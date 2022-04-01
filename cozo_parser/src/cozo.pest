@@ -1,0 +1,124 @@
+file = {SOI ~ ident ~ EOI}
+
+// whitespace
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+BLOCK_COMMENT = _{ "/*" ~ (BLOCK_COMMENT | !"*/" ~ ANY)* ~ "*/" }
+LINE_COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }
+COMMENT = _{(BLOCK_COMMENT | LINE_COMMENT)}
+
+
+// identifiers
+
+normal_ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
+special_ident = @{"_" ~ ("_" | XID_CONTINUE)*}
+param_ident = @{"$" ~ ("_" | XID_CONTINUE)+}
+ident = { normal_ident | special_ident | param_ident}
+
+
+// literals
+
+raw_string = {
+    "r" ~ PUSH("#"*) ~ "\""    // push the number signs onto the stack
+    ~ raw_string_inner
+    ~ "\"" ~ POP               // match a quotation mark and the number signs
+}
+raw_string_inner = {
+    (
+        !("\"" ~ PEEK)    // unless the next character is a quotation mark
+                          // followed by the correct amount of number signs,
+        ~ ANY             // consume one character
+    )*
+}
+
+quoted_string = ${ "\"" ~ quoted_string_inner ~ "\"" }
+quoted_string_inner = @{ char* }
+char = {
+    !("\"" | "\\") ~ ANY
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+string = {(raw_string | quoted_string)}
+
+// Boolean and null
+
+boolean = { "true" | "false" }
+
+null = { "null" }
+
+// Numbers
+
+pos_int = @{ASCII_DIGIT ~ ("_" | ASCII_DIGIT)*}
+neg_int = @{"-" ~ pos_int}
+hex_pos_int = @{"0x" ~ ASCII_HEX_DIGIT ~ ("_" | ASCII_HEX_DIGIT)*}
+octo_pos_int = @{"0o" ~ ASCII_OCT_DIGIT ~ ("_" | ASCII_OCT_DIGIT)*}
+bin_pos_int = @{"0b" ~ ASCII_BIN_DIGIT ~ ("_" | ASCII_BIN_DIGIT)*}
+int = {(hex_pos_int | octo_pos_int | bin_pos_int | pos_int | neg_int)}
+
+dot_float = @{
+    "-"?
+    ~ ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
+    ~ ("." ~ ("_" | ASCII_DIGIT)+)
+}
+
+sci_float = @{
+    "-"?
+    ~ ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
+    ~ ("." ~ ("_" | ASCII_DIGIT)+)?
+    ~ (^"e" ~ ("+" | "-")? ~ ("_" | ASCII_DIGIT)+)
+}
+
+float = {(sci_float | dot_float)}
+number = {(float | int)}
+
+literal = _{ null | boolean | number | string}
+
+// date, time, datetime, duration: no literal, do with functions. User passed in stuff can be coerced from string
+// but they do exist at the AST level (and of course at the value level)
+
+// expressions
+
+comma_sep_expr = { expr ~ ("," ~ expr)* }
+expr = {(unary | term) ~ (operation ~ (unary | term)) *}
+operation = _{ (op_and | op_or | op_pow | op_add | op_sub | op_mul | op_div | op_mod | op_coalesce |
+                op_ge | op_le | op_gt | op_lt | op_eq | op_ne)}
+op_and = { "&&" }
+op_or = { "||" }
+op_pow = { "^" }
+op_add = { "+" }
+op_sub = { "-" }
+op_mul = { "*" }
+op_div = { "/" }
+op_mod = { "%" }
+op_coalesce = { "~" }
+op_eq = { "==" }
+op_ne = { "!=" }
+op_gt = { ">" }
+op_lt = { "<" }
+op_ge = { ">=" }
+op_le = { "<=" }
+
+unary = { unary_op ~ term }
+unary_op = _{ minus | negate }
+minus = { "-" }
+negate = { "!" }
+
+term = { (grouping | literal | normal_ident | param_ident | list | dict) ~ (call | accessor)* }
+call = {"." ~ (normal_ident | special_ident) ~ "(" ~ argument* ~ ")"}
+accessor = {"." ~ (normal_ident | special_ident)}
+argument = _{(kw_arg | pos_arg)}
+kw_arg = {normal_ident ~ "=" ~ expr}
+pos_arg = { expr }
+grouping = { "(" ~ expr ~ ")" }
+
+list = { "[" ~ (list_el ~ ",")* ~ list_el? ~ "]" }
+list_el = _{spreading | expr}
+spreading = {"..." ~ term}
+
+dict = { "{" ~ (dict_entry ~ ",")* ~ dict_entry? ~ "}"}
+dict_entry = _{ spreading | dict_accessor | dict_pair }
+dict_accessor = { normal_ident? ~ ("." ~ (normal_ident | special_ident))+ }
+dict_pair = {(normal_ident | special_ident | string) ~ ":" ~ expr}
+
+scoped_dict = { normal_ident ~ dict }
