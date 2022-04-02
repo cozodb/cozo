@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 pest = "2.0"
 pest_derive = "2.0"
+ordered-float = "2.10.0"
