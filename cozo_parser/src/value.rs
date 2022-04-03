@@ -3,6 +3,7 @@ use std::cmp::{min, Ordering};
 use std::collections::HashMap;
 use std::io::{Write};
 use ordered_float::OrderedFloat;
+use uuid::Uuid;
 
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
@@ -15,6 +16,7 @@ pub enum ValueTag {
     Int = 11,
     Float = 13,
     String = 15,
+    Uuid = 17,
     UInt = 21,
     List = 101,
     Dict = 103,
@@ -34,6 +36,7 @@ pub enum Value<'a> {
     UInt(u64),
     Int(i64),
     Float(f64),
+    Uuid(Uuid),
     String(Cow<'a, str>),
     List(Vec<Value<'a>>),
     Dict(HashMap<Cow<'a, str>, Value<'a>>),
@@ -89,6 +92,7 @@ impl<'a> ByteArrayParser<'a> {
             u if u == ValueTag::UInt as u64 => Some(ValueTag::UInt),
             u if u == ValueTag::List as u64 => Some(ValueTag::List),
             u if u == ValueTag::Dict as u64 => Some(ValueTag::Dict),
+            u if u == ValueTag::Uuid as u64 => Some(ValueTag::Uuid),
             _ => {
                 None
             }
@@ -113,8 +117,31 @@ impl<'a> ByteArrayParser<'a> {
         let buf = self.advance(8)?.try_into().ok()?;
         Some(f64::from_be_bytes(buf))
     }
+    pub fn parse_uuid(&mut self) -> Option<Uuid> {
+        Uuid::from_slice(self.advance(16)?).ok()
+    }
     pub fn compare_float(&mut self, other: &mut Self) -> Ordering {
         OrderedFloat(self.parse_float().unwrap()).cmp(&OrderedFloat(other.parse_float().unwrap()))
+    }
+    // This should first compare UUID version, then for V1, compare the timestamps
+    pub fn compare_uuid(&mut self, other: &mut Self) -> Ordering {
+        let ua = self.parse_uuid().unwrap();
+        let ub = other.parse_uuid().unwrap();
+        let (a3, a2, a1, a4) = ua.as_fields();
+        let (b3, b2, b1, b4) = ub.as_fields();
+        match a1.cmp(&b1) {
+            Ordering::Equal => {}
+            x => {return x}
+        }
+        match a2.cmp(&b2) {
+            Ordering::Equal => {}
+            x => {return x}
+        }
+        match a3.cmp(&b3) {
+            Ordering::Equal => {}
+            x => {return x}
+        }
+        a4.cmp(b4)
     }
     pub fn parse_string(&mut self) -> Option<&'a str> {
         let l = self.parse_varint()?;
@@ -182,6 +209,9 @@ impl<'a> ByteArrayParser<'a> {
             ValueTag::Dict => {
                 Some(Value::Dict(self.parse_dict()?))
             }
+            ValueTag::Uuid => {
+                Some(Value::Uuid(self.parse_uuid()?))
+            }
         }
     }
     pub fn compare_value(&mut self, other: &mut Self) -> Ordering {
@@ -202,6 +232,7 @@ impl<'a> ByteArrayParser<'a> {
                     ValueTag::UInt => { self.compare_varint(other) }
                     ValueTag::List => { self.compare_list(other) }
                     ValueTag::Dict => { self.compare_dict(other) }
+                    ValueTag::Uuid => { self.compare_uuid(other) }
                     ValueTag::Null => { Ordering::Equal }
                     ValueTag::BoolTrue => { Ordering::Equal }
                     ValueTag::BoolFalse => { Ordering::Equal }
@@ -281,6 +312,9 @@ impl<T: Write> ByteArrayBuilder<T> {
     pub fn build_float(&mut self, f: f64) {
         self.byte_writer.write_all(&f.to_be_bytes()).unwrap();
     }
+    pub fn build_uuid(&mut self, u: Uuid) {
+        self.byte_writer.write_all(u.as_bytes()).unwrap();
+    }
     pub fn build_string(&mut self, s: &str) {
         self.build_varint(s.len() as u64);
         self.byte_writer.write_all(s.as_bytes()).unwrap();
@@ -325,6 +359,10 @@ impl<T: Write> ByteArrayBuilder<T> {
             Value::Dict(d) => {
                 self.build_tag(ValueTag::Dict);
                 self.build_dict(d);
+            }
+            Value::Uuid(u) => {
+                self.build_tag(ValueTag::Uuid);
+                self.build_uuid(*u);
             }
         }
     }
@@ -408,6 +446,9 @@ impl<'a> Value<'a> {
                     inner.insert(new_k, v.into_owned());
                 }
                 Value::Dict(inner)
+            }
+            Value::Uuid(u) => {
+                Value::Uuid(u)
             }
         }
     }
