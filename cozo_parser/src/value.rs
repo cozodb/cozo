@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::{min, Ordering};
-use std::collections::HashMap;
+use std::collections::{BTreeMap};
 use std::io::{Write};
 use ordered_float::OrderedFloat;
 use uuid::Uuid;
@@ -18,6 +18,17 @@ pub enum ValueTag {
     String = 15,
     Uuid = 17,
     UInt = 21,
+    // Timestamp = 23,
+    // Datetime = 25,
+    // Timezone = 27,
+    // Date = 27,
+    // Time = 29,
+    // Duration = 31,
+    // BigInt = 51,
+    // BigDecimal = 53,
+    // Inet = 55,
+    // Crs = 57,
+    // Bytes = 99,
     List = 101,
     Dict = 103,
 }
@@ -37,9 +48,10 @@ pub enum Value<'a> {
     Int(i64),
     Float(f64),
     Uuid(Uuid),
-    String(Cow<'a, str>),
-    List(Vec<Value<'a>>),
-    Dict(HashMap<Cow<'a, str>, Value<'a>>),
+    RefString(&'a str),
+    OwnString(Box<String>),
+    List(Box<Vec<Value<'a>>>),
+    Dict(Box<BTreeMap<Cow<'a, str>, Value<'a>>>),
 }
 
 pub struct ByteArrayParser<'a> {
@@ -92,7 +104,7 @@ impl<'a> ByteArrayParser<'a> {
             u if u == ValueTag::UInt as u64 => Some(ValueTag::UInt),
             u if u == ValueTag::List as u64 => Some(ValueTag::List),
             u if u == ValueTag::Dict as u64 => Some(ValueTag::Dict),
-            u if u == ValueTag::Uuid as u64 => Some(ValueTag::Uuid),
+            // u if u == ValueTag::Uuid as u64 => Some(ValueTag::Uuid),
             _ => {
                 None
             }
@@ -131,15 +143,15 @@ impl<'a> ByteArrayParser<'a> {
         let (b3, b2, b1, b4) = ub.as_fields();
         match a1.cmp(&b1) {
             Ordering::Equal => {}
-            x => {return x}
+            x => { return x; }
         }
         match a2.cmp(&b2) {
             Ordering::Equal => {}
-            x => {return x}
+            x => { return x; }
         }
         match a3.cmp(&b3) {
             Ordering::Equal => {}
-            x => {return x}
+            x => { return x; }
         }
         a4.cmp(b4)
     }
@@ -198,16 +210,16 @@ impl<'a> ByteArrayParser<'a> {
                 Some(Value::Float(self.parse_float()?))
             }
             ValueTag::String => {
-                Some(Value::String(Cow::from(self.parse_string()?)))
+                Some(Value::RefString(self.parse_string()?))
             }
             ValueTag::UInt => {
                 Some(Value::UInt(self.parse_varint()?))
             }
             ValueTag::List => {
-                Some(Value::List(self.parse_list()?))
+                Some(Value::List(Box::new(self.parse_list()?)))
             }
             ValueTag::Dict => {
-                Some(Value::Dict(self.parse_dict()?))
+                Some(Value::Dict(Box::new(self.parse_dict()?)))
             }
             ValueTag::Uuid => {
                 Some(Value::Uuid(self.parse_uuid()?))
@@ -254,9 +266,9 @@ impl<'a> ByteArrayParser<'a> {
         }
         len_a.cmp(&len_b)
     }
-    pub fn parse_dict(&mut self) -> Option<HashMap<Cow<'a, str>, Value<'a>>> {
+    pub fn parse_dict(&mut self) -> Option<BTreeMap<Cow<'a, str>, Value<'a>>> {
         let l = self.parse_varint()?;
-        let mut ret = HashMap::with_capacity(l as usize);
+        let mut ret = BTreeMap::new();
 
         for _ in 0..l {
             let key = Cow::from(self.parse_string()?);
@@ -348,7 +360,11 @@ impl<T: Write> ByteArrayBuilder<T> {
                 self.build_tag(ValueTag::Float);
                 self.build_float(*f);
             }
-            Value::String(s) => {
+            Value::OwnString(s) => {
+                self.build_tag(ValueTag::String);
+                self.build_string(s);
+            }
+            Value::RefString(s) => {
                 self.build_tag(ValueTag::String);
                 self.build_string(s);
             }
@@ -372,7 +388,7 @@ impl<T: Write> ByteArrayBuilder<T> {
             self.build_value(el);
         }
     }
-    pub fn build_dict(&mut self, d: &HashMap<Cow<str>, Value>) {
+    pub fn build_dict(&mut self, d: &BTreeMap<Cow<str>, Value>) {
         self.build_varint(d.len() as u64);
         for (k, v) in d {
             self.build_string(k);
@@ -428,24 +444,27 @@ impl<'a> Value<'a> {
             Value::Float(f) => {
                 Value::Float(f)
             }
-            Value::String(s) => {
-                Value::String(Cow::from(s.into_owned()))
+            Value::RefString(s) => {
+                Value::OwnString(Box::new(s.to_string()))
+            }
+            Value::OwnString(s) => {
+                Value::OwnString(s)
             }
             Value::List(l) => {
                 let mut inner = Vec::with_capacity(l.len());
 
-                for el in l {
+                for el in *l {
                     inner.push(el.into_owned())
                 }
-                Value::List(inner)
+                Value::List(Box::new(inner))
             }
             Value::Dict(d) => {
-                let mut inner = HashMap::with_capacity(d.len());
-                for (k, v) in d {
+                let mut inner = BTreeMap::new();
+                for (k, v) in *d {
                     let new_k = Cow::from(k.into_owned());
                     inner.insert(new_k, v.into_owned());
                 }
-                Value::Dict(inner)
+                Value::Dict(Box::new(inner))
             }
             Value::Uuid(u) => {
                 Value::Uuid(u)
@@ -528,4 +547,20 @@ mod tests {
         let i2 = parser.parse_zigzag().unwrap();
         assert_eq!(i, i2);
     }
+
+    //
+    // #[test]
+    // fn size() {
+    //     println!("{:?}", std::mem::size_of::<Value>());
+    //     println!("{:?}", std::mem::size_of::<i64>());
+    //     println!("{:?}", std::mem::size_of::<Uuid>());
+    //     println!("{:?}", std::mem::size_of::<BTreeMap<Cow<str>, Value>>());
+    //     println!("{:?}", std::mem::size_of::<Vec<Value>>());
+    //     println!("{:?}", std::mem::size_of::<Cow<str>>());
+    //     println!("{:?}", std::mem::size_of::<Box<Cow<str>>>());
+    //     println!("{:?}", std::mem::size_of::<Box<Vec<Value>>>());
+    //     println!("{:?}", std::mem::size_of::<String>());
+    //     println!("{:?}", std::mem::size_of::<&str>());
+    // }
+
 }
