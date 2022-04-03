@@ -20,28 +20,6 @@ pub enum ValueTag {
     Dict = 103,
 }
 
-impl From<u64> for ValueTag {
-    fn from(u: u64) -> Self {
-        match u {
-            u if u == ValueTag::Null as u64 => ValueTag::Null,
-            u if u == ValueTag::BoolTrue as u64 => ValueTag::BoolTrue,
-            u if u == ValueTag::BoolFalse as u64 => ValueTag::BoolFalse,
-            u if u == ValueTag::FwdEdge as u64 => ValueTag::FwdEdge,
-            u if u == ValueTag::BwdEdge as u64 => ValueTag::BwdEdge,
-            u if u == ValueTag::Int as u64 => ValueTag::Int,
-            u if u == ValueTag::Float as u64 => ValueTag::Float,
-            u if u == ValueTag::String as u64 => ValueTag::String,
-            u if u == ValueTag::UInt as u64 => ValueTag::UInt,
-            u if u == ValueTag::List as u64 => ValueTag::List,
-            u if u == ValueTag::Dict as u64 => ValueTag::Dict,
-            _ => {
-                panic!()
-            }
-        }
-    }
-}
-
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EdgeDir {
     FwdEdge,
@@ -64,10 +42,6 @@ pub enum Value<'a> {
 pub struct ByteArrayParser<'a> {
     bytes: &'a [u8],
     current: usize,
-}
-
-pub struct ByteArrayBuilder<T: Write> {
-    byte_writer: T,
 }
 
 impl<'a> ByteArrayParser<'a> {
@@ -101,6 +75,26 @@ impl<'a> ByteArrayParser<'a> {
         Some(u)
     }
 
+    pub fn parse_value_tag(&mut self) -> Option<ValueTag> {
+        let u = self.parse_varint()?;
+        match u {
+            u if u == ValueTag::Null as u64 => Some(ValueTag::Null),
+            u if u == ValueTag::BoolTrue as u64 => Some(ValueTag::BoolTrue),
+            u if u == ValueTag::BoolFalse as u64 => Some(ValueTag::BoolFalse),
+            u if u == ValueTag::FwdEdge as u64 => Some(ValueTag::FwdEdge),
+            u if u == ValueTag::BwdEdge as u64 => Some(ValueTag::BwdEdge),
+            u if u == ValueTag::Int as u64 => Some(ValueTag::Int),
+            u if u == ValueTag::Float as u64 => Some(ValueTag::Float),
+            u if u == ValueTag::String as u64 => Some(ValueTag::String),
+            u if u == ValueTag::UInt as u64 => Some(ValueTag::UInt),
+            u if u == ValueTag::List as u64 => Some(ValueTag::List),
+            u if u == ValueTag::Dict as u64 => Some(ValueTag::Dict),
+            _ => {
+                None
+            }
+        }
+    }
+
     pub fn compare_varint(&mut self, other: &mut Self) -> Ordering {
         self.parse_varint().unwrap().cmp(&other.parse_varint().unwrap())
     }
@@ -116,8 +110,7 @@ impl<'a> ByteArrayParser<'a> {
         self.parse_zigzag().unwrap().cmp(&other.parse_zigzag().unwrap())
     }
     pub fn parse_float(&mut self) -> Option<f64> {
-        let buf = self.advance(8)?;
-        let buf: [u8; 8] = buf.try_into().unwrap();
+        let buf = self.advance(8)?.try_into().ok()?;
         Some(f64::from_be_bytes(buf))
     }
     pub fn compare_float(&mut self, other: &mut Self) -> Ordering {
@@ -126,9 +119,10 @@ impl<'a> ByteArrayParser<'a> {
     pub fn parse_string(&mut self) -> Option<&'a str> {
         let l = self.parse_varint()?;
         let bytes = self.advance(l as usize)?;
-        unsafe {
-            Some(std::str::from_utf8_unchecked(bytes))
-        }
+        // unsafe {
+        //     Some(std::str::from_utf8_unchecked(bytes))
+        // }
+        std::str::from_utf8(bytes).ok()
     }
     pub fn compare_string(&mut self, other: &mut Self) -> Ordering {
         let len_a = self.parse_varint().unwrap();
@@ -154,8 +148,7 @@ impl<'a> ByteArrayParser<'a> {
         Some(ret)
     }
     pub fn parse_value(&mut self) -> Option<Value<'a>> {
-        let tag_id = self.parse_varint()?;
-        match ValueTag::from(tag_id) {
+        match self.parse_value_tag()? {
             ValueTag::Null => {
                 Some(Value::Null)
             }
@@ -192,13 +185,11 @@ impl<'a> ByteArrayParser<'a> {
         }
     }
     pub fn compare_value(&mut self, other: &mut Self) -> Ordering {
-        match (self.parse_varint(), other.parse_varint()) {
-            (None, None) => { return Ordering::Equal; }
-            (None, Some(_)) => { return Ordering::Less; }
-            (Some(_), None) => { return Ordering::Greater; }
-            (Some(ta), Some(tb)) => {
-                let type_a = ValueTag::from(ta);
-                let type_b = ValueTag::from(tb);
+        match (self.parse_value_tag(), other.parse_value_tag()) {
+            (None, None) => { Ordering::Equal }
+            (None, Some(_)) => { Ordering::Less }
+            (Some(_), None) => { Ordering::Greater }
+            (Some(type_a), Some(type_b)) => {
                 match type_a.cmp(&type_b) {
                     Ordering::Less => { return Ordering::Less; }
                     Ordering::Greater => { return Ordering::Greater; }
@@ -262,7 +253,11 @@ impl<'a> ByteArrayParser<'a> {
     }
 }
 
-impl <T:Write> ByteArrayBuilder<T> {
+pub struct ByteArrayBuilder<T: Write> {
+    byte_writer: T,
+}
+
+impl<T: Write> ByteArrayBuilder<T> {
     pub fn new(byte_writer: T) -> Self {
         Self { byte_writer }
     }
