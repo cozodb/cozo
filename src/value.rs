@@ -4,46 +4,49 @@ use std::collections::{BTreeMap};
 use std::io::{Write};
 use ordered_float::OrderedFloat;
 use uuid::Uuid;
+use crate::typing::Typing;
+use Ordering::{Greater, Less, Equal};
+
 
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub enum ValueTag {
-    Null = 0,
-    BoolTrue = 2,
-    BoolFalse = 4,
-    FwdEdge = 6,
-    BwdEdge = 8,
-    Int = 11,
-    Float = 13,
-    String = 15,
-    Uuid = 17,
-    UInt = 21,
-    // Timestamp = 23,
-    // Datetime = 25,
-    // Timezone = 27,
-    // Date = 27,
-    // Time = 29,
-    // Duration = 31,
-    // BigInt = 51,
-    // BigDecimal = 53,
-    // Inet = 55,
-    // Crs = 57,
-    // Bytes = 99,
-    List = 101,
-    Dict = 103,
+    NullTag = 0,
+    BoolTrueTag = 2,
+    BoolFalseTag = 4,
+    FwdEdgeTag = 6,
+    BwdEdgeTag = 8,
+    IntTag = 11,
+    FloatTag = 13,
+    StringTag = 15,
+    UuidTag = 17,
+    UIntTag = 21,
+    // TimestampTag = 23,
+    // DatetimeTag = 25,
+    // TimezoneTag = 27,
+    // DateTag = 27,
+    // TimeTag = 29,
+    // DurationTag = 31,
+    // BigIntTag = 51,
+    // BigDecimalTag = 53,
+    // InetTag = 55,
+    // CrsTag = 57,
+    // BytesTag = 99,
+    ListTag = 101,
+    DictTag = 103,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum EdgeDir {
-    FwdEdge,
-    BwdEdge,
+pub enum EdgeDirKind {
+    FwdEdgeDir,
+    BwdEdgeDir,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value<'a> {
     Null,
     Bool(bool),
-    EdgeDir(EdgeDir),
+    EdgeDir(EdgeDirKind),
     UInt(u64),
     Int(i64),
     Float(f64),
@@ -91,23 +94,23 @@ impl<'a> ByteArrayParser<'a> {
     }
 
     pub fn parse_value_tag(&mut self) -> Option<ValueTag> {
+        use ValueTag::*;
+
         let u = self.parse_varint()?;
         match u {
-            u if u == ValueTag::Null as u64 => Some(ValueTag::Null),
-            u if u == ValueTag::BoolTrue as u64 => Some(ValueTag::BoolTrue),
-            u if u == ValueTag::BoolFalse as u64 => Some(ValueTag::BoolFalse),
-            u if u == ValueTag::FwdEdge as u64 => Some(ValueTag::FwdEdge),
-            u if u == ValueTag::BwdEdge as u64 => Some(ValueTag::BwdEdge),
-            u if u == ValueTag::Int as u64 => Some(ValueTag::Int),
-            u if u == ValueTag::Float as u64 => Some(ValueTag::Float),
-            u if u == ValueTag::String as u64 => Some(ValueTag::String),
-            u if u == ValueTag::UInt as u64 => Some(ValueTag::UInt),
-            u if u == ValueTag::List as u64 => Some(ValueTag::List),
-            u if u == ValueTag::Dict as u64 => Some(ValueTag::Dict),
-            u if u == ValueTag::Uuid as u64 => Some(ValueTag::Uuid),
-            _ => {
-                None
-            }
+            u if u == NullTag as u64 => Some(NullTag),
+            u if u == BoolTrueTag as u64 => Some(BoolTrueTag),
+            u if u == BoolFalseTag as u64 => Some(BoolFalseTag),
+            u if u == FwdEdgeTag as u64 => Some(FwdEdgeTag),
+            u if u == BwdEdgeTag as u64 => Some(BwdEdgeTag),
+            u if u == IntTag as u64 => Some(IntTag),
+            u if u == FloatTag as u64 => Some(FloatTag),
+            u if u == StringTag as u64 => Some(StringTag),
+            u if u == UIntTag as u64 => Some(UIntTag),
+            u if u == ListTag as u64 => Some(ListTag),
+            u if u == DictTag as u64 => Some(DictTag),
+            u if u == UuidTag as u64 => Some(UuidTag),
+            _ => None
         }
     }
 
@@ -142,16 +145,16 @@ impl<'a> ByteArrayParser<'a> {
         let (a3, a2, a1, a4) = ua.as_fields();
         let (b3, b2, b1, b4) = ub.as_fields();
         match a1.cmp(&b1) {
-            Ordering::Equal => {}
-            x => { return x; }
+            Equal => (),
+            x => return x
         }
         match a2.cmp(&b2) {
-            Ordering::Equal => {}
-            x => { return x; }
+            Equal => (),
+            x => return x
         }
         match a3.cmp(&b3) {
-            Ordering::Equal => {}
-            x => { return x; }
+            Equal => (),
+            x => return x
         }
         a4.cmp(b4)
     }
@@ -170,9 +173,8 @@ impl<'a> ByteArrayParser<'a> {
             let byte_a = self.advance(1).unwrap()[0];
             let byte_b = other.advance(1).unwrap()[0];
             match byte_a.cmp(&byte_b) {
-                Ordering::Less => { return Ordering::Less; }
-                Ordering::Greater => { return Ordering::Greater; }
-                Ordering::Equal => {}
+                x @ (Less | Greater) => return x,
+                Equal => ()
             }
         }
         len_a.cmp(&len_b)
@@ -187,45 +189,46 @@ impl<'a> ByteArrayParser<'a> {
         Some(ret)
     }
     pub fn parse_value(&mut self) -> Option<Value<'a>> {
+        use ValueTag::*;
+        use Value::*;
+        use EdgeDirKind::*;
+
         match self.parse_value_tag()? {
-            ValueTag::Null => { Some(Value::Null) }
-            ValueTag::BoolTrue => { Some(Value::Bool(true)) }
-            ValueTag::BoolFalse => { Some(Value::Bool(false)) }
-            ValueTag::FwdEdge => { Some(Value::EdgeDir(EdgeDir::FwdEdge)) }
-            ValueTag::BwdEdge => { Some(Value::EdgeDir(EdgeDir::BwdEdge)) }
-            ValueTag::Int => { Some(Value::Int(self.parse_zigzag()?)) }
-            ValueTag::Float => { Some(Value::Float(self.parse_float()?)) }
-            ValueTag::String => { Some(Value::RefString(self.parse_string()?)) }
-            ValueTag::UInt => { Some(Value::UInt(self.parse_varint()?)) }
-            ValueTag::List => { Some(Value::List(Box::new(self.parse_list()?))) }
-            ValueTag::Dict => { Some(Value::Dict(Box::new(self.parse_dict()?))) }
-            ValueTag::Uuid => { Some(Value::Uuid(self.parse_uuid()?)) }
+            NullTag => Some(Null),
+            BoolTrueTag => Some(Bool(true)),
+            BoolFalseTag => Some(Bool(false)),
+            FwdEdgeTag => Some(EdgeDir(FwdEdgeDir)),
+            BwdEdgeTag => Some(EdgeDir(BwdEdgeDir)),
+            IntTag => Some(Int(self.parse_zigzag()?)),
+            FloatTag => Some(Float(self.parse_float()?)),
+            StringTag => Some(RefString(self.parse_string()?)),
+            UIntTag => Some(UInt(self.parse_varint()?)),
+            ListTag => Some(List(Box::new(self.parse_list()?))),
+            DictTag => Some(Dict(Box::new(self.parse_dict()?))),
+            UuidTag => Some(Uuid(self.parse_uuid()?))
         }
     }
     pub fn compare_value(&mut self, other: &mut Self) -> Ordering {
+        use ValueTag::*;
+
         match (self.parse_value_tag(), other.parse_value_tag()) {
-            (None, None) => { Ordering::Equal }
-            (None, Some(_)) => { Ordering::Less }
-            (Some(_), None) => { Ordering::Greater }
+            (None, None) => Equal,
+            (None, Some(_)) => Less,
+            (Some(_), None) => Greater,
             (Some(type_a), Some(type_b)) => {
                 match type_a.cmp(&type_b) {
-                    Ordering::Less => { return Ordering::Less; }
-                    Ordering::Greater => { return Ordering::Greater; }
-                    Ordering::Equal => {}
+                    x @ (Less | Greater) => return x,
+                    Equal => ()
                 }
                 match type_a {
-                    ValueTag::Int => { self.compare_zigzag(other) }
-                    ValueTag::Float => { self.compare_float(other) }
-                    ValueTag::String => { self.compare_string(other) }
-                    ValueTag::UInt => { self.compare_varint(other) }
-                    ValueTag::List => { self.compare_list(other) }
-                    ValueTag::Dict => { self.compare_dict(other) }
-                    ValueTag::Uuid => { self.compare_uuid(other) }
-                    ValueTag::Null => { Ordering::Equal }
-                    ValueTag::BoolTrue => { Ordering::Equal }
-                    ValueTag::BoolFalse => { Ordering::Equal }
-                    ValueTag::FwdEdge => { Ordering::Equal }
-                    ValueTag::BwdEdge => { Ordering::Equal }
+                    IntTag => self.compare_zigzag(other),
+                    FloatTag => self.compare_float(other),
+                    StringTag => self.compare_string(other),
+                    UIntTag => self.compare_varint(other),
+                    ListTag => self.compare_list(other),
+                    DictTag => self.compare_dict(other),
+                    UuidTag => self.compare_uuid(other),
+                    NullTag | BoolTrueTag | BoolFalseTag | FwdEdgeTag | BwdEdgeTag => Equal
                 }
             }
         }
@@ -235,9 +238,8 @@ impl<'a> ByteArrayParser<'a> {
         let len_b = self.parse_varint().unwrap();
         for _ in 0..min(len_a, len_b) {
             match self.compare_value(other) {
-                Ordering::Less => { return Ordering::Less; }
-                Ordering::Greater => { return Ordering::Greater; }
-                Ordering::Equal => {}
+                x @ (Less | Greater) => return x,
+                Equal => ()
             }
         }
         len_a.cmp(&len_b)
@@ -258,14 +260,12 @@ impl<'a> ByteArrayParser<'a> {
         let len_b = self.parse_varint().unwrap();
         for _ in 0..min(len_a, len_b) {
             match self.compare_string(other) {
-                Ordering::Less => { return Ordering::Less; }
-                Ordering::Greater => { return Ordering::Greater; }
-                Ordering::Equal => {}
+                x @ (Less | Greater) => return x,
+                Equal => ()
             }
             match self.compare_value(other) {
-                Ordering::Less => { return Ordering::Less; }
-                Ordering::Greater => { return Ordering::Greater; }
-                Ordering::Equal => {}
+                x @ (Less | Greater) => return x,
+                Equal => ()
             }
         }
         len_a.cmp(&len_b)
@@ -311,49 +311,45 @@ impl<T: Write> ByteArrayBuilder<T> {
         self.byte_writer.write_all(&[t as u8]).unwrap();
     }
     pub fn build_value(&mut self, v: &Value) {
+        use ValueTag::*;
+
         match v {
-            Value::Null => {
-                self.build_tag(ValueTag::Null)
-            }
-            Value::Bool(b) => {
-                self.build_tag(if *b { ValueTag::BoolTrue } else { ValueTag::BoolFalse })
-            }
-            Value::EdgeDir(e) => {
-                self.build_tag(match e {
-                    EdgeDir::FwdEdge => { ValueTag::FwdEdge }
-                    EdgeDir::BwdEdge => { ValueTag::BwdEdge }
-                })
-            }
+            Value::Null => self.build_tag(NullTag),
+            Value::Bool(b) => self.build_tag(if *b { BoolTrueTag } else { BoolFalseTag }),
+            Value::EdgeDir(e) => self.build_tag(match e {
+                EdgeDirKind::FwdEdgeDir => { FwdEdgeTag }
+                EdgeDirKind::BwdEdgeDir => { BwdEdgeTag }
+            }),
             Value::UInt(u) => {
-                self.build_tag(ValueTag::UInt);
+                self.build_tag(UIntTag);
                 self.build_varint(*u);
             }
             Value::Int(i) => {
-                self.build_tag(ValueTag::Int);
+                self.build_tag(IntTag);
                 self.build_zigzag(*i);
             }
             Value::Float(f) => {
-                self.build_tag(ValueTag::Float);
+                self.build_tag(FloatTag);
                 self.build_float(*f);
             }
             Value::OwnString(s) => {
-                self.build_tag(ValueTag::String);
+                self.build_tag(StringTag);
                 self.build_string(s);
             }
             Value::RefString(s) => {
-                self.build_tag(ValueTag::String);
+                self.build_tag(StringTag);
                 self.build_string(s);
             }
             Value::List(l) => {
-                self.build_tag(ValueTag::List);
+                self.build_tag(ListTag);
                 self.build_list(l);
             }
             Value::Dict(d) => {
-                self.build_tag(ValueTag::Dict);
+                self.build_tag(DictTag);
                 self.build_dict(d);
             }
             Value::Uuid(u) => {
-                self.build_tag(ValueTag::Uuid);
+                self.build_tag(UuidTag);
                 self.build_uuid(*u);
             }
         }
@@ -375,9 +371,8 @@ impl<T: Write> ByteArrayBuilder<T> {
 
 pub fn cmp_keys<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) -> Ordering {
     match pa.compare_varint(pb) {
-        Ordering::Less => { return Ordering::Less; }
-        Ordering::Greater => { return Ordering::Greater; }
-        Ordering::Equal => {}
+        x @ (Less | Greater) => return x,
+        Equal => ()
     }
     cmp_data(pa, pb)
 }
@@ -385,15 +380,14 @@ pub fn cmp_keys<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) 
 pub fn cmp_data<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) -> Ordering {
     loop {
         match (pa.at_end(), pb.at_end()) {
-            (true, true) => { return Ordering::Equal; }
-            (true, false) => { return Ordering::Less; }
-            (false, true) => { return Ordering::Greater; }
-            (false, false) => {}
+            (true, true) => return Equal,
+            (true, false) => return Less,
+            (false, true) => return Greater,
+            (false, false) => ()
         }
         match pa.compare_value(pb) {
-            Ordering::Less => { return Ordering::Less; }
-            Ordering::Greater => { return Ordering::Greater; }
-            Ordering::Equal => {}
+            x @ (Less | Greater) => return x,
+            Equal => ()
         }
     }
 }
@@ -401,54 +395,50 @@ pub fn cmp_data<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) 
 
 impl<'a> Value<'a> {
     pub fn into_owned(self) -> Value<'static> {
+        use Value::*;
+
         match self {
-            Value::Null => {
-                Value::Null
-            }
-            Value::Bool(b) => {
-                Value::Bool(b)
-            }
-            Value::EdgeDir(dir) => {
-                Value::EdgeDir(dir)
-            }
-            Value::UInt(u) => {
-                Value::UInt(u)
-            }
-            Value::Int(i) => {
-                Value::Int(i)
-            }
-            Value::Float(f) => {
-                Value::Float(f)
-            }
-            Value::RefString(s) => {
-                Value::OwnString(Box::new(s.to_string()))
-            }
-            Value::OwnString(s) => {
-                Value::OwnString(s)
-            }
-            Value::List(l) => {
+            Null => Null,
+            Bool(b) => Bool(b),
+            EdgeDir(dir) => EdgeDir(dir),
+            UInt(u) => UInt(u),
+            Int(i) => Int(i),
+            Float(f) => Float(f),
+            RefString(s) => OwnString(Box::new(s.to_string())),
+            OwnString(s) => OwnString(s),
+            List(l) => {
                 let mut inner = Vec::with_capacity(l.len());
 
                 for el in *l {
                     inner.push(el.into_owned())
                 }
-                Value::List(Box::new(inner))
+                List(Box::new(inner))
             }
-            Value::Dict(d) => {
+            Dict(d) => {
                 let mut inner = BTreeMap::new();
                 for (k, v) in *d {
                     let new_k = Cow::from(k.into_owned());
                     inner.insert(new_k, v.into_owned());
                 }
-                Value::Dict(Box::new(inner))
+                Dict(Box::new(inner))
             }
-            Value::Uuid(u) => {
-                Value::Uuid(u)
-            }
+            Uuid(u) => Uuid(u),
         }
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct CoercionError<'a> {
+    pub msg: String,
+    pub val: Value<'a>,
+}
+
+impl Typing {
+    pub fn coerce<'a>(&self, v: Value<'a>) -> Result<Value<'a>, CoercionError<'a>> {
+        // TODO
+        Ok(v)
+    }
+}
 
 pub struct CozoKey<'a> {
     pub table_id: u64,

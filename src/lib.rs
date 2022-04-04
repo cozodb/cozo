@@ -3,6 +3,8 @@ extern crate pest;
 extern crate pest_derive;
 
 pub mod value;
+pub mod typing;
+pub mod env;
 
 use pest::Parser;
 
