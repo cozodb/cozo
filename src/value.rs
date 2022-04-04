@@ -159,21 +159,12 @@ impl<'a> ByteArrayParser<'a> {
     #[inline]
     pub fn compare_uuid(&mut self, other: &mut Self) -> Ordering {
         let ua = self.parse_uuid().unwrap();
-        let ub = other.parse_uuid().unwrap();
         let (a3, a2, a1, a4) = ua.as_fields();
+        let ub = other.parse_uuid().unwrap();
         let (b3, b2, b1, b4) = ub.as_fields();
-        match a1.cmp(&b1) {
-            Equal => (),
-            x => return x
-        }
-        match a2.cmp(&b2) {
-            Equal => (),
-            x => return x
-        }
-        match a3.cmp(&b3) {
-            Equal => (),
-            x => return x
-        }
+        if let x @ (Greater | Less) = a1.cmp(&b1) { return x; }
+        if let x @ (Greater | Less) = a2.cmp(&b2) { return x; }
+        if let x @ (Greater | Less) = a3.cmp(&b3) { return x; }
         a4.cmp(b4)
     }
 
@@ -194,10 +185,7 @@ impl<'a> ByteArrayParser<'a> {
         for _ in 0..min(len_a, len_b) {
             let byte_a = self.advance(1).unwrap()[0];
             let byte_b = other.advance(1).unwrap()[0];
-            match byte_a.cmp(&byte_b) {
-                x @ (Less | Greater) => return x,
-                Equal => ()
-            }
+            if let x @ (Greater | Less) = byte_a.cmp(&byte_b) { return x; }
         }
         len_a.cmp(&len_b)
     }
@@ -238,10 +226,7 @@ impl<'a> ByteArrayParser<'a> {
             (None, Some(_)) => Less,
             (Some(_), None) => Greater,
             (Some(type_a), Some(type_b)) => {
-                match type_a.cmp(&type_b) {
-                    x @ (Less | Greater) => return x,
-                    Equal => ()
-                }
+                if let x @ (Greater | Less) = type_a.cmp(&type_b) { return x; }
                 match type_a {
                     IntTag => self.compare_zigzag(other),
                     FloatTag => self.compare_float(other),
@@ -259,10 +244,7 @@ impl<'a> ByteArrayParser<'a> {
         let len_a = self.parse_varint().unwrap();
         let len_b = self.parse_varint().unwrap();
         for _ in 0..min(len_a, len_b) {
-            match self.compare_value(other) {
-                x @ (Less | Greater) => return x,
-                Equal => ()
-            }
+            if let x @ (Greater | Less) = self.compare_value(other) { return x; }
         }
         len_a.cmp(&len_b)
     }
@@ -281,14 +263,8 @@ impl<'a> ByteArrayParser<'a> {
         let len_a = self.parse_varint().unwrap();
         let len_b = self.parse_varint().unwrap();
         for _ in 0..min(len_a, len_b) {
-            match self.compare_string(other) {
-                x @ (Less | Greater) => return x,
-                Equal => ()
-            }
-            match self.compare_value(other) {
-                x @ (Less | Greater) => return x,
-                Equal => ()
-            }
+            if let x @ (Greater | Less) = self.compare_string(other) { return x; }
+            if let x @ (Greater | Less) = self.compare_value(other) { return x; }
         }
         len_a.cmp(&len_b)
     }
@@ -407,10 +383,7 @@ impl<T: Write> ByteArrayBuilder<T> {
 }
 
 pub fn cmp_keys<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) -> Ordering {
-    match pa.compare_varint(pb) {
-        x @ (Less | Greater) => return x,
-        Equal => ()
-    }
+    if let x @ (Greater | Less) = pa.compare_varint(pb) { return x; }
     cmp_data(pa, pb)
 }
 
@@ -422,10 +395,7 @@ pub fn cmp_data<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) 
             (false, true) => return Greater,
             (false, false) => ()
         }
-        match pa.compare_value(pb) {
-            x @ (Less | Greater) => return x,
-            Equal => ()
-        }
+        if let x @ (Greater | Less) = pa.compare_value(pb) { return x; }
     }
 }
 
