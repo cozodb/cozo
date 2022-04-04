@@ -1,2 +1,14 @@
-[workspace]
-members = ["cozo_parser"]
+[package]
+name = "cozo"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+pest = "2.0"
+pest_derive = "2.0"
+ordered-float = "2.10.0"
+uuid = "0.8"
+chrono = "0.4"
+rocksdb = "0.18.0"

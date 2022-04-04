@@ -104,7 +104,7 @@ impl<'a> ByteArrayParser<'a> {
             u if u == ValueTag::UInt as u64 => Some(ValueTag::UInt),
             u if u == ValueTag::List as u64 => Some(ValueTag::List),
             u if u == ValueTag::Dict as u64 => Some(ValueTag::Dict),
-            // u if u == ValueTag::Uuid as u64 => Some(ValueTag::Uuid),
+            u if u == ValueTag::Uuid as u64 => Some(ValueTag::Uuid),
             _ => {
                 None
             }
@@ -188,42 +188,18 @@ impl<'a> ByteArrayParser<'a> {
     }
     pub fn parse_value(&mut self) -> Option<Value<'a>> {
         match self.parse_value_tag()? {
-            ValueTag::Null => {
-                Some(Value::Null)
-            }
-            ValueTag::BoolTrue => {
-                Some(Value::Bool(true))
-            }
-            ValueTag::BoolFalse => {
-                Some(Value::Bool(false))
-            }
-            ValueTag::FwdEdge => {
-                Some(Value::EdgeDir(EdgeDir::FwdEdge))
-            }
-            ValueTag::BwdEdge => {
-                Some(Value::EdgeDir(EdgeDir::BwdEdge))
-            }
-            ValueTag::Int => {
-                Some(Value::Int(self.parse_zigzag()?))
-            }
-            ValueTag::Float => {
-                Some(Value::Float(self.parse_float()?))
-            }
-            ValueTag::String => {
-                Some(Value::RefString(self.parse_string()?))
-            }
-            ValueTag::UInt => {
-                Some(Value::UInt(self.parse_varint()?))
-            }
-            ValueTag::List => {
-                Some(Value::List(Box::new(self.parse_list()?)))
-            }
-            ValueTag::Dict => {
-                Some(Value::Dict(Box::new(self.parse_dict()?)))
-            }
-            ValueTag::Uuid => {
-                Some(Value::Uuid(self.parse_uuid()?))
-            }
+            ValueTag::Null => { Some(Value::Null) }
+            ValueTag::BoolTrue => { Some(Value::Bool(true)) }
+            ValueTag::BoolFalse => { Some(Value::Bool(false)) }
+            ValueTag::FwdEdge => { Some(Value::EdgeDir(EdgeDir::FwdEdge)) }
+            ValueTag::BwdEdge => { Some(Value::EdgeDir(EdgeDir::BwdEdge)) }
+            ValueTag::Int => { Some(Value::Int(self.parse_zigzag()?)) }
+            ValueTag::Float => { Some(Value::Float(self.parse_float()?)) }
+            ValueTag::String => { Some(Value::RefString(self.parse_string()?)) }
+            ValueTag::UInt => { Some(Value::UInt(self.parse_varint()?)) }
+            ValueTag::List => { Some(Value::List(Box::new(self.parse_list()?))) }
+            ValueTag::Dict => { Some(Value::Dict(Box::new(self.parse_dict()?))) }
+            ValueTag::Uuid => { Some(Value::Uuid(self.parse_uuid()?)) }
         }
     }
     pub fn compare_value(&mut self, other: &mut Self) -> Ordering {
@@ -548,19 +524,18 @@ mod tests {
         assert_eq!(i, i2);
     }
 
-    //
-    // #[test]
-    // fn size() {
-    //     println!("{:?}", std::mem::size_of::<Value>());
-    //     println!("{:?}", std::mem::size_of::<i64>());
-    //     println!("{:?}", std::mem::size_of::<Uuid>());
-    //     println!("{:?}", std::mem::size_of::<BTreeMap<Cow<str>, Value>>());
-    //     println!("{:?}", std::mem::size_of::<Vec<Value>>());
-    //     println!("{:?}", std::mem::size_of::<Cow<str>>());
-    //     println!("{:?}", std::mem::size_of::<Box<Cow<str>>>());
-    //     println!("{:?}", std::mem::size_of::<Box<Vec<Value>>>());
-    //     println!("{:?}", std::mem::size_of::<String>());
-    //     println!("{:?}", std::mem::size_of::<&str>());
-    // }
 
+    #[test]
+    fn size() {
+        println!("{:?}", std::mem::size_of::<Value>());
+        println!("{:?}", std::mem::size_of::<i64>());
+        println!("{:?}", std::mem::size_of::<Uuid>());
+        println!("{:?}", std::mem::size_of::<BTreeMap<Cow<str>, Value>>());
+        println!("{:?}", std::mem::size_of::<Vec<Value>>());
+        println!("{:?}", std::mem::size_of::<Cow<str>>());
+        println!("{:?}", std::mem::size_of::<Box<Cow<str>>>());
+        println!("{:?}", std::mem::size_of::<Box<Vec<Value>>>());
+        println!("{:?}", std::mem::size_of::<String>());
+        println!("{:?}", std::mem::size_of::<&str>());
+    }
 }
