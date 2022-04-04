@@ -67,6 +67,7 @@ impl<'a> ByteArrayParser<'a> {
         Self { bytes, current: 0 }
     }
 
+    #[inline]
     fn advance(&mut self, n: usize) -> Option<&'a [u8]> {
         let cur = self.current;
         if n + cur > self.bytes.len() {
@@ -76,9 +77,13 @@ impl<'a> ByteArrayParser<'a> {
             Some(&self.bytes[cur..cur + n])
         }
     }
+
+    #[inline]
     fn at_end(&self) -> bool {
         self.current == self.bytes.len()
     }
+
+    #[inline]
     pub fn parse_varint(&mut self) -> Option<u64> {
         let mut u: u64 = 0;
         let mut shift = 0;
@@ -93,6 +98,7 @@ impl<'a> ByteArrayParser<'a> {
         Some(u)
     }
 
+    #[inline]
     pub fn parse_value_tag(&mut self) -> Option<ValueTag> {
         use ValueTag::*;
 
@@ -114,9 +120,12 @@ impl<'a> ByteArrayParser<'a> {
         }
     }
 
+    #[inline]
     pub fn compare_varint(&mut self, other: &mut Self) -> Ordering {
         self.parse_varint().unwrap().cmp(&other.parse_varint().unwrap())
     }
+
+    #[inline]
     pub fn parse_zigzag(&mut self) -> Option<i64> {
         let u = self.parse_varint()?;
         Some(if u & 1 == 0 {
@@ -125,20 +134,29 @@ impl<'a> ByteArrayParser<'a> {
             -((u >> 1) as i64) - 1
         })
     }
+
+    #[inline]
     pub fn compare_zigzag(&mut self, other: &mut Self) -> Ordering {
         self.parse_zigzag().unwrap().cmp(&other.parse_zigzag().unwrap())
     }
+
+    #[inline]
     pub fn parse_float(&mut self) -> Option<f64> {
         let buf = self.advance(8)?.try_into().ok()?;
         Some(f64::from_be_bytes(buf))
     }
+
+    #[inline]
     pub fn parse_uuid(&mut self) -> Option<Uuid> {
         Uuid::from_slice(self.advance(16)?).ok()
     }
+
+    #[inline]
     pub fn compare_float(&mut self, other: &mut Self) -> Ordering {
         OrderedFloat(self.parse_float().unwrap()).cmp(&OrderedFloat(other.parse_float().unwrap()))
     }
     // This should first compare UUID version, then for V1, compare the timestamps
+    #[inline]
     pub fn compare_uuid(&mut self, other: &mut Self) -> Ordering {
         let ua = self.parse_uuid().unwrap();
         let ub = other.parse_uuid().unwrap();
@@ -158,6 +176,8 @@ impl<'a> ByteArrayParser<'a> {
         }
         a4.cmp(b4)
     }
+
+    #[inline]
     pub fn parse_string(&mut self) -> Option<&'a str> {
         let l = self.parse_varint()?;
         let bytes = self.advance(l as usize)?;
@@ -166,6 +186,8 @@ impl<'a> ByteArrayParser<'a> {
         // }
         std::str::from_utf8(bytes).ok()
     }
+
+    #[inline]
     pub fn compare_string(&mut self, other: &mut Self) -> Ordering {
         let len_a = self.parse_varint().unwrap();
         let len_b = self.parse_varint().unwrap();
@@ -280,6 +302,8 @@ impl<T: Write> ByteArrayBuilder<T> {
     pub fn new(byte_writer: T) -> Self {
         Self { byte_writer }
     }
+
+    #[inline]
     pub fn build_varint(&mut self, u: u64) {
         let mut u = u;
         while u > 0b01111111 {
@@ -288,6 +312,8 @@ impl<T: Write> ByteArrayBuilder<T> {
         }
         self.byte_writer.write_all(&[u as u8]).unwrap();
     }
+
+    #[inline]
     pub fn build_zigzag(&mut self, i: i64) {
         let u: u64 = if i >= 0 {
             (i as u64) << 1
@@ -297,19 +323,28 @@ impl<T: Write> ByteArrayBuilder<T> {
         };
         self.build_varint(u);
     }
+
+    #[inline]
     pub fn build_float(&mut self, f: f64) {
         self.byte_writer.write_all(&f.to_be_bytes()).unwrap();
     }
+
+    #[inline]
     pub fn build_uuid(&mut self, u: Uuid) {
         self.byte_writer.write_all(u.as_bytes()).unwrap();
     }
+
+    #[inline]
     pub fn build_string(&mut self, s: &str) {
         self.build_varint(s.len() as u64);
         self.byte_writer.write_all(s.as_bytes()).unwrap();
     }
+
+    #[inline]
     pub fn build_tag(&mut self, t: ValueTag) {
         self.byte_writer.write_all(&[t as u8]).unwrap();
     }
+
     pub fn build_value(&mut self, v: &Value) {
         use ValueTag::*;
 
@@ -354,12 +389,14 @@ impl<T: Write> ByteArrayBuilder<T> {
             }
         }
     }
+
     pub fn build_list(&mut self, l: &[Value]) {
         self.build_varint(l.len() as u64);
         for el in l {
             self.build_value(el);
         }
     }
+
     pub fn build_dict(&mut self, d: &BTreeMap<Cow<str>, Value>) {
         self.build_varint(d.len() as u64);
         for (k, v) in d {

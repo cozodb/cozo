@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use crate::env::Env;
-use crate::value::Value;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum PrimitiveType {
