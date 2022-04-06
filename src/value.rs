@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::typing::Typing;
 use Ordering::{Greater, Less, Equal};
 
-
+// TODO: array types, alignment of values
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub enum ValueTag {
@@ -31,7 +31,21 @@ pub enum ValueTag {
     // BigDecimalTag = 53,
     // InetTag = 55,
     // CrsTag = 57,
-    // BytesTag = 99,
+    // BitArrTag = 60,
+    // U8ArrTag = 61,
+    // I8ArrTag = 62,
+    // U16ArrTag = 63,
+    // I16ArrTag = 64,
+    // U32ArrTag = 65,
+    // I32ArrTag = 66,
+    // U64ArrTag = 67,
+    // I64ArrTag = 68,
+    // F16ArrTag = 69,
+    // F32ArrTag = 70,
+    // F64ArrTag = 71,
+    // C32ArrTag = 72,
+    // C64ArrTag = 73,
+    // C128ArrTag = 74,
     ListTag = 101,
     DictTag = 103,
 }
@@ -122,7 +136,11 @@ impl<'a> ByteArrayParser<'a> {
 
     #[inline]
     pub fn compare_varint(&mut self, other: &mut Self) -> Ordering {
-        self.parse_varint().unwrap().cmp(&other.parse_varint().unwrap())
+        self.parse_varint().expect(
+            "Failed to parse VarInt when comparing"
+        ).cmp(&other.parse_varint().expect(
+            "Failed to parse VarInt when comparing"
+        ))
     }
 
     #[inline]
@@ -137,7 +155,11 @@ impl<'a> ByteArrayParser<'a> {
 
     #[inline]
     pub fn compare_zigzag(&mut self, other: &mut Self) -> Ordering {
-        self.parse_zigzag().unwrap().cmp(&other.parse_zigzag().unwrap())
+        self.parse_zigzag().expect(
+            "Failed to parse ZigZag when comparing"
+        ).cmp(&other.parse_zigzag().expect(
+            "Failed to parse ZigZag when comparing"
+        ))
     }
 
     #[inline]
@@ -153,14 +175,22 @@ impl<'a> ByteArrayParser<'a> {
 
     #[inline]
     pub fn compare_float(&mut self, other: &mut Self) -> Ordering {
-        OrderedFloat(self.parse_float().unwrap()).cmp(&OrderedFloat(other.parse_float().unwrap()))
+        OrderedFloat(self.parse_float().expect(
+            "Failed to parse Float when comparing"
+        )).cmp(&OrderedFloat(other.parse_float().expect(
+            "Failed to parse Float when comparing"
+        )))
     }
     // This should first compare UUID version, then for V1, compare the timestamps
     #[inline]
     pub fn compare_uuid(&mut self, other: &mut Self) -> Ordering {
-        let ua = self.parse_uuid().unwrap();
+        let ua = self.parse_uuid().expect(
+            "Failed to parse Uuid when comparing"
+        );
         let (a3, a2, a1, a4) = ua.as_fields();
-        let ub = other.parse_uuid().unwrap();
+        let ub = other.parse_uuid().expect(
+            "Failed to parse Uuid when comparing"
+        );
         let (b3, b2, b1, b4) = ub.as_fields();
         if let x @ (Greater | Less) = a1.cmp(&b1) { return x; }
         if let x @ (Greater | Less) = a2.cmp(&b2) { return x; }
@@ -180,11 +210,11 @@ impl<'a> ByteArrayParser<'a> {
 
     #[inline]
     pub fn compare_string(&mut self, other: &mut Self) -> Ordering {
-        let len_a = self.parse_varint().unwrap();
-        let len_b = self.parse_varint().unwrap();
+        let len_a = self.parse_varint().expect("Failed to get String length when comparing");
+        let len_b = self.parse_varint().expect("Failed to get String length when comparing");
         for _ in 0..min(len_a, len_b) {
-            let byte_a = self.advance(1).unwrap()[0];
-            let byte_b = other.advance(1).unwrap()[0];
+            let byte_a = self.advance(1).expect("Unexpected end of String when comparing")[0];
+            let byte_b = other.advance(1).expect("Unexpected end of String when comparing")[0];
             if let x @ (Greater | Less) = byte_a.cmp(&byte_b) { return x; }
         }
         len_a.cmp(&len_b)
@@ -241,8 +271,8 @@ impl<'a> ByteArrayParser<'a> {
         }
     }
     pub fn compare_list(&mut self, other: &mut Self) -> Ordering {
-        let len_a = self.parse_varint().unwrap();
-        let len_b = self.parse_varint().unwrap();
+        let len_a = self.parse_varint().expect("Failed to get List length when comparing");
+        let len_b = self.parse_varint().expect("Failed to get List length when comparing");
         for _ in 0..min(len_a, len_b) {
             if let x @ (Greater | Less) = self.compare_value(other) { return x; }
         }
@@ -260,8 +290,8 @@ impl<'a> ByteArrayParser<'a> {
         Some(ret)
     }
     pub fn compare_dict(&mut self, other: &mut Self) -> Ordering {
-        let len_a = self.parse_varint().unwrap();
-        let len_b = self.parse_varint().unwrap();
+        let len_a = self.parse_varint().expect("Failed to get Dict length when comparing");
+        let len_b = self.parse_varint().expect("Failed to get Dict length when comparing");
         for _ in 0..min(len_a, len_b) {
             if let x @ (Greater | Less) = self.compare_string(other) { return x; }
             if let x @ (Greater | Less) = self.compare_value(other) { return x; }
@@ -283,10 +313,14 @@ impl<T: Write> ByteArrayBuilder<T> {
     pub fn build_varint(&mut self, u: u64) {
         let mut u = u;
         while u > 0b01111111 {
-            self.byte_writer.write_all(&[0b10000000 | (u as u8 & 0b01111111)]).unwrap();
+            self.byte_writer.write_all(&[0b10000000 | (u as u8 & 0b01111111)]).expect(
+                "Failed to write when building VarInt"
+            );
             u >>= 7;
         }
-        self.byte_writer.write_all(&[u as u8]).unwrap();
+        self.byte_writer.write_all(&[u as u8]).expect(
+            "Failed to write when building Varint"
+        );
     }
 
     #[inline]
@@ -302,23 +336,27 @@ impl<T: Write> ByteArrayBuilder<T> {
 
     #[inline]
     pub fn build_float(&mut self, f: f64) {
-        self.byte_writer.write_all(&f.to_be_bytes()).unwrap();
+        self.byte_writer.write_all(&f.to_be_bytes()).expect(
+            "Failed to write when building Float"
+        );
     }
 
     #[inline]
     pub fn build_uuid(&mut self, u: Uuid) {
-        self.byte_writer.write_all(u.as_bytes()).unwrap();
+        self.byte_writer.write_all(u.as_bytes()).expect(
+            "Failed to write when building Uuid"
+        );
     }
 
     #[inline]
     pub fn build_string(&mut self, s: &str) {
         self.build_varint(s.len() as u64);
-        self.byte_writer.write_all(s.as_bytes()).unwrap();
+        self.byte_writer.write_all(s.as_bytes()).expect("Failed to write when building String");
     }
 
     #[inline]
     pub fn build_tag(&mut self, t: ValueTag) {
-        self.byte_writer.write_all(&[t as u8]).unwrap();
+        self.byte_writer.write_all(&[t as u8]).expect("Failed to write when building Tag");
     }
 
     pub fn build_value(&mut self, v: &Value) {

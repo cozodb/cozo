@@ -8,7 +8,21 @@ pub enum PrimitiveType {
     UInt,
     Float,
     String,
-    Bytes,
+    BitArr,
+    U8Arr,
+    I8Arr,
+    I16Arr,
+    U16Arr,
+    I32Arr,
+    U32Arr,
+    I64Arr,
+    U64Arr,
+    F16Arr,
+    F32Arr,
+    F64Arr,
+    C32Arr,
+    C64Arr,
+    C128Arr,
     Uuid,
     Timestamp,
     Datetime,
@@ -40,7 +54,8 @@ pub fn define_types<T: Env<Typing>>(env: &mut T) {
     env.define("UInt", Typing::Primitive(PrimitiveType::UInt));
     env.define("Float", Typing::Primitive(PrimitiveType::Float));
     env.define("String", Typing::Primitive(PrimitiveType::String));
-    env.define("Bytes", Typing::Primitive(PrimitiveType::Bytes));
+    env.define("Bytes", Typing::Primitive(PrimitiveType::U8Arr));
+    env.define("U8Arr", Typing::Primitive(PrimitiveType::U8Arr));
     env.define("Uuid", Typing::Primitive(PrimitiveType::Uuid));
     env.define("Timestamp", Typing::Primitive(PrimitiveType::Timestamp));
     env.define("Datetime", Typing::Primitive(PrimitiveType::Datetime));
