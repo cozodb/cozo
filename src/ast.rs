@@ -59,7 +59,7 @@ pub enum Expr<'a> {
     Const(Value<'a>),
 }
 
-fn parse_expr_infix<'a>(lhs: Result<Expr<'a>, CozoError>, op: Pair<Rule>, rhs: Result<Expr<'a>, CozoError>) -> Result<Expr<'a>, CozoError> {
+fn build_expr_infix<'a>(lhs: Result<Expr<'a>, CozoError>, op: Pair<Rule>, rhs: Result<Expr<'a>, CozoError>) -> Result<Expr<'a>, CozoError> {
     let lhs = lhs?;
     let rhs = rhs?;
     if let (Const(a), Const(b)) = (lhs, rhs) {
@@ -197,10 +197,10 @@ fn parse_s_quoted_string(pairs: Pairs<Rule>) -> Result<String, CozoError> {
     Ok(ret)
 }
 
-fn parse_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
+fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
     match pair.as_rule() {
-        Rule::expr => parse_expr_primary(pair.into_inner().next().unwrap()),
-        Rule::term => parse_expr_primary(pair.into_inner().next().unwrap()),
+        Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
+        Rule::term => build_expr_primary(pair.into_inner().next().unwrap()),
 
         Rule::pos_int => Ok(Const(Value::Int(pair.as_str().replace('_', "").parse::<i64>()?))),
         Rule::hex_pos_int => Ok(Const(Value::Int(parse_int(pair.as_str(), 16)))),
@@ -218,13 +218,13 @@ fn parse_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
     }
 }
 
-fn parse_expr(pair: Pair<Rule>) -> Result<Expr, CozoError> {
-    PREC_CLIMBER.climb(pair.into_inner(), parse_expr_primary, parse_expr_infix)
+fn build_expr(pair: Pair<Rule>) -> Result<Expr, CozoError> {
+    PREC_CLIMBER.climb(pair.into_inner(), build_expr_primary, build_expr_infix)
 }
 
 pub fn parse_expr_from_str(inp: &str) -> Result<Expr, CozoError> {
     let expr_tree = Parser::parse(Rule::expr, inp)?.next().unwrap();
-    parse_expr(expr_tree)
+    build_expr(expr_tree)
 }
 
 #[cfg(test)]
