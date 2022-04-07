@@ -56,7 +56,7 @@ pub enum EdgeDirKind {
     BwdEdgeDir,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum Value<'a> {
     Null,
     Bool(bool),
@@ -69,6 +69,29 @@ pub enum Value<'a> {
     OwnString(Box<String>),
     List(Box<Vec<Value<'a>>>),
     Dict(Box<BTreeMap<Cow<'a, str>, Value<'a>>>),
+}
+
+impl<'a> PartialEq for Value<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        use Value::*;
+
+        match (self, other) {
+            (Null, Null) => true,
+            (Bool(a), Bool(b)) => a == b,
+            (EdgeDir(a), EdgeDir(b)) => a == b,
+            (UInt(a), UInt(b)) => a == b,
+            (Int(a), Int(b)) => a == b,
+            (Float(a), Float(b)) => a == b,
+            (Uuid(a), Uuid(b)) => a == b,
+            (RefString(a), RefString(b)) => a == b,
+            (RefString(a), OwnString(b)) => *a == **b,
+            (OwnString(a), RefString(b)) => **a == *b,
+            (OwnString(a), OwnString(b)) => a == b,
+            (List(a), List(b)) => a == b,
+            (Dict(a), Dict(b)) => a == b,
+            _ => false
+        }
+    }
 }
 
 pub struct ByteArrayParser<'a> {

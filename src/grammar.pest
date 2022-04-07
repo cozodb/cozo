@@ -18,28 +18,25 @@ ident = { normal_ident | special_ident | param_ident}
 
 // literals
 
-raw_string = {
-    "r" ~ PUSH("#"*) ~ "\""    // push the number signs onto the stack
-    ~ raw_string_inner
-    ~ "\"" ~ POP               // match a quotation mark and the number signs
-}
-raw_string_inner = {
-    (
-        !("\"" ~ PEEK)    // unless the next character is a quotation mark
-                          // followed by the correct amount of number signs,
-        ~ ANY             // consume one character
-    )*
-}
-
 quoted_string = ${ "\"" ~ quoted_string_inner ~ "\"" }
-quoted_string_inner = @{ char* }
+quoted_string_inner = { char* }
 char = {
     !("\"" | "\\") ~ ANY
     | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
 
-string = {(raw_string | quoted_string)}
+
+s_quoted_string = ${ "\'" ~ s_quoted_string_inner ~ "\'" }
+s_quoted_string_inner = { s_char* }
+s_char = {
+    !("\'" | "\\") ~ ANY
+    | "\\" ~ ("\'" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+
+
+string = _{(s_quoted_string | quoted_string)}
 
 // Boolean and null
 
@@ -50,27 +47,24 @@ null = { "null" }
 // Numbers
 
 pos_int = @{ASCII_DIGIT ~ ("_" | ASCII_DIGIT)*}
-neg_int = @{"-" ~ pos_int}
 hex_pos_int = @{"0x" ~ ASCII_HEX_DIGIT ~ ("_" | ASCII_HEX_DIGIT)*}
 octo_pos_int = @{"0o" ~ ASCII_OCT_DIGIT ~ ("_" | ASCII_OCT_DIGIT)*}
 bin_pos_int = @{"0b" ~ ASCII_BIN_DIGIT ~ ("_" | ASCII_BIN_DIGIT)*}
-int = {(hex_pos_int | octo_pos_int | bin_pos_int | pos_int | neg_int)}
+int = _{(hex_pos_int | octo_pos_int | bin_pos_int | pos_int)}
 
 dot_float = @{
-    "-"?
-    ~ ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
+    ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
     ~ ("." ~ ("_" | ASCII_DIGIT)+)
 }
 
 sci_float = @{
-    "-"?
-    ~ ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
+    ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
     ~ ("." ~ ("_" | ASCII_DIGIT)+)?
     ~ (^"e" ~ ("+" | "-")? ~ ("_" | ASCII_DIGIT)+)
 }
 
-float = {(sci_float | dot_float)}
-number = {(float | int)}
+float = _{(sci_float | dot_float)}
+number = _{(float | int)}
 
 literal = _{ null | boolean | number | string}
 
@@ -83,9 +77,8 @@ comma_sep_expr = { expr ~ ("," ~ expr)* }
 expr = {(unary | term) ~ (operation ~ (unary | term)) *}
 operation = _{ (op_and | op_or | op_pow | op_add | op_sub | op_mul | op_div | op_mod | op_coalesce |
                 op_ge | op_le | op_gt | op_lt | op_eq | op_ne)}
-op_and = { "&&" }
 op_or = { "||" }
-op_pow = { "^" }
+op_and = { "&&" }
 op_add = { "+" }
 op_sub = { "-" }
 op_mul = { "*" }
@@ -98,15 +91,17 @@ op_gt = { ">" }
 op_lt = { "<" }
 op_ge = { ">=" }
 op_le = { "<=" }
+op_pow = { "^" }
 
 unary = { unary_op ~ term }
 unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }
 
-term = { (grouping | literal | normal_ident | param_ident | list | dict) ~ (call | accessor)* }
+term = { (grouping | literal | normal_ident | param_ident | list | dict) ~ (call | accessor | index_accessor)* }
 call = {"." ~ (normal_ident | special_ident) ~ "(" ~ argument* ~ ")"}
 accessor = {"." ~ (normal_ident | special_ident)}
+index_accessor = {"[" ~ expr ~ "]"}
 argument = _{(kw_arg | pos_arg)}
 kw_arg = {normal_ident ~ "=" ~ expr}
 pos_arg = { expr }
