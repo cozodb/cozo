@@ -4,31 +4,14 @@ use pest::prec_climber::{Assoc, PrecClimber, Operator};
 use crate::parser::Parser;
 use crate::parser::Rule;
 use lazy_static::lazy_static;
-use crate::ast::Expr::Const;
+use crate::ast::eval_op::*;
+use crate::ast::Expr::{Apply, Const};
+use crate::ast::op::Op;
+use crate::error::CozoError;
 use crate::value::Value;
-use thiserror::Error;
 
-#[derive(Error, Debug)]
-pub enum CozoError {
-    #[error("Invalid UTF code")]
-    InvalidUtfCode,
-
-    #[error("Type mismatch")]
-    InfixTypeMismatch {
-        op: Rule,
-        lhs: Value<'static>,
-        rhs: Value<'static>,
-    },
-
-    #[error(transparent)]
-    ParseInt(#[from] std::num::ParseIntError),
-
-    #[error(transparent)]
-    ParseFloat(#[from] std::num::ParseFloatError),
-
-    #[error(transparent)]
-    Parse(#[from] pest::error::Error<Rule>),
-}
+mod eval_op;
+mod op;
 
 
 lazy_static! {
@@ -49,72 +32,69 @@ lazy_static! {
     };
 }
 
+
 #[derive(PartialEq, Debug)]
 pub enum Expr<'a> {
-    UnaryOp,
-    BinaryOp,
-    AssocOp,
-    Accessor,
-    FnCall,
+    Apply(Op, Vec<Expr<'a>>),
     Const(Value<'a>),
+}
+
+impl<'a> Expr<'a> {
+    pub fn eval(&self) -> Result<Expr<'a>, CozoError> {
+        match self {
+            Apply(op, args) => {
+                match op {
+                    Op::Add => add_exprs(args),
+                    Op::Sub => sub_exprs(args),
+                    Op::Mul => mul_exprs(args),
+                    Op::Div => div_exprs(args),
+                    Op::Eq => eq_exprs(args),
+                    Op::Neq => ne_exprs(args),
+                    Op::Gt => gt_exprs(args),
+                    Op::Lt => lt_exprs(args),
+                    Op::Ge => ge_exprs(args),
+                    Op::Le => le_exprs(args),
+                    Op::Neg => negate_expr(args),
+                    Op::Minus => minus_expr(args),
+                    Op::Mod => mod_exprs(args),
+                    Op::Or => or_expr(args),
+                    Op::And => and_expr(args),
+                    Op::Coalesce => coalesce_exprs(args),
+                    Op::Pow => pow_exprs(args),
+                    Op::IsNull => is_null_expr(args),
+                    Op::NotNull => not_null_expr(args),
+                    Op::Call => unimplemented!(),
+                }
+            }
+            Const(v) => Ok(Const(v.clone()))
+        }
+    }
 }
 
 fn build_expr_infix<'a>(lhs: Result<Expr<'a>, CozoError>, op: Pair<Rule>, rhs: Result<Expr<'a>, CozoError>) -> Result<Expr<'a>, CozoError> {
     let lhs = lhs?;
     let rhs = rhs?;
-    if let (Const(a), Const(b)) = (lhs, rhs) {
-        let rule = op.as_rule();
-        return match rule {
-            Rule::op_add => {
-                match (a, b) {
-                    (Value::Null, _) => Ok(Const(Value::Null)),
-                    (_, Value::Null) => Ok(Const(Value::Null)),
-                    (Value::Int(va), Value::Int(vb)) => Ok(Const(Value::Int(va + vb))),
-                    (Value::Float(va), Value::Int(vb)) => Ok(Const(Value::Float(va + vb as f64))),
-                    (Value::Int(va), Value::Float(vb)) => Ok(Const(Value::Float(va as f64 + vb))),
-                    (Value::Float(va), Value::Float(vb)) => Ok(Const(Value::Float(va + vb))),
-                    (Value::OwnString(va), Value::OwnString(vb)) => Ok(Const(Value::OwnString(Box::new(*va + &*vb)))),
-                    (Value::OwnString(va), Value::RefString(vb)) => Ok(Const(Value::OwnString(Box::new(*va + &*vb)))),
-                    (Value::RefString(va), Value::OwnString(vb)) => Ok(Const(Value::OwnString(Box::new(va.to_string() + &*vb)))),
-                    (Value::RefString(va), Value::RefString(vb)) => Ok(Const(Value::OwnString(Box::new(va.to_string() + &*vb)))),
-                    (a, b) => Err(CozoError::InfixTypeMismatch { op: rule, lhs: a.into_owned(), rhs: b.into_owned() })
-                }
-            }
-            Rule::op_sub => {
-                match (a, b) {
-                    (Value::Null, _) => Ok(Const(Value::Null)),
-                    (_, Value::Null) => Ok(Const(Value::Null)),
-                    (Value::Int(va), Value::Int(vb)) => Ok(Const(Value::Int(va - vb))),
-                    (Value::Float(va), Value::Int(vb)) => Ok(Const(Value::Float(va - vb as f64))),
-                    (Value::Int(va), Value::Float(vb)) => Ok(Const(Value::Float(va as f64 - vb))),
-                    (Value::Float(va), Value::Float(vb)) => Ok(Const(Value::Float(va - vb))),
-                    (a, b) => Err(CozoError::InfixTypeMismatch { op: rule, lhs: a.into_owned(), rhs: b.into_owned() })
-                }
-            }
-            Rule::op_mul => {
-                match (a, b) {
-                    (Value::Null, _) => Ok(Const(Value::Null)),
-                    (_, Value::Null) => Ok(Const(Value::Null)),
-                    (Value::Int(va), Value::Int(vb)) => Ok(Const(Value::Int(va * vb))),
-                    (Value::Float(va), Value::Int(vb)) => Ok(Const(Value::Float(va * vb as f64))),
-                    (Value::Int(va), Value::Float(vb)) => Ok(Const(Value::Float(va as f64 * vb))),
-                    (Value::Float(va), Value::Float(vb)) => Ok(Const(Value::Float(va * vb))),
-                    (a, b) => Err(CozoError::InfixTypeMismatch { op: rule, lhs: a.into_owned(), rhs: b.into_owned() })
-                }
-            }
-            Rule::op_div => {
-                match (a, b) {
-                    (Value::Null, _) => Ok(Const(Value::Null)),
-                    (_, Value::Null) => Ok(Const(Value::Null)),
-                    (Value::Int(va), Value::Int(vb)) => Ok(Const(Value::Float(va as f64 / vb as f64))),
-                    (Value::Float(va), Value::Int(vb)) => Ok(Const(Value::Float(va / vb as f64))),
-                    (Value::Int(va), Value::Float(vb)) => Ok(Const(Value::Float(va as f64 / vb))),
-                    (Value::Float(va), Value::Float(vb)) => Ok(Const(Value::Float(va / vb))),
-                    (a, b) => Err(CozoError::InfixTypeMismatch { op: rule, lhs: a.into_owned(), rhs: b.into_owned() })
-                }
-            }
-            Rule::op_eq => Ok(Const(Value::Bool(a == b))),
-            Rule::op_ne => Ok(Const(Value::Bool(a != b))),
+    let op = match op.as_rule() {
+        Rule::op_add => Op::Add,
+        Rule::op_sub => Op::Sub,
+        Rule::op_mul => Op::Mul,
+        Rule::op_div => Op::Div,
+        Rule::op_eq => Op::Eq,
+        Rule::op_ne => Op::Neq,
+        Rule::op_or => Op::Or,
+        Rule::op_and => Op::And,
+        Rule::op_mod => Op::Mod,
+        Rule::op_gt => Op::Gt,
+        Rule::op_ge => Op::Ge,
+        Rule::op_lt => Op::Lt,
+        Rule::op_le => Op::Le,
+        Rule::op_pow => Op::Pow,
+        Rule::op_coalesce => Op::Coalesce,
+        _ => unreachable!()
+    };
+    Ok(Apply(op, vec![lhs, rhs]))
+    /*
+        /*
             Rule::op_or => {
                 match (a, b) {
                     (Value::Null, Value::Null) => Ok(Const(Value::Null)),
@@ -133,12 +113,8 @@ fn build_expr_infix<'a>(lhs: Result<Expr<'a>, CozoError>, op: Pair<Rule>, rhs: R
                     (a, b) => Err(CozoError::InfixTypeMismatch { op: rule, lhs: a.into_owned(), rhs: b.into_owned() })
                 }
             }
-            Rule::op_coalesce => Ok(if a == Value::Null { Const(b) } else { Const(a) }),
-            _ => { unimplemented!() }
-        };
-    } else {
-        unimplemented!()
-    }
+         */
+        */
 }
 
 #[inline]
@@ -148,7 +124,7 @@ fn parse_int(s: &str, radix: u32) -> i64 {
 
 #[inline]
 fn parse_quoted_string(pairs: Pairs<Rule>) -> Result<String, CozoError> {
-    let mut ret = String::new();
+    let mut ret = String::with_capacity(pairs.as_str().len());
     for pair in pairs {
         let s = pair.as_str();
         match s {
@@ -165,6 +141,7 @@ fn parse_quoted_string(pairs: Pairs<Rule>) -> Result<String, CozoError> {
                 let ch = char::from_u32(code).ok_or(CozoError::InvalidUtfCode)?;
                 ret.push(ch);
             }
+            s if s.starts_with('\\') => return Err(CozoError::InvalidEscapeSequence),
             s => ret.push_str(s)
         }
     }
@@ -174,7 +151,7 @@ fn parse_quoted_string(pairs: Pairs<Rule>) -> Result<String, CozoError> {
 
 #[inline]
 fn parse_s_quoted_string(pairs: Pairs<Rule>) -> Result<String, CozoError> {
-    let mut ret = String::new();
+    let mut ret = String::with_capacity(pairs.as_str().len());
     for pair in pairs {
         let s = pair.as_str();
         match s {
@@ -191,6 +168,7 @@ fn parse_s_quoted_string(pairs: Pairs<Rule>) -> Result<String, CozoError> {
                 let ch = char::from_u32(code).ok_or(CozoError::InvalidUtfCode)?;
                 ret.push(ch);
             }
+            s if s.starts_with('\\') => return Err(CozoError::InvalidEscapeSequence),
             s => ret.push_str(s)
         }
     }
@@ -201,6 +179,26 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
     match pair.as_rule() {
         Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
         Rule::term => build_expr_primary(pair.into_inner().next().unwrap()),
+        Rule::grouping => build_expr(pair.into_inner().next().unwrap()),
+
+        Rule::unary => {
+            let mut inner = pair.into_inner();
+            let op = inner.next().unwrap().as_rule();
+            let term = build_expr_primary(inner.next().unwrap())?;
+            /*
+            match (op, term) {
+                (Rule::minus, Const(Value::Int(i))) => Ok(Const(Value::Int(-i))),
+                (Rule::minus, Const(Value::Float(f))) => Ok(Const(Value::Float(-f))),
+                (_, Const(term)) => Err(PrefixTypeMismatch { op, term: term.into_owned() }),
+                (_, _) => unimplemented!()
+            }
+             */
+            Ok(Apply(match op {
+                Rule::negate => Op::Neg,
+                Rule::minus => Op::Minus,
+                _ => unreachable!()
+            }, vec![term]))
+        }
 
         Rule::pos_int => Ok(Const(Value::Int(pair.as_str().replace('_', "").parse::<i64>()?))),
         Rule::hex_pos_int => Ok(Const(Value::Int(parse_int(pair.as_str(), 16)))),
@@ -255,6 +253,11 @@ mod tests {
 
     #[test]
     fn operators() {
-        println!("{:#?}", parse_expr_from_str("1/10+2+3*4").unwrap());
+        println!("{:#?}", parse_expr_from_str("1/10+(-2+3)*4^5").unwrap().eval().unwrap());
+        println!("{:#?}", parse_expr_from_str("true && false").unwrap().eval().unwrap());
+        println!("{:#?}", parse_expr_from_str("true || false").unwrap().eval().unwrap());
+        println!("{:#?}", parse_expr_from_str("true || null").unwrap().eval().unwrap());
+        println!("{:#?}", parse_expr_from_str("null || true").unwrap().eval().unwrap());
+        println!("{:#?}", parse_expr_from_str("true && null").unwrap().eval().unwrap());
     }
 }
