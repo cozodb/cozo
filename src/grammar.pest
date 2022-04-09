@@ -1,4 +1,4 @@
-file = {SOI ~ ident ~ EOI}
+file = _{SOI ~ statement* ~ EOI}
 
 // whitespace
 
@@ -126,3 +126,32 @@ dict_accessor = { ident? ~ ("." ~ ident)+ }
 dict_pair = {(ident | string) ~ ":" ~ expr}
 
 scoped_dict = { ident ~ dict }
+
+name_in_def = {(ident | string)}
+col_entry = { col_name ~ ":" ~ typing ~ ("=" ~ expr)? }
+
+col_name = { key_marker? ~ name_in_def }
+key_marker = { "*" }
+
+typing = { nullable_marker? ~ (simple_type | tuple_type | list_type ) }
+nullable_marker = {"?"}
+simple_type = {ident}
+tuple_type = {"("~ (typing ~ ",")+ ~")"}
+list_type = {"[" ~ typing ~ "]"}
+
+cols_def = { "{" ~ col_entry ~ ("," ~ col_entry)* ~ ","? ~ "}" }
+
+col_list = {"(" ~ name_in_def ~ ("," ~ name_in_def)* ~ ","? ~ ")"}
+
+node_def = { "node" ~ name_in_def ~ cols_def }
+columns_def = { "columns" ~ name_in_def ~ ":" ~ name_in_def ~ cols_def }
+edge_def = { "edge" ~
+             "[" ~ name_in_def ~ "]" ~ "-" ~ "(" ~ name_in_def ~ ")" ~ "->" ~ "[" ~ name_in_def ~ "]"
+             ~ cols_def? }
+index_def = { "index" ~ (name_in_def ~ ":")? ~ name_in_def ~ col_list }
+struct_def = { "struct" ~ name_in_def ~ cols_def }
+
+definition = _{ node_def | columns_def | edge_def | struct_def | index_def }
+global_def = { "create" ~ definition }
+local_def = { "local" ~ definition }
+statement = _{ global_def | local_def }

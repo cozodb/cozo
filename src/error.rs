@@ -12,6 +12,9 @@ pub enum CozoError {
     #[error("Type mismatch")]
     TypeError,
 
+    #[error("Reserved identifier")]
+    ReservedIdent,
+
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
 
