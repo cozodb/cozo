@@ -31,22 +31,20 @@ mod tests {
 
     #[test]
     fn identifiers() {
-        assert_eq!(Parser::parse(Rule::normal_ident, "x").unwrap().as_str(), "x");
-        assert_eq!(Parser::parse(Rule::normal_ident, "x2").unwrap().as_str(), "x2");
-        assert_eq!(Parser::parse(Rule::normal_ident, "x_y").unwrap().as_str(), "x_y");
-        assert_eq!(Parser::parse(Rule::normal_ident, "x_").unwrap().as_str(), "x_");
-        assert_eq!(Parser::parse(Rule::normal_ident, "你好").unwrap().as_str(), "你好");
-        assert_eq!(Parser::parse(Rule::normal_ident, "你好123").unwrap().as_str(), "你好123");
+        assert_eq!(Parser::parse(Rule::ident, "x").unwrap().as_str(), "x");
+        assert_eq!(Parser::parse(Rule::ident, "x2").unwrap().as_str(), "x2");
+        assert_eq!(Parser::parse(Rule::ident, "x_y").unwrap().as_str(), "x_y");
+        assert_eq!(Parser::parse(Rule::ident, "x_").unwrap().as_str(), "x_");
+        assert_eq!(Parser::parse(Rule::ident, "你好").unwrap().as_str(), "你好");
+        assert_eq!(Parser::parse(Rule::ident, "你好123").unwrap().as_str(), "你好123");
         assert_ne!(Parser::parse(Rule::ident, "x$y").unwrap().as_str(), "x$y");
 
-        assert!(Parser::parse(Rule::normal_ident, "_x").is_err());
-        assert!(Parser::parse(Rule::normal_ident, "_").is_err());
         assert_eq!(Parser::parse(Rule::ident, "_x").unwrap().as_str(), "_x");
         assert_eq!(Parser::parse(Rule::ident, "_").unwrap().as_str(), "_");
 
-        assert!(Parser::parse(Rule::normal_ident, "$x").is_err());
+        assert!(Parser::parse(Rule::ident, "$x").is_err());
         assert!(Parser::parse(Rule::ident, "$").is_err());
-        assert_eq!(Parser::parse(Rule::ident, "$x").unwrap().as_str(), "$x");
+        assert_eq!(Parser::parse(Rule::param, "$x").unwrap().as_str(), "$x");
 
         assert!(Parser::parse(Rule::ident, "123x").is_err());
         assert!(Parser::parse(Rule::ident, ".x").is_err());

@@ -11,9 +11,9 @@ use Ordering::{Greater, Less, Equal};
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub enum ValueTag {
-    NullTag = 0,
-    BoolTrueTag = 2,
-    BoolFalseTag = 4,
+    BoolFalseTag = 0,
+    NullTag = 2,
+    BoolTrueTag = 4,
     FwdEdgeTag = 6,
     BwdEdgeTag = 8,
     IntTag = 11,

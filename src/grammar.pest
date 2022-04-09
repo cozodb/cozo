@@ -10,10 +10,8 @@ COMMENT = _{(BLOCK_COMMENT | LINE_COMMENT)}
 
 // identifiers
 
-normal_ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
-special_ident = @{"_" ~ ("_" | XID_CONTINUE)*}
-param_ident = @{"$" ~ ("_" | XID_CONTINUE)+}
-ident = { normal_ident | special_ident | param_ident}
+ident = @{("_" | XID_START) ~ ("_" | XID_CONTINUE)*}
+param = @{"$" ~ ("_" | XID_CONTINUE)+}
 
 
 // literals
@@ -34,9 +32,20 @@ s_char = {
     | "\\" ~ ("\'" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
+raw_string = {
+    "r" ~ PUSH("#"*) ~ "\""    // push the number signs onto the stack
+    ~ raw_string_inner
+    ~ "\"" ~ POP               // match a quotation mark and the number signs
+}
+raw_string_inner = {
+    (
+        !("\"" ~ PEEK)    // unless the next character is a quotation mark
+                          // followed by the correct amount of number signs,
+        ~ ANY             // consume one character
+    )*
+}
 
-
-string = _{(s_quoted_string | quoted_string)}
+string = _{(raw_string | s_quoted_string | quoted_string)}
 
 // Boolean and null
 
@@ -98,12 +107,12 @@ unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }
 
-term = { (grouping | literal | normal_ident | param_ident | list | dict) ~ (call | accessor | index_accessor)* }
-call = {"." ~ (normal_ident | special_ident) ~ "(" ~ argument* ~ ")"}
-accessor = {"." ~ (normal_ident | special_ident)}
+term = { (grouping | literal | ident | param | list | dict) ~ (call | accessor | index_accessor)* }
+call = {"." ~ ident ~ "(" ~ argument* ~ ")"}
+accessor = {"." ~ ident}
 index_accessor = {"[" ~ expr ~ "]"}
 argument = _{(kw_arg | pos_arg)}
-kw_arg = {normal_ident ~ "=" ~ expr}
+kw_arg = {ident ~ "=" ~ expr}
 pos_arg = { expr }
 grouping = { "(" ~ expr ~ ")" }
 
@@ -113,7 +122,7 @@ spreading = {"..." ~ term}
 
 dict = { "{" ~ (dict_entry ~ ",")* ~ dict_entry? ~ "}"}
 dict_entry = _{ spreading | dict_accessor | dict_pair }
-dict_accessor = { normal_ident? ~ ("." ~ (normal_ident | special_ident))+ }
-dict_pair = {(normal_ident | special_ident | string) ~ ":" ~ expr}
+dict_accessor = { ident? ~ ("." ~ ident)+ }
+dict_pair = {(ident | string) ~ ":" ~ expr}
 
-scoped_dict = { normal_ident ~ dict }
+scoped_dict = { ident ~ dict }

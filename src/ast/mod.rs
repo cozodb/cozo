@@ -8,6 +8,7 @@ use crate::ast::eval_op::*;
 use crate::ast::Expr::{Apply, Const};
 use crate::ast::op::Op;
 use crate::error::CozoError;
+use crate::typing::Typing;
 use crate::value::Value;
 
 mod eval_op;
@@ -30,6 +31,32 @@ lazy_static! {
             Operator::new(Rule::op_coalesce, Assoc::Left)
         ])
     };
+}
+
+pub struct Col {
+    pub name: String,
+    pub typ: Typing,
+    pub default: Option<Value<'static>>,
+}
+
+pub enum TableDef {
+    Node {
+        name: String,
+        keys: Vec<Col>,
+        cols: Vec<Col>,
+    },
+    Edge {
+        src: String,
+        dst: String,
+        name: String,
+        keys: Vec<Col>,
+        cols: Vec<Col>,
+    },
+    Columns {
+        attached: String,
+        name: String,
+        cols: Vec<Col>,
+    },
 }
 
 
@@ -93,33 +120,16 @@ fn build_expr_infix<'a>(lhs: Result<Expr<'a>, CozoError>, op: Pair<Rule>, rhs: R
         _ => unreachable!()
     };
     Ok(Apply(op, vec![lhs, rhs]))
-    /*
-        /*
-            Rule::op_or => {
-                match (a, b) {
-                    (Value::Null, Value::Null) => Ok(Const(Value::Null)),
-                    (Value::Null, Value::Bool(b)) => Ok(Const(Value::Bool(b))),
-                    (Value::Bool(b), Value::Null) => Ok(Const(Value::Bool(b))),
-                    (Value::Bool(a), Value::Bool(b)) => Ok(Const(Value::Bool(a || b))),
-                    (a, b) => Err(CozoError::InfixTypeMismatch { op: rule, lhs: a.into_owned(), rhs: b.into_owned() })
-                }
-            }
-            Rule::op_and => {
-                match (a, b) {
-                    (Value::Null, Value::Null) => Ok(Const(Value::Null)),
-                    (Value::Null, Value::Bool(_)) => Ok(Const(Value::Null)),
-                    (Value::Bool(_), Value::Null) => Ok(Const(Value::Null)),
-                    (Value::Bool(a), Value::Bool(b)) => Ok(Const(Value::Bool(a && b))),
-                    (a, b) => Err(CozoError::InfixTypeMismatch { op: rule, lhs: a.into_owned(), rhs: b.into_owned() })
-                }
-            }
-         */
-        */
 }
 
 #[inline]
 fn parse_int(s: &str, radix: u32) -> i64 {
     i64::from_str_radix(&s[2..].replace('_', ""), radix).unwrap()
+}
+
+#[inline]
+fn parse_raw_string(pairs: Pairs<Rule>) -> Result<String, CozoError> {
+    Ok(pairs.into_iter().next().unwrap().as_str().to_string())
 }
 
 #[inline]
@@ -185,14 +195,6 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
             let mut inner = pair.into_inner();
             let op = inner.next().unwrap().as_rule();
             let term = build_expr_primary(inner.next().unwrap())?;
-            /*
-            match (op, term) {
-                (Rule::minus, Const(Value::Int(i))) => Ok(Const(Value::Int(-i))),
-                (Rule::minus, Const(Value::Float(f))) => Ok(Const(Value::Float(-f))),
-                (_, Const(term)) => Err(PrefixTypeMismatch { op, term: term.into_owned() }),
-                (_, _) => unimplemented!()
-            }
-             */
             Ok(Apply(match op {
                 Rule::negate => Op::Neg,
                 Rule::minus => Op::Minus,
@@ -209,6 +211,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
         Rule::boolean => Ok(Const(Value::Bool(pair.as_str() == "true"))),
         Rule::quoted_string => Ok(Const(Value::OwnString(Box::new(parse_quoted_string(pair.into_inner().next().unwrap().into_inner())?)))),
         Rule::s_quoted_string => Ok(Const(Value::OwnString(Box::new(parse_s_quoted_string(pair.into_inner().next().unwrap().into_inner())?)))),
+        Rule::raw_string => Ok(Const(Value::OwnString(Box::new(parse_raw_string(pair.into_inner())?)))),
         _ => {
             println!("{:#?}", pair);
             unimplemented!()
@@ -230,6 +233,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn raw_string() {
+        println!("{:#?}", parse_expr_from_str(r#####"r#"x"#"#####))
+    }
+
+    #[test]
     fn parse_literals() {
         assert_eq!(parse_expr_from_str("1").unwrap(), Const(Value::Int(1)));
         assert_eq!(parse_expr_from_str("12_3").unwrap(), Const(Value::Int(123)));
@@ -249,6 +257,7 @@ mod tests {
         assert_eq!(parse_expr_from_str(r#""x \n \ty \"""#).unwrap(), Const(Value::RefString("x \n \ty \"")));
         assert_eq!(parse_expr_from_str(r#""x'""#).unwrap(), Const(Value::RefString("x'")));
         assert_eq!(parse_expr_from_str(r#"'"x"'"#).unwrap(), Const(Value::RefString(r##""x""##)));
+        assert_eq!(parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(), Const(Value::RefString(r##"x"yz"##)));
     }
 
     #[test]
