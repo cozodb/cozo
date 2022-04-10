@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use crate::typing::{PrimitiveType, Typing};
+use crate::typing::{BaseType, Typing};
 use crate::value::Value;
 use lazy_static::lazy_static;
 
@@ -55,16 +55,16 @@ lazy_static! {
         ret.insert("_add_int",
             Function {
                 args: vec![],
-                var_arg: Some(Typing::Primitive(PrimitiveType::Int)),
-                ret_type: Typing::Primitive(PrimitiveType::Int),
+                var_arg: Some(Typing::Base(BaseType::Int)),
+                ret_type: Typing::Base(BaseType::Int),
                 fn_impl: FunctionImpl::Native("_add_int", add_int)
             });
 
         ret.insert("_add_float",
             Function {
                 args: vec![],
-                var_arg: Some(Typing::Primitive(PrimitiveType::Float)),
-                ret_type: Typing::Primitive(PrimitiveType::Float),
+                var_arg: Some(Typing::Base(BaseType::Float)),
+                ret_type: Typing::Base(BaseType::Float),
                 fn_impl: FunctionImpl::Native("_add_float", add_float)
             });
 

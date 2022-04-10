@@ -4,16 +4,37 @@ use pest::prec_climber::{Assoc, PrecClimber, Operator};
 use crate::parser::Parser;
 use crate::parser::Rule;
 use lazy_static::lazy_static;
-use crate::ast::eval_op::*;
 use crate::ast::Expr::{Apply, Const};
-use crate::ast::op::Op;
 use crate::error::CozoError;
 use crate::error::CozoError::ReservedIdent;
-use crate::typing::{PrimitiveType, Typing};
+use crate::typing::{BaseType, Typing};
 use crate::value::Value;
 
-mod eval_op;
-mod op;
+
+
+#[derive(PartialEq, Debug)]
+pub enum Op {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    Neq,
+    Gt,
+    Lt,
+    Ge,
+    Le,
+    Neg,
+    Minus,
+    Mod,
+    Or,
+    And,
+    Coalesce,
+    Pow,
+    Call,
+    IsNull,
+    NotNull
+}
 
 
 lazy_static! {
@@ -78,37 +99,10 @@ pub enum Expr<'a> {
     Const(Value<'a>),
 }
 
-impl<'a> Expr<'a> {
-    pub fn eval(&self) -> Result<Expr<'a>, CozoError> {
-        match self {
-            Apply(op, args) => {
-                match op {
-                    Op::Add => add_exprs(args),
-                    Op::Sub => sub_exprs(args),
-                    Op::Mul => mul_exprs(args),
-                    Op::Div => div_exprs(args),
-                    Op::Eq => eq_exprs(args),
-                    Op::Neq => ne_exprs(args),
-                    Op::Gt => gt_exprs(args),
-                    Op::Lt => lt_exprs(args),
-                    Op::Ge => ge_exprs(args),
-                    Op::Le => le_exprs(args),
-                    Op::Neg => negate_expr(args),
-                    Op::Minus => minus_expr(args),
-                    Op::Mod => mod_exprs(args),
-                    Op::Or => or_expr(args),
-                    Op::And => and_expr(args),
-                    Op::Coalesce => coalesce_exprs(args),
-                    Op::Pow => pow_exprs(args),
-                    Op::IsNull => is_null_expr(args),
-                    Op::NotNull => not_null_expr(args),
-                    Op::Call => unimplemented!(),
-                }
-            }
-            Const(v) => Ok(Const(v.clone()))
-        }
-    }
+pub trait ExprVisitor<'a, T> {
+    fn visit_expr(&mut self, ex: &Expr<'a>) -> T;
 }
+
 
 fn build_expr_infix<'a>(lhs: Result<Expr<'a>, CozoError>, op: Pair<Rule>, rhs: Result<Expr<'a>, CozoError>) -> Result<Expr<'a>, CozoError> {
     let lhs = lhs?;
@@ -279,8 +273,8 @@ fn build_col_entry(pair: Pair<Rule>) -> Result<(Col, bool), CozoError> {
     let (name, is_key) = parse_col_name(pairs.next().unwrap())?;
     Ok((Col {
         name,
-        typ: Typing::Primitive(PrimitiveType::Int),
-        default: None
+        typ: Typing::Base(BaseType::Int),
+        default: None,
     }, is_key))
 }
 
@@ -368,16 +362,6 @@ mod tests {
         assert_eq!(parse_expr_from_str(r#""x'""#).unwrap(), Const(Value::RefString("x'")));
         assert_eq!(parse_expr_from_str(r#"'"x"'"#).unwrap(), Const(Value::RefString(r##""x""##)));
         assert_eq!(parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(), Const(Value::RefString(r##"x"yz"##)));
-    }
-
-    #[test]
-    fn operators() {
-        println!("{:#?}", parse_expr_from_str("1/10+(-2+3)*4^5").unwrap().eval().unwrap());
-        println!("{:#?}", parse_expr_from_str("true && false").unwrap().eval().unwrap());
-        println!("{:#?}", parse_expr_from_str("true || false").unwrap().eval().unwrap());
-        println!("{:#?}", parse_expr_from_str("true || null").unwrap().eval().unwrap());
-        println!("{:#?}", parse_expr_from_str("null || true").unwrap().eval().unwrap());
-        println!("{:#?}", parse_expr_from_str("true && null").unwrap().eval().unwrap());
     }
 
     #[test]
