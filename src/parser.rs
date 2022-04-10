@@ -1,4 +1,3 @@
-use pest::Parser as PestParser;
 use pest_derive::Parser;
 
 
@@ -10,6 +9,7 @@ pub struct Parser;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pest::Parser as PestParser;
 
     #[test]
     fn db() {
@@ -66,9 +66,7 @@ mod tests {
     #[test]
     fn numbers() {
         assert_eq!(Parser::parse(Rule::number, "123").unwrap().as_str(), "123");
-        assert_eq!(Parser::parse(Rule::number, "-123").unwrap().as_str(), "-123");
         assert_eq!(Parser::parse(Rule::number, "0").unwrap().as_str(), "0");
-        assert_eq!(Parser::parse(Rule::number, "-0").unwrap().as_str(), "-0");
         assert_eq!(Parser::parse(Rule::number, "0123").unwrap().as_str(), "0123");
         assert_eq!(Parser::parse(Rule::number, "000_1").unwrap().as_str(), "000_1");
         assert!(Parser::parse(Rule::number, "_000_1").is_err());
@@ -81,7 +79,6 @@ mod tests {
         assert_eq!(Parser::parse(Rule::number, "123.45").unwrap().as_str(), "123.45");
         assert_eq!(Parser::parse(Rule::number, "1_23.4_5_").unwrap().as_str(), "1_23.4_5_");
         assert_ne!(Parser::parse(Rule::number, "123.").unwrap().as_str(), "123.");
-        assert_eq!(Parser::parse(Rule::number, "-123e-456").unwrap().as_str(), "-123e-456");
         assert_eq!(Parser::parse(Rule::number, "123.333e456").unwrap().as_str(), "123.333e456");
         assert_eq!(Parser::parse(Rule::number, "1_23.33_3e45_6").unwrap().as_str(), "1_23.33_3e45_6");
     }

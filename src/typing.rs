@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use crate::ast::Op;
 use crate::env::{Env, LayeredEnv};
 use crate::value::Value;
 

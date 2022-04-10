@@ -1,11 +1,10 @@
-use pest::Parser as PestParser;
 use pest::iterators::{Pair, Pairs};
 use crate::ast::parse_string;
 use crate::env::Env;
-use crate::error::CozoError;
+use crate::error::Result;
 use crate::error::CozoError::*;
-use crate::parser::{Parser, Rule};
-use crate::typing::{BaseType, Col, Edge, Node, Structured, StructuredEnv, StructuredEnvItem, TableId, Typing};
+use crate::parser::{Rule};
+use crate::typing::{Col, Edge, Node, Structured, StructuredEnv, StructuredEnvItem, TableId, Typing};
 use crate::typing::Persistence::{Global, Local};
 use crate::typing::StorageStatus::Planned;
 use crate::value::Value;
@@ -14,7 +13,7 @@ fn parse_ident(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
 }
 
-fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<String, CozoError> {
+fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<String> {
     let inner = pair.into_inner().next().unwrap();
     let name = match inner.as_rule() {
         Rule::ident => parse_ident(inner),
@@ -28,7 +27,7 @@ fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<String
     }
 }
 
-fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool), CozoError> {
+fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool)> {
     let mut pairs = pair.into_inner();
     let mut is_key = false;
     let mut nxt_pair = pairs.next().unwrap();
@@ -42,7 +41,7 @@ fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool), CozoError> {
 
 
 impl StructuredEnvItem {
-    pub fn build_edge_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<(), CozoError> {
+    pub fn build_edge_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<()> {
         let mut inner = pair.into_inner();
         let src_name = build_name_in_def(inner.next().unwrap(), true)?;
         let src = self.resolve(&src_name).ok_or(UndefinedType)?;
@@ -91,7 +90,7 @@ impl StructuredEnvItem {
             Err(NameConflict)
         }
     }
-    pub fn build_node_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<(), CozoError> {
+    pub fn build_node_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<()> {
         let mut inner = pair.into_inner();
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let (keys, cols) = self.build_col_defs(inner.next().unwrap())?;
@@ -110,7 +109,7 @@ impl StructuredEnvItem {
         }
     }
 
-    fn build_type(&self, pair: Pair<Rule>) -> Result<Typing, CozoError> {
+    fn build_type(&self, pair: Pair<Rule>) -> Result<Typing> {
         let mut pairs = pair.into_inner();
         let mut inner = pairs.next().unwrap();
         let nullable = if Rule::nullable_marker == inner.as_rule() {
@@ -142,12 +141,12 @@ impl StructuredEnvItem {
         })
     }
 
-    fn build_default_value(&self, _pair: Pair<Rule>) -> Result<Value<'static>, CozoError> {
+    fn build_default_value(&self, _pair: Pair<Rule>) -> Result<Value<'static>> {
         // TODO: _pair is an expression, parse it and evaluate it to a constant value
         Ok(Value::Null)
     }
 
-    fn build_col_entry(&self, pair: Pair<Rule>) -> Result<(Col, bool), CozoError> {
+    fn build_col_entry(&self, pair: Pair<Rule>) -> Result<(Col, bool)> {
         let mut pairs = pair.into_inner();
         let (name, is_key) = parse_col_name(pairs.next().unwrap())?;
         let typ = self.build_type(pairs.next().unwrap())?;
@@ -164,7 +163,7 @@ impl StructuredEnvItem {
         }, is_key))
     }
 
-    fn build_col_defs(&self, pair: Pair<Rule>) -> Result<(Vec<Col>, Vec<Col>), CozoError> {
+    fn build_col_defs(&self, pair: Pair<Rule>) -> Result<(Vec<Col>, Vec<Col>)> {
         let mut keys = vec![];
         let mut cols = vec![];
         for pair in pair.into_inner() {
@@ -181,7 +180,7 @@ impl StructuredEnvItem {
 }
 
 impl StructuredEnv {
-    pub fn build_table(&mut self, pairs: Pairs<Rule>) -> Result<(), CozoError> {
+    pub fn build_table(&mut self, pairs: Pairs<Rule>) -> Result<()> {
         for pair in pairs {
             match pair.as_rule() {
                 r @ (Rule::global_def | Rule::local_def) => {
@@ -217,6 +216,8 @@ impl StructuredEnv {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pest::Parser as PestParser;
+    use crate::parser::Parser;
 
     #[test]
     fn definitions() {

@@ -1,4 +1,4 @@
-use pest::iterators::{Pair, Pairs};
+use pest::iterators::{Pair};
 use pest::Parser as PestParser;
 use pest::prec_climber::{Assoc, PrecClimber, Operator};
 use crate::parser::Parser;
@@ -6,7 +6,7 @@ use crate::parser::Rule;
 use lazy_static::lazy_static;
 use crate::ast::Expr::{Apply, Const};
 use crate::error::CozoError;
-use crate::error::CozoError::ReservedIdent;
+use crate::error::Result;
 use crate::value::Value;
 
 
@@ -66,7 +66,7 @@ pub trait ExprVisitor<'a, T> {
 }
 
 
-fn build_expr_infix<'a>(lhs: Result<Expr<'a>, CozoError>, op: Pair<Rule>, rhs: Result<Expr<'a>, CozoError>) -> Result<Expr<'a>, CozoError> {
+fn build_expr_infix<'a>(lhs: Result<Expr<'a>>, op: Pair<Rule>, rhs: Result<Expr<'a>>) -> Result<Expr<'a>> {
     let lhs = lhs?;
     let rhs = rhs?;
     let op = match op.as_rule() {
@@ -96,12 +96,12 @@ fn parse_int(s: &str, radix: u32) -> i64 {
 }
 
 #[inline]
-fn parse_raw_string(pair: Pair<Rule>) -> Result<String, CozoError> {
+fn parse_raw_string(pair: Pair<Rule>) -> Result<String> {
     Ok(pair.into_inner().into_iter().next().unwrap().as_str().to_string())
 }
 
 #[inline]
-fn parse_quoted_string(pair: Pair<Rule>) -> Result<String, CozoError> {
+fn parse_quoted_string(pair: Pair<Rule>) -> Result<String> {
     let pairs = pair.into_inner().next().unwrap().into_inner();
     let mut ret = String::with_capacity(pairs.as_str().len());
     for pair in pairs {
@@ -129,7 +129,7 @@ fn parse_quoted_string(pair: Pair<Rule>) -> Result<String, CozoError> {
 
 
 #[inline]
-fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String, CozoError> {
+fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
     let pairs = pair.into_inner().next().unwrap().into_inner();
     let mut ret = String::with_capacity(pairs.as_str().len());
     for pair in pairs {
@@ -156,7 +156,7 @@ fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String, CozoError> {
 }
 
 #[inline]
-pub fn parse_string(pair: Pair<Rule>) -> Result<String, CozoError>  {
+pub fn parse_string(pair: Pair<Rule>) -> Result<String>  {
     match pair.as_rule() {
         Rule::quoted_string => Ok(parse_quoted_string(pair)?),
         Rule::s_quoted_string => Ok(parse_s_quoted_string(pair)?),
@@ -165,7 +165,7 @@ pub fn parse_string(pair: Pair<Rule>) -> Result<String, CozoError>  {
     }
 }
 
-fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
+fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
     match pair.as_rule() {
         Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
         Rule::term => build_expr_primary(pair.into_inner().next().unwrap()),
@@ -189,7 +189,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
         Rule::dot_float | Rule::sci_float => Ok(Const(Value::Float(pair.as_str().replace('_', "").parse::<f64>()?))),
         Rule::null => Ok(Const(Value::Null)),
         Rule::boolean => Ok(Const(Value::Bool(pair.as_str() == "true"))),
-        Rule::quoted_string | Rule::s_quoted_string | Rule::s_quoted_string => Ok(
+        Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => Ok(
             Const(Value::OwnString(Box::new(parse_string(pair)?)))),
         _ => {
             println!("{:#?}", pair);
@@ -198,11 +198,11 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
     }
 }
 
-fn build_expr(pair: Pair<Rule>) -> Result<Expr, CozoError> {
+fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
     PREC_CLIMBER.climb(pair.into_inner(), build_expr_primary, build_expr_infix)
 }
 
-pub fn parse_expr_from_str(inp: &str) -> Result<Expr, CozoError> {
+pub fn parse_expr_from_str(inp: &str) -> Result<Expr> {
     let expr_tree = Parser::parse(Rule::expr, inp)?.next().unwrap();
     build_expr(expr_tree)
 }

@@ -1,5 +1,6 @@
 use crate::ast::Expr;
 use crate::ast::Expr::*;
+use crate::error::Result;
 use crate::error::CozoError;
 use crate::error::CozoError::*;
 use crate::value::Value::*;
@@ -22,8 +23,8 @@ impl Default for Evaluator {
     }
 }
 
-impl<'a> ExprVisitor<'a, Result<Expr<'a>, CozoError>> for Evaluator {
-    fn visit_expr(&mut self, ex: &Expr<'a>) -> Result<Expr<'a>, CozoError> {
+impl<'a> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator {
+    fn visit_expr(&mut self, ex: &Expr<'a>) -> Result<Expr<'a>> {
         match ex {
             Apply(op, args) => {
                 match op {
@@ -55,7 +56,7 @@ impl<'a> ExprVisitor<'a, Result<Expr<'a>, CozoError>> for Evaluator {
 }
 
 impl Evaluator {
-    fn add_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn add_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -84,7 +85,7 @@ impl Evaluator {
         }
     }
 
-    fn sub_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn sub_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -109,7 +110,7 @@ impl Evaluator {
         }
     }
 
-    fn mul_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn mul_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -135,7 +136,7 @@ impl Evaluator {
     }
 
 
-    fn div_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn div_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -160,7 +161,7 @@ impl Evaluator {
         }
     }
 
-    fn mod_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn mod_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -183,7 +184,7 @@ impl Evaluator {
     }
 
 
-    fn eq_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn eq_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -201,7 +202,7 @@ impl Evaluator {
     }
 
 
-    fn ne_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn ne_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -219,7 +220,7 @@ impl Evaluator {
     }
 
 
-    fn gt_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn gt_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -245,7 +246,7 @@ impl Evaluator {
     }
 
 
-    fn ge_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn ge_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -271,7 +272,7 @@ impl Evaluator {
     }
 
 
-    fn lt_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn lt_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -296,7 +297,7 @@ impl Evaluator {
         }
     }
 
-    fn le_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn le_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -322,7 +323,7 @@ impl Evaluator {
     }
 
 
-    fn pow_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn pow_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -347,7 +348,7 @@ impl Evaluator {
         }
     }
 
-    fn coalesce_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn coalesce_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -367,7 +368,7 @@ impl Evaluator {
         }
     }
 
-    fn negate_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn negate_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
             [a] => {
                 match self.visit_expr(a)? {
@@ -391,7 +392,7 @@ impl Evaluator {
     }
 
 
-    fn minus_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn minus_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
             [a] => {
                 match self.visit_expr(a)? {
@@ -408,7 +409,7 @@ impl Evaluator {
     }
 
 
-    fn test_null_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn test_null_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
             [a] => {
                 match self.visit_expr(a)? {
@@ -421,7 +422,7 @@ impl Evaluator {
         })
     }
 
-    fn not_null_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn not_null_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
             [a] => {
                 match self.visit_expr(a)? {
@@ -434,7 +435,7 @@ impl Evaluator {
         })
     }
 
-    fn or_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn or_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         let mut unevaluated = vec![];
         let mut has_null = false;
         for expr in exprs {
@@ -467,7 +468,7 @@ impl Evaluator {
     }
 
 
-    fn and_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>, CozoError> {
+    fn and_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         let mut unevaluated = vec![];
         let mut no_null = true;
         for expr in exprs {

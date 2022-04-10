@@ -1,3 +1,4 @@
+use std::result;
 use thiserror::Error;
 use crate::parser::Rule;
 
@@ -36,3 +37,5 @@ pub enum CozoError {
     #[error(transparent)]
     Parse(#[from] pest::error::Error<Rule>),
 }
+
+pub type Result<T> = result::Result<T, CozoError>;
