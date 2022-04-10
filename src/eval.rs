@@ -4,8 +4,23 @@ use crate::error::CozoError;
 use crate::error::CozoError::*;
 use crate::value::Value::*;
 use crate::ast::*;
+use crate::typing::StructuredEnv;
 
-struct Evaluator;
+pub struct Evaluator {
+    pub s_envs: StructuredEnv,
+}
+
+impl Evaluator {
+    pub fn new() -> Self {
+        Self { s_envs: StructuredEnv::new() }
+    }
+}
+
+impl Default for Evaluator {
+    fn default() -> Self {
+        Evaluator::new()
+    }
+}
 
 impl<'a> ExprVisitor<'a, Result<Expr<'a>, CozoError>> for Evaluator {
     fn visit_expr(&mut self, ex: &Expr<'a>) -> Result<Expr<'a>, CozoError> {
@@ -491,7 +506,7 @@ mod tests {
 
     #[test]
     fn operators() {
-        let mut ev = Evaluator {};
+        let mut ev = Evaluator::new();
 
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("1/10+(-2+3)*4^5").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && false").unwrap()).unwrap());

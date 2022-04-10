@@ -7,7 +7,6 @@ use lazy_static::lazy_static;
 use crate::ast::Expr::{Apply, Const};
 use crate::error::CozoError;
 use crate::error::CozoError::ReservedIdent;
-use crate::typing::{BaseType, Typing};
 use crate::value::Value;
 
 
@@ -53,43 +52,6 @@ lazy_static! {
             Operator::new(Rule::op_coalesce, Assoc::Left)
         ])
     };
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Col {
-    pub name: String,
-    pub typ: Typing,
-    pub default: Option<Value<'static>>,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum TableDef {
-    Node {
-        is_local: bool,
-        name: String,
-        keys: Vec<Col>,
-        cols: Vec<Col>,
-    },
-    Edge {
-        is_local: bool,
-        src: String,
-        dst: String,
-        name: String,
-        keys: Vec<Col>,
-        cols: Vec<Col>,
-    },
-    Columns {
-        is_local: bool,
-        attached: String,
-        name: String,
-        cols: Vec<Col>,
-    },
-    Index {
-        is_local: bool,
-        name: String,
-        attached: String,
-        cols: Vec<String>,
-    },
 }
 
 
@@ -193,6 +155,16 @@ fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String, CozoError> {
     Ok(ret)
 }
 
+#[inline]
+pub fn parse_string(pair: Pair<Rule>) -> Result<String, CozoError>  {
+    match pair.as_rule() {
+        Rule::quoted_string => Ok(parse_quoted_string(pair)?),
+        Rule::s_quoted_string => Ok(parse_s_quoted_string(pair)?),
+        Rule::raw_string => Ok(parse_raw_string(pair)?),
+        _ => unreachable!()
+    }
+}
+
 fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
     match pair.as_rule() {
         Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
@@ -217,9 +189,8 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr, CozoError> {
         Rule::dot_float | Rule::sci_float => Ok(Const(Value::Float(pair.as_str().replace('_', "").parse::<f64>()?))),
         Rule::null => Ok(Const(Value::Null)),
         Rule::boolean => Ok(Const(Value::Bool(pair.as_str() == "true"))),
-        Rule::quoted_string => Ok(Const(Value::OwnString(Box::new(parse_quoted_string(pair)?)))),
-        Rule::s_quoted_string => Ok(Const(Value::OwnString(Box::new(parse_s_quoted_string(pair)?)))),
-        Rule::raw_string => Ok(Const(Value::OwnString(Box::new(parse_raw_string(pair)?)))),
+        Rule::quoted_string | Rule::s_quoted_string | Rule::s_quoted_string => Ok(
+            Const(Value::OwnString(Box::new(parse_string(pair)?)))),
         _ => {
             println!("{:#?}", pair);
             unimplemented!()
@@ -234,102 +205,6 @@ fn build_expr(pair: Pair<Rule>) -> Result<Expr, CozoError> {
 pub fn parse_expr_from_str(inp: &str) -> Result<Expr, CozoError> {
     let expr_tree = Parser::parse(Rule::expr, inp)?.next().unwrap();
     build_expr(expr_tree)
-}
-
-fn parse_ident(pair: Pair<Rule>) -> String {
-    pair.as_str().to_string()
-}
-
-fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<String, CozoError> {
-    let inner = pair.into_inner().next().unwrap();
-    let name = match inner.as_rule() {
-        Rule::ident => parse_ident(inner),
-        Rule::raw_string => parse_raw_string(inner)?,
-        Rule::s_quoted_string => parse_s_quoted_string(inner)?,
-        Rule::quoted_string => parse_quoted_string(inner)?,
-        _ => unreachable!()
-    };
-    if forbid_underscore && name.starts_with('_') {
-        Err(ReservedIdent)
-    } else {
-        Ok(name)
-    }
-}
-
-fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool), CozoError> {
-    let mut pairs = pair.into_inner();
-    let mut is_key = false;
-    let mut nxt_pair = pairs.next().unwrap();
-    if nxt_pair.as_rule() == Rule::key_marker {
-        is_key = true;
-        nxt_pair = pairs.next().unwrap();
-    }
-
-    Ok((build_name_in_def(nxt_pair, true)?, is_key))
-}
-
-fn build_col_entry(pair: Pair<Rule>) -> Result<(Col, bool), CozoError> {
-    let mut pairs = pair.into_inner();
-    let (name, is_key) = parse_col_name(pairs.next().unwrap())?;
-    Ok((Col {
-        name,
-        typ: Typing::Base(BaseType::Int),
-        default: None,
-    }, is_key))
-}
-
-fn build_col_defs(pair: Pair<Rule>) -> Result<(Vec<Col>, Vec<Col>), CozoError> {
-    let mut keys = vec![];
-    let mut cols = vec![];
-    for pair in pair.into_inner() {
-        let (col, is_key) = build_col_entry(pair)?;
-        if is_key {
-            keys.push(col)
-        } else {
-            cols.push(col)
-        }
-    }
-
-    Ok((keys, cols))
-}
-
-fn build_node_def(pair: Pair<Rule>, is_local: bool) -> Result<TableDef, CozoError> {
-    let mut inner = pair.into_inner();
-    let name = build_name_in_def(inner.next().unwrap(), true)?;
-    let (keys, cols) = build_col_defs(inner.next().unwrap())?;
-    Ok(TableDef::Node {
-        is_local,
-        name,
-        keys,
-        cols,
-    })
-}
-
-pub fn build_statements(pairs: Pairs<Rule>) -> Result<Vec<TableDef>, CozoError> {
-    let mut ret = vec![];
-    for pair in pairs {
-        match pair.as_rule() {
-            r @ (Rule::global_def | Rule::local_def) => {
-                let inner = pair.into_inner().next().unwrap();
-                let is_local = r == Rule::local_def;
-                // println!("{:?} {:?}", r, inner.as_rule());
-                match inner.as_rule() {
-                    Rule::node_def => {
-                        ret.push(build_node_def(inner, is_local)?);
-                    }
-                    _ => todo!()
-                }
-            }
-            Rule::EOI => {}
-            _ => unreachable!()
-        }
-    }
-    Ok(ret)
-}
-
-pub fn build_statements_from_str(inp: &str) -> Result<Vec<TableDef>, CozoError> {
-    let expr_tree = Parser::parse(Rule::file, inp)?;
-    build_statements(expr_tree)
 }
 
 #[cfg(test)]
@@ -364,15 +239,4 @@ mod tests {
         assert_eq!(parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(), Const(Value::RefString(r##"x"yz"##)));
     }
 
-    #[test]
-    fn definitions() {
-        println!("{:#?}", build_statements_from_str(r#"
-            local node "Person" {
-                *id: Int,
-                name: String,
-                email: ?String,
-                habits: [String]
-            }
-        "#).unwrap());
-    }
 }

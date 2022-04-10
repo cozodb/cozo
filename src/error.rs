@@ -15,6 +15,18 @@ pub enum CozoError {
     #[error("Reserved identifier")]
     ReservedIdent,
 
+    #[error("The requested name exists")]
+    NameConflict,
+
+    #[error("Undefined type")]
+    UndefinedType,
+
+    #[error("Wrong type")]
+    WrongType,
+
+    #[error("Cannot have global edge between local nodes")]
+    IncompatibleEdge,
+
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
 
