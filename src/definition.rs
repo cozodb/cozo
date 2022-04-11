@@ -1,13 +1,15 @@
 use pest::iterators::{Pair, Pairs};
 use crate::ast::parse_string;
-use crate::env::Env;
+use crate::env::{Env, StructuredEnvItem};
 use crate::error::Result;
 use crate::error::CozoError::*;
+use crate::eval::Evaluator;
 use crate::parser::{Rule};
-use crate::typing::{Col, Columns, Edge, Index, Node, Structured, StructuredEnv, StructuredEnvItem, TableId, Typing};
+use crate::storage::Storage;
+use crate::typing::{Col, Columns, Edge, Index, Node, Structured, TableId, Typing};
 use crate::typing::Persistence::{Global, Local};
-use crate::typing::StorageStatus::Planned;
-use crate::value::Value;
+use crate::typing::StorageStatus::{Planned, Stored};
+use crate::value::{ByteArrayBuilder, Value};
 
 fn parse_ident(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
@@ -41,11 +43,11 @@ fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool)> {
 
 
 impl StructuredEnvItem {
-    pub fn build_edge_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<()> {
+    pub fn build_edge_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<String> {
         let mut inner = pair.into_inner();
         let src_name = build_name_in_def(inner.next().unwrap(), true)?;
         let src = self.resolve(&src_name).ok_or(UndefinedType)?;
-        let src_id = if let Structured::Node(n, _) = src {
+        let src_id = if let Structured::Node(n) = src {
             n.id
         } else {
             return Err(WrongType);
@@ -53,7 +55,7 @@ impl StructuredEnvItem {
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let dst_name = build_name_in_def(inner.next().unwrap(), true)?;
         let dst = self.resolve(&dst_name).ok_or(UndefinedType)?;
-        let dst_id = if let Structured::Node(n, _) = dst {
+        let dst_id = if let Structured::Node(n) = dst {
             n.id
         } else {
             return Err(WrongType);
@@ -67,34 +69,36 @@ impl StructuredEnvItem {
             (vec![], vec![])
         };
         let edge = Edge {
+            status: Planned,
             src: src_id,
             dst: dst_id,
             id: table_id,
             keys,
             cols,
         };
-        if self.define_new(name.to_string(), Structured::Edge(edge, Planned)) {
-            if let Some(Structured::Node(src, _)) = self.resolve_mut(&src_name) {
+        if self.define_new(name.to_string(), Structured::Edge(edge)) {
+            if let Some(Structured::Node(src)) = self.resolve_mut(&src_name) {
                 src.out_e.push(table_id);
             } else {
                 unreachable!()
             }
 
-            if let Some(Structured::Node(dst, _)) = self.resolve_mut(&dst_name) {
+            if let Some(Structured::Node(dst)) = self.resolve_mut(&dst_name) {
                 dst.in_e.push(table_id);
             } else {
                 unreachable!()
             }
-            Ok(())
+            Ok(name.to_string())
         } else {
             Err(NameConflict)
         }
     }
-    pub fn build_node_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<()> {
+    pub fn build_node_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<String> {
         let mut inner = pair.into_inner();
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let (keys, cols) = self.build_col_defs(inner.next().unwrap())?;
         let node = Node {
+            status: Planned,
             id: table_id,
             keys,
             cols,
@@ -102,8 +106,8 @@ impl StructuredEnvItem {
             in_e: vec![],
             attached: vec![],
         };
-        if self.define_new(name.to_string(), Structured::Node(node, Planned)) {
-            Ok(())
+        if self.define_new(name.to_string(), Structured::Node(node)) {
+            Ok(name.to_string())
         } else {
             Err(NameConflict)
         }
@@ -116,38 +120,39 @@ impl StructuredEnvItem {
         }
         Ok(ret)
     }
-    fn build_columns_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<()> {
+    fn build_columns_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<String> {
         let mut inner = pair.into_inner();
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let node_name = build_name_in_def(inner.next().unwrap(), true)?;
         let node = self.resolve(&node_name).ok_or(UndefinedType)?;
-        let node_id = if let Structured::Node(n, _) = node {
+        let node_id = if let Structured::Node(n) = node {
             n.id
-        } else if let Structured::Edge(n, _) = node {
+        } else if let Structured::Edge(n) = node {
             n.id
         } else {
             return Err(WrongType);
         };
         let (keys, cols) = self.build_col_defs(inner.next().unwrap())?;
         if !keys.is_empty() {
-            return Err(UnexpectedIndexColumns)
+            return Err(UnexpectedIndexColumns);
         }
         if table_id.0 == Global && node_id.0 == Local {
             return Err(IncompatibleEdge);
         }
 
-        if self.define_new(name, Structured::Columns(Columns {
+        if self.define_new(name.clone(), Structured::Columns(Columns {
+            status: Planned,
             id: table_id,
             attached: node_id,
-            cols
-        }, Planned)) {
-            Ok(())
+            cols,
+        })) {
+            Ok(name)
         } else {
             Err(NameConflict)
         }
     }
 
-    fn build_index_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<()> {
+    fn build_index_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<String> {
         let mut inner = pair.into_inner();
         let mut name = build_name_in_def(inner.next().unwrap(), true)?;
         let node_name;
@@ -172,7 +177,7 @@ impl StructuredEnvItem {
         };
 
         let node = self.resolve(&node_name).ok_or(UndefinedType)?;
-        let node_id = if let Structured::Node(n, _) = node {
+        let node_id = if let Structured::Node(n) = node {
             n.id
         } else {
             return Err(WrongType);
@@ -183,12 +188,13 @@ impl StructuredEnvItem {
 
         // TODO: make sure cols make sense
 
-        if self.define_new(name, Structured::Index(Index {
+        if self.define_new(name.clone(), Structured::Index(Index {
+            status: Planned,
             id: table_id,
             attached: node_id,
             cols: col_list,
-        }, Planned)) {
-            Ok(())
+        })) {
+            Ok(name)
         } else {
             Err(NameConflict)
         }
@@ -238,9 +244,9 @@ impl StructuredEnvItem {
         let typ = self.build_type(pairs.next().unwrap())?;
         let default = if let Some(p) = pairs.next() {
             // TODO: check value is suitable for the type
-            Some(self.build_default_value(p)?)
+            self.build_default_value(p)?
         } else {
-            None
+            Value::Null
         };
         Ok((Col {
             name,
@@ -265,40 +271,74 @@ impl StructuredEnvItem {
     }
 }
 
-impl StructuredEnv {
+impl Storage {
+    fn persist_node(&mut self, node: &mut Node) -> Result<()> {
+        let mut key_writer = ByteArrayBuilder::with_capacity(8);
+        key_writer.build_varint(0);
+        key_writer.build_value(&Value::UInt(node.id.1 as u64));
+        // println!("{:#?}", node);
+        // println!("{:?}", key_writer.get());
+        node.status = Stored;
+        Ok(())
+    }
+
+    fn persist_edge(&mut self, edge: &mut Edge) -> Result<()> {
+        edge.status = Stored;
+        Ok(())
+    }
+}
+
+impl Evaluator {
+    pub fn restore_metadata(&mut self) {}
+
+    fn persist_change(&mut self, tname: &str) -> Result<()> {
+        let tbl = self.s_envs.resolve_mut(tname).unwrap();
+        match tbl {
+            Structured::Node(n) => self.storage.persist_node(n),
+            Structured::Edge(e) => self.storage.persist_edge(e),
+            Structured::Columns(_) => unimplemented!(),
+            Structured::Index(_) => unimplemented!(),
+            Structured::Typing(_) => panic!(),
+        }
+    }
+
+
     pub fn build_table(&mut self, pairs: Pairs<Rule>) -> Result<()> {
+        let mut new_tables = vec![];
         for pair in pairs {
             match pair.as_rule() {
                 r @ (Rule::global_def | Rule::local_def) => {
                     let inner = pair.into_inner().next().unwrap();
                     let is_local = r == Rule::local_def;
-                    let next_id = self.get_next_table_id(is_local);
+                    let next_id = self.s_envs.get_next_table_id(is_local);
                     let env_to_build = if is_local {
-                        self.root_mut()
+                        self.s_envs.root_mut()
                     } else {
-                        self.cur_mut()
+                        self.s_envs.cur_mut()
                     };
 
-                    // println!("{:?} {:?}", r, inner.as_rule());
-                    match inner.as_rule() {
+                    new_tables.push(match inner.as_rule() {
                         Rule::node_def => {
-                            env_to_build.build_node_def(inner, next_id)?;
+                            env_to_build.build_node_def(inner, next_id)?
                         }
                         Rule::edge_def => {
-                            env_to_build.build_edge_def(inner, next_id)?;
+                            env_to_build.build_edge_def(inner, next_id)?
                         }
                         Rule::columns_def => {
-                            env_to_build.build_columns_def(inner, next_id)?;
+                            env_to_build.build_columns_def(inner, next_id)?
                         }
                         Rule::index_def => {
-                            env_to_build.build_index_def(inner, next_id)?;
+                            env_to_build.build_index_def(inner, next_id)?
                         }
                         _ => todo!()
-                    }
+                    });
                 }
                 Rule::EOI => {}
                 _ => unreachable!()
             }
+        }
+        for tname in &new_tables {
+            self.persist_change(tname).unwrap(); // TODO proper error handling
         }
         Ok(())
     }
@@ -326,9 +366,9 @@ mod tests {
             }
         "#;
         let parsed = Parser::parse(Rule::file, s).unwrap();
-        let mut env = StructuredEnv::new();
-        env.build_table(parsed).unwrap();
-        println!("{:#?}", env.resolve("Person"));
-        println!("{:#?}", env.resolve("Friend"));
+        let mut eval = Evaluator::new("_path_for_rocksdb_storagex".to_string()).unwrap();
+        eval.build_table(parsed).unwrap();
+        // println!("{:#?}", eval.s_envs.resolve("Person"));
+        // println!("{:#?}", eval.s_envs.resolve("Friend"));
     }
 }

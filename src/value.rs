@@ -327,7 +327,17 @@ pub struct ByteArrayBuilder<T: Write> {
     byte_writer: T,
 }
 
+impl ByteArrayBuilder<Vec<u8>> {
+    pub fn with_capacity(size: usize) -> Self {
+        Self::new(Vec::with_capacity(size))
+    }
+}
+
 impl<T: Write> ByteArrayBuilder<T> {
+    pub fn get(self) -> T {
+        self.byte_writer
+    }
+
     pub fn new(byte_writer: T) -> Self {
         Self { byte_writer }
     }
@@ -446,6 +456,11 @@ impl<T: Write> ByteArrayBuilder<T> {
 pub fn cmp_keys<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) -> Ordering {
     if let x @ (Greater | Less) = pa.compare_varint(pb) { return x; }
     cmp_data(pa, pb)
+}
+
+pub fn cozo_comparator_v1(a: &[u8], b: &[u8]) -> Ordering {
+    cmp_keys(&mut ByteArrayParser { bytes: a, current: 0 },
+             &mut ByteArrayParser { bytes: b, current: 0 })
 }
 
 pub fn cmp_data<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) -> Ordering {

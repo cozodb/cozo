@@ -10,24 +10,24 @@ pub struct Parser;
 mod tests {
     use super::*;
     use pest::Parser as PestParser;
-
-    #[test]
-    fn db() {
-        use rocksdb::{DB, Options};
-// NB: db is automatically closed at end of lifetime
-        let path = "_path_for_rocksdb_storage";
-        {
-            let db = DB::open_default(path).unwrap();
-            db.put("真二", "你好👋").unwrap();
-            match db.get_pinned("真二") {
-                Ok(Some(value)) => println!("retrieved value {}", std::str::from_utf8(&value).unwrap()),
-                Ok(None) => println!("value not found"),
-                Err(e) => println!("operational problem encountered: {}", e),
-            }
-            db.delete(b"my key").unwrap();
-        }
-        let _ = DB::destroy(&Options::default(), path);
-    }
+//
+//     #[test]
+//     fn db() {
+//         use rocksdb::{DB, Options};
+// // NB: db is automatically closed at end of lifetime
+//         let path = "_path_for_rocksdb_storage";
+//         {
+//             let db = DB::open_default(path).unwrap();
+//             db.put("真二", "你好👋").unwrap();
+//             match db.get_pinned("真二") {
+//                 Ok(Some(value)) => println!("retrieved value {}", std::str::from_utf8(&value).unwrap()),
+//                 Ok(None) => println!("value not found"),
+//                 Err(e) => println!("operational problem encountered: {}", e),
+//             }
+//             db.delete(b"my key").unwrap();
+//         }
+//         let _ = DB::destroy(&Options::default(), path);
+//     }
 
     #[test]
     fn identifiers() {

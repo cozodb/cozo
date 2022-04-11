@@ -39,6 +39,9 @@ pub enum CozoError {
 
     #[error(transparent)]
     Parse(#[from] pest::error::Error<Rule>),
+
+    #[error(transparent)]
+    Storage(#[from] rocksdb::Error)
 }
 
 pub type Result<T> = result::Result<T, CozoError>;

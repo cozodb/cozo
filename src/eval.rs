@@ -5,23 +5,20 @@ use crate::error::CozoError;
 use crate::error::CozoError::*;
 use crate::value::Value::*;
 use crate::ast::*;
-use crate::typing::StructuredEnv;
+use crate::env::StructuredEnv;
+use crate::storage::Storage;
 
 pub struct Evaluator {
     pub s_envs: StructuredEnv,
+    pub storage: Storage,
 }
 
 impl Evaluator {
-    pub fn new() -> Self {
-        Self { s_envs: StructuredEnv::new() }
+    pub fn new(path: String) -> Result<Self> {
+        Ok(Self { s_envs: StructuredEnv::new(), storage: Storage::new(path)? })
     }
 }
 
-impl Default for Evaluator {
-    fn default() -> Self {
-        Evaluator::new()
-    }
-}
 
 impl<'a> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator {
     fn visit_expr(&mut self, ex: &Expr<'a>) -> Result<Expr<'a>> {
@@ -135,7 +132,6 @@ impl Evaluator {
         }
     }
 
-
     fn div_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
@@ -183,7 +179,6 @@ impl Evaluator {
         }
     }
 
-
     fn eq_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
@@ -201,7 +196,6 @@ impl Evaluator {
         }
     }
 
-
     fn ne_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
@@ -218,7 +212,6 @@ impl Evaluator {
             _ => unreachable!()
         }
     }
-
 
     fn gt_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
@@ -245,7 +238,6 @@ impl Evaluator {
         }
     }
 
-
     fn ge_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
@@ -270,7 +262,6 @@ impl Evaluator {
             _ => unreachable!()
         }
     }
-
 
     fn lt_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
@@ -321,7 +312,6 @@ impl Evaluator {
             _ => unreachable!()
         }
     }
-
 
     fn pow_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
@@ -391,7 +381,6 @@ impl Evaluator {
         })
     }
 
-
     fn minus_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
             [a] => {
@@ -407,7 +396,6 @@ impl Evaluator {
             _ => unreachable!()
         })
     }
-
 
     fn test_null_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
@@ -467,7 +455,6 @@ impl Evaluator {
         }
     }
 
-
     fn and_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         let mut unevaluated = vec![];
         let mut no_null = true;
@@ -507,7 +494,7 @@ mod tests {
 
     #[test]
     fn operators() {
-        let mut ev = Evaluator::new();
+        let mut ev = Evaluator::new("_path_for_rocksdb_storage".to_string()).unwrap();
 
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("1/10+(-2+3)*4^5").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && false").unwrap()).unwrap());
@@ -515,5 +502,6 @@ mod tests {
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true || null").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("null || true").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && null").unwrap()).unwrap());
+        ev.storage.delete().unwrap();
     }
 }
