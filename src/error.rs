@@ -28,6 +28,9 @@ pub enum CozoError {
     #[error("Cannot have global edge between local nodes")]
     IncompatibleEdge,
 
+    #[error("Unexpected index columns found")]
+    UnexpectedIndexColumns,
+
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
 

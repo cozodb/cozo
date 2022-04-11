@@ -4,7 +4,7 @@ use crate::env::Env;
 use crate::error::Result;
 use crate::error::CozoError::*;
 use crate::parser::{Rule};
-use crate::typing::{Col, Edge, Node, Structured, StructuredEnv, StructuredEnvItem, TableId, Typing};
+use crate::typing::{Col, Columns, Edge, Index, Node, Structured, StructuredEnv, StructuredEnvItem, TableId, Typing};
 use crate::typing::Persistence::{Global, Local};
 use crate::typing::StorageStatus::Planned;
 use crate::value::Value;
@@ -109,6 +109,92 @@ impl StructuredEnvItem {
         }
     }
 
+    fn build_col_list(&mut self, pair: Pair<Rule>) -> Result<Vec<String>> {
+        let mut ret = vec![];
+        for p in pair.into_inner() {
+            ret.push(build_name_in_def(p, true)?);
+        }
+        Ok(ret)
+    }
+    fn build_columns_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<()> {
+        let mut inner = pair.into_inner();
+        let name = build_name_in_def(inner.next().unwrap(), true)?;
+        let node_name = build_name_in_def(inner.next().unwrap(), true)?;
+        let node = self.resolve(&node_name).ok_or(UndefinedType)?;
+        let node_id = if let Structured::Node(n, _) = node {
+            n.id
+        } else if let Structured::Edge(n, _) = node {
+            n.id
+        } else {
+            return Err(WrongType);
+        };
+        let (keys, cols) = self.build_col_defs(inner.next().unwrap())?;
+        if !keys.is_empty() {
+            return Err(UnexpectedIndexColumns)
+        }
+        if table_id.0 == Global && node_id.0 == Local {
+            return Err(IncompatibleEdge);
+        }
+
+        if self.define_new(name, Structured::Columns(Columns {
+            id: table_id,
+            attached: node_id,
+            cols
+        }, Planned)) {
+            Ok(())
+        } else {
+            Err(NameConflict)
+        }
+    }
+
+    fn build_index_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<()> {
+        let mut inner = pair.into_inner();
+        let mut name = build_name_in_def(inner.next().unwrap(), true)?;
+        let node_name;
+        let nxt = inner.next().unwrap();
+
+        let col_list = match nxt.as_rule() {
+            Rule::col_list => {
+                node_name = name;
+                name = "_".to_string() + &node_name;
+                let cols = self.build_col_list(nxt)?;
+                name.push('_');
+                for col in &cols {
+                    name.push('_');
+                    name += col;
+                }
+                cols
+            }
+            _ => {
+                node_name = build_name_in_def(nxt, true)?;
+                self.build_col_list(inner.next().unwrap())?
+            }
+        };
+
+        let node = self.resolve(&node_name).ok_or(UndefinedType)?;
+        let node_id = if let Structured::Node(n, _) = node {
+            n.id
+        } else {
+            return Err(WrongType);
+        };
+        if table_id.0 == Global && node_id.0 == Local {
+            return Err(IncompatibleEdge);
+        }
+
+        // TODO: make sure cols make sense
+
+        if self.define_new(name, Structured::Index(Index {
+            id: table_id,
+            attached: node_id,
+            cols: col_list,
+        }, Planned)) {
+            Ok(())
+        } else {
+            Err(NameConflict)
+        }
+    }
+
+
     fn build_type(&self, pair: Pair<Rule>) -> Result<Typing> {
         let mut pairs = pair.into_inner();
         let mut inner = pairs.next().unwrap();
@@ -200,6 +286,12 @@ impl StructuredEnv {
                         }
                         Rule::edge_def => {
                             env_to_build.build_edge_def(inner, next_id)?;
+                        }
+                        Rule::columns_def => {
+                            env_to_build.build_columns_def(inner, next_id)?;
+                        }
+                        Rule::index_def => {
+                            env_to_build.build_index_def(inner, next_id)?;
                         }
                         _ => todo!()
                     }
