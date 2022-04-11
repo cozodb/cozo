@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use crate::typing::{define_base_types, Persistence, Structured, TableId};
+use crate::typing::{define_base_types, Structured, TableId};
 
 pub trait Env<V> {
     fn define(&mut self, name: String, value: V) -> Option<V>;
@@ -9,14 +9,13 @@ pub trait Env<V> {
     fn undef(&mut self, name: &str) -> Option<V>;
 }
 
-pub trait LayeredEnv<V> : Env<V> {
+pub trait LayeredEnv<V>: Env<V> {
     fn root_define(&mut self, name: String, value: V) -> Option<V>;
     fn root_define_new(&mut self, name: String, value: V) -> bool;
     fn root_resolve(&self, name: &str) -> Option<&V>;
     fn root_resolve_mut(&mut self, name: &str) -> Option<&mut V>;
     fn root_undef(&mut self, name: &str) -> Option<V>;
 }
-
 
 
 pub struct StructuredEnvItem {
@@ -66,17 +65,16 @@ impl StructuredEnv {
 
     pub fn get_next_table_id(&self, local: bool) -> TableId {
         let mut id = 0;
-        let persistence = if local { Persistence::Local } else { Persistence::Global };
         for env in &self.stack {
             for item in env.map.values() {
-                if let Some(TableId(p, eid)) = item.storage_id() {
-                    if p == persistence {
-                        id = id.max(eid);
+                if let Some(c_id) = item.storage_id() {
+                    if c_id.is_local() == local {
+                        id = id.max(c_id.0.abs());
                     }
                 }
             }
         }
-        TableId(persistence, id + 1)
+        TableId((1 + id) * if local { -1 } else { 1 })
     }
 }
 

@@ -31,6 +31,9 @@ pub enum CozoError {
     #[error("Unexpected index columns found")]
     UnexpectedIndexColumns,
 
+    #[error("Database already closed")]
+    DatabaseClosed,
+
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
 

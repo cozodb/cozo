@@ -46,11 +46,6 @@ pub struct Col {
     pub default: Value<'static>,
 }
 
-#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
-pub enum Persistence {
-    Global,
-    Local,
-}
 
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone)]
 pub enum StorageStatus {
@@ -59,16 +54,42 @@ pub enum StorageStatus {
     Stored,
 }
 
-#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
-pub struct TableId(pub Persistence, pub usize);
+#[derive(PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
+pub struct TableId(pub i64);
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub struct ColumnId(TableId, usize);
+impl TableId {
+    pub fn is_global(&self) -> bool {
+        self.0 >= 0
+    }
+    pub fn is_local(&self) -> bool {
+        self.0 < 0
+    }
+}
+
+impl Debug for TableId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str( if self.is_global() { "G+" } else {"L"})?;
+        f.write_str(&format!("{}", self.0))?;
+        Ok(())
+    }
+}
+
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
+pub struct ColumnId(TableId, i64);
+
+impl Debug for ColumnId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&format!("{:?}", self.0))?;
+        f.write_str(&format!("~{}", self.1))?;
+        Ok(())
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Node {
     pub status: StorageStatus,
     pub id: TableId,
+    pub name: String,
     pub keys: Vec<Col>,
     pub cols: Vec<Col>,
     pub out_e: Vec<TableId>,
@@ -82,6 +103,7 @@ pub struct Edge {
     pub src: TableId,
     pub dst: TableId,
     pub id: TableId,
+    pub name: String,
     pub keys: Vec<Col>,
     pub cols: Vec<Col>,
 }
@@ -91,6 +113,7 @@ pub struct Columns {
     pub status: StorageStatus,
     pub attached: TableId,
     pub id: TableId,
+    pub name: String,
     pub cols: Vec<Col>,
 }
 
@@ -98,6 +121,7 @@ pub struct Columns {
 pub struct Index {
     pub status: StorageStatus,
     pub id: TableId,
+    pub name: String,
     pub attached: TableId,
     pub cols: Vec<String>,
 }

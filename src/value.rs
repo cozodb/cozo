@@ -4,7 +4,7 @@ use std::collections::{BTreeMap};
 use std::io::{Write};
 use ordered_float::OrderedFloat;
 use uuid::Uuid;
-use crate::typing::Typing;
+use crate::typing::{TableId, Typing};
 use Ordering::{Greater, Less, Equal};
 
 // TODO: array types, alignment of values
@@ -69,6 +69,30 @@ pub enum Value<'a> {
     OwnString(Box<String>),
     List(Box<Vec<Value<'a>>>),
     Dict(Box<BTreeMap<Cow<'a, str>, Value<'a>>>),
+}
+
+impl <'a> Value<'a> {
+    pub fn get_list(self) -> Option<Vec<Self>> {
+        match self {
+            Value::List(v) => Some(*v),
+            _ => None
+        }
+    }
+    pub fn get_string(self) -> Option<String> {
+        match self {
+            Value::OwnString(v) => Some(*v),
+            Value::RefString(v) => Some(v.to_string()),
+            _ => None
+        }
+    }
+
+    pub fn get_table_id(self) -> Option<TableId> {
+        if let Value::Int(id) = self {
+            Some(TableId(id))
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a> PartialEq for Value<'a> {
@@ -454,7 +478,7 @@ impl<T: Write> ByteArrayBuilder<T> {
 }
 
 pub fn cmp_keys<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) -> Ordering {
-    if let x @ (Greater | Less) = pa.compare_varint(pb) { return x; }
+    if let x @ (Greater | Less) = pa.compare_zigzag(pb) { return x; }
     cmp_data(pa, pb)
 }
 
@@ -524,7 +548,7 @@ impl Typing {
 }
 
 pub struct CozoKey<'a> {
-    pub table_id: u64,
+    pub table_id: i64,
     pub values: Vec<Value<'a>>,
 }
 
