@@ -10,6 +10,7 @@ use crate::typing::StorageStatus::{Planned, Stored};
 use crate::value::{ByteArrayBuilder, ByteArrayParser, Value};
 use crate::parser::{Parser, Rule};
 use pest::Parser as PestParser;
+use rocksdb::IteratorMode;
 
 fn parse_ident(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
@@ -290,15 +291,12 @@ pub enum TableKind {
 
 impl Storage {
     fn all_metadata(&self, env: &StructuredEnvItem) -> Result<Vec<Structured>> {
-        let mut builder = ByteArrayBuilder::with_capacity(1);
-        builder.build_zigzag(0);
-        let prefix = builder.get();
-        let it = self.db.as_ref().ok_or(DatabaseClosed)?.prefix_iterator(&prefix);
+        let it = self.db.as_ref().ok_or(DatabaseClosed)?.full_iterator(IteratorMode::Start);
 
         let mut ret = vec![];
         for (k, v) in it {
+            println!("{:?} {:?}", k, v);
             let mut key_parser = ByteArrayParser::new(&k);
-            key_parser.parse_zigzag();
             let table_name = key_parser.parse_value().unwrap().get_string().unwrap();
 
             let mut data_parser = ByteArrayParser::new(&v);
@@ -398,7 +396,6 @@ impl Storage {
 
     fn persist_node(&mut self, node: &mut Node) -> Result<()> {
         let mut key_writer = ByteArrayBuilder::with_capacity(8);
-        key_writer.build_zigzag(0);
         key_writer.build_value(&Value::RefString(&node.id.name));
         let mut val_writer = ByteArrayBuilder::with_capacity(128);
         val_writer.build_value(&Value::UInt(TableKind::Node as u64));
@@ -417,14 +414,13 @@ impl Storage {
             ]))
         }).collect())));
 
-        self.put(&key_writer.get(), &val_writer.get(), TableId { name: "_sys".to_string(), global: true })?;
+        self.put_global(&key_writer.get(), &val_writer.get())?;
         node.status = Stored;
         Ok(())
     }
 
     fn persist_edge(&mut self, edge: &mut Edge) -> Result<()> {
         let mut key_writer = ByteArrayBuilder::with_capacity(8);
-        key_writer.build_zigzag(0);
         key_writer.build_value(&Value::RefString(&edge.id.name));
 
         let mut val_writer = ByteArrayBuilder::with_capacity(128);
@@ -446,7 +442,7 @@ impl Storage {
             ]))
         }).collect())));
 
-        self.put(&key_writer.get(), &val_writer.get(), TableId { name: "_sys".to_string(), global: true })?;
+        self.put_global(&key_writer.get(), &val_writer.get())?;
         edge.status = Stored;
         Ok(())
     }

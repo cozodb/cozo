@@ -1,7 +1,6 @@
 use rocksdb::{DB, Options, ColumnFamilyDescriptor};
 use crate::error::CozoError::DatabaseClosed;
 use crate::error::Result;
-use crate::typing::TableId;
 use crate::value::cozo_comparator_v1;
 
 
@@ -29,14 +28,9 @@ impl Storage {
         DB::destroy(&self.options, &self.path)?;
         Ok(())
     }
-    pub fn put(&self, k: &[u8], v: &[u8], table_id: TableId) -> Result<()> {
+    pub fn put_global(&self, k: &[u8], v: &[u8]) -> Result<()> {
         let db = self.db.as_ref().ok_or(DatabaseClosed)?;
-        if table_id.global {
-            db.put(k, v)?;
-        } else {
-            let cf = db.cf_handle("temp").ok_or(DatabaseClosed)?;
-            db.put_cf(cf, k, v)?;
-        }
+        db.put(k, v)?;
         Ok(())
     }
 }
