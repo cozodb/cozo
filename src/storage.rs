@@ -31,7 +31,7 @@ impl Storage {
     }
     pub fn put(&self, k: &[u8], v: &[u8], table_id: TableId) -> Result<()> {
         let db = self.db.as_ref().ok_or(DatabaseClosed)?;
-        if table_id.is_global() {
+        if table_id.global {
             db.put(k, v)?;
         } else {
             let cf = db.cf_handle("temp").ok_or(DatabaseClosed)?;

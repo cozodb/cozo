@@ -4,7 +4,7 @@ use std::collections::{BTreeMap};
 use std::io::{Write};
 use ordered_float::OrderedFloat;
 use uuid::Uuid;
-use crate::typing::{TableId, Typing};
+use crate::typing::{Typing};
 use Ordering::{Greater, Less, Equal};
 
 // TODO: array types, alignment of values
@@ -83,14 +83,6 @@ impl <'a> Value<'a> {
             Value::OwnString(v) => Some(*v),
             Value::RefString(v) => Some(v.to_string()),
             _ => None
-        }
-    }
-
-    pub fn get_table_id(self) -> Option<TableId> {
-        if let Value::Int(id) = self {
-            Some(TableId(id))
-        } else {
-            None
         }
     }
 }
@@ -477,13 +469,8 @@ impl<T: Write> ByteArrayBuilder<T> {
     }
 }
 
-pub fn cmp_keys<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) -> Ordering {
-    if let x @ (Greater | Less) = pa.compare_zigzag(pb) { return x; }
-    cmp_data(pa, pb)
-}
-
 pub fn cozo_comparator_v1(a: &[u8], b: &[u8]) -> Ordering {
-    cmp_keys(&mut ByteArrayParser { bytes: a, current: 0 },
+    cmp_data(&mut ByteArrayParser { bytes: a, current: 0 },
              &mut ByteArrayParser { bytes: b, current: 0 })
 }
 

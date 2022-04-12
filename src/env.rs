@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use crate::typing::{define_base_types, Structured, TableId};
+use crate::typing::{define_base_types, Structured};
 
 pub trait Env<V> {
     fn define(&mut self, name: String, value: V) -> Option<V>;
@@ -61,20 +61,6 @@ impl StructuredEnv {
             self.stack.pop();
             true
         }
-    }
-
-    pub fn get_next_table_id(&self, local: bool) -> TableId {
-        let mut id = 0;
-        for env in &self.stack {
-            for item in env.map.values() {
-                if let Some(c_id) = item.storage_id() {
-                    if c_id.is_local() == local {
-                        id = id.max(c_id.0.abs());
-                    }
-                }
-            }
-        }
-        TableId((1 + id) * if local { -1 } else { 1 })
     }
 }
 

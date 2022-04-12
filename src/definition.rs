@@ -43,12 +43,12 @@ fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool)> {
 
 
 impl StructuredEnvItem {
-    pub fn build_edge_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<String> {
+    pub fn build_edge_def(&mut self, pair: Pair<Rule>, global: bool) -> Result<String> {
         let mut inner = pair.into_inner();
         let src_name = build_name_in_def(inner.next().unwrap(), true)?;
         let src = self.resolve(&src_name).ok_or(UndefinedType)?;
         let src_id = if let Structured::Node(n) = src {
-            n.id
+            n.id.clone()
         } else {
             return Err(WrongType);
         };
@@ -56,11 +56,11 @@ impl StructuredEnvItem {
         let dst_name = build_name_in_def(inner.next().unwrap(), true)?;
         let dst = self.resolve(&dst_name).ok_or(UndefinedType)?;
         let dst_id = if let Structured::Node(n) = dst {
-            n.id
+            n.id.clone()
         } else {
             return Err(WrongType);
         };
-        if table_id.is_global() && (src_id.is_local() || dst_id.is_local()) {
+        if global && (!src_id.global || !dst_id.global) {
             return Err(IncompatibleEdge);
         }
         let (keys, cols) = if let Some(p) = inner.next() {
@@ -68,24 +68,24 @@ impl StructuredEnvItem {
         } else {
             (vec![], vec![])
         };
+        let table_id = TableId { name: name.clone(), global };
         let edge = Edge {
             status: Planned,
             src: src_id,
             dst: dst_id,
-            id: table_id,
-            name: name.clone(),
+            id: table_id.clone(),
             keys,
             cols,
         };
-        if self.define_new(name.to_string(), Structured::Edge(edge)) {
+        if self.define_new(name.clone(), Structured::Edge(edge)) {
             if let Some(Structured::Node(src)) = self.resolve_mut(&src_name) {
-                src.out_e.push(table_id);
+                src.out_e.push(table_id.clone());
             } else {
                 unreachable!()
             }
 
             if let Some(Structured::Node(dst)) = self.resolve_mut(&dst_name) {
-                dst.in_e.push(table_id);
+                dst.in_e.push(table_id.clone());
             } else {
                 unreachable!()
             }
@@ -94,21 +94,21 @@ impl StructuredEnvItem {
             Err(NameConflict)
         }
     }
-    pub fn build_node_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<String> {
+    pub fn build_node_def(&mut self, pair: Pair<Rule>, global: bool) -> Result<String> {
         let mut inner = pair.into_inner();
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let (keys, cols) = self.build_col_defs(inner.next().unwrap())?;
+        let table_id = TableId { name: name.clone(), global };
         let node = Node {
             status: Planned,
             id: table_id,
-            name: name.to_string(),
             keys,
             cols,
             out_e: vec![],
             in_e: vec![],
             attached: vec![],
         };
-        if self.define_new(name.to_string(), Structured::Node(node)) {
+        if self.define_new(name.clone(), Structured::Node(node)) {
             Ok(name.to_string())
         } else {
             Err(NameConflict)
@@ -122,15 +122,15 @@ impl StructuredEnvItem {
         }
         Ok(ret)
     }
-    fn build_columns_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<String> {
+    fn build_columns_def(&mut self, pair: Pair<Rule>, global: bool) -> Result<String> {
         let mut inner = pair.into_inner();
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let node_name = build_name_in_def(inner.next().unwrap(), true)?;
         let node = self.resolve(&node_name).ok_or(UndefinedType)?;
         let node_id = if let Structured::Node(n) = node {
-            n.id
+            n.id.clone()
         } else if let Structured::Edge(n) = node {
-            n.id
+            n.id.clone()
         } else {
             return Err(WrongType);
         };
@@ -138,14 +138,14 @@ impl StructuredEnvItem {
         if !keys.is_empty() {
             return Err(UnexpectedIndexColumns);
         }
-        if table_id.is_global() && node_id.is_local() {
+        let table_id = TableId { name: name.clone(), global };
+        if table_id.global && !node_id.global {
             return Err(IncompatibleEdge);
         }
 
         if self.define_new(name.clone(), Structured::Columns(Columns {
             status: Planned,
             id: table_id,
-            name: name.to_string(),
             attached: node_id,
             cols,
         })) {
@@ -155,7 +155,7 @@ impl StructuredEnvItem {
         }
     }
 
-    fn build_index_def(&mut self, pair: Pair<Rule>, table_id: TableId) -> Result<String> {
+    fn build_index_def(&mut self, pair: Pair<Rule>, global: bool) -> Result<String> {
         let mut inner = pair.into_inner();
         let mut name = build_name_in_def(inner.next().unwrap(), true)?;
         let node_name;
@@ -181,11 +181,13 @@ impl StructuredEnvItem {
 
         let node = self.resolve(&node_name).ok_or(UndefinedType)?;
         let node_id = if let Structured::Node(n) = node {
-            n.id
+            n.id.clone()
         } else {
             return Err(WrongType);
         };
-        if table_id.is_global() && node_id.is_local() {
+        let table_id = TableId { name: name.clone(), global };
+
+        if table_id.global && !node_id.global {
             return Err(IncompatibleEdge);
         }
 
@@ -194,7 +196,6 @@ impl StructuredEnvItem {
         if self.define_new(name.clone(), Structured::Index(Index {
             status: Planned,
             id: table_id,
-            name: name.clone(),
             attached: node_id,
             cols: col_list,
         })) {
@@ -298,11 +299,11 @@ impl Storage {
         for (k, v) in it {
             let mut key_parser = ByteArrayParser::new(&k);
             key_parser.parse_zigzag();
-            let table_id = key_parser.parse_value().unwrap().get_table_id().unwrap();
+            let table_name = key_parser.parse_value().unwrap().get_string().unwrap();
 
             let mut data_parser = ByteArrayParser::new(&v);
             let table_kind = data_parser.parse_value().unwrap();
-            let table_name = data_parser.parse_value().unwrap().get_string().unwrap();
+            let table_id = TableId { name: table_name, global: true };
             match table_kind {
                 Value::UInt(i) if i == TableKind::Node as u64 => {
                     let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
@@ -334,7 +335,6 @@ impl Storage {
                     let node = Node {
                         status: StorageStatus::Stored,
                         id: table_id,
-                        name: table_name,
                         keys,
                         cols,
                         out_e: vec![], // TODO fix these
@@ -344,8 +344,10 @@ impl Storage {
                     ret.push(Structured::Node(node));
                 }
                 Value::UInt(i) if i == TableKind::Edge as u64 => {
-                    let src_id = data_parser.parse_value().unwrap().get_table_id().unwrap();
-                    let dst_id = data_parser.parse_value().unwrap().get_table_id().unwrap();
+                    let src_name = data_parser.parse_value().unwrap().get_string().unwrap();
+                    let dst_name = data_parser.parse_value().unwrap().get_string().unwrap();
+                    let src_id = TableId { name: src_name, global: true };
+                    let dst_id = TableId { name: dst_name, global: true };
                     let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
                         .into_iter().map(|v| {
                         let mut vs = v.get_list().unwrap().into_iter();
@@ -377,7 +379,6 @@ impl Storage {
                         src: src_id,
                         dst: dst_id,
                         id: table_id,
-                        name: table_name,
                         keys,
                         cols,
                     };
@@ -398,10 +399,9 @@ impl Storage {
     fn persist_node(&mut self, node: &mut Node) -> Result<()> {
         let mut key_writer = ByteArrayBuilder::with_capacity(8);
         key_writer.build_zigzag(0);
-        key_writer.build_value(&Value::Int(node.id.0));
+        key_writer.build_value(&Value::RefString(&node.id.name));
         let mut val_writer = ByteArrayBuilder::with_capacity(128);
         val_writer.build_value(&Value::UInt(TableKind::Node as u64));
-        val_writer.build_value(&Value::RefString(&node.name));
         val_writer.build_value(&Value::List(Box::new(node.keys.iter().map(|k| {
             Value::List(Box::new(vec![
                 Value::RefString(&k.name),
@@ -417,7 +417,7 @@ impl Storage {
             ]))
         }).collect())));
 
-        self.put(&key_writer.get(), &val_writer.get(), TableId(0))?;
+        self.put(&key_writer.get(), &val_writer.get(), TableId { name: "_sys".to_string(), global: true })?;
         node.status = Stored;
         Ok(())
     }
@@ -425,12 +425,12 @@ impl Storage {
     fn persist_edge(&mut self, edge: &mut Edge) -> Result<()> {
         let mut key_writer = ByteArrayBuilder::with_capacity(8);
         key_writer.build_zigzag(0);
-        key_writer.build_value(&Value::Int(edge.id.0));
+        key_writer.build_value(&Value::RefString(&edge.id.name));
+
         let mut val_writer = ByteArrayBuilder::with_capacity(128);
         val_writer.build_value(&Value::UInt(TableKind::Edge as u64));
-        val_writer.build_value(&Value::RefString(&edge.name));
-        val_writer.build_value(&Value::Int(edge.src.0));
-        val_writer.build_value(&Value::Int(edge.dst.0));
+        val_writer.build_value(&Value::RefString(&edge.src.name));
+        val_writer.build_value(&Value::RefString(&edge.dst.name));
         val_writer.build_value(&Value::List(Box::new(edge.keys.iter().map(|k| {
             Value::List(Box::new(vec![
                 Value::RefString(&k.name),
@@ -446,7 +446,7 @@ impl Storage {
             ]))
         }).collect())));
 
-        self.put(&key_writer.get(), &val_writer.get(), TableId(0))?;
+        self.put(&key_writer.get(), &val_writer.get(), TableId { name: "_sys".to_string(), global: true })?;
         edge.status = Stored;
         Ok(())
     }
@@ -459,10 +459,10 @@ impl Evaluator {
             match md {
                 v @ Structured::Node(n) => {
                     // TODO: check if they are the same if one already exists
-                    self.s_envs.root_define(n.name.clone(), v.clone());
+                    self.s_envs.root_define(n.id.name.clone(), v.clone());
                 }
                 v @ Structured::Edge(e) => {
-                    self.s_envs.root_define(e.name.clone(), v.clone());
+                    self.s_envs.root_define(e.id.name.clone(), v.clone());
                 }
                 Structured::Columns(_) => {}
                 Structured::Index(_) => {}
@@ -490,29 +490,29 @@ impl Evaluator {
             match pair.as_rule() {
                 r @ (Rule::global_def | Rule::local_def) => {
                     let inner = pair.into_inner().next().unwrap();
-                    let is_local = r == Rule::local_def;
-                    let next_id = self.s_envs.get_next_table_id(is_local);
-                    let env_to_build = if is_local {
+                    let global = r == Rule::global_def;
+                    let env_to_build = if global {
                         self.s_envs.root_mut()
                     } else {
                         self.s_envs.cur_mut()
                     };
-
-                    new_tables.push(match inner.as_rule() {
-                        Rule::node_def => {
-                            env_to_build.build_node_def(inner, next_id)?
-                        }
-                        Rule::edge_def => {
-                            env_to_build.build_edge_def(inner, next_id)?
-                        }
-                        Rule::columns_def => {
-                            env_to_build.build_columns_def(inner, next_id)?
-                        }
-                        Rule::index_def => {
-                            env_to_build.build_index_def(inner, next_id)?
-                        }
-                        _ => todo!()
-                    });
+                    if global {
+                        new_tables.push(match inner.as_rule() {
+                            Rule::node_def => {
+                                env_to_build.build_node_def(inner, global)?
+                            }
+                            Rule::edge_def => {
+                                env_to_build.build_edge_def(inner, global)?
+                            }
+                            Rule::columns_def => {
+                                env_to_build.build_columns_def(inner, global)?
+                            }
+                            Rule::index_def => {
+                                env_to_build.build_index_def(inner, global)?
+                            }
+                            _ => todo!()
+                        });
+                    }
                 }
                 Rule::EOI => {}
                 _ => unreachable!()
@@ -535,14 +535,14 @@ mod tests {
     #[test]
     fn definitions() {
         let s = r#"
-            local node "Person" {
+            create node "Person" {
                 *id: Int,
                 name: String,
                 email: ?String,
                 habits: ?[?String]
             }
 
-            local edge (Person)-[Friend]->(Person) {
+            create edge (Person)-[Friend]->(Person) {
                 relation: ?String
             }
         "#;
@@ -550,7 +550,7 @@ mod tests {
         let mut eval = Evaluator::new("_path_for_rocksdb_storagex".to_string()).unwrap();
         eval.build_table(parsed).unwrap();
         eval.restore_metadata().unwrap();
-        // eval.storage.delete().unwrap();
+        eval.storage.delete().unwrap();
         println!("{:#?}", eval.s_envs.resolve("Person"));
         println!("{:#?}", eval.s_envs.resolve("Friend"));
     }

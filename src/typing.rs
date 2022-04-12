@@ -54,22 +54,17 @@ pub enum StorageStatus {
     Stored,
 }
 
-#[derive(PartialEq, Eq, Ord, PartialOrd, Clone, Copy)]
-pub struct TableId(pub i64);
-
-impl TableId {
-    pub fn is_global(&self) -> bool {
-        self.0 >= 0
-    }
-    pub fn is_local(&self) -> bool {
-        self.0 < 0
-    }
+#[derive(PartialEq, Eq, Ord, PartialOrd, Clone)]
+pub struct TableId{
+    pub name: String,
+    pub global: bool
 }
+
 
 impl Debug for TableId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str( if self.is_global() { "G+" } else {"L"})?;
-        f.write_str(&format!("{}", self.0))?;
+        f.write_str( if self.global { "+" } else {"-"})?;
+        f.write_str(&format!("{}", self.name))?;
         Ok(())
     }
 }
@@ -89,7 +84,6 @@ impl Debug for ColumnId {
 pub struct Node {
     pub status: StorageStatus,
     pub id: TableId,
-    pub name: String,
     pub keys: Vec<Col>,
     pub cols: Vec<Col>,
     pub out_e: Vec<TableId>,
@@ -103,7 +97,6 @@ pub struct Edge {
     pub src: TableId,
     pub dst: TableId,
     pub id: TableId,
-    pub name: String,
     pub keys: Vec<Col>,
     pub cols: Vec<Col>,
 }
@@ -113,7 +106,6 @@ pub struct Columns {
     pub status: StorageStatus,
     pub attached: TableId,
     pub id: TableId,
-    pub name: String,
     pub cols: Vec<Col>,
 }
 
@@ -121,7 +113,6 @@ pub struct Columns {
 pub struct Index {
     pub status: StorageStatus,
     pub id: TableId,
-    pub name: String,
     pub attached: TableId,
     pub cols: Vec<String>,
 }
@@ -211,10 +202,10 @@ impl Structured {
     pub fn storage_id(&self) -> Option<TableId> {
         match self {
             Structured::Typing(_) => None,
-            Structured::Node(n) => Some(n.id),
-            Structured::Edge(e) => Some(e.id),
-            Structured::Columns(c) => Some(c.id),
-            Structured::Index(i) => Some(i.id)
+            Structured::Node(n) => Some(n.id.clone()),
+            Structured::Edge(e) => Some(e.id.clone()),
+            Structured::Columns(c) => Some(c.id.clone()),
+            Structured::Index(i) => Some(i.id.clone())
         }
     }
 }
