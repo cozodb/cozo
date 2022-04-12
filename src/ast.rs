@@ -10,7 +10,6 @@ use crate::error::Result;
 use crate::value::Value;
 
 
-
 #[derive(PartialEq, Debug)]
 pub enum Op {
     Add,
@@ -32,7 +31,7 @@ pub enum Op {
     Pow,
     Call,
     IsNull,
-    NotNull
+    NotNull,
 }
 
 
@@ -57,6 +56,8 @@ lazy_static! {
 
 #[derive(PartialEq, Debug)]
 pub enum Expr<'a> {
+    List(Vec<Expr<'a>>),
+    Dict(Vec<String>, Vec<Expr<'a>>),
     Apply(Op, Vec<Expr<'a>>),
     Const(Value<'a>),
 }
@@ -156,11 +157,12 @@ fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
 }
 
 #[inline]
-pub fn parse_string(pair: Pair<Rule>) -> Result<String>  {
+pub fn parse_string(pair: Pair<Rule>) -> Result<String> {
     match pair.as_rule() {
         Rule::quoted_string => Ok(parse_quoted_string(pair)?),
         Rule::s_quoted_string => Ok(parse_s_quoted_string(pair)?),
         Rule::raw_string => Ok(parse_raw_string(pair)?),
+        Rule::ident => Ok(pair.as_str().to_string()),
         _ => unreachable!()
     }
 }
@@ -191,8 +193,73 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
         Rule::boolean => Ok(Const(Value::Bool(pair.as_str() == "true"))),
         Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => Ok(
             Const(Value::OwnString(Box::new(parse_string(pair)?)))),
+        Rule::list => {
+            let mut vals = vec![];
+            let mut has_apply = false;
+            for p in pair.into_inner() {
+                let res = build_expr_primary(p)?;
+                match res {
+                    v @ Const(_) => { vals.push(v) }
+                    v => {
+                        has_apply = true;
+                        vals.push(v);
+                    }
+                }
+            }
+            if has_apply {
+                Ok(Expr::List(vals))
+            } else {
+                Ok(Const(Value::List(Box::new(vals.into_iter().map(|v| {
+                    match v {
+                        Apply(_, _) => { unreachable!() }
+                        Expr::List(_) => { unreachable!() }
+                        Expr::Dict(_, _) => { unreachable!() }
+                        Const(v) => { v }
+                    }
+                }).collect()))))
+            }
+        }
+        Rule::dict => {
+            // let mut res = BTreeMap::new();
+            let mut keys = vec![];
+            let mut vals = vec![];
+            let mut has_apply = false;
+            for p in pair.into_inner() {
+                match p.as_rule() {
+                    Rule::dict_pair => {
+                        let mut inner = p.into_inner();
+                        let name = parse_string(inner.next().unwrap())?;
+                        keys.push(name);
+                        match build_expr_primary(inner.next().unwrap())? {
+                            v @ Const(_) => {
+                                vals.push(v);
+                            }
+                            v => {
+                                has_apply = true;
+                                vals.push(v);
+                            }
+                        }
+                    }
+                    _ => todo!()
+                }
+            }
+            if has_apply {
+                Ok(Expr::Dict(keys, vals))
+            } else {
+                Ok(Const(Value::Dict(Box::new(keys.into_iter().zip(vals.into_iter()).map(|(k, v)| {
+                    match v {
+                        Expr::List(_) => { unreachable!() }
+                        Expr::Dict(_, _) => { unreachable!() }
+                        Apply(_, _) => { unreachable!() }
+                        Const(v) => {
+                            (k.into(), v)
+                        }
+                    }
+                }).collect()))))
+            }
+        }
         _ => {
-            println!("{:#?}", pair);
+            println!("Unhandled rule {:?}", pair.as_rule());
             unimplemented!()
         }
     }
@@ -238,5 +305,4 @@ mod tests {
         assert_eq!(parse_expr_from_str(r#"'"x"'"#).unwrap(), Const(Value::RefString(r##""x""##)));
         assert_eq!(parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(), Const(Value::RefString(r##"x"yz"##)));
     }
-
 }

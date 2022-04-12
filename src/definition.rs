@@ -295,7 +295,6 @@ impl Storage {
 
         let mut ret = vec![];
         for (k, v) in it {
-            println!("{:?} {:?}", k, v);
             let mut key_parser = ByteArrayParser::new(&k);
             let table_name = key_parser.parse_value().unwrap().get_string().unwrap();
 
@@ -468,14 +467,19 @@ impl Evaluator {
         Ok(())
     }
 
-    fn persist_change(&mut self, tname: &str) -> Result<()> {
+    fn persist_change(&mut self, tname: &str, global: bool) -> Result<()> {
         let tbl = self.s_envs.resolve_mut(tname).unwrap();
-        match tbl {
-            Structured::Node(n) => self.storage.persist_node(n),
-            Structured::Edge(e) => self.storage.persist_edge(e),
-            Structured::Columns(_) => unimplemented!(),
-            Structured::Index(_) => unimplemented!(),
-            Structured::Typing(_) => panic!(),
+        self.storage.create_table(tname, global)?;
+        if global {
+            match tbl {
+                Structured::Node(n) => self.storage.persist_node(n),
+                Structured::Edge(e) => self.storage.persist_edge(e),
+                Structured::Columns(_) => unimplemented!(),
+                Structured::Index(_) => unimplemented!(),
+                Structured::Typing(_) => panic!(),
+            }
+        } else {
+            Ok(())
         }
     }
 
@@ -492,30 +496,28 @@ impl Evaluator {
                     } else {
                         self.s_envs.cur_mut()
                     };
-                    if global {
-                        new_tables.push(match inner.as_rule() {
-                            Rule::node_def => {
-                                env_to_build.build_node_def(inner, global)?
-                            }
-                            Rule::edge_def => {
-                                env_to_build.build_edge_def(inner, global)?
-                            }
-                            Rule::columns_def => {
-                                env_to_build.build_columns_def(inner, global)?
-                            }
-                            Rule::index_def => {
-                                env_to_build.build_index_def(inner, global)?
-                            }
-                            _ => todo!()
-                        });
-                    }
+                    new_tables.push((global, match inner.as_rule() {
+                        Rule::node_def => {
+                            env_to_build.build_node_def(inner, global)?
+                        }
+                        Rule::edge_def => {
+                            env_to_build.build_edge_def(inner, global)?
+                        }
+                        Rule::columns_def => {
+                            env_to_build.build_columns_def(inner, global)?
+                        }
+                        Rule::index_def => {
+                            env_to_build.build_index_def(inner, global)?
+                        }
+                        _ => todo!()
+                    }));
                 }
                 Rule::EOI => {}
                 _ => unreachable!()
             }
         }
-        for tname in &new_tables {
-            self.persist_change(tname).unwrap(); // TODO proper error handling
+        for (global, tname) in &new_tables {
+            self.persist_change(tname, *global).unwrap(); // TODO proper error handling
         }
         Ok(())
     }
@@ -546,7 +548,7 @@ mod tests {
         let mut eval = Evaluator::new("_path_for_rocksdb_storagex".to_string()).unwrap();
         eval.build_table(parsed).unwrap();
         eval.restore_metadata().unwrap();
-        // eval.storage.delete().unwrap();
+        eval.storage.delete().unwrap();
         println!("{:#?}", eval.s_envs.resolve("Person"));
         println!("{:#?}", eval.s_envs.resolve("Friend"));
     }
