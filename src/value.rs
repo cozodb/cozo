@@ -71,7 +71,7 @@ pub enum Value<'a> {
     Dict(Box<BTreeMap<Cow<'a, str>, Value<'a>>>),
 }
 
-impl <'a> Value<'a> {
+impl<'a> Value<'a> {
     pub fn get_list(self) -> Option<Vec<Self>> {
         match self {
             Value::List(v) => Some(*v),
@@ -250,7 +250,7 @@ impl<'a> ByteArrayParser<'a> {
     #[inline]
     pub fn compare_string(&mut self, other: &mut Self) -> Ordering {
         let len_a = self.parse_varint().expect("Failed to get String length when comparing");
-        let len_b = self.parse_varint().expect("Failed to get String length when comparing");
+        let len_b = other.parse_varint().expect("Failed to get String length when comparing");
         for _ in 0..min(len_a, len_b) {
             let byte_a = self.advance(1).expect("Unexpected end of String when comparing")[0];
             let byte_b = other.advance(1).expect("Unexpected end of String when comparing")[0];
@@ -471,7 +471,8 @@ impl<T: Write> ByteArrayBuilder<T> {
 
 pub fn cozo_comparator_v1(a: &[u8], b: &[u8]) -> Ordering {
     cmp_data(&mut ByteArrayParser { bytes: a, current: 0 },
-             &mut ByteArrayParser { bytes: b, current: 0 })
+                       &mut ByteArrayParser { bytes: b, current: 0 })
+
 }
 
 pub fn cmp_data<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) -> Ordering {

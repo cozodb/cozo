@@ -18,8 +18,8 @@ impl Storage {
         options.create_if_missing(true);
         options.set_comparator("cozo_comparator_v1", cozo_comparator_v1);
 
-        let temp_cf = ColumnFamilyDescriptor::new("temp", options.clone());
-        let db = DB::open_cf_descriptors(&options, &path, vec![temp_cf])?;
+        // let temp_cf = ColumnFamilyDescriptor::new("temp", options.clone());
+        let db = DB::open(&options, &path)?;
 
         Ok(Storage { db: Some(db), options, path })
     }
