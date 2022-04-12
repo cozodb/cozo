@@ -311,7 +311,7 @@ impl<'a> ByteArrayParser<'a> {
     }
     pub fn compare_list(&mut self, other: &mut Self) -> Ordering {
         let len_a = self.parse_varint().expect("Failed to get List length when comparing");
-        let len_b = self.parse_varint().expect("Failed to get List length when comparing");
+        let len_b = other.parse_varint().expect("Failed to get List length when comparing");
         for _ in 0..min(len_a, len_b) {
             if let x @ (Greater | Less) = self.compare_value(other) { return x; }
         }
@@ -330,7 +330,7 @@ impl<'a> ByteArrayParser<'a> {
     }
     pub fn compare_dict(&mut self, other: &mut Self) -> Ordering {
         let len_a = self.parse_varint().expect("Failed to get Dict length when comparing");
-        let len_b = self.parse_varint().expect("Failed to get Dict length when comparing");
+        let len_b = other.parse_varint().expect("Failed to get Dict length when comparing");
         for _ in 0..min(len_a, len_b) {
             if let x @ (Greater | Less) = self.compare_string(other) { return x; }
             if let x @ (Greater | Less) = self.compare_value(other) { return x; }
