@@ -155,3 +155,12 @@ definition = _{ node_def | columns_def | edge_def | struct_def | index_def }
 global_def = { "create" ~ definition }
 local_def = { "local" ~ definition }
 statement = _{ global_def | local_def }
+
+mutation = { (insert|update|delete) ~ expr ~ ("as" ~ name_in_def)? ~
+             ( (exclude ~ name_in_def ~ ("," ~ name_in_def)*)
+             | (include ~ name_in_def ~ ("," ~ name_in_def)*))? }
+exclude = {"exclude"}
+include = {"include"}
+insert = {"insert"}
+update = {"update"}
+delete = {"delete"}

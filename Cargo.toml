@@ -11,7 +11,7 @@ pest_derive = "2.0"
 ordered-float = "2.10.0"
 uuid = "0.8"
 chrono = "0.4"
-rocksdb = "0.18.0"
 anyhow = "1.0"
 lazy_static = "1.4.0"
 thiserror = "1.0.30"
+cozo-rocks-sys = { path = "cozo-rocks-sys" }

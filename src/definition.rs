@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use pest::iterators::{Pair, Pairs};
 use crate::ast::parse_string;
 use crate::env::{Env, LayeredEnv, StructuredEnvItem};
@@ -10,7 +11,7 @@ use crate::typing::StorageStatus::{Planned, Stored};
 use crate::value::{ByteArrayBuilder, ByteArrayParser, Value};
 use crate::parser::{Parser, Rule};
 use pest::Parser as PestParser;
-use rocksdb::IteratorMode;
+// use rocksdb::IteratorMode;
 
 fn parse_ident(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
@@ -291,106 +292,107 @@ pub enum TableKind {
 
 impl Storage {
     fn all_metadata(&self, env: &StructuredEnvItem) -> Result<Vec<Structured>> {
-        let it = self.db.as_ref().ok_or(DatabaseClosed)?.full_iterator(IteratorMode::Start);
-
-        let mut ret = vec![];
-        for (k, v) in it {
-            let mut key_parser = ByteArrayParser::new(&k);
-            let table_name = key_parser.parse_value().unwrap().get_string().unwrap();
-
-            let mut data_parser = ByteArrayParser::new(&v);
-            let table_kind = data_parser.parse_value().unwrap();
-            let table_id = TableId { name: table_name, global: true };
-            match table_kind {
-                Value::UInt(i) if i == TableKind::Node as u64 => {
-                    let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-                        .into_iter().map(|v| {
-                        let mut vs = v.get_list().unwrap().into_iter();
-                        let name = vs.next().unwrap().get_string().unwrap();
-                        let typ = vs.next().unwrap().get_string().unwrap();
-                        let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().into_owned();
-                        Col {
-                            name,
-                            typ,
-                            default,
-                        }
-                    }).collect();
-                    let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-                        .into_iter().map(|v| {
-                        let mut vs = v.get_list().unwrap().into_iter();
-                        let name = vs.next().unwrap().get_string().unwrap();
-                        let typ = vs.next().unwrap().get_string().unwrap();
-                        let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().into_owned();
-                        Col {
-                            name,
-                            typ,
-                            default,
-                        }
-                    }).collect();
-                    let node = Node {
-                        status: StorageStatus::Stored,
-                        id: table_id,
-                        keys,
-                        cols,
-                        out_e: vec![], // TODO fix these
-                        in_e: vec![],
-                        attached: vec![],
-                    };
-                    ret.push(Structured::Node(node));
-                }
-                Value::UInt(i) if i == TableKind::Edge as u64 => {
-                    let src_name = data_parser.parse_value().unwrap().get_string().unwrap();
-                    let dst_name = data_parser.parse_value().unwrap().get_string().unwrap();
-                    let src_id = TableId { name: src_name, global: true };
-                    let dst_id = TableId { name: dst_name, global: true };
-                    let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-                        .into_iter().map(|v| {
-                        let mut vs = v.get_list().unwrap().into_iter();
-                        let name = vs.next().unwrap().get_string().unwrap();
-                        let typ = vs.next().unwrap().get_string().unwrap();
-                        let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().into_owned();
-                        Col {
-                            name,
-                            typ,
-                            default,
-                        }
-                    }).collect();
-                    let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-                        .into_iter().map(|v| {
-                        let mut vs = v.get_list().unwrap().into_iter();
-                        let name = vs.next().unwrap().get_string().unwrap();
-                        let typ = vs.next().unwrap().get_string().unwrap();
-                        let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().into_owned();
-                        Col {
-                            name,
-                            typ,
-                            default,
-                        }
-                    }).collect();
-                    let edge = Edge {
-                        status: StorageStatus::Stored,
-                        src: src_id,
-                        dst: dst_id,
-                        id: table_id,
-                        keys,
-                        cols,
-                    };
-                    ret.push(Structured::Edge(edge));
-                }
-                Value::UInt(i) if i == TableKind::Columns as u64 => {
-                    todo!()
-                }
-                Value::UInt(i) if i == TableKind::Index as u64 => {
-                    todo!()
-                }
-                _ => unreachable!()
-            }
-        }
-        Ok(ret)
+        todo!()
+        // let it = self.db.as_ref().ok_or(DatabaseClosed)?.full_iterator(IteratorMode::Start);
+        //
+        // let mut ret = vec![];
+        // for (k, v) in it {
+        //     let mut key_parser = ByteArrayParser::new(&k);
+        //     let table_name = key_parser.parse_value().unwrap().get_string().unwrap();
+        //
+        //     let mut data_parser = ByteArrayParser::new(&v);
+        //     let table_kind = data_parser.parse_value().unwrap();
+        //     let table_id = TableId { name: table_name, global: true };
+        //     match table_kind {
+        //         Value::UInt(i) if i == TableKind::Node as u64 => {
+        //             let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
+        //                 .into_iter().map(|v| {
+        //                 let mut vs = v.get_list().unwrap().into_iter();
+        //                 let name = vs.next().unwrap().get_string().unwrap();
+        //                 let typ = vs.next().unwrap().get_string().unwrap();
+        //                 let typ = env.build_type_from_str(&typ).unwrap();
+        //                 let default = vs.next().unwrap().into_owned();
+        //                 Col {
+        //                     name,
+        //                     typ,
+        //                     default,
+        //                 }
+        //             }).collect();
+        //             let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
+        //                 .into_iter().map(|v| {
+        //                 let mut vs = v.get_list().unwrap().into_iter();
+        //                 let name = vs.next().unwrap().get_string().unwrap();
+        //                 let typ = vs.next().unwrap().get_string().unwrap();
+        //                 let typ = env.build_type_from_str(&typ).unwrap();
+        //                 let default = vs.next().unwrap().into_owned();
+        //                 Col {
+        //                     name,
+        //                     typ,
+        //                     default,
+        //                 }
+        //             }).collect();
+        //             let node = Node {
+        //                 status: StorageStatus::Stored,
+        //                 id: table_id,
+        //                 keys,
+        //                 cols,
+        //                 out_e: vec![], // TODO fix these
+        //                 in_e: vec![],
+        //                 attached: vec![],
+        //             };
+        //             ret.push(Structured::Node(node));
+        //         }
+        //         Value::UInt(i) if i == TableKind::Edge as u64 => {
+        //             let src_name = data_parser.parse_value().unwrap().get_string().unwrap();
+        //             let dst_name = data_parser.parse_value().unwrap().get_string().unwrap();
+        //             let src_id = TableId { name: src_name, global: true };
+        //             let dst_id = TableId { name: dst_name, global: true };
+        //             let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
+        //                 .into_iter().map(|v| {
+        //                 let mut vs = v.get_list().unwrap().into_iter();
+        //                 let name = vs.next().unwrap().get_string().unwrap();
+        //                 let typ = vs.next().unwrap().get_string().unwrap();
+        //                 let typ = env.build_type_from_str(&typ).unwrap();
+        //                 let default = vs.next().unwrap().into_owned();
+        //                 Col {
+        //                     name,
+        //                     typ,
+        //                     default,
+        //                 }
+        //             }).collect();
+        //             let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
+        //                 .into_iter().map(|v| {
+        //                 let mut vs = v.get_list().unwrap().into_iter();
+        //                 let name = vs.next().unwrap().get_string().unwrap();
+        //                 let typ = vs.next().unwrap().get_string().unwrap();
+        //                 let typ = env.build_type_from_str(&typ).unwrap();
+        //                 let default = vs.next().unwrap().into_owned();
+        //                 Col {
+        //                     name,
+        //                     typ,
+        //                     default,
+        //                 }
+        //             }).collect();
+        //             let edge = Edge {
+        //                 status: StorageStatus::Stored,
+        //                 src: src_id,
+        //                 dst: dst_id,
+        //                 id: table_id,
+        //                 keys,
+        //                 cols,
+        //             };
+        //             ret.push(Structured::Edge(edge));
+        //         }
+        //         Value::UInt(i) if i == TableKind::Columns as u64 => {
+        //             todo!()
+        //         }
+        //         Value::UInt(i) if i == TableKind::Index as u64 => {
+        //             todo!()
+        //         }
+        //         _ => unreachable!()
+        //     }
+        // }
+        // Ok(ret)
     }
 
     fn persist_node(&mut self, node: &mut Node) -> Result<()> {
@@ -520,6 +522,10 @@ impl Evaluator {
             self.persist_change(tname, *global).unwrap(); // TODO proper error handling
         }
         Ok(())
+    }
+
+    pub fn insert_data(&mut self, _pairs: Pairs<Rule>, _bindings: BTreeMap<&str, Value>) -> Result<()> {
+        todo!()
     }
 }
 
