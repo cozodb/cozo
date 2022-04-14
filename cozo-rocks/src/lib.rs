@@ -59,7 +59,7 @@ mod ffi {
     }
 
     unsafe extern "C++" {
-        include!("cozo-rocks/include/cozorocks.h");
+        include!("cozorocks.h");
 
         type StatusCode;
         type StatusSubCode;
@@ -81,7 +81,7 @@ mod ffi {
         fn increase_parallelism(self: &OptionsBridge);
         fn optimize_level_style_compaction(self: &OptionsBridge);
         fn set_create_if_missing(self: &OptionsBridge, v: bool);
-        fn set_comparator(self: &OptionsBridge,  name: &str, compare: fn(&[u8], &[u8]) -> i8);
+        fn set_comparator(self: &OptionsBridge, name: &str, compare: fn(&[u8], &[u8]) -> i8);
 
         type DBBridge;
         fn open_db(options: &OptionsBridge, path: &[u8]) -> UniquePtr<DBBridge>;
@@ -195,7 +195,7 @@ impl DB {
                 ),
                 default_read_options: ReadOptions::default(),
                 default_write_options: WriteOptions::default(),
-                options
+                options,
             }
         }
         #[cfg(not(unix))]
@@ -222,15 +222,15 @@ impl DB {
     }
 
     #[inline]
-    pub fn get(&self, key: impl AsRef<[u8]>, options: Option<&ReadOptions>) -> Result<PinnableSlice, Status> {
+    pub fn get(&self, key: impl AsRef<[u8]>, options: Option<&ReadOptions>) -> Result<Option<PinnableSlice>, Status> {
         let mut status = Status::default();
         let slice = self.bridge.get(
             &options.unwrap_or(&self.default_read_options).bridge,
             key.as_ref(), &mut status);
-        if status.code == StatusCode::kOk {
-            Ok(PinnableSlice { bridge: slice })
-        } else {
-            Err(status)
+        match status.code {
+            StatusCode::kOk => Ok(Some(PinnableSlice { bridge: slice })),
+            StatusCode::kNotFound => Ok(None),
+            _ => Err(status)
         }
     }
 }
