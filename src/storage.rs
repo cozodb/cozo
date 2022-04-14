@@ -1,10 +1,9 @@
-use crate::error::CozoError::DatabaseClosed;
 use crate::error::Result;
-use crate::value::cozo_comparator_v1;
 
 
 pub struct Storage {
     pub db: Option<()>,
+    #[allow(dead_code)]
     path: String,
 }
 //
@@ -28,6 +27,7 @@ impl Storage {
     pub fn no_storage() -> Self {
         Self { db: None, path: "".to_string() }
     }
+    #[allow(unused_variables)]
     pub fn new(path: String) -> Result<Self> {
         unimplemented!()
         // let options = make_options();
@@ -41,37 +41,40 @@ impl Storage {
         // let db = DB::open_cf_descriptors(&options, &path, cfs)?;
         // Ok(Storage { db: Some(db), path })
     }
+    #[allow(unused_variables)]
     pub fn delete(&mut self) -> Result<()> {
-        unimplemented!();
+        unimplemented!()
         // drop(self.db.take());
         // DB::destroy(&make_options(), &self.path)?;
-        Ok(())
+        // Ok(())
     }
+    #[allow(unused_variables)]
     pub fn put_global(&self, k: &[u8], v: &[u8]) -> Result<()> {
         // let db = self.db.as_ref().ok_or(DatabaseClosed)?;
         // db.put(k, v)?;
-        unimplemented!();
-        Ok(())
+        unimplemented!()
+        // Ok(())
     }
+    #[allow(unused_variables)]
     pub fn create_table(&mut self, name: &str, _global: bool) -> Result<()> {
-        unimplemented!();
+        unimplemented!()
         // let db = self.db.as_mut().ok_or(DatabaseClosed)?;
         // db.create_cf(name, &make_options())?;
-        Ok(())
+        // Ok(())
     }
+    #[allow(unused_variables)]
     pub fn drop_table(&mut self, name: &str, _global: bool) -> Result<()> {
-        unimplemented!();
+        unimplemented!()
         // let db = self.db.as_mut().ok_or(DatabaseClosed)?;
         // db.drop_cf(name)?;
-        Ok(())
+        // Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::from_utf8;
-    use crate::value::{ByteArrayBuilder, Value};
-    use super::*;
+    use crate::value::{ByteArrayBuilder, cozo_comparator_v1, Value};
 
     #[test]
     fn import() {

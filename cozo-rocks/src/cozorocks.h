@@ -21,7 +21,7 @@ typedef RDB::Status::Code StatusCode;
 typedef RDB::Status::SubCode StatusSubCode;
 typedef RDB::Status::Severity StatusSeverity;
 
-std::unique_ptr<RDB::DB> new_db();
+std::unique_ptr <RDB::DB> new_db();
 
 struct ReadOptionsBridge {
     mutable RDB::ReadOptions inner;
@@ -38,19 +38,21 @@ public:
 
 typedef rust::Fn<std::int8_t(rust::Slice<const std::uint8_t>, rust::Slice<const std::uint8_t>)> RustComparatorFn;
 
-class RustComparator: public RDB::Comparator {
+class RustComparator : public RDB::Comparator {
 public:
-    inline int Compare(const rocksdb::Slice& a, const rocksdb::Slice& b ) const {
+    inline int Compare(const rocksdb::Slice &a, const rocksdb::Slice &b) const {
         auto ra = rust::Slice(reinterpret_cast<const std::uint8_t *>(a.data()), a.size());
         auto rb = rust::Slice(reinterpret_cast<const std::uint8_t *>(b.data()), b.size());
         return int(rust_compare(ra, rb));
     }
 
-    const char* Name() const {
+    const char *Name() const {
         return "RustComparator";
     }
-    void FindShortestSeparator(std::string*, const rocksdb::Slice&) const { }
-    void FindShortSuccessor(std::string*) const { }
+
+    void FindShortestSeparator(std::string *, const rocksdb::Slice &) const {}
+
+    void FindShortSuccessor(std::string *) const {}
 
     void set_fn(RustComparatorFn f) const {
         rust_compare = f;
@@ -93,15 +95,15 @@ public:
     }
 };
 
-inline std::unique_ptr<ReadOptionsBridge> new_read_options() {
+inline std::unique_ptr <ReadOptionsBridge> new_read_options() {
     return std::unique_ptr<ReadOptionsBridge>(new ReadOptionsBridge);
 }
 
-inline std::unique_ptr<WriteOptionsBridge> new_write_options() {
+inline std::unique_ptr <WriteOptionsBridge> new_write_options() {
     return std::unique_ptr<WriteOptionsBridge>(new WriteOptionsBridge);
 }
 
-inline std::unique_ptr<OptionsBridge> new_options() {
+inline std::unique_ptr <OptionsBridge> new_options() {
     return std::unique_ptr<OptionsBridge>(new OptionsBridge);
 }
 
@@ -124,7 +126,7 @@ inline void write_status(RDB::Status &&rstatus, Status &status) {
 }
 
 struct DBBridge {
-    mutable std::unique_ptr<RDB::DB> inner;
+    mutable std::unique_ptr <RDB::DB> inner;
 
     DBBridge(RDB::DB *inner_) : inner(inner_) {}
 
@@ -142,7 +144,7 @@ struct DBBridge {
         );
     }
 
-    inline std::unique_ptr<PinnableSliceBridge> get(
+    inline std::unique_ptr <PinnableSliceBridge> get(
             const ReadOptionsBridge &options,
             rust::Slice<const uint8_t> key,
             Status &status
@@ -159,7 +161,16 @@ struct DBBridge {
     }
 };
 
-inline std::unique_ptr<DBBridge> open_db(const OptionsBridge &options, const rust::Slice<const uint8_t> path) {
+inline std::vector <std::string> list_column_families(const OptionsBridge &options,
+                                                      const rust::Slice<const uint8_t> path) {
+    std::vector <std::string> column_families;
+    RDB::DB::ListColumnFamilies(options.inner,
+                                std::string(reinterpret_cast<const char *>(path.data()), path.size()),
+                                &column_families);
+    return column_families;
+}
+
+inline std::unique_ptr <DBBridge> open_db(const OptionsBridge &options, const rust::Slice<const uint8_t> path) {
     RDB::DB *db_ptr;
     RDB::Status s = RDB::DB::Open(options.inner,
                                   std::string(reinterpret_cast<const char *>(path.data()), path.size()),

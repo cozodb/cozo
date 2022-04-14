@@ -9,5 +9,4 @@ void write_status_impl(Status &status, StatusCode code, StatusSubCode subcode, S
     status.code = code;
     status.subcode = subcode;
     status.severity = severity;
-
 }

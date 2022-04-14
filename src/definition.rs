@@ -6,9 +6,9 @@ use crate::error::Result;
 use crate::error::CozoError::*;
 use crate::eval::Evaluator;
 use crate::storage::Storage;
-use crate::typing::{Col, Columns, Edge, Index, Node, StorageStatus, Structured, TableId, Typing};
+use crate::typing::{Col, Columns, Edge, Index, Node, Structured, TableId, Typing};
 use crate::typing::StorageStatus::{Planned, Stored};
-use crate::value::{ByteArrayBuilder, ByteArrayParser, Value};
+use crate::value::{ByteArrayBuilder, Value};
 use crate::parser::{Parser, Rule};
 use pest::Parser as PestParser;
 // use rocksdb::IteratorMode;
@@ -291,6 +291,7 @@ pub enum TableKind {
 }
 
 impl Storage {
+    #[allow(unused_variables)]
     fn all_metadata(&self, env: &StructuredEnvItem) -> Result<Vec<Structured>> {
         todo!()
         // let it = self.db.as_ref().ok_or(DatabaseClosed)?.full_iterator(IteratorMode::Start);

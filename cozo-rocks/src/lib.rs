@@ -91,7 +91,6 @@ mod ffi {
 }
 
 
-use std::sync::atomic::Ordering;
 use cxx::UniquePtr;
 pub use ffi::*;
 
@@ -177,6 +176,7 @@ impl Default for WriteOptions {
 
 pub struct DB {
     bridge: UniquePtr<DBBridge>,
+    #[allow(dead_code)]
     options: Options,
     default_read_options: ReadOptions,
     default_write_options: WriteOptions,
