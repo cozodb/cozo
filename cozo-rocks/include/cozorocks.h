@@ -25,6 +25,14 @@ std::unique_ptr <RDB::DB> new_db();
 
 struct ReadOptionsBridge {
     mutable RDB::ReadOptions inner;
+
+    inline void set_verify_checksums(bool v) const {
+        inner.verify_checksums = v;
+    }
+
+    inline void set_total_order_seek(bool v) const {
+        inner.total_order_seek = v;
+    }
 };
 
 struct WriteOptionsBridge {
@@ -116,6 +124,15 @@ struct PinnableSliceBridge {
     }
 };
 
+struct SliceBridge {
+    RDB::Slice inner;
+    SliceBridge(RDB::Slice&& s) : inner(s) {}
+
+    inline rust::Slice<const std::uint8_t> as_bytes() const {
+        return rust::Slice(reinterpret_cast<const std::uint8_t *>(inner.data()), inner.size());
+    }
+};
+
 void write_status_impl(Status &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity);
 
 inline void write_status(RDB::Status &&rstatus, Status &status) {
@@ -125,6 +142,53 @@ inline void write_status(RDB::Status &&rstatus, Status &status) {
     }
 }
 
+struct WriteBatchBridge {
+    mutable RDB::WriteBatch inner;
+    std::vector<RDB::ColumnFamilyHandle *> *handles;
+};
+
+struct IteratorBridge {
+    mutable std::unique_ptr <RDB::Iterator> inner;
+
+    IteratorBridge(RDB::Iterator *it) : inner(it) {}
+
+    inline void seek_to_first() const {
+        inner->SeekToFirst();
+    }
+
+    inline void seek_to_last() const {
+        inner->SeekToLast();
+    }
+
+    inline void next() const {
+        inner->Next();
+    }
+
+    inline bool is_valid() const {
+        return inner->Valid();
+    }
+
+    inline void seek(rust::Slice<const uint8_t> key) const {
+        auto k = RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size());
+        inner->Seek(k);
+    }
+
+    inline void seek_for_prev(rust::Slice<const uint8_t> key) const {
+        auto k = RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size());
+        inner->SeekForPrev(k);
+    }
+
+    inline std::unique_ptr<SliceBridge> key() const {
+        return std::make_unique<SliceBridge>(inner->key());
+    }
+
+    inline std::unique_ptr<SliceBridge> value() const {
+        return std::make_unique<SliceBridge>(inner->value());
+    }
+
+    Status status() const;
+};
+
 struct DBBridge {
     mutable std::unique_ptr <RDB::DB> inner;
 
@@ -132,12 +196,18 @@ struct DBBridge {
 
     DBBridge(RDB::DB *inner_) : inner(inner_) {}
 
-    inline std::unique_ptr<std::vector<std::string>> cf_names() const {
-        auto ret = std::make_unique<std::vector<std::string>>();
-        for (auto h : handles) {
+    inline std::unique_ptr <std::vector<std::string>> cf_names() const {
+        auto ret = std::make_unique < std::vector < std::string >> ();
+        for (auto h: handles) {
             ret->push_back(h->GetName());
         }
         return ret;
+    }
+
+    inline std::unique_ptr <WriteBatchBridge> write_batch() const {
+        auto wb = std::make_unique<WriteBatchBridge>();
+        wb->handles = &handles;
+        return wb;
     }
 
     inline void put(
@@ -171,6 +241,10 @@ struct DBBridge {
                 status
         );
         return pinnable_val;
+    }
+
+    inline std::unique_ptr <IteratorBridge> iterator(const ReadOptionsBridge &options, std::size_t cf_id) const {
+        return std::make_unique<IteratorBridge>(inner->NewIterator(options.inner, handles[cf_id]));
     }
 };
 

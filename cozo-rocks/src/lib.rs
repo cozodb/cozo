@@ -68,8 +68,13 @@ mod ffi {
         type PinnableSliceBridge;
         fn as_bytes(self: &PinnableSliceBridge) -> &[u8];
 
+        type SliceBridge;
+        fn as_bytes(self: &SliceBridge) -> &[u8];
+
         type ReadOptionsBridge;
         fn new_read_options() -> UniquePtr<ReadOptionsBridge>;
+        fn set_verify_checksums(self: &ReadOptionsBridge, v: bool);
+        fn set_total_order_seek(self: &ReadOptionsBridge, v: bool);
 
         type WriteOptionsBridge;
         fn new_write_options() -> UniquePtr<WriteOptionsBridge>;
@@ -89,6 +94,21 @@ mod ffi {
         fn cf_names(self: &DBBridge) -> UniquePtr<CxxVector<CxxString>>;
         fn put(self: &DBBridge, options: &WriteOptionsBridge, cf_id: usize, key: &[u8], val: &[u8], status: &mut Status);
         fn get(self: &DBBridge, options: &ReadOptionsBridge, cf_id: usize, key: &[u8], status: &mut Status) -> UniquePtr<PinnableSliceBridge>;
+        fn write_batch(self: &DBBridge) -> UniquePtr<WriteBatchBridge>;
+        fn iterator(self: &DBBridge, options: &ReadOptionsBridge, cf_id: usize) -> UniquePtr<IteratorBridge>;
+
+        type WriteBatchBridge;
+
+        type IteratorBridge;
+        fn seek_to_first(self: &IteratorBridge);
+        fn seek_to_last(self: &IteratorBridge);
+        fn next(self: &IteratorBridge);
+        fn is_valid(self: &IteratorBridge) -> bool;
+        fn seek(self: &IteratorBridge, key: &[u8]);
+        fn seek_for_prev(self: &IteratorBridge, key: &[u8]);
+        fn key(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
+        fn value(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
+        fn status(self: &IteratorBridge) -> Status;
     }
 }
 
@@ -140,18 +160,19 @@ impl Default for Options {
     }
 }
 
-pub struct PinnableSlice {
-    bridge: UniquePtr<PinnableSliceBridge>,
-}
-
-impl PinnableSlice {
-    pub fn as_bytes(&self) -> &[u8] {
-        self.bridge.as_bytes()
-    }
-}
-
 pub struct ReadOptions {
     bridge: UniquePtr<ReadOptionsBridge>,
+}
+
+impl ReadOptions {
+    pub fn set_total_order_seek(self, v: bool) -> Self {
+        self.bridge.set_total_order_seek(v);
+        self
+    }
+    pub fn set_verify_checksums(self, v: bool) -> Self {
+        self.bridge.set_total_order_seek(v);
+        self
+    }
 }
 
 impl Default for ReadOptions {
@@ -177,12 +198,16 @@ impl Default for WriteOptions {
     }
 }
 
+pub type PinnableSlice = UniquePtr<PinnableSliceBridge>;
+pub type Slice = UniquePtr<SliceBridge>;
+pub type Iterator = UniquePtr<IteratorBridge>;
+
 pub struct DB {
     bridge: UniquePtr<DBBridge>,
     pub options: Options,
     pub default_read_options: ReadOptions,
     pub default_write_options: WriteOptions,
-    pub column_families: BTreeMap<String, usize>
+    pub column_families: BTreeMap<String, usize>,
 }
 
 fn get_path_bytes(path: &std::path::Path) -> &[u8] {
@@ -209,7 +234,7 @@ impl DB {
         let bridge = open_db(
             &options.bridge,
             get_path_bytes(path.as_ref()),
-            &mut status
+            &mut status,
         );
 
         if status.code == StatusCode::kOk {
@@ -219,13 +244,11 @@ impl DB {
                 default_read_options: ReadOptions::default(),
                 default_write_options: WriteOptions::default(),
                 options,
-                column_families
+                column_families,
             })
         } else {
             Err(status)
         }
-
-
     }
 
     #[inline]
@@ -248,10 +271,15 @@ impl DB {
             &options.unwrap_or(&self.default_read_options).bridge, cf,
             key.as_ref(), &mut status);
         match status.code {
-            StatusCode::kOk => Ok(Some(PinnableSlice { bridge: slice })),
+            StatusCode::kOk => Ok(Some(slice)),
             StatusCode::kNotFound => Ok(None),
             _ => Err(status)
         }
+    }
+
+    #[inline]
+    pub fn iterator(&self, cf: usize, options: Option<&ReadOptions>) -> Iterator {
+        self.bridge.iterator(&options.unwrap_or(&self.default_read_options).bridge, cf)
     }
 }
 
