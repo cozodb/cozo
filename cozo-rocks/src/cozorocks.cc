@@ -3,7 +3,7 @@
 //
 
 #include "cozorocks.h"
-#include "cozo-rocks-sys/src/lib.rs.h"
+#include "cozo-rocks/src/lib.rs.h"
 
 void write_status_impl(Status &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity) {
     status.code = code;

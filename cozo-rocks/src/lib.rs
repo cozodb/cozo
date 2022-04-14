@@ -59,7 +59,7 @@ mod ffi {
     }
 
     unsafe extern "C++" {
-        include!("cozo-rocks-sys/include/cozorocks.h");
+        include!("cozo-rocks/include/cozorocks.h");
 
         type StatusCode;
         type StatusSubCode;

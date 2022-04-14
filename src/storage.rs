@@ -75,14 +75,14 @@ mod tests {
 
     #[test]
     fn import() {
-        use cozo_rocks_sys::*;
+        use cozo_rocks::*;
 
         let db = DB::open(Options::default()
                               .increase_parallelism()
                               .optimize_level_style_compaction()
                               .set_create_if_missing(true)
                               .set_comparator("cozo_comparator_v1", cozo_comparator_v1),
-                          "xxyyzz");
+                          "xxyyzz.db");
 
         let mut x = vec![];
         let mut builder = ByteArrayBuilder::new(&mut x);

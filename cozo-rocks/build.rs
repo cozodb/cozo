@@ -4,7 +4,7 @@ fn main() {
         .include("../rocksdb/include")
         .include("include")
         .flag_if_supported("-std=c++17")
-        .compile("rocksdb-sys");
+        .compile("cozo-rocks");
 
     println!("cargo:rustc-link-search=rocksdb/");
     println!("cargo:rustc-link-lib=rocksdb");

@@ -14,4 +14,4 @@ chrono = "0.4"
 anyhow = "1.0"
 lazy_static = "1.4.0"
 thiserror = "1.0.30"
-cozo-rocks-sys = { path = "cozo-rocks-sys" }
+cozo-rocks = { path = "cozo-rocks" }
