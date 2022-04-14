@@ -469,10 +469,14 @@ impl<T: Write> ByteArrayBuilder<T> {
     }
 }
 
-pub fn cozo_comparator_v1(a: &[u8], b: &[u8]) -> Ordering {
-    cmp_data(&mut ByteArrayParser { bytes: a, current: 0 },
-                       &mut ByteArrayParser { bytes: b, current: 0 })
 
+pub fn cozo_comparator_v1(a: &[u8], b: &[u8]) -> i8 {
+    match cmp_data(&mut ByteArrayParser { bytes: a, current: 0 },
+                   &mut ByteArrayParser { bytes: b, current: 0 }) {
+        Less => -1,
+        Equal => 0,
+        Greater => 1
+    }
 }
 
 pub fn cmp_data<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) -> Ordering {

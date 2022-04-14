@@ -70,22 +70,41 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use std::str::from_utf8;
-    use crate::typing::BaseType::String;
+    use crate::value::{ByteArrayBuilder, Value};
     use super::*;
 
     #[test]
     fn import() {
         use cozo_rocks_sys::*;
 
-        let options = new_options();
-        options.increase_parallelism();
-        options.optimize_level_style_compaction();
-        options.set_create_if_missing(true);
-        let db = open_db(&options, "xxyyzz");
-        let mut status = Status::new();
-        db.put("A key".as_bytes(), "A motherfucking value!!! 👋👋👋".as_bytes(), &mut status);
-        let val = db.get("A key".as_bytes());
+        let db = DB::open(Options::default()
+                              .increase_parallelism()
+                              .optimize_level_style_compaction()
+                              .set_create_if_missing(true)
+                              .set_comparator("cozo_comparator_v1", cozo_comparator_v1),
+                          "xxyyzz");
+
+        let mut x = vec![];
+        let mut builder = ByteArrayBuilder::new(&mut x);
+        builder.build_value(&Value::RefString("A key"));
+        let key = builder.get();
+
+        let mut x = vec![];
+        let mut builder = ByteArrayBuilder::new(&mut x);
+        builder.build_value(&Value::RefString("Another key"));
+        let key2 = builder.get();
+
+        db.put(&key, "A motherfucking value!!! 👋👋👋", None).unwrap();
+        db.put(&key2, "Another motherfucking value!!! 👋👋👋", None).unwrap();
+        // db.put("Yes man", "A motherfucking value!!! 👋👋👋", None).unwrap();
+        let val = db.get(&key, None).unwrap();
         let val = val.as_bytes();
-        println!("{:?} {}", status, from_utf8(val).unwrap());
+        println!("{}", from_utf8(val).unwrap());
+        let val = db.get(&key2, None).unwrap();
+        let val = val.as_bytes();
+        println!("{}", from_utf8(val).unwrap());
+        let val = db.get(&key, None).unwrap();
+        let val = val.as_bytes();
+        println!("{}", from_utf8(val).unwrap());
     }
 }
