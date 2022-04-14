@@ -161,19 +161,39 @@ struct DBBridge {
     }
 };
 
-inline std::vector <std::string> list_column_families(const OptionsBridge &options,
-                                                      const rust::Slice<const uint8_t> path) {
-    std::vector <std::string> column_families;
+inline std::unique_ptr <std::vector<std::string>> list_column_families(const OptionsBridge &options,
+                                                                       const rust::Slice<const uint8_t> path) {
+    auto column_families = std::make_unique < std::vector < std::string >> ();
     RDB::DB::ListColumnFamilies(options.inner,
                                 std::string(reinterpret_cast<const char *>(path.data()), path.size()),
-                                &column_families);
+                                &*column_families);
     return column_families;
 }
 
-inline std::unique_ptr <DBBridge> open_db(const OptionsBridge &options, const rust::Slice<const uint8_t> path) {
+inline std::unique_ptr <DBBridge> open_db(const OptionsBridge &options, const rust::Slice<const uint8_t> path, Status &status) {
+    auto old_column_families = std::vector<std::string>();
+    RDB::DB::ListColumnFamilies(options.inner,
+                                std::string(reinterpret_cast<const char *>(path.data()), path.size()),
+                                &old_column_families);
+    if (old_column_families.empty()) {
+        old_column_families.push_back(RDB::kDefaultColumnFamilyName);
+    }
+
+    std::vector <RDB::ColumnFamilyDescriptor> column_families;
+
+    for (auto el: old_column_families) {
+        column_families.push_back(RDB::ColumnFamilyDescriptor(
+                el, options.inner));
+    }
+
+    std::vector < RDB::ColumnFamilyHandle * > handles;
+
     RDB::DB *db_ptr;
     RDB::Status s = RDB::DB::Open(options.inner,
                                   std::string(reinterpret_cast<const char *>(path.data()), path.size()),
+                                  column_families,
+                                  &handles,
                                   &db_ptr);
+    write_status(std::move(s), status);
     return std::unique_ptr<DBBridge>(new DBBridge(db_ptr));
 }

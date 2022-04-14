@@ -2,7 +2,7 @@
 // Created by Ziyang Hu on 2022/4/13.
 //
 
-#include "cozorocks.h"
+#include "../include/cozorocks.h"
 #include "cozo-rocks/src/lib.rs.h"
 
 void write_status_impl(Status &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity) {

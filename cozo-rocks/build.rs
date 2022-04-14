@@ -2,7 +2,7 @@ fn main() {
     cxx_build::bridge("src/lib.rs")
         .file("src/cozorocks.cc")
         .include("../rocksdb/include")
-        .include("src")
+        .include("include")
         .flag_if_supported("-std=c++17")
         .compile("cozo-rocks");
 
@@ -12,5 +12,5 @@ fn main() {
     println!("cargo:rustc-link-lib=bz2");
     println!("cargo:rerun-if-changed=src/main.rs");
     println!("cargo:rerun-if-changed=src/cozorocks.cc");
-    println!("cargo:rerun-if-changed=src/cozorocks.h");
+    println!("cargo:rerun-if-changed=include/cozorocks.h");
 }

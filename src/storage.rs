@@ -6,22 +6,6 @@ pub struct Storage {
     #[allow(dead_code)]
     path: String,
 }
-//
-// fn make_options() -> Options {
-//     let mut options = Options::default();
-//
-//     options.create_missing_column_families(true);
-//     options.create_if_missing(true);
-//     options.set_comparator("cozo_comparator_v1", cozo_comparator_v1);
-//     options
-// }
-
-// #[allow(dead_code)]
-// fn make_write_options(global: bool) -> WriteOptions {
-//     let mut options = WriteOptions::new();
-//     options.disable_wal(!global);
-//     options
-// }
 
 impl Storage {
     pub fn no_storage() -> Self {
@@ -79,13 +63,15 @@ mod tests {
     #[test]
     fn import() {
         use cozo_rocks::*;
+        let options = Options::default()
+            .increase_parallelism()
+            .optimize_level_style_compaction()
+            .set_create_if_missing(true)
+            .set_comparator("cozo_comparator_v1", cozo_comparator_v1);
+        println!("{:?}", DB::list_column_families(&options, "xxyyzz.db"));
 
-        let db = DB::open(Options::default()
-                              .increase_parallelism()
-                              .optimize_level_style_compaction()
-                              .set_create_if_missing(true)
-                              .set_comparator("cozo_comparator_v1", cozo_comparator_v1),
-                          "xxyyzz.db");
+        let db = DB::open(options,
+                          "xxyyzz.db").unwrap();
 
         let mut x = vec![];
         let mut builder = ByteArrayBuilder::new(&mut x);

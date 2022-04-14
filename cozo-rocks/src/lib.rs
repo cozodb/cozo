@@ -84,7 +84,8 @@ mod ffi {
         fn set_comparator(self: &OptionsBridge, name: &str, compare: fn(&[u8], &[u8]) -> i8);
 
         type DBBridge;
-        fn open_db(options: &OptionsBridge, path: &[u8]) -> UniquePtr<DBBridge>;
+        fn list_column_families(options: &OptionsBridge, path: &[u8]) -> UniquePtr<CxxVector<CxxString>>;
+        fn open_db(options: &OptionsBridge, path: &[u8], status: &mut Status) -> UniquePtr<DBBridge>;
         fn put(self: &DBBridge, options: &WriteOptionsBridge, key: &[u8], val: &[u8], status: &mut Status);
         fn get(self: &DBBridge, options: &ReadOptionsBridge, key: &[u8], status: &mut Status) -> UniquePtr<PinnableSliceBridge>;
     }
@@ -182,30 +183,45 @@ pub struct DB {
     default_write_options: WriteOptions,
 }
 
+fn get_path_bytes(path: &std::path::Path) -> &[u8] {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes()
+    }
+
+    #[cfg(not(unix))]
+    { path.to_string_lossy().to_string().as_bytes() }
+}
+
 impl DB {
     #[inline]
-    pub fn open(options: Options, path: impl AsRef<std::path::Path>) -> Self {
-        #[cfg(unix)]
-        {
-            use std::os::unix::ffi::OsStrExt;
-            Self {
-                bridge: open_db(
-                    &options.bridge,
-                    path.as_ref().as_os_str().as_bytes(),
-                ),
+    pub fn list_column_families(options: &Options, path: impl AsRef<std::path::Path>) -> Vec<String> {
+        let results = list_column_families(&options.bridge, get_path_bytes(path.as_ref()));
+        results.iter().map(|s| s.to_string_lossy().into_owned()).collect()
+    }
+
+    #[inline]
+    pub fn open(options: Options, path: impl AsRef<std::path::Path>) -> Result<Self, Status> {
+        let mut status = Status::default();
+        let bridge = open_db(
+            &options.bridge,
+            get_path_bytes(path.as_ref()),
+            &mut status
+        );
+
+        if status.code == StatusCode::kOk {
+            Ok(Self {
+                bridge,
                 default_read_options: ReadOptions::default(),
                 default_write_options: WriteOptions::default(),
                 options,
-            }
+            })
+        } else {
+            Err(status)
         }
-        #[cfg(not(unix))]
-        {
-            Self {
-                bridge: open_db(
-                    &options.bridge,
-                    path.as_ref().to_string_lossy().to_string().as_bytes())
-            }
-        }
+
+
     }
 
     #[inline]
