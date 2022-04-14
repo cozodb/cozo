@@ -86,12 +86,14 @@ mod ffi {
         type DBBridge;
         fn list_column_families(options: &OptionsBridge, path: &[u8]) -> UniquePtr<CxxVector<CxxString>>;
         fn open_db(options: &OptionsBridge, path: &[u8], status: &mut Status) -> UniquePtr<DBBridge>;
-        fn put(self: &DBBridge, options: &WriteOptionsBridge, key: &[u8], val: &[u8], status: &mut Status);
-        fn get(self: &DBBridge, options: &ReadOptionsBridge, key: &[u8], status: &mut Status) -> UniquePtr<PinnableSliceBridge>;
+        fn cf_names(self: &DBBridge) -> UniquePtr<CxxVector<CxxString>>;
+        fn put(self: &DBBridge, options: &WriteOptionsBridge, cf_id: usize, key: &[u8], val: &[u8], status: &mut Status);
+        fn get(self: &DBBridge, options: &ReadOptionsBridge, cf_id: usize, key: &[u8], status: &mut Status) -> UniquePtr<PinnableSliceBridge>;
     }
 }
 
 
+use std::collections::BTreeMap;
 use cxx::UniquePtr;
 pub use ffi::*;
 
@@ -177,10 +179,10 @@ impl Default for WriteOptions {
 
 pub struct DB {
     bridge: UniquePtr<DBBridge>,
-    #[allow(dead_code)]
-    options: Options,
-    default_read_options: ReadOptions,
-    default_write_options: WriteOptions,
+    pub options: Options,
+    pub default_read_options: ReadOptions,
+    pub default_write_options: WriteOptions,
+    pub column_families: BTreeMap<String, usize>
 }
 
 fn get_path_bytes(path: &std::path::Path) -> &[u8] {
@@ -211,11 +213,13 @@ impl DB {
         );
 
         if status.code == StatusCode::kOk {
+            let column_families = bridge.cf_names().iter().enumerate().map(|(i, v)| (v.to_string_lossy().into_owned(), i)).collect();
             Ok(Self {
                 bridge,
                 default_read_options: ReadOptions::default(),
                 default_write_options: WriteOptions::default(),
                 options,
+                column_families
             })
         } else {
             Err(status)
@@ -225,9 +229,9 @@ impl DB {
     }
 
     #[inline]
-    pub fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, options: Option<&WriteOptions>) -> Result<Status, Status> {
+    pub fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, cf: usize, options: Option<&WriteOptions>) -> Result<Status, Status> {
         let mut status = Status::default();
-        self.bridge.put(&options.unwrap_or(&self.default_write_options).bridge,
+        self.bridge.put(&options.unwrap_or(&self.default_write_options).bridge, cf,
                         key.as_ref(), val.as_ref(),
                         &mut status);
         if status.code == StatusCode::kOk {
@@ -238,10 +242,10 @@ impl DB {
     }
 
     #[inline]
-    pub fn get(&self, key: impl AsRef<[u8]>, options: Option<&ReadOptions>) -> Result<Option<PinnableSlice>, Status> {
+    pub fn get(&self, key: impl AsRef<[u8]>, cf: usize, options: Option<&ReadOptions>) -> Result<Option<PinnableSlice>, Status> {
         let mut status = Status::default();
         let slice = self.bridge.get(
-            &options.unwrap_or(&self.default_read_options).bridge,
+            &options.unwrap_or(&self.default_read_options).bridge, cf,
             key.as_ref(), &mut status);
         match status.code {
             StatusCode::kOk => Ok(Some(PinnableSlice { bridge: slice })),

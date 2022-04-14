@@ -68,7 +68,6 @@ mod tests {
             .optimize_level_style_compaction()
             .set_create_if_missing(true)
             .set_comparator("cozo_comparator_v1", cozo_comparator_v1);
-        println!("{:?}", DB::list_column_families(&options, "xxyyzz.db"));
 
         let db = DB::open(options,
                           "xxyyzz.db").unwrap();
@@ -83,20 +82,20 @@ mod tests {
         builder.build_value(&Value::RefString("Another key"));
         let key2 = builder.get();
 
-        let val = db.get(&key, None).unwrap();
+        let val = db.get(&key, 0, None).unwrap();
         // let val = val.as_bytes();
         println!("before anything {}", val.is_none());
 
-        db.put(&key, "A motherfucking value!!! 👋👋👋", None).unwrap();
-        db.put(&key2, "Another motherfucking value!!! 👋👋👋", None).unwrap();
+        db.put(&key, "A motherfucking value!!! 👋👋👋", 0, None).unwrap();
+        db.put(&key2, "Another motherfucking value!!! 👋👋👋", 0, None).unwrap();
         // db.put("Yes man", "A motherfucking value!!! 👋👋👋", None).unwrap();
-        let val = db.get(&key, None).unwrap().unwrap();
+        let val = db.get(&key, 0, None).unwrap().unwrap();
         let val = val.as_bytes();
         println!("{}", from_utf8(val).unwrap());
-        let val = db.get(&key2, None).unwrap().unwrap();
+        let val = db.get(&key2, 0, None).unwrap().unwrap();
         let val = val.as_bytes();
         println!("{}", from_utf8(val).unwrap());
-        let val = db.get(&key, None).unwrap().unwrap();
+        let val = db.get(&key, 0, None).unwrap().unwrap();
         let val = val.as_bytes();
         println!("{}", from_utf8(val).unwrap());
     }

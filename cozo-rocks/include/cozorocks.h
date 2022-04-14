@@ -128,16 +128,28 @@ inline void write_status(RDB::Status &&rstatus, Status &status) {
 struct DBBridge {
     mutable std::unique_ptr <RDB::DB> inner;
 
+    mutable std::vector<RDB::ColumnFamilyHandle *> handles;
+
     DBBridge(RDB::DB *inner_) : inner(inner_) {}
+
+    inline std::unique_ptr<std::vector<std::string>> cf_names() const {
+        auto ret = std::make_unique<std::vector<std::string>>();
+        for (auto h : handles) {
+            ret->push_back(h->GetName());
+        }
+        return ret;
+    }
 
     inline void put(
             const WriteOptionsBridge &options,
+            std::size_t cf_id,
             rust::Slice<const uint8_t> key,
             rust::Slice<const uint8_t> val,
             Status &status
     ) const {
         write_status(
                 inner->Put(options.inner,
+                           handles[cf_id],
                            RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size()),
                            RDB::Slice(reinterpret_cast<const char *>(val.data()), val.size())),
                 status
@@ -146,13 +158,14 @@ struct DBBridge {
 
     inline std::unique_ptr <PinnableSliceBridge> get(
             const ReadOptionsBridge &options,
+            std::size_t cf_id,
             rust::Slice<const uint8_t> key,
             Status &status
     ) const {
         auto pinnable_val = std::make_unique<PinnableSliceBridge>();
         write_status(
                 inner->Get(options.inner,
-                           inner->DefaultColumnFamily(),
+                           handles[cf_id],
                            RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size()),
                            &pinnable_val->inner),
                 status
@@ -170,7 +183,8 @@ inline std::unique_ptr <std::vector<std::string>> list_column_families(const Opt
     return column_families;
 }
 
-inline std::unique_ptr <DBBridge> open_db(const OptionsBridge &options, const rust::Slice<const uint8_t> path, Status &status) {
+inline std::unique_ptr <DBBridge>
+open_db(const OptionsBridge &options, const rust::Slice<const uint8_t> path, Status &status) {
     auto old_column_families = std::vector<std::string>();
     RDB::DB::ListColumnFamilies(options.inner,
                                 std::string(reinterpret_cast<const char *>(path.data()), path.size()),
@@ -195,5 +209,7 @@ inline std::unique_ptr <DBBridge> open_db(const OptionsBridge &options, const ru
                                   &handles,
                                   &db_ptr);
     write_status(std::move(s), status);
-    return std::unique_ptr<DBBridge>(new DBBridge(db_ptr));
+    auto ret = std::unique_ptr<DBBridge>(new DBBridge(db_ptr));
+    ret->handles = std::move(handles);
+    return ret;
 }
