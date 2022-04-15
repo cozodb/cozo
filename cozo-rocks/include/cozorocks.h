@@ -26,11 +26,11 @@ std::unique_ptr <RDB::DB> new_db();
 struct ReadOptionsBridge {
     mutable RDB::ReadOptions inner;
 
-    inline void set_verify_checksums(bool v) const {
+    inline void do_set_verify_checksums(bool v) const {
         inner.verify_checksums = v;
     }
 
-    inline void set_total_order_seek(bool v) const {
+    inline void do_set_total_order_seek(bool v) const {
         inner.total_order_seek = v;
     }
 };
@@ -39,7 +39,7 @@ struct WriteOptionsBridge {
     mutable RDB::WriteOptions inner;
 
 public:
-    inline void set_disable_wal(bool v) const {
+    inline void do_set_disable_wal(bool v) const {
         inner.disableWAL = v;
     }
 };
@@ -79,23 +79,23 @@ struct OptionsBridge {
     mutable RustComparator cmp_obj;
 
 public:
-    inline void prepare_for_bulk_load() const {
+    inline void do_prepare_for_bulk_load() const {
         inner.PrepareForBulkLoad();
     }
 
-    inline void increase_parallelism() const {
+    inline void do_increase_parallelism() const {
         inner.IncreaseParallelism();
     }
 
-    inline void optimize_level_style_compaction() const {
+    inline void do_optimize_level_style_compaction() const {
         inner.OptimizeLevelStyleCompaction();
     };
 
-    inline void set_create_if_missing(bool v) const {
+    inline void do_set_create_if_missing(bool v) const {
         inner.create_if_missing = v;
     }
 
-    inline void set_comparator(rust::Str name, RustComparatorFn f) const {
+    inline void do_set_comparator(rust::Str name, RustComparatorFn f) const {
         cmp_obj = RustComparator();
         cmp_obj.set_name(name);
         cmp_obj.set_fn(f);
@@ -168,12 +168,12 @@ struct IteratorBridge {
         return inner->Valid();
     }
 
-    inline void seek(rust::Slice<const uint8_t> key) const {
+    inline void do_seek(rust::Slice<const uint8_t> key) const {
         auto k = RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size());
         inner->Seek(k);
     }
 
-    inline void seek_for_prev(rust::Slice<const uint8_t> key) const {
+    inline void do_seek_for_prev(rust::Slice<const uint8_t> key) const {
         auto k = RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size());
         inner->SeekForPrev(k);
     }

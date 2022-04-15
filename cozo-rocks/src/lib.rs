@@ -1,14 +1,14 @@
 #[cxx::bridge]
 mod ffi {
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    struct Status {
+    pub struct Status {
         code: StatusCode,
         subcode: StatusSubCode,
         severity: StatusSeverity,
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    enum StatusCode {
+    pub enum StatusCode {
         kOk = 0,
         kNotFound = 1,
         kCorruption = 2,
@@ -29,7 +29,7 @@ mod ffi {
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    enum StatusSubCode {
+    pub enum StatusSubCode {
         kNone = 0,
         kMutexTimeout = 1,
         kLockTimeout = 2,
@@ -49,7 +49,7 @@ mod ffi {
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    enum StatusSeverity {
+    pub enum StatusSeverity {
         kNoError = 0,
         kSoftError = 1,
         kHardError = 2,
@@ -66,27 +66,27 @@ mod ffi {
         type StatusSeverity;
 
         type PinnableSliceBridge;
-        fn as_bytes(self: &PinnableSliceBridge) -> &[u8];
+        pub fn as_bytes(self: &PinnableSliceBridge) -> &[u8];
 
         type SliceBridge;
-        fn as_bytes(self: &SliceBridge) -> &[u8];
+        pub fn as_bytes(self: &SliceBridge) -> &[u8];
 
         type ReadOptionsBridge;
         fn new_read_options() -> UniquePtr<ReadOptionsBridge>;
-        fn set_verify_checksums(self: &ReadOptionsBridge, v: bool);
-        fn set_total_order_seek(self: &ReadOptionsBridge, v: bool);
+        pub fn do_set_verify_checksums(self: &ReadOptionsBridge, v: bool);
+        pub fn do_set_total_order_seek(self: &ReadOptionsBridge, v: bool);
 
         type WriteOptionsBridge;
         fn new_write_options() -> UniquePtr<WriteOptionsBridge>;
-        fn set_disable_wal(self: &WriteOptionsBridge, v: bool);
+        pub fn do_set_disable_wal(self: &WriteOptionsBridge, v: bool);
 
         type OptionsBridge;
         fn new_options() -> UniquePtr<OptionsBridge>;
-        fn prepare_for_bulk_load(self: &OptionsBridge);
-        fn increase_parallelism(self: &OptionsBridge);
-        fn optimize_level_style_compaction(self: &OptionsBridge);
-        fn set_create_if_missing(self: &OptionsBridge, v: bool);
-        fn set_comparator(self: &OptionsBridge, name: &str, compare: fn(&[u8], &[u8]) -> i8);
+        pub fn do_prepare_for_bulk_load(self: &OptionsBridge);
+        pub fn do_increase_parallelism(self: &OptionsBridge);
+        pub fn do_optimize_level_style_compaction(self: &OptionsBridge);
+        pub fn do_set_create_if_missing(self: &OptionsBridge, v: bool);
+        pub fn do_set_comparator(self: &OptionsBridge, name: &str, compare: fn(&[u8], &[u8]) -> i8);
 
         type DBBridge;
         fn list_column_families(options: &OptionsBridge, path: &[u8]) -> UniquePtr<CxxVector<CxxString>>;
@@ -100,107 +100,130 @@ mod ffi {
         type WriteBatchBridge;
 
         type IteratorBridge;
-        fn seek_to_first(self: &IteratorBridge);
-        fn seek_to_last(self: &IteratorBridge);
-        fn next(self: &IteratorBridge);
-        fn is_valid(self: &IteratorBridge) -> bool;
-        fn seek(self: &IteratorBridge, key: &[u8]);
-        fn seek_for_prev(self: &IteratorBridge, key: &[u8]);
-        fn key(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
-        fn value(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
-        fn status(self: &IteratorBridge) -> Status;
+        pub fn seek_to_first(self: &IteratorBridge);
+        pub fn seek_to_last(self: &IteratorBridge);
+        pub fn next(self: &IteratorBridge);
+        pub fn is_valid(self: &IteratorBridge) -> bool;
+        fn do_seek(self: &IteratorBridge, key: &[u8]);
+        fn do_seek_for_prev(self: &IteratorBridge, key: &[u8]);
+        pub fn key(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
+        pub fn value(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
+        pub fn status(self: &IteratorBridge) -> Status;
     }
 }
 
 
+pub use ffi::{Status, StatusCode, StatusSubCode, StatusSeverity};
 use std::collections::BTreeMap;
 use cxx::UniquePtr;
-pub use ffi::*;
+use ffi::*;
 
-pub struct Options {
-    bridge: UniquePtr<OptionsBridge>,
+pub type Options = UniquePtr<OptionsBridge>;
+
+pub trait OptionsTrait {
+    fn prepare_for_bulk_load(self) -> Self;
+    fn increase_parallelism(self) -> Self;
+    fn optimize_level_style_compaction(self) -> Self;
+    fn set_create_if_missing(self, v: bool) -> Self;
+    fn set_comparator(self, name: &str, compare: fn(&[u8], &[u8]) -> i8) -> Self;
+    fn default() -> Self;
 }
 
-impl Options {
+impl OptionsTrait for Options {
     #[inline]
-    pub fn prepare_for_bulk_load(self) -> Self {
-        self.bridge.prepare_for_bulk_load();
+    fn prepare_for_bulk_load(self) -> Self {
+        self.do_prepare_for_bulk_load();
         self
     }
 
     #[inline]
-    pub fn increase_parallelism(self) -> Self {
-        self.bridge.increase_parallelism();
+    fn increase_parallelism(self) -> Self {
+        self.do_increase_parallelism();
         self
     }
 
     #[inline]
-    pub fn optimize_level_style_compaction(self) -> Self {
-        self.bridge.optimize_level_style_compaction();
+    fn optimize_level_style_compaction(self) -> Self {
+        self.do_optimize_level_style_compaction();
         self
     }
 
     #[inline]
-    pub fn set_create_if_missing(self, v: bool) -> Self {
-        self.bridge.set_create_if_missing(v);
+    fn set_create_if_missing(self, v: bool) -> Self {
+        self.do_set_create_if_missing(v);
         self
     }
 
     #[inline]
-    pub fn set_comparator(self, name: &str, compare: fn(&[u8], &[u8]) -> i8) -> Self {
-        self.bridge.set_comparator(name, compare);
+    fn set_comparator(self, name: &str, compare: fn(&[u8], &[u8]) -> i8) -> Self {
+        self.do_set_comparator(name, compare);
         self
     }
-}
 
-impl Default for Options {
     #[inline]
     fn default() -> Self {
-        Self { bridge: new_options() }
+        new_options()
     }
 }
 
-pub struct ReadOptions {
-    bridge: UniquePtr<ReadOptionsBridge>,
+pub type ReadOptions = UniquePtr<ReadOptionsBridge>;
+
+pub trait ReadOptionsTrait {
+    fn set_total_order_seek(self, v: bool) -> Self;
+    fn set_verify_checksums(self, v: bool) -> Self;
+    fn default() -> Self;
 }
 
-impl ReadOptions {
-    pub fn set_total_order_seek(self, v: bool) -> Self {
-        self.bridge.set_total_order_seek(v);
+impl ReadOptionsTrait for ReadOptions {
+    fn set_total_order_seek(self, v: bool) -> Self {
+        self.do_set_total_order_seek(v);
         self
     }
-    pub fn set_verify_checksums(self, v: bool) -> Self {
-        self.bridge.set_total_order_seek(v);
+    fn set_verify_checksums(self, v: bool) -> Self {
+        self.do_set_verify_checksums(v);
         self
     }
-}
 
-impl Default for ReadOptions {
     fn default() -> Self {
-        Self { bridge: new_read_options() }
+        new_read_options()
     }
 }
 
-pub struct WriteOptions {
-    bridge: UniquePtr<WriteOptionsBridge>,
+pub type WriteOptions = UniquePtr<WriteOptionsBridge>;
+
+pub trait WriteOptionsTrait {
+    fn set_disable_wal(self, v: bool) -> Self;
+    fn default() -> Self;
 }
 
-impl WriteOptions {
+impl WriteOptionsTrait for WriteOptions {
     #[inline]
-    pub fn set_disable_wal(&self, v: bool) {
-        self.bridge.set_disable_wal(v);
+    fn set_disable_wal(self, v: bool) -> Self {
+        self.do_set_disable_wal(v);
+        self
     }
-}
-
-impl Default for WriteOptions {
     fn default() -> Self {
-        Self { bridge: new_write_options() }
+        new_write_options()
     }
 }
 
 pub type PinnableSlice = UniquePtr<PinnableSliceBridge>;
 pub type Slice = UniquePtr<SliceBridge>;
 pub type Iterator = UniquePtr<IteratorBridge>;
+
+pub trait IteratorTrait {
+    fn seek(&self, key: impl AsRef<[u8]>);
+    fn seek_for_prev(&self, key: impl AsRef<[u8]>);
+}
+
+impl IteratorTrait for Iterator {
+    fn seek(&self, key: impl AsRef<[u8]>) {
+        self.do_seek(key.as_ref());
+    }
+    fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
+        self.do_seek_for_prev(key.as_ref())
+    }
+}
 
 pub struct DB {
     bridge: UniquePtr<DBBridge>,
@@ -224,7 +247,7 @@ fn get_path_bytes(path: &std::path::Path) -> &[u8] {
 impl DB {
     #[inline]
     pub fn list_column_families(options: &Options, path: impl AsRef<std::path::Path>) -> Vec<String> {
-        let results = list_column_families(&options.bridge, get_path_bytes(path.as_ref()));
+        let results = list_column_families(&options, get_path_bytes(path.as_ref()));
         results.iter().map(|s| s.to_string_lossy().into_owned()).collect()
     }
 
@@ -232,7 +255,7 @@ impl DB {
     pub fn open(options: Options, path: impl AsRef<std::path::Path>) -> Result<Self, Status> {
         let mut status = Status::default();
         let bridge = open_db(
-            &options.bridge,
+            &options,
             get_path_bytes(path.as_ref()),
             &mut status,
         );
@@ -254,7 +277,7 @@ impl DB {
     #[inline]
     pub fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, cf: usize, options: Option<&WriteOptions>) -> Result<Status, Status> {
         let mut status = Status::default();
-        self.bridge.put(&options.unwrap_or(&self.default_write_options).bridge, cf,
+        self.bridge.put(options.unwrap_or(&self.default_write_options), cf,
                         key.as_ref(), val.as_ref(),
                         &mut status);
         if status.code == StatusCode::kOk {
@@ -268,7 +291,7 @@ impl DB {
     pub fn get(&self, key: impl AsRef<[u8]>, cf: usize, options: Option<&ReadOptions>) -> Result<Option<PinnableSlice>, Status> {
         let mut status = Status::default();
         let slice = self.bridge.get(
-            &options.unwrap_or(&self.default_read_options).bridge, cf,
+            options.unwrap_or(&self.default_read_options), cf,
             key.as_ref(), &mut status);
         match status.code {
             StatusCode::kOk => Ok(Some(slice)),
@@ -279,7 +302,12 @@ impl DB {
 
     #[inline]
     pub fn iterator(&self, cf: usize, options: Option<&ReadOptions>) -> Iterator {
-        self.bridge.iterator(&options.unwrap_or(&self.default_read_options).bridge, cf)
+        self.bridge.iterator(options.unwrap_or(&self.default_read_options), cf)
+    }
+
+    #[inline]
+    pub fn write_batch(&self) -> UniquePtr<WriteBatchBridge> {
+        self.bridge.write_batch()
     }
 }
 
