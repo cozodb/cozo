@@ -2,9 +2,9 @@
 mod ffi {
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
     pub struct Status {
-        code: StatusCode,
-        subcode: StatusSubCode,
-        severity: StatusSeverity,
+        pub code: StatusCode,
+        pub subcode: StatusSubCode,
+        pub severity: StatusSeverity,
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -207,8 +207,25 @@ impl WriteOptionsTrait for WriteOptions {
     }
 }
 
-pub type PinnableSlice = UniquePtr<PinnableSliceBridge>;
-pub type Slice = UniquePtr<SliceBridge>;
+pub struct PinnableSlice(UniquePtr<PinnableSliceBridge>);
+
+impl AsRef<[u8]> for PinnableSlice {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+pub struct Slice(UniquePtr<SliceBridge>);
+
+impl AsRef<[u8]> for Slice {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+
 pub type Iterator = UniquePtr<IteratorBridge>;
 
 pub trait IteratorTrait {
@@ -294,7 +311,7 @@ impl DB {
             options.unwrap_or(&self.default_read_options), cf,
             key.as_ref(), &mut status);
         match status.code {
-            StatusCode::kOk => Ok(Some(slice)),
+            StatusCode::kOk => Ok(Some(PinnableSlice(slice))),
             StatusCode::kNotFound => Ok(None),
             _ => Err(status)
         }
@@ -308,6 +325,20 @@ impl DB {
     #[inline]
     pub fn write_batch(&self) -> UniquePtr<WriteBatchBridge> {
         self.bridge.write_batch()
+    }
+
+    #[inline]
+    pub fn create_column_family(&self, _name: impl AsRef<str>) -> Result<usize, Status> {
+        unimplemented!()
+    }
+
+    #[inline]
+    pub fn drop_column_family(&self, _name: impl AsRef<str>) -> Result<(), Status> {
+        unimplemented!()
+    }
+
+    pub fn destroy_data(self) -> Result<(), Status> {
+        unimplemented!()
     }
 }
 

@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::borrow::{Cow};
 use std::cmp::{min, Ordering};
 use std::collections::{BTreeMap};
 use std::io::{Write};
@@ -116,8 +116,8 @@ pub struct ByteArrayParser<'a> {
 }
 
 impl<'a> ByteArrayParser<'a> {
-    pub fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, current: 0 }
+    pub fn new<T: AsRef<[u8]>>(source: &'a T) -> Self {
+        Self { bytes: source.as_ref(), current: 0 }
     }
 
     #[inline]
@@ -339,17 +339,24 @@ impl<'a> ByteArrayParser<'a> {
     }
 }
 
-pub struct ByteArrayBuilder<T: Write> {
+pub struct ByteArrayBuilder<T: Write + AsRef<[u8]>> {
     byte_writer: T,
 }
 
+impl <T: Write + AsRef<[u8]>> AsRef<[u8]> for ByteArrayBuilder<T> {
+    fn as_ref(&self) -> &[u8] {
+        self.byte_writer.as_ref()
+    }
+}
+
 impl ByteArrayBuilder<Vec<u8>> {
+    pub fn default() -> Self { Self { byte_writer: vec![] } }
     pub fn with_capacity(size: usize) -> Self {
         Self::new(Vec::with_capacity(size))
     }
 }
 
-impl<T: Write> ByteArrayBuilder<T> {
+impl<T: Write + AsRef<[u8]>> ByteArrayBuilder<T> {
     pub fn get(self) -> T {
         self.byte_writer
     }
@@ -359,7 +366,7 @@ impl<T: Write> ByteArrayBuilder<T> {
     }
 
     #[inline]
-    pub fn build_varint(&mut self, u: u64) {
+    pub fn build_varint(&mut self, u: u64) -> &mut Self {
         let mut u = u;
         while u > 0b01111111 {
             self.byte_writer.write_all(&[0b10000000 | (u as u8 & 0b01111111)]).expect(
@@ -370,10 +377,11 @@ impl<T: Write> ByteArrayBuilder<T> {
         self.byte_writer.write_all(&[u as u8]).expect(
             "Failed to write when building Varint"
         );
+        self
     }
 
     #[inline]
-    pub fn build_zigzag(&mut self, i: i64) {
+    pub fn build_zigzag(&mut self, i: i64) -> &mut Self {
         let u: u64 = if i >= 0 {
             (i as u64) << 1
         } else {
@@ -381,34 +389,39 @@ impl<T: Write> ByteArrayBuilder<T> {
             (((i + 1).abs() as u64) << 1) + 1
         };
         self.build_varint(u);
+        self
     }
 
     #[inline]
-    pub fn build_float(&mut self, f: f64) {
+    pub fn build_float(&mut self, f: f64) -> &mut Self {
         self.byte_writer.write_all(&f.to_be_bytes()).expect(
             "Failed to write when building Float"
         );
+        self
     }
 
     #[inline]
-    pub fn build_uuid(&mut self, u: Uuid) {
+    pub fn build_uuid(&mut self, u: Uuid) -> &mut Self {
         self.byte_writer.write_all(u.as_bytes()).expect(
             "Failed to write when building Uuid"
         );
+        self
     }
 
     #[inline]
-    pub fn build_string(&mut self, s: &str) {
+    pub fn build_string(&mut self, s: &str) -> &mut Self {
         self.build_varint(s.len() as u64);
         self.byte_writer.write_all(s.as_bytes()).expect("Failed to write when building String");
+        self
     }
 
     #[inline]
-    pub fn build_tag(&mut self, t: ValueTag) {
+    pub fn build_tag(&mut self, t: ValueTag) -> &mut Self {
         self.byte_writer.write_all(&[t as u8]).expect("Failed to write when building Tag");
+        self
     }
 
-    pub fn build_value(&mut self, v: &Value) {
+    pub fn build_value(&mut self, v: &Value) -> &mut Self{
         use ValueTag::*;
 
         match v {
@@ -419,53 +432,46 @@ impl<T: Write> ByteArrayBuilder<T> {
                 EdgeDirKind::BwdEdgeDir => { BwdEdgeTag }
             }),
             Value::UInt(u) => {
-                self.build_tag(UIntTag);
-                self.build_varint(*u);
+                self.build_tag(UIntTag).build_varint(*u)
             }
             Value::Int(i) => {
-                self.build_tag(IntTag);
-                self.build_zigzag(*i);
+                self.build_tag(IntTag).build_zigzag(*i)
             }
             Value::Float(f) => {
-                self.build_tag(FloatTag);
-                self.build_float(*f);
+                self.build_tag(FloatTag).build_float(*f)
             }
             Value::OwnString(s) => {
-                self.build_tag(StringTag);
-                self.build_string(s);
+                self.build_tag(StringTag).build_string(s)
             }
             Value::RefString(s) => {
-                self.build_tag(StringTag);
-                self.build_string(s);
+                self.build_tag(StringTag).build_string(s)
             }
             Value::List(l) => {
-                self.build_tag(ListTag);
-                self.build_list(l);
+                self.build_tag(ListTag).build_list(l)
             }
             Value::Dict(d) => {
-                self.build_tag(DictTag);
-                self.build_dict(d);
+                self.build_tag(DictTag).build_dict(d)
             }
             Value::Uuid(u) => {
-                self.build_tag(UuidTag);
-                self.build_uuid(*u);
+                self.build_tag(UuidTag).build_uuid(*u)
             }
         }
     }
 
-    pub fn build_list(&mut self, l: &[Value]) {
+    pub fn build_list(&mut self, l: &[Value]) -> &mut Self {
         self.build_varint(l.len() as u64);
         for el in l {
             self.build_value(el);
         }
+        self
     }
 
-    pub fn build_dict(&mut self, d: &BTreeMap<Cow<str>, Value>) {
+    pub fn build_dict(&mut self, d: &BTreeMap<Cow<str>, Value>) -> &mut Self {
         self.build_varint(d.len() as u64);
         for (k, v) in d {
-            self.build_string(k);
-            self.build_value(v);
+            self.build_string(k).build_value(v);
         }
+        self
     }
 }
 
@@ -579,10 +585,9 @@ mod tests {
     #[test]
     fn zigzag() {
         for i in 126..(2i64).pow(9) {
-            let mut x = vec![];
-            let mut builder = ByteArrayBuilder::new(&mut x);
+            let mut builder = ByteArrayBuilder::default();
             builder.build_zigzag(i);
-            let mut parser = ByteArrayParser::new(&x);
+            let mut parser = ByteArrayParser::new(&builder);
             let i2 = parser.parse_zigzag().unwrap();
             assert_eq!(i, i2);
         }

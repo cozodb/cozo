@@ -72,31 +72,27 @@ mod tests {
         let db = DB::open(options,
                           "xxyyzz.db").unwrap();
 
-        let mut x = vec![];
-        let mut builder = ByteArrayBuilder::new(&mut x);
+        let mut builder = ByteArrayBuilder::default();
         builder.build_value(&Value::RefString("A key"));
-        let key = builder.get();
+        let key = builder;
 
-        let mut x = vec![];
-        let mut builder = ByteArrayBuilder::new(&mut x);
+        let mut builder = ByteArrayBuilder::default();
         builder.build_value(&Value::RefString("Another key"));
-        let key2 = builder.get();
+        let key2 = builder;
 
         let val = db.get(&key, 0, None).unwrap();
-        // let val = val.as_bytes();
         println!("before anything {}", val.is_none());
 
         db.put(&key, "A motherfucking value!!! 👋👋👋", 0, None).unwrap();
         db.put(&key2, "Another motherfucking value!!! 👋👋👋", 0, None).unwrap();
         // db.put("Yes man", "A motherfucking value!!! 👋👋👋", None).unwrap();
         let val = db.get(&key, 0, None).unwrap().unwrap();
-        let val = val.as_bytes();
-        println!("{}", from_utf8(val).unwrap());
+        println!("1 {}", from_utf8(val.as_ref()).unwrap());
         let val = db.get(&key2, 0, None).unwrap().unwrap();
-        let val = val.as_bytes();
-        println!("{}", from_utf8(val).unwrap());
+        // let val = val.as_bytes();
+        println!("2 {}", from_utf8(val.as_ref()).unwrap());
         let val = db.get(&key, 0, None).unwrap().unwrap();
-        let val = val.as_bytes();
-        println!("{}", from_utf8(val).unwrap());
+        println!("3 {}", from_utf8(val.as_ref()).unwrap());
+        println!("4 {}", from_utf8(db.get(&key, 0, None).unwrap().unwrap().as_ref()).unwrap());
     }
 }
