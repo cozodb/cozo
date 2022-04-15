@@ -58,6 +58,7 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use std::str::from_utf8;
+    use cozo_rocks::DBImpl;
     use crate::value::{ByteArrayBuilder, cozo_comparator_v1, Value};
 
     #[test]
@@ -70,7 +71,7 @@ mod tests {
             .set_comparator("cozo_comparator_v1", cozo_comparator_v1);
 
         let db = DB::open(options,
-                          "xxyyzz.db").unwrap();
+                          "xxyyzz.db".as_ref()).unwrap();
 
         let mut builder = ByteArrayBuilder::default();
         builder.build_value(&Value::RefString("A key"));
@@ -79,20 +80,22 @@ mod tests {
         let mut builder = ByteArrayBuilder::default();
         builder.build_value(&Value::RefString("Another key"));
         let key2 = builder;
+        let cf = db.get_cf_handle("default").unwrap();
+        println!("{:?}", db.get_column_family_names());
 
-        let val = db.get(&key, 0, None).unwrap();
+        let val = db.get(&key, &cf, None).unwrap();
         println!("before anything {}", val.is_none());
 
-        db.put(&key, "A motherfucking value!!! 👋👋👋", 0, None).unwrap();
-        db.put(&key2, "Another motherfucking value!!! 👋👋👋", 0, None).unwrap();
+        db.put(&key, "A motherfucking value!!! 👋👋👋", &cf, None).unwrap();
+        db.put(&key2, "Another motherfucking value!!! 👋👋👋", &cf, None).unwrap();
         // db.put("Yes man", "A motherfucking value!!! 👋👋👋", None).unwrap();
-        let val = db.get(&key, 0, None).unwrap().unwrap();
+        let val = db.get(&key, &cf, None).unwrap().unwrap();
         println!("1 {}", from_utf8(val.as_ref()).unwrap());
-        let val = db.get(&key2, 0, None).unwrap().unwrap();
+        let val = db.get(&key2, &cf, None).unwrap().unwrap();
         // let val = val.as_bytes();
         println!("2 {}", from_utf8(val.as_ref()).unwrap());
-        let val = db.get(&key, 0, None).unwrap().unwrap();
+        let val = db.get(&key, &cf, None).unwrap().unwrap();
         println!("3 {}", from_utf8(val.as_ref()).unwrap());
-        println!("4 {}", from_utf8(db.get(&key, 0, None).unwrap().unwrap().as_ref()).unwrap());
+        println!("4 {}", from_utf8(db.get(&key, &cf, None).unwrap().unwrap().as_ref()).unwrap());
     }
 }

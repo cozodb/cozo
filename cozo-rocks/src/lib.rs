@@ -1,10 +1,19 @@
 #[cxx::bridge]
 mod ffi {
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-    pub struct Status {
+    pub enum StatusBridgeCode {
+        OK = 0,
+        LOCK_ERROR = 1,
+        EXISTING_ERROR = 2,
+        NOT_FOUND_ERROR = 3,
+    }
+
+    #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+    pub struct BridgeStatus {
         pub code: StatusCode,
         pub subcode: StatusSubCode,
         pub severity: StatusSeverity,
+        pub bridge_code: StatusBridgeCode,
     }
 
     #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -66,59 +75,65 @@ mod ffi {
         type StatusSeverity;
 
         type PinnableSliceBridge;
-        pub fn as_bytes(self: &PinnableSliceBridge) -> &[u8];
+        fn as_bytes(self: &PinnableSliceBridge) -> &[u8];
 
         type SliceBridge;
-        pub fn as_bytes(self: &SliceBridge) -> &[u8];
+        fn as_bytes(self: &SliceBridge) -> &[u8];
 
         type ReadOptionsBridge;
         fn new_read_options() -> UniquePtr<ReadOptionsBridge>;
-        pub fn do_set_verify_checksums(self: &ReadOptionsBridge, v: bool);
-        pub fn do_set_total_order_seek(self: &ReadOptionsBridge, v: bool);
+        fn do_set_verify_checksums(self: &ReadOptionsBridge, v: bool);
+        fn do_set_total_order_seek(self: &ReadOptionsBridge, v: bool);
 
         type WriteOptionsBridge;
         fn new_write_options() -> UniquePtr<WriteOptionsBridge>;
-        pub fn do_set_disable_wal(self: &WriteOptionsBridge, v: bool);
+        fn do_set_disable_wal(self: &WriteOptionsBridge, v: bool);
 
         type OptionsBridge;
         fn new_options() -> UniquePtr<OptionsBridge>;
-        pub fn do_prepare_for_bulk_load(self: &OptionsBridge);
-        pub fn do_increase_parallelism(self: &OptionsBridge);
-        pub fn do_optimize_level_style_compaction(self: &OptionsBridge);
-        pub fn do_set_create_if_missing(self: &OptionsBridge, v: bool);
-        pub fn do_set_comparator(self: &OptionsBridge, name: &str, compare: fn(&[u8], &[u8]) -> i8);
+        fn do_prepare_for_bulk_load(self: &OptionsBridge);
+        fn do_increase_parallelism(self: &OptionsBridge);
+        fn do_optimize_level_style_compaction(self: &OptionsBridge);
+        fn do_set_create_if_missing(self: &OptionsBridge, v: bool);
+        fn do_set_comparator(self: &OptionsBridge, name: &str, compare: fn(&[u8], &[u8]) -> i8);
 
+        pub type ColumnFamilyHandle;
         type DBBridge;
-        fn list_column_families(options: &OptionsBridge, path: &[u8]) -> UniquePtr<CxxVector<CxxString>>;
-        fn open_db(options: &OptionsBridge, path: &[u8], status: &mut Status) -> UniquePtr<DBBridge>;
-        fn cf_names(self: &DBBridge) -> UniquePtr<CxxVector<CxxString>>;
-        fn put(self: &DBBridge, options: &WriteOptionsBridge, cf_id: usize, key: &[u8], val: &[u8], status: &mut Status);
-        fn get(self: &DBBridge, options: &ReadOptionsBridge, cf_id: usize, key: &[u8], status: &mut Status) -> UniquePtr<PinnableSliceBridge>;
-        fn write_batch(self: &DBBridge) -> UniquePtr<WriteBatchBridge>;
-        fn iterator(self: &DBBridge, options: &ReadOptionsBridge, cf_id: usize) -> UniquePtr<IteratorBridge>;
+        fn open_db_raw(options: &OptionsBridge, path: &CxxString, status: &mut BridgeStatus) -> UniquePtr<DBBridge>;
+        fn get_cf_handle_raw(self: &DBBridge, name: &CxxString) -> SharedPtr<ColumnFamilyHandle>;
+        fn put_raw(self: &DBBridge, options: &WriteOptionsBridge, cf: &ColumnFamilyHandle, key: &[u8], val: &[u8], status: &mut BridgeStatus);
+        fn get_raw(self: &DBBridge, options: &ReadOptionsBridge, cf: &ColumnFamilyHandle, key: &[u8], status: &mut BridgeStatus) -> UniquePtr<PinnableSliceBridge>;
+        fn iterator_raw(self: &DBBridge, options: &ReadOptionsBridge, cf: &ColumnFamilyHandle) -> UniquePtr<IteratorBridge>;
+        fn create_column_family_raw(self: &DBBridge, options: &OptionsBridge, name: &CxxString, status: &mut BridgeStatus);
+        fn drop_column_family_raw(self: &DBBridge, name: &CxxString, status: &mut BridgeStatus);
+        fn get_column_family_names_raw(self: &DBBridge) -> UniquePtr<CxxVector<CxxString>>;
 
-        type WriteBatchBridge;
-
+        //         fn write_batch(self: &DBBridge) -> UniquePtr<WriteBatchBridge>;
+//
+//         type WriteBatchBridge;
+//
         type IteratorBridge;
-        pub fn seek_to_first(self: &IteratorBridge);
-        pub fn seek_to_last(self: &IteratorBridge);
-        pub fn next(self: &IteratorBridge);
-        pub fn is_valid(self: &IteratorBridge) -> bool;
+        fn seek_to_first(self: &IteratorBridge);
+        fn seek_to_last(self: &IteratorBridge);
+        fn next(self: &IteratorBridge);
+        fn is_valid(self: &IteratorBridge) -> bool;
         fn do_seek(self: &IteratorBridge, key: &[u8]);
         fn do_seek_for_prev(self: &IteratorBridge, key: &[u8]);
-        pub fn key(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
-        pub fn value(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
-        pub fn status(self: &IteratorBridge) -> Status;
+        fn key(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
+        fn value(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
+        fn status(self: &IteratorBridge) -> BridgeStatus;
     }
 }
 
-
-pub use ffi::{Status, StatusCode, StatusSubCode, StatusSeverity};
-use std::collections::BTreeMap;
-use cxx::UniquePtr;
+use std::path::Path;
+use cxx::{UniquePtr, SharedPtr, let_cxx_string};
 use ffi::*;
 
+type Result<T> = std::result::Result<T, BridgeStatus>;
+
 pub type Options = UniquePtr<OptionsBridge>;
+
+type ColumnFamilyHandle = SharedPtr<ffi::ColumnFamilyHandle>;
 
 pub trait OptionsTrait {
     fn prepare_for_bulk_load(self) -> Self;
@@ -228,26 +243,18 @@ impl AsRef<[u8]> for Slice {
 
 pub type Iterator = UniquePtr<IteratorBridge>;
 
-pub trait IteratorTrait {
+pub trait IteratorImpl {
     fn seek(&self, key: impl AsRef<[u8]>);
     fn seek_for_prev(&self, key: impl AsRef<[u8]>);
 }
 
-impl IteratorTrait for Iterator {
+impl IteratorImpl for IteratorBridge {
     fn seek(&self, key: impl AsRef<[u8]>) {
         self.do_seek(key.as_ref());
     }
     fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
         self.do_seek_for_prev(key.as_ref())
     }
-}
-
-pub struct DB {
-    bridge: UniquePtr<DBBridge>,
-    pub options: Options,
-    pub default_read_options: ReadOptions,
-    pub default_write_options: WriteOptions,
-    pub column_families: BTreeMap<String, usize>,
 }
 
 fn get_path_bytes(path: &std::path::Path) -> &[u8] {
@@ -261,94 +268,191 @@ fn get_path_bytes(path: &std::path::Path) -> &[u8] {
     { path.to_string_lossy().to_string().as_bytes() }
 }
 
-impl DB {
-    #[inline]
-    pub fn list_column_families(options: &Options, path: impl AsRef<std::path::Path>) -> Vec<String> {
-        let results = list_column_families(&options, get_path_bytes(path.as_ref()));
-        results.iter().map(|s| s.to_string_lossy().into_owned()).collect()
-    }
-
-    #[inline]
-    pub fn open(options: Options, path: impl AsRef<std::path::Path>) -> Result<Self, Status> {
-        let mut status = Status::default();
-        let bridge = open_db(
-            &options,
-            get_path_bytes(path.as_ref()),
-            &mut status,
-        );
-
-        if status.code == StatusCode::kOk {
-            let column_families = bridge.cf_names().iter().enumerate().map(|(i, v)| (v.to_string_lossy().into_owned(), i)).collect();
-            Ok(Self {
-                bridge,
-                default_read_options: ReadOptions::default(),
-                default_write_options: WriteOptions::default(),
-                options,
-                column_families,
-            })
-        } else {
-            Err(status)
-        }
-    }
-
-    #[inline]
-    pub fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, cf: usize, options: Option<&WriteOptions>) -> Result<Status, Status> {
-        let mut status = Status::default();
-        self.bridge.put(options.unwrap_or(&self.default_write_options), cf,
-                        key.as_ref(), val.as_ref(),
-                        &mut status);
-        if status.code == StatusCode::kOk {
-            Ok(status)
-        } else {
-            Err(status)
-        }
-    }
-
-    #[inline]
-    pub fn get(&self, key: impl AsRef<[u8]>, cf: usize, options: Option<&ReadOptions>) -> Result<Option<PinnableSlice>, Status> {
-        let mut status = Status::default();
-        let slice = self.bridge.get(
-            options.unwrap_or(&self.default_read_options), cf,
-            key.as_ref(), &mut status);
-        match status.code {
-            StatusCode::kOk => Ok(Some(PinnableSlice(slice))),
-            StatusCode::kNotFound => Ok(None),
-            _ => Err(status)
-        }
-    }
-
-    #[inline]
-    pub fn iterator(&self, cf: usize, options: Option<&ReadOptions>) -> Iterator {
-        self.bridge.iterator(options.unwrap_or(&self.default_read_options), cf)
-    }
-
-    #[inline]
-    pub fn write_batch(&self) -> UniquePtr<WriteBatchBridge> {
-        self.bridge.write_batch()
-    }
-
-    #[inline]
-    pub fn create_column_family(&self, _name: impl AsRef<str>) -> Result<usize, Status> {
-        unimplemented!()
-    }
-
-    #[inline]
-    pub fn drop_column_family(&self, _name: impl AsRef<str>) -> Result<(), Status> {
-        unimplemented!()
-    }
-
-    pub fn destroy_data(self) -> Result<(), Status> {
-        unimplemented!()
-    }
-}
-
-impl Default for Status {
+//
+//     #[inline]
+//     pub fn write_batch(&self) -> UniquePtr<WriteBatchBridge> {
+//         self.bridge.write_batch()
+//     }
+//
+//     // #[inline]
+//     // pub fn get_column_family_id(&self, name: impl AsRef<str>) -> Result<Option<usize>, Status> {
+//     //     let handles = self.cf_map.read()
+//     //         .map_err(|_| Status::bridge(StatusBridgeCode::LOCK_ERROR))?;
+//     //     Ok(handles.get(name.as_ref()).copied())
+//     // }
+//
+//     // #[inline]
+//     // pub fn create_column_family(&self, name: impl AsRef<str>) -> Result<(), Status> {
+//     //     let mut s = Status::default();
+//     //     let mut cf_map = self.cf_map.write()
+//     //         .map_err(|_| Status::bridge(StatusBridgeCode::LOCK_ERROR))?;
+//     //     let mut cfs = self.cfs.write()
+//     //         .map_err(|_| Status::bridge(StatusBridgeCode::LOCK_ERROR))?;
+//     //     let v = self.bridge.create_column_family(&self.options, name.as_ref(), &mut s);
+//     //     if v > 0 {
+//     //         assert_eq!(v as usize, cfs.len());
+//     //         cf_map.insert(name.as_ref().to_string(), v as usize);
+//     //         cfs.push(name.as_ref().to_string());
+//     //         Ok(())
+//     //     } else {
+//     //         Err(s)
+//     //     }
+//     // }
+//
+//     // #[inline]
+//     // pub fn drop_column_family(&self, _name: impl AsRef<str>) -> Result<(), Status> {
+//     //     unimplemented!()
+//     // }
+//
+//     pub fn destroy_data(self) -> Result<(), Status> {
+//         unimplemented!()
+//     }
+// }
+//
+impl Default for BridgeStatus {
     #[inline]
     fn default() -> Self {
         Self {
             code: StatusCode::kOk,
             subcode: StatusSubCode::kNone,
             severity: StatusSeverity::kNoError,
+            bridge_code: StatusBridgeCode::OK,
         }
+    }
+}
+
+impl BridgeStatus {
+    #[inline]
+    fn bridge(c: StatusBridgeCode) -> Self {
+        Self {
+            code: StatusCode::kMaxCode,
+            subcode: StatusSubCode::kMaxSubCode,
+            severity: StatusSeverity::kMaxSeverity,
+            bridge_code: c,
+        }
+    }
+}
+
+pub trait DBRead {
+    fn get(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>)
+           -> Result<Option<PinnableSlice>>;
+}
+
+pub trait DBWrite {
+    fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>)
+           -> Result<BridgeStatus>;
+}
+
+pub struct DB {
+    inner: UniquePtr<DBBridge>,
+    pub options: Options,
+    pub default_read_options: ReadOptions,
+    pub default_write_options: WriteOptions,
+}
+
+impl DBRead for DB {
+    #[inline]
+    fn get(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> Result<Option<PinnableSlice>> {
+        let mut status = BridgeStatus::default();
+        let slice = self.inner.get_raw(options.unwrap_or(&self.default_read_options), cf, key.as_ref(), &mut status);
+        match status.code {
+            StatusCode::kOk => Ok(Some(PinnableSlice(slice))),
+            StatusCode::kNotFound => Ok(None),
+            _ => Err(status)
+        }
+    }
+}
+
+impl DBWrite for DB {
+    #[inline]
+    fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>) -> Result<BridgeStatus> {
+        let mut status = BridgeStatus::default();
+        self.inner.put_raw(options.unwrap_or(&self.default_write_options), cf,
+                           key.as_ref(), val.as_ref(),
+                           &mut status);
+        if status.code == StatusCode::kOk {
+            Ok(status)
+        } else {
+            Err(status)
+        }
+    }
+}
+
+
+pub trait DBImpl {
+    fn open(options: Options, path: &Path) -> Result<DB>;
+    fn get_cf_handle(&self, name: impl AsRef<str>) -> Result<ColumnFamilyHandle>;
+    fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> Iterator;
+    fn create_column_family(&self, name: impl AsRef<str>) -> Result<()>;
+    fn drop_column_family(&self, name: impl AsRef<str>) -> Result<()>;
+    fn get_column_family_names(&self) -> Vec<String>;
+}
+
+impl DBImpl for DB {
+    fn open(options: Options, path: &Path) -> Result<DB> {
+        let_cxx_string!(path = get_path_bytes(path));
+        let mut status = BridgeStatus::default();
+        let bridge = open_db_raw(
+            &options,
+            &path,
+            &mut status,
+        );
+
+        if status.code == StatusCode::kOk {
+            Ok(DB {
+                inner: bridge,
+                options,
+                default_read_options: ReadOptions::default(),
+                default_write_options: WriteOptions::default(),
+            })
+        } else {
+            Err(status)
+        }
+    }
+
+    fn get_cf_handle(&self, name: impl AsRef<str>) -> Result<ColumnFamilyHandle> {
+        let_cxx_string!(name = name.as_ref());
+        let ret = self.inner.get_cf_handle_raw(&name);
+        if ret.is_null() {
+            Err(BridgeStatus {
+                code: StatusCode::kMaxCode,
+                subcode: StatusSubCode::kMaxSubCode,
+                severity: StatusSeverity::kSoftError,
+                bridge_code: StatusBridgeCode::NOT_FOUND_ERROR
+            })
+        } else {
+            Ok(ret)
+        }
+    }
+
+    #[inline]
+    fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> Iterator {
+        self.inner.iterator_raw(options.unwrap_or(&self.default_read_options), cf)
+    }
+
+    fn create_column_family(&self, name: impl AsRef<str>) -> Result<()> {
+        let_cxx_string!(name = name.as_ref());
+        let mut status = BridgeStatus::default();
+        self.inner.create_column_family_raw(&self.options, &name, &mut status);
+        if status.code == StatusCode::kOk {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+
+    fn drop_column_family(&self, name: impl AsRef<str>) -> Result<()> {
+        let_cxx_string!(name = name.as_ref());
+        let mut status = BridgeStatus::default();
+        self.inner.drop_column_family_raw(&name, &mut status);
+        if status.code == StatusCode::kOk {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+
+    fn get_column_family_names(&self) -> Vec<String> {
+        self.inner.get_column_family_names_raw().iter().map(|v| v.to_string_lossy().to_string()).collect()
     }
 }

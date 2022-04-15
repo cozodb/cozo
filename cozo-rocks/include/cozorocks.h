@@ -13,18 +13,31 @@
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
 
-struct Status;
+using namespace ROCKSDB_NAMESPACE;
+using std::unique_ptr;
+using std::shared_ptr;
+using std::make_unique;
+using std::make_shared;
+using std::string;
+using std::vector;
+using std::unordered_map;
 
-namespace RDB = ROCKSDB_NAMESPACE;
+struct BridgeStatus;
 
-typedef RDB::Status::Code StatusCode;
-typedef RDB::Status::SubCode StatusSubCode;
-typedef RDB::Status::Severity StatusSeverity;
+typedef Status::Code StatusCode;
+typedef Status::SubCode StatusSubCode;
+typedef Status::Severity StatusSeverity;
 
-std::unique_ptr <RDB::DB> new_db();
+inline Slice convert_slice(rust::Slice<const uint8_t> d) {
+    return Slice(reinterpret_cast<const char *>(d.data()), d.size());
+}
+
+inline rust::Slice<const uint8_t> convert_slice_back(const Slice &s) {
+    return rust::Slice(reinterpret_cast<const std::uint8_t *>(s.data()), s.size());
+}
 
 struct ReadOptionsBridge {
-    mutable RDB::ReadOptions inner;
+    mutable ReadOptions inner;
 
     inline void do_set_verify_checksums(bool v) const {
         inner.verify_checksums = v;
@@ -36,7 +49,7 @@ struct ReadOptionsBridge {
 };
 
 struct WriteOptionsBridge {
-    mutable RDB::WriteOptions inner;
+    mutable WriteOptions inner;
 
 public:
     inline void do_set_disable_wal(bool v) const {
@@ -46,12 +59,10 @@ public:
 
 typedef rust::Fn<std::int8_t(rust::Slice<const std::uint8_t>, rust::Slice<const std::uint8_t>)> RustComparatorFn;
 
-class RustComparator : public RDB::Comparator {
+class RustComparator : public Comparator {
 public:
     inline int Compare(const rocksdb::Slice &a, const rocksdb::Slice &b) const {
-        auto ra = rust::Slice(reinterpret_cast<const std::uint8_t *>(a.data()), a.size());
-        auto rb = rust::Slice(reinterpret_cast<const std::uint8_t *>(b.data()), b.size());
-        return int(rust_compare(ra, rb));
+        return int(rust_compare(convert_slice_back(a), convert_slice_back(b)));
     }
 
     const char *Name() const {
@@ -75,10 +86,9 @@ public:
 };
 
 struct OptionsBridge {
-    mutable RDB::Options inner;
+    mutable Options inner;
     mutable RustComparator cmp_obj;
 
-public:
     inline void do_prepare_for_bulk_load() const {
         inner.PrepareForBulkLoad();
     }
@@ -117,40 +127,42 @@ inline std::unique_ptr <OptionsBridge> new_options() {
 
 
 struct PinnableSliceBridge {
-    RDB::PinnableSlice inner;
+    PinnableSlice inner;
 
     inline rust::Slice<const std::uint8_t> as_bytes() const {
-        return rust::Slice(reinterpret_cast<const std::uint8_t *>(inner.data()), inner.size());
+        return convert_slice_back(inner);
     }
 };
 
 struct SliceBridge {
-    RDB::Slice inner;
-    SliceBridge(RDB::Slice&& s) : inner(s) {}
+    Slice inner;
+
+    SliceBridge(Slice &&s) : inner(s) {}
 
     inline rust::Slice<const std::uint8_t> as_bytes() const {
-        return rust::Slice(reinterpret_cast<const std::uint8_t *>(inner.data()), inner.size());
+        return convert_slice_back(inner);
     }
 };
 
-void write_status_impl(Status &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity);
+void write_status_impl(BridgeStatus &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity, int bridge_code);
 
-inline void write_status(RDB::Status &&rstatus, Status &status) {
+inline void write_status(Status &&rstatus, BridgeStatus &status) {
     if (rstatus.code() != StatusCode::kOk || rstatus.subcode() != StatusSubCode::kNoSpace ||
         rstatus.severity() != StatusSeverity::kNoError) {
-        write_status_impl(status, rstatus.code(), rstatus.subcode(), rstatus.severity());
+        write_status_impl(status, rstatus.code(), rstatus.subcode(), rstatus.severity(), 0);
     }
 }
 
-struct WriteBatchBridge {
-    mutable RDB::WriteBatch inner;
-    std::vector<RDB::ColumnFamilyHandle *> *handles;
-};
-
+//
+//struct WriteBatchBridge {
+//    mutable WriteBatch inner;
+//    std::vector<ColumnFamilyHandle *> *handles;
+//};
+//
 struct IteratorBridge {
-    mutable std::unique_ptr <RDB::Iterator> inner;
+    mutable std::unique_ptr <Iterator> inner;
 
-    IteratorBridge(RDB::Iterator *it) : inner(it) {}
+    IteratorBridge(Iterator *it) : inner(it) {}
 
     inline void seek_to_first() const {
         inner->SeekToFirst();
@@ -169,121 +181,151 @@ struct IteratorBridge {
     }
 
     inline void do_seek(rust::Slice<const uint8_t> key) const {
-        auto k = RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size());
+        auto k = Slice(reinterpret_cast<const char *>(key.data()), key.size());
         inner->Seek(k);
     }
 
     inline void do_seek_for_prev(rust::Slice<const uint8_t> key) const {
-        auto k = RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size());
+        auto k = Slice(reinterpret_cast<const char *>(key.data()), key.size());
         inner->SeekForPrev(k);
     }
 
-    inline std::unique_ptr<SliceBridge> key() const {
+    inline std::unique_ptr <SliceBridge> key() const {
         return std::make_unique<SliceBridge>(inner->key());
     }
 
-    inline std::unique_ptr<SliceBridge> value() const {
+    inline std::unique_ptr <SliceBridge> value() const {
         return std::make_unique<SliceBridge>(inner->value());
     }
 
-    Status status() const;
+    BridgeStatus status() const;
 };
 
 struct DBBridge {
-    mutable std::unique_ptr <RDB::DB> inner;
+    mutable unique_ptr <DB> db;
+    mutable unordered_map <string, shared_ptr<ColumnFamilyHandle>> handles;
 
-    mutable std::vector<RDB::ColumnFamilyHandle *> handles;
+    DBBridge(DB *db_,
+             unordered_map <string, shared_ptr<ColumnFamilyHandle>> &&handles_) : db(db_), handles(handles_) {}
 
-    DBBridge(RDB::DB *inner_) : inner(inner_) {}
 
-    inline std::unique_ptr <std::vector<std::string>> cf_names() const {
-        auto ret = std::make_unique < std::vector < std::string >> ();
-        for (auto h: handles) {
-            ret->push_back(h->GetName());
+    inline shared_ptr <ColumnFamilyHandle> get_cf_handle_raw(const string &name) const {
+        try {
+            return handles.at(name);
+        } catch (const std::out_of_range &) {
+            return shared_ptr<ColumnFamilyHandle>(nullptr);
         }
-        return ret;
     }
 
-    inline std::unique_ptr <WriteBatchBridge> write_batch() const {
-        auto wb = std::make_unique<WriteBatchBridge>();
-        wb->handles = &handles;
-        return wb;
-    }
-
-    inline void put(
+//
+//    inline std::unique_ptr <WriteBatchBridge> write_batch() const {
+//        auto wb = std::make_unique<WriteBatchBridge>();
+//        wb->handles = &handles;
+//        return wb;
+//    }
+//
+    inline void put_raw(
             const WriteOptionsBridge &options,
-            std::size_t cf_id,
+            const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             rust::Slice<const uint8_t> val,
-            Status &status
+            BridgeStatus &status
     ) const {
         write_status(
-                inner->Put(options.inner,
-                           handles[cf_id],
-                           RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size()),
-                           RDB::Slice(reinterpret_cast<const char *>(val.data()), val.size())),
+                db->Put(options.inner,
+                        const_cast<ColumnFamilyHandle *>(&cf),
+                        convert_slice(key),
+                        convert_slice(val)),
                 status
         );
     }
 
-    inline std::unique_ptr <PinnableSliceBridge> get(
+    inline std::unique_ptr <PinnableSliceBridge> get_raw(
             const ReadOptionsBridge &options,
-            std::size_t cf_id,
+            const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
-            Status &status
+            BridgeStatus &status
     ) const {
         auto pinnable_val = std::make_unique<PinnableSliceBridge>();
         write_status(
-                inner->Get(options.inner,
-                           handles[cf_id],
-                           RDB::Slice(reinterpret_cast<const char *>(key.data()), key.size()),
-                           &pinnable_val->inner),
+                db->Get(options.inner,
+                        const_cast<ColumnFamilyHandle *>(&cf),
+                        convert_slice(key),
+                        &pinnable_val->inner),
                 status
         );
         return pinnable_val;
     }
 
-    inline std::unique_ptr <IteratorBridge> iterator(const ReadOptionsBridge &options, std::size_t cf_id) const {
-        return std::make_unique<IteratorBridge>(inner->NewIterator(options.inner, handles[cf_id]));
+    inline std::unique_ptr <IteratorBridge> iterator_raw(
+            const ReadOptionsBridge &options,
+            const ColumnFamilyHandle &cf) const {
+        return std::make_unique<IteratorBridge>(db->NewIterator(options.inner, const_cast<ColumnFamilyHandle *>(&cf)));
+    }
+
+    inline void create_column_family_raw(const OptionsBridge &options, const string &name, BridgeStatus &status) const {
+        if (handles.find(name) != handles.end()) {
+            write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError, 2);
+            return;
+        }
+        ColumnFamilyHandle *handle;
+        auto s = db->CreateColumnFamily(options.inner, name, &handle);
+        write_status(std::move(s), status);
+        handles[name] = shared_ptr<ColumnFamilyHandle>(handle);
+    }
+
+    inline void drop_column_family_raw(const string &name, BridgeStatus &status) const {
+        auto cf_it = handles.find(name);
+        if (cf_it != handles.end()) {
+            auto s = db->DropColumnFamily(cf_it->second.get());
+            handles.erase(cf_it);
+            write_status(std::move(s), status);
+        } else {
+            write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError, 3);
+        }
+        // When should we call DestroyColumnFamilyHandle?
+    }
+
+    inline unique_ptr<vector<string>> get_column_family_names_raw() const {
+        auto ret = make_unique<vector<string>>();
+        for (auto entry : handles) {
+            ret->push_back(entry.first);
+        }
+        return ret;
     }
 };
 
-inline std::unique_ptr <std::vector<std::string>> list_column_families(const OptionsBridge &options,
-                                                                       const rust::Slice<const uint8_t> path) {
-    auto column_families = std::make_unique < std::vector < std::string >> ();
-    RDB::DB::ListColumnFamilies(options.inner,
-                                std::string(reinterpret_cast<const char *>(path.data()), path.size()),
-                                &*column_families);
-    return column_families;
-}
 
 inline std::unique_ptr <DBBridge>
-open_db(const OptionsBridge &options, const rust::Slice<const uint8_t> path, Status &status) {
-    auto old_column_families = std::vector<std::string>();
-    RDB::DB::ListColumnFamilies(options.inner,
-                                std::string(reinterpret_cast<const char *>(path.data()), path.size()),
-                                &old_column_families);
-    if (old_column_families.empty()) {
-        old_column_families.push_back(RDB::kDefaultColumnFamilyName);
+open_db_raw(const OptionsBridge &options,
+            const string &path,
+            BridgeStatus &status) {
+    auto cf_names = std::vector<std::string>();
+    DB::ListColumnFamilies(options.inner, path, &cf_names);
+    if (cf_names.empty()) {
+        cf_names.push_back(kDefaultColumnFamilyName);
     }
 
-    std::vector <RDB::ColumnFamilyDescriptor> column_families;
+    std::vector <ColumnFamilyDescriptor> column_families;
 
-    for (auto el: old_column_families) {
-        column_families.push_back(RDB::ColumnFamilyDescriptor(
+    for (auto el: cf_names) {
+        column_families.push_back(ColumnFamilyDescriptor(
                 el, options.inner));
     }
 
-    std::vector < RDB::ColumnFamilyHandle * > handles;
+    std::vector < ColumnFamilyHandle * > handles;
 
-    RDB::DB *db_ptr;
-    RDB::Status s = RDB::DB::Open(options.inner,
-                                  std::string(reinterpret_cast<const char *>(path.data()), path.size()),
-                                  column_families,
-                                  &handles,
-                                  &db_ptr);
+    DB *db_ptr;
+    Status s = DB::Open(options.inner, path, column_families, &handles, &db_ptr);
+
+    auto ok = s.ok();
     write_status(std::move(s), status);
-    auto ret = std::unique_ptr<DBBridge>(new DBBridge(db_ptr));
-    ret->handles = std::move(handles);
-    return ret;
+    unordered_map <string, shared_ptr<ColumnFamilyHandle>> handle_map;
+    if (ok) {
+        assert(handles.size() == cf_names.size());
+        for (size_t i = 0; i < handles.size(); ++i) {
+            handle_map[cf_names[i]] = shared_ptr<ColumnFamilyHandle>(handles[i]);
+        }
+    }
+    return std::make_unique<DBBridge>(db_ptr, std::move(handle_map));
 }
