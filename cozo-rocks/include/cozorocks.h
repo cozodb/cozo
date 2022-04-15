@@ -144,7 +144,8 @@ struct SliceBridge {
     }
 };
 
-void write_status_impl(BridgeStatus &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity, int bridge_code);
+void write_status_impl(BridgeStatus &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity,
+                       int bridge_code);
 
 inline void write_status(Status &&rstatus, BridgeStatus &status) {
     if (rstatus.code() != StatusCode::kOk || rstatus.subcode() != StatusSubCode::kNoSpace ||
@@ -153,12 +154,6 @@ inline void write_status(Status &&rstatus, BridgeStatus &status) {
     }
 }
 
-//
-//struct WriteBatchBridge {
-//    mutable WriteBatch inner;
-//    std::vector<ColumnFamilyHandle *> *handles;
-//};
-//
 struct IteratorBridge {
     mutable std::unique_ptr <Iterator> inner;
 
@@ -201,6 +196,41 @@ struct IteratorBridge {
     BridgeStatus status() const;
 };
 
+
+struct WriteBatchBridge {
+    mutable WriteBatch inner;
+
+    inline void batch_put_raw(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const uint8_t> key,
+            rust::Slice<const uint8_t> val,
+            BridgeStatus &status
+    ) const {
+        write_status(
+                inner.Put(const_cast<ColumnFamilyHandle *>(&cf),
+                          convert_slice(key),
+                          convert_slice(val)),
+                status
+        );
+    }
+
+    inline void batch_delete_raw(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const uint8_t> key,
+            BridgeStatus &status
+    ) const {
+        write_status(
+                inner.Delete(const_cast<ColumnFamilyHandle *>(&cf),
+                             convert_slice(key)),
+                status
+        );
+    }
+};
+
+inline unique_ptr <WriteBatchBridge> new_write_batch_raw() {
+    return make_unique<WriteBatchBridge>();
+}
+
 struct DBBridge {
     mutable unique_ptr <DB> db;
     mutable unordered_map <string, shared_ptr<ColumnFamilyHandle>> handles;
@@ -217,13 +247,6 @@ struct DBBridge {
         }
     }
 
-//
-//    inline std::unique_ptr <WriteBatchBridge> write_batch() const {
-//        auto wb = std::make_unique<WriteBatchBridge>();
-//        wb->handles = &handles;
-//        return wb;
-//    }
-//
     inline void put_raw(
             const WriteOptionsBridge &options,
             const ColumnFamilyHandle &cf,
@@ -238,6 +261,28 @@ struct DBBridge {
                         convert_slice(val)),
                 status
         );
+    }
+
+    inline void delete_raw(
+            const WriteOptionsBridge &options,
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const uint8_t> key,
+            BridgeStatus &status
+    ) const {
+        write_status(
+                db->Delete(options.inner,
+                           const_cast<ColumnFamilyHandle *>(&cf),
+                           convert_slice(key)),
+                status
+        );
+    }
+
+    inline void write_raw(
+            const WriteOptionsBridge &options,
+            WriteBatchBridge &updates,
+            BridgeStatus &status
+    ) const {
+        write_status(db->Write(options.inner, &updates.inner), status);
     }
 
     inline std::unique_ptr <PinnableSliceBridge> get_raw(
@@ -286,9 +331,9 @@ struct DBBridge {
         // When should we call DestroyColumnFamilyHandle?
     }
 
-    inline unique_ptr<vector<string>> get_column_family_names_raw() const {
-        auto ret = make_unique<vector<string>>();
-        for (auto entry : handles) {
+    inline unique_ptr <vector<string>> get_column_family_names_raw() const {
+        auto ret = make_unique < vector < string >> ();
+        for (auto entry: handles) {
             ret->push_back(entry.first);
         }
         return ret;

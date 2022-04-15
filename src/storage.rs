@@ -58,7 +58,6 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use std::str::from_utf8;
-    use cozo_rocks::DBImpl;
     use crate::value::{ByteArrayBuilder, cozo_comparator_v1, Value};
 
     #[test]
@@ -87,7 +86,9 @@ mod tests {
         println!("before anything {}", val.is_none());
 
         db.put(&key, "A motherfucking value!!! 👋👋👋", &cf, None).unwrap();
-        db.put(&key2, "Another motherfucking value!!! 👋👋👋", &cf, None).unwrap();
+        let batch = WriteBatch::default();
+        batch.put(&key2, "Another motherfucking value!!! 👋👋👋", &cf).unwrap();
+        db.write(batch, None).unwrap();
         // db.put("Yes man", "A motherfucking value!!! 👋👋👋", None).unwrap();
         let val = db.get(&key, &cf, None).unwrap().unwrap();
         println!("1 {}", from_utf8(val.as_ref()).unwrap());
