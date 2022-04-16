@@ -22,8 +22,8 @@ impl EvaluatorWithStorage {
     }
 }
 
-impl BareEvaluator {
-    pub fn new() -> Self {
+impl Default for BareEvaluator {
+    fn default() -> Self {
         Self { s_envs: StructuredEnv::new(), storage: DummyStorage }
     }
 }
@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn operators() {
-        let mut ev = BareEvaluator::new();
+        let mut ev = BareEvaluator::default();
 
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("1/10+(-2+3)*4^5").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && false").unwrap()).unwrap());
@@ -847,7 +847,7 @@ mod tests {
 {"_src":205,"_dst":11,"_type":"InDepartment"},
 {"_src":206,"_dst":11,"_type":"InDepartment"}]"#;
         let parsed = parse_expr_from_str(data)?;
-        let mut ev = BareEvaluator::new();
+        let mut ev = BareEvaluator::default();
         let evaluated = ev.visit_expr(&parsed)?;
         println!("{:#?}", evaluated);
         Ok(())

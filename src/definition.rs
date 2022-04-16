@@ -5,7 +5,7 @@ use crate::env::{Env, LayeredEnv, StructuredEnvItem};
 use crate::error::Result;
 use crate::error::CozoError::*;
 use crate::eval::Evaluator;
-use crate::storage::{RocksStorage, Storage};
+use crate::storage::{RocksStorage};
 use crate::typing::{Col, Columns, Edge, Index, Node, StorageStatus, Structured, TableId, Typing};
 use crate::typing::StorageStatus::{Planned, Stored};
 use crate::value::{ByteArrayBuilder, ByteArrayParser, Value};
@@ -88,11 +88,11 @@ impl StructuredEnvItem {
             }
 
             if let Some(Structured::Node(dst)) = self.resolve_mut(&dst_name) {
-                dst.in_e.push(table_id.clone());
+                dst.in_e.push(table_id);
             } else {
                 unreachable!()
             }
-            Ok(name.to_string())
+            Ok(name)
         } else {
             Err(NameConflict)
         }
@@ -112,7 +112,7 @@ impl StructuredEnvItem {
             attached: vec![],
         };
         if self.define_new(name.clone(), Structured::Node(node)) {
-            Ok(name.to_string())
+            Ok(name)
         } else {
             Err(NameConflict)
         }

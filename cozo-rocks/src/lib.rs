@@ -260,7 +260,7 @@ impl AsRef<[u8]> for Slice {
 }
 
 
-pub type Iterator = UniquePtr<IteratorBridge>;
+pub type DBIterator = UniquePtr<IteratorBridge>;
 
 pub trait IteratorImpl {
     fn seek(&self, key: impl AsRef<[u8]>);
@@ -321,7 +321,7 @@ pub struct DB {
 pub trait DBImpl {
     fn open(options: Options, path: &Path) -> Result<DB>;
     fn get_cf_handle(&self, name: impl AsRef<str>) -> Result<ColumnFamilyHandle>;
-    fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> Iterator;
+    fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> DBIterator;
     fn create_column_family(&self, name: impl AsRef<str>) -> Result<()>;
     fn drop_column_family(&self, name: impl AsRef<str>) -> Result<()>;
     fn get_column_family_names(&self) -> Vec<String>;
@@ -372,7 +372,7 @@ impl DBImpl for DB {
     }
 
     #[inline]
-    fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> Iterator {
+    fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> DBIterator {
         self.inner.iterator_raw(options.unwrap_or(&self.default_read_options), cf)
     }
 

@@ -1,6 +1,6 @@
 use crate::error::{CozoError, Result};
 use cozo_rocks::*;
-use crate::value::{ByteArrayBuilder, cozo_comparator_v1, Value};
+use crate::value::{cozo_comparator_v1};
 
 
 pub struct RocksStorage {

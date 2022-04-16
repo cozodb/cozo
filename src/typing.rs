@@ -64,7 +64,7 @@ pub struct TableId{
 impl Debug for TableId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str( if self.global { "+" } else {"-"})?;
-        f.write_str(&format!("{}", self.name))?;
+        f.write_str(&self.name)?;
         Ok(())
     }
 }
