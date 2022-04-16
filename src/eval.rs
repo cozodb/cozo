@@ -6,24 +6,30 @@ use crate::error::CozoError::*;
 use crate::value::Value::*;
 use crate::ast::*;
 use crate::env::StructuredEnv;
-use crate::storage::Storage;
+use crate::storage::{DummyStorage, RocksStorage, Storage};
 
-pub struct Evaluator {
+pub struct Evaluator<S: Storage> {
     pub s_envs: StructuredEnv,
-    pub storage: Storage,
+    pub storage: S,
 }
 
-impl Evaluator {
-    pub fn no_storage() -> Self {
-        Self { s_envs: StructuredEnv::new(), storage: Storage::no_storage() }
-    }
+pub type EvaluatorWithStorage = Evaluator<RocksStorage>;
+pub type BareEvaluator = Evaluator<DummyStorage>;
+
+impl EvaluatorWithStorage {
     pub fn new(path: String) -> Result<Self> {
-        Ok(Self { s_envs: StructuredEnv::new(), storage: Storage::new(path)? })
+        Ok(Self { s_envs: StructuredEnv::new(), storage: RocksStorage::new(path)? })
+    }
+}
+
+impl BareEvaluator {
+    pub fn new() -> Self {
+        Self { s_envs: StructuredEnv::new(), storage: DummyStorage }
     }
 }
 
 
-impl<'a> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator {
+impl<'a, S: Storage> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator<S> {
     fn visit_expr(&mut self, ex: &Expr<'a>) -> Result<Expr<'a>> {
         match ex {
             Apply(op, args) => {
@@ -57,7 +63,7 @@ impl<'a> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator {
     }
 }
 
-impl Evaluator {
+impl<S: Storage> Evaluator<S> {
     fn add_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
@@ -499,7 +505,7 @@ mod tests {
 
     #[test]
     fn operators() {
-        let mut ev = Evaluator::no_storage();
+        let mut ev = BareEvaluator::new();
 
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("1/10+(-2+3)*4^5").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && false").unwrap()).unwrap());
@@ -507,7 +513,6 @@ mod tests {
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true || null").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("null || true").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && null").unwrap()).unwrap());
-        ev.storage.delete().unwrap();
     }
 
 
@@ -842,7 +847,7 @@ mod tests {
 {"_src":205,"_dst":11,"_type":"InDepartment"},
 {"_src":206,"_dst":11,"_type":"InDepartment"}]"#;
         let parsed = parse_expr_from_str(data)?;
-        let mut ev = Evaluator::no_storage();
+        let mut ev = BareEvaluator::new();
         let evaluated = ev.visit_expr(&parsed)?;
         println!("{:#?}", evaluated);
         Ok(())

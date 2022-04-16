@@ -185,11 +185,11 @@ struct IteratorBridge {
         inner->SeekForPrev(k);
     }
 
-    inline std::unique_ptr <SliceBridge> key() const {
+    inline std::unique_ptr <SliceBridge> key_raw() const {
         return std::make_unique<SliceBridge>(inner->key());
     }
 
-    inline std::unique_ptr <SliceBridge> value() const {
+    inline std::unique_ptr <SliceBridge> value_raw() const {
         return std::make_unique<SliceBridge>(inner->value());
     }
 

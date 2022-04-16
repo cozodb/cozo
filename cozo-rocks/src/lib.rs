@@ -110,15 +110,15 @@ mod ffi {
         fn drop_column_family_raw(self: &DBBridge, name: &CxxString, status: &mut BridgeStatus);
         fn get_column_family_names_raw(self: &DBBridge) -> UniquePtr<CxxVector<CxxString>>;
 
-        type IteratorBridge;
+        pub type IteratorBridge;
         fn seek_to_first(self: &IteratorBridge);
         fn seek_to_last(self: &IteratorBridge);
         fn next(self: &IteratorBridge);
         fn is_valid(self: &IteratorBridge) -> bool;
         fn do_seek(self: &IteratorBridge, key: &[u8]);
         fn do_seek_for_prev(self: &IteratorBridge, key: &[u8]);
-        fn key(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
-        fn value(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
+        fn key_raw(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
+        fn value_raw(self: &IteratorBridge) -> UniquePtr<SliceBridge>;
         fn status(self: &IteratorBridge) -> BridgeStatus;
 
         pub type WriteBatchBridge;
@@ -128,9 +128,25 @@ mod ffi {
     }
 }
 
+use std::fmt::Formatter;
+use std::fmt::Debug;
 use std::path::Path;
 use cxx::{UniquePtr, SharedPtr, let_cxx_string};
+pub use ffi::BridgeStatus;
+pub use ffi::StatusBridgeCode;
+pub use ffi::StatusCode;
+pub use ffi::StatusSubCode;
+pub use ffi::StatusSeverity;
+pub use ffi::IteratorBridge;
 use ffi::*;
+
+impl std::fmt::Display for BridgeStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
+}
+
+impl std::error::Error for BridgeStatus {}
 
 type Result<T> = std::result::Result<T, BridgeStatus>;
 
@@ -249,14 +265,26 @@ pub type Iterator = UniquePtr<IteratorBridge>;
 pub trait IteratorImpl {
     fn seek(&self, key: impl AsRef<[u8]>);
     fn seek_for_prev(&self, key: impl AsRef<[u8]>);
+    fn key(&self) -> Slice;
+    fn value(&self) -> Slice;
 }
 
 impl IteratorImpl for IteratorBridge {
+    #[inline]
     fn seek(&self, key: impl AsRef<[u8]>) {
         self.do_seek(key.as_ref());
     }
+    #[inline]
     fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
         self.do_seek_for_prev(key.as_ref())
+    }
+    #[inline]
+    fn key(&self) -> Slice {
+        Slice(self.key_raw())
+    }
+    #[inline]
+    fn value(&self) -> Slice {
+        Slice(self.value_raw())
     }
 }
 
@@ -304,7 +332,6 @@ pub trait DBImpl {
     fn delete(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>)
               -> Result<BridgeStatus>;
     fn write(&self, updates: WriteBatch, options: Option<&WriteOptions>) -> Result<BridgeStatus>;
-
 }
 
 impl DBImpl for DB {
@@ -416,8 +443,8 @@ impl DBImpl for DB {
     fn write(&self, mut updates: WriteBatch, options: Option<&WriteOptions>) -> Result<BridgeStatus> {
         let mut status = BridgeStatus::default();
         self.inner.write_raw(options.unwrap_or(&self.default_write_options),
-                           updates.pin_mut(),
-                           &mut status);
+                             updates.pin_mut(),
+                             &mut status);
         if status.code == StatusCode::kOk {
             Ok(status)
         } else {

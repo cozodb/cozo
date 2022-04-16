@@ -5,12 +5,13 @@ use crate::env::{Env, LayeredEnv, StructuredEnvItem};
 use crate::error::Result;
 use crate::error::CozoError::*;
 use crate::eval::Evaluator;
-use crate::storage::Storage;
-use crate::typing::{Col, Columns, Edge, Index, Node, Structured, TableId, Typing};
+use crate::storage::{RocksStorage, Storage};
+use crate::typing::{Col, Columns, Edge, Index, Node, StorageStatus, Structured, TableId, Typing};
 use crate::typing::StorageStatus::{Planned, Stored};
-use crate::value::{ByteArrayBuilder, Value};
+use crate::value::{ByteArrayBuilder, ByteArrayParser, Value};
 use crate::parser::{Parser, Rule};
 use pest::Parser as PestParser;
+use cozo_rocks::*;
 // use rocksdb::IteratorMode;
 
 fn parse_ident(pair: Pair<Rule>) -> String {
@@ -290,110 +291,115 @@ pub enum TableKind {
     Index = 4,
 }
 
-impl Storage {
+impl RocksStorage {
     #[allow(unused_variables)]
     fn all_metadata(&self, env: &StructuredEnvItem) -> Result<Vec<Structured>> {
-        todo!()
-        // let it = self.db.as_ref().ok_or(DatabaseClosed)?.full_iterator(IteratorMode::Start);
-        //
-        // let mut ret = vec![];
-        // for (k, v) in it {
-        //     let mut key_parser = ByteArrayParser::new(&k);
-        //     let table_name = key_parser.parse_value().unwrap().get_string().unwrap();
-        //
-        //     let mut data_parser = ByteArrayParser::new(&v);
-        //     let table_kind = data_parser.parse_value().unwrap();
-        //     let table_id = TableId { name: table_name, global: true };
-        //     match table_kind {
-        //         Value::UInt(i) if i == TableKind::Node as u64 => {
-        //             let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-        //                 .into_iter().map(|v| {
-        //                 let mut vs = v.get_list().unwrap().into_iter();
-        //                 let name = vs.next().unwrap().get_string().unwrap();
-        //                 let typ = vs.next().unwrap().get_string().unwrap();
-        //                 let typ = env.build_type_from_str(&typ).unwrap();
-        //                 let default = vs.next().unwrap().into_owned();
-        //                 Col {
-        //                     name,
-        //                     typ,
-        //                     default,
-        //                 }
-        //             }).collect();
-        //             let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-        //                 .into_iter().map(|v| {
-        //                 let mut vs = v.get_list().unwrap().into_iter();
-        //                 let name = vs.next().unwrap().get_string().unwrap();
-        //                 let typ = vs.next().unwrap().get_string().unwrap();
-        //                 let typ = env.build_type_from_str(&typ).unwrap();
-        //                 let default = vs.next().unwrap().into_owned();
-        //                 Col {
-        //                     name,
-        //                     typ,
-        //                     default,
-        //                 }
-        //             }).collect();
-        //             let node = Node {
-        //                 status: StorageStatus::Stored,
-        //                 id: table_id,
-        //                 keys,
-        //                 cols,
-        //                 out_e: vec![], // TODO fix these
-        //                 in_e: vec![],
-        //                 attached: vec![],
-        //             };
-        //             ret.push(Structured::Node(node));
-        //         }
-        //         Value::UInt(i) if i == TableKind::Edge as u64 => {
-        //             let src_name = data_parser.parse_value().unwrap().get_string().unwrap();
-        //             let dst_name = data_parser.parse_value().unwrap().get_string().unwrap();
-        //             let src_id = TableId { name: src_name, global: true };
-        //             let dst_id = TableId { name: dst_name, global: true };
-        //             let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-        //                 .into_iter().map(|v| {
-        //                 let mut vs = v.get_list().unwrap().into_iter();
-        //                 let name = vs.next().unwrap().get_string().unwrap();
-        //                 let typ = vs.next().unwrap().get_string().unwrap();
-        //                 let typ = env.build_type_from_str(&typ).unwrap();
-        //                 let default = vs.next().unwrap().into_owned();
-        //                 Col {
-        //                     name,
-        //                     typ,
-        //                     default,
-        //                 }
-        //             }).collect();
-        //             let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-        //                 .into_iter().map(|v| {
-        //                 let mut vs = v.get_list().unwrap().into_iter();
-        //                 let name = vs.next().unwrap().get_string().unwrap();
-        //                 let typ = vs.next().unwrap().get_string().unwrap();
-        //                 let typ = env.build_type_from_str(&typ).unwrap();
-        //                 let default = vs.next().unwrap().into_owned();
-        //                 Col {
-        //                     name,
-        //                     typ,
-        //                     default,
-        //                 }
-        //             }).collect();
-        //             let edge = Edge {
-        //                 status: StorageStatus::Stored,
-        //                 src: src_id,
-        //                 dst: dst_id,
-        //                 id: table_id,
-        //                 keys,
-        //                 cols,
-        //             };
-        //             ret.push(Structured::Edge(edge));
-        //         }
-        //         Value::UInt(i) if i == TableKind::Columns as u64 => {
-        //             todo!()
-        //         }
-        //         Value::UInt(i) if i == TableKind::Index as u64 => {
-        //             todo!()
-        //         }
-        //         _ => unreachable!()
-        //     }
-        // }
-        // Ok(ret)
+        let default_cf = self.db.get_cf_handle("default")?;
+        let it = self.db.iterator(&default_cf, None);
+        let mut ret = vec![];
+
+        while it.is_valid() {
+            let k = it.key();
+            let v = it.value();
+            let mut key_parser = ByteArrayParser::new(&k);
+            let mut data_parser = ByteArrayParser::new(&v);
+
+            let table_name = key_parser.parse_value().unwrap().get_string().unwrap();
+            let table_kind = data_parser.parse_value().unwrap();
+            let table_id = TableId { name: table_name, global: true };
+
+            match table_kind {
+                Value::UInt(i) if i == TableKind::Node as u64 => {
+                    let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
+                        .into_iter().map(|v| {
+                        let mut vs = v.get_list().unwrap().into_iter();
+                        let name = vs.next().unwrap().get_string().unwrap();
+                        let typ = vs.next().unwrap().get_string().unwrap();
+                        let typ = env.build_type_from_str(&typ).unwrap();
+                        let default = vs.next().unwrap().into_owned();
+                        Col {
+                            name,
+                            typ,
+                            default,
+                        }
+                    }).collect();
+                    let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
+                        .into_iter().map(|v| {
+                        let mut vs = v.get_list().unwrap().into_iter();
+                        let name = vs.next().unwrap().get_string().unwrap();
+                        let typ = vs.next().unwrap().get_string().unwrap();
+                        let typ = env.build_type_from_str(&typ).unwrap();
+                        let default = vs.next().unwrap().into_owned();
+                        Col {
+                            name,
+                            typ,
+                            default,
+                        }
+                    }).collect();
+                    let node = Node {
+                        status: StorageStatus::Stored,
+                        id: table_id,
+                        keys,
+                        cols,
+                        out_e: vec![], // TODO fix these
+                        in_e: vec![],
+                        attached: vec![],
+                    };
+                    ret.push(Structured::Node(node));
+                }
+                Value::UInt(i) if i == TableKind::Edge as u64 => {
+                    let src_name = data_parser.parse_value().unwrap().get_string().unwrap();
+                    let dst_name = data_parser.parse_value().unwrap().get_string().unwrap();
+                    let src_id = TableId { name: src_name, global: true };
+                    let dst_id = TableId { name: dst_name, global: true };
+                    let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
+                        .into_iter().map(|v| {
+                        let mut vs = v.get_list().unwrap().into_iter();
+                        let name = vs.next().unwrap().get_string().unwrap();
+                        let typ = vs.next().unwrap().get_string().unwrap();
+                        let typ = env.build_type_from_str(&typ).unwrap();
+                        let default = vs.next().unwrap().into_owned();
+                        Col {
+                            name,
+                            typ,
+                            default,
+                        }
+                    }).collect();
+                    let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
+                        .into_iter().map(|v| {
+                        let mut vs = v.get_list().unwrap().into_iter();
+                        let name = vs.next().unwrap().get_string().unwrap();
+                        let typ = vs.next().unwrap().get_string().unwrap();
+                        let typ = env.build_type_from_str(&typ).unwrap();
+                        let default = vs.next().unwrap().into_owned();
+                        Col {
+                            name,
+                            typ,
+                            default,
+                        }
+                    }).collect();
+                    let edge = Edge {
+                        status: StorageStatus::Stored,
+                        src: src_id,
+                        dst: dst_id,
+                        id: table_id,
+                        keys,
+                        cols,
+                    };
+                    ret.push(Structured::Edge(edge));
+                }
+                Value::UInt(i) if i == TableKind::Columns as u64 => {
+                    todo!()
+                }
+                Value::UInt(i) if i == TableKind::Index as u64 => {
+                    todo!()
+                }
+                _ => unreachable!()
+            }
+
+            it.next();
+        }
+        Ok(ret)
     }
 
     fn persist_node(&mut self, node: &mut Node) -> Result<()> {
@@ -450,7 +456,7 @@ impl Storage {
     }
 }
 
-impl Evaluator {
+impl Evaluator<RocksStorage> {
     pub fn restore_metadata(&mut self) -> Result<()> {
         let mds = self.storage.all_metadata(self.s_envs.root())?;
         for md in &mds {
@@ -535,6 +541,7 @@ impl Evaluator {
 mod tests {
     use super::*;
     use pest::Parser as PestParser;
+    use crate::eval::EvaluatorWithStorage;
     use crate::parser::Parser;
 
     #[test]
@@ -552,7 +559,7 @@ mod tests {
             }
         "#;
         let parsed = Parser::parse(Rule::file, s).unwrap();
-        let mut eval = Evaluator::new("_path_for_rocksdb_storagex".to_string()).unwrap();
+        let mut eval = EvaluatorWithStorage::new("_path_for_rocksdb_storagex".to_string()).unwrap();
         eval.build_table(parsed).unwrap();
         eval.restore_metadata().unwrap();
         eval.storage.delete().unwrap();
