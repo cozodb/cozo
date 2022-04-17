@@ -318,7 +318,7 @@ impl RocksStorage {
                         let name = vs.next().unwrap().get_string().unwrap().to_string();
                         let typ = vs.next().unwrap().get_string().unwrap();
                         let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().to_owned();
+                        let default = vs.next().unwrap().owned_clone();
                         Col {
                             name,
                             typ,
@@ -332,7 +332,7 @@ impl RocksStorage {
                         let name = vs.next().unwrap().get_string().unwrap().to_string();
                         let typ = vs.next().unwrap().get_string().unwrap();
                         let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().to_owned();
+                        let default = vs.next().unwrap().owned_clone();
                         Col {
                             name,
                             typ,
@@ -362,7 +362,7 @@ impl RocksStorage {
                         let name = vs.next().unwrap().get_string().unwrap().to_string();
                         let typ = vs.next().unwrap().get_string().unwrap();
                         let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().to_owned();
+                        let default = vs.next().unwrap().owned_clone();
                         Col {
                             name,
                             typ,
@@ -376,7 +376,7 @@ impl RocksStorage {
                         let name = vs.next().unwrap().get_string().unwrap().to_string();
                         let typ = vs.next().unwrap().get_string().unwrap();
                         let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().to_owned();
+                        let default = vs.next().unwrap().owned_clone();
                         Col {
                             name,
                             typ,

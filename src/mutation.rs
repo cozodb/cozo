@@ -87,7 +87,7 @@ mod tests {
             _ => unreachable!()
         };
         eval.env.push();
-        eval.env.define("$data".to_string(), Structured::Value(bound_value.to_owned()));
+        eval.env.define("$data".to_string(), Structured::Value(bound_value.owned_clone()));
         eval.eval_mutation(insert_stmt.next().unwrap()).unwrap();
         // println!("{:#?}", evaluated);
         eval.env.pop();

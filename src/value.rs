@@ -506,7 +506,7 @@ pub fn cmp_data<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) 
 
 
 impl<'a> Value<'a> {
-    pub fn to_owned(&self) -> Value<'static> {
+    pub fn owned_clone(&self) -> Value<'static> {
         use Value::*;
 
         match self {
@@ -522,7 +522,7 @@ impl<'a> Value<'a> {
                 let mut inner = Vec::with_capacity(l.len());
 
                 for el in l.iter() {
-                    inner.push(el.clone().to_owned())
+                    inner.push(el.owned_clone())
                 }
                 List(Rc::new(inner))
             }
@@ -530,7 +530,7 @@ impl<'a> Value<'a> {
                 let mut inner = BTreeMap::new();
                 for (k, v) in d.iter() {
                     let new_k = Cow::from(k.clone().into_owned());
-                    inner.insert(new_k, v.clone().to_owned());
+                    inner.insert(new_k, v.owned_clone());
                 }
                 Dict(Rc::new(inner))
             }
