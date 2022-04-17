@@ -86,7 +86,7 @@ mod tests {
         builder.build_value(&Value::RefString("Another key"));
         let key2 = builder;
         let cf = db.get_cf_handle("default").unwrap();
-        println!("{:?}", db.get_column_family_names());
+        println!("{:?}", db.all_cf_names());
 
         let val = db.get(&key, &cf, None).unwrap();
         println!("before anything {}", val.is_none());

@@ -55,16 +55,24 @@ pub enum StorageStatus {
 }
 
 #[derive(PartialEq, Eq, Ord, PartialOrd, Clone)]
-pub struct TableId{
+pub struct TableId {
     pub name: String,
-    pub global: bool
+    pub local_id: usize,
+}
+
+impl TableId {
+    pub fn is_global(&self) -> bool {
+        self.local_id == 0
+    }
 }
 
 
 impl Debug for TableId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str( if self.global { "+" } else {"-"})?;
         f.write_str(&self.name)?;
+        if self.local_id > 0 {
+            f.write_str(&format!("({})", self.local_id))?;
+        }
         Ok(())
     }
 }

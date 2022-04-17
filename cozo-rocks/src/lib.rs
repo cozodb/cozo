@@ -324,7 +324,7 @@ pub trait DBImpl {
     fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> DBIterator;
     fn create_column_family(&self, name: impl AsRef<str>) -> Result<()>;
     fn drop_column_family(&self, name: impl AsRef<str>) -> Result<()>;
-    fn get_column_family_names(&self) -> Vec<String>;
+    fn all_cf_names(&self) -> Vec<String>;
     fn get(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>)
            -> Result<Option<PinnableSlice>>;
     fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>)
@@ -398,7 +398,7 @@ impl DBImpl for DB {
         }
     }
 
-    fn get_column_family_names(&self) -> Vec<String> {
+    fn all_cf_names(&self) -> Vec<String> {
         self.inner.get_column_family_names_raw().iter().map(|v| v.to_string_lossy().to_string()).collect()
     }
 

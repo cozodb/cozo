@@ -343,7 +343,7 @@ pub struct ByteArrayBuilder<T: Write + AsRef<[u8]>> {
     byte_writer: T,
 }
 
-impl <T: Write + AsRef<[u8]>> AsRef<[u8]> for ByteArrayBuilder<T> {
+impl<T: Write + AsRef<[u8]>> AsRef<[u8]> for ByteArrayBuilder<T> {
     fn as_ref(&self) -> &[u8] {
         self.byte_writer.as_ref()
     }
@@ -421,7 +421,7 @@ impl<T: Write + AsRef<[u8]>> ByteArrayBuilder<T> {
         self
     }
 
-    pub fn build_value(&mut self, v: &Value) -> &mut Self{
+    pub fn build_value(&mut self, v: &Value) -> &mut Self {
         use ValueTag::*;
 
         match v {
@@ -477,8 +477,14 @@ impl<T: Write + AsRef<[u8]>> ByteArrayBuilder<T> {
 
 
 pub fn cozo_comparator_v1(a: &[u8], b: &[u8]) -> i8 {
-    match cmp_data(&mut ByteArrayParser { bytes: a, current: 0 },
-                   &mut ByteArrayParser { bytes: b, current: 0 }) {
+    let mut ba = &mut ByteArrayParser { bytes: a, current: 0 };
+    let mut bb = &mut ByteArrayParser { bytes: b, current: 0 };
+    match ba.compare_varint(&mut bb) {
+        Less => return -1,
+        Greater => return 1,
+        Equal => {}
+    }
+    match cmp_data(&mut ba, &mut bb) {
         Less => -1,
         Equal => 0,
         Greater => 1

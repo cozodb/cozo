@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::ast::Expr;
 use crate::ast::Expr::*;
 use crate::error::Result;
@@ -11,6 +13,17 @@ use crate::storage::{DummyStorage, RocksStorage, Storage};
 pub struct Evaluator<S: Storage> {
     pub s_envs: StructuredEnv,
     pub storage: S,
+    pub last_local_id: Arc<AtomicUsize>,
+}
+
+impl <S:Storage> Evaluator<S> {
+    pub fn get_next_local_id(&self, is_global: bool) -> usize {
+        if is_global {
+            0
+        } else {
+            self.last_local_id.fetch_add(1, Ordering::Relaxed)
+        }
+    }
 }
 
 pub type EvaluatorWithStorage = Evaluator<RocksStorage>;
@@ -18,13 +31,21 @@ pub type BareEvaluator = Evaluator<DummyStorage>;
 
 impl EvaluatorWithStorage {
     pub fn new(path: String) -> Result<Self> {
-        Ok(Self { s_envs: StructuredEnv::new(), storage: RocksStorage::new(path)? })
+        Ok(Self {
+            s_envs: StructuredEnv::new(),
+            storage: RocksStorage::new(path)?,
+            last_local_id: Arc::new(AtomicUsize::new(1)),
+        })
     }
 }
 
 impl Default for BareEvaluator {
     fn default() -> Self {
-        Self { s_envs: StructuredEnv::new(), storage: DummyStorage }
+        Self {
+            s_envs: StructuredEnv::new(),
+            storage: DummyStorage,
+            last_local_id: Arc::new(AtomicUsize::new(0)),
+        }
     }
 }
 

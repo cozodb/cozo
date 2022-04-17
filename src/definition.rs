@@ -46,7 +46,7 @@ fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool)> {
 
 
 impl StructuredEnvItem {
-    pub fn build_edge_def(&mut self, pair: Pair<Rule>, global: bool) -> Result<String> {
+    pub fn build_edge_def(&mut self, pair: Pair<Rule>, local_id: usize) -> Result<String> {
         let mut inner = pair.into_inner();
         let src_name = build_name_in_def(inner.next().unwrap(), true)?;
         let src = self.resolve(&src_name).ok_or(UndefinedType)?;
@@ -63,7 +63,7 @@ impl StructuredEnvItem {
         } else {
             return Err(WrongType);
         };
-        if global && (!src_id.global || !dst_id.global) {
+        if local_id == 0 && (!src_id.is_global() || !dst_id.is_global()) {
             return Err(IncompatibleEdge);
         }
         let (keys, cols) = if let Some(p) = inner.next() {
@@ -71,7 +71,7 @@ impl StructuredEnvItem {
         } else {
             (vec![], vec![])
         };
-        let table_id = TableId { name: name.clone(), global };
+        let table_id = TableId { name: name.clone(), local_id };
         let edge = Edge {
             status: Planned,
             src: src_id,
@@ -97,11 +97,11 @@ impl StructuredEnvItem {
             Err(NameConflict)
         }
     }
-    pub fn build_node_def(&mut self, pair: Pair<Rule>, global: bool) -> Result<String> {
+    pub fn build_node_def(&mut self, pair: Pair<Rule>, local_id: usize) -> Result<String> {
         let mut inner = pair.into_inner();
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let (keys, cols) = self.build_col_defs(inner.next().unwrap())?;
-        let table_id = TableId { name: name.clone(), global };
+        let table_id = TableId { name: name.clone(), local_id };
         let node = Node {
             status: Planned,
             id: table_id,
@@ -125,7 +125,7 @@ impl StructuredEnvItem {
         }
         Ok(ret)
     }
-    fn build_columns_def(&mut self, pair: Pair<Rule>, global: bool) -> Result<String> {
+    fn build_columns_def(&mut self, pair: Pair<Rule>, local_id: usize) -> Result<String> {
         let mut inner = pair.into_inner();
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let node_name = build_name_in_def(inner.next().unwrap(), true)?;
@@ -141,8 +141,8 @@ impl StructuredEnvItem {
         if !keys.is_empty() {
             return Err(UnexpectedIndexColumns);
         }
-        let table_id = TableId { name: name.clone(), global };
-        if table_id.global && !node_id.global {
+        let table_id = TableId { name: name.clone(), local_id };
+        if table_id.is_global() && !node_id.is_global() {
             return Err(IncompatibleEdge);
         }
 
@@ -158,7 +158,7 @@ impl StructuredEnvItem {
         }
     }
 
-    fn build_index_def(&mut self, pair: Pair<Rule>, global: bool) -> Result<String> {
+    fn build_index_def(&mut self, pair: Pair<Rule>, local_id: usize) -> Result<String> {
         let mut inner = pair.into_inner();
         let mut name = build_name_in_def(inner.next().unwrap(), true)?;
         let node_name;
@@ -188,9 +188,9 @@ impl StructuredEnvItem {
         } else {
             return Err(WrongType);
         };
-        let table_id = TableId { name: name.clone(), global };
+        let table_id = TableId { name: name.clone(), local_id };
 
-        if table_id.global && !node_id.global {
+        if table_id.is_global() && !node_id.is_global() {
             return Err(IncompatibleEdge);
         }
 
@@ -303,10 +303,10 @@ impl RocksStorage {
             let v = it.value();
             let mut key_parser = ByteArrayParser::new(&k);
             let mut data_parser = ByteArrayParser::new(&v);
-
+            key_parser.parse_varint().unwrap();
             let table_name = key_parser.parse_value().unwrap().get_string().unwrap();
             let table_kind = data_parser.parse_value().unwrap();
-            let table_id = TableId { name: table_name, global: true };
+            let table_id = TableId { name: table_name, local_id: 0 };
 
             match table_kind {
                 Value::UInt(i) if i == TableKind::Node as u64 => {
@@ -350,8 +350,8 @@ impl RocksStorage {
                 Value::UInt(i) if i == TableKind::Edge as u64 => {
                     let src_name = data_parser.parse_value().unwrap().get_string().unwrap();
                     let dst_name = data_parser.parse_value().unwrap().get_string().unwrap();
-                    let src_id = TableId { name: src_name, global: true };
-                    let dst_id = TableId { name: dst_name, global: true };
+                    let src_id = TableId { name: src_name, local_id: 0 };
+                    let dst_id = TableId { name: dst_name, local_id: 0 };
                     let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
                         .into_iter().map(|v| {
                         let mut vs = v.get_list().unwrap().into_iter();
@@ -404,6 +404,7 @@ impl RocksStorage {
 
     fn persist_node(&mut self, node: &mut Node) -> Result<()> {
         let mut key_writer = ByteArrayBuilder::with_capacity(8);
+        key_writer.build_varint(0);
         key_writer.build_value(&Value::RefString(&node.id.name));
         let mut val_writer = ByteArrayBuilder::with_capacity(128);
         val_writer.build_value(&Value::UInt(TableKind::Node as u64));
@@ -429,6 +430,7 @@ impl RocksStorage {
 
     fn persist_edge(&mut self, edge: &mut Edge) -> Result<()> {
         let mut key_writer = ByteArrayBuilder::with_capacity(8);
+        key_writer.build_varint(0);
         key_writer.build_value(&Value::RefString(&edge.id.name));
 
         let mut val_writer = ByteArrayBuilder::with_capacity(128);
@@ -500,6 +502,7 @@ impl Evaluator<RocksStorage> {
                 r @ (Rule::global_def | Rule::local_def) => {
                     let inner = pair.into_inner().next().unwrap();
                     let global = r == Rule::global_def;
+                    let local_id = self.get_next_local_id(global);
                     let env_to_build = if global {
                         self.s_envs.root_mut()
                     } else {
@@ -507,16 +510,16 @@ impl Evaluator<RocksStorage> {
                     };
                     new_tables.push((global, match inner.as_rule() {
                         Rule::node_def => {
-                            env_to_build.build_node_def(inner, global)?
+                            env_to_build.build_node_def(inner, local_id)?
                         }
                         Rule::edge_def => {
-                            env_to_build.build_edge_def(inner, global)?
+                            env_to_build.build_edge_def(inner, local_id)?
                         }
                         Rule::columns_def => {
-                            env_to_build.build_columns_def(inner, global)?
+                            env_to_build.build_columns_def(inner, local_id)?
                         }
                         Rule::index_def => {
-                            env_to_build.build_index_def(inner, global)?
+                            env_to_build.build_index_def(inner, local_id)?
                         }
                         _ => todo!()
                     }));
