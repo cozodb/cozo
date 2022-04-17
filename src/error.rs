@@ -22,6 +22,9 @@ pub enum CozoError {
     #[error("Undefined type")]
     UndefinedType,
 
+    #[error("Undefined table")]
+    UndefinedTable,
+
     #[error("Undefined parameter")]
     UndefinedParam,
 

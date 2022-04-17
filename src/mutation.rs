@@ -1,10 +1,14 @@
+use std::collections::BTreeMap;
 use pest::iterators::Pair;
 use crate::ast::{build_expr, Expr, ExprVisitor};
-use crate::error::CozoError::ValueRequired;
+use crate::definition::build_name_in_def;
+use crate::env::Env;
+use crate::error::CozoError::{UndefinedTable, ValueRequired};
 use crate::eval::Evaluator;
 use crate::storage::{RocksStorage};
 use crate::error::Result;
 use crate::parser::{Parser, Rule};
+use crate::typing::Structured;
 use crate::value::Value;
 
 impl Evaluator<RocksStorage> {
@@ -12,6 +16,28 @@ impl Evaluator<RocksStorage> {
         let mut pairs = pair.into_inner();
         let op = pairs.next().unwrap().as_rule();
         let expr = pairs.next().unwrap();
+        let main_target;
+        // let filters;
+        match pairs.next() {
+            None => {
+                main_target = None;
+                // filters = None;
+            }
+            Some(v) => {
+                match v.as_rule() {
+                    Rule::name_in_def => {
+                        let resolved = self.env.resolve(&build_name_in_def(v, true)?)
+                            .ok_or(UndefinedTable)?;
+                        main_target = Some(resolved);
+                    }
+                    Rule::mutation_filter => {
+                        main_target = None;
+                        todo!()
+                    }
+                    _ => unreachable!()
+                }
+            }
+        }
         let expr = build_expr(expr)?;
         let expr = self.visit_expr(&expr)?;
         let val = match expr {
@@ -19,7 +45,12 @@ impl Evaluator<RocksStorage> {
             _ => return Err(ValueRequired)
         };
         println!("{:#?}", val);
+        let coerced_values = self.coerce_table_values(&val, main_target);
         Ok(())
+    }
+
+    fn coerce_table_values(&self, values: &Value, table: Option<&Structured>) -> BTreeMap<&Structured, Vec<Value>> {
+        todo!()
     }
 }
 

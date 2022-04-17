@@ -65,7 +65,7 @@ pub enum Expr<'a> {
 }
 
 pub trait ExprVisitor<'a, T> {
-    fn visit_expr(&mut self, ex: &Expr<'a>) -> T;
+    fn visit_expr(&self, ex: &Expr<'a>) -> T;
 }
 
 

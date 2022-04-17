@@ -156,9 +156,8 @@ global_def = { "create" ~ definition }
 local_def = { "local" ~ definition }
 statement = _{ global_def | local_def }
 
-mutation = { (insert|update|delete) ~ expr ~ ("as" ~ name_in_def)? ~
-             ( (exclude ~ name_in_def ~ ("," ~ name_in_def)*)
-             | (include ~ name_in_def ~ ("," ~ name_in_def)*))? ~ ";" }
+mutation = { (insert|update|delete) ~ expr ~ ("as" ~ name_in_def)? ~ mutation_filter? ~ ";" }
+mutation_filter = { (exclude|include) ~ name_in_def ~ ("," ~ name_in_def)* }
 exclude = {"exclude"}
 include = {"include"}
 insert = {"insert"}

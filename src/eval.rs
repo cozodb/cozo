@@ -52,7 +52,7 @@ impl Default for BareEvaluator {
 
 
 impl<'a, S: Storage> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator<S> {
-    fn visit_expr(&mut self, ex: &Expr<'a>) -> Result<Expr<'a>> {
+    fn visit_expr(&self, ex: &Expr<'a>) -> Result<Expr<'a>> {
         match ex {
             Apply(op, args) => {
                 match op {
@@ -96,7 +96,7 @@ impl<'a, S: Storage> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator<S> {
 }
 
 impl<S: Storage> Evaluator<S> {
-    fn add_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn add_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -125,7 +125,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn sub_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn sub_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -150,7 +150,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn mul_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn mul_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -175,7 +175,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn div_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn div_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -200,7 +200,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn mod_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn mod_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -222,7 +222,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn eq_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn eq_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -239,7 +239,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn ne_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn ne_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -256,7 +256,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn gt_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn gt_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -281,7 +281,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn ge_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn ge_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -306,7 +306,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn lt_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn lt_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -331,7 +331,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn le_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn le_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -356,7 +356,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn pow_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn pow_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -381,7 +381,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn coalesce_exprs<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn coalesce_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
                 let a = self.visit_expr(a)?;
@@ -401,7 +401,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn negate_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn negate_expr<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
             [a] => {
                 match self.visit_expr(a)? {
@@ -424,7 +424,7 @@ impl<S: Storage> Evaluator<S> {
         })
     }
 
-    fn minus_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn minus_expr<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
             [a] => {
                 match self.visit_expr(a)? {
@@ -440,7 +440,7 @@ impl<S: Storage> Evaluator<S> {
         })
     }
 
-    fn test_null_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn test_null_expr<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
             [a] => {
                 match self.visit_expr(a)? {
@@ -453,7 +453,7 @@ impl<S: Storage> Evaluator<S> {
         })
     }
 
-    fn not_null_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn not_null_expr<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         Ok(match exprs {
             [a] => {
                 match self.visit_expr(a)? {
@@ -466,7 +466,7 @@ impl<S: Storage> Evaluator<S> {
         })
     }
 
-    fn or_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn or_expr<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         let mut unevaluated = vec![];
         let mut has_null = false;
         for expr in exprs {
@@ -498,7 +498,7 @@ impl<S: Storage> Evaluator<S> {
         }
     }
 
-    fn and_expr<'a>(&mut self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+    fn and_expr<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         let mut unevaluated = vec![];
         let mut no_null = true;
         for expr in exprs {

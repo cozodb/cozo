@@ -19,7 +19,7 @@ fn parse_ident(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
 }
 
-fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<String> {
+pub fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<String> {
     let inner = pair.into_inner().next().unwrap();
     let name = match inner.as_rule() {
         Rule::ident => parse_ident(inner),
