@@ -131,7 +131,7 @@ mod ffi {
 use std::fmt::Formatter;
 use std::fmt::Debug;
 use std::path::Path;
-use cxx::{UniquePtr, SharedPtr, let_cxx_string};
+use cxx::{UniquePtr, SharedPtr, let_cxx_string, CxxString};
 pub use ffi::BridgeStatus;
 pub use ffi::StatusBridgeCode;
 pub use ffi::StatusCode;
@@ -288,15 +288,15 @@ impl IteratorImpl for IteratorBridge {
     }
 }
 
-fn get_path_bytes(path: &std::path::Path) -> &[u8] {
+fn get_path_bytes(path: &std::path::Path) -> Vec<u8> {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
-        path.as_os_str().as_bytes()
+        path.as_os_str().as_bytes().to_vec()
     }
 
     #[cfg(not(unix))]
-    { path.to_string_lossy().to_string().as_bytes() }
+    { path.to_string_lossy().to_string().as_bytes().to_vec() }
 }
 
 impl Default for BridgeStatus {
@@ -313,6 +313,7 @@ impl Default for BridgeStatus {
 
 pub struct DB {
     inner: UniquePtr<DBBridge>,
+    pub path: Vec<u8>,
     pub options: Options,
     pub default_read_options: ReadOptions,
     pub default_write_options: WriteOptions,
@@ -322,35 +323,21 @@ unsafe impl Send for DB {}
 
 unsafe impl Sync for DB {}
 
-pub trait DBImpl {
-    fn open(options: Options, path: &Path) -> Result<DB>;
-    fn get_cf_handle(&self, name: impl AsRef<str>) -> Result<ColumnFamilyHandle>;
-    fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> DBIterator;
-    fn create_column_family(&self, name: impl AsRef<str>) -> Result<()>;
-    fn drop_column_family(&self, name: impl AsRef<str>) -> Result<()>;
-    fn all_cf_names(&self) -> Vec<String>;
-    fn get(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>)
-           -> Result<Option<PinnableSlice>>;
-    fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>)
-           -> Result<BridgeStatus>;
-    fn delete(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>)
-              -> Result<BridgeStatus>;
-    fn write(&self, updates: WriteBatch, options: Option<&WriteOptions>) -> Result<BridgeStatus>;
-}
-
-impl DBImpl for DB {
-    fn open(options: Options, path: &Path) -> Result<DB> {
-        let_cxx_string!(path = get_path_bytes(path));
+impl DB {
+    pub fn open(options: Options, path: &Path) -> Result<DB> {
+        let path = get_path_bytes(path);
+        let_cxx_string!(cpp_path = path.clone());
         let mut status = BridgeStatus::default();
         let bridge = open_db_raw(
             &options,
-            &path,
+            &cpp_path,
             &mut status,
         );
 
         if status.code == StatusCode::kOk {
             Ok(DB {
                 inner: bridge,
+                path,
                 options,
                 default_read_options: ReadOptions::default(),
                 default_write_options: WriteOptions::default(),
@@ -360,7 +347,7 @@ impl DBImpl for DB {
         }
     }
 
-    fn get_cf_handle(&self, name: impl AsRef<str>) -> Result<ColumnFamilyHandle> {
+    pub fn get_cf_handle(&self, name: impl AsRef<str>) -> Result<ColumnFamilyHandle> {
         let_cxx_string!(name = name.as_ref());
         let ret = self.inner.get_cf_handle_raw(&name);
         if ret.is_null() {
@@ -376,11 +363,11 @@ impl DBImpl for DB {
     }
 
     #[inline]
-    fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> DBIterator {
+    pub fn iterator(&self, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> DBIterator {
         self.inner.iterator_raw(options.unwrap_or(&self.default_read_options), cf)
     }
 
-    fn create_column_family(&self, name: impl AsRef<str>) -> Result<()> {
+    pub fn create_column_family(&self, name: impl AsRef<str>) -> Result<()> {
         let_cxx_string!(name = name.as_ref());
         let mut status = BridgeStatus::default();
         self.inner.create_column_family_raw(&self.options, &name, &mut status);
@@ -391,7 +378,7 @@ impl DBImpl for DB {
         }
     }
 
-    fn drop_column_family(&self, name: impl AsRef<str>) -> Result<()> {
+    pub fn drop_column_family(&self, name: impl AsRef<str>) -> Result<()> {
         let_cxx_string!(name = name.as_ref());
         let mut status = BridgeStatus::default();
         self.inner.drop_column_family_raw(&name, &mut status);
@@ -402,12 +389,12 @@ impl DBImpl for DB {
         }
     }
 
-    fn all_cf_names(&self) -> Vec<String> {
+    pub fn all_cf_names(&self) -> Vec<String> {
         self.inner.get_column_family_names_raw().iter().map(|v| v.to_string_lossy().to_string()).collect()
     }
 
     #[inline]
-    fn get(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> Result<Option<PinnableSlice>> {
+    pub fn get(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&ReadOptions>) -> Result<Option<PinnableSlice>> {
         let mut status = BridgeStatus::default();
         let slice = self.inner.get_raw(options.unwrap_or(&self.default_read_options), cf, key.as_ref(), &mut status);
         match status.code {
@@ -418,7 +405,7 @@ impl DBImpl for DB {
     }
 
     #[inline]
-    fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>) -> Result<BridgeStatus> {
+    pub fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>) -> Result<BridgeStatus> {
         let mut status = BridgeStatus::default();
         self.inner.put_raw(options.unwrap_or(&self.default_write_options), cf,
                            key.as_ref(), val.as_ref(),
@@ -431,7 +418,7 @@ impl DBImpl for DB {
     }
 
     #[inline]
-    fn delete(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>) -> Result<BridgeStatus> {
+    pub fn delete(&self, key: impl AsRef<[u8]>, cf: &ColumnFamilyHandle, options: Option<&WriteOptions>) -> Result<BridgeStatus> {
         let mut status = BridgeStatus::default();
         self.inner.delete_raw(options.unwrap_or(&self.default_write_options), cf,
                               key.as_ref(),
@@ -444,7 +431,7 @@ impl DBImpl for DB {
     }
 
     #[inline]
-    fn write(&self, mut updates: WriteBatch, options: Option<&WriteOptions>) -> Result<BridgeStatus> {
+    pub fn write(&self, mut updates: WriteBatch, options: Option<&WriteOptions>) -> Result<BridgeStatus> {
         let mut status = BridgeStatus::default();
         self.inner.write_raw(options.unwrap_or(&self.default_write_options),
                              updates.pin_mut(),

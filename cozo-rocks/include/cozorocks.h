@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include "rust/cxx.h"
 
 #include "rocksdb/db.h"
@@ -234,6 +235,7 @@ inline unique_ptr <WriteBatchBridge> new_write_batch_raw() {
 struct DBBridge {
     mutable unique_ptr <DB> db;
     mutable unordered_map <string, shared_ptr<ColumnFamilyHandle>> handles;
+    mutable std::mutex handle_lock;
 
     DBBridge(DB *db_,
              unordered_map <string, shared_ptr<ColumnFamilyHandle>> &&handles_) : db(db_), handles(handles_) {}
@@ -313,13 +315,16 @@ struct DBBridge {
             write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError, 2);
             return;
         }
+        handle_lock.lock();
         ColumnFamilyHandle *handle;
         auto s = db->CreateColumnFamily(options.inner, name, &handle);
         write_status(std::move(s), status);
         handles[name] = shared_ptr<ColumnFamilyHandle>(handle);
+        handle_lock.unlock();
     }
 
     inline void drop_column_family_raw(const string &name, BridgeStatus &status) const {
+        handle_lock.lock();
         auto cf_it = handles.find(name);
         if (cf_it != handles.end()) {
             auto s = db->DropColumnFamily(cf_it->second.get());
@@ -328,6 +333,7 @@ struct DBBridge {
         } else {
             write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError, 3);
         }
+        handle_lock.unlock();
         // When should we call DestroyColumnFamilyHandle?
     }
 

@@ -31,6 +31,9 @@ pub enum CozoError {
     #[error("Value required")]
     ValueRequired,
 
+    #[error("Incompatible value")]
+    IncompatibleValue,
+
     #[error("Wrong type")]
     WrongType,
 

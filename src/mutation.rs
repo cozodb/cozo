@@ -3,7 +3,7 @@ use pest::iterators::Pair;
 use crate::ast::{build_expr, Expr, ExprVisitor};
 use crate::definition::build_name_in_def;
 use crate::env::Env;
-use crate::error::CozoError::{UndefinedTable, ValueRequired};
+use crate::error::CozoError::{IncompatibleValue, UndefinedTable, ValueRequired};
 use crate::eval::Evaluator;
 use crate::storage::{RocksStorage};
 use crate::error::Result;
@@ -44,12 +44,13 @@ impl Evaluator<RocksStorage> {
             Expr::Const(v) => v,
             _ => return Err(ValueRequired)
         };
+        let val = val.get_list().ok_or(IncompatibleValue)?;
         println!("{:#?}", val);
         let coerced_values = self.coerce_table_values(&val, main_target);
         Ok(())
     }
 
-    fn coerce_table_values(&self, values: &Value, table: Option<&Structured>) -> BTreeMap<&Structured, Vec<Value>> {
+    fn coerce_table_values(&self, values: &[Value], default_table: Option<&Structured>) -> BTreeMap<&Structured, Vec<Value>> {
         todo!()
     }
 }
@@ -62,7 +63,7 @@ mod tests {
     use crate::ast::{Expr, ExprVisitor, parse_expr_from_str};
     use crate::eval::{BareEvaluator, EvaluatorWithStorage};
     use pest::Parser as PestParser;
-    use cozo_rocks::DBImpl;
+    use cozo_rocks::*;
     use crate::env::Env;
     use crate::typing::Structured;
 
@@ -80,7 +81,7 @@ mod tests {
 
         let data = fs::read_to_string("test_data/hr.json")?;
         let parsed = parse_expr_from_str(&data)?;
-        let mut ev = BareEvaluator::default();
+        let ev = BareEvaluator::default();
         let evaluated = ev.visit_expr(&parsed)?;
         let bound_value = match evaluated {
             Expr::Const(v) => v,

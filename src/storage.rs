@@ -1,3 +1,4 @@
+use std::fs;
 use crate::error::{CozoError, Result};
 use cozo_rocks::*;
 use crate::value::{cozo_comparator_v1};
@@ -23,10 +24,13 @@ impl RocksStorage {
     }
 
     #[allow(unused_variables)]
-    pub fn delete(&mut self) -> Result<()> {
+    pub fn delete_storage(self) -> Result<()> {
         // unimplemented!()
         // drop(self.db.take());
         // DB::destroy(&make_options(), &self.path)?;
+        let path  = self.path.clone();
+        drop(self);
+        fs::remove_dir_all(path);
         Ok(())
     }
 

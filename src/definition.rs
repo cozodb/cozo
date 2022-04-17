@@ -572,7 +572,7 @@ mod tests {
         let mut eval = EvaluatorWithStorage::new("_path_for_rocksdb_storagex".to_string()).unwrap();
         eval.build_table(parsed).unwrap();
         eval.restore_metadata().unwrap();
-        eval.storage.delete().unwrap();
+        eval.storage.delete_storage().unwrap();
         println!("{:#?}", eval.env.resolve("Person"));
         println!("{:#?}", eval.env.resolve("Friend"));
     }
