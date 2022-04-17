@@ -6,6 +6,7 @@ use ordered_float::OrderedFloat;
 use uuid::Uuid;
 use crate::typing::{Typing};
 use Ordering::{Greater, Less, Equal};
+use std::sync::Arc;
 
 // TODO: array types, alignment of values
 #[repr(u8)]
@@ -66,22 +67,22 @@ pub enum Value<'a> {
     Float(f64),
     Uuid(Uuid),
     RefString(&'a str),
-    OwnString(Box<String>),
-    List(Box<Vec<Value<'a>>>),
-    Dict(Box<BTreeMap<Cow<'a, str>, Value<'a>>>),
+    OwnString(Arc<String>),
+    List(Arc<Vec<Value<'a>>>),
+    Dict(Arc<BTreeMap<Cow<'a, str>, Value<'a>>>),
 }
 
 impl<'a> Value<'a> {
-    pub fn get_list(self) -> Option<Vec<Self>> {
+    pub fn get_list(&self) -> Option<Arc<Vec<Self>>> {
         match self {
-            Value::List(v) => Some(*v),
+            Value::List(v) => Some(v.clone()),
             _ => None
         }
     }
-    pub fn get_string(self) -> Option<String> {
+    pub fn get_string(&self) -> Option<Arc<String>> {
         match self {
-            Value::OwnString(v) => Some(*v),
-            Value::RefString(v) => Some(v.to_string()),
+            Value::OwnString(v) => Some(v.clone()),
+            Value::RefString(v) => Some(Arc::new(v.to_string())),
             _ => None
         }
     }
@@ -282,8 +283,8 @@ impl<'a> ByteArrayParser<'a> {
             FloatTag => Some(Float(self.parse_float()?)),
             StringTag => Some(RefString(self.parse_string()?)),
             UIntTag => Some(UInt(self.parse_varint()?)),
-            ListTag => Some(List(Box::new(self.parse_list()?))),
-            DictTag => Some(Dict(Box::new(self.parse_dict()?))),
+            ListTag => Some(List(Arc::new(self.parse_list()?))),
+            DictTag => Some(Dict(Arc::new(self.parse_dict()?))),
             UuidTag => Some(Uuid(self.parse_uuid()?))
         }
     }
@@ -505,35 +506,35 @@ pub fn cmp_data<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) 
 
 
 impl<'a> Value<'a> {
-    pub fn into_owned(self) -> Value<'static> {
+    pub fn to_owned(&self) -> Value<'static> {
         use Value::*;
 
         match self {
             Null => Null,
-            Bool(b) => Bool(b),
-            EdgeDir(dir) => EdgeDir(dir),
-            UInt(u) => UInt(u),
-            Int(i) => Int(i),
-            Float(f) => Float(f),
-            RefString(s) => OwnString(Box::new(s.to_string())),
-            OwnString(s) => OwnString(s),
+            Bool(b) => Bool(*b),
+            EdgeDir(dir) => EdgeDir(*dir),
+            UInt(u) => UInt(*u),
+            Int(i) => Int(*i),
+            Float(f) => Float(*f),
+            RefString(s) => OwnString(Arc::new(s.to_string())),
+            OwnString(s) => OwnString(s.clone()),
             List(l) => {
                 let mut inner = Vec::with_capacity(l.len());
 
-                for el in *l {
-                    inner.push(el.into_owned())
+                for el in l.iter() {
+                    inner.push(el.clone().to_owned())
                 }
-                List(Box::new(inner))
+                List(Arc::new(inner))
             }
             Dict(d) => {
                 let mut inner = BTreeMap::new();
-                for (k, v) in *d {
-                    let new_k = Cow::from(k.into_owned());
-                    inner.insert(new_k, v.into_owned());
+                for (k, v) in d.iter() {
+                    let new_k = Cow::from(k.clone().into_owned());
+                    inner.insert(new_k, v.clone().to_owned());
                 }
-                Dict(Box::new(inner))
+                Dict(Arc::new(inner))
             }
-            Uuid(u) => Uuid(u),
+            Uuid(u) => Uuid(*u),
         }
     }
 }

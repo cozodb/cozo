@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use pest::iterators::{Pair};
 use pest::Parser as PestParser;
 use pest::prec_climber::{Assoc, PrecClimber, Operator};
@@ -59,6 +60,7 @@ pub enum Expr<'a> {
     List(Vec<Expr<'a>>),
     Dict(Vec<String>, Vec<Expr<'a>>),
     Apply(Op, Vec<Expr<'a>>),
+    Ident(String),
     Const(Value<'a>),
 }
 
@@ -192,7 +194,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
         Rule::null => Ok(Const(Value::Null)),
         Rule::boolean => Ok(Const(Value::Bool(pair.as_str() == "true"))),
         Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => Ok(
-            Const(Value::OwnString(Box::new(parse_string(pair)?)))),
+            Const(Value::OwnString(Arc::new(parse_string(pair)?)))),
         Rule::list => {
             let mut vals = vec![];
             let mut has_apply = false;
@@ -209,12 +211,13 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
             if has_apply {
                 Ok(Expr::List(vals))
             } else {
-                Ok(Const(Value::List(Box::new(vals.into_iter().map(|v| {
+                Ok(Const(Value::List(Arc::new(vals.into_iter().map(|v| {
                     match v {
                         Apply(_, _) => { unreachable!() }
                         Expr::List(_) => { unreachable!() }
                         Expr::Dict(_, _) => { unreachable!() }
                         Const(v) => { v }
+                        Expr::Ident(_) => unimplemented!()
                     }
                 }).collect()))))
             }
@@ -246,7 +249,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
             if has_apply {
                 Ok(Expr::Dict(keys, vals))
             } else {
-                Ok(Const(Value::Dict(Box::new(keys.into_iter().zip(vals.into_iter()).map(|(k, v)| {
+                Ok(Const(Value::Dict(Arc::new(keys.into_iter().zip(vals.into_iter()).map(|(k, v)| {
                     match v {
                         Expr::List(_) => { unreachable!() }
                         Expr::Dict(_, _) => { unreachable!() }
@@ -254,9 +257,13 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
                         Const(v) => {
                             (k.into(), v)
                         }
+                        Expr::Ident(_) => unimplemented!()
                     }
                 }).collect()))))
             }
+        }
+        Rule::param => {
+            Ok(Expr::Ident(pair.as_str().to_string()))
         }
         _ => {
             println!("Unhandled rule {:?}", pair.as_rule());
@@ -265,7 +272,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
     }
 }
 
-fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
+pub fn build_expr(pair: Pair<Rule>) -> Result<Expr> {
     PREC_CLIMBER.climb(pair.into_inner(), build_expr_primary, build_expr_infix)
 }
 

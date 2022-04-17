@@ -204,6 +204,7 @@ pub enum Structured {
     Edge(Edge),
     Columns(Columns),
     Index(Index),
+    Value(Value<'static>)
 }
 
 impl Structured {
@@ -213,7 +214,8 @@ impl Structured {
             Structured::Node(n) => Some(n.id.clone()),
             Structured::Edge(e) => Some(e.id.clone()),
             Structured::Columns(c) => Some(c.id.clone()),
-            Structured::Index(i) => Some(i.id.clone())
+            Structured::Index(i) => Some(i.id.clone()),
+            Structured::Value(_) => None
         }
     }
 }

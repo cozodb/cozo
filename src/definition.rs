@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use pest::iterators::{Pair, Pairs};
 use crate::ast::parse_string;
 use crate::env::{Env, LayeredEnv, StructuredEnvItem};
@@ -304,19 +305,20 @@ impl RocksStorage {
             let mut key_parser = ByteArrayParser::new(&k);
             let mut data_parser = ByteArrayParser::new(&v);
             key_parser.parse_varint().unwrap();
-            let table_name = key_parser.parse_value().unwrap().get_string().unwrap();
+            let table_name = key_parser.parse_value().unwrap().get_string().unwrap().to_string();
             let table_kind = data_parser.parse_value().unwrap();
             let table_id = TableId { name: table_name, local_id: 0 };
 
             match table_kind {
                 Value::UInt(i) if i == TableKind::Node as u64 => {
                     let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-                        .into_iter().map(|v| {
-                        let mut vs = v.get_list().unwrap().into_iter();
-                        let name = vs.next().unwrap().get_string().unwrap();
+                        .iter().map(|v| {
+                        let vs = v.get_list().unwrap();
+                        let mut vs = vs.iter();
+                        let name = vs.next().unwrap().get_string().unwrap().to_string();
                         let typ = vs.next().unwrap().get_string().unwrap();
                         let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().into_owned();
+                        let default = vs.next().unwrap().to_owned();
                         Col {
                             name,
                             typ,
@@ -324,12 +326,13 @@ impl RocksStorage {
                         }
                     }).collect();
                     let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-                        .into_iter().map(|v| {
-                        let mut vs = v.get_list().unwrap().into_iter();
-                        let name = vs.next().unwrap().get_string().unwrap();
+                        .iter().map(|v| {
+                        let vs = v.get_list().unwrap();
+                        let mut vs = vs.iter();
+                        let name = vs.next().unwrap().get_string().unwrap().to_string();
                         let typ = vs.next().unwrap().get_string().unwrap();
                         let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().into_owned();
+                        let default = vs.next().unwrap().to_owned();
                         Col {
                             name,
                             typ,
@@ -348,17 +351,18 @@ impl RocksStorage {
                     ret.push(Structured::Node(node));
                 }
                 Value::UInt(i) if i == TableKind::Edge as u64 => {
-                    let src_name = data_parser.parse_value().unwrap().get_string().unwrap();
-                    let dst_name = data_parser.parse_value().unwrap().get_string().unwrap();
+                    let src_name = data_parser.parse_value().unwrap().get_string().unwrap().to_string();
+                    let dst_name = data_parser.parse_value().unwrap().get_string().unwrap().to_string();
                     let src_id = TableId { name: src_name, local_id: 0 };
                     let dst_id = TableId { name: dst_name, local_id: 0 };
                     let keys: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-                        .into_iter().map(|v| {
-                        let mut vs = v.get_list().unwrap().into_iter();
-                        let name = vs.next().unwrap().get_string().unwrap();
+                        .iter().map(|v| {
+                        let vs = v.get_list().unwrap();
+                        let mut vs = vs.iter();
+                        let name = vs.next().unwrap().get_string().unwrap().to_string();
                         let typ = vs.next().unwrap().get_string().unwrap();
                         let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().into_owned();
+                        let default = vs.next().unwrap().to_owned();
                         Col {
                             name,
                             typ,
@@ -366,12 +370,13 @@ impl RocksStorage {
                         }
                     }).collect();
                     let cols: Vec<_> = data_parser.parse_value().unwrap().get_list().unwrap()
-                        .into_iter().map(|v| {
-                        let mut vs = v.get_list().unwrap().into_iter();
-                        let name = vs.next().unwrap().get_string().unwrap();
+                        .iter().map(|v| {
+                        let vs = v.get_list().unwrap();
+                        let mut vs = vs.iter();
+                        let name = vs.next().unwrap().get_string().unwrap().to_string();
                         let typ = vs.next().unwrap().get_string().unwrap();
                         let typ = env.build_type_from_str(&typ).unwrap();
-                        let default = vs.next().unwrap().into_owned();
+                        let default = vs.next().unwrap().to_owned();
                         Col {
                             name,
                             typ,
@@ -408,17 +413,17 @@ impl RocksStorage {
         key_writer.build_value(&Value::RefString(&node.id.name));
         let mut val_writer = ByteArrayBuilder::with_capacity(128);
         val_writer.build_value(&Value::UInt(TableKind::Node as u64));
-        val_writer.build_value(&Value::List(Box::new(node.keys.iter().map(|k| {
-            Value::List(Box::new(vec![
+        val_writer.build_value(&Value::List(Arc::new(node.keys.iter().map(|k| {
+            Value::List(Arc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Box::new(format!("{}", k.typ))),
+                Value::OwnString(Arc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
-        val_writer.build_value(&Value::List(Box::new(node.cols.iter().map(|k| {
-            Value::List(Box::new(vec![
+        val_writer.build_value(&Value::List(Arc::new(node.cols.iter().map(|k| {
+            Value::List(Arc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Box::new(format!("{}", k.typ))),
+                Value::OwnString(Arc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
@@ -437,17 +442,17 @@ impl RocksStorage {
         val_writer.build_value(&Value::UInt(TableKind::Edge as u64));
         val_writer.build_value(&Value::RefString(&edge.src.name));
         val_writer.build_value(&Value::RefString(&edge.dst.name));
-        val_writer.build_value(&Value::List(Box::new(edge.keys.iter().map(|k| {
-            Value::List(Box::new(vec![
+        val_writer.build_value(&Value::List(Arc::new(edge.keys.iter().map(|k| {
+            Value::List(Arc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Box::new(format!("{}", k.typ))),
+                Value::OwnString(Arc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
-        val_writer.build_value(&Value::List(Box::new(edge.cols.iter().map(|k| {
-            Value::List(Box::new(vec![
+        val_writer.build_value(&Value::List(Arc::new(edge.cols.iter().map(|k| {
+            Value::List(Arc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Box::new(format!("{}", k.typ))),
+                Value::OwnString(Arc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
@@ -460,26 +465,27 @@ impl RocksStorage {
 
 impl Evaluator<RocksStorage> {
     pub fn restore_metadata(&mut self) -> Result<()> {
-        let mds = self.storage.all_metadata(self.s_envs.root())?;
+        let mds = self.storage.all_metadata(self.env.root())?;
         for md in &mds {
             match md {
                 v @ Structured::Node(n) => {
                     // TODO: check if they are the same if one already exists
-                    self.s_envs.root_define(n.id.name.clone(), v.clone());
+                    self.env.root_define(n.id.name.clone(), v.clone());
                 }
                 v @ Structured::Edge(e) => {
-                    self.s_envs.root_define(e.id.name.clone(), v.clone());
+                    self.env.root_define(e.id.name.clone(), v.clone());
                 }
                 Structured::Columns(_) => {}
                 Structured::Index(_) => {}
-                Structured::Typing(_) => unreachable!()
+                Structured::Typing(_) => unreachable!(),
+                Structured::Value(_) => unreachable!()
             }
         }
         Ok(())
     }
 
     fn persist_change(&mut self, tname: &str, global: bool) -> Result<()> {
-        let tbl = self.s_envs.resolve_mut(tname).unwrap();
+        let tbl = self.env.resolve_mut(tname).unwrap();
         self.storage.create_table(tname, global)?;
         if global {
             match tbl {
@@ -488,6 +494,7 @@ impl Evaluator<RocksStorage> {
                 Structured::Columns(_) => unimplemented!(),
                 Structured::Index(_) => unimplemented!(),
                 Structured::Typing(_) => panic!(),
+                Structured::Value(_) => unreachable!()
             }
         } else {
             Ok(())
@@ -504,9 +511,9 @@ impl Evaluator<RocksStorage> {
                     let global = r == Rule::global_def;
                     let local_id = self.get_next_local_id(global);
                     let env_to_build = if global {
-                        self.s_envs.root_mut()
+                        self.env.root_mut()
                     } else {
-                        self.s_envs.cur_mut()
+                        self.env.cur_mut()
                     };
                     new_tables.push((global, match inner.as_rule() {
                         Rule::node_def => {
@@ -566,7 +573,7 @@ mod tests {
         eval.build_table(parsed).unwrap();
         eval.restore_metadata().unwrap();
         eval.storage.delete().unwrap();
-        println!("{:#?}", eval.s_envs.resolve("Person"));
-        println!("{:#?}", eval.s_envs.resolve("Friend"));
+        println!("{:#?}", eval.env.resolve("Person"));
+        println!("{:#?}", eval.env.resolve("Friend"));
     }
 }

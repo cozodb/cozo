@@ -22,6 +22,12 @@ pub enum CozoError {
     #[error("Undefined type")]
     UndefinedType,
 
+    #[error("Undefined parameter")]
+    UndefinedParam,
+
+    #[error("Value required")]
+    ValueRequired,
+
     #[error("Wrong type")]
     WrongType,
 
@@ -44,7 +50,10 @@ pub enum CozoError {
     Parse(#[from] pest::error::Error<Rule>),
 
     #[error(transparent)]
-    Storage(#[from] cozo_rocks::BridgeStatus)
+    Storage(#[from] cozo_rocks::BridgeStatus),
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 pub type Result<T> = result::Result<T, CozoError>;

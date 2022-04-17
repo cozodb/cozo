@@ -318,6 +318,10 @@ pub struct DB {
     pub default_write_options: WriteOptions,
 }
 
+unsafe impl Send for DB {}
+
+unsafe impl Sync for DB {}
+
 pub trait DBImpl {
     fn open(options: Options, path: &Path) -> Result<DB>;
     fn get_cf_handle(&self, name: impl AsRef<str>) -> Result<ColumnFamilyHandle>;

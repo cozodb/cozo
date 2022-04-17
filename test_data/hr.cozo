@@ -1,0 +1,62 @@
+create node Job {
+    *id: Int,
+    title: String,
+    min_salary: Float,
+    max_salary: Float
+}
+
+create node Employee {
+    *id: Int,
+    first_name: String,
+    last_name: String,
+    email: String,
+    phone_number: ?String
+}
+
+create node Dependent {
+    *id: Int,
+    first_name: String,
+    last_name: String
+}
+
+create node Department {
+    *id: Int,
+    name: String
+}
+
+create node Location {
+    *id: Int,
+    street_address: String,
+    postal_code: ?String,
+    city: String,
+    state_province: ?String
+}
+
+create node Country {
+    *id: String,
+    name: String
+}
+
+create node Region {
+    *id: Int,
+    name: String
+}
+
+create edge (Employee)-[HasJob]->(Job) {
+    salary: Float,
+    hire_date: String
+}
+
+create edge (Employee)-[InDepartment]->(Department)
+
+create edge (Employee)-[Manages]->(Employee)
+
+create edge (Employee)-[HasDependent]->(Dependent) {
+    relationship: String
+}
+
+create edge (Department)-[InLocation]->(Location)
+
+create edge (Location)-[InCountry]->(Country)
+
+create edge (Country)-[InRegion]->(Region)
