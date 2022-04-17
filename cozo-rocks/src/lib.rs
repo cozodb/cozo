@@ -131,7 +131,7 @@ mod ffi {
 use std::fmt::Formatter;
 use std::fmt::Debug;
 use std::path::Path;
-use cxx::{UniquePtr, SharedPtr, let_cxx_string, CxxString};
+use cxx::{UniquePtr, SharedPtr, let_cxx_string};
 pub use ffi::BridgeStatus;
 pub use ffi::StatusBridgeCode;
 pub use ffi::StatusCode;

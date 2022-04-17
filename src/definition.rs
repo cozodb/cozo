@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::rc::Rc;
 use pest::iterators::{Pair, Pairs};
 use crate::ast::parse_string;
 use crate::env::{Env, LayeredEnv, StructuredEnvItem};
@@ -413,17 +413,17 @@ impl RocksStorage {
         key_writer.build_value(&Value::RefString(&node.id.name));
         let mut val_writer = ByteArrayBuilder::with_capacity(128);
         val_writer.build_value(&Value::UInt(TableKind::Node as u64));
-        val_writer.build_value(&Value::List(Arc::new(node.keys.iter().map(|k| {
-            Value::List(Arc::new(vec![
+        val_writer.build_value(&Value::List(Rc::new(node.keys.iter().map(|k| {
+            Value::List(Rc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Arc::new(format!("{}", k.typ))),
+                Value::OwnString(Rc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
-        val_writer.build_value(&Value::List(Arc::new(node.cols.iter().map(|k| {
-            Value::List(Arc::new(vec![
+        val_writer.build_value(&Value::List(Rc::new(node.cols.iter().map(|k| {
+            Value::List(Rc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Arc::new(format!("{}", k.typ))),
+                Value::OwnString(Rc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
@@ -442,17 +442,17 @@ impl RocksStorage {
         val_writer.build_value(&Value::UInt(TableKind::Edge as u64));
         val_writer.build_value(&Value::RefString(&edge.src.name));
         val_writer.build_value(&Value::RefString(&edge.dst.name));
-        val_writer.build_value(&Value::List(Arc::new(edge.keys.iter().map(|k| {
-            Value::List(Arc::new(vec![
+        val_writer.build_value(&Value::List(Rc::new(edge.keys.iter().map(|k| {
+            Value::List(Rc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Arc::new(format!("{}", k.typ))),
+                Value::OwnString(Rc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
-        val_writer.build_value(&Value::List(Arc::new(edge.cols.iter().map(|k| {
-            Value::List(Arc::new(vec![
+        val_writer.build_value(&Value::List(Rc::new(edge.cols.iter().map(|k| {
+            Value::List(Rc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Arc::new(format!("{}", k.typ))),
+                Value::OwnString(Rc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));

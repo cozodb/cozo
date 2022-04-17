@@ -30,7 +30,7 @@ impl RocksStorage {
         // DB::destroy(&make_options(), &self.path)?;
         let path  = self.path.clone();
         drop(self);
-        fs::remove_dir_all(path);
+        fs::remove_dir_all(path)?;
         Ok(())
     }
 

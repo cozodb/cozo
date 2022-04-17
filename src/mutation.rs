@@ -63,7 +63,6 @@ mod tests {
     use crate::ast::{Expr, ExprVisitor, parse_expr_from_str};
     use crate::eval::{BareEvaluator, EvaluatorWithStorage};
     use pest::Parser as PestParser;
-    use cozo_rocks::*;
     use crate::env::Env;
     use crate::typing::Structured;
 

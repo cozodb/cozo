@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::rc::Rc;
 use crate::ast::Expr;
 use crate::ast::Expr::*;
 use crate::error::Result;
@@ -14,15 +13,16 @@ use crate::typing::Structured;
 pub struct Evaluator<S: Storage> {
     pub env: StructuredEnv,
     pub storage: S,
-    pub last_local_id: Arc<AtomicUsize>,
+    pub last_local_id: usize,
 }
 
 impl<S: Storage> Evaluator<S> {
-    pub fn get_next_local_id(&self, is_global: bool) -> usize {
+    pub fn get_next_local_id(&mut self, is_global: bool) -> usize {
         if is_global {
             0
         } else {
-            self.last_local_id.fetch_add(1, Ordering::Relaxed)
+            self.last_local_id += 1;
+            self.last_local_id
         }
     }
 }
@@ -35,7 +35,7 @@ impl EvaluatorWithStorage {
         Ok(Self {
             env: StructuredEnv::new(),
             storage: RocksStorage::new(path)?,
-            last_local_id: Arc::new(AtomicUsize::new(1)),
+            last_local_id: 0,
         })
     }
 }
@@ -45,7 +45,7 @@ impl Default for BareEvaluator {
         Self {
             env: StructuredEnv::new(),
             storage: DummyStorage,
-            last_local_id: Arc::new(AtomicUsize::new(0)),
+            last_local_id: 0,
         }
     }
 }
@@ -89,7 +89,6 @@ impl<'a, S: Storage> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator<S> {
                     }
                     _ => return Err(ValueRequired)
                 }
-
             }
         }
     }
@@ -111,10 +110,10 @@ impl<S: Storage> Evaluator<S> {
                             (Float(va), Int(vb)) => Float(va + vb as f64),
                             (Int(va), Float(vb)) => Float(va as f64 + vb),
                             (Float(va), Float(vb)) => Float(va + vb),
-                            (OwnString(va), OwnString(vb)) => OwnString(Arc::new(va.clone().to_string() + &vb)),
-                            (OwnString(va), RefString(vb)) => OwnString(Arc::new(va.clone().to_string() + &*vb)),
-                            (RefString(va), OwnString(vb)) => OwnString(Arc::new(va.to_string() + &*vb)),
-                            (RefString(va), RefString(vb)) => OwnString(Arc::new(va.to_string() + &*vb)),
+                            (OwnString(va), OwnString(vb)) => OwnString(Rc::new(va.clone().to_string() + &vb)),
+                            (OwnString(va), RefString(vb)) => OwnString(Rc::new(va.clone().to_string() + &*vb)),
+                            (RefString(va), OwnString(vb)) => OwnString(Rc::new(va.to_string() + &*vb)),
+                            (RefString(va), RefString(vb)) => OwnString(Rc::new(va.to_string() + &*vb)),
                             (_, _) => return Err(CozoError::TypeError)
                         }
                     }
@@ -537,7 +536,7 @@ mod tests {
 
     #[test]
     fn operators() {
-        let mut ev = BareEvaluator::default();
+        let ev = BareEvaluator::default();
 
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("1/10+(-2+3)*4^5").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && false").unwrap()).unwrap());

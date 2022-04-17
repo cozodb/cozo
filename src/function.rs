@@ -1,8 +1,7 @@
-use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use crate::typing::{BaseType, Typing};
+use crate::typing::{Typing};
 use crate::value::Value;
-use lazy_static::lazy_static;
+// use lazy_static::lazy_static;
 
 #[derive(PartialEq, Debug)]
 pub struct Function {
@@ -40,34 +39,34 @@ pub struct Arg {
     pub name: Option<String>,
 }
 
-lazy_static! {
-    static ref BUILT_IN_FUNCTIONS : BTreeMap<&'static str, Function> = {
-        let mut ret = BTreeMap::new();
-
-        fn add_int<'a>(_args: &[Value<'a>]) -> Value<'a> {
-            todo!()
-        }
-
-        fn add_float<'a>(_args: &[Value<'a>]) -> Value<'a> {
-            todo!()
-        }
-
-        ret.insert("_add_int",
-            Function {
-                args: vec![],
-                var_arg: Some(Typing::Base(BaseType::Int)),
-                ret_type: Typing::Base(BaseType::Int),
-                fn_impl: FunctionImpl::Native("_add_int", add_int)
-            });
-
-        ret.insert("_add_float",
-            Function {
-                args: vec![],
-                var_arg: Some(Typing::Base(BaseType::Float)),
-                ret_type: Typing::Base(BaseType::Float),
-                fn_impl: FunctionImpl::Native("_add_float", add_float)
-            });
-
-        ret
-    };
-}
+// lazy_static! {
+//     static ref BUILT_IN_FUNCTIONS : BTreeMap<&'static str, Function> = {
+//         let mut ret = BTreeMap::new();
+//
+//         fn add_int<'a>(_args: &[Value<'a>]) -> Value<'a> {
+//             todo!()
+//         }
+//
+//         fn add_float<'a>(_args: &[Value<'a>]) -> Value<'a> {
+//             todo!()
+//         }
+//
+//         ret.insert("_add_int",
+//             Function {
+//                 args: vec![],
+//                 var_arg: Some(Typing::Base(BaseType::Int)),
+//                 ret_type: Typing::Base(BaseType::Int),
+//                 fn_impl: FunctionImpl::Native("_add_int", add_int)
+//             });
+//
+//         ret.insert("_add_float",
+//             Function {
+//                 args: vec![],
+//                 var_arg: Some(Typing::Base(BaseType::Float)),
+//                 ret_type: Typing::Base(BaseType::Float),
+//                 fn_impl: FunctionImpl::Native("_add_float", add_float)
+//             });
+//
+//         ret
+//     };
+// }
