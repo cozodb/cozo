@@ -88,37 +88,58 @@ pub enum Value<'a> {
     Dict(BTreeMap<Cow<'a, str>, Value<'a>>),
 }
 
-impl From<()> for Value<'static> {
+pub type StaticValue = Value<'static>;
+
+impl <'a> Value<'a> {
+    fn to_static(self) -> StaticValue {
+        match self {
+            Value::Null => Value::Null,
+            Value::Bool(b) => Value::Bool(b),
+            Value::EdgeDir(e) => Value::EdgeDir(e),
+            Value::UInt(u) => Value::UInt(u),
+            Value::Int(i) => Value::Int(i),
+            Value::Float(f) => Value::Float(f),
+            Value::Uuid(u) => Value::Uuid(u),
+            Value::Text(t) => Value::from(t.into_owned()),
+            Value::List(l) => l.into_iter().map(|v| v.to_static()).collect::<Vec<StaticValue>>().into(),
+            Value::Dict(d) => d.into_iter()
+                .map(|(k, v)| (Cow::Owned(k.into_owned()), v.to_static()))
+                .collect::<BTreeMap<Cow<'static, str>, StaticValue>>().into()
+        }
+    }
+}
+
+impl From<()> for StaticValue {
     fn from(_: ()) -> Self {
         Value::Null
     }
 }
 
-impl From<bool> for Value<'static> {
+impl From<bool> for StaticValue {
     fn from(b: bool) -> Self {
         Value::Bool(b)
     }
 }
 
-impl From<EdgeDir> for Value<'static> {
+impl From<EdgeDir> for StaticValue {
     fn from(e: EdgeDir) -> Self {
         Value::EdgeDir(e)
     }
 }
 
-impl From<u64> for Value<'static> {
+impl From<u64> for StaticValue {
     fn from(u: u64) -> Self {
         Value::UInt(u)
     }
 }
 
-impl From<i64> for Value<'static> {
+impl From<i64> for StaticValue {
     fn from(i: i64) -> Self {
         Value::Int(i)
     }
 }
 
-impl From<f64> for Value<'static> {
+impl From<f64> for StaticValue {
     fn from(f: f64) -> Self {
         Value::Float(f)
     }
@@ -130,13 +151,13 @@ impl<'a> From<&'a str> for Value<'a> {
     }
 }
 
-impl From<String> for Value<'static> {
+impl From<String> for StaticValue {
     fn from(s: String) -> Self {
         Value::Text(Cow::Owned(s))
     }
 }
 
-impl From<Uuid> for Value<'static> {
+impl From<Uuid> for StaticValue {
     fn from(u: Uuid) -> Self {
         Value::Uuid(u)
     }
@@ -153,8 +174,6 @@ impl<'a> From<BTreeMap<Cow<'a, str>, Value<'a>>> for Value<'a> {
         Value::Dict(m)
     }
 }
-
-pub type StaticValue = Value<'static>;
 
 #[derive(Debug, Clone)]
 pub struct Tuple<T>
