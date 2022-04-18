@@ -1,6 +1,9 @@
 use std::fs;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{RwLock};
 use crate::error::{CozoError, Result};
 use cozo_rocks::*;
+use crate::env::Environment;
 use crate::value::{cozo_comparator_v1};
 
 
@@ -8,7 +11,13 @@ pub struct RocksStorage {
     pub db: DB,
     #[allow(dead_code)]
     path: String,
+    last_local_id: AtomicUsize,
+    pub root_env: RwLock<Environment>,
 }
+
+const DEFAULT_CF: &str = "default";
+const SCRATCH_CF: &str = "scratch";
+const COMPARATOR_NAME: &str = "cozo_comparator_v1";
 
 impl RocksStorage {
     #[allow(unused_variables)]
@@ -17,18 +26,26 @@ impl RocksStorage {
             .increase_parallelism()
             .optimize_level_style_compaction()
             .set_create_if_missing(true)
-            .set_comparator("cozo_comparator_v1", cozo_comparator_v1);
+            .set_comparator(COMPARATOR_NAME, cozo_comparator_v1);
 
         let db = DB::open(options, path.as_ref())?;
-        Ok(RocksStorage {db, path})
+        (match db.create_column_family(SCRATCH_CF) {
+            Err(s) if s.bridge_code == StatusBridgeCode::EXISTING_ERROR => Ok(()),
+            v => v
+        })?;
+        let mut env = Environment::default();
+        env.define_base_types();
+        Ok(RocksStorage {
+            db,
+            path,
+            last_local_id: AtomicUsize::new(0),
+            root_env: RwLock::new(env),
+        })
     }
 
     #[allow(unused_variables)]
     pub fn delete_storage(self) -> Result<()> {
-        // unimplemented!()
-        // drop(self.db.take());
-        // DB::destroy(&make_options(), &self.path)?;
-        let path  = self.path.clone();
+        let path = self.path.clone();
         drop(self);
         fs::remove_dir_all(path)?;
         Ok(())
@@ -36,25 +53,37 @@ impl RocksStorage {
 
     #[allow(unused_variables)]
     pub fn put_global(&self, k: &[u8], v: &[u8]) -> Result<()> {
-        // let db = self.db.as_ref().ok_or(DatabaseClosed)?;
-        let default_cf = self.db.get_cf_handle("default")?;
+        let default_cf = self.db.get_cf_handle(DEFAULT_CF)?;
         self.db.put(k, v, &default_cf, None)?;
 
         Ok(())
     }
     #[allow(unused_variables)]
-    pub fn create_table(&mut self, name: &str, _global: bool) -> Result<()> {
-        match self.db.create_column_family(name) {
+    pub fn create_table(&self, name: &str, _global: bool) -> Result<()> {
+        match self.db.create_column_family(table_name_to_cf_name(name)) {
             Ok(_) => Ok(()),
             Err(s) if s.bridge_code == StatusBridgeCode::EXISTING_ERROR => Ok(()),
             Err(e) => Err(CozoError::Storage(e))
         }
     }
     #[allow(unused_variables)]
-    pub fn drop_table(&mut self, name: &str, _global: bool) -> Result<()> {
-        self.db.drop_column_family(name)?;
+    pub fn drop_table(&self, name: &str, _global: bool) -> Result<()> {
+        self.db.drop_column_family(table_name_to_cf_name(name))?;
         Ok(())
     }
+
+    pub fn get_next_local_id(&self, global: bool) -> usize {
+        if global {
+            0
+        } else {
+            self.last_local_id.fetch_add(1, Ordering::Relaxed) + 1
+        }
+    }
+}
+
+#[inline]
+fn table_name_to_cf_name(name: &str) -> String {
+    format!("${}", name)
 }
 
 pub trait Storage {}

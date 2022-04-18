@@ -6,7 +6,7 @@ use ordered_float::OrderedFloat;
 use uuid::Uuid;
 use crate::typing::{Typing};
 use Ordering::{Greater, Less, Equal};
-use std::rc::Rc;
+use std::sync::Arc;
 
 // TODO: array types, alignment of values
 #[repr(u8)]
@@ -67,22 +67,24 @@ pub enum Value<'a> {
     Float(f64),
     Uuid(Uuid),
     RefString(&'a str),
-    OwnString(Rc<String>),
-    List(Rc<Vec<Value<'a>>>),
-    Dict(Rc<BTreeMap<Cow<'a, str>, Value<'a>>>),
+    OwnString(Arc<String>),
+    List(Arc<Vec<Value<'a>>>),
+    Dict(Arc<BTreeMap<Cow<'a, str>, Value<'a>>>),
 }
 
+pub type StaticValue = Value<'static>;
+
 impl<'a> Value<'a> {
-    pub fn get_list(&self) -> Option<Rc<Vec<Self>>> {
+    pub fn get_list(&self) -> Option<Arc<Vec<Self>>> {
         match self {
             Value::List(v) => Some(v.clone()),
             _ => None
         }
     }
-    pub fn get_string(&self) -> Option<Rc<String>> {
+    pub fn get_string(&self) -> Option<Arc<String>> {
         match self {
             Value::OwnString(v) => Some(v.clone()),
-            Value::RefString(v) => Some(Rc::new(v.to_string())),
+            Value::RefString(v) => Some(Arc::new(v.to_string())),
             _ => None
         }
     }
@@ -283,8 +285,8 @@ impl<'a> ByteArrayParser<'a> {
             FloatTag => Some(Float(self.parse_float()?)),
             StringTag => Some(RefString(self.parse_string()?)),
             UIntTag => Some(UInt(self.parse_varint()?)),
-            ListTag => Some(List(Rc::new(self.parse_list()?))),
-            DictTag => Some(Dict(Rc::new(self.parse_dict()?))),
+            ListTag => Some(List(Arc::new(self.parse_list()?))),
+            DictTag => Some(Dict(Arc::new(self.parse_dict()?))),
             UuidTag => Some(Uuid(self.parse_uuid()?))
         }
     }
@@ -506,7 +508,7 @@ pub fn cmp_data<'a>(pa: &mut ByteArrayParser<'a>, pb: &mut ByteArrayParser<'a>) 
 
 
 impl<'a> Value<'a> {
-    pub fn owned_clone(&self) -> Value<'static> {
+    pub fn owned_clone(&self) -> StaticValue {
         use Value::*;
 
         match self {
@@ -516,7 +518,7 @@ impl<'a> Value<'a> {
             UInt(u) => UInt(*u),
             Int(i) => Int(*i),
             Float(f) => Float(*f),
-            RefString(s) => OwnString(Rc::new(s.to_string())),
+            RefString(s) => OwnString(Arc::new(s.to_string())),
             OwnString(s) => OwnString(s.clone()),
             List(l) => {
                 let mut inner = Vec::with_capacity(l.len());
@@ -524,7 +526,7 @@ impl<'a> Value<'a> {
                 for el in l.iter() {
                     inner.push(el.owned_clone())
                 }
-                List(Rc::new(inner))
+                List(Arc::new(inner))
             }
             Dict(d) => {
                 let mut inner = BTreeMap::new();
@@ -532,7 +534,7 @@ impl<'a> Value<'a> {
                     let new_k = Cow::from(k.clone().into_owned());
                     inner.insert(new_k, v.owned_clone());
                 }
-                Dict(Rc::new(inner))
+                Dict(Arc::new(inner))
             }
             Uuid(u) => Uuid(*u),
         }

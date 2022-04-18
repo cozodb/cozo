@@ -1,15 +1,16 @@
+use std::borrow::{Borrow, BorrowMut};
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::sync::Arc;
 use pest::iterators::{Pair, Pairs};
 use crate::ast::parse_string;
-use crate::env::{Env, LayeredEnv, StructuredEnvItem};
+use crate::env::{Env, LayeredEnv, Environment};
 use crate::error::Result;
 use crate::error::CozoError::*;
 use crate::eval::Evaluator;
 use crate::storage::{RocksStorage};
 use crate::typing::{Col, Columns, Edge, Index, Node, StorageStatus, Structured, TableId, Typing};
 use crate::typing::StorageStatus::{Planned, Stored};
-use crate::value::{ByteArrayBuilder, ByteArrayParser, Value};
+use crate::value::{ByteArrayBuilder, ByteArrayParser, StaticValue, Value};
 use crate::parser::{Parser, Rule};
 use pest::Parser as PestParser;
 use cozo_rocks::*;
@@ -46,11 +47,12 @@ fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool)> {
 }
 
 
-impl StructuredEnvItem {
+impl Environment {
     pub fn build_edge_def(&mut self, pair: Pair<Rule>, local_id: usize) -> Result<String> {
         let mut inner = pair.into_inner();
         let src_name = build_name_in_def(inner.next().unwrap(), true)?;
         let src = self.resolve(&src_name).ok_or(UndefinedType)?;
+        let src = src.borrow();
         let src_id = if let Structured::Node(n) = src {
             n.id.clone()
         } else {
@@ -59,6 +61,7 @@ impl StructuredEnvItem {
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let dst_name = build_name_in_def(inner.next().unwrap(), true)?;
         let dst = self.resolve(&dst_name).ok_or(UndefinedType)?;
+        let dst = dst.borrow();
         let dst_id = if let Structured::Node(n) = dst {
             n.id.clone()
         } else {
@@ -80,6 +83,7 @@ impl StructuredEnvItem {
             id: table_id.clone(),
             keys,
             cols,
+            col_map: BTreeMap::new(),
         };
         if self.define_new(name.clone(), Structured::Edge(edge)) {
             if let Some(Structured::Node(src)) = self.resolve_mut(&src_name) {
@@ -111,6 +115,7 @@ impl StructuredEnvItem {
             out_e: vec![],
             in_e: vec![],
             attached: vec![],
+            col_map: BTreeMap::new(),
         };
         if self.define_new(name.clone(), Structured::Node(node)) {
             Ok(name)
@@ -131,6 +136,7 @@ impl StructuredEnvItem {
         let name = build_name_in_def(inner.next().unwrap(), true)?;
         let node_name = build_name_in_def(inner.next().unwrap(), true)?;
         let node = self.resolve(&node_name).ok_or(UndefinedType)?;
+        let node = node.borrow();
         let node_id = if let Structured::Node(n) = node {
             n.id.clone()
         } else if let Structured::Edge(n) = node {
@@ -184,6 +190,7 @@ impl StructuredEnvItem {
         };
 
         let node = self.resolve(&node_name).ok_or(UndefinedType)?;
+        let node = node.borrow();
         let node_id = if let Structured::Node(n) = node {
             n.id.clone()
         } else {
@@ -226,7 +233,9 @@ impl StructuredEnvItem {
         let t = match inner.as_rule() {
             Rule::simple_type => {
                 let name = parse_ident(inner.into_inner().next().unwrap());
-                if let Some(Structured::Typing(t)) = self.resolve(&name) {
+                let typ = self.resolve(&name).ok_or(UndefinedType)?;
+                let typ = typ.borrow();
+                if let Structured::Typing(t) = typ {
                     t.clone()
                 } else {
                     return Err(UndefinedType);
@@ -246,7 +255,7 @@ impl StructuredEnvItem {
         })
     }
 
-    fn build_default_value(&self, _pair: Pair<Rule>) -> Result<Value<'static>> {
+    fn build_default_value(&self, _pair: Pair<Rule>) -> Result<StaticValue> {
         // TODO: _pair is an expression, parse it and evaluate it to a constant value
         Ok(Value::Null)
     }
@@ -294,11 +303,11 @@ pub enum TableKind {
 
 impl RocksStorage {
     #[allow(unused_variables)]
-    fn all_metadata(&self, env: &StructuredEnvItem) -> Result<Vec<Structured>> {
+    fn all_metadata(&self) -> Result<Vec<Structured>> {
         let default_cf = self.db.get_cf_handle("default")?;
         let it = self.db.iterator(&default_cf, None);
         let mut ret = vec![];
-
+        let env = self.root_env.write().expect("Root environment poisoned");
         while it.is_valid() {
             let k = it.key();
             let v = it.value();
@@ -347,6 +356,7 @@ impl RocksStorage {
                         out_e: vec![], // TODO fix these
                         in_e: vec![],
                         attached: vec![],
+                        col_map: BTreeMap::new(),
                     };
                     ret.push(Structured::Node(node));
                 }
@@ -390,6 +400,7 @@ impl RocksStorage {
                         id: table_id,
                         keys,
                         cols,
+                        col_map: BTreeMap::new(),
                     };
                     ret.push(Structured::Edge(edge));
                 }
@@ -413,17 +424,17 @@ impl RocksStorage {
         key_writer.build_value(&Value::RefString(&node.id.name));
         let mut val_writer = ByteArrayBuilder::with_capacity(128);
         val_writer.build_value(&Value::UInt(TableKind::Node as u64));
-        val_writer.build_value(&Value::List(Rc::new(node.keys.iter().map(|k| {
-            Value::List(Rc::new(vec![
+        val_writer.build_value(&Value::List(Arc::new(node.keys.iter().map(|k| {
+            Value::List(Arc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Rc::new(format!("{}", k.typ))),
+                Value::OwnString(Arc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
-        val_writer.build_value(&Value::List(Rc::new(node.cols.iter().map(|k| {
-            Value::List(Rc::new(vec![
+        val_writer.build_value(&Value::List(Arc::new(node.cols.iter().map(|k| {
+            Value::List(Arc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Rc::new(format!("{}", k.typ))),
+                Value::OwnString(Arc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
@@ -442,17 +453,17 @@ impl RocksStorage {
         val_writer.build_value(&Value::UInt(TableKind::Edge as u64));
         val_writer.build_value(&Value::RefString(&edge.src.name));
         val_writer.build_value(&Value::RefString(&edge.dst.name));
-        val_writer.build_value(&Value::List(Rc::new(edge.keys.iter().map(|k| {
-            Value::List(Rc::new(vec![
+        val_writer.build_value(&Value::List(Arc::new(edge.keys.iter().map(|k| {
+            Value::List(Arc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Rc::new(format!("{}", k.typ))),
+                Value::OwnString(Arc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
-        val_writer.build_value(&Value::List(Rc::new(edge.cols.iter().map(|k| {
-            Value::List(Rc::new(vec![
+        val_writer.build_value(&Value::List(Arc::new(edge.cols.iter().map(|k| {
+            Value::List(Arc::new(vec![
                 Value::RefString(&k.name),
-                Value::OwnString(Rc::new(format!("{}", k.typ))),
+                Value::OwnString(Arc::new(format!("{}", k.typ))),
                 k.default.clone(),
             ]))
         }).collect())));
@@ -465,15 +476,15 @@ impl RocksStorage {
 
 impl Evaluator<RocksStorage> {
     pub fn restore_metadata(&mut self) -> Result<()> {
-        let mds = self.storage.all_metadata(self.env.root())?;
+        let mds = self.storage.all_metadata()?;
         for md in &mds {
             match md {
                 v @ Structured::Node(n) => {
                     // TODO: check if they are the same if one already exists
-                    self.env.root_define(n.id.name.clone(), v.clone());
+                    self.root_define(n.id.name.clone(), v.clone());
                 }
                 v @ Structured::Edge(e) => {
-                    self.env.root_define(e.id.name.clone(), v.clone());
+                    self.root_define(e.id.name.clone(), v.clone());
                 }
                 Structured::Columns(_) => {}
                 Structured::Index(_) => {}
@@ -484,22 +495,24 @@ impl Evaluator<RocksStorage> {
         Ok(())
     }
 
-    fn persist_change(&mut self, tname: &str, global: bool) -> Result<()> {
-        let tbl = self.env.resolve_mut(tname).unwrap();
-        self.storage.create_table(tname, global)?;
-        if global {
-            match tbl {
-                Structured::Node(n) => self.storage.persist_node(n),
-                Structured::Edge(e) => self.storage.persist_edge(e),
-                Structured::Columns(_) => unimplemented!(),
-                Structured::Index(_) => unimplemented!(),
-                Structured::Typing(_) => panic!(),
-                Structured::Value(_) => unreachable!()
-            }
-        } else {
-            Ok(())
-        }
-    }
+    // fn persist_change(&mut self, tname: &str, global: bool) -> Result<()> {
+    //     self.storage.create_table(tname, global)?;
+    //     let tbl = {
+    //         self.resolve_mut(tname).unwrap()
+    //     };
+    //     if global {
+    //         match tbl {
+    //             Structured::Node(n) => self.storage.persist_node(n),
+    //             Structured::Edge(e) => self.storage.persist_edge(e),
+    //             Structured::Columns(_) => unimplemented!(),
+    //             Structured::Index(_) => unimplemented!(),
+    //             Structured::Typing(_) => panic!(),
+    //             Structured::Value(_) => unreachable!()
+    //         }
+    //     } else {
+    //         Ok(())
+    //     }
+    // }
 
 
     pub fn build_table(&mut self, pairs: Pairs<Rule>) -> Result<()> {
@@ -509,12 +522,14 @@ impl Evaluator<RocksStorage> {
                 r @ (Rule::global_def | Rule::local_def) => {
                     let inner = pair.into_inner().next().unwrap();
                     let global = r == Rule::global_def;
-                    let local_id = self.get_next_local_id(global);
-                    let env_to_build = if global {
-                        self.env.root_mut()
-                    } else {
-                        self.env.cur_mut()
-                    };
+                    let local_id = self.storage.get_next_local_id(global);
+                    let mut env_to_build =
+                        // if global {
+                    //     self.storage.root_env.write().expect("Root environment poisoned").borrow_mut()
+                    // } else {
+                        self.env_stack.last_mut().unwrap()
+                    ;
+                    // };
                     new_tables.push((global, match inner.as_rule() {
                         Rule::node_def => {
                             env_to_build.build_node_def(inner, local_id)?
@@ -536,7 +551,7 @@ impl Evaluator<RocksStorage> {
             }
         }
         for (global, tname) in &new_tables {
-            self.persist_change(tname, *global).unwrap(); // TODO proper error handling
+            // self.persist_change(tname, *global).unwrap(); // TODO proper error handling
         }
         Ok(())
     }
@@ -554,6 +569,8 @@ mod tests {
     use crate::eval::EvaluatorWithStorage;
     use crate::parser::Parser;
 
+    fn send_sync<X: Send + Sync>(_x: &X) {}
+
     #[test]
     fn definitions() {
         let s = r#"
@@ -569,11 +586,13 @@ mod tests {
             }
         "#;
         let parsed = Parser::parse(Rule::file, s).unwrap();
-        let mut eval = EvaluatorWithStorage::new("_path_for_rocksdb_storagex".to_string()).unwrap();
+        let db = RocksStorage::new("_path_for_rocksdb_storagex".to_string()).unwrap();
+        send_sync(&db);
+        let mut eval = EvaluatorWithStorage::new(db).unwrap();
         eval.build_table(parsed).unwrap();
         eval.restore_metadata().unwrap();
-        eval.storage.delete_storage().unwrap();
-        println!("{:#?}", eval.env.resolve("Person"));
-        println!("{:#?}", eval.env.resolve("Friend"));
+        // eval.storage.delete_storage().unwrap();
+        println!("{:#?}", eval.resolve("Person"));
+        println!("{:#?}", eval.resolve("Friend"));
     }
 }

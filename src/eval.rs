@@ -1,4 +1,5 @@
-use std::rc::Rc;
+use std::borrow::{Borrow, Cow};
+use std::sync::Arc;
 use crate::ast::Expr;
 use crate::ast::Expr::*;
 use crate::error::Result;
@@ -6,52 +7,124 @@ use crate::error::CozoError;
 use crate::error::CozoError::*;
 use crate::value::Value::*;
 use crate::ast::*;
-use crate::env::{Env, StructuredEnv};
+use crate::env::{Env, Environment, LayeredEnv};
 use crate::storage::{DummyStorage, RocksStorage, Storage};
 use crate::typing::Structured;
 
 pub struct Evaluator<S: Storage> {
-    pub env: StructuredEnv,
+    pub env_stack: Vec<Environment>,
     pub storage: S,
-    pub last_local_id: usize,
 }
 
-impl<S: Storage> Evaluator<S> {
-    pub fn get_next_local_id(&mut self, is_global: bool) -> usize {
-        if is_global {
-            0
-        } else {
-            self.last_local_id += 1;
-            self.last_local_id
+impl Env<Structured> for Evaluator<DummyStorage> {
+    fn define(&mut self, name: String, value: Structured) -> Option<Structured> {
+        None
+    }
+
+    fn define_new(&mut self, name: String, value: Structured) -> bool {
+        false
+    }
+
+    fn resolve(&self, name: &str) -> Option<Cow<Structured>> {
+        None
+    }
+
+    fn resolve_mut(&mut self, name: &str) -> Option<&mut Structured> {
+        None
+    }
+
+    fn undef(&mut self, name: &str) -> Option<Structured> {
+        None
+    }
+}
+
+impl Env<Structured> for Evaluator<RocksStorage> {
+    fn define(&mut self, name: String, value: Structured) -> Option<Structured> {
+        self.env_stack.last_mut().unwrap().define(name, value)
+    }
+
+    fn define_new(&mut self, name: String, value: Structured) -> bool {
+        if self.env_stack.is_empty() {
+            self.env_stack.push(Environment::default());
         }
+        self.env_stack.last_mut().unwrap().define_new(name, value)
+    }
+
+    fn resolve(&self, name: &str) -> Option<Cow<Structured>> {
+        let mut res = None;
+        for item in self.env_stack.iter().rev() {
+            res = item.resolve(name);
+            if res.is_some() {
+                return res;
+            }
+        }
+        // Unwrap here because read() only fails if lock is poisoned
+        let env = self.storage.root_env.read().expect("Root environment is poisoned");
+        env.resolve(name).map(|v| Cow::Owned(v.into_owned()))
+    }
+
+    fn resolve_mut(&mut self, name: &str) -> Option<&mut Structured> {
+        // Cannot obtain root elements this way
+        let mut res = None;
+        for item in self.env_stack.iter_mut().rev() {
+            res = item.resolve_mut(name);
+            if res.is_some() {
+                return res;
+            }
+        }
+        res
+    }
+
+    fn undef(&mut self, name: &str) -> Option<Structured> {
+        // Cannot undef root elements this way
+        let mut res = None;
+        for item in self.env_stack.iter_mut().rev() {
+            res = item.undef(name);
+            if res.is_some() {
+                return res;
+            }
+        }
+        res
+    }
+}
+
+impl LayeredEnv<Structured> for Evaluator<RocksStorage> {
+    fn root_define(&mut self, name: String, value: Structured) -> Option<Structured> {
+        self.storage.root_env.write().expect("Root environment is poisoned")
+            .define(name, value)
+    }
+
+    fn root_define_new(&mut self, name: String, value: Structured) -> bool {
+        self.storage.root_env.write().expect("Root environment is poisoned")
+            .define_new(name, value)
+    }
+
+    fn root_resolve(&self, name: &str) -> Option<Cow<Structured>> {
+        let env = self.storage.root_env.read().expect("Root environment is poisoned");
+        env.resolve(name).map(|v| Cow::Owned(v.into_owned()))
+    }
+
+    fn root_undef(&mut self, name: &str) -> Option<Structured> {
+        self.storage.root_env.write().expect("Root environment is poisoned")
+            .undef(name)
     }
 }
 
 pub type EvaluatorWithStorage = Evaluator<RocksStorage>;
 pub type BareEvaluator = Evaluator<DummyStorage>;
 
-impl EvaluatorWithStorage {
-    pub fn new(path: String) -> Result<Self> {
+impl<S: Storage> Evaluator<S> {
+    pub fn new(storage: S) -> Result<Self> {
         Ok(Self {
-            env: StructuredEnv::new(),
-            storage: RocksStorage::new(path)?,
-            last_local_id: 0,
+            env_stack: vec![Environment::default()],
+            storage,
         })
     }
 }
 
-impl Default for BareEvaluator {
-    fn default() -> Self {
-        Self {
-            env: StructuredEnv::new(),
-            storage: DummyStorage,
-            last_local_id: 0,
-        }
-    }
-}
 
-
-impl<'a, S: Storage> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator<S> {
+impl<'a, S: Storage> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator<S>
+    where Evaluator<S>: Env<Structured> {
     fn visit_expr(&self, ex: &Expr<'a>) -> Result<Expr<'a>> {
         match ex {
             Apply(op, args) => {
@@ -82,8 +155,8 @@ impl<'a, S: Storage> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator<S> {
             Expr::List(_) => { unimplemented!() }
             Expr::Dict(_, _) => { unimplemented!() }
             Ident(ident) => {
-                let resolved = self.env.resolve(ident).ok_or(UndefinedParam)?;
-                match resolved {
+                let resolved = self.resolve(ident).ok_or(UndefinedParam)?;
+                match resolved.borrow() {
                     Structured::Value(v) => {
                         Ok(Const(v.clone()))
                     }
@@ -94,7 +167,8 @@ impl<'a, S: Storage> ExprVisitor<'a, Result<Expr<'a>>> for Evaluator<S> {
     }
 }
 
-impl<S: Storage> Evaluator<S> {
+impl<S: Storage> Evaluator<S>
+    where Evaluator<S>: Env<Structured> {
     fn add_exprs<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
         match exprs {
             [a, b] => {
@@ -110,10 +184,10 @@ impl<S: Storage> Evaluator<S> {
                             (Float(va), Int(vb)) => Float(va + vb as f64),
                             (Int(va), Float(vb)) => Float(va as f64 + vb),
                             (Float(va), Float(vb)) => Float(va + vb),
-                            (OwnString(va), OwnString(vb)) => OwnString(Rc::new(va.clone().to_string() + &vb)),
-                            (OwnString(va), RefString(vb)) => OwnString(Rc::new(va.clone().to_string() + &*vb)),
-                            (RefString(va), OwnString(vb)) => OwnString(Rc::new(va.to_string() + &*vb)),
-                            (RefString(va), RefString(vb)) => OwnString(Rc::new(va.to_string() + &*vb)),
+                            (OwnString(va), OwnString(vb)) => OwnString(Arc::new(va.clone().to_string() + &vb)),
+                            (OwnString(va), RefString(vb)) => OwnString(Arc::new(va.clone().to_string() + &*vb)),
+                            (RefString(va), OwnString(vb)) => OwnString(Arc::new(va.to_string() + &*vb)),
+                            (RefString(va), RefString(vb)) => OwnString(Arc::new(va.to_string() + &*vb)),
                             (_, _) => return Err(CozoError::TypeError)
                         }
                     }
@@ -536,7 +610,7 @@ mod tests {
 
     #[test]
     fn operators() {
-        let ev = BareEvaluator::default();
+        let ev = Evaluator::new(DummyStorage {}).unwrap();
 
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("1/10+(-2+3)*4^5").unwrap()).unwrap());
         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && false").unwrap()).unwrap());

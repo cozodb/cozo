@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter, Write};
-use crate::env::{Env};
-use crate::value::Value;
+use crate::env::{Env, Environment};
+use crate::value::{StaticValue, Value};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum BaseType {
@@ -43,7 +43,7 @@ pub enum BaseType {
 pub struct Col {
     pub name: String,
     pub typ: Typing,
-    pub default: Value<'static>,
+    pub default: StaticValue,
 }
 
 
@@ -77,13 +77,22 @@ impl Debug for TableId {
     }
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
-pub struct ColumnId(TableId, i64);
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
+pub struct ColumnId {
+    table_id: TableId,
+    is_key: bool,
+    col_order: usize,
+}
 
 impl Debug for ColumnId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&format!("{:?}", self.0))?;
-        f.write_str(&format!("~{}", self.1))?;
+        f.write_str(&format!("{:?}", self.table_id))?;
+        if self.is_key {
+            f.write_char('*')?;
+        } else {
+            f.write_char('-')?;
+        }
+        f.write_str(&format!("{}", self.col_order))?;
         Ok(())
     }
 }
@@ -97,6 +106,7 @@ pub struct Node {
     pub out_e: Vec<TableId>,
     pub in_e: Vec<TableId>,
     pub attached: Vec<TableId>,
+    pub col_map: BTreeMap<String, ColumnId>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -107,6 +117,7 @@ pub struct Edge {
     pub id: TableId,
     pub keys: Vec<Col>,
     pub cols: Vec<Col>,
+    pub col_map: BTreeMap<String, ColumnId>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -204,7 +215,7 @@ pub enum Structured {
     Edge(Edge),
     Columns(Columns),
     Index(Index),
-    Value(Value<'static>)
+    Value(StaticValue),
 }
 
 impl Structured {
@@ -220,24 +231,26 @@ impl Structured {
     }
 }
 
-pub fn define_base_types<T: Env<Structured>>(env: &mut T) {
-    env.define("Any".to_string(), Structured::Typing(Typing::Any));
-    env.define("Bool".to_string(), Structured::Typing(Typing::Base(BaseType::Bool)));
-    env.define("Int".to_string(), Structured::Typing(Typing::Base(BaseType::Int)));
-    env.define("UInt".to_string(), Structured::Typing(Typing::Base(BaseType::UInt)));
-    env.define("Float".to_string(), Structured::Typing(Typing::Base(BaseType::Float)));
-    env.define("String".to_string(), Structured::Typing(Typing::Base(BaseType::String)));
-    env.define("Bytes".to_string(), Structured::Typing(Typing::Base(BaseType::U8Arr)));
-    env.define("U8Arr".to_string(), Structured::Typing(Typing::Base(BaseType::U8Arr)));
-    env.define("Uuid".to_string(), Structured::Typing(Typing::Base(BaseType::Uuid)));
-    env.define("Timestamp".to_string(), Structured::Typing(Typing::Base(BaseType::Timestamp)));
-    env.define("Datetime".to_string(), Structured::Typing(Typing::Base(BaseType::Datetime)));
-    env.define("Timezone".to_string(), Structured::Typing(Typing::Base(BaseType::Timezone)));
-    env.define("Date".to_string(), Structured::Typing(Typing::Base(BaseType::Date)));
-    env.define("Time".to_string(), Structured::Typing(Typing::Base(BaseType::Time)));
-    env.define("Duration".to_string(), Structured::Typing(Typing::Base(BaseType::Duration)));
-    env.define("BigInt".to_string(), Structured::Typing(Typing::Base(BaseType::BigInt)));
-    env.define("BigDecimal".to_string(), Structured::Typing(Typing::Base(BaseType::BigDecimal)));
-    env.define("Int".to_string(), Structured::Typing(Typing::Base(BaseType::Int)));
-    env.define("Crs".to_string(), Structured::Typing(Typing::Base(BaseType::Crs)));
+impl Environment {
+    pub fn define_base_types(&mut self) {
+        self.define("Any".to_string(), Structured::Typing(Typing::Any));
+        self.define("Bool".to_string(), Structured::Typing(Typing::Base(BaseType::Bool)));
+        self.define("Int".to_string(), Structured::Typing(Typing::Base(BaseType::Int)));
+        self.define("UInt".to_string(), Structured::Typing(Typing::Base(BaseType::UInt)));
+        self.define("Float".to_string(), Structured::Typing(Typing::Base(BaseType::Float)));
+        self.define("String".to_string(), Structured::Typing(Typing::Base(BaseType::String)));
+        self.define("Bytes".to_string(), Structured::Typing(Typing::Base(BaseType::U8Arr)));
+        self.define("U8Arr".to_string(), Structured::Typing(Typing::Base(BaseType::U8Arr)));
+        self.define("Uuid".to_string(), Structured::Typing(Typing::Base(BaseType::Uuid)));
+        self.define("Timestamp".to_string(), Structured::Typing(Typing::Base(BaseType::Timestamp)));
+        self.define("Datetime".to_string(), Structured::Typing(Typing::Base(BaseType::Datetime)));
+        self.define("Timezone".to_string(), Structured::Typing(Typing::Base(BaseType::Timezone)));
+        self.define("Date".to_string(), Structured::Typing(Typing::Base(BaseType::Date)));
+        self.define("Time".to_string(), Structured::Typing(Typing::Base(BaseType::Time)));
+        self.define("Duration".to_string(), Structured::Typing(Typing::Base(BaseType::Duration)));
+        self.define("BigInt".to_string(), Structured::Typing(Typing::Base(BaseType::BigInt)));
+        self.define("BigDecimal".to_string(), Structured::Typing(Typing::Base(BaseType::BigDecimal)));
+        self.define("Int".to_string(), Structured::Typing(Typing::Base(BaseType::Int)));
+        self.define("Crs".to_string(), Structured::Typing(Typing::Base(BaseType::Crs)));
+    }
 }

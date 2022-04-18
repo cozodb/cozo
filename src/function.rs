@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 use crate::typing::{Typing};
-use crate::value::Value;
+use crate::value::{StaticValue, Value};
 // use lazy_static::lazy_static;
 
 #[derive(PartialEq, Debug)]
@@ -35,7 +35,7 @@ impl PartialEq for FunctionImpl {
 #[derive(PartialEq, Debug)]
 pub struct Arg {
     pub typing: Typing,
-    pub default_val: Option<Value<'static>>,
+    pub default_val: Option<StaticValue>,
     pub name: Option<String>,
 }
 
