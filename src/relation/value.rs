@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter, Write};
+use ordered_float::OrderedFloat;
 use uuid::Uuid;
 
 #[repr(u8)]
@@ -66,21 +68,21 @@ impl From<u8> for Tag {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub enum EdgeDir {
     Fwd,
     Bwd,
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq)]
 pub enum Value<'a> {
     Null,
     Bool(bool),
     EdgeDir(EdgeDir),
     UInt(u64),
     Int(i64),
-    Float(f64),
+    Float(OrderedFloat<f64>),
     Uuid(Uuid),
     Text(Cow<'a, str>),
     List(Vec<Value<'a>>),
@@ -89,7 +91,7 @@ pub enum Value<'a> {
 
 pub type StaticValue = Value<'static>;
 
-impl <'a> Value<'a> {
+impl<'a> Value<'a> {
     #[inline]
     pub fn to_static(self) -> StaticValue {
         match self {
@@ -147,6 +149,14 @@ impl From<i64> for StaticValue {
 impl From<f64> for StaticValue {
     #[inline]
     fn from(f: f64) -> Self {
+        Value::Float(f.into())
+    }
+}
+
+
+impl From<OrderedFloat<f64>> for StaticValue {
+    #[inline]
+    fn from(f: OrderedFloat<f64>) -> Self {
         Value::Float(f)
     }
 }
@@ -183,5 +193,72 @@ impl<'a> From<BTreeMap<Cow<'a, str>, Value<'a>>> for Value<'a> {
     #[inline]
     fn from(m: BTreeMap<Cow<'a, str>, Value<'a>>) -> Self {
         Value::Dict(m)
+    }
+}
+
+
+impl<'a> Display for Value<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Null => { f.write_str("null")?; }
+            Value::Bool(b) => { f.write_str(if *b { "true" } else { "false" })?; }
+            Value::EdgeDir(d) => {
+                f.write_str(match d {
+                    EdgeDir::Fwd => "fwd",
+                    EdgeDir::Bwd => "bwd"
+                })?;
+            }
+            Value::UInt(u) => {
+                f.write_str(&u.to_string())?;
+                f.write_str("u")?;
+            }
+            Value::Int(i) => { f.write_str(&i.to_string())?; }
+            Value::Float(n) => { f.write_str(&format!("{:e}", n.into_inner()))?; }
+            Value::Uuid(u) => { f.write_str(&u.to_string())?; }
+            Value::Text(t) => {
+                f.write_char('"')?;
+                for char in t.chars() {
+                    match char {
+                        '"' => { f.write_str("\\\"")?; }
+                        '\\' => { f.write_str("\\\\")?; }
+                        '/' => { f.write_str("\\/")?; }
+                        '\x08' => { f.write_str("\\b")?; }
+                        '\x0c' => { f.write_str("\\f")?; }
+                        '\n' => { f.write_str("\\n")?; }
+                        '\r' => { f.write_str("\\r")?; }
+                        '\t' => { f.write_str("\\t")?; }
+                        c => { f.write_char(c)?; }
+                    }
+                }
+                f.write_char('"')?;
+            }
+            Value::List(l) => {
+                f.write_char('[')?;
+                let mut first = true;
+                for v in l.iter() {
+                    if !first {
+                        f.write_char(',')?;
+                    }
+                    Display::fmt(v, f)?;
+                    first = false;
+                }
+                f.write_char(']')?;
+            }
+            Value::Dict(d) => {
+                f.write_char('{')?;
+                let mut first = true;
+                for (k, v) in d.iter() {
+                    if !first {
+                        f.write_char(',')?;
+                    }
+                    Display::fmt(&Value::Text(k.clone()), f)?;
+                    f.write_char(':')?;
+                    Display::fmt(v, f)?;
+                    first = false;
+                }
+                f.write_char('}')?;
+            }
+        }
+        Ok(())
     }
 }

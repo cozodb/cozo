@@ -1,6 +1,5 @@
 use std::borrow::{Cow};
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use uuid::Uuid;
 use crate::relation::value::{EdgeDir, Tag, Value};
@@ -13,15 +12,26 @@ pub struct Tuple<T>
     idx_cache: RefCell<Vec<usize>>,
 }
 
+impl<T> AsRef<[u8]> for Tuple<T> where T: AsRef<[u8]> {
+    fn as_ref(&self) -> &[u8] {
+        self.data.as_ref()
+    }
+}
+
 const PREFIX_LEN: usize = 4;
 
 impl<T: AsRef<[u8]>> Tuple<T> {
     #[inline]
-    fn new(data: T) -> Self {
+    pub fn new(data: T) -> Self {
         Self {
             data,
             idx_cache: RefCell::new(vec![]),
         }
+    }
+
+    #[inline]
+    pub fn get_prefix(&self) -> u32 {
+        u32::from_be_bytes(self.data.as_ref()[0..4].try_into().unwrap())
     }
 
     #[inline]
@@ -106,7 +116,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         }
     }
     #[inline]
-    pub fn parse_value_at(&self, pos: usize) -> (Value, usize) {
+    fn parse_value_at(&self, pos: usize) -> (Value, usize) {
         let data = self.data.as_ref();
         let start = pos + 1;
         let (nxt, val): (usize, Value) = match Tag::from(data[pos]) {
@@ -170,10 +180,31 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         };
         (val, nxt)
     }
+    pub fn iter(&self) -> TupleIter<T> {
+        TupleIter {
+            tuple: self,
+            pos: 4,
+        }
+    }
 }
 
-impl Tuple<&[u8]> {}
+pub struct TupleIter<'a, T: AsRef<[u8]>> {
+    tuple: &'a Tuple<T>,
+    pos: usize,
+}
 
+impl<'a, T: AsRef<[u8]>> Iterator for TupleIter<'a, T> {
+    type Item = Value<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos == self.tuple.data.as_ref().len() {
+            return None;
+        }
+        let (v, pos) = self.tuple.parse_value_at(self.pos);
+        self.pos = pos;
+        Some(v)
+    }
+}
 
 impl Tuple<Vec<u8>> {
     #[inline]
@@ -246,7 +277,7 @@ impl Tuple<Vec<u8>> {
             Value::EdgeDir(e) => self.push_edge_dir(*e),
             Value::UInt(u) => self.push_uint(*u),
             Value::Int(i) => self.push_int(*i),
-            Value::Float(f) => self.push_float(*f),
+            Value::Float(f) => self.push_float(f.into_inner()),
             Value::Uuid(u) => self.push_uuid(*u),
             Value::Text(t) => self.push_str(t),
             Value::List(l) => {
@@ -309,7 +340,6 @@ impl Tuple<Vec<u8>> {
         };
         self.push_varint(u);
     }
-
 }
 
 impl<T: AsRef<[u8]>> PartialEq for Tuple<T> {
@@ -320,20 +350,6 @@ impl<T: AsRef<[u8]>> PartialEq for Tuple<T> {
 }
 
 impl<T: AsRef<[u8]>> Eq for Tuple<T> {}
-
-impl<T: AsRef<[u8]>> PartialOrd for Tuple<T> {
-    #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<T: AsRef<[u8]>> Ord for Tuple<T> {
-    #[inline]
-    fn cmp(&self, other: &Self) -> Ordering {
-        todo!()
-    }
-}
 
 
 #[cfg(test)]
@@ -432,5 +448,24 @@ mod tests {
         assert_eq!(Value::from(-123345i64), t.get(7).unwrap());
         assert_eq!(Value::from(BTreeMap::from([("yzyz".into(), "fifo".into())])), t.get(10).unwrap());
         assert_eq!(None, t.get(13131));
+
+        println!("{:?}", t.iter().collect::<Vec<Value>>());
+        for v in t.iter() {
+            println!("{}", v);
+        }
     }
+
+    /*
+    #[test]
+    fn lifetime() {
+        let v;
+        {
+            let s : Vec<u8> = vec![];
+            let s = s.as_slice();
+            let p = Tuple::new(s);
+            v = p.get(0);
+        }
+        println!("{:?}", v);
+    }
+     */
 }
