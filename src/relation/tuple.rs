@@ -2,7 +2,7 @@ use std::borrow::{Cow};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use uuid::Uuid;
-use crate::relation::value::{EdgeDir, Tag, Value};
+use crate::relation::value::{Tag, Value};
 
 #[derive(Debug, Clone)]
 pub struct Tuple<T>
@@ -66,7 +66,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         let tag_start = *self.idx_cache.borrow().last().unwrap_or(&PREFIX_LEN);
         let start = tag_start + 1;
         let nxt = match Tag::from(data[tag_start]) {
-            Tag::Null | Tag::BoolTrue | Tag::BoolFalse | Tag::FwdEdge | Tag::BwdEdge => start,
+            Tag::Null | Tag::BoolTrue | Tag::BoolFalse => start,
             Tag::Int | Tag::UInt => start + self.parse_varint(start).1,
             Tag::Float => start + 8,
             Tag::Uuid => start + 16,
@@ -123,8 +123,6 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             Tag::Null => (start, ().into()),
             Tag::BoolTrue => (start, true.into()),
             Tag::BoolFalse => (start, false.into()),
-            Tag::FwdEdge => (start, EdgeDir::Fwd.into()),
-            Tag::BwdEdge => (start, EdgeDir::Bwd.into()),
             Tag::UInt => {
                 let (u, offset) = self.parse_varint(start);
                 (start + offset, u.into())
@@ -230,14 +228,6 @@ impl Tuple<Vec<u8>> {
         self.idx_cache.borrow_mut().push(self.data.len());
     }
     #[inline]
-    pub fn push_edge_dir(&mut self, d: EdgeDir) {
-        self.push_tag(match d {
-            EdgeDir::Fwd => { Tag::FwdEdge }
-            EdgeDir::Bwd => { Tag::BwdEdge }
-        });
-        self.idx_cache.borrow_mut().push(self.data.len());
-    }
-    #[inline]
     pub fn push_int(&mut self, i: i64) {
         self.push_tag(Tag::Int);
         self.push_zigzag(i);
@@ -274,7 +264,6 @@ impl Tuple<Vec<u8>> {
         match v {
             Value::Null => self.push_null(),
             Value::Bool(b) => self.push_bool(*b),
-            Value::EdgeDir(e) => self.push_edge_dir(*e),
             Value::UInt(u) => self.push_uint(*u),
             Value::Int(i) => self.push_int(*i),
             Value::Float(f) => self.push_float(f.into_inner()),
@@ -363,9 +352,9 @@ mod tests {
         t.push_null();
         t.push_bool(true);
         t.push_bool(false);
-        t.push_edge_dir(EdgeDir::Fwd);
+        t.push_null();
         t.push_str("abcdef");
-        t.push_edge_dir(EdgeDir::Bwd);
+        t.push_null();
         t.push_value(&vec![
             true.into(),
             1e236.into(),
@@ -391,13 +380,13 @@ mod tests {
         assert_eq!(Value::from(false), t.get(2).unwrap());
         t3.get_pos(3);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
-        assert_eq!(Value::from(EdgeDir::Fwd), t.get(3).unwrap());
+        assert_eq!(Value::Null, t.get(3).unwrap());
         t3.get_pos(4);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
         assert_eq!(Value::from("abcdef"), t.get(4).unwrap());
         t3.get_pos(5);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
-        assert_eq!(Value::from(EdgeDir::Bwd), t.get(5).unwrap());
+        assert_eq!(Value::Null, t.get(5).unwrap());
         t3.get_pos(6);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
         assert_eq!(Value::from(Value::from(vec![
@@ -428,7 +417,7 @@ mod tests {
         assert_eq!(None, t.get(13));
         assert_eq!(None, t.get(13131));
         let t = Tuple::new(ot.data.as_slice());
-        assert_eq!(Value::from(EdgeDir::Bwd), t.get(5).unwrap());
+        assert_eq!(Value::Null, t.get(5).unwrap());
         assert_eq!(Value::from(true), t.get(1).unwrap());
         assert_eq!(Value::from(true), t.get(1).unwrap());
         assert_eq!(Value::from(1e245), t.get(11).unwrap());
@@ -437,7 +426,7 @@ mod tests {
         assert_eq!(Value::from(false), t.get(2).unwrap());
         assert_eq!(Value::from(12121212u64), t.get(9).unwrap());
         assert_eq!(Value::from(BTreeMap::new()), t.get(8).unwrap());
-        assert_eq!(Value::from(EdgeDir::Fwd), t.get(3).unwrap());
+        assert_eq!(Value::Null, t.get(3).unwrap());
         assert_eq!(Value::from("abcdef"), t.get(4).unwrap());
         assert_eq!(Value::from(Value::from(vec![
             true.into(),

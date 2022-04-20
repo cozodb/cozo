@@ -10,8 +10,6 @@ pub enum Tag {
     BoolFalse = 0,
     Null = 2,
     BoolTrue = 4,
-    FwdEdge = 6,
-    BwdEdge = 8,
     Int = 11,
     Float = 13,
     Text = 15,
@@ -54,8 +52,6 @@ impl From<u8> for Tag {
             0 => BoolFalse,
             2 => Null,
             4 => BoolTrue,
-            6 => FwdEdge,
-            8 => BwdEdge,
             11 => Int,
             13 => Float,
             15 => Text,
@@ -68,18 +64,10 @@ impl From<u8> for Tag {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
-pub enum EdgeDir {
-    Fwd,
-    Bwd,
-}
-
-
 #[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq)]
 pub enum Value<'a> {
     Null,
     Bool(bool),
-    EdgeDir(EdgeDir),
     UInt(u64),
     Int(i64),
     Float(OrderedFloat<f64>),
@@ -97,7 +85,6 @@ impl<'a> Value<'a> {
         match self {
             Value::Null => Value::from(()),
             Value::Bool(b) => Value::from(b),
-            Value::EdgeDir(e) => Value::from(e),
             Value::UInt(u) => Value::from(u),
             Value::Int(i) => Value::from(i),
             Value::Float(f) => Value::from(f),
@@ -125,13 +112,6 @@ impl From<bool> for StaticValue {
     }
 }
 
-impl From<EdgeDir> for StaticValue {
-    #[inline]
-    fn from(e: EdgeDir) -> Self {
-        Value::EdgeDir(e)
-    }
-}
-
 impl From<u64> for StaticValue {
     #[inline]
     fn from(u: u64) -> Self {
@@ -139,10 +119,26 @@ impl From<u64> for StaticValue {
     }
 }
 
+
+impl From<u32> for StaticValue {
+    #[inline]
+    fn from(u: u32) -> Self {
+        Value::UInt(u as u64)
+    }
+}
+
+
 impl From<i64> for StaticValue {
     #[inline]
     fn from(i: i64) -> Self {
         Value::Int(i)
+    }
+}
+
+impl From<i32> for StaticValue {
+    #[inline]
+    fn from(i: i32) -> Self {
+        Value::Int(i as i64)
     }
 }
 
@@ -202,12 +198,6 @@ impl<'a> Display for Value<'a> {
         match self {
             Value::Null => { f.write_str("null")?; }
             Value::Bool(b) => { f.write_str(if *b { "true" } else { "false" })?; }
-            Value::EdgeDir(d) => {
-                f.write_str(match d {
-                    EdgeDir::Fwd => "fwd",
-                    EdgeDir::Bwd => "bwd"
-                })?;
-            }
             Value::UInt(u) => {
                 f.write_str(&u.to_string())?;
                 f.write_str("u")?;

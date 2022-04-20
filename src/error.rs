@@ -1,9 +1,9 @@
-// use std::result;
-// use thiserror::Error;
+use std::result;
+use thiserror::Error;
 // use crate::parser::Rule;
 //
-// #[derive(Error, Debug)]
-// pub enum CozoError {
+#[derive(Error, Debug)]
+pub enum CozoError {
 //     #[error("Invalid UTF code")]
 //     InvalidUtfCode,
 //
@@ -60,6 +60,6 @@
 //
 //     #[error(transparent)]
 //     Io(#[from] std::io::Error),
-// }
-//
-// pub type Result<T> = result::Result<T, CozoError>;
+}
+
+pub type Result<T> = result::Result<T, CozoError>;
