@@ -1,11 +1,12 @@
-////
-//// Created by Ziyang Hu on 2022/4/13.
-////
 //
+// Created by Ziyang Hu on 2022/4/13.
+//
+
 #include "cozorocks.h"
 #include "cozorocks/src/lib.rs.h"
 
-void write_status_impl(BridgeStatus &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity, int bridge_code) {
+void write_status_impl(BridgeStatus &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity,
+                       int bridge_code) {
     status.code = code;
     status.subcode = subcode;
     status.severity = severity;

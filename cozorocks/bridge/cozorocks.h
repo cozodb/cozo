@@ -16,8 +16,8 @@
 
 
 typedef std::shared_mutex Lock;
-typedef std::unique_lock <Lock> WriteLock;
-typedef std::shared_lock <Lock> ReadLock;
+typedef std::unique_lock<Lock> WriteLock;
+typedef std::shared_lock<Lock> ReadLock;
 
 
 using namespace ROCKSDB_NAMESPACE;
@@ -120,15 +120,15 @@ struct OptionsBridge {
     }
 };
 
-inline std::unique_ptr <ReadOptionsBridge> new_read_options() {
+inline std::unique_ptr<ReadOptionsBridge> new_read_options() {
     return std::unique_ptr<ReadOptionsBridge>(new ReadOptionsBridge);
 }
 
-inline std::unique_ptr <WriteOptionsBridge> new_write_options() {
+inline std::unique_ptr<WriteOptionsBridge> new_write_options() {
     return std::unique_ptr<WriteOptionsBridge>(new WriteOptionsBridge);
 }
 
-inline std::unique_ptr <OptionsBridge> new_options() {
+inline std::unique_ptr<OptionsBridge> new_options() {
     return std::unique_ptr<OptionsBridge>(new OptionsBridge);
 }
 
@@ -162,7 +162,7 @@ inline void write_status(Status &&rstatus, BridgeStatus &status) {
 }
 
 struct IteratorBridge {
-    mutable std::unique_ptr <Iterator> inner;
+    mutable std::unique_ptr<Iterator> inner;
 
     IteratorBridge(Iterator *it) : inner(it) {}
 
@@ -192,11 +192,11 @@ struct IteratorBridge {
         inner->SeekForPrev(k);
     }
 
-    inline std::unique_ptr <SliceBridge> key_raw() const {
+    inline std::unique_ptr<SliceBridge> key_raw() const {
         return std::make_unique<SliceBridge>(inner->key());
     }
 
-    inline std::unique_ptr <SliceBridge> value_raw() const {
+    inline std::unique_ptr<SliceBridge> value_raw() const {
         return std::make_unique<SliceBridge>(inner->value());
     }
 
@@ -234,20 +234,20 @@ struct WriteBatchBridge {
     }
 };
 
-inline unique_ptr <WriteBatchBridge> new_write_batch_raw() {
+inline unique_ptr<WriteBatchBridge> new_write_batch_raw() {
     return make_unique<WriteBatchBridge>();
 }
 
 struct DBBridge {
-    mutable unique_ptr <DB> db;
-    mutable unordered_map <string, shared_ptr<ColumnFamilyHandle>> handles;
+    mutable unique_ptr<DB> db;
+    mutable unordered_map<string, shared_ptr<ColumnFamilyHandle>> handles;
     mutable Lock handle_lock;
 
     DBBridge(DB *db_,
-             unordered_map <string, shared_ptr<ColumnFamilyHandle>> &&handles_) : db(db_), handles(handles_) {}
+             unordered_map<string, shared_ptr<ColumnFamilyHandle>> &&handles_) : db(db_), handles(handles_) {}
 
 
-    inline shared_ptr <ColumnFamilyHandle> get_cf_handle_raw(const string &name) const {
+    inline shared_ptr<ColumnFamilyHandle> get_cf_handle_raw(const string &name) const {
         ReadLock r_lock(handle_lock);
         try {
             return handles.at(name);
@@ -294,7 +294,7 @@ struct DBBridge {
         write_status(db->Write(options.inner, &updates.inner), status);
     }
 
-    inline std::unique_ptr <PinnableSliceBridge> get_raw(
+    inline std::unique_ptr<PinnableSliceBridge> get_raw(
             const ReadOptionsBridge &options,
             const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
@@ -311,7 +311,7 @@ struct DBBridge {
         return pinnable_val;
     }
 
-    inline std::unique_ptr <IteratorBridge> iterator_raw(
+    inline std::unique_ptr<IteratorBridge> iterator_raw(
             const ReadOptionsBridge &options,
             const ColumnFamilyHandle &cf) const {
         return std::make_unique<IteratorBridge>(db->NewIterator(options.inner, const_cast<ColumnFamilyHandle *>(&cf)));
@@ -321,7 +321,8 @@ struct DBBridge {
         {
             ReadLock r_lock(handle_lock);
             if (handles.find(name) != handles.end()) {
-                write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError, 2);
+                write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError,
+                                  2);
                 return;
             }
         }
@@ -345,9 +346,9 @@ struct DBBridge {
         // When should we call DestroyColumnFamilyHandle?
     }
 
-    inline unique_ptr <vector<string>> get_column_family_names_raw() const {
+    inline unique_ptr<vector<string>> get_column_family_names_raw() const {
         ReadLock r_lock(handle_lock);
-        auto ret = make_unique < vector < string >> ();
+        auto ret = make_unique<vector<string >>();
         for (auto entry: handles) {
             ret->push_back(entry.first);
         }
@@ -356,7 +357,7 @@ struct DBBridge {
 };
 
 
-inline std::unique_ptr <DBBridge>
+inline std::unique_ptr<DBBridge>
 open_db_raw(const OptionsBridge &options,
             const string &path,
             BridgeStatus &status) {
@@ -366,21 +367,21 @@ open_db_raw(const OptionsBridge &options,
         cf_names.push_back(kDefaultColumnFamilyName);
     }
 
-    std::vector <ColumnFamilyDescriptor> column_families;
+    std::vector<ColumnFamilyDescriptor> column_families;
 
     for (auto el: cf_names) {
         column_families.push_back(ColumnFamilyDescriptor(
                 el, options.inner));
     }
 
-    std::vector < ColumnFamilyHandle * > handles;
+    std::vector<ColumnFamilyHandle *> handles;
 
     DB *db_ptr;
     Status s = DB::Open(options.inner, path, column_families, &handles, &db_ptr);
 
     auto ok = s.ok();
     write_status(std::move(s), status);
-    unordered_map <string, shared_ptr<ColumnFamilyHandle>> handle_map;
+    unordered_map<string, shared_ptr<ColumnFamilyHandle>> handle_map;
     if (ok) {
         assert(handles.size() == cf_names.size());
         for (size_t i = 0; i < handles.size(); ++i) {
