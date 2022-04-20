@@ -28,3 +28,4 @@ CTestTestfile.cmake
 _deps
 
 *.db
+deps/

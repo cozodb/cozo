@@ -1,5 +1,3 @@
-extern crate core;
-
 // pub mod value;
 // pub mod typing;
 // pub mod env;
@@ -14,3 +12,13 @@ extern crate core;
 pub mod relation;
 pub mod db;
 pub mod error;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn import() {
+        use cozorocks::*;
+        let _o = Options::default();
+        println!("Hello");
+    }
+}
