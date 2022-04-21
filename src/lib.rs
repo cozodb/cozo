@@ -18,7 +18,7 @@ mod tests {
     #[test]
     fn import() {
         use cozorocks::*;
-        let _o = Options::default();
+        let _o = OptionsPtr::default();
         println!("Hello");
     }
 }

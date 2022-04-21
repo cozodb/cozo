@@ -9,21 +9,10 @@ pub fn compare(a: &[u8], b: &[u8]) -> i8 {
         Ordering::Greater => return 1,
         Ordering::Equal => {}
     }
-    let mut ia = ta.iter();
-    let mut ib = tb.iter();
-    loop {
-        match (ia.next(), ib.next()) {
-            (None, None) => return 0,
-            (None, Some(_)) => return -1,
-            (Some(_), None) => return 1,
-            (Some(va), Some(vb)) => {
-                match va.cmp(&vb) {
-                    Ordering::Less => return -1,
-                    Ordering::Greater => return 1,
-                    Ordering::Equal => {}
-                }
-            }
-        }
+    match ta.iter().cmp(tb.iter()) {
+        Ordering::Less => -1,
+        Ordering::Equal => 0,
+        Ordering::Greater => 1
     }
 }
 
