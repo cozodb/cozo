@@ -3,7 +3,7 @@
 //
 
 #include "cozorocks.h"
-#include "cozorocks/src/lib.rs.h"
+#include "cozorocks/src/bridge.rs.h"
 
 void write_status_impl(BridgeStatus &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity,
                        int bridge_code) {

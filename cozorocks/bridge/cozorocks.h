@@ -13,6 +13,7 @@
 #include "rocksdb/options.h"
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
+#include "rocksdb/utilities/optimistic_transaction_db.h"
 
 
 typedef std::shared_mutex Lock;
@@ -28,6 +29,7 @@ using std::make_shared;
 using std::string;
 using std::vector;
 using std::unordered_map;
+using std::tuple;
 
 struct BridgeStatus;
 
@@ -43,26 +45,34 @@ inline rust::Slice<const uint8_t> convert_slice_back(const Slice &s) {
     return rust::Slice(reinterpret_cast<const std::uint8_t *>(s.data()), s.size());
 }
 
-struct ReadOptionsBridge {
-    mutable ReadOptions inner;
 
-    inline void do_set_verify_checksums(bool v) const {
-        inner.verify_checksums = v;
+inline rust::Slice<const uint8_t> convert_pinnable_slice_back(const PinnableSlice &s) {
+    return rust::Slice(reinterpret_cast<const std::uint8_t *>(s.data()), s.size());
+}
+
+void write_status_impl(BridgeStatus &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity,
+                       int bridge_code);
+
+inline void write_status(Status &&rstatus, BridgeStatus &status) {
+    if (rstatus.code() != StatusCode::kOk || rstatus.subcode() != StatusSubCode::kNoSpace ||
+        rstatus.severity() != StatusSeverity::kNoError) {
+        write_status_impl(status, rstatus.code(), rstatus.subcode(), rstatus.severity(), 0);
     }
+}
 
-    inline void do_set_total_order_seek(bool v) const {
-        inner.total_order_seek = v;
-    }
-};
+void set_verify_checksums(ReadOptions &options, const bool v) {
+    options.verify_checksums = v;
+}
 
-struct WriteOptionsBridge {
-    mutable WriteOptions inner;
+void set_total_order_seek(ReadOptions &options, const bool v) {
+    options.total_order_seek = v;
+}
 
-public:
-    inline void do_set_disable_wal(bool v) const {
-        inner.disableWAL = v;
-    }
-};
+
+void set_disable_wal(WriteOptions &options, const bool v) {
+    options.disableWAL = v;
+}
+
 
 typedef rust::Fn<std::int8_t(rust::Slice<const std::uint8_t>, rust::Slice<const std::uint8_t>)> RustComparatorFn;
 
@@ -75,6 +85,7 @@ public:
     const char *Name() const {
         return "RustComparator";
     }
+
 
     void FindShortestSeparator(std::string *, const rocksdb::Slice &) const {}
 
@@ -92,73 +103,44 @@ public:
     mutable RustComparatorFn rust_compare;
 };
 
-struct OptionsBridge {
-    mutable Options inner;
-    mutable RustComparator cmp_obj;
-
-    inline void do_prepare_for_bulk_load() const {
-        inner.PrepareForBulkLoad();
-    }
-
-    inline void do_increase_parallelism() const {
-        inner.IncreaseParallelism();
-    }
-
-    inline void do_optimize_level_style_compaction() const {
-        inner.OptimizeLevelStyleCompaction();
-    };
-
-    inline void do_set_create_if_missing(bool v) const {
-        inner.create_if_missing = v;
-    }
-
-    inline void do_set_comparator(rust::Str name, RustComparatorFn f) const {
-        cmp_obj = RustComparator();
-        cmp_obj.set_name(name);
-        cmp_obj.set_fn(f);
-        inner.comparator = &cmp_obj;
-    }
-};
-
-inline std::unique_ptr<ReadOptionsBridge> new_read_options() {
-    return std::unique_ptr<ReadOptionsBridge>(new ReadOptionsBridge);
-}
-
-inline std::unique_ptr<WriteOptionsBridge> new_write_options() {
-    return std::unique_ptr<WriteOptionsBridge>(new WriteOptionsBridge);
-}
-
-inline std::unique_ptr<OptionsBridge> new_options() {
-    return std::unique_ptr<OptionsBridge>(new OptionsBridge);
+inline unique_ptr<RustComparator> new_rust_comparator(rust::Str name, RustComparatorFn f) {
+    auto ret = make_unique<RustComparator>();
+    ret->set_name(name);
+    ret->set_fn(f);
+    return ret;
 }
 
 
-struct PinnableSliceBridge {
-    PinnableSlice inner;
+inline void prepare_for_bulk_load(Options &inner) {
+    inner.PrepareForBulkLoad();
+}
 
-    inline rust::Slice<const std::uint8_t> as_bytes() const {
-        return convert_slice_back(inner);
-    }
+inline void increase_parallelism(Options &inner) {
+    inner.IncreaseParallelism();
+}
+
+inline void optimize_level_style_compaction(Options &inner) {
+    inner.OptimizeLevelStyleCompaction();
 };
 
-struct SliceBridge {
-    Slice inner;
+inline void set_create_if_missing(Options &inner, bool v) {
+    inner.create_if_missing = v;
+}
 
-    SliceBridge(Slice &&s) : inner(s) {}
+inline void set_comparator(Options &inner, const RustComparator &cmp_obj) {
+    inner.comparator = &cmp_obj;
+}
 
-    inline rust::Slice<const std::uint8_t> as_bytes() const {
-        return convert_slice_back(inner);
-    }
-};
+inline std::unique_ptr<ReadOptions> new_read_options() {
+    return std::make_unique<ReadOptions>();
+}
 
-void write_status_impl(BridgeStatus &status, StatusCode code, StatusSubCode subcode, StatusSeverity severity,
-                       int bridge_code);
+inline std::unique_ptr<WriteOptions> new_write_options() {
+    return std::make_unique<WriteOptions>();
+}
 
-inline void write_status(Status &&rstatus, BridgeStatus &status) {
-    if (rstatus.code() != StatusCode::kOk || rstatus.subcode() != StatusSubCode::kNoSpace ||
-        rstatus.severity() != StatusSeverity::kNoError) {
-        write_status_impl(status, rstatus.code(), rstatus.subcode(), rstatus.severity(), 0);
-    }
+inline std::unique_ptr<Options> new_options() {
+    return std::make_unique<Options>();
 }
 
 struct IteratorBridge {
@@ -192,60 +174,254 @@ struct IteratorBridge {
         inner->SeekForPrev(k);
     }
 
-    inline std::unique_ptr<SliceBridge> key_raw() const {
-        return std::make_unique<SliceBridge>(inner->key());
+    inline std::unique_ptr<Slice> key_raw() const {
+        return std::make_unique<Slice>(inner->key());
     }
 
-    inline std::unique_ptr<SliceBridge> value_raw() const {
-        return std::make_unique<SliceBridge>(inner->value());
+    inline std::unique_ptr<Slice> value_raw() const {
+        return std::make_unique<Slice>(inner->value());
     }
 
     BridgeStatus status() const;
 };
 
 
-struct WriteBatchBridge {
-    mutable WriteBatch inner;
+inline unique_ptr<TransactionOptions> new_transaction_options() {
+    return make_unique<TransactionOptions>();
+}
 
-    inline void batch_put_raw(
+inline void set_deadlock_detect(TransactionOptions &inner, bool v) {
+    inner.deadlock_detect = v;
+}
+
+inline unique_ptr<OptimisticTransactionOptions> new_optimistic_transaction_options(const RustComparator &compare) {
+    auto ret = make_unique<OptimisticTransactionOptions>();
+    ret->cmp = &compare;
+    return ret;
+}
+
+struct TransactionBridge {
+    DB *raw_db;
+    unique_ptr<Transaction> inner;
+    mutable unique_ptr<TransactionOptions> t_ops; // Put here to make sure ownership works
+    mutable unique_ptr<OptimisticTransactionOptions> o_ops; // same as above
+    mutable unique_ptr<ReadOptions> r_ops;
+    mutable unique_ptr<ReadOptions> raw_r_ops;
+    mutable unique_ptr<WriteOptions> w_ops;
+    mutable unique_ptr<WriteOptions> raw_w_ops;
+
+    inline void set_snapshot() const {
+        inner->SetSnapshot();
+        r_ops->snapshot = inner->GetSnapshot();
+    }
+
+    inline void commit(BridgeStatus &status) const {
+        write_status(inner->Commit(), status);
+        r_ops->snapshot = nullptr;
+    }
+
+    inline void rollback(BridgeStatus &status) const {
+        write_status(inner->Rollback(), status);
+    }
+
+    inline void set_savepoint() const {
+        inner->SetSavePoint();
+    }
+
+    inline void rollback_to_savepoint(BridgeStatus &status) const {
+        write_status(inner->RollbackToSavePoint(), status);
+    }
+
+    inline void pop_savepoint(BridgeStatus &status) const {
+        write_status(inner->PopSavePoint(), status);
+    }
+
+    inline std::unique_ptr<PinnableSlice> get_txn(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const uint8_t> key,
+            BridgeStatus &status
+    ) const {
+        auto pinnable_val = std::make_unique<PinnableSlice>();
+        write_status(
+                inner->Get(*r_ops,
+                           const_cast<ColumnFamilyHandle *>(&cf),
+                           convert_slice(key),
+                           &*pinnable_val),
+                status
+        );
+        return pinnable_val;
+    }
+
+    inline std::unique_ptr<PinnableSlice> get_for_update_txn(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const uint8_t> key,
+            BridgeStatus &status
+    ) const {
+        auto pinnable_val = std::make_unique<PinnableSlice>();
+        write_status(
+                inner->GetForUpdate(*r_ops,
+                                    const_cast<ColumnFamilyHandle *>(&cf),
+                                    convert_slice(key),
+                                    &*pinnable_val),
+                status
+        );
+        return pinnable_val;
+    }
+
+    inline std::unique_ptr<PinnableSlice> get_raw(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const uint8_t> key,
+            BridgeStatus &status
+    ) const {
+        auto pinnable_val = std::make_unique<PinnableSlice>();
+        write_status(
+                raw_db->Get(*r_ops,
+                            const_cast<ColumnFamilyHandle *>(&cf),
+                            convert_slice(key),
+                            &*pinnable_val),
+                status
+        );
+        return pinnable_val;
+    }
+
+    inline void put_txn(
             const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             rust::Slice<const uint8_t> val,
             BridgeStatus &status
     ) const {
         write_status(
-                inner.Put(const_cast<ColumnFamilyHandle *>(&cf),
-                          convert_slice(key),
-                          convert_slice(val)),
+                inner->Put(const_cast<ColumnFamilyHandle *>(&cf),
+                           convert_slice(key),
+                           convert_slice(val)),
                 status
         );
     }
 
-    inline void batch_delete_raw(
+    inline void put_raw(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const uint8_t> key,
+            rust::Slice<const uint8_t> val,
+            BridgeStatus &status
+    ) const {
+        write_status(
+                raw_db->Put(
+                        *raw_w_ops,
+                        const_cast<ColumnFamilyHandle *>(&cf),
+                        convert_slice(key),
+                        convert_slice(val)),
+                status
+        );
+    }
+
+    inline void del_txn(
             const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
     ) const {
         write_status(
-                inner.Delete(const_cast<ColumnFamilyHandle *>(&cf),
-                             convert_slice(key)),
+                inner->Delete(const_cast<ColumnFamilyHandle *>(&cf),
+                              convert_slice(key)),
                 status
         );
     }
+
+    inline void del_raw(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const uint8_t> key,
+            BridgeStatus &status
+    ) const {
+        write_status(
+                raw_db->Delete(
+                        *raw_w_ops,
+                        const_cast<ColumnFamilyHandle *>(&cf),
+                        convert_slice(key)),
+                status
+        );
+    }
+
+    inline std::unique_ptr<IteratorBridge> iterator_txn(
+            const ColumnFamilyHandle &cf) const {
+        return std::make_unique<IteratorBridge>(
+                inner->GetIterator(*r_ops, const_cast<ColumnFamilyHandle *>(&cf)));
+    }
+
+    inline std::unique_ptr<IteratorBridge> iterator_raw(
+            const ColumnFamilyHandle &cf) const {
+        return std::make_unique<IteratorBridge>(
+                raw_db->NewIterator(*raw_r_ops, const_cast<ColumnFamilyHandle *>(&cf)));
+    }
 };
 
-inline unique_ptr<WriteBatchBridge> new_write_batch_raw() {
-    return make_unique<WriteBatchBridge>();
+inline tuple<vector<string>, vector<ColumnFamilyDescriptor>>
+get_cf_data(const Options &options,
+            const string &path) {
+    auto cf_names = std::vector<std::string>();
+    DB::ListColumnFamilies(options, path, &cf_names);
+    if (cf_names.empty()) {
+        cf_names.push_back(kDefaultColumnFamilyName);
+    }
+
+    std::vector<ColumnFamilyDescriptor> column_families;
+
+    for (auto el: cf_names) {
+        column_families.push_back(ColumnFamilyDescriptor(
+                el, options));
+    }
+    return std::make_tuple(cf_names, column_families);
 }
 
-struct DBBridge {
-    mutable unique_ptr<DB> db;
+struct TDBBridge {
+    mutable unique_ptr<StackableDB> db;
+    mutable TransactionDB *tdb;
+    mutable OptimisticTransactionDB *odb;
     mutable unordered_map<string, shared_ptr<ColumnFamilyHandle>> handles;
     mutable Lock handle_lock;
+    bool is_odb;
 
-    DBBridge(DB *db_,
-             unordered_map<string, shared_ptr<ColumnFamilyHandle>> &&handles_) : db(db_), handles(handles_) {}
+    TDBBridge(StackableDB *db_,
+              TransactionDB *tdb_,
+              OptimisticTransactionDB *odb_,
+              unordered_map<string, shared_ptr<ColumnFamilyHandle>> &&handles_) :
+            db(db_), tdb(tdb_), odb(odb_), handles(handles_), handle_lock() {
+        is_odb = (tdb_ == nullptr);
+    }
 
+    inline unique_ptr<TransactionBridge> begin_t_transaction(
+            unique_ptr<WriteOptions> w_ops,
+            unique_ptr<WriteOptions> raw_w_ops,
+            unique_ptr<ReadOptions> r_ops,
+            unique_ptr<ReadOptions> raw_r_ops,
+            unique_ptr<TransactionOptions> txn_options) const {
+        auto ret = make_unique<TransactionBridge>();
+        ret->raw_db = tdb;
+        ret->r_ops = std::move(r_ops);
+        ret->w_ops = std::move(w_ops);
+        ret->raw_r_ops = std::move(raw_r_ops);
+        ret->raw_w_ops = std::move(raw_w_ops);
+        ret->t_ops = std::move(txn_options);
+        Transaction *txn = tdb->BeginTransaction(*ret->w_ops, *ret->t_ops);
+        ret->inner = unique_ptr<Transaction>(txn);
+        return ret;
+    }
+
+    inline unique_ptr<TransactionBridge> begin_o_transaction(
+            unique_ptr<WriteOptions> w_ops,
+            unique_ptr<WriteOptions> raw_w_ops,
+            unique_ptr<ReadOptions> r_ops,
+            unique_ptr<ReadOptions> raw_r_ops,
+            unique_ptr<OptimisticTransactionOptions> txn_options) const {
+        auto ret = make_unique<TransactionBridge>();
+        ret->raw_db = odb;
+        ret->r_ops = std::move(r_ops);
+        ret->w_ops = std::move(w_ops);
+        ret->raw_r_ops = std::move(raw_r_ops);
+        ret->raw_w_ops = std::move(raw_w_ops);
+        ret->o_ops = std::move(txn_options);
+        Transaction *txn = odb->BeginTransaction(*ret->w_ops, *ret->o_ops);
+        ret->inner = unique_ptr<Transaction>(txn);
+        return ret;
+    }
 
     inline shared_ptr<ColumnFamilyHandle> get_cf_handle_raw(const string &name) const {
         ReadLock r_lock(handle_lock);
@@ -256,79 +432,20 @@ struct DBBridge {
         }
     }
 
-    inline void put_raw(
-            const WriteOptionsBridge &options,
-            const ColumnFamilyHandle &cf,
-            rust::Slice<const uint8_t> key,
-            rust::Slice<const uint8_t> val,
-            BridgeStatus &status
-    ) const {
-        write_status(
-                db->Put(options.inner,
-                        const_cast<ColumnFamilyHandle *>(&cf),
-                        convert_slice(key),
-                        convert_slice(val)),
-                status
-        );
-    }
-
-    inline void delete_raw(
-            const WriteOptionsBridge &options,
-            const ColumnFamilyHandle &cf,
-            rust::Slice<const uint8_t> key,
-            BridgeStatus &status
-    ) const {
-        write_status(
-                db->Delete(options.inner,
-                           const_cast<ColumnFamilyHandle *>(&cf),
-                           convert_slice(key)),
-                status
-        );
-    }
-
-    inline void write_raw(
-            const WriteOptionsBridge &options,
-            WriteBatchBridge &updates,
-            BridgeStatus &status
-    ) const {
-        write_status(db->Write(options.inner, &updates.inner), status);
-    }
-
-    inline std::unique_ptr<PinnableSliceBridge> get_raw(
-            const ReadOptionsBridge &options,
-            const ColumnFamilyHandle &cf,
-            rust::Slice<const uint8_t> key,
-            BridgeStatus &status
-    ) const {
-        auto pinnable_val = std::make_unique<PinnableSliceBridge>();
-        write_status(
-                db->Get(options.inner,
-                        const_cast<ColumnFamilyHandle *>(&cf),
-                        convert_slice(key),
-                        &pinnable_val->inner),
-                status
-        );
-        return pinnable_val;
-    }
-
-    inline std::unique_ptr<IteratorBridge> iterator_raw(
-            const ReadOptionsBridge &options,
-            const ColumnFamilyHandle &cf) const {
-        return std::make_unique<IteratorBridge>(db->NewIterator(options.inner, const_cast<ColumnFamilyHandle *>(&cf)));
-    }
-
-    inline void create_column_family_raw(const OptionsBridge &options, const string &name, BridgeStatus &status) const {
+    inline void
+    create_column_family_raw(const Options &options, const string &name, BridgeStatus &status) const {
         {
             ReadLock r_lock(handle_lock);
             if (handles.find(name) != handles.end()) {
-                write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError,
+                write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode,
+                                  StatusSeverity::kSoftError,
                                   2);
                 return;
             }
         }
         WriteLock w_lock(handle_lock);
         ColumnFamilyHandle *handle;
-        auto s = db->CreateColumnFamily(options.inner, name, &handle);
+        auto s = db->CreateColumnFamily(options, name, &handle);
         write_status(std::move(s), status);
         handles[name] = shared_ptr<ColumnFamilyHandle>(handle);
     }
@@ -341,7 +458,8 @@ struct DBBridge {
             handles.erase(cf_it);
             write_status(std::move(s), status);
         } else {
-            write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError, 3);
+            write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError,
+                              3);
         }
         // When should we call DestroyColumnFamilyHandle?
     }
@@ -356,31 +474,33 @@ struct DBBridge {
     }
 };
 
+inline unique_ptr<TransactionDBOptions> new_tdb_options() {
+    return make_unique<TransactionDBOptions>();
+}
 
-inline std::unique_ptr<DBBridge>
-open_db_raw(const OptionsBridge &options,
-            const string &path,
-            BridgeStatus &status) {
-    auto cf_names = std::vector<std::string>();
-    DB::ListColumnFamilies(options.inner, path, &cf_names);
-    if (cf_names.empty()) {
-        cf_names.push_back(kDefaultColumnFamilyName);
-    }
+inline unique_ptr<OptimisticTransactionDBOptions> new_odb_options() {
+    return make_unique<OptimisticTransactionDBOptions>();
+}
 
-    std::vector<ColumnFamilyDescriptor> column_families;
+inline unique_ptr<TDBBridge>
+open_tdb_raw(const Options &options,
+             const TransactionDBOptions &txn_db_options,
+             const string &path,
+             BridgeStatus &status) {
+    auto cf_info = get_cf_data(options, path);
+    auto cf_names = std::get<0>(cf_info);
+    auto column_families = std::get<1>(cf_info);
 
-    for (auto el: cf_names) {
-        column_families.push_back(ColumnFamilyDescriptor(
-                el, options.inner));
-    }
 
     std::vector<ColumnFamilyHandle *> handles;
+    TransactionDB *txn_db;
 
-    DB *db_ptr;
-    Status s = DB::Open(options.inner, path, column_families, &handles, &db_ptr);
-
+    Status s = TransactionDB::Open(options, txn_db_options, path,
+                                   column_families, &handles,
+                                   &txn_db);
     auto ok = s.ok();
     write_status(std::move(s), status);
+
     unordered_map<string, shared_ptr<ColumnFamilyHandle>> handle_map;
     if (ok) {
         assert(handles.size() == cf_names.size());
@@ -388,5 +508,38 @@ open_db_raw(const OptionsBridge &options,
             handle_map[cf_names[i]] = shared_ptr<ColumnFamilyHandle>(handles[i]);
         }
     }
-    return std::make_unique<DBBridge>(db_ptr, std::move(handle_map));
+
+    return make_unique<TDBBridge>(txn_db, txn_db, nullptr, std::move(handle_map));
+}
+
+
+inline unique_ptr<TDBBridge>
+open_odb_raw(const Options &options,
+             const OptimisticTransactionDBOptions &txn_db_options,
+             const string &path,
+             BridgeStatus &status) {
+    auto cf_info = get_cf_data(options, path);
+    auto cf_names = std::get<0>(cf_info);
+    auto column_families = std::get<1>(cf_info);
+
+
+    std::vector<ColumnFamilyHandle *> handles;
+    OptimisticTransactionDB *txn_db;
+
+    Status s = OptimisticTransactionDB::Open(options, txn_db_options, path,
+                                             column_families, &handles,
+                                             &txn_db);
+    auto ok = s.ok();
+    write_status(std::move(s), status);
+
+
+    unordered_map<string, shared_ptr<ColumnFamilyHandle>> handle_map;
+    if (ok) {
+        assert(handles.size() == cf_names.size());
+        for (size_t i = 0; i < handles.size(); ++i) {
+            handle_map[cf_names[i]] = shared_ptr<ColumnFamilyHandle>(handles[i]);
+        }
+    }
+
+    return make_unique<TDBBridge>(txn_db, nullptr, txn_db, std::move(handle_map));
 }
