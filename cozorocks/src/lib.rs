@@ -14,6 +14,7 @@ pub use bridge::StatusSubCode;
 pub use bridge::StatusSeverity;
 pub use bridge::Slice;
 pub use bridge::PinnableSlice;
+pub use bridge::ColumnFamilyHandle;
 
 
 impl std::fmt::Display for BridgeStatus {
@@ -240,7 +241,7 @@ impl DerefMut for OptimisticTransactionOptionsPtr {
 }
 
 impl OptimisticTransactionOptionsPtr {
-    pub fn new(cmp: &RustComparator) -> Self {
+    pub fn new(cmp: &RustComparatorPtr) -> Self {
         Self(new_optimistic_transaction_options(cmp))
     }
 }
@@ -462,19 +463,53 @@ unsafe impl Send for DBPtr {}
 
 unsafe impl Sync for DBPtr {}
 
+pub enum TransactOption {
+    Pessimistic(TransactionOptionsPtr),
+    Optimistic(OptimisticTransactionOptionsPtr),
+}
+
 impl DBPtr {
-    pub fn open_pessimistic(options: &Options, t_options: &TransactionDBOptions, path: impl AsRef<str>) -> Result<Self> {
+    pub fn open_pessimistic(options: &OptionsPtr, t_options: &TransactionDBOptionsPtr, path: impl AsRef<str>) -> Result<Self> {
         let_cxx_string!(cname = path.as_ref());
         let mut status = BridgeStatus::default();
         let ret = open_tdb_raw(options, t_options, &cname, &mut status);
         status.check_err(Self(ret))
     }
 
-    pub fn open_optimistic(options: &Options, t_options: &OptimisticTransactionDBOptions, path: impl AsRef<str>) -> Result<Self> {
+    pub fn open_optimistic(options: &OptionsPtr, t_options: &OptimisticTransactionDBOptionsPtr, path: impl AsRef<str>) -> Result<Self> {
         let_cxx_string!(cname = path.as_ref());
         let mut status = BridgeStatus::default();
         let ret = open_odb_raw(options, t_options, &cname, &mut status);
         status.check_err(Self(ret))
+    }
+
+    pub fn make_transaction(&self,
+                            options: TransactOption,
+                            read_ops: ReadOptionsPtr,
+                            raw_read_ops: ReadOptionsPtr,
+                            write_ops: WriteOptionsPtr,
+                            raw_write_ops: WriteOptionsPtr,
+    ) -> TransactionPtr {
+        TransactionPtr(match options {
+            TransactOption::Optimistic(o) => {
+                self.begin_o_transaction(
+                    write_ops.0,
+                    raw_write_ops.0,
+                    read_ops.0,
+                    raw_read_ops.0,
+                    o.0,
+                )
+            }
+            TransactOption::Pessimistic(o) => {
+                self.begin_t_transaction(
+                    write_ops.0,
+                    raw_write_ops.0,
+                    read_ops.0,
+                    raw_read_ops.0,
+                    o.0,
+                )
+            }
+        })
     }
 
     pub fn get_cf(&self, name: impl AsRef<str>) -> Option<SharedPtr<ColumnFamilyHandle>> {
@@ -487,7 +522,7 @@ impl DBPtr {
         }
     }
 
-    pub fn create_cf(&self, options: &Options, name: impl AsRef<str>) -> Result<()> {
+    pub fn create_cf(&self, options: &OptionsPtr, name: impl AsRef<str>) -> Result<()> {
         let_cxx_string!(name = name.as_ref());
         let mut status = BridgeStatus::default();
         self.create_column_family_raw(options, &name, &mut status);
