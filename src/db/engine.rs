@@ -31,9 +31,9 @@ unsafe impl Sync for Engine {}
 impl Engine {
     pub fn new(path: String, optimistic: bool) -> Result<Self> {
         let t_options = if optimistic {
-            TDBOptions::Optimistic(OptimisticTransactionDBOptionsPtr::default())
+            TDBOptions::Optimistic(OTxnDBOptionsPtr::default())
         } else {
-            TDBOptions::Pessimistic(TransactionDBOptionsPtr::default())
+            TDBOptions::Pessimistic(PTxnDBOptionsPtr::default())
         };
         let mut options = OptionsPtr::default();
         let cmp = RustComparatorPtr::new("cozo_cmp_v1", crate::relation::key_order::compare);
@@ -110,7 +110,7 @@ pub struct Session<'a> {
 // every session has its own column family to play with
 // metadata are stored in table 0
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SessionHandle {
     cf_ident: String,
     status: SessionStatus,
@@ -126,7 +126,7 @@ pub enum SessionStatus {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, thread};
     use super::*;
 
     #[test]
@@ -147,15 +147,40 @@ mod tests {
             }
             let engine2 = Engine::new(p2.to_string(), false);
             assert!(engine2.is_ok());
-            let engine2 = Engine::new(p3.to_string(), false).unwrap();
-            let _sess = engine2.session();
-            let handles = engine2.session_handles.lock().unwrap();
-            println!("got handles {}", handles.len());
-            let cf_ident = &handles.first().unwrap().read().unwrap().cf_ident;
-            println!("Opening ok {}", cf_ident);
-            let cf = engine2.db.get_cf(cf_ident).unwrap();
-            assert!(!cf.is_null());
-            println!("Getting CF ok");
+            let engine2 = Arc::new(Engine::new(p3.to_string(), false).unwrap());
+            {
+                for i in 0..10 {
+                    let _sess = engine2.session();
+                }
+                let handles = engine2.session_handles.lock().unwrap();
+                println!("got handles {}", handles.len());
+                let cf_ident = &handles.first().unwrap().read().unwrap().cf_ident;
+                println!("Opening ok {}", cf_ident);
+                let cf = engine2.db.get_cf(cf_ident).unwrap();
+                assert!(!cf.is_null());
+                println!("Getting CF ok");
+            }
+            let mut thread_handles = vec![];
+
+            println!("concurrent");
+            for i in 0..10 {
+                let engine = engine2.clone();
+                thread_handles.push(thread::spawn(move || {
+                    // println!("In thread {}", i);
+                    let _sess = engine.session();
+                    // println!("In thread {} end", i);
+                }))
+            }
+
+
+            for t in thread_handles {
+                t.join().unwrap();
+            }
+            println!("All OK");
+            {
+                let handles = engine2.session_handles.lock().unwrap();
+                println!("got handles {:#?}", handles.iter().map(|h| h.read().unwrap().cf_ident.to_string()).collect::<Vec<_>>());
+            }
         }
         let _ = fs::remove_dir_all(p1);
         let _ = fs::remove_dir_all(p2);

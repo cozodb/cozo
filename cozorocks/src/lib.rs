@@ -227,9 +227,9 @@ impl WriteOptionsPtr {
     }
 }
 
-pub struct TransactionOptionsPtr(UniquePtr<TransactionOptions>);
+pub struct PTxnOptionsPtr(UniquePtr<TransactionOptions>);
 
-impl Deref for TransactionOptionsPtr {
+impl Deref for PTxnOptionsPtr {
     type Target = UniquePtr<TransactionOptions>;
 
     #[inline]
@@ -238,14 +238,14 @@ impl Deref for TransactionOptionsPtr {
     }
 }
 
-impl DerefMut for TransactionOptionsPtr {
+impl DerefMut for PTxnOptionsPtr {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl TransactionOptionsPtr {
+impl PTxnOptionsPtr {
     #[inline]
     pub fn default() -> Self {
         Self(new_transaction_options())
@@ -257,9 +257,9 @@ impl TransactionOptionsPtr {
     }
 }
 
-pub struct OptimisticTransactionOptionsPtr(UniquePtr<OptimisticTransactionOptions>);
+pub struct OTxnOptionsPtr(UniquePtr<OptimisticTransactionOptions>);
 
-impl Deref for OptimisticTransactionOptionsPtr {
+impl Deref for OTxnOptionsPtr {
     type Target = UniquePtr<OptimisticTransactionOptions>;
 
     #[inline]
@@ -268,23 +268,23 @@ impl Deref for OptimisticTransactionOptionsPtr {
     }
 }
 
-impl DerefMut for OptimisticTransactionOptionsPtr {
+impl DerefMut for OTxnOptionsPtr {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl OptimisticTransactionOptionsPtr {
+impl OTxnOptionsPtr {
     #[inline]
     pub fn new(cmp: &RustComparatorPtr) -> Self {
         Self(new_optimistic_transaction_options(cmp))
     }
 }
 
-pub struct TransactionDBOptionsPtr(UniquePtr<TransactionDBOptions>);
+pub struct PTxnDBOptionsPtr(UniquePtr<TransactionDBOptions>);
 
-impl Deref for TransactionDBOptionsPtr {
+impl Deref for PTxnDBOptionsPtr {
     type Target = UniquePtr<TransactionDBOptions>;
 
     #[inline]
@@ -293,23 +293,23 @@ impl Deref for TransactionDBOptionsPtr {
     }
 }
 
-impl DerefMut for TransactionDBOptionsPtr {
+impl DerefMut for PTxnDBOptionsPtr {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl TransactionDBOptionsPtr {
+impl PTxnDBOptionsPtr {
     #[inline]
     pub fn default() -> Self {
         Self(new_tdb_options())
     }
 }
 
-pub struct OptimisticTransactionDBOptionsPtr(UniquePtr<OptimisticTransactionDBOptions>);
+pub struct OTxnDBOptionsPtr(UniquePtr<OptimisticTransactionDBOptions>);
 
-impl Deref for OptimisticTransactionDBOptionsPtr {
+impl Deref for OTxnDBOptionsPtr {
     type Target = UniquePtr<OptimisticTransactionDBOptions>;
 
     #[inline]
@@ -318,14 +318,14 @@ impl Deref for OptimisticTransactionDBOptionsPtr {
     }
 }
 
-impl DerefMut for OptimisticTransactionDBOptionsPtr {
+impl DerefMut for OTxnDBOptionsPtr {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl OptimisticTransactionDBOptionsPtr {
+impl OTxnDBOptionsPtr {
     #[inline]
     pub fn default() -> Self {
         Self(new_odb_options())
@@ -536,13 +536,13 @@ unsafe impl Send for DBPtr {}
 unsafe impl Sync for DBPtr {}
 
 pub enum TransactOptions {
-    Pessimistic(TransactionOptionsPtr),
-    Optimistic(OptimisticTransactionOptionsPtr),
+    Pessimistic(PTxnOptionsPtr),
+    Optimistic(OTxnOptionsPtr),
 }
 
 pub enum TDBOptions {
-    Pessimistic(TransactionDBOptionsPtr),
-    Optimistic(OptimisticTransactionDBOptionsPtr),
+    Pessimistic(PTxnDBOptionsPtr),
+    Optimistic(OTxnDBOptionsPtr),
 }
 
 impl DBPtr {
