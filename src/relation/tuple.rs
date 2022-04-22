@@ -1,6 +1,7 @@
 use std::borrow::{Cow};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 use crate::relation::value::{Tag, Value};
 
@@ -350,6 +351,12 @@ impl<T: AsRef<[u8]>> PartialEq for Tuple<T> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.data.as_ref() == other.data.as_ref()
+    }
+}
+
+impl <T: AsRef<[u8]>> Hash for Tuple<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.as_ref().hash(state);
     }
 }
 
