@@ -432,7 +432,7 @@ struct TDBBridge {
         }
     }
 
-    inline void
+    inline shared_ptr<ColumnFamilyHandle>
     create_column_family_raw(const Options &options, const string &name, BridgeStatus &status) const {
         {
             ReadLock r_lock(handle_lock);
@@ -440,14 +440,18 @@ struct TDBBridge {
                 write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode,
                                   StatusSeverity::kSoftError,
                                   2);
-                return;
+                return shared_ptr<ColumnFamilyHandle>(nullptr);
             }
         }
-        WriteLock w_lock(handle_lock);
-        ColumnFamilyHandle *handle;
-        auto s = db->CreateColumnFamily(options, name, &handle);
-        write_status(std::move(s), status);
-        handles[name] = shared_ptr<ColumnFamilyHandle>(handle);
+        {
+            WriteLock w_lock(handle_lock);
+            ColumnFamilyHandle *handle;
+            auto s = db->CreateColumnFamily(options, name, &handle);
+            write_status(std::move(s), status);
+            auto ret = shared_ptr<ColumnFamilyHandle>(handle);
+            handles[name] = ret;
+            return ret;
+        }
     }
 
     inline void drop_column_family_raw(const string &name, BridgeStatus &status) const {

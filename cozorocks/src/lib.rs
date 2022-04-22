@@ -596,11 +596,11 @@ impl DBPtr {
         }
     }
     #[inline]
-    pub fn create_cf(&self, options: &OptionsPtr, name: impl AsRef<str>) -> Result<()> {
+    pub fn create_cf(&self, options: &OptionsPtr, name: impl AsRef<str>) -> Result<SharedPtr<ColumnFamilyHandle>> {
         let_cxx_string!(name = name.as_ref());
         let mut status = BridgeStatus::default();
-        self.create_column_family_raw(options, &name, &mut status);
-        status.check_err(())
+        let ret = self.create_column_family_raw(options, &name, &mut status);
+        status.check_err(ret)
     }
     #[inline]
     pub fn drop_cf(&self, name: impl AsRef<str>) -> Result<()> {
@@ -615,7 +615,9 @@ impl DBPtr {
     }
     pub fn drop_non_default_cfs(&self) {
         for name in self.cf_names() {
-            self.drop_cf(name);
+            if name != "default" {
+                self.drop_cf(name).unwrap();
+            }
         }
     }
 }
