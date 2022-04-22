@@ -329,6 +329,21 @@ impl Tuple<Vec<u8>> {
         };
         self.push_varint(u);
     }
+
+    #[inline]
+    pub fn concat_data<T: AsRef<[u8]>>(&mut self, other: &Tuple<T>) {
+        let other_data_part = &other.as_ref()[4..];
+        self.data.extend_from_slice(other_data_part);
+    }
+}
+
+impl <'a> Extend<Value<'a>> for Tuple<Vec<u8>> {
+    #[inline]
+    fn extend<T: IntoIterator<Item=Value<'a>>>(&mut self, iter: T) {
+        for v in iter {
+            self.push_value(&v)
+        }
+    }
 }
 
 impl<T: AsRef<[u8]>> PartialEq for Tuple<T> {

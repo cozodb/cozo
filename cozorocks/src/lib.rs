@@ -62,7 +62,9 @@ impl BridgeStatus {
 impl From<BridgeStatus> for Option<BridgeError> {
     #[inline]
     fn from(s: BridgeStatus) -> Self {
-        if s.severity == StatusSeverity::kNoError && s.bridge_code == StatusBridgeCode::OK {
+        if s.severity == StatusSeverity::kNoError &&
+            s.bridge_code == StatusBridgeCode::OK &&
+            s.code == StatusCode::kOk {
             None
         } else {
             Some(BridgeError { status: s })
@@ -533,36 +535,37 @@ unsafe impl Send for DBPtr {}
 
 unsafe impl Sync for DBPtr {}
 
-pub enum TransactOption {
+pub enum TransactOptions {
     Pessimistic(TransactionOptionsPtr),
     Optimistic(OptimisticTransactionOptionsPtr),
 }
 
-impl DBPtr {
-    pub fn open_pessimistic(options: &OptionsPtr, t_options: &TransactionDBOptionsPtr, path: impl AsRef<str>) -> Result<Self> {
-        let_cxx_string!(cname = path.as_ref());
-        let mut status = BridgeStatus::default();
-        let ret = open_tdb_raw(options, t_options, &cname, &mut status);
-        status.check_err(Self(ret))
-    }
+pub enum TDBOptions {
+    Pessimistic(TransactionDBOptionsPtr),
+    Optimistic(OptimisticTransactionDBOptionsPtr),
+}
 
-    pub fn open_optimistic(options: &OptionsPtr, t_options: &OptimisticTransactionDBOptionsPtr, path: impl AsRef<str>) -> Result<Self> {
+impl DBPtr {
+    pub fn open(options: &OptionsPtr, t_options: &TDBOptions, path: impl AsRef<str>) -> Result<Self> {
         let_cxx_string!(cname = path.as_ref());
         let mut status = BridgeStatus::default();
-        let ret = open_odb_raw(options, t_options, &cname, &mut status);
+        let ret = match t_options {
+            TDBOptions::Pessimistic(o) => open_tdb_raw(options, o, &cname, &mut status),
+            TDBOptions::Optimistic(o) => open_odb_raw(options, o, &cname, &mut status)
+        };
         status.check_err(Self(ret))
     }
 
     #[inline]
     pub fn make_transaction(&self,
-                            options: TransactOption,
+                            options: TransactOptions,
                             read_ops: ReadOptionsPtr,
                             raw_read_ops: ReadOptionsPtr,
                             write_ops: WriteOptionsPtr,
                             raw_write_ops: WriteOptionsPtr,
     ) -> TransactionPtr {
         TransactionPtr(match options {
-            TransactOption::Optimistic(o) => {
+            TransactOptions::Optimistic(o) => {
                 self.begin_o_transaction(
                     write_ops.0,
                     raw_write_ops.0,
@@ -571,7 +574,7 @@ impl DBPtr {
                     o.0,
                 )
             }
-            TransactOption::Pessimistic(o) => {
+            TransactOptions::Pessimistic(o) => {
                 self.begin_t_transaction(
                     write_ops.0,
                     raw_write_ops.0,
@@ -609,5 +612,10 @@ impl DBPtr {
     #[inline]
     pub fn cf_names(&self) -> Vec<String> {
         self.get_column_family_names_raw().iter().map(|v| v.to_string_lossy().to_string()).collect()
+    }
+    pub fn drop_non_default_cfs(&self) {
+        for name in self.cf_names() {
+            self.drop_cf(name);
+        }
     }
 }

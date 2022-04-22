@@ -1,3 +1,5 @@
+extern crate core;
+
 // pub mod value;
 // pub mod typing;
 // pub mod env;

@@ -493,7 +493,7 @@ open_tdb_raw(const Options &options,
 
 
     std::vector<ColumnFamilyHandle *> handles;
-    TransactionDB *txn_db;
+    TransactionDB *txn_db = nullptr;
 
     Status s = TransactionDB::Open(options, txn_db_options, path,
                                    column_families, &handles,
@@ -524,7 +524,7 @@ open_odb_raw(const Options &options,
 
 
     std::vector<ColumnFamilyHandle *> handles;
-    OptimisticTransactionDB *txn_db;
+    OptimisticTransactionDB *txn_db = nullptr;
 
     Status s = OptimisticTransactionDB::Open(options, txn_db_options, path,
                                              column_families, &handles,
