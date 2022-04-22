@@ -131,6 +131,10 @@ inline void set_comparator(Options &inner, const RustComparator &cmp_obj) {
     inner.comparator = &cmp_obj;
 }
 
+inline void set_paranoid_checks(Options &inner, bool v) {
+    inner.paranoid_checks = v;
+}
+
 inline std::unique_ptr<ReadOptions> new_read_options() {
     return std::make_unique<ReadOptions>();
 }

@@ -158,6 +158,11 @@ impl OptionsPtr {
         set_comparator(self.pin_mut(), cmp);
         self
     }
+    #[inline]
+    pub fn set_paranoid_checks(&mut self, v: bool) -> &mut Self {
+        set_paranoid_checks(self.pin_mut(), v);
+        self
+    }
 }
 
 

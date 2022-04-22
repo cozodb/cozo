@@ -86,6 +86,7 @@ mod ffi {
         fn optimize_level_style_compaction(o: Pin<&mut Options>);
         fn set_create_if_missing(o: Pin<&mut Options>, v: bool);
         fn set_comparator(o: Pin<&mut Options>, cmp: &RustComparator);
+        fn set_paranoid_checks(o: Pin<&mut Options>, v: bool);
 
         type ReadOptions;
         fn new_read_options() -> UniquePtr<ReadOptions>;
