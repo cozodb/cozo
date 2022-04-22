@@ -158,6 +158,7 @@ mod ffi {
                                raw_r_ops: UniquePtr<ReadOptions>,
                                txn_options: UniquePtr<OptimisticTransactionOptions>) -> UniquePtr<TransactionBridge>;
         fn get_cf_handle_raw(self: &TDBBridge, name: &CxxString) -> SharedPtr<ColumnFamilyHandle>;
+        fn get_default_cf_handle_raw(self: &TDBBridge) -> SharedPtr<ColumnFamilyHandle>;
         fn create_column_family_raw(self: &TDBBridge, options: &Options, name: &CxxString, status: &mut BridgeStatus) -> SharedPtr<ColumnFamilyHandle>;
         fn drop_column_family_raw(self: &TDBBridge, name: &CxxString, status: &mut BridgeStatus);
         fn get_column_family_names_raw(self: &TDBBridge) -> UniquePtr<CxxVector<CxxString>>;

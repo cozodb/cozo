@@ -596,6 +596,10 @@ impl DBPtr {
         }
     }
     #[inline]
+    pub fn default_cf(&self) -> SharedPtr<ColumnFamilyHandle> {
+        self.get_default_cf_handle_raw()
+    }
+    #[inline]
     pub fn create_cf(&self, options: &OptionsPtr, name: impl AsRef<str>) -> Result<SharedPtr<ColumnFamilyHandle>> {
         let_cxx_string!(name = name.as_ref());
         let mut status = BridgeStatus::default();

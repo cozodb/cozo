@@ -432,6 +432,10 @@ struct TDBBridge {
         }
     }
 
+    inline shared_ptr<ColumnFamilyHandle> get_default_cf_handle_raw() const {
+        return handles.at("default");
+    }
+
     inline shared_ptr<ColumnFamilyHandle>
     create_column_family_raw(const Options &options, const string &name, BridgeStatus &status) const {
         {
