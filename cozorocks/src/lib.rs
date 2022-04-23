@@ -445,6 +445,10 @@ impl Deref for TransactionPtr {
 
 impl TransactionPtr {
     #[inline]
+    pub fn null() -> Self {
+        TransactionPtr(UniquePtr::null())
+    }
+    #[inline]
     pub fn set_snapshot(&self) {
         TransactionBridge::set_snapshot(self)
     }

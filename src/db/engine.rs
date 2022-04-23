@@ -9,7 +9,7 @@ use uuid::Uuid;
 use uuid::v1::{Context, Timestamp};
 use rand::Rng;
 
-struct EngineOptions {
+pub struct EngineOptions {
     cmp: RustComparatorPtr,
     options: OptionsPtr,
     t_options: TDBOptions,
@@ -18,8 +18,8 @@ struct EngineOptions {
 }
 
 pub struct Engine {
-    db: DBPtr,
-    options_store: Box<EngineOptions>,
+    pub db: DBPtr,
+    pub options_store: Box<EngineOptions>,
     session_handles: RwLock<Vec<Arc<RwLock<SessionHandle>>>>,
 }
 
@@ -97,19 +97,50 @@ impl Engine {
         return Session {
             engine: self,
             stack_depth: 0,
+            txn: TransactionPtr::null(),
+            perm_cf: SharedPtr::null(),
+            temp_cf: SharedPtr::null(),
             handle,
         };
     }
 }
 
 pub struct Session<'a> {
-    engine: &'a Engine,
-    stack_depth: i32,
-    // zero or negative
-    handle: Arc<RwLock<SessionHandle>>,
+    pub engine: &'a Engine,
+    pub stack_depth: i32,
+    pub handle: Arc<RwLock<SessionHandle>>,
+    pub txn: TransactionPtr,
+    pub perm_cf: SharedPtr<ColumnFamilyHandle>,
+    pub temp_cf: SharedPtr<ColumnFamilyHandle>,
 }
 // every session has its own column family to play with
 // metadata are stored in table 0
+
+impl<'a> Session<'a> {
+    pub fn start(&mut self) {
+        self.perm_cf = self.engine.db.default_cf();
+        let name = self.handle.read().unwrap().cf_ident.to_string();
+        self.temp_cf = self.engine.db.get_cf(name).unwrap();
+        let t_options = match self.engine.options_store.t_options {
+            TDBOptions::Pessimistic(_) => {
+                TransactOptions::Pessimistic(PTxnOptionsPtr::default())
+            }
+            TDBOptions::Optimistic(_) => {
+                TransactOptions::Optimistic(OTxnOptionsPtr::new(&self.engine.options_store.cmp))
+            }
+        };
+        let r_opts = ReadOptionsPtr::default();
+        let rx_opts = ReadOptionsPtr::default();
+        let w_opts = WriteOptionsPtr::default();
+        let mut wx_opts = WriteOptionsPtr::default();
+        wx_opts.set_disable_wal(true);
+        self.txn = self.engine.db.make_transaction(t_options, r_opts, rx_opts, w_opts, wx_opts);
+        if self.txn.is_null() {
+            panic!("Starting session failed as opening transaction failed");
+        }
+        self.handle.write().unwrap().status = SessionStatus::Running;
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct SessionHandle {
@@ -151,7 +182,8 @@ mod tests {
             let engine2 = Arc::new(Engine::new(p3.to_string(), false).unwrap());
             {
                 for _i in 0..10 {
-                    let _sess = engine2.session();
+                    let mut _sess = engine2.session();
+                    _sess.start();
                 }
                 let handles = engine2.session_handles.read().unwrap();
                 println!("got handles {}", handles.len());
@@ -168,7 +200,8 @@ mod tests {
                 let engine = engine2.clone();
                 thread_handles.push(thread::spawn(move || {
                     println!("In thread {}", i);
-                    let _sess = engine.session();
+                    let mut _sess = engine.session();
+                    _sess.start();
                     println!("In thread {} end", i);
                 }))
             }

@@ -397,6 +397,9 @@ struct TDBBridge {
             unique_ptr<ReadOptions> r_ops,
             unique_ptr<ReadOptions> raw_r_ops,
             unique_ptr<TransactionOptions> txn_options) const {
+        if (tdb == nullptr) {
+            return unique_ptr<TransactionBridge>(nullptr);
+        }
         auto ret = make_unique<TransactionBridge>();
         ret->raw_db = tdb;
         ret->r_ops = std::move(r_ops);
@@ -415,6 +418,9 @@ struct TDBBridge {
             unique_ptr<ReadOptions> r_ops,
             unique_ptr<ReadOptions> raw_r_ops,
             unique_ptr<OptimisticTransactionOptions> txn_options) const {
+        if (odb == nullptr) {
+            return unique_ptr<TransactionBridge>(nullptr);
+        }
         auto ret = make_unique<TransactionBridge>();
         ret->raw_db = odb;
         ret->r_ops = std::move(r_ops);
