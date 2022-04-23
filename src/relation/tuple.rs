@@ -1,11 +1,12 @@
 use std::borrow::{Cow};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 use crate::relation::value::{Tag, Value};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Tuple<T>
     where T: AsRef<[u8]>
 {
@@ -22,6 +23,11 @@ impl<T> AsRef<[u8]> for Tuple<T> where T: AsRef<[u8]> {
 const PREFIX_LEN: usize = 4;
 
 impl<T: AsRef<[u8]>> Tuple<T> {
+    #[inline]
+    pub fn starts_with<T2: AsRef<[u8]>>(&self, other: &Tuple<T2>) -> bool {
+        self.data.as_ref().starts_with(other.data.as_ref())
+    }
+
     #[inline]
     pub fn new(data: T) -> Self {
         Self {
@@ -66,7 +72,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         let data = self.data.as_ref();
         let tag_start = *self.idx_cache.borrow().last().unwrap_or(&PREFIX_LEN);
         let start = tag_start + 1;
-        let nxt = match Tag::from(data[tag_start]) {
+        let nxt = match Tag::try_from(data[tag_start]).unwrap() {
             Tag::Null | Tag::BoolTrue | Tag::BoolFalse => start,
             Tag::Int | Tag::UInt => start + self.parse_varint(start).1,
             Tag::Float => start + 8,
@@ -77,7 +83,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 start + slen + offset
             }
             Tag::List => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
-            Tag::Dict => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize
+            Tag::Dict => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
         };
         self.idx_cache.borrow_mut().push(nxt);
     }
@@ -120,7 +126,11 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     fn parse_value_at(&self, pos: usize) -> (Value, usize) {
         let data = self.data.as_ref();
         let start = pos + 1;
-        let (nxt, val): (usize, Value) = match Tag::from(data[pos]) {
+        let tag = match Tag::try_from(data[pos]) {
+            Ok(t) => t,
+            Err(e) => panic!("Cannot parse tag {} for {:?}", e, data)
+        };
+        let (nxt, val): (usize, Value) = match tag {
             Tag::Null => (start, ().into()),
             Tag::BoolTrue => (start, true.into()),
             Tag::BoolFalse => (start, false.into()),
@@ -184,6 +194,12 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             tuple: self,
             pos: 4,
         }
+    }
+}
+
+impl<T: AsRef<[u8]>> Debug for Tuple<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.iter().collect::<Vec<_>>())
     }
 }
 
@@ -280,9 +296,7 @@ impl Tuple<Vec<u8>> {
                 }
                 let length = (self.data.len() - start_pos) as u32;
                 let length_bytes = length.to_be_bytes();
-                for i in 0..4 {
-                    self.data[start_pos + i] = length_bytes[i]
-                }
+                self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
                 let mut cache = self.idx_cache.borrow_mut();
                 cache.truncate(start_len);
                 cache.push(self.data.len());
@@ -299,9 +313,7 @@ impl Tuple<Vec<u8>> {
                 }
                 let length = (self.data.len() - start_pos) as u32;
                 let length_bytes = length.to_be_bytes();
-                for i in 0..4 {
-                    self.data[start_pos + i] = length_bytes[i]
-                }
+                self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
                 let mut cache = self.idx_cache.borrow_mut();
                 cache.truncate(start_len);
                 cache.push(self.data.len());
@@ -347,14 +359,14 @@ impl <'a> Extend<Value<'a>> for Tuple<Vec<u8>> {
     }
 }
 
-impl<T: AsRef<[u8]>> PartialEq for Tuple<T> {
+impl<T: AsRef<[u8]>, T2: AsRef<[u8]>> PartialEq<Tuple<T2>> for Tuple<T> {
     #[inline]
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(&self, other: &Tuple<T2>) -> bool {
         self.data.as_ref() == other.data.as_ref()
     }
 }
 
-impl <T: AsRef<[u8]>> Hash for Tuple<T> {
+impl<T: AsRef<[u8]>> Hash for Tuple<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.data.as_ref().hash(state);
     }
@@ -479,4 +491,12 @@ mod tests {
         println!("{:?}", v);
     }
      */
+
+    #[test]
+    fn particular() {
+        let mut v = Tuple::with_prefix(0);
+        v.push_str("pqr");
+        v.push_int(-64);
+        println!("{:?} {:?}", v, v.data);
+    }
 }

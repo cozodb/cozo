@@ -74,21 +74,22 @@ impl From<BridgeStatus> for Option<BridgeError> {
 
 pub type Result<T> = std::result::Result<T, BridgeError>;
 
-pub trait SlicePtr {
-    fn as_bytes(&self) -> &[u8];
+pub enum SlicePtr {
+    Plain(UniquePtr<Slice>),
+    Pinnable(UniquePtr<PinnableSlice>),
 }
 
-impl SlicePtr for UniquePtr<Slice> {
+impl AsRef<[u8]> for SlicePtr {
     #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        convert_slice_back(self)
-    }
-}
-
-impl SlicePtr for UniquePtr<PinnableSlice> {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        convert_pinnable_slice_back(self)
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            SlicePtr::Plain(s) => {
+                convert_slice_back(s)
+            }
+            SlicePtr::Pinnable(s) => {
+                convert_pinnable_slice_back(s)
+            }
+        }
     }
 }
 
@@ -374,12 +375,29 @@ impl IteratorPtr {
         IteratorBridge::do_seek_for_prev(self, key.as_ref())
     }
     #[inline]
-    pub fn key(&self) -> UniquePtr<Slice> {
-        IteratorBridge::key_raw(self)
+    pub fn key(&self) -> Option<SlicePtr> {
+        if self.is_valid() {
+            Some(SlicePtr::Plain(IteratorBridge::key_raw(self)))
+        } else {
+            None
+        }
     }
     #[inline]
-    pub fn val(&self) -> UniquePtr<Slice> {
-        IteratorBridge::value_raw(self)
+    pub fn val(&self) -> Option<SlicePtr> {
+        if self.is_valid() {
+            Some(SlicePtr::Plain(IteratorBridge::value_raw(self)))
+        } else {
+            None
+        }
+    }
+    #[inline]
+    pub fn pair(&self) -> Option<(SlicePtr, SlicePtr)> {
+        if self.is_valid() {
+            Some((SlicePtr::Plain(IteratorBridge::key_raw(self)),
+                  SlicePtr::Plain(IteratorBridge::value_raw(self))))
+        } else {
+            None
+        }
     }
     #[inline]
     pub fn status(&self) -> BridgeStatus {
@@ -387,48 +405,46 @@ impl IteratorPtr {
     }
     #[inline]
     pub fn iter(&self) -> KVIterator {
-        KVIterator { it: self }
+        KVIterator { it: self, should_next: false }
     }
     #[inline]
     pub fn keys(&self) -> KeyIterator {
-        KeyIterator { it: self }
+        KeyIterator { it: self, should_next: false }
     }
 }
 
 pub struct KVIterator<'a> {
     it: &'a IteratorPtr,
+    should_next: bool,
 }
 
 impl Iterator for KVIterator<'_> {
-    type Item = (UniquePtr<Slice>, UniquePtr<Slice>);
+    type Item = (SlicePtr, SlicePtr);
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.it.is_valid() {
-            let ret = (self.it.key(), self.it.val());
-            self.next();
-            Some(ret)
-        } else {
-            None
+        if self.should_next {
+            self.it.next();
         }
+        self.should_next = true;
+        self.it.pair()
     }
 }
 
 
 pub struct KeyIterator<'a> {
     it: &'a IteratorPtr,
+    should_next: bool,
 }
 
 impl Iterator for KeyIterator<'_> {
-    type Item = UniquePtr<Slice>;
+    type Item = SlicePtr;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.it.is_valid() {
-            let ret = self.it.key();
-            self.next();
-            Some(ret)
-        } else {
-            None
+        if self.should_next {
+            self.it.next();
         }
+        self.should_next = true;
+        self.it.key()
     }
 }
 
@@ -481,21 +497,21 @@ impl TransactionPtr {
         status.check_err(())
     }
     #[inline]
-    pub fn get(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<UniquePtr<PinnableSlice>> {
+    pub fn get(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<SlicePtr> {
         let mut status = BridgeStatus::default();
         if transact {
             let ret = self.get_txn(cf, key.as_ref(), &mut status);
-            status.check_err(ret)
+            status.check_err(SlicePtr::Pinnable(ret))
         } else {
             let ret = self.get_raw(cf, key.as_ref(), &mut status);
-            status.check_err(ret)
+            status.check_err(SlicePtr::Pinnable(ret))
         }
     }
     #[inline]
-    pub fn get_for_update(&self, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<UniquePtr<PinnableSlice>> {
+    pub fn get_for_update(&self, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<SlicePtr> {
         let mut status = BridgeStatus::default();
         let ret = self.get_for_update_txn(cf, key.as_ref(), &mut status);
-        status.check_err(ret)
+        status.check_err(SlicePtr::Pinnable(ret))
     }
     #[inline]
     pub fn del(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<()> {

@@ -1,8 +1,9 @@
 use crate::relation::typing::Typing;
 
-#[repr(u8)]
+#[repr(u32)]
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub enum DataKind {
+    DataTuple = 0,
     Node = 1,
     Edge = 2,
     Associate = 3,

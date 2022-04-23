@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include<iostream>
 #include <shared_mutex>
 #include "rust/cxx.h"
 
@@ -83,9 +84,10 @@ public:
     }
 
     const char *Name() const {
-        return "RustComparator";
+        return name.c_str();
     }
 
+    virtual bool CanKeysWithDifferentByteContentsBeEqual() const { return true; }
 
     void FindShortestSeparator(std::string *, const rocksdb::Slice &) const {}
 
@@ -179,6 +181,7 @@ struct IteratorBridge {
     }
 
     inline std::unique_ptr<Slice> key_raw() const {
+//        std::cout << "c++ get  " << inner->key().size() << std::endl;
         return std::make_unique<Slice>(inner->key());
     }
 
@@ -308,12 +311,15 @@ struct TransactionBridge {
             rust::Slice<const uint8_t> val,
             BridgeStatus &status
     ) const {
+        auto k = convert_slice(key);
+        auto v = convert_slice(val);
+//        std::cout << "c++ put  " << key.size() << "  " << k.size() << std::endl;
         write_status(
                 raw_db->Put(
                         *raw_w_ops,
                         const_cast<ColumnFamilyHandle *>(&cf),
-                        convert_slice(key),
-                        convert_slice(val)),
+                        k,
+                        v),
                 status
         );
     }

@@ -7,16 +7,16 @@ use uuid::Uuid;
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub enum Tag {
-    BoolFalse = 0,
+    BoolFalse = 1,
     Null = 2,
-    BoolTrue = 4,
-    Int = 11,
-    Float = 13,
-    Text = 15,
-    Uuid = 17,
-    UInt = 21,
-    List = 101,
-    Dict = 103,
+    BoolTrue = 3,
+    Int = 4,
+    Float = 5,
+    Text = 6,
+    Uuid = 7,
+    UInt = 8,
+    List = 9,
+    Dict = 10,
     // Timestamp = 23,
     // Datetime = 25,
     // Timezone = 27,
@@ -44,23 +44,24 @@ pub enum Tag {
     // C128Arr = 74,
 }
 
-impl From<u8> for Tag {
+impl TryFrom<u8> for Tag {
+    type Error = u8;
     #[inline]
-    fn from(u: u8) -> Self {
+    fn try_from(u: u8) -> std::result::Result<Tag, u8> {
         use self::Tag::*;
-        match u {
-            0 => BoolFalse,
+        Ok(match u {
+            1 => BoolFalse,
             2 => Null,
-            4 => BoolTrue,
-            11 => Int,
-            13 => Float,
-            15 => Text,
-            17 => Uuid,
-            21 => UInt,
-            101 => List,
-            103 => Dict,
-            _ => panic!("Unexpected value tag {}", u)
-        }
+            3 => BoolTrue,
+            4 => Int,
+            5 => Float,
+            6 => Text,
+            7 => Uuid,
+            8 => UInt,
+            9 => List,
+            10 => Dict,
+            v => return Err(v)
+        })
     }
 }
 
@@ -93,7 +94,7 @@ impl<'a> Value<'a> {
             Value::List(l) => l.into_iter().map(|v| v.to_static()).collect::<Vec<StaticValue>>().into(),
             Value::Dict(d) => d.into_iter()
                 .map(|(k, v)| (Cow::Owned(k.into_owned()), v.to_static()))
-                .collect::<BTreeMap<Cow<'static, str>, StaticValue>>().into()
+                .collect::<BTreeMap<Cow<'static, str>, StaticValue>>().into(),
         }
     }
 }

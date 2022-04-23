@@ -94,14 +94,14 @@ impl Engine {
             Some(h) => h.clone()
         };
 
-        return Session {
+        Session {
             engine: self,
             stack_depth: 0,
             txn: TransactionPtr::null(),
             perm_cf: SharedPtr::null(),
             temp_cf: SharedPtr::null(),
             handle,
-        };
+        }
     }
 }
 
@@ -119,8 +119,9 @@ pub struct Session<'a> {
 impl<'a> Session<'a> {
     pub fn start(&mut self) {
         self.perm_cf = self.engine.db.default_cf();
-        let name = self.handle.read().unwrap().cf_ident.to_string();
-        self.temp_cf = self.engine.db.get_cf(name).unwrap();
+        assert!(!self.perm_cf.is_null());
+        self.temp_cf = self.engine.db.get_cf(&self.handle.read().unwrap().cf_ident).unwrap();
+        assert!(!self.temp_cf.is_null());
         let t_options = match self.engine.options_store.t_options {
             TDBOptions::Pessimistic(_) => {
                 TransactOptions::Pessimistic(PTxnOptionsPtr::default())
@@ -129,8 +130,10 @@ impl<'a> Session<'a> {
                 TransactOptions::Optimistic(OTxnOptionsPtr::new(&self.engine.options_store.cmp))
             }
         };
-        let r_opts = ReadOptionsPtr::default();
-        let rx_opts = ReadOptionsPtr::default();
+        let mut r_opts = ReadOptionsPtr::default();
+        r_opts.set_total_order_seek(true);
+        let mut rx_opts = ReadOptionsPtr::default();
+        rx_opts.set_total_order_seek(true);
         let w_opts = WriteOptionsPtr::default();
         let mut wx_opts = WriteOptionsPtr::default();
         wx_opts.set_disable_wal(true);
@@ -159,7 +162,34 @@ pub enum SessionStatus {
 #[cfg(test)]
 mod tests {
     use std::{fs, thread};
+    use crate::db::eval::Environment;
+    use crate::relation::table::DataKind::Value;
+    use crate::relation::tuple::Tuple;
     use super::*;
+
+    #[test]
+    fn push_get() {
+        {
+            let engine = Engine::new("_push_get".to_string(), false).unwrap();
+            let mut sess = engine.session();
+            sess.start();
+            for i in (-80..-40).step_by(10) {
+                let mut ikey = Tuple::with_prefix(0);
+                ikey.push_int(i);
+                ikey.push_str("pqr");
+                println!("in {:?} {:?}", ikey, ikey.data);
+                sess.txn.put(false, &sess.temp_cf, &ikey, &ikey).unwrap();
+                println!("out {:?}", sess.txn.get(false, &sess.temp_cf, &ikey).unwrap().as_ref());
+            }
+            let it = sess.txn.iterator(false, &sess.temp_cf);
+            it.to_first();
+            for (key, val) in it.iter() {
+                println!("a: {:?} {:?}", key.as_ref(), val.as_ref());
+                println!("v: {:?} {:?}", Tuple::new(key), Tuple::new(val));
+            }
+        }
+        let _ = fs::remove_dir_all("_push_get");
+    }
 
     #[test]
     fn test_create() {
@@ -170,7 +200,7 @@ mod tests {
             {
                 let engine = Engine::new(p1.to_string(), true);
                 assert!(engine.is_ok());
-                let engine = Engine::new(p2.to_string(), true);
+                let engine = Engine::new(p2.to_string(), false);
                 assert!(engine.is_ok());
                 let engine = Engine::new(p3.to_string(), true);
                 assert!(engine.is_ok());
@@ -179,7 +209,7 @@ mod tests {
             }
             let engine2 = Engine::new(p2.to_string(), false);
             assert!(engine2.is_ok());
-            let engine2 = Arc::new(Engine::new(p3.to_string(), false).unwrap());
+            let engine2 = Arc::new(Engine::new(p3.to_string(), true).unwrap());
             {
                 for _i in 0..10 {
                     let mut _sess = engine2.session();
@@ -196,12 +226,30 @@ mod tests {
             let mut thread_handles = vec![];
 
             println!("concurrent");
-            for i in 0..10 {
+            for i in 0..1 {
                 let engine = engine2.clone();
                 thread_handles.push(thread::spawn(move || {
                     println!("In thread {}", i);
-                    let mut _sess = engine.session();
-                    _sess.start();
+                    let mut sess = engine.session();
+                    sess.start();
+                    for _ in 0..10000 {
+                        sess.push_env();
+                        sess.define_variable("abc", &"xyz".into(), true);
+                        sess.define_variable("pqr", &"xyz".into(), false);
+                    }
+                    println!("pqr {:?}", sess.resolve("pqr"));
+                    println!("uvw {:?}", sess.resolve("uvw"));
+                    println!("aaa {:?}", sess.resolve("aaa"));
+                    let it = sess.txn.iterator(false, &sess.temp_cf);
+                    it.to_first();
+                    // for (key, val) in it.iter() {
+                    //     println!("a: {:?} {:?}", key.as_ref(), val.as_ref());
+                    //     println!("v: {:?}", Tuple::new(key));
+                    // }
+                    for _ in 0..5000 {
+                        sess.pop_env();
+                    }
+                    println!("pqr {:?}", sess.resolve("pqr"));
                     println!("In thread {} end", i);
                 }))
             }

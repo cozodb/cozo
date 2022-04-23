@@ -1,18 +1,30 @@
 use std::cmp::Ordering;
 use crate::relation::tuple::Tuple;
 
+impl<T: AsRef<[u8]>, T2: AsRef<[u8]>> PartialOrd<Tuple<T2>> for Tuple<T> {
+    fn partial_cmp(&self, other: &Tuple<T2>) -> Option<Ordering> {
+        match self.get_prefix().cmp(&other.get_prefix()) {
+            x @ (Ordering::Less | Ordering::Greater) => return Some(x),
+            Ordering::Equal => {}
+        }
+        Some(self.iter().cmp(other.iter()))
+    }
+}
+
+impl<T: AsRef<[u8]>> Ord for Tuple<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
 pub fn compare(a: &[u8], b: &[u8]) -> i8 {
     let ta = Tuple::new(a);
     let tb = Tuple::new(b);
-    match ta.get_prefix().cmp(&tb.get_prefix()) {
-        Ordering::Less => return -1,
-        Ordering::Greater => return 1,
-        Ordering::Equal => {}
-    }
-    match ta.iter().cmp(tb.iter()) {
+
+    match ta.cmp(&tb) {
         Ordering::Less => -1,
-        Ordering::Equal => 0,
-        Ordering::Greater => 1
+        Ordering::Greater => 1,
+        Ordering::Equal => 0
     }
 }
 
