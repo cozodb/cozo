@@ -3,8 +3,7 @@
 
 
 use cozorocks::*;
-use std::sync::{Arc, LockResult, Mutex, RwLock};
-use std::sync::atomic::AtomicUsize;
+use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 use uuid::v1::{Context, Timestamp};
@@ -151,7 +150,7 @@ mod tests {
             assert!(engine2.is_ok());
             let engine2 = Arc::new(Engine::new(p3.to_string(), false).unwrap());
             {
-                for i in 0..10 {
+                for _i in 0..10 {
                     let _sess = engine2.session();
                 }
                 let handles = engine2.session_handles.read().unwrap();

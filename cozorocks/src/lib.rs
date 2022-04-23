@@ -2,7 +2,7 @@ mod bridge;
 
 use bridge::*;
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{Display, Formatter, write};
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 use cxx::{let_cxx_string};
@@ -19,7 +19,7 @@ pub use bridge::ColumnFamilyHandle;
 
 impl std::fmt::Display for BridgeStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(self, f)
+        write!(f, "BridgeStatus({}, {}, {}, {})", self.code, self.subcode, self.severity, self.bridge_code)
     }
 }
 
@@ -30,7 +30,7 @@ pub struct BridgeError {
 
 impl Display for BridgeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(self, f)
+        write!(f, "BridgeError({}, {}, {}, {})", self.status.code, self.status.subcode, self.status.severity, self.status.bridge_code)
     }
 }
 
