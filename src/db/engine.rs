@@ -152,6 +152,14 @@ impl<'a> Session<'a> {
         self.handle.write().map_err(|_| Poisoned)?.status = SessionStatus::Running;
         Ok(())
     }
+    pub fn commit(&mut self) -> Result<()> {
+        self.txn.commit()?;
+        Ok(())
+    }
+    pub fn rollback(&mut self) -> Result<()> {
+        self.txn.rollback()?;
+        Ok(())
+    }
     pub fn finish_work(&mut self) -> Result<()> {
         self.handle.write().map_err(|_| Poisoned)?.status = SessionStatus::Completed;
         Ok(())
@@ -228,7 +236,7 @@ mod tests {
                 assert!(engine2.is_err());
                 println!("create OK");
             }
-            let engine2 = Engine::new(p2.to_string(), false);
+            let engine2 = Engine::new(p2.to_string(), true);
             assert!(engine2.is_ok());
             println!("start ok");
             let engine2 = Arc::new(Engine::new(p3.to_string(), true).unwrap());
@@ -268,8 +276,18 @@ mod tests {
                     //     println!("v: {:?}", Tuple::new(key));
                     // }
                     for _ in 0..5000 {
-                        sess.pop_env();
+                        sess.pop_env().unwrap();
                     }
+                    if let Err(e) = sess.commit() {
+                        println!("Err {} with {:?}", i, e);
+                    } else {
+                        println!("OK!!!! {}", i);
+                        sess.commit().unwrap();
+                        sess.commit().unwrap();
+                        println!("OK!!!!!!!! {}", i);
+                    }
+                    // sess.commit().unwrap();
+                    // sess.commit().unwrap();
                     println!("pqr {:?}", sess.resolve("pqr"));
                     println!("In thread {} end", i);
                 }))
