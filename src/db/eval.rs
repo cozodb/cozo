@@ -25,6 +25,20 @@ impl<'a> Session<'a> {
         tuple.push_int(depth_code);
         tuple
     }
+
+    fn define_data(&mut self, name: &str, data: Tuple<Vec<u8>>, in_root: bool) -> Result<()> {
+        let key = self.encode_definable_key(name, in_root);
+        if in_root {
+            self.txn.put(true, &self.perm_cf, key, data)?;
+        } else {
+            let mut ikey = Tuple::with_null_prefix();
+            ikey.push_int(self.stack_depth as i64);
+            ikey.push_str(name);
+            self.txn.put(false, &self.temp_cf, key, data)?;
+            self.txn.put(false, &self.temp_cf, ikey, "")?;
+        }
+        Ok(())
+    }
 }
 
 
@@ -62,23 +76,15 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
     }
 
     fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
-        let key = self.encode_definable_key(name, in_root);
         let mut data = Tuple::with_data_prefix(DataKind::Value);
         data.push_value(val);
-        if in_root {
-            self.txn.put(true, &self.perm_cf, key, data)?;
-        } else {
-            let mut ikey = Tuple::with_null_prefix();
-            ikey.push_int(self.stack_depth as i64);
-            ikey.push_str(name);
-            self.txn.put(false, &self.temp_cf, key, data)?;
-            self.txn.put(false, &self.temp_cf, ikey, "")?;
-        }
-        Ok(())
+        self.define_data(name, data, in_root)
     }
 
     fn define_type_alias(&mut self, name: &str, typ: &Typing, in_root: bool) -> Result<()> {
-        todo!()
+        let mut data = Tuple::with_data_prefix(DataKind::TypeAlias);
+        data.push_str(typ.to_string());
+        self.define_data(name, data, in_root)
     }
 
     fn define_table(&mut self, table: &Table, in_root: bool) -> Result<()> {
