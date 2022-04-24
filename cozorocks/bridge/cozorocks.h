@@ -87,28 +87,36 @@ public:
         return name.c_str();
     }
 
-    virtual bool CanKeysWithDifferentByteContentsBeEqual() const { return true; }
+    virtual bool CanKeysWithDifferentByteContentsBeEqual() const {
+        return can_different_bytes_be_equal;
+    }
 
     void FindShortestSeparator(std::string *, const rocksdb::Slice &) const {}
 
     void FindShortSuccessor(std::string *) const {}
 
-    void set_fn(RustComparatorFn f) const {
+    void set_fn(RustComparatorFn f) {
         rust_compare = f;
     }
 
-    void set_name(rust::Str name_) const {
+    void set_name(rust::Str name_) {
         name = std::string(name_);
     }
 
-    mutable std::string name;
-    mutable RustComparatorFn rust_compare;
+    void set_can_different_bytes_be_equal(bool v) {
+        can_different_bytes_be_equal = v;
+    }
+
+    std::string name;
+    RustComparatorFn rust_compare;
+    bool can_different_bytes_be_equal;
 };
 
-inline unique_ptr<RustComparator> new_rust_comparator(rust::Str name, RustComparatorFn f) {
+inline unique_ptr<RustComparator> new_rust_comparator(rust::Str name, RustComparatorFn f, bool diff_bytes_can_equal) {
     auto ret = make_unique<RustComparator>();
     ret->set_name(name);
     ret->set_fn(f);
+    ret->set_can_different_bytes_be_equal(diff_bytes_can_equal);
     return ret;
 }
 

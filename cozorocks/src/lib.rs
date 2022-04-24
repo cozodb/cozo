@@ -72,7 +72,7 @@ impl From<BridgeStatus> for Option<BridgeError> {
     }
 }
 
-pub type Result<T> = std::result::Result<T, BridgeError>;
+type Result<T> = std::result::Result<T, BridgeError>;
 
 pub enum SlicePtr {
     Plain(UniquePtr<Slice>),
@@ -97,8 +97,8 @@ pub struct RustComparatorPtr(UniquePtr<RustComparator>);
 
 impl RustComparatorPtr {
     #[inline]
-    pub fn new(name: &str, cmp: fn(&[u8], &[u8]) -> i8) -> Self {
-        Self(new_rust_comparator(name, cmp))
+    pub fn new(name: &str, cmp: fn(&[u8], &[u8]) -> i8, diff_bytes_can_equal: bool) -> Self {
+        Self(new_rust_comparator(name, cmp, diff_bytes_can_equal))
     }
 }
 

@@ -3,11 +3,13 @@
 
 
 use cozorocks::*;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 use uuid::v1::{Context, Timestamp};
 use rand::Rng;
+use crate::error::{CozoError, Result};
+use crate::error::CozoError::{Poisoned, SessionErr};
 
 pub struct EngineOptions {
     cmp: RustComparatorPtr,
@@ -20,7 +22,7 @@ pub struct EngineOptions {
 pub struct Engine {
     pub db: DBPtr,
     pub options_store: Box<EngineOptions>,
-    session_handles: RwLock<Vec<Arc<RwLock<SessionHandle>>>>,
+    session_handles: Mutex<Vec<Arc<RwLock<SessionHandle>>>>,
 }
 
 unsafe impl Send for Engine {}
@@ -34,7 +36,10 @@ impl Engine {
         } else {
             TDBOptions::Pessimistic(PTxnDBOptionsPtr::default())
         };
-        let cmp = RustComparatorPtr::new("cozo_cmp_v1", crate::relation::key_order::compare);
+        let cmp = RustComparatorPtr::new(
+            "cozo_cmp_v1",
+            crate::relation::key_order::compare,
+            false);
         let mut options = OptionsPtr::default();
         options
             .set_comparator(&cmp)
@@ -57,13 +62,14 @@ impl Engine {
         Ok(Self {
             db,
             options_store: e_options,
-            session_handles: RwLock::new(vec![]),
+            session_handles: Mutex::new(vec![]),
         })
     }
-    pub fn session(&self) -> Session {
+    pub fn session(&self) -> Result<Session> {
         // find a handle if there is one available
         // otherwise create a new one
-        let old_handle = self.session_handles.read().unwrap().iter().find(|v| {
+        let mut guard = self.session_handles.lock().map_err(|_| CozoError::Poisoned)?;
+        let old_handle = guard.iter().find(|v| {
             match v.read() {
                 Ok(content) => content.status == SessionStatus::Completed,
                 Err(_) => false
@@ -72,36 +78,38 @@ impl Engine {
         let handle = match old_handle {
             None => {
                 let now = SystemTime::now();
-                let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
+                let since_epoch = now.duration_since(UNIX_EPOCH)?;
                 let ts = Timestamp::from_unix(
                     &self.options_store.uuid_ctx,
                     since_epoch.as_secs(),
                     since_epoch.subsec_nanos(),
                 );
                 let mut rng = rand::thread_rng();
-                let id = Uuid::new_v1(ts, &[rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen()]).unwrap();
+                let id = Uuid::new_v1(ts, &[rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen()])?;
                 let cf_ident = id.to_string();
-                self.db.create_cf(&self.options_store.options, &cf_ident).unwrap();
+                self.db.create_cf(&self.options_store.options, &cf_ident)?;
 
                 let ret = Arc::new(RwLock::new(SessionHandle {
                     cf_ident,
                     status: SessionStatus::Prepared,
                     table_count: 0,
                 }));
-                self.session_handles.write().unwrap().push(ret.clone());
+                guard.push(ret.clone());
                 ret
             }
-            Some(h) => h.clone()
+            Some(h) => h
         };
 
-        Session {
+        let mut sess = Session {
             engine: self,
             stack_depth: 0,
             txn: TransactionPtr::null(),
             perm_cf: SharedPtr::null(),
             temp_cf: SharedPtr::null(),
             handle,
-        }
+        };
+        sess.start()?;
+        Ok(sess)
     }
 }
 
@@ -117,10 +125,10 @@ pub struct Session<'a> {
 // metadata are stored in table 0
 
 impl<'a> Session<'a> {
-    pub fn start(&mut self) {
+    pub fn start(&mut self) -> Result<()> {
         self.perm_cf = self.engine.db.default_cf();
         assert!(!self.perm_cf.is_null());
-        self.temp_cf = self.engine.db.get_cf(&self.handle.read().unwrap().cf_ident).unwrap();
+        self.temp_cf = self.engine.db.get_cf(&self.handle.read().map_err(|_| Poisoned)?.cf_ident).ok_or(SessionErr)?;
         assert!(!self.temp_cf.is_null());
         let t_options = match self.engine.options_store.t_options {
             TDBOptions::Pessimistic(_) => {
@@ -141,7 +149,20 @@ impl<'a> Session<'a> {
         if self.txn.is_null() {
             panic!("Starting session failed as opening transaction failed");
         }
-        self.handle.write().unwrap().status = SessionStatus::Running;
+        self.handle.write().map_err(|_| Poisoned)?.status = SessionStatus::Running;
+        Ok(())
+    }
+    pub fn finish_work(&mut self) -> Result<()> {
+        self.handle.write().map_err(|_| Poisoned)?.status = SessionStatus::Completed;
+        Ok(())
+    }
+}
+
+impl<'a> Drop for Session<'a> {
+    fn drop(&mut self) {
+        if let Err(e) = self.finish_work() {
+            eprintln!("{:?}", e);
+        }
     }
 }
 
@@ -171,17 +192,16 @@ mod tests {
     fn push_get() {
         {
             let engine = Engine::new("_push_get".to_string(), false).unwrap();
-            let mut sess = engine.session();
-            sess.start();
+            let sess = engine.session().unwrap();
             for i in (-80..-40).step_by(10) {
-                let mut ikey = Tuple::with_prefix(0);
+                let mut ikey = Tuple::with_null_prefix();
                 ikey.push_int(i);
                 ikey.push_str("pqr");
                 println!("in {:?} {:?}", ikey, ikey.data);
-                sess.txn.put(false, &sess.temp_cf, &ikey, &ikey).unwrap();
-                println!("out {:?}", sess.txn.get(false, &sess.temp_cf, &ikey).unwrap().as_ref());
+                sess.txn.put(true, &sess.perm_cf, &ikey, &ikey).unwrap();
+                println!("out {:?}", sess.txn.get(true, &sess.perm_cf, &ikey).unwrap().as_ref());
             }
-            let it = sess.txn.iterator(false, &sess.temp_cf);
+            let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
             for (key, val) in it.iter() {
                 println!("a: {:?} {:?}", key.as_ref(), val.as_ref());
@@ -206,16 +226,18 @@ mod tests {
                 assert!(engine.is_ok());
                 let engine2 = Engine::new(p1.to_string(), false);
                 assert!(engine2.is_err());
+                println!("create OK");
             }
             let engine2 = Engine::new(p2.to_string(), false);
             assert!(engine2.is_ok());
+            println!("start ok");
             let engine2 = Arc::new(Engine::new(p3.to_string(), true).unwrap());
             {
                 for _i in 0..10 {
-                    let mut _sess = engine2.session();
-                    _sess.start();
+                    let _sess = engine2.session().unwrap();
                 }
-                let handles = engine2.session_handles.read().unwrap();
+                println!("sess OK");
+                let handles = engine2.session_handles.lock().unwrap();
                 println!("got handles {}", handles.len());
                 let cf_ident = &handles.first().unwrap().read().unwrap().cf_ident;
                 println!("Opening ok {}", cf_ident);
@@ -226,12 +248,11 @@ mod tests {
             let mut thread_handles = vec![];
 
             println!("concurrent");
-            for i in 0..1 {
+            for i in 0..10 {
                 let engine = engine2.clone();
                 thread_handles.push(thread::spawn(move || {
-                    println!("In thread {}", i);
-                    let mut sess = engine.session();
-                    sess.start();
+                    let mut sess = engine.session().unwrap();
+                    println!("In thread {} {}", i, sess.handle.read().unwrap().cf_ident);
                     for _ in 0..10000 {
                         sess.push_env();
                         sess.define_variable("abc", &"xyz".into(), true);
@@ -260,7 +281,7 @@ mod tests {
             }
             println!("All OK");
             {
-                let handles = engine2.session_handles.read().unwrap();
+                let handles = engine2.session_handles.lock().unwrap();
                 println!("got handles {:#?}", handles.iter().map(|h| h.read().unwrap().cf_ident.to_string()).collect::<Vec<_>>());
             }
         }

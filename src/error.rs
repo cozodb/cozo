@@ -1,10 +1,14 @@
 use std::result;
+use std::sync::PoisonError;
+use std::time::SystemTimeError;
 use thiserror::Error;
+use cozorocks::BridgeError;
+
 // use crate::parser::Rule;
 //
 #[derive(Error, Debug)]
 pub enum CozoError {
-//     #[error("Invalid UTF code")]
+    //     #[error("Invalid UTF code")]
 //     InvalidUtfCode,
 //
 //     #[error("Invalid escape sequence")]
@@ -60,6 +64,20 @@ pub enum CozoError {
 //
 //     #[error(transparent)]
 //     Io(#[from] std::io::Error),
+    #[error("Session error")]
+    SessionErr,
+
+    #[error("Poisoned locks")]
+    Poisoned,
+
+    #[error(transparent)]
+    SysTime(#[from] SystemTimeError),
+
+    #[error(transparent)]
+    Uuid(#[from] uuid::Error),
+
+    #[error(transparent)]
+    Bridge(#[from] BridgeError),
 }
 
 pub type Result<T> = result::Result<T, CozoError>;

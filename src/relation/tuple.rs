@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use uuid::Uuid;
+use crate::relation::table::DataKind;
 use crate::relation::value::{Tag, Value};
 
 #[derive(Clone)]
@@ -222,6 +223,14 @@ impl<'a, T: AsRef<[u8]>> Iterator for TupleIter<'a, T> {
 }
 
 impl Tuple<Vec<u8>> {
+    #[inline]
+    pub fn with_null_prefix() -> Self {
+        Tuple::with_prefix(0)
+    }
+    #[inline]
+    pub fn with_data_prefix(prefix: DataKind) -> Self {
+        Tuple::with_prefix(prefix as u32)
+    }
     #[inline]
     pub fn with_prefix(prefix: u32) -> Self {
         let data = Vec::from(prefix.to_be_bytes());

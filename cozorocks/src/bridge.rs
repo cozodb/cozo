@@ -106,7 +106,7 @@ mod ffi {
         fn new_odb_options() -> UniquePtr<OptimisticTransactionDBOptions>;
 
         type RustComparator;
-        fn new_rust_comparator(name: &str, cmp: fn(&[u8], &[u8]) -> i8) -> UniquePtr<RustComparator>;
+        fn new_rust_comparator(name: &str, cmp: fn(&[u8], &[u8]) -> i8, diff_bytes_can_equal: bool) -> UniquePtr<RustComparator>;
 
         pub type IteratorBridge;
         fn seek_to_first(self: &IteratorBridge);
@@ -180,11 +180,11 @@ use std::fmt::Formatter;
 
 impl std::fmt::Display for StatusBridgeCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            &StatusBridgeCode::OK => "Ok",
-            &StatusBridgeCode::LOCK_ERROR => "LockError",
-            &StatusBridgeCode::EXISTING_ERROR => "ExistingError",
-            &StatusBridgeCode::NOT_FOUND_ERROR => "NotFoundError",
+        write!(f, "{}", match *self {
+            StatusBridgeCode::OK => "Ok",
+            StatusBridgeCode::LOCK_ERROR => "LockError",
+            StatusBridgeCode::EXISTING_ERROR => "ExistingError",
+            StatusBridgeCode::NOT_FOUND_ERROR => "NotFoundError",
             _ => "Unknown"
         })
     }
@@ -192,24 +192,24 @@ impl std::fmt::Display for StatusBridgeCode {
 
 impl std::fmt::Display for StatusCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            &StatusCode::kOk => "Ok",
-            &StatusCode::kNotFound => "NotFound",
-            &StatusCode::kCorruption => "Corruption",
-            &StatusCode::kNotSupported => "NotSupported",
-            &StatusCode::kInvalidArgument => "InvalidArgument",
-            &StatusCode::kIOError => "IoError",
-            &StatusCode::kMergeInProgress => "MergeInProgress",
-            &StatusCode::kIncomplete => "Incomplete",
-            &StatusCode::kShutdownInProgress => "ShutdownInProgress",
-            &StatusCode::kTimedOut => "TimedOut",
-            &StatusCode::kAborted => "Aborted",
-            &StatusCode::kBusy => "Busy",
-            &StatusCode::kExpired => "Expired",
-            &StatusCode::kTryAgain => "TryAgain",
-            &StatusCode::kCompactionTooLarge => "CompactionTooLarge",
-            &StatusCode::kColumnFamilyDropped => "ColumnFamilyDropped",
-            &StatusCode::kMaxCode => "MaxCode",
+        write!(f, "{}", match *self {
+            StatusCode::kOk => "Ok",
+            StatusCode::kNotFound => "NotFound",
+            StatusCode::kCorruption => "Corruption",
+            StatusCode::kNotSupported => "NotSupported",
+            StatusCode::kInvalidArgument => "InvalidArgument",
+            StatusCode::kIOError => "IoError",
+            StatusCode::kMergeInProgress => "MergeInProgress",
+            StatusCode::kIncomplete => "Incomplete",
+            StatusCode::kShutdownInProgress => "ShutdownInProgress",
+            StatusCode::kTimedOut => "TimedOut",
+            StatusCode::kAborted => "Aborted",
+            StatusCode::kBusy => "Busy",
+            StatusCode::kExpired => "Expired",
+            StatusCode::kTryAgain => "TryAgain",
+            StatusCode::kCompactionTooLarge => "CompactionTooLarge",
+            StatusCode::kColumnFamilyDropped => "ColumnFamilyDropped",
+            StatusCode::kMaxCode => "MaxCode",
             _ => "Unknown"
         })
     }
@@ -217,23 +217,23 @@ impl std::fmt::Display for StatusCode {
 
 impl std::fmt::Display for StatusSubCode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            &StatusSubCode::kNone => "None",
-            &StatusSubCode::kMutexTimeout => "MutexTimeout",
-            &StatusSubCode::kLockTimeout => "LockTimeout",
-            &StatusSubCode::kLockLimit => "LockLimit",
-            &StatusSubCode::kNoSpace => "NoSpace",
-            &StatusSubCode::kDeadlock => "DeadLock",
-            &StatusSubCode::kStaleFile => "StaleFile",
-            &StatusSubCode::kMemoryLimit => "MemoryLimit",
-            &StatusSubCode::kSpaceLimit => "SpaceLimit",
-            &StatusSubCode::kPathNotFound => "PathNotFound",
-            &StatusSubCode::KMergeOperandsInsufficientCapacity => "MergeOperandsInsufficientCapacity",
-            &StatusSubCode::kManualCompactionPaused => "ManualCompactionPaused",
-            &StatusSubCode::kOverwritten => "Overwritten",
-            &StatusSubCode::kTxnNotPrepared => "TxnNotPrepared",
-            &StatusSubCode::kIOFenced => "IoFenced",
-            &StatusSubCode::kMaxSubCode => "MaxSubCode",
+        write!(f, "{}", match *self {
+            StatusSubCode::kNone => "None",
+            StatusSubCode::kMutexTimeout => "MutexTimeout",
+            StatusSubCode::kLockTimeout => "LockTimeout",
+            StatusSubCode::kLockLimit => "LockLimit",
+            StatusSubCode::kNoSpace => "NoSpace",
+            StatusSubCode::kDeadlock => "DeadLock",
+            StatusSubCode::kStaleFile => "StaleFile",
+            StatusSubCode::kMemoryLimit => "MemoryLimit",
+            StatusSubCode::kSpaceLimit => "SpaceLimit",
+            StatusSubCode::kPathNotFound => "PathNotFound",
+            StatusSubCode::KMergeOperandsInsufficientCapacity => "MergeOperandsInsufficientCapacity",
+            StatusSubCode::kManualCompactionPaused => "ManualCompactionPaused",
+            StatusSubCode::kOverwritten => "Overwritten",
+            StatusSubCode::kTxnNotPrepared => "TxnNotPrepared",
+            StatusSubCode::kIOFenced => "IoFenced",
+            StatusSubCode::kMaxSubCode => "MaxSubCode",
             _ => "Unknown"
         })
     }
@@ -241,13 +241,13 @@ impl std::fmt::Display for StatusSubCode {
 
 impl std::fmt::Display for StatusSeverity {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            &StatusSeverity::kNoError => "NoError",
-            &StatusSeverity::kSoftError => "SoftError",
-            &StatusSeverity::kHardError => "HardError",
-            &StatusSeverity::kFatalError => "FatalError",
-            &StatusSeverity::kUnrecoverableError => "UnrecoverableError",
-            &StatusSeverity::kMaxSeverity => "MaxSeverity",
+        write!(f, "{}", match *self {
+            StatusSeverity::kNoError => "NoError",
+            StatusSeverity::kSoftError => "SoftError",
+            StatusSeverity::kHardError => "HardError",
+            StatusSeverity::kFatalError => "FatalError",
+            StatusSeverity::kUnrecoverableError => "UnrecoverableError",
+            StatusSeverity::kMaxSeverity => "MaxSeverity",
             _ => "Unknown"
         })
     }
