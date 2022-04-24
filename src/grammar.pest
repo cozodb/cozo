@@ -133,11 +133,15 @@ col_entry = { col_name ~ ":" ~ typing ~ ("=" ~ expr)? }
 col_name = { key_marker? ~ name_in_def }
 key_marker = { "*" }
 
-typing = { nullable_marker? ~ (simple_type | tuple_type | list_type ) }
-nullable_marker = {"?"}
-simple_type = {ident}
-tuple_type = {"("~ (typing ~ ",")+ ~")"}
-list_type = {"[" ~ typing ~ "]"}
+
+typing = _{ simple_type | nullable_type | homogeneous_list_type | unnamed_tuple_type | named_tuple_type }
+simple_type = { ident }
+nullable_type = { "?" ~ typing }
+homogeneous_list_type = { "[" ~ typing ~ "]"}
+unnamed_tuple_type = { "(" ~ typing ~ ("," ~ typing)* ~ ")" }
+named_tuple_type = { "{" ~ named_type_pair ~ ("," ~ named_type_pair)* ~ "}" }
+named_type_pair = { (name_in_def | string) ~ ":" ~ typing }
+
 
 cols_def = { "{" ~ col_entry ~ ("," ~ col_entry)* ~ ","? ~ "}" }
 

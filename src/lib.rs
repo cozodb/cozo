@@ -14,6 +14,7 @@ extern crate core;
 pub mod relation;
 pub mod db;
 pub mod error;
+pub mod parser;
 
 #[cfg(test)]
 mod tests {

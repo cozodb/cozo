@@ -246,7 +246,7 @@ mod tests {
                 assert!(engine2.is_err());
                 println!("create OK");
             }
-            let engine2 = Engine::new(p2.to_string(), true);
+            let engine2 = Engine::new(p2.to_string(), false);
             assert!(engine2.is_ok());
             println!("start ok");
             let engine2 = Arc::new(Engine::new(p3.to_string(), true).unwrap());
@@ -271,14 +271,15 @@ mod tests {
                 thread_handles.push(thread::spawn(move || {
                     let mut sess = engine.session().unwrap();
                     println!("In thread {} {}", i, sess.handle.read().unwrap().cf_ident);
+                    let gname = format!("abc{}", i);
                     for _ in 0..10000 {
                         sess.push_env();
-                        sess.define_variable("abc", &"xyz".into(), true);
-                        sess.define_variable("pqr", &"xyz".into(), false);
+                        sess.define_variable(&gname, &"xyz".into(), true).unwrap();
+                        sess.define_variable("pqr", &"xyz".into(), false).unwrap();
                     }
                     println!("pqr {:?}", sess.resolve("pqr"));
                     println!("uvw {:?}", sess.resolve("uvw"));
-                    println!("aaa {:?}", sess.resolve("aaa"));
+                    println!("aaa {:?}", sess.resolve(&gname));
                     let it = sess.txn.iterator(false, &sess.temp_cf);
                     it.to_first();
                     // for (key, val) in it.iter() {

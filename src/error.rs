@@ -1,30 +1,28 @@
 use std::result;
-use std::sync::PoisonError;
 use std::time::SystemTimeError;
 use thiserror::Error;
 use cozorocks::BridgeError;
+use crate::parser::Rule;
 
-// use crate::parser::Rule;
-//
 #[derive(Error, Debug)]
 pub enum CozoError {
-    //     #[error("Invalid UTF code")]
-//     InvalidUtfCode,
-//
-//     #[error("Invalid escape sequence")]
-//     InvalidEscapeSequence,
-//
+    #[error("Invalid UTF code")]
+    InvalidUtfCode,
+
+    #[error("Invalid escape sequence")]
+    InvalidEscapeSequence,
+
 //     #[error("Type mismatch")]
 //     TypeError,
-//
-//     #[error("Reserved identifier")]
-//     ReservedIdent,
-//
-//     #[error("The requested name exists")]
+
+    #[error("Reserved identifier")]
+    ReservedIdent,
+
+    //     #[error("The requested name exists")]
 //     NameConflict,
 //
-//     #[error("Undefined type")]
-//     UndefinedType,
+    #[error("Undefined type '{0}'")]
+    UndefinedType(String),
 //
 //     #[error("Undefined table")]
 //     UndefinedTable,
@@ -55,10 +53,10 @@ pub enum CozoError {
 //
 //     #[error(transparent)]
 //     ParseFloat(#[from] std::num::ParseFloatError),
-//
-//     #[error(transparent)]
-//     Parse(#[from] pest::error::Error<Rule>),
-//
+
+    #[error(transparent)]
+    Parse(#[from] pest::error::Error<Rule>),
+
 //     #[error(transparent)]
 //     Storage(#[from] cozo_rocks::BridgeStatus),
 //
