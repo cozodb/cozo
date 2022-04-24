@@ -150,6 +150,10 @@ mod ffi {
         fn flush_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle, options: &FlushOptions, status: &mut BridgeStatus);
         fn iterator_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle) -> UniquePtr<IteratorBridge>;
         fn iterator_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle) -> UniquePtr<IteratorBridge>;
+        fn multiget_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle,
+                        keys: &[&[u8]], statuses: &mut [BridgeStatus]) -> UniquePtr<CxxVector<PinnableSlice>>;
+        fn multiget_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle,
+                        keys: &[&[u8]], statuses: &mut [BridgeStatus]) -> UniquePtr<CxxVector<PinnableSlice>>;
 
         pub type ColumnFamilyHandle;
 

@@ -251,7 +251,18 @@ struct TransactionBridge {
         write_status(inner->PopSavePoint(), status);
     }
 
-    inline std::unique_ptr<PinnableSlice> get_txn(
+    unique_ptr<vector<PinnableSlice>> multiget_txn(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const rust::Slice<const uint8_t>> keys,
+            rust::Slice<BridgeStatus> statuses) const;
+
+    unique_ptr<vector<PinnableSlice>> multiget_raw(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const rust::Slice<const uint8_t>> keys,
+            rust::Slice<BridgeStatus> statuses) const;
+
+
+    inline unique_ptr<PinnableSlice> get_txn(
             const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
@@ -267,7 +278,7 @@ struct TransactionBridge {
         return pinnable_val;
     }
 
-    inline std::unique_ptr<PinnableSlice> get_for_update_txn(
+    inline unique_ptr<PinnableSlice> get_for_update_txn(
             const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
