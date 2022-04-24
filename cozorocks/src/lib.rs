@@ -233,6 +233,33 @@ impl WriteOptionsPtr {
     }
 }
 
+pub struct FlushOptionsPtr(UniquePtr<FlushOptions>);
+
+impl Deref for FlushOptionsPtr {
+    type Target = UniquePtr<FlushOptions>;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl FlushOptionsPtr {
+    #[inline]
+    pub fn default() -> Self {
+        Self(new_flush_options())
+    }
+    #[inline]
+    pub fn set_allow_write_stall(&mut self, v: bool) -> &mut Self {
+        set_allow_write_stall(self.0.pin_mut(), v);
+        self
+    }
+    #[inline]
+    pub fn set_flush_wait(&mut self, v: bool) -> &mut Self {
+        set_flush_wait(self.0.pin_mut(), v);
+        self
+    }
+}
+
 pub struct PTxnOptionsPtr(UniquePtr<TransactionOptions>);
 
 impl Deref for PTxnOptionsPtr {
@@ -523,6 +550,18 @@ impl TransactionPtr {
             let ret = self.del_raw(cf, key.as_ref(), &mut status);
             status.check_err(ret)
         }
+    }
+    #[inline]
+    pub fn del_range(&self, cf: &ColumnFamilyHandle, start_key: impl AsRef<[u8]>, end_key: impl AsRef<[u8]>) -> Result<()> {
+        let mut status = BridgeStatus::default();
+        let ret = self.del_range_raw(cf, start_key.as_ref(), end_key.as_ref(), &mut status);
+        status.check_err(ret)
+    }
+    #[inline]
+    pub fn flush(&self, cf: &ColumnFamilyHandle, options: FlushOptionsPtr) -> Result<()> {
+        let mut status = BridgeStatus::default();
+        self.flush_raw(cf, &options, &mut status);
+        status.check_err(())
     }
     #[inline]
     pub fn put(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>) -> Result<()> {

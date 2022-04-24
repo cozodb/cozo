@@ -105,6 +105,11 @@ mod ffi {
         type OptimisticTransactionDBOptions;
         fn new_odb_options() -> UniquePtr<OptimisticTransactionDBOptions>;
 
+        type FlushOptions;
+        fn new_flush_options() -> UniquePtr<FlushOptions>;
+        fn set_flush_wait(o: Pin<&mut FlushOptions>, v: bool);
+        fn set_allow_write_stall(o: Pin<&mut FlushOptions>, v: bool);
+
         type RustComparator;
         fn new_rust_comparator(name: &str, cmp: fn(&[u8], &[u8]) -> i8, diff_bytes_can_equal: bool) -> UniquePtr<RustComparator>;
 
@@ -140,6 +145,9 @@ mod ffi {
                    status: &mut BridgeStatus);
         fn del_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle, key: &[u8],
                    status: &mut BridgeStatus);
+        fn del_range_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle,
+                         start_key: &[u8], end_key: &[u8], status: &mut BridgeStatus);
+        fn flush_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle, options: &FlushOptions, status: &mut BridgeStatus);
         fn iterator_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle) -> UniquePtr<IteratorBridge>;
         fn iterator_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle) -> UniquePtr<IteratorBridge>;
 

@@ -85,6 +85,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             }
             Tag::List => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
             Tag::Dict => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
+            Tag::MaxTag => panic!()
         };
         self.idx_cache.borrow_mut().push(nxt);
     }
@@ -187,6 +188,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 }
                 (end_pos, collected.into())
             }
+            Tag::MaxTag => (start, Value::End_Sentinel)
         };
         (val, nxt)
     }
@@ -238,6 +240,16 @@ impl Tuple<Vec<u8>> {
             data,
             idx_cache: RefCell::new(vec![]),
         }
+    }
+    #[inline]
+    pub fn max_tuple() -> Self {
+        let mut ret = Tuple::with_prefix(u32::MAX);
+        ret.seal_with_sentinel();
+        ret
+    }
+    #[inline]
+    pub fn seal_with_sentinel(&mut self) {
+        self.push_tag(Tag::MaxTag);
     }
     #[inline]
     fn push_tag(&mut self, tag: Tag) {
@@ -327,6 +339,7 @@ impl Tuple<Vec<u8>> {
                 cache.truncate(start_len);
                 cache.push(self.data.len());
             }
+            Value::End_Sentinel => panic!("Cannot push sentinel value")
         }
     }
 
@@ -359,7 +372,7 @@ impl Tuple<Vec<u8>> {
     }
 }
 
-impl <'a> Extend<Value<'a>> for Tuple<Vec<u8>> {
+impl<'a> Extend<Value<'a>> for Tuple<Vec<u8>> {
     #[inline]
     fn extend<T: IntoIterator<Item=Value<'a>>>(&mut self, iter: T) {
         for v in iter {

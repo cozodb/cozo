@@ -34,9 +34,6 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
     }
 
     fn pop_env(&mut self) -> Result<()> {
-        if self.stack_depth == 0 {
-            return Ok(());
-        }
         // Remove all stuff starting with the stack depth from the temp session
         let mut prefix = Tuple::with_null_prefix();
         prefix.push_int(self.stack_depth as i64);
@@ -58,7 +55,9 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
             }
         }
 
-        self.stack_depth += 1;
+        if self.stack_depth != 0 {
+            self.stack_depth += 1;
+        }
         Ok(())
     }
 

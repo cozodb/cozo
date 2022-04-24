@@ -358,6 +358,24 @@ struct TransactionBridge {
         );
     }
 
+    inline void del_range_raw(
+            const ColumnFamilyHandle &cf,
+            rust::Slice<const uint8_t> start_key,
+            rust::Slice<const uint8_t> end_key,
+            BridgeStatus &status
+    ) const {
+        write_status(
+                raw_db->GetRootDB()->DeleteRange(
+                        *raw_w_ops, const_cast<ColumnFamilyHandle *>(&cf),
+                        convert_slice(start_key), convert_slice(end_key)),
+                status);
+    }
+
+    inline void flush_raw(const ColumnFamilyHandle &cf, const FlushOptions &options, BridgeStatus &status) const {
+        write_status(raw_db->Flush(options, const_cast<ColumnFamilyHandle *>(&cf)), status);
+    }
+
+
     inline std::unique_ptr<IteratorBridge> iterator_txn(
             const ColumnFamilyHandle &cf) const {
         return std::make_unique<IteratorBridge>(
@@ -512,6 +530,18 @@ inline unique_ptr<TransactionDBOptions> new_tdb_options() {
 
 inline unique_ptr<OptimisticTransactionDBOptions> new_odb_options() {
     return make_unique<OptimisticTransactionDBOptions>();
+}
+
+inline unique_ptr<FlushOptions> new_flush_options() {
+    return make_unique<FlushOptions>();
+}
+
+void set_flush_wait(FlushOptions &options, bool v) {
+    options.wait = v;
+}
+
+void set_allow_write_stall(FlushOptions &options, bool v) {
+    options.allow_write_stall = v;
 }
 
 inline unique_ptr<TDBBridge>

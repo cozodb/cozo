@@ -42,6 +42,7 @@ pub enum Tag {
     // C32Arr = 72,
     // C64Arr = 73,
     // C128Arr = 74,
+    MaxTag = u8::MAX
 }
 
 impl TryFrom<u8> for Tag {
@@ -60,6 +61,7 @@ impl TryFrom<u8> for Tag {
             8 => UInt,
             9 => List,
             10 => Dict,
+            u8::MAX => MaxTag,
             v => return Err(v)
         })
     }
@@ -76,6 +78,7 @@ pub enum Value<'a> {
     Text(Cow<'a, str>),
     List(Vec<Value<'a>>),
     Dict(BTreeMap<Cow<'a, str>, Value<'a>>),
+    End_Sentinel
 }
 
 pub type StaticValue = Value<'static>;
@@ -95,6 +98,7 @@ impl<'a> Value<'a> {
             Value::Dict(d) => d.into_iter()
                 .map(|(k, v)| (Cow::Owned(k.into_owned()), v.to_static()))
                 .collect::<BTreeMap<Cow<'static, str>, StaticValue>>().into(),
+            Value::End_Sentinel => panic!("Cannot process sentinel value")
         }
     }
 }
@@ -248,6 +252,9 @@ impl<'a> Display for Value<'a> {
                     first = false;
                 }
                 f.write_char('}')?;
+            }
+            Value::End_Sentinel => {
+                write!(f, "Sentinel")?
             }
         }
         Ok(())

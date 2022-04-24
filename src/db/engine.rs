@@ -8,8 +8,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 use uuid::v1::{Context, Timestamp};
 use rand::Rng;
+use crate::db::eval::Environment;
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::{Poisoned, SessionErr};
+use crate::relation::tuple::Tuple;
 
 pub struct EngineOptions {
     cmp: RustComparatorPtr,
@@ -161,7 +163,10 @@ impl<'a> Session<'a> {
         Ok(())
     }
     pub fn finish_work(&mut self) -> Result<()> {
-        self.handle.write().map_err(|_| Poisoned)?.status = SessionStatus::Completed;
+        self.txn.del_range(&self.temp_cf, Tuple::with_null_prefix(), Tuple::max_tuple())?;
+        let mut options = FlushOptionsPtr::default();
+        options.set_allow_write_stall(true).set_flush_wait(true);
+        self.txn.flush(&self.temp_cf, options)?;
         Ok(())
     }
 }
@@ -169,7 +174,12 @@ impl<'a> Session<'a> {
 impl<'a> Drop for Session<'a> {
     fn drop(&mut self) {
         if let Err(e) = self.finish_work() {
-            eprintln!("{:?}", e);
+            eprintln!("Dropping session failed {:?}", e);
+        }
+        if let Ok(mut h) = self.handle.write().map_err(|_| Poisoned) {
+            h.status = SessionStatus::Completed;
+        } else {
+            eprintln!("Accessing lock of session handle failed");
         }
     }
 }
