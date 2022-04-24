@@ -104,9 +104,7 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
                 let k = Tuple::new(tk);
                 if k.starts_with(&tuple) {
                     println!("Resolved to key {:?}", k);
-                    let vt = Tuple::new(vk);
-                    // let v = vt.iter().collect::<Vec<_>>();
-                    Some(vt)
+                    Some(Tuple::new(vk))
                 } else {
                     None
                 }
@@ -115,6 +113,27 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
     }
 
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
-        todo!()
+        let key = self.encode_definable_key(name, in_root);
+        if in_root {
+            self.txn.del(true, &self.perm_cf, key)?;
+
+        } else {
+            let it = self.txn.iterator(false, &self.temp_cf);
+            it.seek(&key);
+            if let Some(found_key) = it.key() {
+                let found_key_tuple = Tuple::new(found_key);
+                if found_key_tuple.starts_with(&key) {
+                    let mut ikey = Tuple::with_null_prefix();
+                    ikey.push_value(&found_key_tuple.get(1).unwrap());
+                    ikey.push_value(&found_key_tuple.get(0).unwrap());
+                    self.txn.del(false, &self.temp_cf, found_key_tuple)?;
+                    self.txn.del(false, &self.temp_cf, ikey)?;
+
+                }
+            }
+        }
+        // TODO cleanup if the thing deleted is a table
+
+        Ok(())
     }
 }
