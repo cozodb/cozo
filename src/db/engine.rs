@@ -246,7 +246,7 @@ mod tests {
             let engine2 = Engine::new(p2.to_string(), false);
             assert!(engine2.is_ok());
             println!("start ok");
-            let engine2 = Arc::new(Engine::new(p3.to_string(), true).unwrap());
+            let engine2 = Arc::new(Engine::new(p3.to_string(), false).unwrap());
             {
                 for _i in 0..10 {
                     let _sess = engine2.session().unwrap();
@@ -274,9 +274,12 @@ mod tests {
                         sess.define_variable(&gname, &"xyz".into(), true).unwrap();
                         sess.define_variable("pqr", &"xyz".into(), false).unwrap();
                     }
+                    if i & 1 == 0 {
+                        sess.commit().unwrap();
+                    }
                     println!("pqr {:?}", sess.resolve("pqr"));
                     println!("uvw {:?}", sess.resolve("uvw"));
-                    println!("aaa {:?}", sess.resolve(&gname));
+                    println!("aaa {} {:?}", &gname, sess.resolve(&gname));
                     let it = sess.txn.iterator(false, &sess.temp_cf);
                     it.to_first();
                     // for (key, val) in it.iter() {
@@ -286,14 +289,14 @@ mod tests {
                     for _ in 0..5000 {
                         sess.pop_env().unwrap();
                     }
-                    if let Err(e) = sess.commit() {
-                        println!("Err {} with {:?}", i, e);
-                    } else {
-                        println!("OK!!!! {}", i);
-                        sess.commit().unwrap();
-                        sess.commit().unwrap();
-                        println!("OK!!!!!!!! {}", i);
-                    }
+                    // if let Err(e) = sess.commit() {
+                    //     println!("Err {} with {:?}", i, e);
+                    // } else {
+                    //     println!("OK!!!! {}", i);
+                    //     sess.commit().unwrap();
+                    //     sess.commit().unwrap();
+                    //     println!("OK!!!!!!!! {}", i);
+                    // }
                     // sess.commit().unwrap();
                     // sess.commit().unwrap();
                     println!("pqr {:?}", sess.resolve("pqr"));
