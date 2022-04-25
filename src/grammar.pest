@@ -148,14 +148,14 @@ cols_def = { "{" ~ col_entry ~ ("," ~ col_entry)* ~ ","? ~ "}" }
 col_list = {"(" ~ name_in_def ~ ("," ~ name_in_def)* ~ ","? ~ ")"}
 
 node_def = { "node" ~ name_in_def ~ cols_def }
-columns_def = { "columns" ~ name_in_def ~ ":" ~ name_in_def ~ cols_def }
+associate_def = { "columns" ~ name_in_def ~ ":" ~ name_in_def ~ cols_def }
 edge_def = { "edge" ~
              "(" ~ name_in_def ~ ")" ~ "-" ~ "[" ~ name_in_def ~ "]" ~ "->" ~ "(" ~ name_in_def ~ ")"
              ~ cols_def? }
 index_def = { "index" ~ (name_in_def ~ ":")? ~ name_in_def ~ col_list }
-struct_def = { "struct" ~ name_in_def ~ cols_def }
+type_def = { "type" ~ name_in_def ~ "=" ~ cols_def }
 
-definition = _{ node_def | columns_def | edge_def | struct_def | index_def }
+definition = _{ node_def | associate_def | edge_def | type_def | index_def }
 global_def = { "create" ~ definition }
 local_def = { "local" ~ definition }
 statement = _{ global_def | local_def }

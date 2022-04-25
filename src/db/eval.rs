@@ -1,4 +1,5 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
+use pest::iterators::{Pair, Pairs};
 use cozorocks::{SlicePtr, StatusCode};
 use crate::db::engine::{Session};
 use crate::relation::table::{Table};
@@ -7,8 +8,11 @@ use crate::relation::typing::Typing;
 use crate::relation::value::Value;
 use crate::error::{CozoError, Result};
 use crate::relation::data::DataKind;
+use crate::parser::Rule;
+use crate::parser::text_identifier::build_name_in_def;
 
 pub trait Environment<T: AsRef<[u8]>> {
+    fn get_next_storage_id(&mut self, in_root: bool) -> u32;
     fn get_stack_depth(&self) -> i32;
     fn push_env(&mut self);
     fn pop_env(&mut self) -> Result<()>;
@@ -37,20 +41,73 @@ pub trait Environment<T: AsRef<[u8]>> {
         tuple.push_int(depth_code);
         tuple
     }
+    fn parse_table_def(&self, pair: Pair<Rule>) -> Result<(String, OwnTuple)>
+        where Self: Sized {
+        let parsed = match pair.as_rule() {
+            Rule::node_def => self.parse_node_def(pair.into_inner()),
+            Rule::edge_def => todo!(),
+            Rule::associate_def => todo!(),
+            Rule::index_def => todo!(),
+            Rule::type_def => todo!(),
+            _ => unreachable!()
+        };
+        println!("{:?}", parsed);
+        todo!()
+    }
+    fn parse_node_def(&self, mut pairs: Pairs<Rule>) -> Result<(String, OwnTuple)>
+        where Self: Sized {
+        let name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let col_pairs = pairs.next().unwrap().into_inner();
+        let col_res = col_pairs.into_iter().map(|p| {
+            let mut ps = p.into_inner();
+            let mut name_ps = ps.next().unwrap().into_inner();
+            let is_key;
+            let mut name_p = name_ps.next().unwrap();
+            match name_p.as_rule() {
+                Rule::key_marker => {
+                    is_key = true;
+                    name_p = name_ps.next().unwrap();
+                }
+                _ => { is_key = false }
+            }
+            let name = build_name_in_def(name_p, true)?;
+            let type_p = Typing::from_pair(ps.next().unwrap(), Some(self))?;
+            Ok((is_key, name, type_p))
+        }).collect::<Result<Vec<_>>>()?;
+        let all_names = col_res.iter().map(|(_, n, _)| n).collect::<HashSet<_>>();
+        if all_names.len() != col_res.len() {
+            return Err(CozoError::DuplicateNames(col_res.iter().map(|(_, n, _)| n.to_string()).collect::<Vec<_>>()));
+        }
+        let (keys, cols): (Vec<_>, Vec<_>) = col_res.iter().partition(|(is_key, _, _)| *is_key);
+        let keys_typing = Typing::NamedTuple(keys.iter().map(|(_, n, t)| (n.to_string(), t.clone())).collect());
+        let vals_typing = Typing::NamedTuple(cols.iter().map(|(_, n, t)| (n.to_string(), t.clone())).collect());
+        let mut tuple = Tuple::with_data_prefix(DataKind::Node);
+        tuple.push_str(keys_typing.to_string());
+        tuple.push_str(vals_typing.to_string());
+        tuple.push_null(); // TODO default values for keys
+        tuple.push_null(); // TODO default values for cols
+        Ok((name, tuple))
+    }
 }
 
 pub struct MemoryEnv {
     root: BTreeMap<String, OwnTuple>,
     stack: Vec<BTreeMap<String, OwnTuple>>,
+    max_storage_id: u32,
 }
 
 impl Default for MemoryEnv {
     fn default() -> Self {
-        MemoryEnv { root: BTreeMap::default(), stack: vec![BTreeMap::default()] }
+        MemoryEnv { root: BTreeMap::default(), stack: vec![BTreeMap::default()], max_storage_id: 0 }
     }
 }
 
 impl Environment<Vec<u8>> for MemoryEnv {
+    fn get_next_storage_id(&mut self, _in_root: bool) -> u32 {
+        self.max_storage_id += 1;
+        self.max_storage_id
+    }
+
     fn get_stack_depth(&self) -> i32 {
         -(self.stack.len() as i32)
     }
@@ -69,7 +126,7 @@ impl Environment<Vec<u8>> for MemoryEnv {
     fn resolve(&self, name: &str) -> Result<Option<OwnTuple>> {
         for layer in self.stack.iter() {
             if let Some(res) = layer.get(name) {
-                return Ok(Some(res.clone()))
+                return Ok(Some(res.clone()));
             }
         }
         Ok(self.root.get(name).cloned())
@@ -101,6 +158,17 @@ impl Environment<Vec<u8>> for MemoryEnv {
 
 
 impl<'a> Environment<SlicePtr> for Session<'a> {
+    fn get_next_storage_id(&mut self, in_root: bool) -> u32 {
+        let mut key_entry = Tuple::with_null_prefix();
+        key_entry.push_null();
+        todo!()
+        // if in_root {
+        //     todo!()
+        // } else {
+        //     todo!()
+        // }
+    }
+
     fn get_stack_depth(&self) -> i32 {
         self.stack_depth
     }
@@ -149,11 +217,8 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
             }
         }
         let root_key = self.encode_definable_key(name, true);
-        match self.txn.get(true, &self.perm_cf, root_key) {
-            Ok(root_res) => Ok(Some(Tuple::new(root_res))),
-            Err(e) if e.status.code == StatusCode::kNotFound => Ok(None),
-            Err(e) => Err(CozoError::Bridge(e))
-        }
+        let res = self.txn.get(true, &self.perm_cf, root_key).map(|v| v.map(Tuple::new))?;
+        Ok(res)
     }
 
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
@@ -191,5 +256,37 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
             self.txn.put(false, &self.temp_cf, ikey, "")?;
         }
         Ok(())
+    }
+}
+
+
+impl<'a> Session<'a> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::Parser;
+    use pest::Parser as PestParser;
+    use crate::db::eval::MemoryEnv;
+
+    #[test]
+    fn node() {
+        let s = r#"
+            create node "Person" {
+                *id: Int,
+                name: Text,
+                email: ?Text,
+                habits: ?[?Text]
+            }
+
+            create edge (Person)-[Friend]->(Person) {
+                relation: ?Text
+            }
+        "#;
+        let mut parsed = Parser::parse(Rule::file, s).unwrap();
+        let first_t = parsed.next().unwrap().into_inner().next().unwrap();
+        let second_t = parsed.next().unwrap().into_inner().next().unwrap();
+        let env = MemoryEnv::default();
+        env.parse_table_def(first_t);
     }
 }

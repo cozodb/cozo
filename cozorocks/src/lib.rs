@@ -524,14 +524,19 @@ impl TransactionPtr {
         status.check_err(())
     }
     #[inline]
-    pub fn get(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<SlicePtr> {
+    pub fn get(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<Option<SlicePtr>> {
         let mut status = BridgeStatus::default();
-        if transact {
+        let res = if transact {
             let ret = self.get_txn(cf, key.as_ref(), &mut status);
             status.check_err(SlicePtr::Pinnable(ret))
         } else {
             let ret = self.get_raw(cf, key.as_ref(), &mut status);
             status.check_err(SlicePtr::Pinnable(ret))
+        };
+        match res {
+            Ok(r) => Ok(Some(r)),
+            Err(e)  if e.status.code == StatusCode::kNotFound => Ok(None),
+            res => res.map(|v| None)
         }
     }
     #[inline]

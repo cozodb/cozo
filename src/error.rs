@@ -29,6 +29,9 @@ pub enum CozoError {
 
     #[error("Bad data format {0:?}")]
     BadDataFormat(Vec<u8>),
+
+    #[error("Duplicate names in {0:?}")]
+    DuplicateNames(Vec<String>),
 //
 //     #[error("Undefined table")]
 //     UndefinedTable,

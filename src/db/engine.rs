@@ -214,7 +214,9 @@ mod tests {
                 ikey.push_str("pqr");
                 println!("in {:?} {:?}", ikey, ikey.data);
                 sess.txn.put(true, &sess.perm_cf, &ikey, &ikey).unwrap();
-                println!("out {:?}", sess.txn.get(true, &sess.perm_cf, &ikey).unwrap().as_ref());
+                let out = sess.txn.get(true, &sess.perm_cf, &ikey).unwrap();
+                let out = out.as_ref().map(Tuple::new);
+                println!("out {:?}", out);
             }
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
