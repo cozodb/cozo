@@ -89,9 +89,9 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Err(CozoError::LogicError("Cannot have keys in assoc".to_string()));
         }
         let mut tuple = Tuple::with_data_prefix(DataKind::Associate);
-        tuple.push_str(vals_typing.to_string());
         tuple.push_bool(src_global);
         tuple.push_uint(src_id);
+        tuple.push_str(vals_typing.to_string());
         Ok((name, tuple))
     }
     fn parse_type_def(&self, mut pairs: Pairs<Rule>, _in_root: bool) -> Result<(String, OwnTuple)> {
@@ -132,33 +132,28 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             None => (Typing::NamedTuple(vec![]), Typing::NamedTuple(vec![]))
         };
         let mut tuple = Tuple::with_data_prefix(DataKind::Edge);
-        tuple.push_str(keys_typing.to_string());
-        tuple.push_str(vals_typing.to_string());
-        tuple.push_null(); // TODO default values for keys
-        tuple.push_null(); // TODO default values for cols
         tuple.push_bool(src_global);
         tuple.push_uint(src_id);
         tuple.push_bool(dst_global);
         tuple.push_uint(dst_id);
+        tuple.push_str(keys_typing.to_string());
+        tuple.push_str(vals_typing.to_string());
+        tuple.push_null(); // TODO default values for keys
+        tuple.push_null(); // TODO default values for cols
         Ok((name, tuple))
     }
 
     fn extract_table_id(src_tbl: Tuple<T>) -> Result<(DataKind, bool, u64)> {
         let kind = src_tbl.data_kind()?;
-        let id_idx = match kind {
-            DataKind::DataTuple => return Err(CozoError::UnexpectedDataKind(kind)),
-            DataKind::Node => 4,
-            DataKind::Edge => 8,
-            DataKind::Associate => 3,
-            DataKind::Index => todo!(),
-            DataKind::Value => return Err(CozoError::UnexpectedDataKind(kind)),
-            DataKind::TypeAlias => return Err(CozoError::UnexpectedDataKind(kind)),
+        match kind {
+            DataKind::DataTuple | DataKind::Value | DataKind::TypeAlias => return Err(CozoError::UnexpectedDataKind(kind)),
+            _ => {}
         };
-        let is_global = match src_tbl.get(id_idx).expect("Data corrupt") {
+        let is_global = match src_tbl.get(0).expect("Data corrupt") {
             Value::Bool(u) => u,
             _ => panic!("Data corrupt")
         };
-        let table_id = match src_tbl.get(id_idx + 1).expect("Data corrupt") {
+        let table_id = match src_tbl.get(1).expect("Data corrupt") {
             Value::UInt(u) => u,
             _ => panic!("Data corrupt")
         };
@@ -183,12 +178,15 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
         };
 
         let (need_id, (name, mut tuple)) = self.parse_definition(
-            pair.into_inner().next().unwrap(), in_root
+            pair.into_inner().next().unwrap(), in_root,
         )?;
         if need_id {
             let id = self.get_next_storage_id(in_root)?;
-            tuple.push_bool(in_root);
-            tuple.push_uint(id as u64);
+            let mut new_tuple = Tuple::with_prefix(tuple.get_prefix());
+            new_tuple.push_bool(in_root);
+            new_tuple.push_uint(id as u64);
+            new_tuple.concat_data(&tuple);
+            tuple = new_tuple;
         }
         self.define_data(&name, tuple, in_root)
     }

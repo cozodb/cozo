@@ -256,6 +256,11 @@ impl OwnTuple {
         }
     }
     #[inline]
+    pub fn overwrite_prefix(&mut self, prefix: u32) {
+        let bytes = prefix.to_be_bytes();
+        self.data[..4].clone_from_slice(&bytes[..4]);
+    }
+    #[inline]
     pub fn max_tuple() -> Self {
         let mut ret = Tuple::with_prefix(u32::MAX);
         ret.seal_with_sentinel();
