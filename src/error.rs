@@ -31,6 +31,9 @@ pub enum CozoError {
     #[error("Unexpected data kind {0:?}")]
     UnexpectedDataKind(DataKind),
 
+    #[error("Logic error: {0}")]
+    LogicError(String),
+
     #[error("Bad data format {0:?}")]
     BadDataFormat(Vec<u8>),
 

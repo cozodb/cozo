@@ -23,13 +23,6 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
         data.push_value(val);
         self.define_data(name, data, in_root)
     }
-
-    fn define_type_alias(&mut self, name: &str, typ: &Typing, in_root: bool) -> Result<()> {
-        let mut data = Tuple::with_data_prefix(DataKind::TypeAlias);
-        data.push_str(typ.to_string());
-        self.define_data(name, data, in_root)
-    }
-
     fn define_table(&mut self, table: &Table, in_root: bool) -> Result<()> {
         todo!()
     }
@@ -42,16 +35,6 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
         tuple.push_str(name);
         tuple.push_int(depth_code);
         tuple
-    }
-    fn parse_definition(&self, pair: Pair<Rule>) -> Result<(String, OwnTuple)> {
-        match pair.as_rule() {
-            Rule::node_def => self.parse_node_def(pair.into_inner()),
-            Rule::edge_def => self.parse_edge_def(pair.into_inner()),
-            Rule::associate_def => todo!(),
-            Rule::index_def => todo!(),
-            Rule::type_def => todo!(),
-            _ => unreachable!()
-        }
     }
     fn parse_cols(&self, pair: Pair<Rule>) -> Result<(Typing, Typing)> {
         let col_res = pair.into_inner().map(|p| {
@@ -79,13 +62,55 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
         let vals_typing = Typing::NamedTuple(cols.iter().map(|(_, n, t)| (n.to_string(), t.clone())).collect());
         Ok((keys_typing, vals_typing))
     }
-    fn parse_edge_def(&self, mut pairs: Pairs<Rule>) -> Result<(String, OwnTuple)> {
+    fn parse_definition(&self, pair: Pair<Rule>, in_root: bool) -> Result<(bool, (String, OwnTuple))> {
+        Ok(match pair.as_rule() {
+            Rule::node_def => (true, self.parse_node_def(pair.into_inner(), in_root)?),
+            Rule::edge_def => (true, self.parse_edge_def(pair.into_inner(), in_root)?),
+            Rule::associate_def => (true, self.parse_assoc_def(pair.into_inner(), in_root)?),
+            Rule::index_def => todo!(),
+            Rule::type_def => (false, self.parse_type_def(pair.into_inner(), in_root)?),
+            _ => unreachable!()
+        })
+    }
+    fn parse_assoc_def(&self, mut pairs: Pairs<Rule>, in_root: bool) -> Result<(String, OwnTuple)> {
+        let name = build_name_in_def(pairs.next().unwrap(), true)?;
         let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let src_tbl = match self.resolve(&src_name)? {
             Some(res) => res,
             None => return Err(CozoError::UndefinedType(src_name))
         };
-        let (kind, src_id) = Self::extract_table_id(src_tbl)?;
+        let (_kind, src_global, src_id) = Self::extract_table_id(src_tbl)?;
+        if in_root && !src_global {
+            return Err(CozoError::LogicError("Cannot have global edge with local nodes".to_string()));
+        }
+
+        let (keys_typing, vals_typing) = self.parse_cols(pairs.next().unwrap())?;
+        if keys_typing.to_string() != "()" {
+            return Err(CozoError::LogicError("Cannot have keys in assoc".to_string()));
+        }
+        let mut tuple = Tuple::with_data_prefix(DataKind::Associate);
+        tuple.push_str(vals_typing.to_string());
+        tuple.push_bool(src_global);
+        tuple.push_uint(src_id);
+        Ok((name, tuple))
+    }
+    fn parse_type_def(&self, mut pairs: Pairs<Rule>, _in_root: bool) -> Result<(String, OwnTuple)> {
+        let name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let typ = Typing::from_pair(pairs.next().unwrap(), Some(self))?;
+        let mut data = Tuple::with_data_prefix(DataKind::TypeAlias);
+        data.push_str(typ.to_string());
+        Ok((name, data))
+    }
+    fn parse_edge_def(&self, mut pairs: Pairs<Rule>, in_root: bool) -> Result<(String, OwnTuple)> {
+        let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let src_tbl = match self.resolve(&src_name)? {
+            Some(res) => res,
+            None => return Err(CozoError::UndefinedType(src_name))
+        };
+        let (kind, src_global, src_id) = Self::extract_table_id(src_tbl)?;
+        if in_root && !src_global {
+            return Err(CozoError::LogicError("Cannot have global edge with local nodes".to_string()));
+        }
         if kind != DataKind::Node {
             return Err(CozoError::UnexpectedDataKind(kind));
         }
@@ -95,7 +120,10 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             Some(res) => res,
             None => return Err(CozoError::UndefinedType(dst_name))
         };
-        let (kind, dst_id) = Self::extract_table_id(dst_tbl)?;
+        let (kind, dst_global, dst_id) = Self::extract_table_id(dst_tbl)?;
+        if in_root && !dst_global {
+            return Err(CozoError::LogicError("Cannot have global edge with local nodes".to_string()));
+        }
         if kind != DataKind::Node {
             return Err(CozoError::UnexpectedDataKind(kind));
         }
@@ -108,29 +136,35 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
         tuple.push_str(vals_typing.to_string());
         tuple.push_null(); // TODO default values for keys
         tuple.push_null(); // TODO default values for cols
+        tuple.push_bool(src_global);
         tuple.push_uint(src_id);
+        tuple.push_bool(dst_global);
         tuple.push_uint(dst_id);
         Ok((name, tuple))
     }
 
-    fn extract_table_id(src_tbl: Tuple<T>) -> Result<(DataKind, u64)> {
+    fn extract_table_id(src_tbl: Tuple<T>) -> Result<(DataKind, bool, u64)> {
         let kind = src_tbl.data_kind()?;
         let id_idx = match kind {
             DataKind::DataTuple => return Err(CozoError::UnexpectedDataKind(kind)),
             DataKind::Node => 4,
-            DataKind::Edge => 6,
-            DataKind::Associate => todo!(),
+            DataKind::Edge => 8,
+            DataKind::Associate => 3,
             DataKind::Index => todo!(),
             DataKind::Value => return Err(CozoError::UnexpectedDataKind(kind)),
             DataKind::TypeAlias => return Err(CozoError::UnexpectedDataKind(kind)),
         };
-        let table_id = match src_tbl.get(id_idx).expect("Data corrupt") {
+        let is_global = match src_tbl.get(id_idx).expect("Data corrupt") {
+            Value::Bool(u) => u,
+            _ => panic!("Data corrupt")
+        };
+        let table_id = match src_tbl.get(id_idx + 1).expect("Data corrupt") {
             Value::UInt(u) => u,
             _ => panic!("Data corrupt")
         };
-        Ok((kind, table_id))
+        Ok((kind, is_global, table_id))
     }
-    fn parse_node_def(&self, mut pairs: Pairs<Rule>) -> Result<(String, OwnTuple)> {
+    fn parse_node_def(&self, mut pairs: Pairs<Rule>, _in_root: bool) -> Result<(String, OwnTuple)> {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
         let col_pair = pairs.next().unwrap();
         let (keys_typing, vals_typing) = self.parse_cols(col_pair)?;
@@ -148,9 +182,14 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             _ => unreachable!()
         };
 
-        let (name, mut tuple) = self.parse_definition(pair.into_inner().next().unwrap())?;
-        let id = self.get_next_storage_id(in_root)?;
-        tuple.push_uint(id as u64);
+        let (need_id, (name, mut tuple)) = self.parse_definition(
+            pair.into_inner().next().unwrap(), in_root
+        )?;
+        if need_id {
+            let id = self.get_next_storage_id(in_root)?;
+            tuple.push_bool(in_root);
+            tuple.push_uint(id as u64);
+        }
         self.define_data(&name, tuple, in_root)
     }
 }
@@ -362,14 +401,30 @@ mod tests {
             create edge (Person)-[Friend]->(Person) {
                 relation: ?Text
             }
+
+            create type XXY = {me: Int, f: ?[Text]}
+
+            local assoc WorkInfo: Person {
+                email: Text
+            }
         "#;
-        let mut parsed = Parser::parse(Rule::file, s).unwrap();
-        let first_t = parsed.next().unwrap();
-        let second_t = parsed.next().unwrap();
         let mut env = MemoryEnv::default();
-        env.run_definition(first_t).unwrap();
+        let mut parsed = Parser::parse(Rule::file, s).unwrap();
+
+        let t = parsed.next().unwrap();
+        env.run_definition(t).unwrap();
         println!("{:?}", env.resolve("Person"));
-        env.run_definition(second_t).unwrap();
+
+        let t = parsed.next().unwrap();
+        env.run_definition(t).unwrap();
         println!("{:?}", env.resolve("Friend"));
+
+        let t = parsed.next().unwrap();
+        env.run_definition(t).unwrap();
+        println!("{:?}", env.resolve("XXY"));
+
+        let t = parsed.next().unwrap();
+        env.run_definition(t).unwrap();
+        println!("{:?}", env.resolve("WorkInfo"));
     }
 }
