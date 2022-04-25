@@ -204,7 +204,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
 
 impl<T: AsRef<[u8]>> Debug for Tuple<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.iter().collect::<Vec<_>>())
+        write!(f, "<{}>{:?}", self.get_prefix(), self.iter().collect::<Vec<_>>())
     }
 }
 

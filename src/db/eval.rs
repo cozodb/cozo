@@ -11,8 +11,8 @@ use crate::relation::data::DataKind;
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
 
-pub trait Environment<T: AsRef<[u8]>> {
-    fn get_next_storage_id(&mut self, in_root: bool) -> u32;
+pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
+    fn get_next_storage_id(&mut self, in_root: bool) -> Result<u32>;
     fn get_stack_depth(&self) -> i32;
     fn push_env(&mut self);
     fn pop_env(&mut self) -> Result<()>;
@@ -41,21 +41,17 @@ pub trait Environment<T: AsRef<[u8]>> {
         tuple.push_int(depth_code);
         tuple
     }
-    fn parse_table_def(&self, pair: Pair<Rule>) -> Result<(String, OwnTuple)>
-        where Self: Sized {
-        let parsed = match pair.as_rule() {
+    fn parse_definition(&self, pair: Pair<Rule>) -> Result<(String, OwnTuple)> {
+        match pair.as_rule() {
             Rule::node_def => self.parse_node_def(pair.into_inner()),
             Rule::edge_def => todo!(),
             Rule::associate_def => todo!(),
             Rule::index_def => todo!(),
             Rule::type_def => todo!(),
             _ => unreachable!()
-        };
-        println!("{:?}", parsed);
-        todo!()
+        }
     }
-    fn parse_node_def(&self, mut pairs: Pairs<Rule>) -> Result<(String, OwnTuple)>
-        where Self: Sized {
+    fn parse_node_def(&self, mut pairs: Pairs<Rule>) -> Result<(String, OwnTuple)> {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
         let col_pairs = pairs.next().unwrap().into_inner();
         let col_res = col_pairs.into_iter().map(|p| {
@@ -88,6 +84,18 @@ pub trait Environment<T: AsRef<[u8]>> {
         tuple.push_null(); // TODO default values for cols
         Ok((name, tuple))
     }
+    fn run_definition(&mut self, pair: Pair<Rule>) -> Result<()> {
+        let in_root = match pair.as_rule() {
+            Rule::global_def => true,
+            Rule::local_def => false,
+            _ => unreachable!()
+        };
+
+        let (name, mut tuple) = self.parse_definition(pair.into_inner().next().unwrap())?;
+        let id = self.get_next_storage_id(in_root)?;
+        tuple.push_uint(id as u64);
+        self.define_data(&name, tuple, in_root)
+    }
 }
 
 pub struct MemoryEnv {
@@ -103,9 +111,9 @@ impl Default for MemoryEnv {
 }
 
 impl Environment<Vec<u8>> for MemoryEnv {
-    fn get_next_storage_id(&mut self, _in_root: bool) -> u32 {
+    fn get_next_storage_id(&mut self, _in_root: bool) -> Result<u32> {
         self.max_storage_id += 1;
-        self.max_storage_id
+        Ok(self.max_storage_id)
     }
 
     fn get_stack_depth(&self) -> i32 {
@@ -158,15 +166,30 @@ impl Environment<Vec<u8>> for MemoryEnv {
 
 
 impl<'a> Environment<SlicePtr> for Session<'a> {
-    fn get_next_storage_id(&mut self, in_root: bool) -> u32 {
+    fn get_next_storage_id(&mut self, in_root: bool) -> Result<u32> {
+        // TODO: deal with wrapping problem
         let mut key_entry = Tuple::with_null_prefix();
         key_entry.push_null();
-        todo!()
-        // if in_root {
-        //     todo!()
-        // } else {
-        //     todo!()
-        // }
+        let db_res = if in_root {
+            self.txn.get(true, &self.perm_cf, &key_entry)
+        } else {
+            self.txn.get(false, &self.temp_cf, &key_entry)
+        };
+        let u = if let Some(en) = db_res? {
+            if let Value::UInt(u) = Tuple::new(en).get(0).unwrap() {
+                u
+            } else {
+                panic!("Unexpected value in storage id");
+            }
+        } else { 0 };
+        let mut new_data = Tuple::with_null_prefix();
+        new_data.push_uint(u + 1);
+        if in_root {
+            self.txn.put(true, &self.perm_cf, key_entry, new_data)?;
+        } else {
+            self.txn.put(false, &self.temp_cf, key_entry, new_data)?;
+        }
+        Ok((u + 1) as u32)
     }
 
     fn get_stack_depth(&self) -> i32 {
@@ -284,9 +307,10 @@ mod tests {
             }
         "#;
         let mut parsed = Parser::parse(Rule::file, s).unwrap();
-        let first_t = parsed.next().unwrap().into_inner().next().unwrap();
-        let second_t = parsed.next().unwrap().into_inner().next().unwrap();
-        let env = MemoryEnv::default();
-        env.parse_table_def(first_t);
+        let first_t = parsed.next().unwrap();
+        let second_t = parsed.next().unwrap();
+        let mut env = MemoryEnv::default();
+        env.run_definition(first_t).unwrap();
+        println!("{:?}", env.resolve("Person"));
     }
 }
