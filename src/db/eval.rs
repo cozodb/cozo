@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
+use std::process::id;
 use pest::iterators::{Pair, Pairs};
 use cozorocks::{SlicePtr, StatusCode};
 use crate::db::engine::{Session};
@@ -7,6 +8,7 @@ use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::typing::Typing;
 use crate::relation::value::Value;
 use crate::error::{CozoError, Result};
+use crate::error::CozoError::UnexpectedDataKind;
 use crate::relation::data::DataKind;
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
@@ -44,17 +46,15 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
     fn parse_definition(&self, pair: Pair<Rule>) -> Result<(String, OwnTuple)> {
         match pair.as_rule() {
             Rule::node_def => self.parse_node_def(pair.into_inner()),
-            Rule::edge_def => todo!(),
+            Rule::edge_def => self.parse_edge_def(pair.into_inner()),
             Rule::associate_def => todo!(),
             Rule::index_def => todo!(),
             Rule::type_def => todo!(),
             _ => unreachable!()
         }
     }
-    fn parse_node_def(&self, mut pairs: Pairs<Rule>) -> Result<(String, OwnTuple)> {
-        let name = build_name_in_def(pairs.next().unwrap(), true)?;
-        let col_pairs = pairs.next().unwrap().into_inner();
-        let col_res = col_pairs.into_iter().map(|p| {
+    fn parse_cols(&self, pair: Pair<Rule>) -> Result<(Typing, Typing)> {
+        let col_res = pair.into_inner().map(|p| {
             let mut ps = p.into_inner();
             let mut name_ps = ps.next().unwrap().into_inner();
             let is_key;
@@ -77,6 +77,63 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
         let (keys, cols): (Vec<_>, Vec<_>) = col_res.iter().partition(|(is_key, _, _)| *is_key);
         let keys_typing = Typing::NamedTuple(keys.iter().map(|(_, n, t)| (n.to_string(), t.clone())).collect());
         let vals_typing = Typing::NamedTuple(cols.iter().map(|(_, n, t)| (n.to_string(), t.clone())).collect());
+        Ok((keys_typing, vals_typing))
+    }
+    fn parse_edge_def(&self, mut pairs: Pairs<Rule>) -> Result<(String, OwnTuple)> {
+        let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let src_tbl = match self.resolve(&src_name)? {
+            Some(res) => res,
+            None => return Err(CozoError::UndefinedType(src_name))
+        };
+        let (kind, src_id) = Self::extract_table_id(src_tbl)?;
+        if kind != DataKind::Node {
+            return Err(CozoError::UnexpectedDataKind(kind));
+        }
+        let name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let dst_name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let dst_tbl = match self.resolve(&dst_name)? {
+            Some(res) => res,
+            None => return Err(CozoError::UndefinedType(dst_name))
+        };
+        let (kind, dst_id) = Self::extract_table_id(dst_tbl)?;
+        if kind != DataKind::Node {
+            return Err(CozoError::UnexpectedDataKind(kind));
+        }
+        let (keys_typing, vals_typing) = match pairs.next() {
+            Some(p) => self.parse_cols(p)?,
+            None => (Typing::NamedTuple(vec![]), Typing::NamedTuple(vec![]))
+        };
+        let mut tuple = Tuple::with_data_prefix(DataKind::Edge);
+        tuple.push_str(keys_typing.to_string());
+        tuple.push_str(vals_typing.to_string());
+        tuple.push_null(); // TODO default values for keys
+        tuple.push_null(); // TODO default values for cols
+        tuple.push_uint(src_id);
+        tuple.push_uint(dst_id);
+        Ok((name, tuple))
+    }
+
+    fn extract_table_id(src_tbl: Tuple<T>) -> Result<(DataKind, u64)> {
+        let kind = src_tbl.data_kind()?;
+        let id_idx = match kind {
+            DataKind::DataTuple => return Err(CozoError::UnexpectedDataKind(kind)),
+            DataKind::Node => 4,
+            DataKind::Edge => 6,
+            DataKind::Associate => todo!(),
+            DataKind::Index => todo!(),
+            DataKind::Value => return Err(CozoError::UnexpectedDataKind(kind)),
+            DataKind::TypeAlias => return Err(CozoError::UnexpectedDataKind(kind)),
+        };
+        let table_id = match src_tbl.get(id_idx).expect("Data corrupt") {
+            Value::UInt(u) => u,
+            _ => panic!("Data corrupt")
+        };
+        Ok((kind, table_id))
+    }
+    fn parse_node_def(&self, mut pairs: Pairs<Rule>) -> Result<(String, OwnTuple)> {
+        let name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let col_pair = pairs.next().unwrap();
+        let (keys_typing, vals_typing) = self.parse_cols(col_pair)?;
         let mut tuple = Tuple::with_data_prefix(DataKind::Node);
         tuple.push_str(keys_typing.to_string());
         tuple.push_str(vals_typing.to_string());
@@ -312,5 +369,7 @@ mod tests {
         let mut env = MemoryEnv::default();
         env.run_definition(first_t).unwrap();
         println!("{:?}", env.resolve("Person"));
+        env.run_definition(second_t).unwrap();
+        println!("{:?}", env.resolve("Friend"));
     }
 }

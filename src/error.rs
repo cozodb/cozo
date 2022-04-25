@@ -3,6 +3,7 @@ use std::time::SystemTimeError;
 use thiserror::Error;
 use cozorocks::BridgeError;
 use crate::parser::Rule;
+use crate::relation::data::DataKind;
 
 #[derive(Error, Debug)]
 pub enum CozoError {
@@ -26,6 +27,9 @@ pub enum CozoError {
 
     #[error("Undefined data kind {0}")]
     UndefinedDataKind(u32),
+
+    #[error("Unexpected data kind {0:?}")]
+    UnexpectedDataKind(DataKind),
 
     #[error("Bad data format {0:?}")]
     BadDataFormat(Vec<u8>),

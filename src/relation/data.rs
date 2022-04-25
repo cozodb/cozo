@@ -5,7 +5,7 @@ use crate::relation::typing::Typing;
 use crate::relation::value::Value;
 
 #[repr(u32)]
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum DataKind {
     DataTuple = 0,
     Node = 1,

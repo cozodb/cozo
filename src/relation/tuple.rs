@@ -1,8 +1,10 @@
 use std::borrow::{Cow};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::convert::Infallible;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
+use std::ptr::write;
 use uuid::Uuid;
 use crate::relation::data::DataKind;
 use crate::relation::value::{Tag, Value};
@@ -204,7 +206,17 @@ impl<T: AsRef<[u8]>> Tuple<T> {
 
 impl<T: AsRef<[u8]>> Debug for Tuple<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<{}>{:?}", self.get_prefix(), self.iter().collect::<Vec<_>>())
+        match self.data_kind() {
+            Ok(data_kind) => {
+                write!(f, "Tuple<{}:{:?}>{{", self.get_prefix(), data_kind)?;
+            }
+            Err(_) => {
+                write!(f, "Tuple<{}>[", self.get_prefix())?;
+            }
+        }
+        let strings = self.iter().enumerate().map(|(i, v)| format!("{}: {}", i, v))
+            .collect::<Vec<_>>().join(", ");
+        write!(f, "{}}}", strings)
     }
 }
 
