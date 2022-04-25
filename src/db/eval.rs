@@ -1,10 +1,11 @@
 use cozorocks::SlicePtr;
 use crate::db::engine::{Session};
-use crate::relation::table::{DataKind, Table};
+use crate::relation::table::{Table};
 use crate::relation::tuple::{Tuple};
 use crate::relation::typing::Typing;
 use crate::relation::value::Value;
 use crate::error::Result;
+use crate::relation::data::DataKind;
 
 pub trait Environment<T: AsRef<[u8]>> {
     fn push_env(&mut self);
@@ -12,7 +13,7 @@ pub trait Environment<T: AsRef<[u8]>> {
     fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()>;
     fn define_type_alias(&mut self, name: &str, typ: &Typing, in_root: bool) -> Result<()>;
     fn define_table(&mut self, table: &Table, in_root: bool) -> Result<()>;
-    fn resolve(&mut self, name: &str) -> Result<Option<Tuple<T>>>;
+    fn resolve(&self, name: &str) -> Result<Option<Tuple<T>>>;
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()>;
 }
 
@@ -91,7 +92,7 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
         todo!()
     }
 
-    fn resolve(&mut self, name: &str) -> Result<Option<Tuple<SlicePtr>>> {
+    fn resolve(&self, name: &str) -> Result<Option<Tuple<SlicePtr>>> {
         let mut tuple = Tuple::with_null_prefix();
         tuple.push_str(name);
         let it = self.txn.iterator(false, &self.temp_cf);

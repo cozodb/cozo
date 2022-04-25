@@ -1,34 +1,19 @@
 use crate::relation::typing::Typing;
 
-#[repr(u32)]
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
-pub enum DataKind {
-    DataTuple = 0,
-    Node = 1,
-    Edge = 2,
-    Associate = 3,
-    Index = 4,
-    Value = 5,
-    TypeAlias = 6
-}
-// In storage, key layout is `[0, name, stack_depth]` where stack_depth is a non-positive number as zigzag
-// Also has inverted index `[0, stack_depth, name]` for easy popping of stacks
-
-
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct StorageId {
-    cf: String,
-    tid: u32,
+    pub cf: String,
+    pub tid: u32,
 }
 
 pub struct Column {
-    name: String,
-    typ: Typing,
+    pub name: String,
+    pub typ: Typing,
 }
 
 pub struct StoredRelation {
-    keys: Vec<Column>,
-    vals: Vec<Column>,
+    pub keys: Vec<Column>,
+    pub vals: Vec<Column>,
 }
 
 pub enum Table {

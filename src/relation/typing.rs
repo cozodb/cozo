@@ -4,9 +4,13 @@ use pest::iterators::Pair;
 use crate::error::{Result, CozoError};
 use crate::relation::value::Value;
 use pest::Parser as PestParser;
+use cozorocks::SlicePtr;
+use crate::db::engine::Session;
+use crate::db::eval::Environment;
 use crate::parser::Parser;
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
+use crate::relation::data::DataKind;
 
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -63,7 +67,7 @@ impl Typing {
 }
 
 impl Typing {
-    fn from_pair(pair: Pair<Rule>) -> Result<Self> {
+    fn from_pair<T: AsRef<[u8]>, E: Environment<T>>(pair: Pair<Rule>, env: Option<&E>) -> Result<Self> {
         Ok(match pair.as_rule() {
             Rule::simple_type => match pair.as_str() {
                 "Any" => Typing::Any,
@@ -73,12 +77,24 @@ impl Typing {
                 "Text" => Typing::Text,
                 "Uuid" => Typing::Uuid,
                 "UInt" => Typing::UInt,
-                t => return Err(CozoError::UndefinedType(t.to_string()))
+                t => {
+                    match env {
+                        None => return Err(CozoError::UndefinedType(t.to_string())),
+                        Some(env) => {
+                            let resolved = env.resolve(t)?;
+                            let resolved = resolved.ok_or_else(|| CozoError::UndefinedType(t.to_string()))?;
+                            match resolved.data_kind()? {
+                                DataKind::TypeAlias => resolved.interpret_as_type()?,
+                                _ => return Err(CozoError::UndefinedType(t.to_string()))
+                            }
+                        }
+                    }
+                }
             },
-            Rule::nullable_type => Typing::Nullable(Box::new(Typing::from_pair(pair.into_inner().next().unwrap())?)),
-            Rule::homogeneous_list_type => Typing::Homogeneous(Box::new(Typing::from_pair(pair.into_inner().next().unwrap())?)),
+            Rule::nullable_type => Typing::Nullable(Box::new(Typing::from_pair(pair.into_inner().next().unwrap(), env)?)),
+            Rule::homogeneous_list_type => Typing::Homogeneous(Box::new(Typing::from_pair(pair.into_inner().next().unwrap(), env)?)),
             Rule::unnamed_tuple_type => {
-                let types = pair.into_inner().map(|p| Typing::from_pair(p)).collect::<Result<Vec<Typing>>>()?;
+                let types = pair.into_inner().map(|p| Typing::from_pair(p, env)).collect::<Result<Vec<Typing>>>()?;
                 Typing::UnnamedTuple(types)
             }
             Rule::named_tuple_type => {
@@ -87,7 +103,7 @@ impl Typing {
                     let name_pair = ps.next().unwrap();
                     let name = build_name_in_def(name_pair, true)?;
                     let typ_pair = ps.next().unwrap();
-                    let typ = Typing::from_pair(typ_pair)?;
+                    let typ = Typing::from_pair(typ_pair, env)?;
                     Ok((name, typ))
                 }).collect::<Result<Vec<(String, Typing)>>>()?;
                 Typing::NamedTuple(types)
@@ -102,7 +118,7 @@ impl TryFrom<&str> for Typing {
 
     fn try_from(value: &str) -> Result<Self> {
         let pair = Parser::parse(Rule::typing, value)?.next().unwrap();
-        Typing::from_pair(pair)
+        Typing::from_pair::<SlicePtr, Session>(pair, None)
     }
 }
 
@@ -133,5 +149,8 @@ mod tests {
         let res: Result<Typing> = "?({x : Text, ppqp: ?UInt}, [Int], ?Uuid)".try_into();
         println!("{:#?}", res);
         assert!(res.is_ok());
+        let res: Result<Typing> = "??Int".try_into();
+        println!("{:#?}", res);
+        assert!(res.is_err());
     }
 }

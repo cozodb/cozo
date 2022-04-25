@@ -94,7 +94,6 @@ impl Engine {
                 let ret = Arc::new(RwLock::new(SessionHandle {
                     cf_ident,
                     status: SessionStatus::Prepared,
-                    table_count: 0,
                 }));
                 guard.push(ret.clone());
                 ret
@@ -188,7 +187,6 @@ impl<'a> Drop for Session<'a> {
 pub struct SessionHandle {
     cf_ident: String,
     status: SessionStatus,
-    table_count: usize,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -202,7 +200,6 @@ pub enum SessionStatus {
 mod tests {
     use std::{fs, thread};
     use crate::db::eval::Environment;
-    use crate::relation::table::DataKind::Value;
     use crate::relation::tuple::Tuple;
     use super::*;
 

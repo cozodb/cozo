@@ -136,7 +136,7 @@ key_marker = { "*" }
 
 typing = _{ simple_type | nullable_type | homogeneous_list_type | unnamed_tuple_type | named_tuple_type }
 simple_type = { ident }
-nullable_type = { "?" ~ typing }
+nullable_type = { "?" ~ (simple_type | homogeneous_list_type | unnamed_tuple_type | named_tuple_type) }
 homogeneous_list_type = { "[" ~ typing ~ "]"}
 unnamed_tuple_type = { "(" ~ typing ~ ("," ~ typing)* ~ ")" }
 named_tuple_type = { "{" ~ named_type_pair ~ ("," ~ named_type_pair)* ~ "}" }

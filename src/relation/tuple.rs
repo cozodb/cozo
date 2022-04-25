@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use uuid::Uuid;
-use crate::relation::table::DataKind;
+use crate::relation::data::DataKind;
 use crate::relation::value::{Tag, Value};
 
 #[derive(Clone)]

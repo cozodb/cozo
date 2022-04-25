@@ -23,6 +23,12 @@ pub enum CozoError {
 //
     #[error("Undefined type '{0}'")]
     UndefinedType(String),
+
+    #[error("Undefined data kind {0}")]
+    UndefinedDataKind(u32),
+
+    #[error("Bad data format {0:?}")]
+    BadDataFormat(Vec<u8>),
 //
 //     #[error("Undefined table")]
 //     UndefinedTable,
@@ -57,7 +63,7 @@ pub enum CozoError {
     #[error(transparent)]
     Parse(#[from] pest::error::Error<Rule>),
 
-//     #[error(transparent)]
+    //     #[error(transparent)]
 //     Storage(#[from] cozo_rocks::BridgeStatus),
 //
 //     #[error(transparent)]
