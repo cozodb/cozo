@@ -6,7 +6,7 @@ use crate::relation::value::Value;
 use pest::Parser as PestParser;
 use cozorocks::SlicePtr;
 use crate::db::engine::Session;
-use crate::db::eval::Environment;
+use crate::db::eval::{Environment, MemoryEnv};
 use crate::parser::Parser;
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
@@ -118,7 +118,7 @@ impl TryFrom<&str> for Typing {
 
     fn try_from(value: &str) -> Result<Self> {
         let pair = Parser::parse(Rule::typing, value)?.next().unwrap();
-        Typing::from_pair::<SlicePtr, Session>(pair, None)
+        Typing::from_pair::<Vec<u8>, MemoryEnv>(pair, None)
     }
 }
 

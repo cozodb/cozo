@@ -21,6 +21,8 @@ impl<T> AsRef<[u8]> for Tuple<T> where T: AsRef<[u8]> {
     }
 }
 
+pub type OwnTuple = Tuple<Vec<u8>>;
+
 const PREFIX_LEN: usize = 4;
 
 impl<T: AsRef<[u8]>> Tuple<T> {
@@ -224,7 +226,7 @@ impl<'a, T: AsRef<[u8]>> Iterator for TupleIter<'a, T> {
     }
 }
 
-impl Tuple<Vec<u8>> {
+impl OwnTuple {
     #[inline]
     pub fn with_null_prefix() -> Self {
         Tuple::with_prefix(0)
@@ -372,7 +374,7 @@ impl Tuple<Vec<u8>> {
     }
 }
 
-impl<'a> Extend<Value<'a>> for Tuple<Vec<u8>> {
+impl<'a> Extend<Value<'a>> for OwnTuple {
     #[inline]
     fn extend<T: IntoIterator<Item=Value<'a>>>(&mut self, iter: T) {
         for v in iter {

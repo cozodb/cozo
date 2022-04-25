@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use cozorocks::{SlicePtr, StatusCode};
 use crate::db::engine::{Session};
 use crate::relation::table::{Table};
-use crate::relation::tuple::{Tuple};
+use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::typing::Typing;
 use crate::relation::value::Value;
 use crate::error::{CozoError, Result};
@@ -29,8 +29,8 @@ pub trait Environment<T: AsRef<[u8]>> {
     }
     fn resolve(&self, name: &str) -> Result<Option<Tuple<T>>>;
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()>;
-    fn define_data(&mut self, name: &str, data: Tuple<Vec<u8>>, in_root: bool) -> Result<()>;
-    fn encode_definable_key(&self, name: &str, in_root: bool) -> Tuple<Vec<u8>> {
+    fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()>;
+    fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
         let depth_code = if in_root { 0 } else { self.get_stack_depth() as i64 };
         let mut tuple = Tuple::with_null_prefix();
         tuple.push_str(name);
@@ -40,8 +40,8 @@ pub trait Environment<T: AsRef<[u8]>> {
 }
 
 pub struct MemoryEnv {
-    root: BTreeMap<String, Tuple<Vec<u8>>>,
-    stack: Vec<BTreeMap<String, Tuple<Vec<u8>>>>,
+    root: BTreeMap<String, OwnTuple>,
+    stack: Vec<BTreeMap<String, OwnTuple>>,
 }
 
 impl Default for MemoryEnv {
@@ -50,7 +50,7 @@ impl Default for MemoryEnv {
     }
 }
 
-impl Environment<Tuple<Vec<u8>>> for MemoryEnv {
+impl Environment<Vec<u8>> for MemoryEnv {
     fn get_stack_depth(&self) -> i32 {
         -(self.stack.len() as i32)
     }
@@ -66,28 +66,36 @@ impl Environment<Tuple<Vec<u8>>> for MemoryEnv {
         Ok(())
     }
 
-    fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
-        todo!()
-    }
-
-    fn define_type_alias(&mut self, name: &str, typ: &Typing, in_root: bool) -> Result<()> {
-        todo!()
-    }
-
-    fn define_table(&mut self, table: &Table, in_root: bool) -> Result<()> {
-        todo!()
-    }
-
-    fn resolve(&self, name: &str) -> Result<Option<Tuple<Tuple<Vec<u8>>>>> {
-        todo!()
+    fn resolve(&self, name: &str) -> Result<Option<OwnTuple>> {
+        for layer in self.stack.iter() {
+            if let Some(res) = layer.get(name) {
+                return Ok(Some(res.clone()))
+            }
+        }
+        Ok(self.root.get(name).cloned())
     }
 
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
-        todo!()
+        if in_root {
+            self.root.remove(name);
+        } else {
+            for layer in self.stack.iter_mut().rev() {
+                if let Some(_) = layer.remove(name) {
+                    return Ok(());
+                }
+            }
+        }
+        Ok(())
     }
 
-    fn define_data(&mut self, name: &str, data: Tuple<Vec<u8>>, in_root: bool) -> Result<()> {
-        todo!()
+    fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()> {
+        if in_root {
+            self.root.insert(name.to_string(), data);
+        } else {
+            let last = self.stack.last_mut().unwrap();
+            last.insert(name.to_string(), data);
+        }
+        Ok(())
     }
 }
 
@@ -171,7 +179,7 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
         Ok(())
     }
 
-    fn define_data(&mut self, name: &str, data: Tuple<Vec<u8>>, in_root: bool) -> Result<()> {
+    fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()> {
         let key = self.encode_definable_key(name, in_root);
         if in_root {
             self.txn.put(true, &self.perm_cf, key, data)?;
