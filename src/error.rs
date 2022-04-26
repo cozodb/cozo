@@ -64,6 +64,9 @@ pub enum CozoError {
 //     #[error("Database already closed")]
 //     DatabaseClosed,
 
+    #[error("InvalidArgument")]
+    InvalidArgument,
+
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),
 

@@ -14,6 +14,8 @@ use crate::error::CozoError::UnexpectedDataKind;
 use crate::relation::data::DataKind;
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
+use crate::relation::value;
+use crate::relation::value::Value::Apply;
 
 pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
     fn get_next_storage_id(&mut self, in_root: bool) -> Result<u32>;
@@ -240,10 +242,10 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             Value::Apply(op, args) => {
                 use crate::relation::value;
                 Ok(match op.as_ref() {
-                    value::OP_ADD => add_values(args)?,
-                    value::OP_SUB => sub_values(args)?,
-                    value::OP_MUL => { todo!() }
-                    value::OP_DIV => { todo!() }
+                    value::OP_ADD => self.add_values(args)?,
+                    value::OP_SUB => self.sub_values(args)?,
+                    value::OP_MUL => self.mul_values(args)?,
+                    value::OP_DIV => self.div_values(args)?,
                     value::OP_EQ => { todo!() }
                     value::OP_NE => { todo!() }
                     value::OP_OR => { todo!() }
@@ -262,14 +264,78 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             }
         }
     }
+
+    fn add_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap())?;
+        let (re, right) = self.partial_eval(args.next().unwrap())?;
+        if left == Value::Null || right == Value::Null {
+            return Ok((true, Value::Null));
+        }
+        if !le || !re {
+            return Ok((false, Apply(value::OP_ADD.into(), vec![left, right])));
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (true, (l + r).into()),
+            (Value::Float(l), Value::Int(r)) => (true, (l + (r as f64)).into()),
+            (Value::Int(l), Value::Float(r)) => (true, ((l as f64) + r.into_inner()).into()),
+            (Value::Text(l), Value::Text(r)) => (true, (l.to_string() + r.as_ref()).into()),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+    fn sub_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap())?;
+        let (re, right) = self.partial_eval(args.next().unwrap())?;
+        if left == Value::Null || right == Value::Null {
+            return Ok((true, Value::Null));
+        }
+        if !le || !re {
+            return Ok((false, Apply(value::OP_ADD.into(), vec![left, right])));
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (true, (l - r).into()),
+            (Value::Float(l), Value::Int(r)) => (true, (l - (r as f64)).into()),
+            (Value::Int(l), Value::Float(r)) => (true, ((l as f64) - r.into_inner()).into()),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+    fn mul_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap())?;
+        let (re, right) = self.partial_eval(args.next().unwrap())?;
+        if left == Value::Null || right == Value::Null {
+            return Ok((true, Value::Null));
+        }
+        if !le || !re {
+            return Ok((false, Apply(value::OP_ADD.into(), vec![left, right])));
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (true, (l * r).into()),
+            (Value::Float(l), Value::Int(r)) => (true, (l * (r as f64)).into()),
+            (Value::Int(l), Value::Float(r)) => (true, ((l as f64) * r.into_inner()).into()),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+    fn div_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap())?;
+        let (re, right) = self.partial_eval(args.next().unwrap())?;
+        if left == Value::Null || right == Value::Null {
+            return Ok((true, Value::Null));
+        }
+        if !le || !re {
+            return Ok((false, Apply(value::OP_ADD.into(), vec![left, right])));
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (true, (l as f64 / r as f64).into()),
+            (Value::Float(l), Value::Int(r)) => (true, (l / (r as f64)).into()),
+            (Value::Int(l), Value::Float(r)) => (true, ((l as f64) / r.into_inner()).into()),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
 }
 
-fn add_values(args: Vec<Value>) -> Result<(bool, Value)> {
-    todo!()
-}
-fn sub_values(args: Vec<Value>) -> Result<(bool, Value)> {
-    todo!()
-}
 
 pub struct MemoryEnv {
     root: BTreeMap<String, OwnTuple>,
