@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
+use std::path::is_separator;
 use std::process::id;
 use pest::iterators::{Pair, Pairs};
 use cozorocks::{SlicePtr, StatusCode};
@@ -190,6 +192,83 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
         }
         self.define_data(&name, tuple, in_root)
     }
+    fn partial_eval<'a>(&self, value: Value<'a>) -> Result<(bool, Value<'a>)> {
+        match value {
+            v @ (Value::Null |
+            Value::Bool(_) |
+            Value::UInt(_) |
+            Value::Int(_) |
+            Value::Float(_) |
+            Value::Uuid(_) |
+            Value::Text(_) |
+            Value::EndSentinel) => Ok((true, v)),
+            Value::List(l) => {
+                let init_vec = Vec::with_capacity(l.len());
+                let res: Result<(bool, Vec<Value>)> = l.into_iter()
+                    .try_fold((true, init_vec), |(is_evaluated, mut accum), val| {
+                        let (ev, new_val) = self.partial_eval(val)?;
+                        accum.push(new_val);
+                        Ok((ev && is_evaluated, accum))
+                    });
+                let (is_ev, v) = res?;
+                Ok((is_ev, v.into()))
+            }
+            Value::Dict(d) => {
+                let res: Result<(bool, BTreeMap<Cow<str>, Value>)> = d.into_iter()
+                    .try_fold((true, BTreeMap::new()), |(is_evaluated, mut accum), (k, v)| {
+                        let (ev, new_val) = self.partial_eval(v)?;
+                        accum.insert(k, new_val);
+                        Ok((ev && is_evaluated, accum))
+                    });
+                let (is_ev, v) = res?;
+                Ok((is_ev, v.into()))
+            }
+            Value::Variable(v) => {
+                Ok(match self.resolve(&v)? {
+                    None => (false, Value::Variable(v)),
+                    Some(rs) => {
+                        match rs.data_kind() {
+                            Ok(DataKind::Value) => {
+                                let resolved = rs.get(0).ok_or_else(|| CozoError::BadDataFormat(rs.data.as_ref().to_vec()))?;
+                                (resolved.is_evaluated(), resolved.to_static())
+                            }
+                            _ => (false, Value::Variable(v))
+                        }
+                    }
+                })
+            }
+            Value::Apply(op, args) => {
+                use crate::relation::value;
+                Ok(match op.as_ref() {
+                    value::OP_ADD => add_values(args)?,
+                    value::OP_SUB => sub_values(args)?,
+                    value::OP_MUL => { todo!() }
+                    value::OP_DIV => { todo!() }
+                    value::OP_EQ => { todo!() }
+                    value::OP_NE => { todo!() }
+                    value::OP_OR => { todo!() }
+                    value::OP_AND => { todo!() }
+                    value::OP_MOD => { todo!() }
+                    value::OP_GT => { todo!() }
+                    value::OP_GE => { todo!() }
+                    value::OP_LT => { todo!() }
+                    value::OP_LE => { todo!() }
+                    value::OP_POW => { todo!() }
+                    value::OP_COALESCE => { todo!() }
+                    value::OP_NEGATE => { todo!() }
+                    value::OP_MINUS => { todo!() }
+                    _ => { todo!() }
+                })
+            }
+        }
+    }
+}
+
+fn add_values(args: Vec<Value>) -> Result<(bool, Value)> {
+    todo!()
+}
+fn sub_values(args: Vec<Value>) -> Result<(bool, Value)> {
+    todo!()
 }
 
 pub struct MemoryEnv {

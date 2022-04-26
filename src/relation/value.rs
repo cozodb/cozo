@@ -23,36 +23,13 @@ pub enum Tag {
     Text = 6,
     Uuid = 7,
     UInt = 8,
-    List = 9,
-    Dict = 10,
-    // Timestamp = 23,
-    // Datetime = 25,
-    // Timezone = 27,
-    // Date = 27,
-    // Time = 29,
-    // Duration = 31,
-    // BigInt = 51,
-    // BigDecimal = 53,
-    // Inet = 55,
-    // Crs = 57,
-    // BitArr = 60,
-    // U8Arr = 61,
-    // I8Arr = 62,
-    // U16Arr = 63,
-    // I16Arr = 64,
-    // U32Arr = 65,
-    // I32Arr = 66,
-    // U64Arr = 67,
-    // I64Arr = 68,
-    // F16Arr = 69,
-    // F32Arr = 70,
-    // F64Arr = 71,
-    // C32Arr = 72,
-    // C64Arr = 73,
-    // C128Arr = 74,
-    Variable = u8::MAX - 2,
-    Apply = u8::MAX - 1,
-    MaxTag = u8::MAX,
+
+    List = 128,
+    Dict = 129,
+
+    Variable = 253,
+    Apply = 254,
+    MaxTag = 255,
 }
 
 impl TryFrom<u8> for Tag {
@@ -69,13 +46,42 @@ impl TryFrom<u8> for Tag {
             6 => Text,
             7 => Uuid,
             8 => UInt,
-            9 => List,
-            10 => Dict,
-            u8::MAX => MaxTag,
+            128 => List,
+            129 => Dict,
+            253 => Variable,
+            254 => Apply,
+            255 => MaxTag,
             v => return Err(v)
         })
     }
 }
+
+// Timestamp = 23,
+// Datetime = 25,
+// Timezone = 27,
+// Date = 27,
+// Time = 29,
+// Duration = 31,
+// BigInt = 51,
+// BigDecimal = 53,
+// Inet = 55,
+// Crs = 57,
+// BitArr = 60,
+// U8Arr = 61,
+// I8Arr = 62,
+// U16Arr = 63,
+// I16Arr = 64,
+// U32Arr = 65,
+// I32Arr = 66,
+// U64Arr = 67,
+// I64Arr = 68,
+// F16Arr = 69,
+// F32Arr = 70,
+// F64Arr = 71,
+// C32Arr = 72,
+// C64Arr = 73,
+// C128Arr = 74,
+
 
 #[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq)]
 pub enum Value<'a> {
@@ -324,27 +330,44 @@ lazy_static! {
     };
 }
 
+pub const OP_ADD: &str = "+";
+pub const OP_SUB: &str = "-";
+pub const OP_MUL: &str = "*";
+pub const OP_DIV: &str = "/";
+pub const OP_EQ: &str = "==";
+pub const OP_NE: &str = "!=";
+pub const OP_OR: &str = "||";
+pub const OP_AND: &str = "&&";
+pub const OP_MOD: &str = "%";
+pub const OP_GT: &str = ">";
+pub const OP_GE: &str = ">=";
+pub const OP_LT: &str = "<";
+pub const OP_LE: &str = "<=";
+pub const OP_POW: &str = "**";
+pub const OP_COALESCE: &str = "~~";
+pub const OP_NEGATE: &str = "!";
+pub const OP_MINUS: &str = "--";
 
 
 fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Value<'a>>) -> Result<Value<'a>> {
     let lhs = lhs?;
     let rhs = rhs?;
     let op = match op.as_rule() {
-        Rule::op_add => "+",
-        Rule::op_sub => "-",
-        Rule::op_mul => "*",
-        Rule::op_div => "/",
-        Rule::op_eq => "==",
-        Rule::op_ne => "!=",
-        Rule::op_or => "||",
-        Rule::op_and => "&&",
-        Rule::op_mod => "%",
-        Rule::op_gt => ">",
-        Rule::op_ge => ">=",
-        Rule::op_lt => "<",
-        Rule::op_le => "<=",
-        Rule::op_pow => "**",
-        Rule::op_coalesce => "~~",
+        Rule::op_add => OP_ADD,
+        Rule::op_sub => OP_SUB,
+        Rule::op_mul => OP_MUL,
+        Rule::op_div => OP_DIV,
+        Rule::op_eq => OP_EQ,
+        Rule::op_ne => OP_NE,
+        Rule::op_or => OP_OR,
+        Rule::op_and => OP_AND,
+        Rule::op_mod => OP_MOD,
+        Rule::op_gt => OP_GT,
+        Rule::op_ge => OP_GE,
+        Rule::op_lt => OP_LT,
+        Rule::op_le => OP_LE,
+        Rule::op_pow => OP_POW,
+        Rule::op_coalesce => OP_COALESCE,
         _ => unreachable!()
     };
     Ok(Value::Apply(op.into(), vec![lhs, rhs]))
@@ -362,8 +385,8 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
             let op = inner.next().unwrap().as_rule();
             let term = build_expr_primary(inner.next().unwrap())?;
             let op = match op {
-                Rule::negate => "!",
-                Rule::minus => "--",
+                Rule::negate => OP_NEGATE,
+                Rule::minus => OP_MINUS,
                 _ => unreachable!()
             };
             Ok(Value::Apply(op.into(), vec![term]))
