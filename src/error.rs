@@ -63,12 +63,12 @@ pub enum CozoError {
 //
 //     #[error("Database already closed")]
 //     DatabaseClosed,
-//
-//     #[error(transparent)]
-//     ParseInt(#[from] std::num::ParseIntError),
-//
-//     #[error(transparent)]
-//     ParseFloat(#[from] std::num::ParseFloatError),
+
+    #[error(transparent)]
+    ParseInt(#[from] std::num::ParseIntError),
+
+    #[error(transparent)]
+    ParseFloat(#[from] std::num::ParseFloatError),
 
     #[error(transparent)]
     Parse(#[from] pest::error::Error<Rule>),

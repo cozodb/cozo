@@ -82,14 +82,15 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             Tag::Int | Tag::UInt => start + self.parse_varint(start).1,
             Tag::Float => start + 8,
             Tag::Uuid => start + 16,
-            Tag::Text => {
+            Tag::Text | Tag::Variable => {
                 let (slen, offset) = self.parse_varint(start);
                 let slen = slen as usize;
                 start + slen + offset
             }
             Tag::List => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
+            Tag::Apply => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
             Tag::Dict => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
-            Tag::MaxTag => panic!()
+            Tag::MaxTag => panic!(),
         };
         self.idx_cache.borrow_mut().push(nxt);
     }
@@ -164,6 +165,15 @@ impl<T: AsRef<[u8]>> Tuple<T> {
 
                 (start + slen + offset, s.into())
             }
+            Tag::Variable => {
+                let (slen, offset) = self.parse_varint(start);
+                let slen = slen as usize;
+                let s = unsafe {
+                    std::str::from_utf8_unchecked(&data[start + offset..start + offset + slen])
+                };
+
+                (start + slen + offset, Value::Variable(s.into()))
+            }
             Tag::List => {
                 let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
                 let mut start_pos = start + 4;
@@ -174,6 +184,23 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                     start_pos = new_pos;
                 }
                 (end_pos, collected.into())
+            }
+            Tag::Apply => {
+                let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
+                let mut start_pos = start + 4;
+                let mut collected = vec![];
+                let (val, new_pos) = self.parse_value_at(start_pos);
+                start_pos = new_pos;
+                let op = match val {
+                    Value::Variable(s) => s,
+                    _ => panic!("Corrupt data when parsing Apply")
+                };
+                while start_pos < end_pos {
+                    let (val, new_pos) = self.parse_value_at(start_pos);
+                    collected.push(val);
+                    start_pos = new_pos;
+                }
+                (end_pos, Value::Apply(op, collected))
             }
             Tag::Dict => {
                 let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
@@ -192,7 +219,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 }
                 (end_pos, collected.into())
             }
-            Tag::MaxTag => (start, Value::End_Sentinel)
+            Tag::MaxTag => (start, Value::EndSentinel),
         };
         (val, nxt)
     }
@@ -317,6 +344,14 @@ impl OwnTuple {
         self.idx_cache.borrow_mut().push(self.data.len());
     }
     #[inline]
+    pub fn push_variable(&mut self, s: impl AsRef<str>) {
+        let s = s.as_ref();
+        self.push_tag(Tag::Variable);
+        self.push_varint(s.len() as u64);
+        self.data.extend_from_slice(s.as_bytes());
+        self.idx_cache.borrow_mut().push(self.data.len());
+    }
+    #[inline]
     pub fn push_value(&mut self, v: &Value) {
         match v {
             Value::Null => self.push_null(),
@@ -326,12 +361,29 @@ impl OwnTuple {
             Value::Float(f) => self.push_float(f.into_inner()),
             Value::Uuid(u) => self.push_uuid(*u),
             Value::Text(t) => self.push_str(t),
+            Value::Variable(s) => self.push_variable(s),
             Value::List(l) => {
                 self.push_tag(Tag::List);
                 let start_pos = self.data.len();
                 let start_len = self.idx_cache.borrow().len();
                 self.data.extend(0u32.to_be_bytes());
                 for val in l {
+                    self.push_value(val);
+                }
+                let length = (self.data.len() - start_pos) as u32;
+                let length_bytes = length.to_be_bytes();
+                self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
+                let mut cache = self.idx_cache.borrow_mut();
+                cache.truncate(start_len);
+                cache.push(self.data.len());
+            }
+            Value::Apply(op, args) => {
+                self.push_tag(Tag::Apply);
+                let start_pos = self.data.len();
+                let start_len = self.idx_cache.borrow().len();
+                self.data.extend(0u32.to_be_bytes());
+                self.push_variable(op);
+                for val in args {
                     self.push_value(val);
                 }
                 let length = (self.data.len() - start_pos) as u32;
@@ -358,7 +410,7 @@ impl OwnTuple {
                 cache.truncate(start_len);
                 cache.push(self.data.len());
             }
-            Value::End_Sentinel => panic!("Cannot push sentinel value")
+            Value::EndSentinel => panic!("Cannot push sentinel value"),
         }
     }
 

@@ -1,8 +1,16 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter, Write};
+use lazy_static::lazy_static;
+use pest::prec_climber::{Assoc, PrecClimber, Operator};
 use ordered_float::OrderedFloat;
+use pest::iterators::Pair;
 use uuid::Uuid;
+use crate::parser::Rule;
+use crate::error::Result;
+use crate::parser::number::parse_int;
+use crate::parser::text_identifier::parse_string;
+
 
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
@@ -42,7 +50,9 @@ pub enum Tag {
     // C32Arr = 72,
     // C64Arr = 73,
     // C128Arr = 74,
-    MaxTag = u8::MAX
+    Variable = u8::MAX - 2,
+    Apply = u8::MAX - 1,
+    MaxTag = u8::MAX,
 }
 
 impl TryFrom<u8> for Tag {
@@ -78,7 +88,9 @@ pub enum Value<'a> {
     Text(Cow<'a, str>),
     List(Vec<Value<'a>>),
     Dict(BTreeMap<Cow<'a, str>, Value<'a>>),
-    End_Sentinel
+    Variable(Cow<'a, str>),
+    Apply(Cow<'a, str>, Vec<Value<'a>>),
+    EndSentinel,
 }
 
 pub type StaticValue = Value<'static>;
@@ -94,12 +106,38 @@ impl<'a> Value<'a> {
             Value::Float(f) => Value::from(f),
             Value::Uuid(u) => Value::from(u),
             Value::Text(t) => Value::from(t.into_owned()),
+            Value::Variable(s) => Value::Variable(Cow::Owned(s.into_owned())),
             Value::List(l) => l.into_iter().map(|v| v.to_static()).collect::<Vec<StaticValue>>().into(),
+            Value::Apply(op, args) => {
+                Value::Apply(Cow::Owned(op.into_owned()),
+                             args.into_iter().map(|v| v.to_static()).collect::<Vec<StaticValue>>())
+            }
             Value::Dict(d) => d.into_iter()
                 .map(|(k, v)| (Cow::Owned(k.into_owned()), v.to_static()))
                 .collect::<BTreeMap<Cow<'static, str>, StaticValue>>().into(),
-            Value::End_Sentinel => panic!("Cannot process sentinel value")
+            Value::EndSentinel => panic!("Cannot process sentinel value"),
         }
+    }
+    #[inline]
+    pub fn is_evaluated(&self) -> bool {
+        match self {
+            Value::Null |
+            Value::Bool(_) |
+            Value::UInt(_) |
+            Value::Int(_) |
+            Value::Float(_) |
+            Value::Uuid(_) |
+            Value::Text(_) |
+            Value::EndSentinel => true,
+            Value::List(l) => l.iter().all(|v| v.is_evaluated()),
+            Value::Dict(d) => d.values().all(|v| v.is_evaluated()),
+            Value::Variable(_) => false,
+            Value::Apply(_, _) => false
+        }
+    }
+    #[inline]
+    pub fn from_pair(pair: pest::iterators::Pair<'a, Rule>) -> Result<Self> {
+        PREC_CLIMBER.climb(pair.into_inner(), build_expr_primary, build_expr_infix)
     }
 }
 
@@ -253,10 +291,164 @@ impl<'a> Display for Value<'a> {
                 }
                 f.write_char('}')?;
             }
-            Value::End_Sentinel => {
+            Value::Variable(s) => {
+                write!(f, "`{}`", s)?
+            }
+            Value::EndSentinel => {
                 write!(f, "Sentinel")?
+            }
+            Value::Apply(op, args) => {
+                write!(f, "({} {})", op,
+                       args.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" "))?;
             }
         }
         Ok(())
+    }
+}
+
+lazy_static! {
+    static ref PREC_CLIMBER: PrecClimber<Rule> = {
+        use Assoc::*;
+
+        PrecClimber::new(vec![
+            Operator::new(Rule::op_or, Left),
+            Operator::new(Rule::op_and, Left),
+            Operator::new(Rule::op_gt, Left) | Operator::new(Rule::op_lt, Left) | Operator::new(Rule::op_ge,Left) | Operator::new(Rule::op_le, Left),
+            Operator::new(Rule::op_mod, Left),
+            Operator::new(Rule::op_eq, Left) | Operator::new(Rule::op_ne, Left),
+            Operator::new(Rule::op_add, Left) | Operator::new(Rule::op_sub, Left),
+            Operator::new(Rule::op_mul, Left) | Operator::new(Rule::op_div, Left),
+            Operator::new(Rule::op_pow, Assoc::Right),
+            Operator::new(Rule::op_coalesce, Assoc::Left)
+        ])
+    };
+}
+
+
+
+fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Value<'a>>) -> Result<Value<'a>> {
+    let lhs = lhs?;
+    let rhs = rhs?;
+    let op = match op.as_rule() {
+        Rule::op_add => "+",
+        Rule::op_sub => "-",
+        Rule::op_mul => "*",
+        Rule::op_div => "/",
+        Rule::op_eq => "==",
+        Rule::op_ne => "!=",
+        Rule::op_or => "||",
+        Rule::op_and => "&&",
+        Rule::op_mod => "%",
+        Rule::op_gt => ">",
+        Rule::op_ge => ">=",
+        Rule::op_lt => "<",
+        Rule::op_le => "<=",
+        Rule::op_pow => "**",
+        Rule::op_coalesce => "~~",
+        _ => unreachable!()
+    };
+    Ok(Value::Apply(op.into(), vec![lhs, rhs]))
+}
+
+
+fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
+    match pair.as_rule() {
+        Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
+        Rule::term => build_expr_primary(pair.into_inner().next().unwrap()),
+        Rule::grouping => Value::from_pair(pair.into_inner().next().unwrap()),
+
+        Rule::unary => {
+            let mut inner = pair.into_inner();
+            let op = inner.next().unwrap().as_rule();
+            let term = build_expr_primary(inner.next().unwrap())?;
+            let op = match op {
+                Rule::negate => "!",
+                Rule::minus => "--",
+                _ => unreachable!()
+            };
+            Ok(Value::Apply(op.into(), vec![term]))
+        }
+
+        Rule::pos_int => Ok(Value::Int(pair.as_str().replace('_', "").parse::<i64>()?)),
+        Rule::hex_pos_int => Ok(Value::Int(parse_int(pair.as_str(), 16))),
+        Rule::octo_pos_int => Ok(Value::Int(parse_int(pair.as_str(), 8))),
+        Rule::bin_pos_int => Ok(Value::Int(parse_int(pair.as_str(), 2))),
+        Rule::dot_float | Rule::sci_float => Ok(Value::Float(pair.as_str().replace('_', "").parse::<f64>()?.into())),
+        Rule::null => Ok(Value::Null),
+        Rule::boolean => Ok(Value::Bool(pair.as_str() == "true")),
+        Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => Ok(
+            Value::Text(Cow::Owned(parse_string(pair)?))),
+        Rule::list => Ok(pair.into_inner().map(|v| build_expr_primary(v)).collect::<Result<Vec<Value>>>()?.into()),
+        Rule::dict => {
+            Ok(pair.into_inner().map(|p| {
+                match p.as_rule() {
+                    Rule::dict_pair => {
+                        let mut inner = p.into_inner();
+                        let name = parse_string(inner.next().unwrap())?;
+                        let val = build_expr_primary(inner.next().unwrap())?;
+                        Ok((name.into(), val))
+                    }
+                    _ => todo!()
+                }
+            }).collect::<Result<BTreeMap<Cow<str>, Value>>>()?.into())
+        }
+        Rule::param => {
+            Ok(Value::Variable(pair.as_str().into()))
+        }
+        Rule::ident => {
+            Ok(Value::Variable(pair.as_str().into()))
+        }
+        _ => {
+            println!("Unhandled rule {:?}", pair.as_rule());
+            unimplemented!()
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::Parser;
+    use pest::Parser as PestParser;
+
+    fn parse_expr_from_str<S: AsRef<str>>(s: S) -> Result<StaticValue> {
+        let pair = Parser::parse(Rule::expr, s.as_ref()).unwrap().next().unwrap();
+        Value::from_pair(pair).map(|v| v.to_static())
+    }
+
+    #[test]
+    fn raw_string() {
+        println!("{:#?}", parse_expr_from_str(r#####"r#"x"#"#####))
+    }
+
+    #[test]
+    fn unevaluated() {
+        let val = parse_expr_from_str("a+b*c+d").unwrap();
+        println!("{}", val);
+        assert!(!val.is_evaluated());
+    }
+
+    #[test]
+    fn parse_literals() {
+        assert_eq!(parse_expr_from_str("1").unwrap(), Value::Int(1));
+        assert_eq!(parse_expr_from_str("12_3").unwrap(), Value::Int(123));
+        assert_eq!(parse_expr_from_str("0xaf").unwrap(), Value::Int(0xaf));
+        assert_eq!(parse_expr_from_str("0xafcE_f").unwrap(), Value::Int(0xafcef));
+        assert_eq!(parse_expr_from_str("0o1234_567").unwrap(), Value::Int(0o1234567));
+        assert_eq!(parse_expr_from_str("0o0001234_567").unwrap(), Value::Int(0o1234567));
+        assert_eq!(parse_expr_from_str("0b101010").unwrap(), Value::Int(0b101010));
+
+        assert_eq!(parse_expr_from_str("0.0").unwrap(), Value::Float((0.).into()));
+        assert_eq!(parse_expr_from_str("10.022_3").unwrap(), Value::Float(10.0223.into()));
+        assert_eq!(parse_expr_from_str("10.022_3e-100").unwrap(), Value::Float(10.0223e-100.into()));
+
+        assert_eq!(parse_expr_from_str("null").unwrap(), Value::Null);
+        assert_eq!(parse_expr_from_str("true").unwrap(), Value::Bool(true));
+        assert_eq!(parse_expr_from_str("false").unwrap(), Value::Bool(false));
+        assert_eq!(parse_expr_from_str(r#""x \n \ty \"""#).unwrap(), Value::Text(Cow::Borrowed("x \n \ty \"")));
+        assert_eq!(parse_expr_from_str(r#""x'""#).unwrap(), Value::Text("x'".into()));
+        assert_eq!(parse_expr_from_str(r#"'"x"'"#).unwrap(), Value::Text(r##""x""##.into()));
+        assert_eq!(parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(), (Value::Text(r##"x"yz"##.into())));
     }
 }
