@@ -246,10 +246,10 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
                     value::OP_SUB => self.sub_values(args)?,
                     value::OP_MUL => self.mul_values(args)?,
                     value::OP_DIV => self.div_values(args)?,
-                    value::OP_EQ => { todo!() }
-                    value::OP_NE => { todo!() }
-                    value::OP_OR => { todo!() }
-                    value::OP_AND => { todo!() }
+                    value::OP_EQ => self.eq_values(args)?,
+                    value::OP_NE => self.ne_values(args)?,
+                    value::OP_OR => self.or_values(args)?,
+                    value::OP_AND => self.and_values(args)?,
                     value::OP_MOD => { todo!() }
                     value::OP_GT => { todo!() }
                     value::OP_GE => { todo!() }
@@ -333,6 +333,152 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) / r.into_inner()).into()),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
+    }
+    fn eq_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap())?;
+        let (re, right) = self.partial_eval(args.next().unwrap())?;
+        if left == Value::Null || right == Value::Null {
+            return Ok((true, Value::Null));
+        }
+        if !le || !re {
+            return Ok((false, Apply(value::OP_EQ.into(), vec![left, right])));
+        }
+        Ok((true, (left == right).into()))
+    }
+    fn ne_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap())?;
+        let (re, right) = self.partial_eval(args.next().unwrap())?;
+        if left == Value::Null || right == Value::Null {
+            return Ok((true, Value::Null));
+        }
+        if !le || !re {
+            return Ok((false, Apply(value::OP_NE.into(), vec![left, right])));
+        }
+        Ok((true, (left != right).into()))
+    }
+    fn or_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let res = args.into_iter().map(|v| self.partial_eval(v))
+            .try_fold(
+                (true, false, vec![]),
+                |(is_evaluated, has_null, mut collected), x| {
+                    match x {
+                        Ok((cur_eval, cur_val)) => {
+                            if cur_eval {
+                                match cur_val {
+                                    Value::Null => {
+                                        Ok((is_evaluated, true, collected))
+                                    }
+                                    Value::Bool(b) => if b {
+                                        Err(Ok((true, Value::Bool(true)))) // Early return on true
+                                    } else {
+                                        Ok((is_evaluated, has_null, collected))
+                                    },
+                                    _ => Err(Err(CozoError::InvalidArgument))
+                                }
+                            } else {
+                                match cur_val {
+                                    Value::Null |
+                                    Value::Bool(_) |
+                                    Value::UInt(_) |
+                                    Value::Int(_) |
+                                    Value::Float(_) |
+                                    Value::Uuid(_) |
+                                    Value::EndSentinel |
+                                    Value::Text(_) => unreachable!(),
+                                    Value::List(_) |
+                                    Value::Dict(_) => Err(Err(CozoError::InvalidArgument)),
+                                    cur_val @ (Value::Variable(_) |
+                                    Apply(_, _)) => {
+                                        collected.push(cur_val);
+                                        Ok((false, has_null, collected))
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => Err(Err(e))
+                    }
+                });
+        match res {
+            Ok((is_evaluated, has_null, mut unevaluated)) => {
+                if is_evaluated {
+                    if has_null {
+                        Ok((true, Value::Null))
+                    } else {
+                        Ok((true, Value::Bool(false)))
+                    }
+                } else {
+                    if has_null {
+                        unevaluated.push(Value::Null);
+                    }
+                    Ok((false, Value::Apply(value::OP_OR.into(), unevaluated)))
+                }
+            }
+            Err(Ok(res)) => Ok(res),
+            Err(Err(e)) => Err(e)
+        }
+    }
+    fn and_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let res = args.into_iter().map(|v| self.partial_eval(v))
+            .try_fold(
+                (true, false, vec![]),
+                |(is_evaluated, has_null, mut collected), x| {
+                    match x {
+                        Ok((cur_eval, cur_val)) => {
+                            if cur_eval {
+                                match cur_val {
+                                    Value::Null => {
+                                        Ok((is_evaluated, true, collected))
+                                    }
+                                    Value::Bool(b) => if b {
+                                        Ok((is_evaluated, has_null, collected))
+                                    } else {
+                                        Err(Ok((true, Value::Bool(false)))) // Early return on true
+                                    },
+                                    _ => Err(Err(CozoError::InvalidArgument))
+                                }
+                            } else {
+                                match cur_val {
+                                    Value::Null |
+                                    Value::Bool(_) |
+                                    Value::UInt(_) |
+                                    Value::Int(_) |
+                                    Value::Float(_) |
+                                    Value::Uuid(_) |
+                                    Value::EndSentinel |
+                                    Value::Text(_) => unreachable!(),
+                                    Value::List(_) |
+                                    Value::Dict(_) => Err(Err(CozoError::InvalidArgument)),
+                                    cur_val @ (Value::Variable(_) |
+                                    Apply(_, _)) => {
+                                        collected.push(cur_val);
+                                        Ok((false, has_null, collected))
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => Err(Err(e))
+                    }
+                });
+        match res {
+            Ok((is_evaluated, has_null, mut unevaluated)) => {
+                if is_evaluated {
+                    if has_null {
+                        Ok((true, Value::Null))
+                    } else {
+                        Ok((true, Value::Bool(true)))
+                    }
+                } else {
+                    if has_null {
+                        unevaluated.push(Value::Null);
+                    }
+                    Ok((false, Value::Apply(value::OP_AND.into(), unevaluated)))
+                }
+            }
+            Err(Ok(res)) => Ok(res),
+            Err(Err(e)) => Err(e)
+        }
     }
 }
 
@@ -571,3 +717,45 @@ mod tests {
         println!("{:?}", env.resolve("WorkInfo"));
     }
 }
+
+//     fn test_null_expr<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+//         Ok(match exprs {
+//             [a] => {
+//                 match self.visit_expr(a)? {
+//                     Const(Null) => Const(Bool(true)),
+//                     Const(_) => Const(Bool(false)),
+//                     v => Apply(Op::IsNull, vec![v])
+//                 }
+//             }
+//             _ => unreachable!()
+//         })
+//     }
+//
+//     fn not_null_expr<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
+//         Ok(match exprs {
+//             [a] => {
+//                 match self.visit_expr(a)? {
+//                     Const(Null) => Const(Bool(false)),
+//                     Const(_) => Const(Bool(true)),
+//                     v => Apply(Op::IsNull, vec![v])
+//                 }
+//             }
+//             _ => unreachable!()
+//         })
+//     }
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//
+//     #[test]
+//     fn operators() {
+//         let ev = Evaluator::new(DummyStorage {}).unwrap();
+//
+//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("1/10+(-2+3)*4^5").unwrap()).unwrap());
+//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && false").unwrap()).unwrap());
+//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true || false").unwrap()).unwrap());
+//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true || null").unwrap()).unwrap());
+//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("null || true").unwrap()).unwrap());
+//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && null").unwrap()).unwrap());
+//     }
+// }
