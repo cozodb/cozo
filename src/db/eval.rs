@@ -10,7 +10,6 @@ use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::typing::Typing;
 use crate::relation::value::Value;
 use crate::error::{CozoError, Result};
-use crate::error::CozoError::UnexpectedDataKind;
 use crate::relation::data::DataKind;
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
