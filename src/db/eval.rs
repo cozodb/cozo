@@ -15,7 +15,6 @@ use crate::relation::data::DataKind;
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::value;
-use crate::relation::value::Value::Apply;
 
 pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
     fn get_next_storage_id(&mut self, in_root: bool) -> Result<u32>;
@@ -255,13 +254,44 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
                     value::OP_GE => self.ge_values(args)?,
                     value::OP_LT => self.lt_values(args)?,
                     value::OP_LE => self.le_values(args)?,
-                    value::OP_POW => { todo!() }
-                    value::OP_COALESCE => { todo!() }
-                    value::OP_NEGATE => { todo!() }
-                    value::OP_MINUS => { todo!() }
+                    value::OP_POW => self.pow_values(args)?,
+                    value::OP_COALESCE => self.coalesce_values(args)?,
+                    value::OP_NEGATE => self.negate_values(args)?,
+                    value::OP_MINUS => self.minus_values(args)?,
                     _ => { todo!() }
                 })
             }
+        }
+    }
+
+    fn coalesce_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let res = args.into_iter().try_fold(vec![], |mut accum, cur| {
+            match self.partial_eval(cur) {
+                Ok((ev, cur)) => {
+                    if ev {
+                        if cur == Value::Null {
+                            Ok(accum)
+                        } else {
+                            Err(Ok(cur))
+                        }
+                    } else {
+                        accum.push(cur);
+                        Ok(accum)
+                    }
+                }
+                Err(e) => Err(Err(e))
+            }
+        });
+        match res {
+            Ok(accum) => {
+                match accum.len() {
+                    0 => Ok((true, Value::Null)),
+                    1 => Ok((false, accum.into_iter().next().unwrap())),
+                    _ => Ok((false, Value::Apply(value::OP_COALESCE.into(), accum)))
+                }
+            }
+            Err(Ok(v)) => Ok((true, v)),
+            Err(Err(e)) => Err(e)
         }
     }
 
@@ -273,12 +303,13 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_ADD.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_ADD.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l + r).into()),
             (Value::Float(l), Value::Int(r)) => (true, (l + (r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) + r.into_inner()).into()),
+            (Value::Float(l), Value::Float(r)) => (true, (l.into_inner() + r.into_inner()).into()),
             (Value::Text(l), Value::Text(r)) => (true, (l.to_string() + r.as_ref()).into()),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
@@ -291,12 +322,60 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_SUB.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_SUB.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l - r).into()),
             (Value::Float(l), Value::Int(r)) => (true, (l - (r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) - r.into_inner()).into()),
+            (Value::Float(l), Value::Float(r)) => (true, (l.into_inner() - r.into_inner()).into()),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+    fn minus_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap())?;
+        if left == Value::Null {
+            return Ok((true, Value::Null));
+        }
+        if !le {
+            return Ok((false, Value::Apply(value::OP_MINUS.into(), vec![left])));
+        }
+        Ok(match left {
+            Value::Int(l) => (true, (-l).into()),
+            Value::Float(l) => (true, (-l).into()),
+            _ => return Err(CozoError::InvalidArgument)
+        })
+    }
+    fn negate_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap())?;
+        if left == Value::Null {
+            return Ok((true, Value::Null));
+        }
+        if !le {
+            return Ok((false, Value::Apply(value::OP_NEGATE.into(), vec![left])));
+        }
+        Ok(match left {
+            Value::Bool(l) => (true, (!l).into()),
+            _ => return Err(CozoError::InvalidArgument)
+        })
+    }
+    fn pow_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap())?;
+        let (re, right) = self.partial_eval(args.next().unwrap())?;
+        if left == Value::Null || right == Value::Null {
+            return Ok((true, Value::Null));
+        }
+        if !le || !re {
+            return Ok((false, Value::Apply(value::OP_POW.into(), vec![left, right])));
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (true, ((l as f64).powf(r as f64)).into()),
+            (Value::Float(l), Value::Int(r)) => (true, ((l.into_inner()).powf(r as f64)).into()),
+            (Value::Int(l), Value::Float(r)) => (true, ((l as f64).powf(r.into_inner())).into()),
+            (Value::Float(l), Value::Float(r)) => (true, ((l.into_inner()).powf(r.into_inner())).into()),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -308,12 +387,13 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_GT.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_GT.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l > r).into()),
             (Value::Float(l), Value::Int(r)) => (true, (l > (r as f64).into()).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) > r.into_inner()).into()),
+            (Value::Float(l), Value::Float(r)) => (true, (l > r).into()),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -325,12 +405,13 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_LT.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_LT.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l < r).into()),
             (Value::Float(l), Value::Int(r)) => (true, (l < (r as f64).into()).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) < r.into_inner()).into()),
+            (Value::Float(l), Value::Float(r)) => (true, (l < r).into()),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -342,12 +423,13 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_GE.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_GE.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l >= r).into()),
             (Value::Float(l), Value::Int(r)) => (true, (l >= (r as f64).into()).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) >= r.into_inner()).into()),
+            (Value::Float(l), Value::Float(r)) => (true, (l >= r).into()),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -359,12 +441,13 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_GE.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_GE.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l <= r).into()),
             (Value::Float(l), Value::Int(r)) => (true, (l <= (r as f64).into()).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) <= r.into_inner()).into()),
+            (Value::Float(l), Value::Float(r)) => (true, (l <= r).into()),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -376,7 +459,7 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_MOD.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_MOD.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l % r).into()),
@@ -391,12 +474,13 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_MUL.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_MUL.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l * r).into()),
             (Value::Float(l), Value::Int(r)) => (true, (l * (r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) * r.into_inner()).into()),
+            (Value::Float(l), Value::Float(r)) => (true, (l.into_inner() * r.into_inner()).into()),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -408,12 +492,13 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_DIV.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_DIV.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l as f64 / r as f64).into()),
             (Value::Float(l), Value::Int(r)) => (true, (l / (r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) / r.into_inner()).into()),
+            (Value::Float(l), Value::Float(r)) => (true, (l.into_inner() / r.into_inner()).into()),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -425,7 +510,7 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_EQ.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_EQ.into(), vec![left, right])));
         }
         Ok((true, (left == right).into()))
     }
@@ -437,7 +522,7 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Apply(value::OP_NE.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_NE.into(), vec![left, right])));
         }
         Ok((true, (left != right).into()))
     }
@@ -473,7 +558,7 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
                                     Value::List(_) |
                                     Value::Dict(_) => Err(Err(CozoError::InvalidArgument)),
                                     cur_val @ (Value::Variable(_) |
-                                    Apply(_, _)) => {
+                                    Value::Apply(_, _)) => {
                                         collected.push(cur_val);
                                         Ok((false, has_null, collected))
                                     }
@@ -534,7 +619,7 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
                                     Value::List(_) |
                                     Value::Dict(_) => Err(Err(CozoError::InvalidArgument)),
                                     cur_val @ (Value::Variable(_) |
-                                    Apply(_, _)) => {
+                                    Value::Apply(_, _)) => {
                                         collected.push(cur_val);
                                         Ok((false, has_null, collected))
                                     }
@@ -807,7 +892,7 @@ mod tests {
 //                 match self.visit_expr(a)? {
 //                     Const(Null) => Const(Bool(true)),
 //                     Const(_) => Const(Bool(false)),
-//                     v => Apply(Op::IsNull, vec![v])
+//                     v => Value::Apply(Op::IsNull, vec![v])
 //                 }
 //             }
 //             _ => unreachable!()
@@ -820,7 +905,7 @@ mod tests {
 //                 match self.visit_expr(a)? {
 //                     Const(Null) => Const(Bool(false)),
 //                     Const(_) => Const(Bool(true)),
-//                     v => Apply(Op::IsNull, vec![v])
+//                     v => Value::Apply(Op::IsNull, vec![v])
 //                 }
 //             }
 //             _ => unreachable!()
