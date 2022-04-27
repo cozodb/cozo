@@ -840,7 +840,7 @@ impl<'a> Session<'a> {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::Parser;
+    use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
     use crate::db::eval::MemoryEnv;
 
@@ -883,6 +883,22 @@ mod tests {
         env.run_definition(t).unwrap();
         println!("{:?}", env.resolve("WorkInfo"));
     }
+
+    fn parse_expr_from_str(s: &str) -> (bool, Value) {
+        MemoryEnv::default().partial_eval(Value::from_pair(Parser::parse(Rule::expr, s).unwrap().next().unwrap()).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn eval_expr() {
+        assert_eq!((true, Value::from(1024.1)), parse_expr_from_str("1/10+(-2+3)*4^5"));
+        assert_eq!((true, Value::from(false)), parse_expr_from_str("true && false"));
+        assert_eq!((true, Value::from(true)), parse_expr_from_str("true || false"));
+        assert_eq!((true, Value::from(true)), parse_expr_from_str("true || null"));
+        assert_eq!((true, Value::from(true)), parse_expr_from_str("null || true"));
+        assert_eq!((true, Value::Null), parse_expr_from_str("true && null"));
+        let ex = parse_expr_from_str("a + b - 1*2*3*100*c * d");
+        println!("{:?} {}", ex.0, ex.1);
+    }
 }
 
 //     fn test_null_expr<'a>(&self, exprs: &[Expr<'a>]) -> Result<Expr<'a>> {
@@ -918,11 +934,5 @@ mod tests {
 //     fn operators() {
 //         let ev = Evaluator::new(DummyStorage {}).unwrap();
 //
-//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("1/10+(-2+3)*4^5").unwrap()).unwrap());
-//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && false").unwrap()).unwrap());
-//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true || false").unwrap()).unwrap());
-//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true || null").unwrap()).unwrap());
-//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("null || true").unwrap()).unwrap());
-//         println!("{:#?}", ev.visit_expr(&parse_expr_from_str("true && null").unwrap()).unwrap());
 //     }
 // }
