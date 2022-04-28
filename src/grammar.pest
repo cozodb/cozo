@@ -1,4 +1,4 @@
-file = _{SOI ~ statement* ~ EOI}
+file = _{SOI ~ (statement | mutation)* ~ EOI}
 
 // whitespace
 
@@ -147,13 +147,13 @@ cols_def = { "{" ~ col_entry ~ ("," ~ col_entry)* ~ ","? ~ "}" }
 
 col_list = {"(" ~ name_in_def ~ ("," ~ name_in_def)* ~ ","? ~ ")"}
 
-node_def = { "node" ~ name_in_def ~ cols_def }
-associate_def = { "assoc" ~ name_in_def ~ ":" ~ name_in_def ~ cols_def }
+node_def = { "node" ~ name_in_def ~ cols_def ~ ";"?}
+associate_def = { "assoc" ~ name_in_def ~ ":" ~ name_in_def ~ cols_def ~ ";"? }
 edge_def = { "edge" ~
              "(" ~ name_in_def ~ ")" ~ "-" ~ "[" ~ name_in_def ~ "]" ~ "->" ~ "(" ~ name_in_def ~ ")"
-             ~ cols_def? }
-index_def = { "index" ~ (name_in_def ~ ":")? ~ name_in_def ~ col_list }
-type_def = { "type" ~ name_in_def ~ "=" ~ typing }
+             ~ cols_def? ~ ";"? }
+index_def = { "index" ~ (name_in_def ~ ":")? ~ name_in_def ~ col_list ~ ";"? }
+type_def = { "type" ~ name_in_def ~ "=" ~ typing ~ ";"? }
 
 definition = _{ node_def | associate_def | edge_def | type_def | index_def }
 global_def = { "create" ~ definition }

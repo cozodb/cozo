@@ -196,7 +196,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         let in_root = match pair.as_rule() {
             Rule::global_def => true,
             Rule::local_def => false,
-            _ => unreachable!()
+            r => panic!("Encountered definition with rule {:?}", r)
         };
 
         let (need_id, (name, mut tuple)) = self.parse_definition(
