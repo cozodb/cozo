@@ -67,7 +67,7 @@ impl Typing {
 }
 
 impl Typing {
-    pub fn from_pair<T: AsRef<[u8]>, E: Environment<T>>(pair: Pair<Rule>, env: Option<&E>) -> Result<Self> {
+    pub fn from_pair<'t, T: AsRef<[u8]>, E: Environment<'t, T>>(pair: Pair<Rule>, env: Option<&E>) -> Result<Self> {
         Ok(match pair.as_rule() {
             Rule::simple_type => match pair.as_str() {
                 "Any" => Typing::Any,

@@ -116,19 +116,19 @@ impl Engine {
     }
 }
 
-pub struct Session<'a> {
+pub struct Session<'a, 'b> {
     pub engine: &'a Engine,
     pub stack_depth: i32,
     pub handle: Arc<RwLock<SessionHandle>>,
     pub txn: TransactionPtr,
     pub perm_cf: SharedPtr<ColumnFamilyHandle>,
     pub temp_cf: SharedPtr<ColumnFamilyHandle>,
-    pub params: BTreeMap<String, String>,
+    pub params: BTreeMap<String, &'b str>,
 }
 // every session has its own column family to play with
 // metadata are stored in table 0
 
-impl<'a> Session<'a> {
+impl<'a, 'b> Session<'a, 'b> {
     pub fn start(&mut self) -> Result<()> {
         self.perm_cf = self.engine.db.default_cf();
         assert!(!self.perm_cf.is_null());
@@ -173,7 +173,7 @@ impl<'a> Session<'a> {
     }
 }
 
-impl<'a> Drop for Session<'a> {
+impl<'a, 't> Drop for Session<'a, 't> {
     fn drop(&mut self) {
         if let Err(e) = self.finish_work() {
             eprintln!("Dropping session failed {:?}", e);

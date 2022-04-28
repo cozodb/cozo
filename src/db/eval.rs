@@ -16,12 +16,12 @@ use crate::parser::{Parser, Rule};
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::value;
 
-pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
+pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
     fn get_next_storage_id(&mut self, in_root: bool) -> Result<u32>;
     fn get_stack_depth(&self) -> i32;
     fn push_env(&mut self);
     fn pop_env(&mut self) -> Result<()>;
-    fn set_param(&mut self, name: &str, val: String);
+    fn set_param(&mut self, name: &str, val: &'t str);
     fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
         let mut data = Tuple::with_data_prefix(DataKind::Value);
         data.push_value(val);
@@ -664,20 +664,20 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
 }
 
 
-pub struct MemoryEnv {
+pub struct MemoryEnv<'a> {
     root: BTreeMap<String, OwnTuple>,
     stack: Vec<BTreeMap<String, OwnTuple>>,
-    params: BTreeMap<String, String>,
+    params: BTreeMap<String, &'a str>,
     max_storage_id: u32,
 }
 
-impl Default for MemoryEnv {
+impl <'a> Default for MemoryEnv<'a> {
     fn default() -> Self {
         MemoryEnv { root: BTreeMap::default(), stack: vec![BTreeMap::default()], max_storage_id: 0, params: BTreeMap::default() }
     }
 }
 
-impl Environment<Vec<u8>> for MemoryEnv {
+impl <'t> Environment<'t, Vec<u8>> for MemoryEnv<'t> {
     fn get_next_storage_id(&mut self, _in_root: bool) -> Result<u32> {
         self.max_storage_id += 1;
         Ok(self.max_storage_id)
@@ -698,7 +698,7 @@ impl Environment<Vec<u8>> for MemoryEnv {
         Ok(())
     }
 
-    fn set_param(&mut self, name: &str, val: String) {
+    fn set_param(&mut self, name: &str, val: &'t str) {
         self.params.insert(name.to_string(), val);
     }
 
@@ -714,7 +714,7 @@ impl Environment<Vec<u8>> for MemoryEnv {
     fn resolve_param(&self, name: &str) -> Result<Value> {
         let text = self.params.get(name).ok_or_else(|| CozoError::UndefinedParam(name.to_string()))?;
         let pair = Parser::parse(Rule::expr, text)?.next().unwrap();
-        Ok(Value::from_pair(pair)?)
+        Value::from_pair(pair)
     }
 
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
@@ -742,7 +742,7 @@ impl Environment<Vec<u8>> for MemoryEnv {
 }
 
 
-impl<'a> Environment<SlicePtr> for Session<'a> {
+impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
     fn get_next_storage_id(&mut self, in_root: bool) -> Result<u32> {
         // TODO: deal with wrapping problem
         let mut key_entry = Tuple::with_null_prefix();
@@ -805,7 +805,7 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
         Ok(())
     }
 
-    fn set_param(&mut self, name: &str, val: String) {
+    fn set_param(&mut self, name: &str, val: &'t str) {
         self.params.insert(name.to_string(), val);
     }
 
@@ -828,7 +828,7 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
     fn resolve_param(&self, name: &str) -> Result<Value> {
         let text = self.params.get(name).ok_or_else(|| CozoError::UndefinedParam(name.to_string()))?;
         let pair = Parser::parse(Rule::expr, text)?.next().unwrap();
-        Ok(Value::from_pair(pair)?)
+        Value::from_pair(pair)
     }
 
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
@@ -869,8 +869,6 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
     }
 }
 
-
-impl<'a> Session<'a> {}
 
 #[cfg(test)]
 mod tests {
