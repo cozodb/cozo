@@ -123,7 +123,7 @@ pub struct Session<'a> {
     pub txn: TransactionPtr,
     pub perm_cf: SharedPtr<ColumnFamilyHandle>,
     pub temp_cf: SharedPtr<ColumnFamilyHandle>,
-    pub params: BTreeMap<String, StaticValue>,
+    pub params: BTreeMap<String, String>,
 }
 // every session has its own column family to play with
 // metadata are stored in table 0

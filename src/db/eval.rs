@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::path::is_separator;
 use std::process::id;
+use pest::Parser as PestParser;
 use pest::iterators::{Pair, Pairs};
 use cozorocks::{SlicePtr, StatusCode};
 use crate::db::engine::{Session};
@@ -11,7 +12,7 @@ use crate::relation::typing::Typing;
 use crate::relation::value::{StaticValue, Value};
 use crate::error::{CozoError, Result};
 use crate::relation::data::DataKind;
-use crate::parser::Rule;
+use crate::parser::{Parser, Rule};
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::value;
 
@@ -20,7 +21,7 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
     fn get_stack_depth(&self) -> i32;
     fn push_env(&mut self);
     fn pop_env(&mut self) -> Result<()>;
-    fn set_param(&mut self, name: &str, val: Value);
+    fn set_param(&mut self, name: &str, val: String);
     fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
         let mut data = Tuple::with_data_prefix(DataKind::Value);
         data.push_value(val);
@@ -666,7 +667,7 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
 pub struct MemoryEnv {
     root: BTreeMap<String, OwnTuple>,
     stack: Vec<BTreeMap<String, OwnTuple>>,
-    params: BTreeMap<String, StaticValue>,
+    params: BTreeMap<String, String>,
     max_storage_id: u32,
 }
 
@@ -697,8 +698,8 @@ impl Environment<Vec<u8>> for MemoryEnv {
         Ok(())
     }
 
-    fn set_param(&mut self, name: &str, val: Value) {
-        self.params.insert(name.to_string(), val.to_static());
+    fn set_param(&mut self, name: &str, val: String) {
+        self.params.insert(name.to_string(), val);
     }
 
     fn resolve(&self, name: &str) -> Result<Option<OwnTuple>> {
@@ -711,7 +712,9 @@ impl Environment<Vec<u8>> for MemoryEnv {
     }
 
     fn resolve_param(&self, name: &str) -> Result<Value> {
-        self.params.get(name).cloned().ok_or_else(|| CozoError::UndefinedParam(name.to_string()))
+        let text = self.params.get(name).ok_or_else(|| CozoError::UndefinedParam(name.to_string()))?;
+        let pair = Parser::parse(Rule::expr, text)?.next().unwrap();
+        Ok(Value::from_pair(pair)?)
     }
 
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
@@ -802,8 +805,8 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
         Ok(())
     }
 
-    fn set_param(&mut self, name: &str, val: Value) {
-        self.params.insert(name.to_string(), val.to_static());
+    fn set_param(&mut self, name: &str, val: String) {
+        self.params.insert(name.to_string(), val);
     }
 
     fn resolve(&self, name: &str) -> Result<Option<Tuple<SlicePtr>>> {
@@ -823,7 +826,9 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
     }
 
     fn resolve_param(&self, name: &str) -> Result<Value> {
-        self.params.get(name).cloned().ok_or_else(|| CozoError::UndefinedParam(name.to_string()))
+        let text = self.params.get(name).ok_or_else(|| CozoError::UndefinedParam(name.to_string()))?;
+        let pair = Parser::parse(Rule::expr, text)?.next().unwrap();
+        Ok(Value::from_pair(pair)?)
     }
 
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
