@@ -2,16 +2,17 @@
 // will be shared among threads
 
 
+use std::collections::BTreeMap;
 use cozorocks::*;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 use uuid::v1::{Context, Timestamp};
 use rand::Rng;
-use crate::db::eval::Environment;
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::{Poisoned, SessionErr};
 use crate::relation::tuple::Tuple;
+use crate::relation::value::{StaticValue, Value};
 
 pub struct EngineOptions {
     cmp: RustComparatorPtr,
@@ -108,6 +109,7 @@ impl Engine {
             perm_cf: SharedPtr::null(),
             temp_cf: SharedPtr::null(),
             handle,
+            params: BTreeMap::default()
         };
         sess.start()?;
         Ok(sess)
@@ -121,6 +123,7 @@ pub struct Session<'a> {
     pub txn: TransactionPtr,
     pub perm_cf: SharedPtr<ColumnFamilyHandle>,
     pub temp_cf: SharedPtr<ColumnFamilyHandle>,
+    pub params: BTreeMap<String, StaticValue>,
 }
 // every session has its own column family to play with
 // metadata are stored in table 0

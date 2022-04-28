@@ -8,7 +8,7 @@ use crate::db::engine::{Session};
 use crate::relation::table::{Table};
 use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::typing::Typing;
-use crate::relation::value::Value;
+use crate::relation::value::{StaticValue, Value};
 use crate::error::{CozoError, Result};
 use crate::relation::data::DataKind;
 use crate::parser::Rule;
@@ -20,6 +20,7 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
     fn get_stack_depth(&self) -> i32;
     fn push_env(&mut self);
     fn pop_env(&mut self) -> Result<()>;
+    fn set_param(&mut self, name: &str, val: Value);
     fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
         let mut data = Tuple::with_data_prefix(DataKind::Value);
         data.push_value(val);
@@ -29,6 +30,24 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
         todo!()
     }
     fn resolve(&self, name: &str) -> Result<Option<Tuple<T>>>;
+    fn resolve_param(&self, name: &str) -> Result<Value>;
+    fn resolve_value(&self, name: &str) -> Result<Option<Value>> {
+        if name.starts_with('&') {
+            self.resolve_param(name).map(|v| Some(v.clone()))
+        } else {
+            match self.resolve(name)? {
+                None => Ok(None),
+                Some(t) => {
+                    match t.data_kind()? {
+                        DataKind::Value => Ok(Some(t.get(0)
+                            .ok_or_else(|| CozoError::LogicError("Corrupt".to_string()))?
+                            .to_static())),
+                        k => Err(CozoError::UnexpectedDataKind(k))
+                    }
+                }
+            }
+        }
+    }
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()>;
     fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()>;
     fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
@@ -224,21 +243,15 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
                 Ok((is_ev, v.into()))
             }
             Value::Variable(v) => {
-                Ok(match self.resolve(&v)? {
+                Ok(match self.resolve_value(&v)? {
                     None => (false, Value::Variable(v)),
                     Some(rs) => {
-                        match rs.data_kind() {
-                            Ok(DataKind::Value) => {
-                                let resolved = rs.get(0).ok_or_else(|| CozoError::BadDataFormat(rs.data.as_ref().to_vec()))?;
-                                (resolved.is_evaluated(), resolved.to_static())
-                            }
-                            _ => (false, Value::Variable(v))
-                        }
+                        (rs.is_evaluated(), rs.to_static())
                     }
                 })
             }
+
             Value::Apply(op, args) => {
-                use crate::relation::value;
                 Ok(match op.as_ref() {
                     value::OP_ADD => self.add_values(args)?,
                     value::OP_SUB => self.sub_values(args)?,
@@ -653,12 +666,13 @@ pub trait Environment<T: AsRef<[u8]>> where Self: Sized {
 pub struct MemoryEnv {
     root: BTreeMap<String, OwnTuple>,
     stack: Vec<BTreeMap<String, OwnTuple>>,
+    params: BTreeMap<String, StaticValue>,
     max_storage_id: u32,
 }
 
 impl Default for MemoryEnv {
     fn default() -> Self {
-        MemoryEnv { root: BTreeMap::default(), stack: vec![BTreeMap::default()], max_storage_id: 0 }
+        MemoryEnv { root: BTreeMap::default(), stack: vec![BTreeMap::default()], max_storage_id: 0, params: BTreeMap::default() }
     }
 }
 
@@ -683,6 +697,10 @@ impl Environment<Vec<u8>> for MemoryEnv {
         Ok(())
     }
 
+    fn set_param(&mut self, name: &str, val: Value) {
+        self.params.insert(name.to_string(), val.to_static());
+    }
+
     fn resolve(&self, name: &str) -> Result<Option<OwnTuple>> {
         for layer in self.stack.iter() {
             if let Some(res) = layer.get(name) {
@@ -690,6 +708,10 @@ impl Environment<Vec<u8>> for MemoryEnv {
             }
         }
         Ok(self.root.get(name).cloned())
+    }
+
+    fn resolve_param(&self, name: &str) -> Result<Value> {
+        self.params.get(name).cloned().ok_or_else(|| CozoError::UndefinedParam(name.to_string()))
     }
 
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
@@ -780,6 +802,10 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
         Ok(())
     }
 
+    fn set_param(&mut self, name: &str, val: Value) {
+        self.params.insert(name.to_string(), val.to_static());
+    }
+
     fn resolve(&self, name: &str) -> Result<Option<Tuple<SlicePtr>>> {
         let mut tuple = Tuple::with_null_prefix();
         tuple.push_str(name);
@@ -794,6 +820,10 @@ impl<'a> Environment<SlicePtr> for Session<'a> {
         let root_key = self.encode_definable_key(name, true);
         let res = self.txn.get(true, &self.perm_cf, root_key).map(|v| v.map(Tuple::new))?;
         Ok(res)
+    }
+
+    fn resolve_param(&self, name: &str) -> Result<Value> {
+        self.params.get(name).cloned().ok_or_else(|| CozoError::UndefinedParam(name.to_string()))
     }
 
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {

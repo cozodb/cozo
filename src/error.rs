@@ -39,6 +39,9 @@ pub enum CozoError {
 
     #[error("Duplicate names in {0:?}")]
     DuplicateNames(Vec<String>),
+
+    #[error("Undefined parameter {0}")]
+    UndefinedParam(String),
 //
 //     #[error("Undefined table")]
 //     UndefinedTable,
