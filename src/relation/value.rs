@@ -22,7 +22,6 @@ pub enum Tag {
     Float = 5,
     Text = 6,
     Uuid = 7,
-    UInt = 8,
 
     List = 128,
     Dict = 129,
@@ -45,7 +44,6 @@ impl TryFrom<u8> for Tag {
             5 => Float,
             6 => Text,
             7 => Uuid,
-            8 => UInt,
             128 => List,
             129 => Dict,
             253 => Variable,
@@ -87,7 +85,6 @@ impl TryFrom<u8> for Tag {
 pub enum Value<'a> {
     Null,
     Bool(bool),
-    UInt(u64),
     Int(i64),
     Float(OrderedFloat<f64>),
     Uuid(Uuid),
@@ -107,7 +104,6 @@ impl<'a> Value<'a> {
         match self {
             Value::Null => Value::from(()),
             Value::Bool(b) => Value::from(b),
-            Value::UInt(u) => Value::from(u),
             Value::Int(i) => Value::from(i),
             Value::Float(f) => Value::from(f),
             Value::Uuid(u) => Value::from(u),
@@ -129,7 +125,6 @@ impl<'a> Value<'a> {
         match self {
             Value::Null |
             Value::Bool(_) |
-            Value::UInt(_) |
             Value::Int(_) |
             Value::Float(_) |
             Value::Uuid(_) |
@@ -160,22 +155,6 @@ impl From<bool> for StaticValue {
         Value::Bool(b)
     }
 }
-
-impl From<u64> for StaticValue {
-    #[inline]
-    fn from(u: u64) -> Self {
-        Value::UInt(u)
-    }
-}
-
-
-impl From<u32> for StaticValue {
-    #[inline]
-    fn from(u: u32) -> Self {
-        Value::UInt(u as u64)
-    }
-}
-
 
 impl From<i64> for StaticValue {
     #[inline]
@@ -247,10 +226,6 @@ impl<'a> Display for Value<'a> {
         match self {
             Value::Null => { f.write_str("null")?; }
             Value::Bool(b) => { f.write_str(if *b { "true" } else { "false" })?; }
-            Value::UInt(u) => {
-                f.write_str(&u.to_string())?;
-                f.write_str("u")?;
-            }
             Value::Int(i) => { f.write_str(&i.to_string())?; }
             Value::Float(n) => { f.write_str(&format!("{:e}", n.into_inner()))?; }
             Value::Uuid(u) => { f.write_str(&u.to_string())?; }

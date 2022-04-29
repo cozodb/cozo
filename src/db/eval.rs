@@ -17,7 +17,7 @@ use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::value;
 
 pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
-    fn get_next_storage_id(&mut self, in_root: bool) -> Result<u32>;
+    fn get_next_storage_id(&mut self, in_root: bool) -> Result<i64>;
     fn get_stack_depth(&self) -> i32;
     fn push_env(&mut self);
     fn pop_env(&mut self) -> Result<()>;
@@ -112,7 +112,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         }
         let mut tuple = Tuple::with_data_prefix(DataKind::Associate);
         tuple.push_bool(src_global);
-        tuple.push_uint(src_id);
+        tuple.push_int(src_id);
         tuple.push_str(vals_typing.to_string());
         Ok((name, tuple))
     }
@@ -155,9 +155,9 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         };
         let mut tuple = Tuple::with_data_prefix(DataKind::Edge);
         tuple.push_bool(src_global);
-        tuple.push_uint(src_id);
+        tuple.push_int(src_id);
         tuple.push_bool(dst_global);
-        tuple.push_uint(dst_id);
+        tuple.push_int(dst_id);
         tuple.push_str(keys_typing.to_string());
         tuple.push_str(vals_typing.to_string());
         tuple.push_null(); // TODO default values for keys
@@ -165,7 +165,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         Ok((name, tuple))
     }
 
-    fn extract_table_id(src_tbl: Tuple<T>) -> Result<(DataKind, bool, u64)> {
+    fn extract_table_id(src_tbl: Tuple<T>) -> Result<(DataKind, bool, i64)> {
         let kind = src_tbl.data_kind()?;
         match kind {
             DataKind::DataTuple | DataKind::Value | DataKind::TypeAlias => return Err(CozoError::UnexpectedDataKind(kind)),
@@ -176,7 +176,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
             _ => panic!("Data corrupt")
         };
         let table_id = match src_tbl.get(1).expect("Data corrupt") {
-            Value::UInt(u) => u,
+            Value::Int(u) => u,
             _ => panic!("Data corrupt")
         };
         Ok((kind, is_global, table_id))
@@ -203,12 +203,8 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
             pair.into_inner().next().unwrap(), in_root,
         )?;
         if need_id {
-            let id = self.get_next_storage_id(in_root)?;
-            let mut new_tuple = Tuple::with_prefix(tuple.get_prefix());
-            new_tuple.push_bool(in_root);
-            new_tuple.push_uint(id as u64);
-            new_tuple.concat_data(&tuple);
-            tuple = new_tuple;
+            tuple = tuple.insert_values_at(0, &[in_root.into(),
+                (self.get_next_storage_id(in_root)?).into()]);
         }
         self.define_data(&name, tuple, in_root)
     }
@@ -216,7 +212,6 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         match value {
             v @ (Value::Null |
             Value::Bool(_) |
-            Value::UInt(_) |
             Value::Int(_) |
             Value::Float(_) |
             Value::Uuid(_) |
@@ -562,7 +557,6 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
                                 match cur_val {
                                     Value::Null |
                                     Value::Bool(_) |
-                                    Value::UInt(_) |
                                     Value::Int(_) |
                                     Value::Float(_) |
                                     Value::Uuid(_) |
@@ -623,7 +617,6 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
                                 match cur_val {
                                     Value::Null |
                                     Value::Bool(_) |
-                                    Value::UInt(_) |
                                     Value::Int(_) |
                                     Value::Float(_) |
                                     Value::Uuid(_) |
@@ -664,86 +657,8 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
 }
 
 
-pub struct MemoryEnv<'a> {
-    root: BTreeMap<String, OwnTuple>,
-    stack: Vec<BTreeMap<String, OwnTuple>>,
-    params: BTreeMap<String, &'a str>,
-    max_storage_id: u32,
-}
-
-impl <'a> Default for MemoryEnv<'a> {
-    fn default() -> Self {
-        MemoryEnv { root: BTreeMap::default(), stack: vec![BTreeMap::default()], max_storage_id: 0, params: BTreeMap::default() }
-    }
-}
-
-impl <'t> Environment<'t, Vec<u8>> for MemoryEnv<'t> {
-    fn get_next_storage_id(&mut self, _in_root: bool) -> Result<u32> {
-        self.max_storage_id += 1;
-        Ok(self.max_storage_id)
-    }
-
-    fn get_stack_depth(&self) -> i32 {
-        -(self.stack.len() as i32)
-    }
-
-    fn push_env(&mut self) {
-        self.stack.push(BTreeMap::default());
-    }
-
-    fn pop_env(&mut self) -> Result<()> {
-        if self.stack.len() > 1 {
-            self.stack.pop();
-        }
-        Ok(())
-    }
-
-    fn set_param(&mut self, name: &str, val: &'t str) {
-        self.params.insert(name.to_string(), val);
-    }
-
-    fn resolve(&self, name: &str) -> Result<Option<OwnTuple>> {
-        for layer in self.stack.iter() {
-            if let Some(res) = layer.get(name) {
-                return Ok(Some(res.clone()));
-            }
-        }
-        Ok(self.root.get(name).cloned())
-    }
-
-    fn resolve_param(&self, name: &str) -> Result<Value> {
-        let text = self.params.get(name).ok_or_else(|| CozoError::UndefinedParam(name.to_string()))?;
-        let pair = Parser::parse(Rule::expr, text)?.next().unwrap();
-        Value::from_pair(pair)
-    }
-
-    fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
-        if in_root {
-            self.root.remove(name);
-        } else {
-            for layer in self.stack.iter_mut().rev() {
-                if let Some(_) = layer.remove(name) {
-                    return Ok(());
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()> {
-        if in_root {
-            self.root.insert(name.to_string(), data);
-        } else {
-            let last = self.stack.last_mut().unwrap();
-            last.insert(name.to_string(), data);
-        }
-        Ok(())
-    }
-}
-
-
 impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
-    fn get_next_storage_id(&mut self, in_root: bool) -> Result<u32> {
+    fn get_next_storage_id(&mut self, in_root: bool) -> Result<i64> {
         // TODO: deal with wrapping problem
         let mut key_entry = Tuple::with_null_prefix();
         key_entry.push_null();
@@ -753,20 +668,20 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
             self.txn.get(false, &self.temp_cf, &key_entry)
         };
         let u = if let Some(en) = db_res? {
-            if let Value::UInt(u) = Tuple::new(en).get(0).unwrap() {
+            if let Value::Int(u) = Tuple::new(en).get(0).unwrap() {
                 u
             } else {
                 panic!("Unexpected value in storage id");
             }
         } else { 0 };
         let mut new_data = Tuple::with_null_prefix();
-        new_data.push_uint(u + 1);
+        new_data.push_int(u + 1);
         if in_root {
             self.txn.put(true, &self.perm_cf, key_entry, new_data)?;
         } else {
             self.txn.put(false, &self.temp_cf, key_entry, new_data)?;
         }
-        Ok((u + 1) as u32)
+        Ok(u + 1)
     }
 
     fn get_stack_depth(&self) -> i32 {
@@ -872,10 +787,11 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use super::*;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
-    use crate::db::eval::MemoryEnv;
+    use crate::db::engine::Engine;
 
     #[test]
     fn node() {
@@ -897,32 +813,38 @@ mod tests {
                 email: Text
             }
         "#;
-        let mut env = MemoryEnv::default();
-        let mut parsed = Parser::parse(Rule::file, s).unwrap();
-
-        let t = parsed.next().unwrap();
-        env.run_definition(t).unwrap();
-        println!("{:?}", env.resolve("Person"));
-
-        let t = parsed.next().unwrap();
-        env.run_definition(t).unwrap();
-        println!("{:?}", env.resolve("Friend"));
-
-        let t = parsed.next().unwrap();
-        env.run_definition(t).unwrap();
-        println!("{:?}", env.resolve("XXY"));
-
-        let t = parsed.next().unwrap();
-        env.run_definition(t).unwrap();
-        println!("{:?}", env.resolve("WorkInfo"));
-    }
-
-    fn parse_expr_from_str(s: &str) -> (bool, Value) {
-        MemoryEnv::default().partial_eval(Value::from_pair(Parser::parse(Rule::expr, s).unwrap().next().unwrap()).unwrap()).unwrap()
+        // let mut env = MemoryEnv::default();
+        // let mut parsed = Parser::parse(Rule::file, s).unwrap();
+        //
+        // let t = parsed.next().unwrap();
+        // env.run_definition(t).unwrap();
+        // println!("{:?}", env.resolve("Person"));
+        //
+        // let t = parsed.next().unwrap();
+        // env.run_definition(t).unwrap();
+        // println!("{:?}", env.resolve("Friend"));
+        //
+        // let t = parsed.next().unwrap();
+        // env.run_definition(t).unwrap();
+        // println!("{:?}", env.resolve("XXY"));
+        //
+        // let t = parsed.next().unwrap();
+        // env.run_definition(t).unwrap();
+        // println!("{:?}", env.resolve("WorkInfo"));
+        // println!("{:?}", env.resolve("Person"));
     }
 
     #[test]
     fn eval_expr() {
+        let db_path = "_test_db_expr_eval";
+        let engine = Engine::new(db_path.to_string(), true).unwrap();
+        let sess = engine.session().unwrap();
+
+        let parse_expr_from_str = |s: &str| -> (bool, Value) {
+            let (b, v) = sess.partial_eval(Value::from_pair(Parser::parse(Rule::expr, s).unwrap().next().unwrap()).unwrap()).unwrap();
+            (b, v.to_static())
+        };
+
         assert_eq!((true, Value::from(1024.1)), parse_expr_from_str("1/10+(-2+3)*4^5"));
         assert_eq!((true, Value::from(false)), parse_expr_from_str("true && false"));
         assert_eq!((true, Value::from(true)), parse_expr_from_str("true || false"));
@@ -931,6 +853,9 @@ mod tests {
         assert_eq!((true, Value::Null), parse_expr_from_str("true && null"));
         let ex = parse_expr_from_str("a + b - 1*2*3*100*c * d");
         println!("{:?} {}", ex.0, ex.1);
+        drop(sess);
+        drop(engine);
+        fs::remove_dir_all(db_path).unwrap();
     }
 }
 

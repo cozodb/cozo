@@ -6,7 +6,7 @@ use crate::relation::value::Value;
 use pest::Parser as PestParser;
 use cozorocks::SlicePtr;
 use crate::db::engine::Session;
-use crate::db::eval::{Environment, MemoryEnv};
+use crate::db::eval::{Environment};
 use crate::parser::Parser;
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
@@ -21,7 +21,6 @@ pub enum Typing {
     Float,
     Text,
     Uuid,
-    UInt,
     Nullable(Box<Typing>),
     Homogeneous(Box<Typing>),
     UnnamedTuple(Vec<Typing>),
@@ -37,7 +36,6 @@ impl Display for Typing {
             Typing::Float => write!(f, "Float"),
             Typing::Text => write!(f, "Text"),
             Typing::Uuid => write!(f, "Uuid"),
-            Typing::UInt => write!(f, "UInt"),
             Typing::Nullable(t) => write!(f, "?{}", t),
             Typing::Homogeneous(h) => write!(f, "[{}]", h),
             Typing::UnnamedTuple(u) => {
@@ -76,7 +74,6 @@ impl Typing {
                 "Float" => Typing::Float,
                 "Text" => Typing::Text,
                 "Uuid" => Typing::Uuid,
-                "UInt" => Typing::UInt,
                 t => {
                     match env {
                         None => return Err(CozoError::UndefinedType(t.to_string())),
@@ -118,7 +115,7 @@ impl TryFrom<&str> for Typing {
 
     fn try_from(value: &str) -> Result<Self> {
         let pair = Parser::parse(Rule::typing, value)?.next().unwrap();
-        Typing::from_pair::<Vec<u8>, MemoryEnv>(pair, None)
+        Typing::from_pair::<SlicePtr, Session>(pair, None)
     }
 }
 
@@ -146,7 +143,7 @@ mod tests {
         let res: Result<Typing> = "{xzzx : Text}".try_into();
         println!("{:#?}", res);
         assert!(res.is_ok());
-        let res: Result<Typing> = "?({x : Text, ppqp: ?UInt}, [Int], ?Uuid)".try_into();
+        let res: Result<Typing> = "?({x : Text, ppqp: ?Int}, [Int], ?Uuid)".try_into();
         println!("{:#?}", res);
         assert!(res.is_ok());
         let res: Result<Typing> = "??Int".try_into();

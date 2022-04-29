@@ -79,7 +79,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         let start = tag_start + 1;
         let nxt = match Tag::try_from(data[tag_start]).unwrap() {
             Tag::Null | Tag::BoolTrue | Tag::BoolFalse => start,
-            Tag::Int | Tag::UInt => start + self.parse_varint(start).1,
+            Tag::Int => start + self.parse_varint(start).1,
             Tag::Float => start + 8,
             Tag::Uuid => start + 16,
             Tag::Text | Tag::Variable => {
@@ -141,10 +141,6 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             Tag::Null => (start, ().into()),
             Tag::BoolTrue => (start, true.into()),
             Tag::BoolFalse => (start, false.into()),
-            Tag::UInt => {
-                let (u, offset) = self.parse_varint(start);
-                (start + offset, u.into())
-            }
             Tag::Int => {
                 let (u, offset) = self.parse_varint(start);
                 let val = if u & 1 == 0 {
@@ -324,12 +320,6 @@ impl OwnTuple {
         self.idx_cache.borrow_mut().push(self.data.len());
     }
     #[inline]
-    pub fn push_uint(&mut self, u: u64) {
-        self.push_tag(Tag::UInt);
-        self.push_varint(u);
-        self.idx_cache.borrow_mut().push(self.data.len());
-    }
-    #[inline]
     pub fn push_uuid(&mut self, u: Uuid) {
         self.push_tag(Tag::Uuid);
         self.data.extend(u.as_bytes());
@@ -356,7 +346,6 @@ impl OwnTuple {
         match v {
             Value::Null => self.push_null(),
             Value::Bool(b) => self.push_bool(*b),
-            Value::UInt(u) => self.push_uint(*u),
             Value::Int(i) => self.push_int(*i),
             Value::Float(f) => self.push_float(f.into_inner()),
             Value::Uuid(u) => self.push_uuid(*u),
@@ -441,6 +430,21 @@ impl OwnTuple {
         let other_data_part = &other.as_ref()[4..];
         self.data.extend_from_slice(other_data_part);
     }
+
+    #[inline]
+    pub fn insert_values_at<'a, T: AsRef<[Value<'a>]>>(&self, idx: usize, values: T) -> Self {
+        let mut new_tuple = Tuple::with_prefix(self.get_prefix());
+        for v in self.iter().take(idx) {
+            new_tuple.push_value(&v);
+        }
+        for v in values.as_ref() {
+            new_tuple.push_value(v);
+        }
+        for v in self.iter().skip(idx) {
+            new_tuple.push_value(&v);
+        }
+        new_tuple
+    }
 }
 
 impl<'a> Extend<Value<'a>> for OwnTuple {
@@ -489,7 +493,7 @@ mod tests {
         ].into());
         t.push_int(-123345);
         t.push_value(&BTreeMap::from([]).into());
-        t.push_uint(12121212);
+        t.push_int(12121212);
         t.push_value(&BTreeMap::from([("yzyz".into(), "fifo".into())]).into());
         t.push_float(1e245);
         t.push_bool(false);
@@ -529,7 +533,7 @@ mod tests {
         assert_eq!(Value::from(BTreeMap::new()), t.get(8).unwrap());
         t3.get_pos(9);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
-        assert_eq!(Value::from(12121212u64), t.get(9).unwrap());
+        assert_eq!(Value::from(12121212i64), t.get(9).unwrap());
         t3.get_pos(10);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
         assert_eq!(Value::from(BTreeMap::from([("yzyz".into(), "fifo".into())])), t.get(10).unwrap());
@@ -551,7 +555,7 @@ mod tests {
         assert_eq!(Value::from(false), t.get(12).unwrap());
         assert_eq!(Value::from(()), t.get(0).unwrap());
         assert_eq!(Value::from(false), t.get(2).unwrap());
-        assert_eq!(Value::from(12121212u64), t.get(9).unwrap());
+        assert_eq!(Value::from(12121212i64), t.get(9).unwrap());
         assert_eq!(Value::from(BTreeMap::new()), t.get(8).unwrap());
         assert_eq!(Value::Null, t.get(3).unwrap());
         assert_eq!(Value::from("abcdef"), t.get(4).unwrap());

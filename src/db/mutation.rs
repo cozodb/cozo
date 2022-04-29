@@ -36,7 +36,7 @@ impl<'a, 't> Session<'a, 't> {
         println!("{:?}", default_kind);
         println!("{:?}", filters);
 
-        let mut coercion_manager = TableCoercionManager::new(self, default_kind);
+        let mut mutation_manager = MutationManager::new(self, default_kind);
         // Coercion
 
         for item in expr {
@@ -44,36 +44,21 @@ impl<'a, 't> Session<'a, 't> {
                 Value::Dict(d) => d,
                 _ => return Err(LogicError("Must be structs".to_string()))
             };
-            coercion_manager.add(val_map)?;
-            // let explicit_tbl = val_map.get("_type");
-            // let tbl = match explicit_tbl {
-            //     None => if let Some(v) = &default_kind {
-            //         v as &str
-            //     } else {
-            //         return Err(LogicError("Cannot determine table kind".to_string()));
-            //     }
-            //     Some(v) => {
-            //         match v {
-            //             Value::Text(t) => t as &str,
-            //             _ => return Err(LogicError("Cannot determine table kind".to_string()))
-            //         }
-            //     }
-            // };
-            // coercion_manager.coerce(tbl, val_map);
+            mutation_manager.add(val_map)?;
         }
 
         Ok(())
     }
 }
 
-struct TableCoercionManager<'a, 'b, 't> {
+struct MutationManager<'a, 'b, 't> {
     sess: &'a Session<'b, 't>,
     cache: BTreeMap<String, ()>,
     categorized: BTreeMap<String, BTreeSet<OwnTuple>>,
     default_tbl: Option<String>,
 }
 
-impl<'a, 'b, 't> TableCoercionManager<'a, 'b, 't> {
+impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
     fn new(sess: &'a Session<'b, 't>, default_tbl: Option<String>) -> Self {
         Self { sess, cache: BTreeMap::new(), categorized: BTreeMap::new(), default_tbl }
     }
