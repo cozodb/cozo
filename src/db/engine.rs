@@ -12,7 +12,6 @@ use rand::Rng;
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::{Poisoned, SessionErr};
 use crate::relation::tuple::Tuple;
-use crate::relation::value::{StaticValue, Value};
 
 pub struct EngineOptions {
     cmp: RustComparatorPtr,
@@ -109,7 +108,7 @@ impl Engine {
             perm_cf: SharedPtr::null(),
             temp_cf: SharedPtr::null(),
             handle,
-            params: BTreeMap::default()
+            params: BTreeMap::default(),
         };
         sess.start()?;
         Ok(sess)

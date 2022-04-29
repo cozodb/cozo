@@ -82,8 +82,9 @@ pub enum CozoError {
     //     #[error(transparent)]
 //     Storage(#[from] cozo_rocks::BridgeStatus),
 //
-//     #[error(transparent)]
-//     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
     #[error("Session error")]
     SessionErr,
 

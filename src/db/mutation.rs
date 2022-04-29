@@ -75,7 +75,7 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
             None => {
                 self.cache.insert(tbl_name.to_string(), ());
             }
-            Some(t) => {},
+            Some(_t) => {}
         }
         Ok(())
     }
@@ -124,7 +124,7 @@ mod tests {
                 insert [{id: 1, name: "Jack"}, {id: 2, name: "Joe", habits: ["Balls"]}] as Person;
             "#;
             let p = Parser::parse(Rule::file, s).unwrap().next().unwrap();
-            sess.run_mutation(p);
+            sess.run_mutation(p).unwrap();
         }
 
         drop(engine);

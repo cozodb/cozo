@@ -1,15 +1,12 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
-use std::path::is_separator;
-use std::process::id;
 use pest::Parser as PestParser;
 use pest::iterators::{Pair, Pairs};
-use cozorocks::{SlicePtr, StatusCode};
+use cozorocks::{SlicePtr};
 use crate::db::engine::{Session};
-use crate::relation::table::{Table};
 use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::typing::Typing;
-use crate::relation::value::{StaticValue, Value};
+use crate::relation::value::{Value};
 use crate::error::{CozoError, Result};
 use crate::relation::data::DataKind;
 use crate::parser::{Parser, Rule};
@@ -26,9 +23,6 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         let mut data = Tuple::with_data_prefix(DataKind::Value);
         data.push_value(val);
         self.define_data(name, data, in_root)
-    }
-    fn define_table(&mut self, table: &Table, in_root: bool) -> Result<()> {
-        todo!()
     }
     fn resolve(&self, name: &str) -> Result<Option<Tuple<T>>>;
     fn resolve_param(&self, name: &str) -> Result<Value>;
@@ -813,25 +807,31 @@ mod tests {
                 email: Text
             }
         "#;
-        // let mut env = MemoryEnv::default();
-        // let mut parsed = Parser::parse(Rule::file, s).unwrap();
-        //
-        // let t = parsed.next().unwrap();
-        // env.run_definition(t).unwrap();
-        // println!("{:?}", env.resolve("Person"));
-        //
-        // let t = parsed.next().unwrap();
-        // env.run_definition(t).unwrap();
-        // println!("{:?}", env.resolve("Friend"));
-        //
-        // let t = parsed.next().unwrap();
-        // env.run_definition(t).unwrap();
-        // println!("{:?}", env.resolve("XXY"));
-        //
-        // let t = parsed.next().unwrap();
-        // env.run_definition(t).unwrap();
-        // println!("{:?}", env.resolve("WorkInfo"));
-        // println!("{:?}", env.resolve("Person"));
+        let db_path = "_test_node";
+        {
+            let engine = Engine::new(db_path.to_string(), true).unwrap();
+            let mut env = engine.session().unwrap();
+
+            let mut parsed = Parser::parse(Rule::file, s).unwrap();
+
+            let t = parsed.next().unwrap();
+            env.run_definition(t).unwrap();
+            println!("{:?}", env.resolve("Person"));
+
+            let t = parsed.next().unwrap();
+            env.run_definition(t).unwrap();
+            println!("{:?}", env.resolve("Friend"));
+
+            let t = parsed.next().unwrap();
+            env.run_definition(t).unwrap();
+            println!("{:?}", env.resolve("XXY"));
+
+            let t = parsed.next().unwrap();
+            env.run_definition(t).unwrap();
+            println!("{:?}", env.resolve("WorkInfo"));
+            println!("{:?}", env.resolve("Person"));
+        }
+        fs::remove_dir_all(db_path).unwrap();
     }
 
     #[test]

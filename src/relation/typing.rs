@@ -1,5 +1,4 @@
-use std::collections::BTreeMap;
-use std::fmt::{Display, Formatter, write};
+use std::fmt::{Display, Formatter};
 use pest::iterators::Pair;
 use crate::error::{Result, CozoError};
 use crate::relation::value::Value;

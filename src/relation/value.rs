@@ -376,7 +376,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
         Rule::boolean => Ok(Value::Bool(pair.as_str() == "true")),
         Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => Ok(
             Value::Text(Cow::Owned(parse_string(pair)?))),
-        Rule::list => Ok(pair.into_inner().map(|v| build_expr_primary(v)).collect::<Result<Vec<Value>>>()?.into()),
+        Rule::list => Ok(pair.into_inner().map(build_expr_primary).collect::<Result<Vec<Value>>>()?.into()),
         Rule::dict => {
             Ok(pair.into_inner().map(|p| {
                 match p.as_rule() {

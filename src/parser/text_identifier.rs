@@ -1,5 +1,4 @@
 use pest::iterators::Pair;
-use crate::parser::Parser;
 use crate::parser::Rule;
 use crate::error::{CozoError, Result};
 use crate::parser::number::parse_int;

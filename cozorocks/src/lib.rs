@@ -2,7 +2,7 @@ mod bridge;
 
 use bridge::*;
 
-use std::fmt::{Display, Formatter, write};
+use std::fmt::{Display, Formatter};
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 use cxx::{let_cxx_string};
@@ -536,7 +536,7 @@ impl TransactionPtr {
         match res {
             Ok(r) => Ok(Some(r)),
             Err(e)  if e.status.code == StatusCode::kNotFound => Ok(None),
-            res => res.map(|v| None)
+            res => res.map(|_| None)
         }
     }
     #[inline]
