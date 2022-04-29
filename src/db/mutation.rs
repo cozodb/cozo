@@ -1,13 +1,15 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use pest::iterators::Pair;
+use cozorocks::SlicePtr;
 use crate::db::engine::Session;
 use crate::db::eval::Environment;
 use crate::error::CozoError::LogicError;
-use crate::error::Result;
+use crate::error::{CozoError, Result};
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
-use crate::relation::tuple::OwnTuple;
+use crate::relation::data::DataKind;
+use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::value::Value;
 
 impl<'a, 't> Session<'a, 't> {
@@ -73,7 +75,22 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
         };
         match self.cache.get(tbl_name) {
             None => {
-                self.cache.insert(tbl_name.to_string(), ());
+                match self.sess.resolve(tbl_name)? {
+                    None => return Err(CozoError::UndefinedType(tbl_name.to_string())),
+                    Some(tpl) => {
+                        match tpl.data_kind()? {
+                            DataKind::Node => {
+                                println!("Found node {:?}", tpl);
+                            }
+                            DataKind::Edge => {
+                                println!("Found edge {:?}", tpl);
+                            }
+                            _ => return Err(LogicError("Cannot insert into non-tables".to_string()))
+                        }
+
+                    }
+                }
+                // self.cache.insert(tbl_name.to_string(), ());
             }
             Some(_t) => {}
         }

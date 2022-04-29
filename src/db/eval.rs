@@ -17,7 +17,8 @@ use crate::relation::value;
 /// `[Null]`: stores information about table_ids
 /// `[Text, Int]`: contains definable data and depth info
 /// `[Int, Text]`: inverted index for depth info
-/// `[Null, Text, Int, Text]` inverted index for related tables
+/// `[Null, Text, Int, Int, Text]` inverted index for related tables
+/// `[Null, Int, Text, Int, Text]` inverted index for related tables
 
 pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
     fn get_next_storage_id(&mut self, in_root: bool) -> Result<i64>;
@@ -31,6 +32,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         self.define_data(name, data, in_root)
     }
     fn resolve(&self, name: &str) -> Result<Option<Tuple<T>>>;
+    fn resolve_related_tables(&self, name: &str) -> Result<Vec<Tuple<T>>>;
     fn resolve_param(&self, name: &str) -> Result<Value>;
     fn resolve_value(&self, name: &str) -> Result<Option<Value>> {
         if name.starts_with('&') {
@@ -120,10 +122,18 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         let mut for_src = Tuple::with_prefix(0);
         for_src.push_null();
         for_src.push_str(&src_name);
+        for_src.push_int(if in_root { 0 } else { self.get_stack_depth() as i64 });
         for_src.push_int(DataKind::Assoc as i64);
         for_src.push_str(&name);
 
-        Ok((name, tuple, vec![for_src]))
+        let mut for_src_i = Tuple::with_prefix(0);
+        for_src_i.push_null();
+        for_src_i.push_int(if in_root { 0 } else { self.get_stack_depth() as i64 });
+        for_src_i.push_str(&src_name);
+        for_src_i.push_int(DataKind::Assoc as i64);
+        for_src_i.push_str(&name);
+
+        Ok((name, tuple, vec![for_src, for_src_i]))
     }
     fn parse_type_def(&self, mut pairs: Pairs<Rule>, _in_root: bool) -> Result<(String, OwnTuple, Vec<OwnTuple>)> {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
@@ -178,19 +188,39 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         let mut for_src = Tuple::with_prefix(0);
         for_src.push_null();
         for_src.push_str(&src_name);
+        for_src.push_int(if in_root { 0 } else { self.get_stack_depth() as i64 });
         for_src.push_int(DataKind::Edge as i64);
         for_src.push_str(&name);
 
         index_data.push(for_src);
 
+        let mut for_src_i = Tuple::with_prefix(0);
+        for_src_i.push_null();
+        for_src_i.push_int(if in_root { 0 } else { self.get_stack_depth() as i64 });
+        for_src_i.push_str(&src_name);
+        for_src_i.push_int(DataKind::Edge as i64);
+        for_src_i.push_str(&name);
+
+        index_data.push(for_src_i);
+
         if dst_name != src_name {
             let mut for_dst = Tuple::with_prefix(0);
             for_dst.push_null();
             for_dst.push_str(&dst_name);
+            for_dst.push_int(if in_root { 0 } else { self.get_stack_depth() as i64 });
             for_dst.push_int(DataKind::Edge as i64);
             for_dst.push_str(&name);
 
             index_data.push(for_dst);
+
+            let mut for_dst_i = Tuple::with_prefix(0);
+            for_dst_i.push_null();
+            for_dst_i.push_int(if in_root { 0 } else { self.get_stack_depth() as i64 });
+            for_dst_i.push_str(&dst_name);
+            for_dst_i.push_int(DataKind::Edge as i64);
+            for_dst_i.push_str(&name);
+
+            index_data.push(for_dst_i);
         }
 
         Ok((name, tuple, index_data))
@@ -742,6 +772,29 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
             }
         }
 
+        let mut prefix = Tuple::with_null_prefix();
+        prefix.push_null();
+        prefix.push_int(self.stack_depth as i64);
+        let it = self.txn.iterator(false, &self.temp_cf);
+        it.seek(&prefix);
+        for val in it.keys() {
+            let cur = Tuple::new(val);
+            if cur.starts_with(&prefix) {
+                let mut ikey = Tuple::with_prefix(cur.get_prefix());
+                ikey.push_null();
+                ikey.push_str(cur.get_text(2).unwrap());
+                ikey.push_int(cur.get_int(1).unwrap());
+                for k in cur.iter().skip(3) {
+                    ikey.push_value(&k);
+                }
+
+                self.txn.del(false, &self.temp_cf, cur)?;
+                self.txn.del(false, &self.temp_cf, ikey)?;
+            } else {
+                break;
+            }
+        }
+
         if self.stack_depth != 0 {
             self.stack_depth += 1;
         }
@@ -819,6 +872,10 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         }
         Ok(())
     }
+
+    fn resolve_related_tables(&self, name: &str) -> Result<Vec<Tuple<SlicePtr>>> {
+        todo!()
+    }
 }
 
 
@@ -886,7 +943,6 @@ mod tests {
             for (k, v) in it.iter() {
                 println!("{:?}, {:?}", Tuple::new(k), Tuple::new(v));
             }
-
         }
         fs::remove_dir_all(db_path).unwrap();
     }
