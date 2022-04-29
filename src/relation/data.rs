@@ -2,7 +2,6 @@ use std::borrow::Borrow;
 use crate::relation::tuple::Tuple;
 use crate::error::{CozoError, Result};
 use crate::relation::typing::Typing;
-use crate::relation::value::Value;
 
 #[repr(u32)]
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]

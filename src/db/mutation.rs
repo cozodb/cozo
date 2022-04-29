@@ -1,7 +1,6 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap};
 use pest::iterators::Pair;
-use cozorocks::SlicePtr;
 use crate::db::engine::Session;
 use crate::db::eval::Environment;
 use crate::error::CozoError::LogicError;
@@ -9,7 +8,6 @@ use crate::error::{CozoError, Result};
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::data::DataKind;
-use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::value::Value;
 
 impl<'a, 't> Session<'a, 't> {
@@ -56,13 +54,12 @@ impl<'a, 't> Session<'a, 't> {
 struct MutationManager<'a, 'b, 't> {
     sess: &'a Session<'b, 't>,
     cache: BTreeMap<String, ()>,
-    categorized: BTreeMap<String, BTreeSet<OwnTuple>>,
     default_tbl: Option<String>,
 }
 
 impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
     fn new(sess: &'a Session<'b, 't>, default_tbl: Option<String>) -> Self {
-        Self { sess, cache: BTreeMap::new(), categorized: BTreeMap::new(), default_tbl }
+        Self { sess, cache: BTreeMap::new(), default_tbl }
     }
     fn add(&mut self, val_map: BTreeMap<Cow<str>, Value>) -> Result<()> {
         let tbl_name = match val_map.get("_type") {
@@ -87,7 +84,10 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                             }
                             _ => return Err(LogicError("Cannot insert into non-tables".to_string()))
                         }
-
+                        let related = self.sess.resolve_related_tables(tbl_name)?;
+                        for t in related {
+                            println!("Found assoc {:?}", t);
+                        }
                     }
                 }
                 // self.cache.insert(tbl_name.to_string(), ());
@@ -124,6 +124,14 @@ mod tests {
                 create edge (Person)-[Friend]->(Person) {
                     relation: ?Text
                 }
+
+                create assoc WorkInfo : Person {
+                    work_id: Int
+                }
+
+                create assoc RelationshipData: Person {
+                    status: Text
+                }
             "#;
             for p in Parser::parse(Rule::file, s).unwrap() {
                 if p.as_rule() == Rule::EOI {
@@ -138,7 +146,10 @@ mod tests {
             let mut sess = engine.session().unwrap();
             println!("{:#?}", sess.resolve("Person"));
             let s = r#"
-                insert [{id: 1, name: "Jack"}, {id: 2, name: "Joe", habits: ["Balls"]}] as Person;
+                insert [
+                    {id: 1, name: "Jack"},
+                    {id: 2, name: "Joe", habits: ["Balls"]}
+                ] as Person;
             "#;
             let p = Parser::parse(Rule::file, s).unwrap().next().unwrap();
             sess.run_mutation(p).unwrap();

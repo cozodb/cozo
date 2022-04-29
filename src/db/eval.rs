@@ -8,6 +8,7 @@ use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::typing::Typing;
 use crate::relation::value::{Value};
 use crate::error::{CozoError, Result};
+use crate::error::CozoError::LogicError;
 use crate::relation::data::DataKind;
 use crate::parser::{Parser, Rule};
 use crate::parser::text_identifier::build_name_in_def;
@@ -32,7 +33,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         self.define_data(name, data, in_root)
     }
     fn resolve(&self, name: &str) -> Result<Option<Tuple<T>>>;
-    fn resolve_related_tables(&self, name: &str) -> Result<Vec<Tuple<T>>>;
+    fn resolve_related_tables(&self, name: &str) -> Result<Vec<(String, Tuple<SlicePtr>)>>;
     fn resolve_param(&self, name: &str) -> Result<Value>;
     fn resolve_value(&self, name: &str) -> Result<Option<Value>> {
         if name.starts_with('&') {
@@ -821,6 +822,45 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(res)
     }
 
+    fn resolve_related_tables(&self, name: &str) -> Result<Vec<(String, Tuple<SlicePtr>)>> {
+        let mut prefix = Tuple::with_prefix(0);
+        prefix.push_null();
+        prefix.push_str(name);
+        let mut assocs = vec![];
+
+        let it = self.txn.iterator(true, &self.perm_cf);
+        it.seek(&prefix);
+        for val in it.keys() {
+            let cur = Tuple::new(val);
+            if !cur.starts_with(&prefix) {
+                break;
+            }
+            let name = cur.get_text(4).ok_or_else(|| LogicError("Bad data".to_string()))?;
+            if let Some(data) = self.resolve(&name)? {
+                if data.data_kind()? == DataKind::Assoc {
+                    assocs.push((name.to_string(), data));
+                }
+            }
+        }
+
+        let it = self.txn.iterator(false, &self.temp_cf);
+        it.seek(&prefix);
+        for val in it.keys() {
+            let cur = Tuple::new(val);
+            if !cur.starts_with(&prefix) {
+                break;
+            }
+            let name = cur.get_text(4).ok_or_else(|| LogicError("Bad data".to_string()))?;
+            if let Some(data) = self.resolve(&name)? {
+                if data.data_kind()? == DataKind::Assoc {
+                    assocs.push((name.to_string(), data));
+                }
+            }
+        }
+
+        Ok(assocs)
+    }
+
     fn resolve_param(&self, name: &str) -> Result<Value> {
         let text = self.params.get(name).ok_or_else(|| CozoError::UndefinedParam(name.to_string()))?;
         let pair = Parser::parse(Rule::expr, text)?.next().unwrap();
@@ -850,15 +890,6 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(())
     }
 
-    fn define_raw_key(&mut self, key: OwnTuple, in_root: bool) -> Result<()> {
-        if in_root {
-            self.txn.put(true, &self.perm_cf, key, "")?;
-        } else {
-            self.txn.put(false, &self.temp_cf, key, "")?;
-        }
-        Ok(())
-    }
-
     fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()> {
         let key = self.encode_definable_key(name, in_root);
         if in_root {
@@ -873,8 +904,13 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(())
     }
 
-    fn resolve_related_tables(&self, name: &str) -> Result<Vec<Tuple<SlicePtr>>> {
-        todo!()
+    fn define_raw_key(&mut self, key: OwnTuple, in_root: bool) -> Result<()> {
+        if in_root {
+            self.txn.put(true, &self.perm_cf, key, "")?;
+        } else {
+            self.txn.put(false, &self.temp_cf, key, "")?;
+        }
+        Ok(())
     }
 }
 
