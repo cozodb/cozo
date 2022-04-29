@@ -107,9 +107,7 @@ impl Typing {
             _ => unreachable!()
         })
     }
-    pub fn is_nullable(&self) -> bool {
-        matches!(self, Typing::Any | Typing::Nullable(_))
-    }
+
     pub fn coerce<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         if *self == Typing::Any {
             return Ok(v);
@@ -127,8 +125,6 @@ impl Typing {
         }
 
         match self {
-            Typing::Any => unreachable!(),
-            Typing::Nullable(_) => unreachable!(),
             Typing::Bool => self.coerce_bool(v),
             Typing::Int => self.coerce_int(v),
             Typing::Float => self.coerce_float(v),
@@ -148,6 +144,9 @@ impl Typing {
             Typing::NamedTuple(nt) => {
                 todo!()
             }
+            Typing::Any => unreachable!(),
+            Typing::Nullable(_) => unreachable!(),
+
         }
     }
     fn coerce_bool<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
