@@ -4,6 +4,7 @@ use thiserror::Error;
 use cozorocks::BridgeError;
 use crate::parser::Rule;
 use crate::relation::data::DataKind;
+use crate::relation::value::{StaticValue, Value};
 
 #[derive(Error, Debug)]
 pub enum CozoError {
@@ -78,6 +79,12 @@ pub enum CozoError {
 
     #[error(transparent)]
     Parse(#[from] pest::error::Error<Rule>),
+
+    #[error("Not null constraint violated")]
+    NotNullViolated(StaticValue),
+
+    #[error("Type mismatch")]
+    TypeMismatch,
 
     //     #[error(transparent)]
 //     Storage(#[from] cozo_rocks::BridgeStatus),

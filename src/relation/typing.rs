@@ -107,6 +107,79 @@ impl Typing {
             _ => unreachable!()
         })
     }
+    pub fn is_nullable(&self) -> bool {
+        matches!(self, Typing::Any | Typing::Nullable(_))
+    }
+    pub fn coerce<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
+        if *self == Typing::Any {
+            return Ok(v);
+        }
+        if v == Value::Null {
+            return if matches!(self, Typing::Nullable(_)) {
+                Ok(Value::Null)
+            } else {
+                Err(CozoError::NotNullViolated(v.to_static()))
+            };
+        }
+
+        if let Typing::Nullable(t) = self {
+            return t.coerce(v);
+        }
+
+        match self {
+            Typing::Any => unreachable!(),
+            Typing::Nullable(_) => unreachable!(),
+            Typing::Bool => self.coerce_bool(v),
+            Typing::Int => self.coerce_int(v),
+            Typing::Float => self.coerce_float(v),
+            Typing::Text => self.coerce_text(v),
+            Typing::Uuid => self.coerce_uuid(v),
+            Typing::Homogeneous(t) => {
+                match v {
+                    Value::List(vs) => {
+                        Ok(Value::List(vs.into_iter().map(|v| t.coerce(v)).collect::<Result<Vec<_>>>()?))
+                    }
+                    _ => Err(CozoError::TypeMismatch)
+                }
+            }
+            Typing::UnnamedTuple(ut) => {
+                todo!()
+            },
+            Typing::NamedTuple(nt) => {
+                todo!()
+            }
+        }
+    }
+    fn coerce_bool<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
+        match v {
+            v @ Value::Bool(_) => Ok(v),
+            _ => Err(CozoError::TypeMismatch)
+        }
+    }
+    fn coerce_int<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
+        match v {
+            v @ Value::Int(_) => Ok(v),
+            _ => Err(CozoError::TypeMismatch)
+        }
+    }
+    fn coerce_float<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
+        match v {
+            v @ Value::Float(_) => Ok(v),
+            _ => Err(CozoError::TypeMismatch)
+        }
+    }
+    fn coerce_text<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
+        match v {
+            v @ Value::Text(_) => Ok(v),
+            _ => Err(CozoError::TypeMismatch)
+        }
+    }
+    fn coerce_uuid<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
+        match v {
+            v @ Value::Uuid(_) => Ok(v),
+            _ => Err(CozoError::TypeMismatch)
+        }
+    }
 }
 
 impl TryFrom<&str> for Typing {
