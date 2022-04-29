@@ -80,7 +80,7 @@ impl Typing {
                             let resolved = env.resolve(t)?;
                             let resolved = resolved.ok_or_else(|| CozoError::UndefinedType(t.to_string()))?;
                             match resolved.data_kind()? {
-                                DataKind::TypeAlias => resolved.interpret_as_type()?,
+                                DataKind::Type => resolved.interpret_as_type()?,
                                 _ => return Err(CozoError::UndefinedType(t.to_string()))
                             }
                         }

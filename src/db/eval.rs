@@ -13,6 +13,12 @@ use crate::parser::{Parser, Rule};
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::value;
 
+/// layouts for sector 0
+/// `[Null]`: stores information about table_ids
+/// `[Text, Int]`: contains definable data and depth info
+/// `[Int, Text]`: inverted index for depth info
+/// `[Null, Text, Int, Text]` inverted index for related tables
+
 pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
     fn get_next_storage_id(&mut self, in_root: bool) -> Result<i64>;
     fn get_stack_depth(&self) -> i32;
@@ -45,6 +51,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
     }
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()>;
     fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()>;
+    fn define_raw_key(&mut self, key: OwnTuple, in_root: bool) -> Result<()>;
     fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
         let depth_code = if in_root { 0 } else { self.get_stack_depth() as i64 };
         let mut tuple = Tuple::with_null_prefix();
@@ -78,7 +85,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         let vals_typing = Typing::NamedTuple(cols.iter().map(|(_, n, t)| (n.to_string(), t.clone())).collect());
         Ok((keys_typing, vals_typing))
     }
-    fn parse_definition(&self, pair: Pair<Rule>, in_root: bool) -> Result<(bool, (String, OwnTuple))> {
+    fn parse_definition(&self, pair: Pair<Rule>, in_root: bool) -> Result<(bool, (String, OwnTuple, Vec<OwnTuple>))> {
         Ok(match pair.as_rule() {
             Rule::node_def => (true, self.parse_node_def(pair.into_inner(), in_root)?),
             Rule::edge_def => (true, self.parse_edge_def(pair.into_inner(), in_root)?),
@@ -88,7 +95,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
             _ => unreachable!()
         })
     }
-    fn parse_assoc_def(&self, mut pairs: Pairs<Rule>, in_root: bool) -> Result<(String, OwnTuple)> {
+    fn parse_assoc_def(&self, mut pairs: Pairs<Rule>, in_root: bool) -> Result<(String, OwnTuple, Vec<OwnTuple>)> {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
         let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let src_tbl = match self.resolve(&src_name)? {
@@ -104,20 +111,28 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         if keys_typing.to_string() != "()" {
             return Err(CozoError::LogicError("Cannot have keys in assoc".to_string()));
         }
-        let mut tuple = Tuple::with_data_prefix(DataKind::Associate);
+
+        let mut tuple = Tuple::with_data_prefix(DataKind::Assoc);
         tuple.push_bool(src_global);
         tuple.push_int(src_id);
         tuple.push_str(vals_typing.to_string());
-        Ok((name, tuple))
+
+        let mut for_src = Tuple::with_prefix(0);
+        for_src.push_null();
+        for_src.push_str(&src_name);
+        for_src.push_int(DataKind::Assoc as i64);
+        for_src.push_str(&name);
+
+        Ok((name, tuple, vec![for_src]))
     }
-    fn parse_type_def(&self, mut pairs: Pairs<Rule>, _in_root: bool) -> Result<(String, OwnTuple)> {
+    fn parse_type_def(&self, mut pairs: Pairs<Rule>, _in_root: bool) -> Result<(String, OwnTuple, Vec<OwnTuple>)> {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
         let typ = Typing::from_pair(pairs.next().unwrap(), Some(self))?;
-        let mut data = Tuple::with_data_prefix(DataKind::TypeAlias);
+        let mut data = Tuple::with_data_prefix(DataKind::Type);
         data.push_str(typ.to_string());
-        Ok((name, data))
+        Ok((name, data, vec![]))
     }
-    fn parse_edge_def(&self, mut pairs: Pairs<Rule>, in_root: bool) -> Result<(String, OwnTuple)> {
+    fn parse_edge_def(&self, mut pairs: Pairs<Rule>, in_root: bool) -> Result<(String, OwnTuple, Vec<OwnTuple>)> {
         let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let src_tbl = match self.resolve(&src_name)? {
             Some(res) => res,
@@ -147,6 +162,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
             Some(p) => self.parse_cols(p)?,
             None => (Typing::NamedTuple(vec![]), Typing::NamedTuple(vec![]))
         };
+
         let mut tuple = Tuple::with_data_prefix(DataKind::Edge);
         tuple.push_bool(src_global);
         tuple.push_int(src_id);
@@ -156,26 +172,41 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         tuple.push_str(vals_typing.to_string());
         tuple.push_null(); // TODO default values for keys
         tuple.push_null(); // TODO default values for cols
-        Ok((name, tuple))
+
+        let mut index_data = Vec::with_capacity(2);
+
+        let mut for_src = Tuple::with_prefix(0);
+        for_src.push_null();
+        for_src.push_str(&src_name);
+        for_src.push_int(DataKind::Edge as i64);
+        for_src.push_str(&name);
+
+        index_data.push(for_src);
+
+        if dst_name != src_name {
+            let mut for_dst = Tuple::with_prefix(0);
+            for_dst.push_null();
+            for_dst.push_str(&dst_name);
+            for_dst.push_int(DataKind::Edge as i64);
+            for_dst.push_str(&name);
+
+            index_data.push(for_dst);
+        }
+
+        Ok((name, tuple, index_data))
     }
 
     fn extract_table_id(src_tbl: Tuple<T>) -> Result<(DataKind, bool, i64)> {
         let kind = src_tbl.data_kind()?;
         match kind {
-            DataKind::DataTuple | DataKind::Value | DataKind::TypeAlias => return Err(CozoError::UnexpectedDataKind(kind)),
+            DataKind::Data | DataKind::Value | DataKind::Type => return Err(CozoError::UnexpectedDataKind(kind)),
             _ => {}
         };
-        let is_global = match src_tbl.get(0).expect("Data corrupt") {
-            Value::Bool(u) => u,
-            _ => panic!("Data corrupt")
-        };
-        let table_id = match src_tbl.get(1).expect("Data corrupt") {
-            Value::Int(u) => u,
-            _ => panic!("Data corrupt")
-        };
+        let is_global = src_tbl.get_bool(0).expect("Data corrupt");
+        let table_id = src_tbl.get_int(1).expect("Data corrupt");
         Ok((kind, is_global, table_id))
     }
-    fn parse_node_def(&self, mut pairs: Pairs<Rule>, _in_root: bool) -> Result<(String, OwnTuple)> {
+    fn parse_node_def(&self, mut pairs: Pairs<Rule>, _in_root: bool) -> Result<(String, OwnTuple, Vec<OwnTuple>)> {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
         let col_pair = pairs.next().unwrap();
         let (keys_typing, vals_typing) = self.parse_cols(col_pair)?;
@@ -184,7 +215,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         tuple.push_str(vals_typing.to_string());
         tuple.push_null(); // TODO default values for keys
         tuple.push_null(); // TODO default values for cols
-        Ok((name, tuple))
+        Ok((name, tuple, vec![]))
     }
     fn run_definition(&mut self, pair: Pair<Rule>) -> Result<()> {
         let in_root = match pair.as_rule() {
@@ -193,12 +224,15 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
             r => panic!("Encountered definition with rule {:?}", r)
         };
 
-        let (need_id, (name, mut tuple)) = self.parse_definition(
+        let (need_id, (name, mut tuple, assoc_defs)) = self.parse_definition(
             pair.into_inner().next().unwrap(), in_root,
         )?;
         if need_id {
             tuple = tuple.insert_values_at(0, &[in_root.into(),
                 (self.get_next_storage_id(in_root)?).into()]);
+        }
+        for t in assoc_defs {
+            self.define_raw_key(t, in_root).unwrap();
         }
         self.define_data(&name, tuple, in_root)
     }
@@ -763,6 +797,15 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(())
     }
 
+    fn define_raw_key(&mut self, key: OwnTuple, in_root: bool) -> Result<()> {
+        if in_root {
+            self.txn.put(true, &self.perm_cf, key, "")?;
+        } else {
+            self.txn.put(false, &self.temp_cf, key, "")?;
+        }
+        Ok(())
+    }
+
     fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()> {
         let key = self.encode_definable_key(name, in_root);
         if in_root {
@@ -830,6 +873,20 @@ mod tests {
             env.run_definition(t).unwrap();
             println!("{:?}", env.resolve("WorkInfo"));
             println!("{:?}", env.resolve("Person"));
+            env.commit().unwrap();
+
+            let it = env.txn.iterator(false, &env.perm_cf);
+            it.to_first();
+            for (k, v) in it.iter() {
+                println!("{:?}, {:?}", Tuple::new(k), Tuple::new(v));
+            }
+
+            let it = env.txn.iterator(false, &env.temp_cf);
+            it.to_first();
+            for (k, v) in it.iter() {
+                println!("{:?}, {:?}", Tuple::new(k), Tuple::new(v));
+            }
+
         }
         fs::remove_dir_all(db_path).unwrap();
     }

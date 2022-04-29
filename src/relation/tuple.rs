@@ -127,6 +127,88 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             None => None
         }
     }
+
+    #[inline]
+    pub fn get_null(&self, idx: usize) -> Option<()> {
+        match self.get(idx)? {
+            Value::Null => Some(()),
+            _ => None
+        }
+    }
+
+    #[inline]
+    pub fn get_int(&self, idx: usize) -> Option<i64> {
+        match self.get(idx)? {
+            Value::Int(i) => Some(i),
+            _ => None
+        }
+    }
+
+    #[inline]
+    pub fn get_text(&self, idx: usize) -> Option<Cow<str>> {
+        match self.get(idx)? {
+            Value::Text(d) => Some(d),
+            _ => None
+        }
+    }
+
+    #[inline]
+    pub fn get_bool(&self, idx: usize) -> Option<bool> {
+        match self.get(idx)? {
+            Value::Bool(b) => Some(b),
+            _ => None
+        }
+    }
+
+
+    #[inline]
+    pub fn get_float(&self, idx: usize) -> Option<f64> {
+        match self.get(idx)? {
+            Value::Float(f) => Some(f.into_inner()),
+            _ => None
+        }
+    }
+
+    #[inline]
+    pub fn get_uuid(&self, idx: usize) -> Option<Uuid> {
+        match self.get(idx)? {
+            Value::Uuid(u) => Some(u),
+            _ => None
+        }
+    }
+
+    #[inline]
+    pub fn get_list(&self, idx: usize) -> Option<Vec<Value>> {
+        match self.get(idx)? {
+            Value::List(u) => Some(u),
+            _ => None
+        }
+    }
+
+    #[inline]
+    pub fn get_dict(&self, idx: usize) -> Option<BTreeMap<Cow<str>, Value>> {
+        match self.get(idx)? {
+            Value::Dict(u) => Some(u),
+            _ => None
+        }
+    }
+
+    #[inline]
+    pub fn get_variable(&self, idx: usize) -> Option<Cow<str>> {
+        match self.get(idx)? {
+            Value::Variable(u) => Some(u),
+            _ => None
+        }
+    }
+
+    #[inline]
+    pub fn get_apply(&self, idx: usize) -> Option<(Cow<str>, Vec<Value>)> {
+        match self.get(idx)? {
+            Value::Apply(n, l) => Some((n, l)),
+            _ => None
+        }
+    }
+
     #[inline]
     fn parse_value_at(&self, pos: usize) -> (Value, usize) {
         let data = self.data.as_ref();
@@ -227,6 +309,9 @@ impl<T: AsRef<[u8]>> Tuple<T> {
 
 impl<T: AsRef<[u8]>> Debug for Tuple<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.data.as_ref().is_empty() {
+            return write!(f, "Empty");
+        }
         match self.data_kind() {
             Ok(data_kind) => {
                 write!(f, "Tuple<{}:{:?}>{{", self.get_prefix(), data_kind)?;
