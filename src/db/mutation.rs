@@ -63,7 +63,7 @@ impl<'a, 't> Session<'a, 't> {
 
 struct MutationManager<'a, 'b, 't> {
     sess: &'a Session<'b, 't>,
-    cache: BTreeMap<String, Vec<KVCoercer>>,
+    cache: BTreeMap<String, KVCoercer>,
     default_tbl: Option<String>,
 }
 
@@ -76,19 +76,19 @@ struct KVCoercer {
     val_typing: Vec<(String, Typing)>,
     src_key_typing: Vec<Typing>,
     dst_key_typing: Vec<Typing>,
+    assocs: Vec<KVCoercer>
 }
 
 impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
     fn new(sess: &'a Session<'b, 't>, default_tbl: Option<String>) -> Self {
         Self { sess, cache: BTreeMap::new(), default_tbl }
     }
-    fn get_table_info(&mut self, tbl_name: Cow<str>) -> Result<&[KVCoercer]> {
+    fn get_table_info(&mut self, tbl_name: Cow<str>) -> Result<&KVCoercer> {
         if !self.cache.contains_key(tbl_name.as_ref()) {
-            let mut coercers = Vec::with_capacity(1);
-            match self.sess.resolve(&tbl_name)? {
+            let coercer = match self.sess.resolve(&tbl_name)? {
                 None => return Err(CozoError::UndefinedType(tbl_name.to_string())),
                 Some(tpl) => {
-                    match tpl.data_kind()? {
+                    let mut main_coercer = match tpl.data_kind()? {
                         DataKind::Node => {
                             let key_extractor = Typing::try_from(tpl.get_text(2)
                                 .ok_or_else(|| CozoError::BadDataFormat(tpl.data.as_ref().to_vec()))?.as_ref())?
@@ -99,7 +99,7 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                             let in_root = tpl.get_bool(0).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
                             let table_id = tpl.get_int(1).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
 
-                            let coercer = KVCoercer {
+                            KVCoercer {
                                 table_id,
                                 in_root,
                                 data_keys: val_extractor.iter().map(|(k, _)| k.clone()).collect(),
@@ -107,8 +107,8 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                                 val_typing: val_extractor,
                                 src_key_typing: vec![],
                                 dst_key_typing: vec![],
-                            };
-                            coercers.push(coercer);
+                                assocs: vec![]
+                            }
                         }
                         DataKind::Edge => {
                             let other_key_extractor = Typing::try_from(tpl.get_text(6)
@@ -142,7 +142,7 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                             let in_root = tpl.get_bool(0).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
                             let table_id = tpl.get_int(1).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
 
-                            let coercer = KVCoercer {
+                            KVCoercer {
                                 table_id,
                                 in_root,
                                 data_keys: val_extractor.iter().map(|(k, _)| k.clone()).collect(),
@@ -150,12 +150,11 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                                 val_typing: val_extractor,
                                 src_key_typing,
                                 dst_key_typing,
-                            };
-
-                            coercers.push(coercer);
+                                assocs: vec![]
+                            }
                         }
                         _ => return Err(LogicError("Cannot insert into non-tables".to_string()))
-                    }
+                    };
                     let related = self.sess.resolve_related_tables(&tbl_name)?;
                     for (_n, d) in related {
                         let t = d.get_text(4)
@@ -173,14 +172,16 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                             val_typing: t,
                             src_key_typing: vec![],
                             dst_key_typing: vec![],
+                            assocs: vec![]
                         };
 
-                        coercers.push(coercer);
+                        main_coercer.assocs.push(coercer);
                     }
+                    main_coercer
                 }
-            }
-            println!("Inserting info {} {:#?}", tbl_name, coercers);
-            self.cache.insert(tbl_name.as_ref().to_string(), coercers);
+            };
+            println!("Inserting info {} {:#?}", tbl_name, coercer);
+            self.cache.insert(tbl_name.as_ref().to_string(), coercer);
         }
         let info = self.cache.get(tbl_name.as_ref())
             .ok_or_else(|| CozoError::LogicError("Cannot resolve table".to_string()))?;
@@ -196,7 +197,7 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                 None => return Err(LogicError("Cannot determine table kind".to_string()))
             }
         };
-        self.get_table_info(tbl_name).unwrap();
+        let table_info = self.get_table_info(tbl_name)?;
         Ok(())
     }
 }
