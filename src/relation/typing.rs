@@ -110,6 +110,13 @@ impl Typing {
         })
     }
 
+    pub fn extract_named_tuple(self) -> Option<Vec<(String, Typing)>> {
+        match self {
+            Typing::NamedTuple(t) => Some(t),
+            _ => None
+        }
+    }
+
     pub fn coerce<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         if *self == Typing::Any {
             return Ok(v);
@@ -142,13 +149,12 @@ impl Typing {
             }
             Typing::UnnamedTuple(ut) => {
                 todo!()
-            },
+            }
             Typing::NamedTuple(nt) => {
                 todo!()
             }
             Typing::Any => unreachable!(),
             Typing::Nullable(_) => unreachable!(),
-
         }
     }
     fn coerce_bool<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
