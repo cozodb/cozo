@@ -4,7 +4,7 @@ use thiserror::Error;
 use cozorocks::BridgeError;
 use crate::parser::Rule;
 use crate::relation::data::DataKind;
-use crate::relation::value::{StaticValue, Value};
+use crate::relation::value::{StaticValue};
 
 #[derive(Error, Debug)]
 pub enum CozoError {

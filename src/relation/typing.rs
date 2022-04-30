@@ -46,7 +46,9 @@ impl Display for Typing {
                 let collected = n.iter().map(|(k, v)|
                     format!(r##""{}":{}"##, k, v)).collect::<Vec<_>>();
                 let joined = collected.join(",");
-                write!(f, "({})", joined)
+                write!(f, "{{")?;
+                write!(f, "{}", joined)?;
+                write!(f, "}}")
             }
         }
     }

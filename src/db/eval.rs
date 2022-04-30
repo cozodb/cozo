@@ -20,6 +20,7 @@ use crate::relation::value;
 /// `[Int, Text]`: inverted index for depth info
 /// `[Null, Text, Int, Int, Text]` inverted index for related tables
 /// `[Null, Int, Text, Int, Text]` inverted index for related tables
+/// `[True, Int]` table info, value is key
 
 pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
     fn get_next_storage_id(&mut self, in_root: bool) -> Result<i64>;
@@ -32,6 +33,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         data.push_value(val);
         self.define_data(name, data, in_root)
     }
+    fn get_table_info(&self, id: i64, in_root: bool) -> Result<Option<Tuple<T>>>;
     fn resolve(&self, name: &str) -> Result<Option<Tuple<T>>>;
     fn resolve_related_tables(&self, name: &str) -> Result<Vec<(String, Tuple<SlicePtr>)>>;
     fn resolve_param(&self, name: &str) -> Result<Value>;
@@ -54,7 +56,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
     }
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()>;
     fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()>;
-    fn define_raw_key(&mut self, key: OwnTuple, in_root: bool) -> Result<()>;
+    fn define_raw_key(&mut self, key: OwnTuple, value: Option<OwnTuple>, in_root: bool) -> Result<()>;
     fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
         let depth_code = if in_root { 0 } else { self.get_stack_depth() as i64 };
         let mut tuple = Tuple::with_null_prefix();
@@ -111,7 +113,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         }
 
         let (keys_typing, vals_typing) = self.parse_cols(pairs.next().unwrap())?;
-        if keys_typing.to_string() != "()" {
+        if keys_typing.to_string() != "{}" {
             return Err(CozoError::LogicError("Cannot have keys in assoc".to_string()));
         }
 
@@ -259,11 +261,16 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
             pair.into_inner().next().unwrap(), in_root,
         )?;
         if need_id {
+            let id = self.get_next_storage_id(in_root)?;
             tuple = tuple.insert_values_at(0, &[in_root.into(),
-                (self.get_next_storage_id(in_root)?).into()]);
+                id.into()]);
+            let mut id_key = Tuple::with_null_prefix();
+            id_key.push_bool(true);
+            id_key.push_int(id);
+            self.define_raw_key(id_key, Some(tuple.clone()), in_root).unwrap();
         }
         for t in assoc_defs {
-            self.define_raw_key(t, in_root).unwrap();
+            self.define_raw_key(t, None, in_root).unwrap();
         }
         self.define_data(&name, tuple, in_root)
     }
@@ -765,6 +772,23 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
                     ikey.push_value(&name);
                     ikey.push_int(self.stack_depth as i64);
 
+                    let data = self.txn.get(false, &self.temp_cf, &ikey)?
+                        .ok_or_else(|| CozoError::LogicError("Bad format for ikey".to_string()))?;
+                    let data = Tuple::new(data);
+                    match data.data_kind()? {
+                        DataKind::Node |
+                        DataKind::Edge |
+                        DataKind::Assoc |
+                        DataKind::Index => {
+                            let id = data.get_int(1).ok_or_else(|| CozoError::LogicError("Bad table index".to_string()))?;
+                            let mut rkey = Tuple::with_null_prefix();
+                            rkey.push_bool(true);
+                            rkey.push_int(id);
+                            self.txn.del(false, &self.temp_cf, rkey)?;
+                        }
+                        _ => {}
+                    }
+
                     self.txn.del(false, &self.temp_cf, cur)?;
                     self.txn.del(false, &self.temp_cf, ikey)?;
                 }
@@ -804,6 +828,19 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
 
     fn set_param(&mut self, name: &str, val: &'t str) {
         self.params.insert(name.to_string(), val);
+    }
+
+    fn get_table_info(&self, id: i64, in_root: bool) -> Result<Option<Tuple<SlicePtr>>> {
+        let mut key = Tuple::with_null_prefix();
+        key.push_bool(true);
+        key.push_int(id);
+        if in_root {
+            let data = self.txn.get(true, &self.perm_cf, key)?;
+            Ok(data.map(Tuple::new))
+        } else {
+            let data = self.txn.get(false, &self.temp_cf, key)?;
+            Ok(data.map(Tuple::new))
+        }
     }
 
     fn resolve(&self, name: &str) -> Result<Option<Tuple<SlicePtr>>> {
@@ -904,11 +941,25 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(())
     }
 
-    fn define_raw_key(&mut self, key: OwnTuple, in_root: bool) -> Result<()> {
+    fn define_raw_key(&mut self, key: OwnTuple, value: Option<OwnTuple>, in_root: bool) -> Result<()> {
         if in_root {
-            self.txn.put(true, &self.perm_cf, key, "")?;
+            match value {
+                None => {
+                    self.txn.put(true, &self.perm_cf, key, "")?;
+                }
+                Some(v) => {
+                    self.txn.put(true, &self.perm_cf, key, &v)?;
+                }
+            }
         } else {
-            self.txn.put(false, &self.temp_cf, key, "")?;
+            match value {
+                None => {
+                    self.txn.put(false, &self.temp_cf, key, "")?;
+                }
+                Some(v) => {
+                    self.txn.put(false, &self.temp_cf, key, &v)?;
+                }
+            }
         }
         Ok(())
     }

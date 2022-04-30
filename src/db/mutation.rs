@@ -8,7 +8,17 @@ use crate::error::{CozoError, Result};
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::data::DataKind;
+use crate::relation::typing::Typing;
 use crate::relation::value::Value;
+
+/// # key layouts
+///
+/// * Node
+///   * `[table_id, keys]`
+/// * Edge
+///   * `[table_id, fst_table_id, fst_keys, is_forward, snd_keys, other_keys]` twice, the backward has no data
+/// * Associate
+///   * Same as the main one
 
 impl<'a, 't> Session<'a, 't> {
     pub fn run_mutation(&mut self, pair: Pair<Rule>) -> Result<()> {
@@ -61,30 +71,31 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
     fn new(sess: &'a Session<'b, 't>, default_tbl: Option<String>) -> Self {
         Self { sess, cache: BTreeMap::new(), default_tbl }
     }
-    fn add(&mut self, val_map: BTreeMap<Cow<str>, Value>) -> Result<()> {
-        let tbl_name = match val_map.get("_type") {
-            Some(Value::Text(t)) => t as &str,
-            Some(_) => return Err(LogicError("Table kind must be text".to_string())),
-            None => match &self.default_tbl {
-                Some(v) => v as &str,
-                None => return Err(LogicError("Cannot determine table kind".to_string()))
-            }
-        };
-        match self.cache.get(tbl_name) {
+    fn get_table_info(&mut self, tbl_name: Cow<str>) -> Result<()> {
+        match self.cache.get(tbl_name.as_ref()) {
             None => {
-                match self.sess.resolve(tbl_name)? {
+                match self.sess.resolve(&tbl_name)? {
                     None => return Err(CozoError::UndefinedType(tbl_name.to_string())),
                     Some(tpl) => {
+                        println!("Found tuple {:?}", tpl);
                         match tpl.data_kind()? {
                             DataKind::Node => {
-                                println!("Found node {:?}", tpl);
+                                let key_extractor = Typing::try_from(tpl.get_text(2)
+                                    .ok_or_else(|| CozoError::BadDataFormat(tpl.data.as_ref().to_vec()))?.as_ref())?;
+                                let val_extractor = Typing::try_from(tpl.get_text(2)
+                                    .ok_or_else(|| CozoError::BadDataFormat(tpl.data.as_ref().to_vec()))?.as_ref())?;
+                                println!("Found node {:?}, {:?}", key_extractor, val_extractor);
                             }
                             DataKind::Edge => {
-                                println!("Found edge {:?}", tpl);
+                                let other_key_extractor = Typing::try_from(tpl.get_text(6)
+                                    .ok_or_else(|| CozoError::BadDataFormat(tpl.data.as_ref().to_vec()))?.as_ref())?;
+                                let val_extractor = Typing::try_from(tpl.get_text(7)
+                                    .ok_or_else(|| CozoError::BadDataFormat(tpl.data.as_ref().to_vec()))?.as_ref())?;
+                                println!("Found edge {:?}, {:?}", other_key_extractor, val_extractor);
                             }
                             _ => return Err(LogicError("Cannot insert into non-tables".to_string()))
                         }
-                        let related = self.sess.resolve_related_tables(tbl_name)?;
+                        let related = self.sess.resolve_related_tables(&tbl_name)?;
                         for t in related {
                             println!("Found assoc {:?}", t);
                         }
@@ -94,6 +105,18 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
             }
             Some(_t) => {}
         }
+        Ok(())
+    }
+    fn add(&mut self, val_map: BTreeMap<Cow<str>, Value>) -> Result<()> {
+        let tbl_name = match val_map.get("_type") {
+            Some(Value::Text(t)) => t.clone(),
+            Some(_) => return Err(LogicError("Table kind must be text".to_string())),
+            None => match &self.default_tbl {
+                Some(v) => v.clone().into(),
+                None => return Err(LogicError("Cannot determine table kind".to_string()))
+            }
+        };
+        self.get_table_info(tbl_name);
         Ok(())
     }
 }
@@ -148,7 +171,8 @@ mod tests {
             let s = r#"
                 insert [
                     {id: 1, name: "Jack"},
-                    {id: 2, name: "Joe", habits: ["Balls"]}
+                    {id: 2, name: "Joe", habits: ["Balls"], _type: "Person"},
+                    {_type: "Friend", _src: 1, _dst: 2, relation: "mate"}
                 ] as Person;
             "#;
             let p = Parser::parse(Rule::file, s).unwrap().next().unwrap();
