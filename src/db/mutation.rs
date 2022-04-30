@@ -1,5 +1,7 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
+use std::rc::Rc;
 use pest::iterators::Pair;
 use crate::db::engine::Session;
 use crate::db::eval::Environment;
@@ -8,6 +10,7 @@ use crate::error::{CozoError, Result};
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::data::DataKind;
+use crate::relation::tuple::Tuple;
 use crate::relation::typing::Typing;
 use crate::relation::value::Value;
 
@@ -63,28 +66,31 @@ impl<'a, 't> Session<'a, 't> {
 
 struct MutationManager<'a, 'b, 't> {
     sess: &'a Session<'b, 't>,
-    cache: BTreeMap<String, KVCoercer>,
+    cache: RefCell<BTreeMap<String, Rc<KVCoercer>>>,
     default_tbl: Option<String>,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 struct KVCoercer {
+    kind: DataKind,
     table_id: i64,
+    src_table_id: i64,
+    dst_table_id: i64,
     in_root: bool,
     data_keys: HashSet<String>,
     key_typing: Vec<(String, Typing)>,
     val_typing: Vec<(String, Typing)>,
     src_key_typing: Vec<Typing>,
     dst_key_typing: Vec<Typing>,
-    assocs: Vec<KVCoercer>
+    assocs: Vec<KVCoercer>,
 }
 
 impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
     fn new(sess: &'a Session<'b, 't>, default_tbl: Option<String>) -> Self {
-        Self { sess, cache: BTreeMap::new(), default_tbl }
+        Self { sess, cache: RefCell::new(BTreeMap::new()), default_tbl }
     }
-    fn get_table_info(&mut self, tbl_name: Cow<str>) -> Result<&KVCoercer> {
-        if !self.cache.contains_key(tbl_name.as_ref()) {
+    fn get_table_info(&self, tbl_name: Cow<str>) -> Result<Rc<KVCoercer>> {
+        if !self.cache.borrow().contains_key(tbl_name.as_ref()) {
             let coercer = match self.sess.resolve(&tbl_name)? {
                 None => return Err(CozoError::UndefinedType(tbl_name.to_string())),
                 Some(tpl) => {
@@ -100,14 +106,17 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                             let table_id = tpl.get_int(1).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
 
                             KVCoercer {
+                                kind: DataKind::Node,
                                 table_id,
                                 in_root,
+                                src_table_id: -1,
+                                dst_table_id: -1,
                                 data_keys: val_extractor.iter().map(|(k, _)| k.clone()).collect(),
                                 key_typing: key_extractor,
                                 val_typing: val_extractor,
                                 src_key_typing: vec![],
                                 dst_key_typing: vec![],
-                                assocs: vec![]
+                                assocs: vec![],
                             }
                         }
                         DataKind::Edge => {
@@ -143,14 +152,17 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                             let table_id = tpl.get_int(1).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
 
                             KVCoercer {
+                                kind: DataKind::Edge,
                                 table_id,
                                 in_root,
+                                src_table_id: src_id,
+                                dst_table_id: dst_id,
                                 data_keys: val_extractor.iter().map(|(k, _)| k.clone()).collect(),
                                 key_typing: other_key_extractor,
                                 val_typing: val_extractor,
                                 src_key_typing,
                                 dst_key_typing,
-                                assocs: vec![]
+                                assocs: vec![],
                             }
                         }
                         _ => return Err(LogicError("Cannot insert into non-tables".to_string()))
@@ -165,14 +177,17 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                         let table_id = d.get_int(1).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
 
                         let coercer = KVCoercer {
+                            kind: DataKind::Assoc,
                             table_id,
                             in_root,
+                            src_table_id: -1,
+                            dst_table_id: -1,
                             data_keys: t.iter().map(|(k, _)| k.clone()).collect(),
                             key_typing: vec![],
                             val_typing: t,
                             src_key_typing: vec![],
                             dst_key_typing: vec![],
-                            assocs: vec![]
+                            assocs: vec![],
                         };
 
                         main_coercer.assocs.push(coercer);
@@ -180,15 +195,15 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                     main_coercer
                 }
             };
-            println!("Inserting info {} {:#?}", tbl_name, coercer);
-            self.cache.insert(tbl_name.as_ref().to_string(), coercer);
+            self.cache.borrow_mut().insert(tbl_name.as_ref().to_string(), Rc::new(coercer));
         }
-        let info = self.cache.get(tbl_name.as_ref())
+        let cache = self.cache.borrow();
+        let info = cache.get(tbl_name.as_ref())
             .ok_or_else(|| CozoError::LogicError("Cannot resolve table".to_string()))?;
 
-        Ok(info)
+        Ok(info.clone())
     }
-    fn add(&mut self, val_map: BTreeMap<Cow<str>, Value>) -> Result<()> {
+    fn add(&mut self, mut val_map: BTreeMap<Cow<str>, Value>) -> Result<()> {
         let tbl_name = match val_map.get("_type") {
             Some(Value::Text(t)) => t.clone(),
             Some(_) => return Err(LogicError("Table kind must be text".to_string())),
@@ -198,6 +213,108 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
             }
         };
         let table_info = self.get_table_info(tbl_name)?;
+
+        let mut key_tuple;
+
+        match table_info.kind {
+            DataKind::Node => {
+                key_tuple = Tuple::with_prefix(table_info.table_id as u32);
+                for (k, v) in &table_info.key_typing {
+                    let raw = val_map.remove(k.as_str()).unwrap_or(Value::Null);
+                    let processed = v.coerce(raw)?;
+                    key_tuple.push_value(&processed);
+                }
+
+                let mut val_tuple = Tuple::with_data_prefix(DataKind::Data);
+                for (k, v) in &table_info.val_typing {
+                    let raw = val_map.remove(k.as_str()).unwrap_or(Value::Null);
+                    let processed = v.coerce(raw)?;
+                    val_tuple.push_value(&processed);
+                }
+                self.sess.define_raw_key(&key_tuple, Some(&val_tuple), table_info.in_root)?;
+            }
+            DataKind::Edge => {
+                key_tuple = Tuple::with_prefix(table_info.table_id as u32);
+                key_tuple.push_int(table_info.src_table_id);
+
+                let mut ikey_tuple = Tuple::with_prefix(table_info.table_id as u32);
+                ikey_tuple.push_int(table_info.dst_table_id);
+
+                let mut val_tuple = Tuple::with_data_prefix(DataKind::Data);
+
+                let src = val_map.remove("_src").unwrap_or(Value::Null);
+                let src_key_list = match src {
+                    Value::List(v) => v,
+                    v => vec![v]
+                };
+
+                if src_key_list.len() != table_info.src_key_typing.len() {
+                    return Err(CozoError::LogicError("Error in _src key".to_string()));
+                }
+
+                let mut src_keys = Vec::with_capacity(src_key_list.len());
+
+                for (t, v) in table_info.src_key_typing.iter().zip(src_key_list.into_iter()) {
+                    let v = t.coerce(v)?;
+                    key_tuple.push_value(&v);
+                    src_keys.push(v);
+                }
+
+                key_tuple.push_bool(true);
+
+                let dst = val_map.remove("_dst").unwrap_or(Value::Null);
+                let dst_key_list = match dst {
+                    Value::List(v) => v,
+                    v => vec![v]
+                };
+
+                if dst_key_list.len() != table_info.dst_key_typing.len() {
+                    return Err(CozoError::LogicError("Error in _dst key".to_string()));
+                }
+
+                for (t, v) in table_info.dst_key_typing.iter().zip(dst_key_list.into_iter()) {
+                    let v = t.coerce(v)?;
+                    key_tuple.push_value(&v);
+                    ikey_tuple.push_value(&v);
+                }
+
+                ikey_tuple.push_bool(false);
+
+                for v in src_keys {
+                    ikey_tuple.push_value(&v);
+                }
+
+                for (k, v) in &table_info.key_typing {
+                    let raw = val_map.remove(k.as_str()).unwrap_or(Value::Null);
+                    let processed = v.coerce(raw)?;
+                    key_tuple.push_value(&processed);
+                }
+                for (k, v) in &table_info.val_typing {
+                    let raw = val_map.remove(k.as_str()).unwrap_or(Value::Null);
+                    let processed = v.coerce(raw)?;
+                    val_tuple.push_value(&processed);
+                }
+                self.sess.define_raw_key(&key_tuple, Some(&val_tuple), table_info.in_root)?;
+                self.sess.define_raw_key(&ikey_tuple, Some(&key_tuple), table_info.in_root)?;
+            }
+            _ => unreachable!()
+        }
+
+        let existing_keys: HashSet<_> = val_map.iter().map(|(k, _)| k.to_string()).collect();
+
+        for assoc in &table_info.assocs {
+            if assoc.data_keys.is_subset(&existing_keys) {
+                let mut val_tuple = Tuple::with_data_prefix(DataKind::Data);
+                for (k, v) in &assoc.val_typing {
+                    let raw = val_map.remove(k.as_str()).unwrap_or(Value::Null);
+                    let processed = v.coerce(raw)?;
+                    val_tuple.push_value(&processed);
+                }
+                key_tuple.overwrite_prefix(assoc.table_id as u32);
+                self.sess.define_raw_key(&key_tuple, Some(&val_tuple), assoc.in_root)?;
+
+            }
+        }
         Ok(())
     }
 }
@@ -209,6 +326,7 @@ mod tests {
     use crate::db::engine::Engine;
     use crate::db::eval::Environment;
     use crate::parser::{Parser, Rule};
+    use crate::relation::tuple::Tuple;
 
     #[test]
     fn test_mutation() {
@@ -251,13 +369,18 @@ mod tests {
             println!("{:#?}", sess.resolve("Person"));
             let s = r#"
                 insert [
-                    {id: 1, name: "Jack"},
+                    {id: 1, name: "Jack", work_id: 4},
                     {id: 2, name: "Joe", habits: ["Balls"], _type: "Person"},
                     {_type: "Friend", _src: 1, _dst: 2, relation: "mate"}
                 ] as Person;
             "#;
             let p = Parser::parse(Rule::file, s).unwrap().next().unwrap();
             sess.run_mutation(p).unwrap();
+            let it = sess.txn.iterator(true, &sess.perm_cf);
+            it.to_first();
+            for (k, v) in it.iter() {
+                println!("K: {:?}, V: {:?}", Tuple::new(k), Tuple::new(v));
+            }
         }
 
         drop(engine);

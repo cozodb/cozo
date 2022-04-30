@@ -56,7 +56,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
     }
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()>;
     fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()>;
-    fn define_raw_key(&mut self, key: OwnTuple, value: Option<OwnTuple>, in_root: bool) -> Result<()>;
+    fn define_raw_key(&self, key: &OwnTuple, value: Option<&OwnTuple>, in_root: bool) -> Result<()>;
     fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
         let depth_code = if in_root { 0 } else { self.get_stack_depth() as i64 };
         let mut tuple = Tuple::with_null_prefix();
@@ -267,10 +267,10 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
             let mut id_key = Tuple::with_null_prefix();
             id_key.push_bool(true);
             id_key.push_int(id);
-            self.define_raw_key(id_key, Some(tuple.clone()), in_root).unwrap();
+            self.define_raw_key(&id_key, Some(&tuple), in_root).unwrap();
         }
         for t in assoc_defs {
-            self.define_raw_key(t, None, in_root).unwrap();
+            self.define_raw_key(&t, None, in_root).unwrap();
         }
         self.define_data(&name, tuple, in_root)
     }
@@ -941,7 +941,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(())
     }
 
-    fn define_raw_key(&mut self, key: OwnTuple, value: Option<OwnTuple>, in_root: bool) -> Result<()> {
+    fn define_raw_key(&self, key: &OwnTuple, value: Option<&OwnTuple>, in_root: bool) -> Result<()> {
         if in_root {
             match value {
                 None => {

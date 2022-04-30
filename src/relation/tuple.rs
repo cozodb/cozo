@@ -317,7 +317,7 @@ impl<T: AsRef<[u8]>> Debug for Tuple<T> {
                 write!(f, "Tuple<{}:{:?}>{{", self.get_prefix(), data_kind)?;
             }
             Err(_) => {
-                write!(f, "Tuple<{}>[", self.get_prefix())?;
+                write!(f, "Tuple<{}>{{", self.get_prefix())?;
             }
         }
         let strings = self.iter().enumerate().map(|(i, v)| format!("{}: {}", i, v))

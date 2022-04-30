@@ -4,7 +4,7 @@ use crate::error::{CozoError, Result};
 use crate::relation::typing::Typing;
 
 #[repr(u32)]
-#[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Clone)]
 pub enum DataKind {
     Data = 0,
     Node = 1,
