@@ -785,6 +785,10 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
                             rkey.push_bool(true);
                             rkey.push_int(id);
                             self.txn.del(false, &self.temp_cf, rkey)?;
+                            let range_start = Tuple::with_prefix(id as u32);
+                            let mut range_end = Tuple::with_prefix(id as u32);
+                            range_end.seal_with_sentinel();
+                            self.txn.del_range(&self.temp_cf, range_start, range_end)?;
                         }
                         _ => {}
                     }
