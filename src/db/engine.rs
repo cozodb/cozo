@@ -273,8 +273,8 @@ mod tests {
                     let mut sess = engine.session().unwrap();
                     println!("In thread {} {}", i, sess.handle.read().unwrap().cf_ident);
                     let gname = format!("abc{}", i);
-                    for _ in 0..10000 {
-                        sess.push_env();
+                    for _ in 0..1000 {
+                        sess.push_env().unwrap();
                         sess.define_variable(&gname, &"xyz".into(), true).unwrap();
                         sess.define_variable("pqr", &"xyz".into(), false).unwrap();
                     }
@@ -290,7 +290,7 @@ mod tests {
                     //     println!("a: {:?} {:?}", key.as_ref(), val.as_ref());
                     //     println!("v: {:?}", Tuple::new(key));
                     // }
-                    for _ in 0..5000 {
+                    for _ in 0..50 {
                         sess.pop_env().unwrap();
                     }
                     // if let Err(e) = sess.commit() {

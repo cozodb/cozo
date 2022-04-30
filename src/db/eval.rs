@@ -25,7 +25,7 @@ use crate::relation::value;
 pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
     fn get_next_storage_id(&mut self, in_root: bool) -> Result<i64>;
     fn get_stack_depth(&self) -> i32;
-    fn push_env(&mut self);
+    fn push_env(&mut self) -> Result<()>;
     fn pop_env(&mut self) -> Result<()>;
     fn set_param(&mut self, name: &str, val: &'t str);
     fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
@@ -754,8 +754,12 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         self.stack_depth
     }
 
-    fn push_env(&mut self) {
+    fn push_env(&mut self) -> Result<()> {
+        if self.stack_depth <= -1024 {
+            return Err(CozoError::LogicError("Stack overflow in env".to_string()));
+        }
         self.stack_depth -= 1;
+        Ok(())
     }
 
     fn pop_env(&mut self) -> Result<()> {
@@ -764,6 +768,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         prefix.push_int(self.stack_depth as i64);
         let it = self.txn.iterator(false, &self.temp_cf);
         it.seek(&prefix);
+        let mut to_delete = vec![];
         for val in it.keys() {
             let cur = Tuple::new(val);
             if cur.starts_with(&prefix) {
@@ -792,9 +797,8 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
                         }
                         _ => {}
                     }
-
-                    self.txn.del(false, &self.temp_cf, cur)?;
-                    self.txn.del(false, &self.temp_cf, ikey)?;
+                    to_delete.push(cur.data.as_ref().to_vec());
+                    to_delete.push(ikey.data.to_vec());
                 }
             } else {
                 break;
@@ -817,8 +821,8 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
                     ikey.push_value(&k);
                 }
 
-                self.txn.del(false, &self.temp_cf, cur)?;
-                self.txn.del(false, &self.temp_cf, ikey)?;
+                to_delete.push(cur.data.as_ref().to_vec());
+                to_delete.push(ikey.data.to_vec());
             } else {
                 break;
             }
@@ -827,6 +831,11 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         if self.stack_depth != 0 {
             self.stack_depth += 1;
         }
+
+        for d in to_delete {
+            self.txn.del(false, &self.temp_cf, &d)?;
+        }
+
         Ok(())
     }
 
