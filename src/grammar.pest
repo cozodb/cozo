@@ -166,3 +166,17 @@ exclude = {"exclude"}
 include = {"include"}
 upsert = {"upsert"}
 insert = {"insert"}
+
+from_pattern = { "from" ~ (from_el ~ ",")* ~ from_el }
+from_el = { simple_from_pattern | node_edge_pattern }
+
+simple_from_pattern = { ident ~ ":" ~ name_in_def }
+
+node_edge_pattern = { node_pattern? ~ (edge_pattern ~ node_pattern)* ~ edge_pattern? }
+node_pattern = {"(" ~ ident? ~ ":" ~ name_in_def ~ ")"}
+edge_pattern = _{ fwd_edge_pattern | bwd_edge_pattern }
+fwd_edge_pattern = { "-" ~ edge_pattern_inner ~ "->" }
+bwd_edge_pattern = { "<-" ~ edge_pattern_inner ~ "-" }
+edge_pattern_inner = _{"[" ~ ident? ~ ":" ~ name_in_def ~ "]"}
+
+where_pattern = { "where" ~ (expr ~ ",")* ~ expr  }

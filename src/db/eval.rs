@@ -33,7 +33,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         data.push_value(val);
         self.define_data(name, data, in_root)
     }
-    fn get_table_info(&self, id: i64, in_root: bool) -> Result<Option<Tuple<T>>>;
+    fn table_data(&self, id: i64, in_root: bool) -> Result<Option<Tuple<T>>>;
     fn resolve(&self, name: &str) -> Result<Option<Tuple<T>>>;
     fn resolve_related_tables(&self, name: &str) -> Result<Vec<(String, Tuple<SlicePtr>)>>;
     fn resolve_param(&self, name: &str) -> Result<Value>;
@@ -845,7 +845,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         self.params.insert(name.to_string(), val);
     }
 
-    fn get_table_info(&self, id: i64, in_root: bool) -> Result<Option<Tuple<SlicePtr>>> {
+    fn table_data(&self, id: i64, in_root: bool) -> Result<Option<Tuple<SlicePtr>>> {
         let mut key = Tuple::with_null_prefix();
         key.push_bool(true);
         key.push_int(id);
