@@ -61,10 +61,10 @@ impl<'a, 't> Session<'a, 't> {
                 _ => unreachable!()
             }
         }
-        println!("{:?}", kind);
-        println!("{:?}", expr);
-        println!("{:?}", default_kind);
-        println!("{:?}", filters);
+        // println!("{:?}", kind);
+        // println!("{:?}", expr);
+        // println!("{:?}", default_kind);
+        // println!("{:?}", filters);
 
         let mut mutation_manager = MutationManager::new(self, default_kind);
         // Coercion
@@ -279,6 +279,43 @@ mod tests {
                 ] as Person;
             "#;
             let p = Parser::parse(Rule::file, s).unwrap().next().unwrap();
+            assert!(sess.run_mutation(p.clone()).is_ok());
+            sess.commit().unwrap();
+            assert!(sess.run_mutation(p.clone()).is_err());
+            sess.rollback().unwrap();
+            let it = sess.txn.iterator(true, &sess.perm_cf);
+            it.to_first();
+            for (k, v) in it.iter() {
+                println!("K: {:?}, V: {:?}", Tuple::new(k), Tuple::new(v));
+            }
+        }
+
+        drop(engine);
+        let _ = fs::remove_dir_all(db_path);
+    }
+
+    #[test]
+    fn test_big_mutation() {
+        let db_path = "_test_big_mutation";
+        let engine = Engine::new(db_path.to_string(), true).unwrap();
+
+        {
+            let mut sess = engine.session().unwrap();
+            let s = fs::read_to_string("test_data/hr.cozo").unwrap();
+            for p in Parser::parse(Rule::file, &s).unwrap() {
+                if p.as_rule() == Rule::EOI {
+                    break;
+                }
+                sess.run_definition(p).unwrap();
+            }
+            sess.commit().unwrap();
+        }
+
+        {
+            let mut sess = engine.session().unwrap();
+            let data = fs::read_to_string("test_data/hr.json").unwrap();
+            let s = format!("insert {};", data);
+            let p = Parser::parse(Rule::file, &s).unwrap().next().unwrap();
             assert!(sess.run_mutation(p.clone()).is_ok());
             sess.commit().unwrap();
             assert!(sess.run_mutation(p.clone()).is_err());

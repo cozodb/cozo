@@ -204,7 +204,7 @@ mod tests {
             let s = "from a:Friend, (b:Person)-[:Friend]->(c:Person), x:Person";
             let parsed = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
             assert_eq!(parsed.as_rule(), Rule::from_pattern);
-            sess.parse_from_pattern(parsed);
+            sess.parse_from_pattern(parsed).unwrap();
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);
