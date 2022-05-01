@@ -168,7 +168,7 @@ upsert = {"upsert"}
 insert = {"insert"}
 
 from_pattern = { "from" ~ (from_el ~ ",")* ~ from_el }
-from_el = { simple_from_pattern | node_edge_pattern }
+from_el = _{ simple_from_pattern | node_edge_pattern }
 
 simple_from_pattern = { ident ~ ":" ~ name_in_def }
 

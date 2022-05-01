@@ -12,6 +12,8 @@ pub struct TableInfo {
     pub table_id: i64,
     pub src_table_id: i64,
     pub dst_table_id: i64,
+    pub src_in_root: bool,
+    pub dst_in_root: bool,
     pub in_root: bool,
     pub data_keys: HashSet<String>,
     pub key_typing: Vec<(String, Typing)>,
@@ -43,12 +45,14 @@ impl<'a, 't> Session<'a, 't> {
                             in_root,
                             src_table_id: -1,
                             dst_table_id: -1,
+                            src_in_root: false,
                             data_keys: val_extractor.iter().map(|(k, _)| k.clone()).collect(),
                             key_typing: key_extractor,
                             val_typing: val_extractor,
                             src_key_typing: vec![],
                             dst_key_typing: vec![],
                             associates: vec![],
+                            dst_in_root: false
                         }
                     }
                     DataKind::Edge => {
@@ -89,12 +93,14 @@ impl<'a, 't> Session<'a, 't> {
                             in_root,
                             src_table_id: src_id,
                             dst_table_id: dst_id,
+                            src_in_root,
                             data_keys: val_extractor.iter().map(|(k, _)| k.clone()).collect(),
                             key_typing: other_key_extractor,
                             val_typing: val_extractor,
                             src_key_typing,
                             dst_key_typing,
                             associates: vec![],
+                            dst_in_root
                         }
                     }
                     _ => return Err(LogicError("Cannot insert into non-tables".to_string()))
@@ -114,12 +120,14 @@ impl<'a, 't> Session<'a, 't> {
                         in_root,
                         src_table_id: -1,
                         dst_table_id: -1,
+                        src_in_root: false,
                         data_keys: t.iter().map(|(k, _)| k.clone()).collect(),
                         key_typing: vec![],
                         val_typing: t,
                         src_key_typing: vec![],
                         dst_key_typing: vec![],
                         associates: vec![],
+                        dst_in_root: false
                     };
 
                     main_coercer.associates.push(coercer);
