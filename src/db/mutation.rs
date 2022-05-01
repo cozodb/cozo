@@ -226,6 +226,7 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::time::Instant;
     use pest::Parser as PestParser;
     use crate::db::engine::Engine;
     use crate::db::eval::Environment;
@@ -302,6 +303,8 @@ mod tests {
         {
             let mut sess = engine.session().unwrap();
             let s = fs::read_to_string("test_data/hr.cozo").unwrap();
+            let start = Instant::now();
+
             for p in Parser::parse(Rule::file, &s).unwrap() {
                 if p.as_rule() == Rule::EOI {
                     break;
@@ -309,6 +312,9 @@ mod tests {
                 sess.run_definition(p).unwrap();
             }
             sess.commit().unwrap();
+            let duration = start.elapsed();
+            println!("Time elapsed {:?}", duration);
+
         }
 
         {
@@ -316,15 +322,22 @@ mod tests {
             let data = fs::read_to_string("test_data/hr.json").unwrap();
             let s = format!("insert {};", data);
             let p = Parser::parse(Rule::file, &s).unwrap().next().unwrap();
+
+            let start = Instant::now();
+
             assert!(sess.run_mutation(p.clone()).is_ok());
             sess.commit().unwrap();
             assert!(sess.run_mutation(p.clone()).is_err());
             sess.rollback().unwrap();
+            let duration = start.elapsed();
+
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
             for (k, v) in it.iter() {
                 println!("K: {:?}, V: {:?}", Tuple::new(k), Tuple::new(v));
             }
+            println!("Time elapsed {:?}", duration);
+
         }
 
         drop(engine);
