@@ -56,6 +56,8 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
     }
     fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()>;
     fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()>;
+    fn key_exists(&self, key: &OwnTuple, in_root: bool) -> Result<bool>;
+    fn del_key(&self, key: &OwnTuple, in_root: bool) -> Result<()>;
     fn define_raw_key(&self, key: &OwnTuple, value: Option<&OwnTuple>, in_root: bool) -> Result<()>;
     fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
         let depth_code = if in_root { 0 } else { self.get_stack_depth() as i64 };
@@ -951,6 +953,16 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
             self.txn.put(false, &self.temp_cf, key, data)?;
             self.txn.put(false, &self.temp_cf, ikey, "")?;
         }
+        Ok(())
+    }
+
+    fn key_exists(&self, key: &OwnTuple, in_root: bool) -> Result<bool> {
+        let res = self.txn.get(in_root, if in_root { &self.perm_cf } else { &self.temp_cf }, key)?;
+        Ok(res.is_some())
+    }
+
+    fn del_key(&self, key: &OwnTuple, in_root: bool) -> Result<()> {
+        self.txn.del(in_root, if in_root { &self.perm_cf } else { &self.temp_cf }, key)?;
         Ok(())
     }
 

@@ -22,11 +22,28 @@ use crate::relation::value::Value;
 ///   * `[table_id, fst_table_id, fst_keys, is_forward, snd_keys, other_keys]` twice, the backward has no data
 /// * Associate
 ///   * Same as the main one
+///
+/// # Logic of the operations
+///
+/// * Insert/Upsert
+///   * Just add the stuff in
+/// * No update or delete: only possible through relational query
+/// * Delete
+///   * Only need the keys
+#[derive(Eq, PartialEq, Clone, Copy, Debug)]
+enum MutationKind {
+    Upsert,
+    Insert
+}
 
 impl<'a, 't> Session<'a, 't> {
     pub fn run_mutation(&mut self, pair: Pair<Rule>) -> Result<()> {
         let mut pairs = pair.into_inner();
-        let kind = pairs.next().unwrap();
+        let kind = match pairs.next().unwrap().as_rule() {
+            Rule::upsert => MutationKind::Upsert,
+            Rule::insert => MutationKind::Insert,
+            _ => unreachable!()
+        };
         let (evaluated, expr) = self.partial_eval(Value::from_pair(pairs.next().unwrap())?)?;
         if !evaluated {
             return Err(LogicError("Mutation encountered unevaluated expression".to_string()));
@@ -52,12 +69,17 @@ impl<'a, 't> Session<'a, 't> {
         let mut mutation_manager = MutationManager::new(self, default_kind);
         // Coercion
 
-        for item in expr {
-            let val_map = match item {
-                Value::Dict(d) => d,
-                _ => return Err(LogicError("Must be structs".to_string()))
-            };
-            mutation_manager.add(val_map)?;
+        match kind {
+            MutationKind::Insert | MutationKind::Upsert => {
+                for item in expr {
+                    let val_map = match item {
+                        Value::Dict(d) => d,
+                        _ => return Err(LogicError("Must be structs".to_string()))
+                    };
+                    mutation_manager.process_insert(kind == MutationKind::Insert, val_map)?;
+                }
+            }
+            _ => todo!()
         }
 
         Ok(())
@@ -203,7 +225,7 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
 
         Ok(info.clone())
     }
-    fn add(&mut self, mut val_map: BTreeMap<Cow<str>, Value>) -> Result<()> {
+    fn process_insert(&mut self, error_on_existing: bool, mut val_map: BTreeMap<Cow<str>, Value>) -> Result<()> {
         let tbl_name = match val_map.get("_type") {
             Some(Value::Text(t)) => t.clone(),
             Some(_) => return Err(LogicError("Table kind must be text".to_string())),
@@ -230,6 +252,9 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                     let raw = val_map.remove(k.as_str()).unwrap_or(Value::Null);
                     let processed = v.coerce(raw)?;
                     val_tuple.push_value(&processed);
+                }
+                if error_on_existing && self.sess.key_exists(&key_tuple, table_info.in_root)? {
+                    return Err(CozoError::KeyConflict(key_tuple));
                 }
                 self.sess.define_raw_key(&key_tuple, Some(&val_tuple), table_info.in_root)?;
             }
@@ -294,6 +319,9 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                     let processed = v.coerce(raw)?;
                     val_tuple.push_value(&processed);
                 }
+                if error_on_existing && self.sess.key_exists(&key_tuple, table_info.in_root)? {
+                    return Err(CozoError::KeyConflict(key_tuple));
+                }
                 self.sess.define_raw_key(&key_tuple, Some(&val_tuple), table_info.in_root)?;
                 self.sess.define_raw_key(&ikey_tuple, Some(&key_tuple), table_info.in_root)?;
             }
@@ -312,7 +340,6 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                 }
                 key_tuple.overwrite_prefix(assoc.table_id as u32);
                 self.sess.define_raw_key(&key_tuple, Some(&val_tuple), assoc.in_root)?;
-
             }
         }
         Ok(())
@@ -375,7 +402,10 @@ mod tests {
                 ] as Person;
             "#;
             let p = Parser::parse(Rule::file, s).unwrap().next().unwrap();
-            sess.run_mutation(p).unwrap();
+            assert!(sess.run_mutation(p.clone()).is_ok());
+            sess.commit().unwrap();
+            assert!(sess.run_mutation(p.clone()).is_err());
+            sess.rollback().unwrap();
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
             for (k, v) in it.iter() {

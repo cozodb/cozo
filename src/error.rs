@@ -4,6 +4,7 @@ use thiserror::Error;
 use cozorocks::BridgeError;
 use crate::parser::Rule;
 use crate::relation::data::DataKind;
+use crate::relation::tuple::OwnTuple;
 use crate::relation::value::{StaticValue};
 
 #[derive(Error, Debug)]
@@ -34,6 +35,12 @@ pub enum CozoError {
 
     #[error("Logic error: {0}")]
     LogicError(String),
+
+    #[error("Key conflict: {0:?}")]
+    KeyConflict(OwnTuple),
+
+    #[error("Key not found: {0:?}")]
+    KeyNotFound(OwnTuple),
 
     #[error("Bad data format {0:?}")]
     BadDataFormat(Vec<u8>),
