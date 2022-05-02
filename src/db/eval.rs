@@ -257,8 +257,8 @@ impl<'s> Session<'s> {
         }
         self.define_data(&name, tuple, in_root)
     }
-    pub fn partial_eval<'a>(&self, value: Value<'a>, params: BTreeMap<String, Value<'a>>,
-                            _table_bindings: BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+    pub fn partial_eval<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
+                            _table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
         match value {
             v @ (Value::Null |
             Value::Bool(_) |
@@ -271,7 +271,7 @@ impl<'s> Session<'s> {
                 let init_vec = Vec::with_capacity(l.len());
                 let res: Result<(bool, Vec<Value>)> = l.into_iter()
                     .try_fold((true, init_vec), |(is_evaluated, mut accum), val| {
-                        let (ev, new_val) = self.partial_eval(val, Default::default(), Default::default())?;
+                        let (ev, new_val) = self.partial_eval(val, &Default::default(), &Default::default())?;
                         accum.push(new_val);
                         Ok((ev && is_evaluated, accum))
                     });
@@ -281,7 +281,7 @@ impl<'s> Session<'s> {
             Value::Dict(d) => {
                 let res: Result<(bool, BTreeMap<Cow<str>, Value>)> = d.into_iter()
                     .try_fold((true, BTreeMap::new()), |(is_evaluated, mut accum), (k, v)| {
-                        let (ev, new_val) = self.partial_eval(v, Default::default(), Default::default())?;
+                        let (ev, new_val) = self.partial_eval(v, &Default::default(), &Default::default())?;
                         accum.insert(k, new_val);
                         Ok((ev && is_evaluated, accum))
                     });
@@ -328,7 +328,7 @@ impl<'s> Session<'s> {
 
     fn coalesce_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().try_fold(vec![], |mut accum, cur| {
-            match self.partial_eval(cur, Default::default(), Default::default()) {
+            match self.partial_eval(cur, &Default::default(), &Default::default()) {
                 Ok((ev, cur)) => {
                     if ev {
                         if cur == Value::Null {
@@ -359,8 +359,8 @@ impl<'s> Session<'s> {
 
     fn add_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -378,8 +378,8 @@ impl<'s> Session<'s> {
     }
     fn sub_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -396,7 +396,7 @@ impl<'s> Session<'s> {
     }
     fn minus_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -411,7 +411,7 @@ impl<'s> Session<'s> {
     }
     fn negate_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -425,8 +425,8 @@ impl<'s> Session<'s> {
     }
     fn pow_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -443,8 +443,8 @@ impl<'s> Session<'s> {
     }
     fn gt_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -461,8 +461,8 @@ impl<'s> Session<'s> {
     }
     fn lt_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -479,8 +479,8 @@ impl<'s> Session<'s> {
     }
     fn ge_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -497,8 +497,8 @@ impl<'s> Session<'s> {
     }
     fn le_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -515,8 +515,8 @@ impl<'s> Session<'s> {
     }
     fn mod_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -530,8 +530,8 @@ impl<'s> Session<'s> {
     }
     fn mul_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -548,8 +548,8 @@ impl<'s> Session<'s> {
     }
     fn div_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -566,8 +566,8 @@ impl<'s> Session<'s> {
     }
     fn eq_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -578,8 +578,8 @@ impl<'s> Session<'s> {
     }
     fn ne_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
-        let (le, left) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
-        let (re, right) = self.partial_eval(args.next().unwrap(), Default::default(), Default::default())?;
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        let (re, right) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
         if left == Value::Null || right == Value::Null {
             return Ok((true, Value::Null));
         }
@@ -589,7 +589,7 @@ impl<'s> Session<'s> {
         Ok((true, (left != right).into()))
     }
     fn or_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
-        let res = args.into_iter().map(|v| self.partial_eval(v, Default::default(), Default::default()))
+        let res = args.into_iter().map(|v| self.partial_eval(v, &Default::default(), &Default::default()))
             .try_fold(
                 (true, false, vec![]),
                 |(is_evaluated, has_null, mut collected), x| {
@@ -649,7 +649,7 @@ impl<'s> Session<'s> {
         }
     }
     fn and_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
-        let res = args.into_iter().map(|v| self.partial_eval(v, Default::default(), Default::default()))
+        let res = args.into_iter().map(|v| self.partial_eval(v, &Default::default(), &Default::default()))
             .try_fold(
                 (true, false, vec![]),
                 |(is_evaluated, has_null, mut collected), x| {
@@ -1043,7 +1043,7 @@ mod tests {
             let (b, v) = sess.partial_eval(
                 Value::from_pair(Parser::parse(Rule::expr, s)
                     .unwrap().next().unwrap()).unwrap(),
-                Default::default(), Default::default()).unwrap();
+                &Default::default(), &Default::default()).unwrap();
             (b, v.to_static())
         };
 

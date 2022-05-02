@@ -36,7 +36,7 @@ enum MutationKind {
 }
 
 impl<'a> Session<'a> {
-    pub fn run_mutation(&mut self, pair: Pair<Rule>) -> Result<()> {
+    pub fn run_mutation(&mut self, pair: Pair<Rule>, params: &BTreeMap<String, Value>) -> Result<()> {
         let mut pairs = pair.into_inner();
         let kind = match pairs.next().unwrap().as_rule() {
             Rule::upsert => MutationKind::Upsert,
@@ -45,7 +45,8 @@ impl<'a> Session<'a> {
         };
         let (evaluated, expr) = self.partial_eval(
             Value::from_pair(pairs.next().unwrap())?,
-            Default::default(), Default::default())?;
+            params,
+            &Default::default())?;
         if !evaluated {
             return Err(LogicError("Mutation encountered unevaluated expression".to_string()));
         }
@@ -226,12 +227,14 @@ impl<'a, 'b> MutationManager<'a, 'b> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::fs;
     use std::time::Instant;
     use pest::Parser as PestParser;
     use crate::db::engine::Engine;
     use crate::parser::{Parser, Rule};
     use crate::relation::tuple::Tuple;
+    use crate::relation::value::Value;
 
     #[test]
     fn test_mutation() {
@@ -280,9 +283,9 @@ mod tests {
                 ] as Person;
             "#;
             let p = Parser::parse(Rule::file, s).unwrap().next().unwrap();
-            assert!(sess.run_mutation(p.clone()).is_ok());
+            assert!(sess.run_mutation(p.clone(), &Default::default()).is_ok());
             sess.commit().unwrap();
-            assert!(sess.run_mutation(p.clone()).is_err());
+            assert!(sess.run_mutation(p.clone(), &Default::default()).is_err());
             sess.rollback().unwrap();
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
@@ -319,14 +322,17 @@ mod tests {
         {
             let mut sess = engine.session().unwrap();
             let data = fs::read_to_string("test_data/hr.json").unwrap();
-            let s = format!("insert {};", data);
+            let value = Value::parse_str(&data).unwrap();
+            assert!(value.is_evaluated());
+            let s = "insert $data;";
             let p = Parser::parse(Rule::file, &s).unwrap().next().unwrap();
+            let params = BTreeMap::from([("$data".into(), value)]);
 
             let start = Instant::now();
 
-            assert!(sess.run_mutation(p.clone()).is_ok());
+            assert!(sess.run_mutation(p.clone(), &params).is_ok());
             sess.commit().unwrap();
-            assert!(sess.run_mutation(p.clone()).is_err());
+            assert!(sess.run_mutation(p.clone(), &params).is_err());
             sess.rollback().unwrap();
             let duration = start.elapsed();
 

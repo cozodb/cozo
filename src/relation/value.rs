@@ -4,10 +4,11 @@ use std::fmt::{Display, Formatter, Write};
 use lazy_static::lazy_static;
 use pest::prec_climber::{Assoc, PrecClimber, Operator};
 use ordered_float::OrderedFloat;
+use pest::Parser as PestParser;
 use pest::iterators::Pair;
 use uuid::Uuid;
-use crate::parser::Rule;
-use crate::error::Result;
+use crate::parser::{Parser, Rule};
+use crate::error::{CozoError, Result};
 use crate::parser::number::parse_int;
 use crate::parser::text_identifier::parse_string;
 
@@ -139,6 +140,13 @@ impl<'a> Value<'a> {
     #[inline]
     pub fn from_pair(pair: pest::iterators::Pair<'a, Rule>) -> Result<Self> {
         PREC_CLIMBER.climb(pair.into_inner(), build_expr_primary, build_expr_infix)
+    }
+
+    #[inline]
+    pub fn parse_str(s: &'a str) -> Result<Self> {
+        let pair = Parser::parse(Rule::expr, s)?.next();
+        let pair = pair.ok_or_else(|| CozoError::LogicError("Parsing value failed".to_string()))?;
+        Value::from_pair(pair)
     }
 }
 
