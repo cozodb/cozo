@@ -43,7 +43,9 @@ impl<'a, 't> Session<'a, 't> {
             Rule::insert => MutationKind::Insert,
             _ => unreachable!()
         };
-        let (evaluated, expr) = self.partial_eval(Value::from_pair(pairs.next().unwrap())?)?;
+        let (evaluated, expr) = self.partial_eval(
+            Value::from_pair(pairs.next().unwrap())?,
+            Default::default(), Default::default())?;
         if !evaluated {
             return Err(LogicError("Mutation encountered unevaluated expression".to_string()));
         }
@@ -312,7 +314,6 @@ mod tests {
             sess.commit().unwrap();
             let duration = start.elapsed();
             println!("Time elapsed {:?}", duration);
-
         }
 
         {
@@ -335,7 +336,6 @@ mod tests {
                 println!("K: {:?}, V: {:?}", Tuple::new(k), Tuple::new(v));
             }
             println!("Time elapsed {:?}", duration);
-
         }
 
         drop(engine);
