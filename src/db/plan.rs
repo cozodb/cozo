@@ -44,6 +44,8 @@ use crate::parser::Rule;
 use crate::error::{CozoError, Result};
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::data::DataKind;
+use crate::relation::value;
+use crate::relation::value::Value;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum FromEl {
@@ -175,6 +177,11 @@ impl<'a> Session<'a> {
 
         Ok((table_name, name.map(|v| v.to_string()), table_info))
     }
+
+    pub fn parse_where_pattern(&self, pair: Pair<Rule>) -> Result<Value> {
+        let conditions = pair.into_inner().map(Value::from_pair).collect::<Result<Vec<_>>>()?;
+        Ok(Value::Apply(value::OP_AND.into(), conditions).to_static())
+    }
 }
 
 #[cfg(test)]
@@ -236,9 +243,8 @@ mod tests {
 
             let s = "where b.id > c.id || x.name.is_null(), a.id == 5, x.name == 'Joe', x.name.len() == 3";
             let parsed = Parser::parse(Rule::where_pattern, s).unwrap().next().unwrap();
-            let first = parsed.into_inner().next().unwrap();
-            println!("{:#?}", first);
-            println!("{:#?}", Value::from_pair(first));
+            let where_result = sess.parse_where_pattern(parsed).unwrap();
+            println!("{:#?}", where_result);
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);
