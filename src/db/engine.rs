@@ -201,7 +201,6 @@ pub enum SessionStatus {
 #[cfg(test)]
 mod tests {
     use std::{fs, thread};
-    use crate::db::eval::Environment;
     use crate::relation::tuple::Tuple;
     use super::*;
 

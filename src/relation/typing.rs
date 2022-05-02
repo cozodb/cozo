@@ -5,7 +5,6 @@ use crate::relation::value::Value;
 use pest::Parser as PestParser;
 use cozorocks::SlicePtr;
 use crate::db::engine::Session;
-use crate::db::eval::{Environment};
 use crate::parser::Parser;
 use crate::parser::Rule;
 use crate::parser::text_identifier::build_name_in_def;
@@ -66,7 +65,7 @@ impl Typing {
 }
 
 impl Typing {
-    pub fn from_pair<'t, T: AsRef<[u8]>, E: Environment<'t, T>>(pair: Pair<Rule>, env: Option<&E>) -> Result<Self> {
+    pub fn from_pair<'a, 't>(pair: Pair<Rule>, env: Option<&Session<'a, 't>>) -> Result<Self> {
         Ok(match pair.as_rule() {
             Rule::simple_type => match pair.as_str() {
                 "Any" => Typing::Any,
@@ -194,7 +193,7 @@ impl TryFrom<&str> for Typing {
 
     fn try_from(value: &str) -> Result<Self> {
         let pair = Parser::parse(Rule::typing, value)?.next().unwrap();
-        Typing::from_pair::<SlicePtr, Session>(pair, None)
+        Typing::from_pair(pair, None)
     }
 }
 

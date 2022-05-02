@@ -22,21 +22,12 @@ use crate::relation::value;
 /// `[Null, Int, Text, Int, Text]` inverted index for related tables
 /// `[True, Int]` table info, value is key
 
-pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
-    fn get_next_storage_id(&mut self, in_root: bool) -> Result<i64>;
-    fn get_stack_depth(&self) -> i32;
-    fn push_env(&mut self) -> Result<()>;
-    fn pop_env(&mut self) -> Result<()>;
-    fn set_param(&mut self, name: &str, val: &'t str);
-    fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
+impl<'s, 't> Session<'s, 't> {
+    pub fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
         let mut data = Tuple::with_data_prefix(DataKind::Value);
         data.push_value(val);
         self.define_data(name, data, in_root)
     }
-    fn table_data(&self, id: i64, in_root: bool) -> Result<Option<Tuple<T>>>;
-    fn resolve(&self, name: &str) -> Result<Option<Tuple<T>>>;
-    fn resolve_related_tables(&self, name: &str) -> Result<Vec<(String, Tuple<SlicePtr>)>>;
-    fn resolve_param(&self, name: &str) -> Result<Value>;
     fn resolve_value(&self, name: &str) -> Result<Option<Value>> {
         if name.starts_with('&') {
             self.resolve_param(name).map(|v| Some(v.clone()))
@@ -54,11 +45,6 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
             }
         }
     }
-    fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()>;
-    fn define_data(&mut self, name: &str, data: OwnTuple, in_root: bool) -> Result<()>;
-    fn key_exists(&self, key: &OwnTuple, in_root: bool) -> Result<bool>;
-    fn del_key(&self, key: &OwnTuple, in_root: bool) -> Result<()>;
-    fn define_raw_key(&self, key: &OwnTuple, value: Option<&OwnTuple>, in_root: bool) -> Result<()>;
     fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
         let depth_code = if in_root { 0 } else { self.get_stack_depth() as i64 };
         let mut tuple = Tuple::with_null_prefix();
@@ -231,7 +217,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         Ok((name, tuple, index_data))
     }
 
-    fn extract_table_id(src_tbl: Tuple<T>) -> Result<(DataKind, bool, i64)> {
+    fn extract_table_id<T: AsRef<[u8]>>(src_tbl: Tuple<T>) -> Result<(DataKind, bool, i64)> {
         let kind = src_tbl.data_kind()?;
         match kind {
             DataKind::Data | DataKind::Value | DataKind::Type => return Err(CozoError::UnexpectedDataKind(kind)),
@@ -252,7 +238,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         tuple.push_null(); // TODO default values for cols
         Ok((name, tuple, vec![]))
     }
-    fn run_definition(&mut self, pair: Pair<Rule>) -> Result<()> {
+    pub fn run_definition(&mut self, pair: Pair<Rule>) -> Result<()> {
         let in_root = match pair.as_rule() {
             Rule::global_def => true,
             Rule::local_def => false,
@@ -276,7 +262,7 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
         }
         self.define_data(&name, tuple, in_root)
     }
-    fn partial_eval<'a>(&self, value: Value<'a>) -> Result<(bool, Value<'a>)> {
+    pub fn partial_eval<'a>(&self, value: Value<'a>) -> Result<(bool, Value<'a>)> {
         match value {
             v @ (Value::Null |
             Value::Bool(_) |
@@ -722,10 +708,8 @@ pub trait Environment<'t, T: AsRef<[u8]>> where Self: Sized {
             Err(Err(e)) => Err(e)
         }
     }
-}
 
 
-impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
     fn get_next_storage_id(&mut self, in_root: bool) -> Result<i64> {
         // TODO: deal with wrapping problem
         let mut key_entry = Tuple::with_null_prefix();
@@ -756,7 +740,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         self.stack_depth
     }
 
-    fn push_env(&mut self) -> Result<()> {
+    pub fn push_env(&mut self) -> Result<()> {
         if self.stack_depth <= -1024 {
             return Err(CozoError::LogicError("Stack overflow in env".to_string()));
         }
@@ -764,7 +748,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(())
     }
 
-    fn pop_env(&mut self) -> Result<()> {
+    pub fn pop_env(&mut self) -> Result<()> {
         // Remove all stuff starting with the stack depth from the temp session
         let mut prefix = Tuple::with_null_prefix();
         prefix.push_int(self.stack_depth as i64);
@@ -845,7 +829,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         self.params.insert(name.to_string(), val);
     }
 
-    fn table_data(&self, id: i64, in_root: bool) -> Result<Option<Tuple<SlicePtr>>> {
+    pub fn table_data(&self, id: i64, in_root: bool) -> Result<Option<Tuple<SlicePtr>>> {
         let mut key = Tuple::with_null_prefix();
         key.push_bool(true);
         key.push_int(id);
@@ -858,7 +842,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         }
     }
 
-    fn resolve(&self, name: &str) -> Result<Option<Tuple<SlicePtr>>> {
+    pub fn resolve(&self, name: &str) -> Result<Option<Tuple<SlicePtr>>> {
         let mut tuple = Tuple::with_null_prefix();
         tuple.push_str(name);
         let it = self.txn.iterator(false, &self.temp_cf);
@@ -874,7 +858,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(res)
     }
 
-    fn resolve_related_tables(&self, name: &str) -> Result<Vec<(String, Tuple<SlicePtr>)>> {
+    pub fn resolve_related_tables(&self, name: &str) -> Result<Vec<(String, Tuple<SlicePtr>)>> {
         let mut prefix = Tuple::with_prefix(0);
         prefix.push_null();
         prefix.push_str(name);
@@ -956,7 +940,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(())
     }
 
-    fn key_exists(&self, key: &OwnTuple, in_root: bool) -> Result<bool> {
+    pub fn key_exists(&self, key: &OwnTuple, in_root: bool) -> Result<bool> {
         let res = self.txn.get(in_root, if in_root { &self.perm_cf } else { &self.temp_cf }, key)?;
         Ok(res.is_some())
     }
@@ -966,7 +950,7 @@ impl<'a, 't> Environment<'t, SlicePtr> for Session<'a, 't> {
         Ok(())
     }
 
-    fn define_raw_key(&self, key: &OwnTuple, value: Option<&OwnTuple>, in_root: bool) -> Result<()> {
+    pub fn define_raw_key(&self, key: &OwnTuple, value: Option<&OwnTuple>, in_root: bool) -> Result<()> {
         if in_root {
             match value {
                 None => {

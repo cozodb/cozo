@@ -41,7 +41,7 @@ use crate::db::engine::Session;
 use crate::db::table::TableInfo;
 use crate::error::CozoError::LogicError;
 use crate::parser::Rule;
-use crate::error::Result;
+use crate::error::{CozoError, Result};
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::data::DataKind;
 
@@ -74,7 +74,7 @@ pub struct EdgeOrNodeEl {
 }
 
 impl<'a, 't> Session<'a, 't> {
-    pub fn parse_from_pattern(&self, pair: Pair<Rule>) -> Result<()> {
+    pub fn parse_from_pattern(&self, pair: Pair<Rule>) -> Result<Vec<FromEl>> {
         let res: Result<Vec<_>> = pair.into_inner().map(|p| {
             match p.as_rule() {
                 Rule::simple_from_pattern => self.parse_simple_from_pattern(p),
@@ -82,10 +82,10 @@ impl<'a, 't> Session<'a, 't> {
                 _ => unreachable!()
             }
         }).collect();
-        Ok(())
+        res
     }
 
-    fn parse_simple_from_pattern(&self, pair: Pair<Rule>) -> Result<()> {
+    fn parse_simple_from_pattern(&self, pair: Pair<Rule>) -> Result<FromEl> {
         let mut pairs = pair.into_inner();
         let name = pairs.next().unwrap().as_str();
         if name.starts_with('_') {
@@ -94,11 +94,10 @@ impl<'a, 't> Session<'a, 't> {
         let table_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let table_info = self.get_table_info(&table_name)?;
         let ret = FromEl::Simple(Box::new(SimpleFromEl { binding: name.to_string(), table: table_name, info: table_info }));
-        println!("{:#?}", ret);
-        Ok(())
+        Ok(ret)
     }
 
-    fn parse_node_edge_pattern(&self, pair: Pair<Rule>) -> Result<()> {
+    fn parse_node_edge_pattern(&self, pair: Pair<Rule>) -> Result<FromEl> {
         let res: Result<Vec<_>> = pair.into_inner().map(|p| {
             match p.as_rule() {
                 Rule::node_pattern => self.parse_node_pattern(p),
@@ -107,9 +106,30 @@ impl<'a, 't> Session<'a, 't> {
                 _ => unreachable!()
             }
         }).collect();
-        // TODO check the chain connects!
-        println!("{:#?}", res);
-        Ok(())
+        let res = res?;
+        let connects = res.windows(2).all(|v| {
+            let left = &v[0];
+            let right = &v[1];
+            match (&left.kind, &right.kind) {
+                (EdgeOrNodeKind::FwdEdge, EdgeOrNodeKind::Node) => {
+                    left.info.dst_table_id == right.info.table_id
+                }
+                (EdgeOrNodeKind::BwdEdge, EdgeOrNodeKind::Node) => {
+                    left.info.src_table_id == right.info.table_id
+                }
+                (EdgeOrNodeKind::Node, EdgeOrNodeKind::FwdEdge) => {
+                    left.info.table_id == right.info.src_table_id
+                }
+                (EdgeOrNodeKind::Node, EdgeOrNodeKind::BwdEdge) => {
+                    left.info.table_id == right.info.dst_table_id
+                }
+                _ => unreachable!()
+            }
+        });
+        if !connects {
+            return Err(CozoError::LogicError("Chain does not connect".to_string()));
+        }
+        Ok(FromEl::Chain(res))
     }
 
     fn parse_node_pattern(&self, pair: Pair<Rule>) -> Result<EdgeOrNodeEl> {
@@ -164,7 +184,6 @@ mod tests {
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
     use crate::db::engine::Engine;
-    use crate::db::eval::Environment;
 
     #[test]
     fn parse_patterns() {
@@ -182,6 +201,10 @@ mod tests {
 
                 create edge (Person)-[Friend]->(Person) {
                     relation: ?Text
+                }
+
+                create node Z {
+                    *id: Text
                 }
 
                 create assoc WorkInfo : Person {
@@ -205,6 +228,11 @@ mod tests {
             let parsed = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
             assert_eq!(parsed.as_rule(), Rule::from_pattern);
             sess.parse_from_pattern(parsed).unwrap();
+
+            let s = "from a:Friend, (b:Person)-[:Friend]->(c:Z), x:Person";
+            let parsed = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
+            assert_eq!(parsed.as_rule(), Rule::from_pattern);
+            assert!(sess.parse_from_pattern(parsed).is_err());
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

@@ -1,20 +1,37 @@
 use std::collections::HashSet;
 use crate::db::engine::Session;
-use crate::db::eval::Environment;
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::LogicError;
 use crate::relation::data::DataKind;
 use crate::relation::typing::Typing;
 
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+pub struct TableId {
+    pub in_root: bool,
+    pub id: i64,
+}
+
+impl TableId {
+    pub fn new(in_root: bool, id: i64) -> Self {
+        TableId { in_root, id }
+    }
+    pub fn is_valid(&self) -> bool {
+        self.id >= 0
+    }
+}
+
+impl Default for TableId {
+    fn default() -> Self {
+        TableId { in_root: false, id: -1 }
+    }
+}
+
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct TableInfo {
     pub kind: DataKind,
-    pub table_id: i64,
-    pub src_table_id: i64,
-    pub dst_table_id: i64,
-    pub src_in_root: bool,
-    pub dst_in_root: bool,
-    pub in_root: bool,
+    pub table_id: TableId,
+    pub src_table_id: TableId,
+    pub dst_table_id: TableId,
     pub data_keys: HashSet<String>,
     pub key_typing: Vec<(String, Typing)>,
     pub val_typing: Vec<(String, Typing)>,
@@ -38,21 +55,19 @@ impl<'a, 't> Session<'a, 't> {
                             .extract_named_tuple().ok_or_else(|| CozoError::LogicError("Corrupt data".to_string()))?;
                         let in_root = tpl.get_bool(0).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
                         let table_id = tpl.get_int(1).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
+                        let table_id = TableId::new(in_root, table_id);
 
                         TableInfo {
                             kind: DataKind::Node,
                             table_id,
-                            in_root,
-                            src_table_id: -1,
-                            dst_table_id: -1,
-                            src_in_root: false,
+                            src_table_id: Default::default(),
+                            dst_table_id: Default::default(),
                             data_keys: val_extractor.iter().map(|(k, _)| k.clone()).collect(),
                             key_typing: key_extractor,
                             val_typing: val_extractor,
                             src_key_typing: vec![],
                             dst_key_typing: vec![],
                             associates: vec![],
-                            dst_in_root: false
                         }
                     }
                     DataKind::Edge => {
@@ -66,10 +81,12 @@ impl<'a, 't> Session<'a, 't> {
                             .ok_or_else(|| CozoError::LogicError("Src in root extraction failed".to_string()))?;
                         let src_id = tpl.get_int(3)
                             .ok_or_else(|| CozoError::LogicError("Src id extraction failed".to_string()))?;
+                        let src_table_id = TableId::new(src_in_root, src_id);
                         let dst_in_root = tpl.get_bool(4)
                             .ok_or_else(|| CozoError::LogicError("Dst in root extraction failed".to_string()))?;
                         let dst_id = tpl.get_int(5)
                             .ok_or_else(|| CozoError::LogicError("Dst id extraction failed".to_string()))?;
+                        let dst_table_id = TableId::new(dst_in_root, dst_id);
                         let src = self.table_data(src_id, src_in_root)?
                             .ok_or_else(|| CozoError::LogicError("Getting src failed".to_string()))?;
                         let src_key = Typing::try_from(src.get_text(2)
@@ -86,21 +103,19 @@ impl<'a, 't> Session<'a, 't> {
 
                         let in_root = tpl.get_bool(0).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
                         let table_id = tpl.get_int(1).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
+                        let table_id = TableId::new(in_root, table_id);
 
                         TableInfo {
                             kind: DataKind::Edge,
                             table_id,
-                            in_root,
-                            src_table_id: src_id,
-                            dst_table_id: dst_id,
-                            src_in_root,
+                            src_table_id,
+                            dst_table_id,
                             data_keys: val_extractor.iter().map(|(k, _)| k.clone()).collect(),
                             key_typing: other_key_extractor,
                             val_typing: val_extractor,
                             src_key_typing,
                             dst_key_typing,
                             associates: vec![],
-                            dst_in_root
                         }
                     }
                     _ => return Err(LogicError("Cannot insert into non-tables".to_string()))
@@ -113,21 +128,19 @@ impl<'a, 't> Session<'a, 't> {
                         .extract_named_tuple().ok_or_else(|| CozoError::LogicError("Corrupt data".to_string()))?;
                     let in_root = d.get_bool(0).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
                     let table_id = d.get_int(1).ok_or_else(|| CozoError::LogicError("Cannot extract in root".to_string()))?;
+                    let table_id = TableId::new(in_root, table_id);
 
                     let coercer = TableInfo {
                         kind: DataKind::Assoc,
                         table_id,
-                        in_root,
-                        src_table_id: -1,
-                        dst_table_id: -1,
-                        src_in_root: false,
+                        src_table_id: Default::default(),
+                        dst_table_id: Default::default(),
                         data_keys: t.iter().map(|(k, _)| k.clone()).collect(),
                         key_typing: vec![],
                         val_typing: t,
                         src_key_typing: vec![],
                         dst_key_typing: vec![],
                         associates: vec![],
-                        dst_in_root: false
                     };
 
                     main_coercer.associates.push(coercer);

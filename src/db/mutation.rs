@@ -4,7 +4,6 @@ use std::collections::{BTreeMap, HashSet};
 use std::rc::Rc;
 use pest::iterators::Pair;
 use crate::db::engine::Session;
-use crate::db::eval::Environment;
 use crate::db::table::TableInfo;
 use crate::error::CozoError::LogicError;
 use crate::error::{CozoError, Result};
@@ -117,7 +116,7 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
 
         match table_info.kind {
             DataKind::Node => {
-                key_tuple = Tuple::with_prefix(table_info.table_id as u32);
+                key_tuple = Tuple::with_prefix(table_info.table_id.id as u32);
                 for (k, v) in &table_info.key_typing {
                     let raw = val_map.remove(k.as_str()).unwrap_or(Value::Null);
                     let processed = v.coerce(raw)?;
@@ -130,17 +129,17 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                     let processed = v.coerce(raw)?;
                     val_tuple.push_value(&processed);
                 }
-                if error_on_existing && self.sess.key_exists(&key_tuple, table_info.in_root)? {
+                if error_on_existing && self.sess.key_exists(&key_tuple, table_info.table_id.in_root)? {
                     return Err(CozoError::KeyConflict(key_tuple));
                 }
-                self.sess.define_raw_key(&key_tuple, Some(&val_tuple), table_info.in_root)?;
+                self.sess.define_raw_key(&key_tuple, Some(&val_tuple), table_info.table_id.in_root)?;
             }
             DataKind::Edge => {
-                key_tuple = Tuple::with_prefix(table_info.table_id as u32);
-                key_tuple.push_int(table_info.src_table_id);
+                key_tuple = Tuple::with_prefix(table_info.table_id.id as u32);
+                key_tuple.push_int(table_info.src_table_id.id);
 
-                let mut ikey_tuple = Tuple::with_prefix(table_info.table_id as u32);
-                ikey_tuple.push_int(table_info.dst_table_id);
+                let mut ikey_tuple = Tuple::with_prefix(table_info.table_id.id as u32);
+                ikey_tuple.push_int(table_info.dst_table_id.id);
 
                 let mut val_tuple = Tuple::with_data_prefix(DataKind::Data);
 
@@ -196,11 +195,11 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                     let processed = v.coerce(raw)?;
                     val_tuple.push_value(&processed);
                 }
-                if error_on_existing && self.sess.key_exists(&key_tuple, table_info.in_root)? {
+                if error_on_existing && self.sess.key_exists(&key_tuple, table_info.table_id.in_root)? {
                     return Err(CozoError::KeyConflict(key_tuple));
                 }
-                self.sess.define_raw_key(&key_tuple, Some(&val_tuple), table_info.in_root)?;
-                self.sess.define_raw_key(&ikey_tuple, Some(&key_tuple), table_info.in_root)?;
+                self.sess.define_raw_key(&key_tuple, Some(&val_tuple), table_info.table_id.in_root)?;
+                self.sess.define_raw_key(&ikey_tuple, Some(&key_tuple), table_info.table_id.in_root)?;
             }
             _ => unreachable!()
         }
@@ -215,8 +214,8 @@ impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
                     let processed = v.coerce(raw)?;
                     val_tuple.push_value(&processed);
                 }
-                key_tuple.overwrite_prefix(assoc.table_id as u32);
-                self.sess.define_raw_key(&key_tuple, Some(&val_tuple), assoc.in_root)?;
+                key_tuple.overwrite_prefix(assoc.table_id.id as u32);
+                self.sess.define_raw_key(&key_tuple, Some(&val_tuple), assoc.table_id.in_root)?;
             }
         }
         Ok(())
@@ -229,7 +228,6 @@ mod tests {
     use std::time::Instant;
     use pest::Parser as PestParser;
     use crate::db::engine::Engine;
-    use crate::db::eval::Environment;
     use crate::parser::{Parser, Rule};
     use crate::relation::tuple::Tuple;
 
