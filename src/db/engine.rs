@@ -2,7 +2,6 @@
 // will be shared among threads
 
 
-use std::collections::BTreeMap;
 use cozorocks::*;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -108,26 +107,24 @@ impl Engine {
             perm_cf: SharedPtr::null(),
             temp_cf: SharedPtr::null(),
             handle,
-            params: BTreeMap::default(),
         };
         sess.start()?;
         Ok(sess)
     }
 }
 
-pub struct Session<'a, 'b> {
+pub struct Session<'a> {
     pub engine: &'a Engine,
     pub stack_depth: i32,
     pub handle: Arc<RwLock<SessionHandle>>,
     pub txn: TransactionPtr,
     pub perm_cf: SharedPtr<ColumnFamilyHandle>,
     pub temp_cf: SharedPtr<ColumnFamilyHandle>,
-    pub params: BTreeMap<String, &'b str>,
 }
 // every session has its own column family to play with
 // metadata are stored in table 0
 
-impl<'a, 'b> Session<'a, 'b> {
+impl<'a> Session<'a> {
     pub fn start(&mut self) -> Result<()> {
         self.perm_cf = self.engine.db.default_cf();
         assert!(!self.perm_cf.is_null());
@@ -172,7 +169,7 @@ impl<'a, 'b> Session<'a, 'b> {
     }
 }
 
-impl<'a, 't> Drop for Session<'a, 't> {
+impl<'a> Drop for Session<'a> {
     fn drop(&mut self) {
         if let Err(e) = self.finish_work() {
             eprintln!("Dropping session failed {:?}", e);

@@ -35,7 +35,7 @@ enum MutationKind {
     Insert,
 }
 
-impl<'a, 't> Session<'a, 't> {
+impl<'a> Session<'a> {
     pub fn run_mutation(&mut self, pair: Pair<Rule>) -> Result<()> {
         let mut pairs = pair.into_inner();
         let kind = match pairs.next().unwrap().as_rule() {
@@ -54,11 +54,11 @@ impl<'a, 't> Session<'a, 't> {
             _ => return Err(LogicError("Mutation requires iterator of values".to_string()))
         };
         let mut default_kind = None;
-        let mut filters: Option<()> = None;
+        // let mut filters: Option<()> = None;
         for p in pairs {
             match p.as_rule() {
                 Rule::name_in_def => default_kind = Some(build_name_in_def(p, true)?),
-                Rule::mutation_filter => filters = Some(()), // TODO
+                Rule::mutation_filter => todo!(), // filters = Some(()), // TODO
                 _ => unreachable!()
             }
         }
@@ -82,14 +82,14 @@ impl<'a, 't> Session<'a, 't> {
     }
 }
 
-struct MutationManager<'a, 'b, 't> {
-    sess: &'a Session<'b, 't>,
+struct MutationManager<'a, 'b> {
+    sess: &'a Session<'b>,
     cache: RefCell<BTreeMap<String, Rc<TableInfo>>>,
     default_tbl: Option<String>,
 }
 
-impl<'a, 'b, 't> MutationManager<'a, 'b, 't> {
-    fn new(sess: &'a Session<'b, 't>, default_tbl: Option<String>) -> Self {
+impl<'a, 'b> MutationManager<'a, 'b> {
+    fn new(sess: &'a Session<'b>, default_tbl: Option<String>) -> Self {
         Self { sess, cache: RefCell::new(BTreeMap::new()), default_tbl }
     }
     fn get_table_info(&self, tbl_name: Cow<str>) -> Result<Rc<TableInfo>> {

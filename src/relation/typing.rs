@@ -3,7 +3,6 @@ use pest::iterators::Pair;
 use crate::error::{Result, CozoError};
 use crate::relation::value::Value;
 use pest::Parser as PestParser;
-use cozorocks::SlicePtr;
 use crate::db::engine::Session;
 use crate::parser::Parser;
 use crate::parser::Rule;
@@ -65,7 +64,7 @@ impl Typing {
 }
 
 impl Typing {
-    pub fn from_pair<'a, 't>(pair: Pair<Rule>, env: Option<&Session<'a, 't>>) -> Result<Self> {
+    pub fn from_pair<'a, 't>(pair: Pair<Rule>, env: Option<&Session<'a>>) -> Result<Self> {
         Ok(match pair.as_rule() {
             Rule::simple_type => match pair.as_str() {
                 "Any" => Typing::Any,
@@ -146,10 +145,10 @@ impl Typing {
                     _ => Err(CozoError::TypeMismatch)
                 }
             }
-            Typing::UnnamedTuple(ut) => {
+            Typing::UnnamedTuple(_ut) => {
                 todo!()
             }
-            Typing::NamedTuple(nt) => {
+            Typing::NamedTuple(_nt) => {
                 todo!()
             }
             Typing::Any => unreachable!(),

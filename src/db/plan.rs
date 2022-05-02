@@ -73,7 +73,7 @@ pub struct EdgeOrNodeEl {
     pub kind: EdgeOrNodeKind,
 }
 
-impl<'a, 't> Session<'a, 't> {
+impl<'a> Session<'a> {
     pub fn parse_from_pattern(&self, pair: Pair<Rule>) -> Result<Vec<FromEl>> {
         let res: Result<Vec<_>> = pair.into_inner().map(|p| {
             match p.as_rule() {
@@ -180,7 +180,7 @@ impl<'a, 't> Session<'a, 't> {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use super::*;
+    // use super::*;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
     use crate::db::engine::Engine;

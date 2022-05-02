@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
-use pest::Parser as PestParser;
 use pest::iterators::{Pair, Pairs};
 use cozorocks::{SlicePtr};
 use crate::db::engine::{Session};
@@ -10,7 +9,7 @@ use crate::relation::value::{Value};
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::LogicError;
 use crate::relation::data::DataKind;
-use crate::parser::{Parser, Rule};
+use crate::parser::{Rule};
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::value;
 
@@ -22,16 +21,13 @@ use crate::relation::value;
 /// `[Null, Int, Text, Int, Text]` inverted index for related tables
 /// `[True, Int]` table info, value is key
 
-impl<'s, 't> Session<'s, 't> {
+impl<'s> Session<'s> {
     pub fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
         let mut data = Tuple::with_data_prefix(DataKind::Value);
         data.push_value(val);
         self.define_data(name, data, in_root)
     }
     fn resolve_value(&self, name: &str) -> Result<Option<Value>> {
-        if name.starts_with('&') {
-            self.resolve_param(name).map(|v| Some(v.clone()))
-        } else {
             match self.resolve(name)? {
                 None => Ok(None),
                 Some(t) => {
@@ -43,7 +39,6 @@ impl<'s, 't> Session<'s, 't> {
                     }
                 }
             }
-        }
     }
     fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
         let depth_code = if in_root { 0 } else { self.get_stack_depth() as i64 };
@@ -262,7 +257,8 @@ impl<'s, 't> Session<'s, 't> {
         }
         self.define_data(&name, tuple, in_root)
     }
-    pub fn partial_eval<'a>(&self, value: Value<'a>, params: BTreeMap<String, Value>, table_bindings: BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+    pub fn partial_eval<'a>(&self, value: Value<'a>, params: BTreeMap<String, Value<'a>>,
+                            _table_bindings: BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
         match value {
             v @ (Value::Null |
             Value::Bool(_) |
@@ -293,12 +289,16 @@ impl<'s, 't> Session<'s, 't> {
                 Ok((is_ev, v.into()))
             }
             Value::Variable(v) => {
-                Ok(match self.resolve_value(&v)? {
-                    None => (false, Value::Variable(v)),
-                    Some(rs) => {
-                        (rs.is_evaluated(), rs.to_static())
-                    }
-                })
+                if let Some(d) = params.get(v.as_ref()) {
+                    Ok((true, d.clone()))
+                } else {
+                    Ok(match self.resolve_value(&v)? {
+                        None => (false, Value::Variable(v)),
+                        Some(rs) => {
+                            (rs.is_evaluated(), rs.to_static())
+                        }
+                    })
+                }
             }
 
             Value::Apply(op, args) => {
@@ -825,10 +825,6 @@ impl<'s, 't> Session<'s, 't> {
         Ok(())
     }
 
-    fn set_param(&mut self, name: &str, val: &'t str) {
-        self.params.insert(name.to_string(), val);
-    }
-
     pub fn table_data(&self, id: i64, in_root: bool) -> Result<Option<Tuple<SlicePtr>>> {
         let mut key = Tuple::with_null_prefix();
         key.push_bool(true);
@@ -897,13 +893,7 @@ impl<'s, 't> Session<'s, 't> {
         Ok(assocs)
     }
 
-    fn resolve_param(&self, name: &str) -> Result<Value> {
-        let text = self.params.get(name).ok_or_else(|| CozoError::UndefinedParam(name.to_string()))?;
-        let pair = Parser::parse(Rule::expr, text)?.next().unwrap();
-        Value::from_pair(pair)
-    }
-
-    fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
+    pub fn delete_defined(&mut self, name: &str, in_root: bool) -> Result<()> {
         let key = self.encode_definable_key(name, in_root);
         if in_root {
             self.txn.del(true, &self.perm_cf, key)?;
@@ -945,7 +935,7 @@ impl<'s, 't> Session<'s, 't> {
         Ok(res.is_some())
     }
 
-    fn del_key(&self, key: &OwnTuple, in_root: bool) -> Result<()> {
+    pub fn del_key(&self, key: &OwnTuple, in_root: bool) -> Result<()> {
         self.txn.del(in_root, if in_root { &self.perm_cf } else { &self.temp_cf }, key)?;
         Ok(())
     }

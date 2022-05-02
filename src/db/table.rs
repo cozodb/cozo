@@ -40,7 +40,7 @@ pub struct TableInfo {
     pub associates: Vec<TableInfo>,
 }
 
-impl<'a, 't> Session<'a, 't> {
+impl<'a> Session<'a> {
     pub fn get_table_info(&self, tbl_name: &str) -> Result<TableInfo> {
         let table_info = match self.resolve(&tbl_name)? {
             None => return Err(CozoError::UndefinedType(tbl_name.to_string())),
