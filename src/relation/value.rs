@@ -126,10 +126,10 @@ impl<'a> Value<'a> {
                 .collect::<BTreeMap<Cow<'static, str>, StaticValue>>().into(),
             Value::EndSentinel => panic!("Cannot process sentinel value"),
             Value::FieldAccess(field, value) => {
-                Value::FieldAccess(Cow::from(field.into_owned()),value.to_static().into())
+                Value::FieldAccess(Cow::from(field.into_owned()), value.to_static().into())
             }
             Value::IdxAccess(idx, value) => {
-                Value::IdxAccess(idx,value.to_static().into())
+                Value::IdxAccess(idx, value.to_static().into())
             }
         }
     }
@@ -350,6 +350,8 @@ pub const OP_POW: &str = "**";
 pub const OP_COALESCE: &str = "~~";
 pub const OP_NEGATE: &str = "!";
 pub const OP_MINUS: &str = "--";
+pub const METHOD_IS_NULL: &str = "is_null";
+pub const METHOD_NOT_NULL: &str = "not_null";
 
 
 fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Value<'a>>) -> Result<Value<'a>> {
@@ -387,7 +389,19 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                 match p.as_rule() {
                     Rule::accessor => {
                         let accessor_key = p.into_inner().next().unwrap().as_str();
-                        head = Value::Apply(".".into(), vec![accessor_key.into()])
+                        head = Value::FieldAccess(accessor_key.into(), head.into());
+                    }
+                    Rule::index_accessor => {
+                        let accessor_key = p.into_inner().next().unwrap();
+                        let accessor_idx = parse_int(accessor_key.as_str(), 10);
+                        head = Value::IdxAccess(accessor_idx as usize, head.into());
+                    }
+                    Rule::call => {
+                        let mut pairs = p.into_inner();
+                        let method_name = pairs.next().unwrap().as_str();
+                        let mut args = vec![head];
+                        args.extend(pairs.map(build_expr_primary).collect::<Result<Vec<_>>>()?);
+                        head = Value::Apply(method_name.into(), args);
                     }
                     _ => todo!()
                 }

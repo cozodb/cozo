@@ -234,7 +234,7 @@ mod tests {
             assert_eq!(parsed.as_rule(), Rule::from_pattern);
             sess.parse_from_pattern(parsed).unwrap();
 
-            let s = "where b.id > c.id, a.id == 5, x.name == 'Joe', x.name.len() == 3";
+            let s = "where b.id > c.id || x.name.is_null(), a.id == 5, x.name == 'Joe', x.name.len() == 3";
             let parsed = Parser::parse(Rule::where_pattern, s).unwrap().next().unwrap();
             let first = parsed.into_inner().next().unwrap();
             println!("{:#?}", first);

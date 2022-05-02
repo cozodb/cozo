@@ -110,7 +110,7 @@ negate = { "!" }
 term = { (grouping | literal | ident | param | list | dict) ~ (call | accessor | index_accessor)* }
 call = {"." ~ ident ~ "(" ~ argument* ~ ")"}
 accessor = {"." ~ ident}
-index_accessor = {"[" ~ expr ~ "]"}
+index_accessor = {"[" ~ int ~ "]"}
 argument = _{(kw_arg | pos_arg)}
 kw_arg = {ident ~ "=" ~ expr}
 pos_arg = { expr }

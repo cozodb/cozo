@@ -354,6 +354,8 @@ impl<'s> Session<'s> {
                     value::OP_COALESCE => self.coalesce_values(args)?,
                     value::OP_NEGATE => self.negate_values(args)?,
                     value::OP_MINUS => self.minus_values(args)?,
+                    value::METHOD_IS_NULL => self.is_null_values(args)?,
+                    value::METHOD_NOT_NULL => self.not_null_values(args)?,
                     _ => { todo!() }
                 })
             }
@@ -456,6 +458,28 @@ impl<'s> Session<'s> {
             Value::Bool(l) => (true, (!l).into()),
             _ => return Err(CozoError::InvalidArgument)
         })
+    }
+    fn is_null_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        if left == Value::Null {
+            return Ok((true, true.into()));
+        }
+        if !le {
+            return Ok((false, Value::Apply(value::METHOD_IS_NULL.into(), vec![left])));
+        }
+        Ok((true, false.into()))
+    }
+    fn not_null_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
+        let mut args = args.into_iter();
+        let (le, left) = self.partial_eval(args.next().unwrap(), &Default::default(), &Default::default())?;
+        if left == Value::Null {
+            return Ok((true, false.into()));
+        }
+        if !le {
+            return Ok((false, Value::Apply(value::METHOD_NOT_NULL.into(), vec![left])));
+        }
+        Ok((true, true.into()))
     }
     fn pow_values<'a>(&self, args: Vec<Value<'a>>) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
