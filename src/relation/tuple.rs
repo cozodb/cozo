@@ -85,9 +85,11 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 let slen = slen as usize;
                 start + slen + offset
             }
-            Tag::List => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
-            Tag::Apply => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
-            Tag::Dict => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
+            Tag::List |
+            Tag::Apply |
+            Tag::Dict |
+            Tag::IdxAccess |
+            Tag::FieldAccess => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
             Tag::MaxTag => panic!(),
         };
         self.idx_cache.borrow_mut().push(nxt);
@@ -296,6 +298,29 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 (end_pos, collected.into())
             }
             Tag::MaxTag => (start, Value::EndSentinel),
+            Tag::IdxAccess => {
+                let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
+                let mut start_pos = start + 4;
+                let (idx, offset) = self.parse_varint(start_pos);
+                start_pos += offset;
+                let (val, _) = self.parse_value_at(start_pos);
+                (end_pos, Value::IdxAccess(idx as usize, val.into()))
+            }
+            Tag::FieldAccess => {
+                let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
+                let mut start_pos = start + 4;
+
+                let (slen, offset) = self.parse_varint(start);
+                let slen = slen as usize;
+                let field = unsafe {
+                    std::str::from_utf8_unchecked(&data[start + offset..start + offset + slen])
+                };
+
+                start_pos += slen + offset;
+
+                let (val, _) = self.parse_value_at(start_pos);
+                (end_pos, Value::FieldAccess(field.into(), val.into()))
+            }
         };
         (val, nxt)
     }
@@ -458,6 +483,35 @@ impl OwnTuple {
                 for val in args {
                     self.push_value(val);
                 }
+                let length = (self.data.len() - start_pos) as u32;
+                let length_bytes = length.to_be_bytes();
+                self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
+                let mut cache = self.idx_cache.borrow_mut();
+                cache.truncate(start_len);
+                cache.push(self.data.len());
+            }
+            Value::FieldAccess(field, arg) => {
+                self.push_tag(Tag::IdxAccess);
+                let start_pos = self.data.len();
+                let start_len = self.idx_cache.borrow().len();
+                self.data.extend(0u32.to_be_bytes());
+                self.push_varint(field.len() as u64);
+                self.data.extend_from_slice(field.as_bytes());
+                self.push_value(arg);
+                let length = (self.data.len() - start_pos) as u32;
+                let length_bytes = length.to_be_bytes();
+                self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
+                let mut cache = self.idx_cache.borrow_mut();
+                cache.truncate(start_len);
+                cache.push(self.data.len());
+            }
+            Value::IdxAccess(idx, arg) => {
+                self.push_tag(Tag::IdxAccess);
+                let start_pos = self.data.len();
+                let start_len = self.idx_cache.borrow().len();
+                self.data.extend(0u32.to_be_bytes());
+                self.push_varint(*idx as u64);
+                self.push_value(arg);
                 let length = (self.data.len() - start_pos) as u32;
                 let length_bytes = length.to_be_bytes();
                 self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);

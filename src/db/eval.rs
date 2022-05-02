@@ -28,17 +28,17 @@ impl<'s> Session<'s> {
         self.define_data(name, data, in_root)
     }
     fn resolve_value(&self, name: &str) -> Result<Option<Value>> {
-            match self.resolve(name)? {
-                None => Ok(None),
-                Some(t) => {
-                    match t.data_kind()? {
-                        DataKind::Value => Ok(Some(t.get(0)
-                            .ok_or_else(|| CozoError::LogicError("Corrupt".to_string()))?
-                            .to_static())),
-                        k => Err(CozoError::UnexpectedDataKind(k))
-                    }
+        match self.resolve(name)? {
+            None => Ok(None),
+            Some(t) => {
+                match t.data_kind()? {
+                    DataKind::Value => Ok(Some(t.get(0)
+                        .ok_or_else(|| CozoError::LogicError("Corrupt".to_string()))?
+                        .to_static())),
+                    k => Err(CozoError::UnexpectedDataKind(k))
                 }
             }
+        }
     }
     fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
         let depth_code = if in_root { 0 } else { self.get_stack_depth() as i64 };
@@ -289,8 +289,12 @@ impl<'s> Session<'s> {
                 Ok((is_ev, v.into()))
             }
             Value::Variable(v) => {
-                if let Some(d) = params.get(v.as_ref()) {
-                    Ok((true, d.clone()))
+                if v.starts_with('$') {
+                    Ok(if let Some(d) = params.get(v.as_ref()) {
+                        (true, d.clone())
+                    } else {
+                        (false, Value::Variable(v))
+                    })
                 } else {
                     Ok(match self.resolve_value(&v)? {
                         None => (false, Value::Variable(v)),
@@ -300,7 +304,37 @@ impl<'s> Session<'s> {
                     })
                 }
             }
-
+            Value::FieldAccess(field, arg) => {
+                match *arg {
+                    v @ (Value::Variable(_) |
+                    Value::IdxAccess(_, _) |
+                    Value::FieldAccess(_, _) |
+                    Value::Apply(_, _)) => Ok((false, Value::FieldAccess(field, v.into()))),
+                    Value::Dict(mut d) => {
+                        Ok(d.remove(field.as_ref())
+                            .map(|v| (v.is_evaluated(), v))
+                            .unwrap_or((true, Value::Null)))
+                    }
+                    _ => Err(LogicError("Field access failed".to_string()))
+                }
+            }
+            Value::IdxAccess(idx, arg) => {
+                match *arg {
+                    v @ (Value::Variable(_) |
+                    Value::IdxAccess(_, _) |
+                    Value::FieldAccess(_, _) |
+                    Value::Apply(_, _)) => Ok((false, Value::IdxAccess(idx, v.into()))),
+                    Value::List(mut l) => {
+                        if idx >= l.len() {
+                            Ok((true, Value::Null))
+                        } else {
+                            let v = l.swap_remove(idx);
+                            Ok((v.is_evaluated(), v))
+                        }
+                    }
+                    _ => Err(LogicError("Idx access failed".to_string()))
+                }
+            }
             Value::Apply(op, args) => {
                 Ok(match op.as_ref() {
                     value::OP_ADD => self.add_values(args)?,
@@ -619,6 +653,8 @@ impl<'s> Session<'s> {
                                     Value::List(_) |
                                     Value::Dict(_) => Err(Err(CozoError::InvalidArgument)),
                                     cur_val @ (Value::Variable(_) |
+                                    Value::IdxAccess(_, _) |
+                                    Value::FieldAccess(_, _) |
                                     Value::Apply(_, _)) => {
                                         collected.push(cur_val);
                                         Ok((false, has_null, collected))
@@ -679,6 +715,8 @@ impl<'s> Session<'s> {
                                     Value::List(_) |
                                     Value::Dict(_) => Err(Err(CozoError::InvalidArgument)),
                                     cur_val @ (Value::Variable(_) |
+                                    Value::IdxAccess(_, _) |
+                                    Value::FieldAccess(_, _) |
                                     Value::Apply(_, _)) => {
                                         collected.push(cur_val);
                                         Ok((false, has_null, collected))

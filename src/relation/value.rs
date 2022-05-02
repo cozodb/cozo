@@ -27,6 +27,8 @@ pub enum Tag {
     List = 128,
     Dict = 129,
 
+    IdxAccess = 251,
+    FieldAccess = 252,
     Variable = 253,
     Apply = 254,
     MaxTag = 255,
@@ -47,6 +49,8 @@ impl TryFrom<u8> for Tag {
             7 => Uuid,
             128 => List,
             129 => Dict,
+            251 => IdxAccess,
+            252 => FieldAccess,
             253 => Variable,
             254 => Apply,
             255 => MaxTag,
@@ -94,6 +98,8 @@ pub enum Value<'a> {
     Dict(BTreeMap<Cow<'a, str>, Value<'a>>),
     Variable(Cow<'a, str>),
     Apply(Cow<'a, str>, Vec<Value<'a>>),
+    FieldAccess(Cow<'a, str>, Box<Value<'a>>),
+    IdxAccess(usize, Box<Value<'a>>),
     EndSentinel,
 }
 
@@ -119,6 +125,12 @@ impl<'a> Value<'a> {
                 .map(|(k, v)| (Cow::Owned(k.into_owned()), v.to_static()))
                 .collect::<BTreeMap<Cow<'static, str>, StaticValue>>().into(),
             Value::EndSentinel => panic!("Cannot process sentinel value"),
+            Value::FieldAccess(field, value) => {
+                Value::FieldAccess(Cow::from(field.into_owned()),value.to_static().into())
+            }
+            Value::IdxAccess(idx, value) => {
+                Value::IdxAccess(idx,value.to_static().into())
+            }
         }
     }
     #[inline]
@@ -134,7 +146,9 @@ impl<'a> Value<'a> {
             Value::List(l) => l.iter().all(|v| v.is_evaluated()),
             Value::Dict(d) => d.values().all(|v| v.is_evaluated()),
             Value::Variable(_) => false,
-            Value::Apply(_, _) => false
+            Value::Apply(_, _) => false,
+            Value::FieldAccess(_, _) => false,
+            Value::IdxAccess(_, _) => false
         }
     }
     #[inline]
@@ -290,6 +304,12 @@ impl<'a> Display for Value<'a> {
                 write!(f, "({} {})", op,
                        args.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" "))?;
             }
+            Value::FieldAccess(field, value) => {
+                write!(f, "(.{} {})", field, value)?;
+            }
+            Value::IdxAccess(idx, value) => {
+                write!(f, "(.{} {})", idx, value)?;
+            }
         }
         Ok(())
     }
@@ -360,7 +380,20 @@ fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Valu
 fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
     match pair.as_rule() {
         Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
-        Rule::term => build_expr_primary(pair.into_inner().next().unwrap()),
+        Rule::term => {
+            let mut pairs = pair.into_inner();
+            let mut head = build_expr_primary(pairs.next().unwrap())?;
+            for p in pairs {
+                match p.as_rule() {
+                    Rule::accessor => {
+                        let accessor_key = p.into_inner().next().unwrap().as_str();
+                        head = Value::Apply(".".into(), vec![accessor_key.into()])
+                    }
+                    _ => todo!()
+                }
+            }
+            Ok(head)
+        }
         Rule::grouping => Value::from_pair(pair.into_inner().next().unwrap()),
 
         Rule::unary => {

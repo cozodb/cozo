@@ -184,6 +184,7 @@ mod tests {
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
     use crate::db::engine::Engine;
+    use crate::relation::value::Value;
 
     #[test]
     fn parse_patterns() {
@@ -223,16 +224,21 @@ mod tests {
             }
             sess.commit().unwrap();
 
+            let s = "from a:Friend, (b:Person)-[:Friend]->(c:Z), x:Person";
+            let parsed = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
+            assert_eq!(parsed.as_rule(), Rule::from_pattern);
+            assert!(sess.parse_from_pattern(parsed).is_err());
 
             let s = "from a:Friend, (b:Person)-[:Friend]->(c:Person), x:Person";
             let parsed = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
             assert_eq!(parsed.as_rule(), Rule::from_pattern);
             sess.parse_from_pattern(parsed).unwrap();
 
-            let s = "from a:Friend, (b:Person)-[:Friend]->(c:Z), x:Person";
-            let parsed = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
-            assert_eq!(parsed.as_rule(), Rule::from_pattern);
-            assert!(sess.parse_from_pattern(parsed).is_err());
+            let s = "where b.id > c.id, a.id == 5, x.name == 'Joe', x.name.len() == 3";
+            let parsed = Parser::parse(Rule::where_pattern, s).unwrap().next().unwrap();
+            let first = parsed.into_inner().next().unwrap();
+            println!("{:#?}", first);
+            println!("{:#?}", Value::from_pair(first));
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);
