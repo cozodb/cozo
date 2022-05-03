@@ -126,7 +126,11 @@ dict_entry = _{ spreading | dict_pair | scoped_accessor }
 scoped_accessor = { ident }
 dict_pair = {(ident | string) ~ ":" ~ expr}
 
-scoped_dict = { ident ~ dict }
+select_dict = { "{" ~ (select_dict_entry ~ ",")* ~ select_dict_entry? ~ "}"}
+select_dict_entry = _{ grouped_pair | spreading | dict_pair | scoped_accessor }
+grouped_pair = { "*" ~ (ident | string) ~ ":" ~ expr}
+
+scoped_dict = { ident ~ select_dict }
 
 name_in_def = {(ident | string)}
 col_entry = { col_name ~ ":" ~ typing ~ ("=" ~ expr)? }
@@ -182,3 +186,14 @@ edge_pattern_inner = _{"[" ~ ident? ~ ":" ~ name_in_def ~ "]"}
 outer_join_marker = { "?" }
 
 where_pattern = { "where" ~ (expr ~ ",")* ~ expr  }
+select_pattern = { "select" ~ (select_dict | scoped_dict) ~ ( (order_pattern ~ offset_pattern?) | (offset_pattern ~ order_pattern?) )? }
+
+order_pattern = { "ordered" ~ "[" ~ order_el ~ ("," ~ order_el)* ~ "]" }
+order_el = _{order_asc | order_dsc}
+order_asc = {"+"? ~ ident}
+order_dsc = {"-" ~ ident}
+offset_pattern = { limit_clause? ~ offset_clause? }
+limit_clause = { "limit" ~ pos_int }
+offset_clause = { "offset" ~ pos_int }
+
+relational_query = { from_pattern ~ where_pattern? ~ select_pattern }

@@ -387,7 +387,7 @@ fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Valu
 }
 
 
-fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
+pub fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
     match pair.as_rule() {
         Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
         Rule::term => {

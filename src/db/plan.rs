@@ -36,16 +36,17 @@
 // }
 
 
+use std::collections::BTreeMap;
 use pest::iterators::Pair;
 use crate::db::engine::Session;
 use crate::db::table::TableInfo;
 use crate::error::CozoError::LogicError;
 use crate::parser::Rule;
 use crate::error::{CozoError, Result};
-use crate::parser::text_identifier::build_name_in_def;
+use crate::parser::text_identifier::{build_name_in_def, parse_string};
 use crate::relation::data::DataKind;
 use crate::relation::value;
-use crate::relation::value::Value;
+use crate::relation::value::{build_expr_primary, METHOD_MERGE, Value};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum FromEl {
@@ -209,6 +210,117 @@ impl<'a> Session<'a> {
         let conditions = pair.into_inner().map(Value::from_pair).collect::<Result<Vec<_>>>()?;
         Ok(Value::Apply(value::OP_AND.into(), conditions).to_static())
     }
+
+    pub fn parse_select_pattern<'i>(&self, pair: Pair<'i, Rule>) -> Result<Selection<'i>> {
+        let mut pairs = pair.into_inner();
+        let mut nxt = pairs.next().unwrap();
+        let scoped = match nxt.as_rule() {
+            Rule::scoped_dict => {
+                let mut pp = nxt.into_inner();
+                let name = pp.next().unwrap().as_str();
+                nxt = pp.next().unwrap();
+                Some(name.to_string())
+            }
+            _ => None
+        };
+
+        let mut keys = BTreeMap::new();
+        let mut merged = vec![];
+        let mut collected_vals = BTreeMap::new();
+
+        for p in nxt.into_inner() {
+            match p.as_rule() {
+                Rule::grouped_pair => {
+                    let mut pp = p.into_inner();
+                    let id = parse_string(pp.next().unwrap())?;
+                    let val = Value::from_pair(pp.next().unwrap())?;
+                    keys.insert(id, val);
+                }
+                Rule::dict_pair => {
+                    let mut inner = p.into_inner();
+                    let name = parse_string(inner.next().unwrap())?;
+                    let val = build_expr_primary(inner.next().unwrap())?;
+                    collected_vals.insert(name.into(), val);
+                }
+                Rule::spreading => {
+                    let el = p.into_inner().next().unwrap();
+                    let to_concat = build_expr_primary(el)?;
+                    if !matches!(to_concat, Value::Dict(_) | Value::Variable(_) |
+                        Value::IdxAccess(_, _) | Value:: FieldAccess(_, _) | Value::Apply(_, _)) {
+                        return Err(CozoError::LogicError("Cannot spread".to_string()));
+                    }
+                    if !collected_vals.is_empty() {
+                        merged.push(Value::Dict(collected_vals));
+                        collected_vals = BTreeMap::new();
+                    }
+                    merged.push(to_concat);
+                }
+                Rule::scoped_accessor => {
+                    let name = parse_string(p.into_inner().next().unwrap())?;
+                    let val = Value::FieldAccess(name.clone().into(),
+                                                 Value::Variable("_".into()).into());
+                    collected_vals.insert(name.into(), val);
+                }
+                _ => unreachable!()
+            }
+        }
+
+        let vals = if merged.is_empty() {
+            Value::Dict(collected_vals)
+        } else {
+            if !collected_vals.is_empty() {
+                merged.push(Value::Dict(collected_vals));
+            }
+            Value::Apply(METHOD_MERGE.into(), merged)
+        };
+
+        let mut ordering = vec![];
+        let mut limit = None;
+        let mut offset = None;
+
+        for p in pairs {
+            match p.as_rule() {
+                Rule::order_pattern => {
+                    for p in p.into_inner() {
+                        ordering.push((p.as_rule() == Rule::order_asc, parse_string(p.into_inner().next().unwrap())?))
+                    }
+                }
+                Rule::offset_pattern => {
+                    for p in p.into_inner() {
+                        match p.as_rule() {
+                            Rule::limit_clause => {
+                                limit = Some(p.into_inner().next().unwrap().as_str().replace('_', "").parse::<i64>()?);
+                            }
+                            Rule::offset_clause => {
+                                offset = Some(p.into_inner().next().unwrap().as_str().replace('_', "").parse::<i64>()?);
+                            }
+                            _ => unreachable!()
+                        }
+                    }
+                }
+                _ => unreachable!()
+            }
+        }
+
+        Ok(Selection {
+            scoped,
+            keys,
+            vals,
+            ordering,
+            limit,
+            offset
+        })
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct Selection<'a> {
+    pub scoped: Option<String>,
+    pub keys: BTreeMap<String, Value<'a>>,
+    pub vals: Value<'a>,
+    pub ordering: Vec<(bool, String)>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>
 }
 
 #[cfg(test)]
@@ -272,6 +384,11 @@ mod tests {
             let parsed = Parser::parse(Rule::where_pattern, s).unwrap().next().unwrap();
             let where_result = sess.parse_where_pattern(parsed).unwrap();
             println!("{:#?}", where_result);
+
+            let s = "select {*id: a.id, b: a.b, c: a.c} ordered [e, +c, -b] limit 1 offset 2";
+            let parsed = Parser::parse(Rule::select_pattern, s).unwrap().next().unwrap();
+            let select_result = sess.parse_select_pattern(parsed).unwrap();
+            println!("{:#?}", select_result);
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);
