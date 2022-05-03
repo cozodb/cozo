@@ -5,7 +5,7 @@ use cozorocks::{SlicePtr};
 use crate::db::engine::{Session};
 use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::typing::Typing;
-use crate::relation::value::{METHOD_CONCAT, Value};
+use crate::relation::value::{Value};
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::LogicError;
 use crate::relation::data::DataKind;
@@ -13,7 +13,8 @@ use crate::parser::{Rule};
 use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::value;
 
-/// layouts for sector 0
+/// # layouts for sector 0
+///
 /// `[Null]`: stores information about table_ids
 /// `[Text, Int]`: contains definable data and depth info
 /// `[Int, Text]`: inverted index for depth info
@@ -358,6 +359,7 @@ impl<'s> Session<'s> {
                     value::METHOD_IS_NULL => self.is_null_values(args, params, table_bindings)?,
                     value::METHOD_NOT_NULL => self.not_null_values(args, params, table_bindings)?,
                     value::METHOD_CONCAT => self.concat_values(args, params, table_bindings)?,
+                    value::METHOD_MERGE => self.merge_values(args, params, table_bindings)?,
                     _ => { todo!() }
                 })
             }
@@ -779,7 +781,47 @@ impl<'s> Session<'s> {
             if !cur_ret.is_empty() {
                 total_ret.push(cur_ret.into());
             }
-            Ok((false, Value::Apply(METHOD_CONCAT.into(), total_ret)))
+            Ok((false, Value::Apply(value::METHOD_CONCAT.into(), total_ret)))
+        }
+    }
+    fn merge_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                         table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+        let mut total_ret = vec![];
+        let mut cur_ret = BTreeMap::new();
+        let mut evaluated = true;
+        for val in args.into_iter() {
+            let (ev, val) = self.partial_eval(val, params, table_bindings)?;
+            evaluated = ev && evaluated;
+            match val {
+                Value::Dict(d) => {
+                    if cur_ret.is_empty() {
+                        cur_ret = d;
+                    } else {
+                        cur_ret.extend(d);
+                    }
+                }
+                v @ (Value::Variable(_) |
+                Value::Apply(_, _) |
+                Value::FieldAccess(_, _) |
+                Value::IdxAccess(_, _)) => {
+                    if !cur_ret.is_empty() {
+                        total_ret.push(Value::Dict(cur_ret));
+                        cur_ret = BTreeMap::new();
+                    }
+                    total_ret.push(v);
+                }
+                _ => {
+                    return Err(LogicError("Cannot concat incompatible types".to_string()));
+                }
+            }
+        }
+        if total_ret.is_empty() {
+            Ok((evaluated, cur_ret.into()))
+        } else {
+            if !cur_ret.is_empty() {
+                total_ret.push(cur_ret.into());
+            }
+            Ok((false, Value::Apply(value::METHOD_MERGE.into(), total_ret)))
         }
     }
     fn and_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,

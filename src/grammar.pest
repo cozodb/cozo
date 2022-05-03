@@ -122,8 +122,8 @@ list_el = _{spreading | expr}
 spreading = {"..." ~ term}
 
 dict = { "{" ~ (dict_entry ~ ",")* ~ dict_entry? ~ "}"}
-dict_entry = _{ spreading | dict_accessor | dict_pair }
-dict_accessor = { ident? ~ ("." ~ ident)+ }
+dict_entry = _{ spreading | dict_pair | scoped_accessor }
+scoped_accessor = { ident }
 dict_pair = {(ident | string) ~ ":" ~ expr}
 
 scoped_dict = { ident ~ dict }

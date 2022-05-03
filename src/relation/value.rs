@@ -88,18 +88,22 @@ impl TryFrom<u8> for Tag {
 
 #[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq)]
 pub enum Value<'a> {
+    // evaluated
     Null,
     Bool(bool),
     Int(i64),
     Float(OrderedFloat<f64>),
     Uuid(Uuid),
     Text(Cow<'a, str>),
+    // maybe evaluated
     List(Vec<Value<'a>>),
     Dict(BTreeMap<Cow<'a, str>, Value<'a>>),
+    // not evaluated
     Variable(Cow<'a, str>),
     Apply(Cow<'a, str>, Vec<Value<'a>>),
     FieldAccess(Cow<'a, str>, Box<Value<'a>>),
     IdxAccess(usize, Box<Value<'a>>),
+    // cannot exist
     EndSentinel,
 }
 
@@ -354,6 +358,7 @@ pub const OP_MINUS: &str = "--";
 pub const METHOD_IS_NULL: &str = "is_null";
 pub const METHOD_NOT_NULL: &str = "not_null";
 pub const METHOD_CONCAT: &str = "concat";
+pub const METHOD_MERGE: &str = "merge";
 
 
 fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Value<'a>>) -> Result<Value<'a>> {
@@ -443,7 +448,8 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                     Rule::spreading => {
                         let el = p.into_inner().next().unwrap();
                         let to_concat = build_expr_primary(el)?;
-                        if !matches!(to_concat, Value::List(_) | Value::Variable(_)) {
+                        if !matches!(to_concat, Value::List(_) | Value::Variable(_) |
+                        Value::IdxAccess(_, _) | Value:: FieldAccess(_, _) | Value::Apply(_, _)) {
                             return Err(CozoError::LogicError("Cannot spread".to_string()));
                         }
                         if !collected.is_empty() {
@@ -461,20 +467,50 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
             if !collected.is_empty() {
                 spread_collected.push(Value::List(collected));
             }
-            Ok(Value::Apply("concat".into(), spread_collected))
+            Ok(Value::Apply(METHOD_CONCAT.into(), spread_collected))
         }
         Rule::dict => {
-            Ok(pair.into_inner().map(|p| {
+            let mut spread_collected = vec![];
+            let mut collected = BTreeMap::new();
+            for p in pair.into_inner() {
                 match p.as_rule() {
                     Rule::dict_pair => {
                         let mut inner = p.into_inner();
                         let name = parse_string(inner.next().unwrap())?;
                         let val = build_expr_primary(inner.next().unwrap())?;
-                        Ok((name.into(), val))
+                        collected.insert(name.into(), val);
                     }
-                    _ => todo!()
+                    Rule::scoped_accessor => {
+                        let name = parse_string(p.into_inner().next().unwrap())?;
+                        let val = Value::FieldAccess(name.clone().into(),
+                                                     Value::Variable("_".into()).into());
+                        collected.insert(name.into(), val);
+                    }
+                    Rule::spreading => {
+                        let el = p.into_inner().next().unwrap();
+                        let to_concat = build_expr_primary(el)?;
+                        if !matches!(to_concat, Value::Dict(_) | Value::Variable(_) |
+                        Value::IdxAccess(_, _) | Value:: FieldAccess(_, _) | Value::Apply(_, _)) {
+                            return Err(CozoError::LogicError("Cannot spread".to_string()));
+                        }
+                        if !collected.is_empty() {
+                            spread_collected.push(Value::Dict(collected));
+                            collected = BTreeMap::new();
+                        }
+                        spread_collected.push(to_concat);
+                    }
+                    _ => unreachable!()
                 }
-            }).collect::<Result<BTreeMap<Cow<str>, Value>>>()?.into())
+            }
+
+            if spread_collected.is_empty() {
+                return Ok(Value::Dict(collected));
+            }
+
+            if !collected.is_empty() {
+                spread_collected.push(Value::Dict(collected));
+            }
+            Ok(Value::Apply(METHOD_MERGE.into(), spread_collected))
         }
         Rule::param => {
             Ok(Value::Variable(pair.as_str().into()))
@@ -534,5 +570,15 @@ mod tests {
         assert_eq!(parse_expr_from_str(r#""x'""#).unwrap(), Value::Text("x'".into()));
         assert_eq!(parse_expr_from_str(r#"'"x"'"#).unwrap(), Value::Text(r##""x""##.into()));
         assert_eq!(parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(), (Value::Text(r##"x"yz"##.into())));
+    }
+
+    #[test]
+    fn complex_cases() -> Result<()> {
+        println!("{}", parse_expr_from_str("{}")?);
+        println!("{}", parse_expr_from_str("{b:1,a,c:2,d,...e,}")?);
+        println!("{}", parse_expr_from_str("{...a,...b,c:1,d:2,...e,f:3}")?);
+        println!("{}", parse_expr_from_str("[]")?);
+        println!("{}", parse_expr_from_str("[...a,...b,1,2,...e,3]")?);
+        Ok(())
     }
 }
