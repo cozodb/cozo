@@ -73,6 +73,8 @@ pub struct EdgeOrNodeEl {
     pub binding: Option<String>,
     pub info: TableInfo,
     pub kind: EdgeOrNodeKind,
+    pub left_outer_marker: bool,
+    pub right_outer_marker: bool,
 }
 
 impl<'a> Session<'a> {
@@ -103,8 +105,29 @@ impl<'a> Session<'a> {
         let res: Result<Vec<_>> = pair.into_inner().map(|p| {
             match p.as_rule() {
                 Rule::node_pattern => self.parse_node_pattern(p),
-                Rule::fwd_edge_pattern => self.parse_edge_pattern(p, true),
-                Rule::bwd_edge_pattern => self.parse_edge_pattern(p, false),
+                Rule::edge_pattern => {
+                    let right_join;
+                    let mut pairs = p.into_inner();
+                    let mut nxt = pairs.next().unwrap();
+                    if nxt.as_rule() == Rule::outer_join_marker {
+                        right_join = true;
+                        nxt = pairs.next().unwrap();
+                    } else {
+                        right_join = false;
+                    }
+                    let mut edge = match nxt.as_rule() {
+                        Rule::fwd_edge_pattern => {
+                            self.parse_edge_pattern(nxt, true)?
+                        }
+                        Rule::bwd_edge_pattern => {
+                            self.parse_edge_pattern(nxt, false)?
+                        }
+                        _ => unreachable!()
+                    };
+                    edge.left_outer_marker = pairs.next().is_some();
+                    edge.right_outer_marker = right_join;
+                    Ok(edge)
+                }
                 _ => unreachable!()
             }
         }).collect();
@@ -144,6 +167,8 @@ impl<'a> Session<'a> {
             binding,
             info,
             kind: EdgeOrNodeKind::Node,
+            left_outer_marker: false,
+            right_outer_marker: false,
         })
     }
 
@@ -157,6 +182,8 @@ impl<'a> Session<'a> {
             binding,
             info,
             kind: if is_fwd { EdgeOrNodeKind::FwdEdge } else { EdgeOrNodeKind::BwdEdge },
+            left_outer_marker: false,
+            right_outer_marker: false,
         })
     }
 
@@ -191,7 +218,6 @@ mod tests {
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
     use crate::db::engine::Engine;
-    use crate::relation::value::Value;
 
     #[test]
     fn parse_patterns() {
@@ -236,10 +262,11 @@ mod tests {
             assert_eq!(parsed.as_rule(), Rule::from_pattern);
             assert!(sess.parse_from_pattern(parsed).is_err());
 
-            let s = "from a:Friend, (b:Person)-[:Friend]->(c:Person), x:Person";
+            let s = "from a:Friend, (b:Person)-[:Friend]->?(c:Person), x:Person";
             let parsed = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
             assert_eq!(parsed.as_rule(), Rule::from_pattern);
-            sess.parse_from_pattern(parsed).unwrap();
+            let from_pattern = sess.parse_from_pattern(parsed).unwrap();
+            println!("{:#?}", from_pattern);
 
             let s = "where b.id > c.id || x.name.is_null(), a.id == 5, x.name == 'Joe', x.name.len() == 3";
             let parsed = Parser::parse(Rule::where_pattern, s).unwrap().next().unwrap();

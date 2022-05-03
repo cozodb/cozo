@@ -325,7 +325,7 @@ lazy_static! {
             Operator::new(Rule::op_gt, Left) | Operator::new(Rule::op_lt, Left) | Operator::new(Rule::op_ge,Left) | Operator::new(Rule::op_le, Left),
             Operator::new(Rule::op_mod, Left),
             Operator::new(Rule::op_eq, Left) | Operator::new(Rule::op_ne, Left),
-            Operator::new(Rule::op_add, Left) | Operator::new(Rule::op_sub, Left),
+            Operator::new(Rule::op_add, Left) | Operator::new(Rule::op_sub, Left) | Operator::new(Rule::op_str_cat, Left),
             Operator::new(Rule::op_mul, Left) | Operator::new(Rule::op_div, Left),
             Operator::new(Rule::op_pow, Assoc::Right),
             Operator::new(Rule::op_coalesce, Assoc::Left)
@@ -334,6 +334,7 @@ lazy_static! {
 }
 
 pub const OP_ADD: &str = "+";
+pub const OP_STR_CAT: &str = "++";
 pub const OP_SUB: &str = "-";
 pub const OP_MUL: &str = "*";
 pub const OP_DIV: &str = "/";
@@ -352,6 +353,7 @@ pub const OP_NEGATE: &str = "!";
 pub const OP_MINUS: &str = "--";
 pub const METHOD_IS_NULL: &str = "is_null";
 pub const METHOD_NOT_NULL: &str = "not_null";
+pub const METHOD_CONCAT: &str = "concat";
 
 
 fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Value<'a>>) -> Result<Value<'a>> {
@@ -359,6 +361,7 @@ fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Valu
     let rhs = rhs?;
     let op = match op.as_rule() {
         Rule::op_add => OP_ADD,
+        Rule::op_str_cat => OP_STR_CAT,
         Rule::op_sub => OP_SUB,
         Rule::op_mul => OP_MUL,
         Rule::op_div => OP_DIV,
@@ -431,7 +434,35 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
         Rule::boolean => Ok(Value::Bool(pair.as_str() == "true")),
         Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => Ok(
             Value::Text(Cow::Owned(parse_string(pair)?))),
-        Rule::list => Ok(pair.into_inner().map(build_expr_primary).collect::<Result<Vec<Value>>>()?.into()),
+        Rule::list => {
+            let mut spread_collected = vec![];
+            let mut collected = vec![];
+            for p in pair.into_inner() {
+                match p.as_rule() {
+                    Rule::expr => collected.push(build_expr_primary(p)?),
+                    Rule::spreading => {
+                        let el = p.into_inner().next().unwrap();
+                        let to_concat = build_expr_primary(el)?;
+                        if !matches!(to_concat, Value::List(_) | Value::Variable(_)) {
+                            return Err(CozoError::LogicError("Cannot spread".to_string()));
+                        }
+                        if !collected.is_empty() {
+                            spread_collected.push(Value::List(collected));
+                            collected = vec![];
+                        }
+                        spread_collected.push(to_concat);
+                    }
+                    _ => unreachable!()
+                }
+            }
+            if spread_collected.is_empty() {
+                return Ok(Value::List(collected));
+            }
+            if !collected.is_empty() {
+                spread_collected.push(Value::List(collected));
+            }
+            Ok(Value::Apply("concat".into(), spread_collected))
+        }
         Rule::dict => {
             Ok(pair.into_inner().map(|p| {
                 match p.as_rule() {

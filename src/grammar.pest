@@ -84,10 +84,11 @@ literal = _{ null | boolean | number | string}
 
 comma_sep_expr = { expr ~ ("," ~ expr)* }
 expr = {(unary | term) ~ (operation ~ (unary | term)) *}
-operation = _{ (op_and | op_or | op_pow | op_add | op_sub | op_mul | op_div | op_mod | op_coalesce |
+operation = _{ (op_and | op_or | op_pow | op_str_cat | op_add | op_sub | op_mul | op_div | op_mod | op_coalesce |
                 op_ge | op_le | op_gt | op_lt | op_eq | op_ne)}
 op_or = { "||" }
 op_and = { "&&" }
+op_str_cat = { "++" }
 op_add = { "+" }
 op_sub = { "-" }
 op_mul = { "*" }
@@ -174,9 +175,10 @@ simple_from_pattern = { ident ~ ":" ~ name_in_def }
 
 node_edge_pattern = { node_pattern? ~ (edge_pattern ~ node_pattern)* ~ edge_pattern? }
 node_pattern = {"(" ~ ident? ~ ":" ~ name_in_def ~ ")"}
-edge_pattern = _{ fwd_edge_pattern | bwd_edge_pattern }
+edge_pattern = { outer_join_marker? ~ (fwd_edge_pattern | bwd_edge_pattern) ~ outer_join_marker? }
 fwd_edge_pattern = { "-" ~ edge_pattern_inner ~ "->" }
 bwd_edge_pattern = { "<-" ~ edge_pattern_inner ~ "-" }
 edge_pattern_inner = _{"[" ~ ident? ~ ":" ~ name_in_def ~ "]"}
+outer_join_marker = { "?" }
 
 where_pattern = { "where" ~ (expr ~ ",")* ~ expr  }
