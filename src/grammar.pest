@@ -139,13 +139,15 @@ col_name = { key_marker? ~ name_in_def }
 key_marker = { "*" }
 
 
-typing = _{ simple_type | nullable_type | homogeneous_list_type | unnamed_tuple_type | named_tuple_type }
+typing = _{ simple_type | nullable_type | homogeneous_list_type | unnamed_tuple_type | named_tuple_type | function_type }
 simple_type = { ident }
 nullable_type = { "?" ~ (simple_type | homogeneous_list_type | unnamed_tuple_type | named_tuple_type) }
 homogeneous_list_type = { "[" ~ typing ~ "]"}
 unnamed_tuple_type = { "(" ~ (typing ~ ",")* ~ typing? ~ ")" }
 named_tuple_type = { "{" ~ (named_type_pair ~ ",")* ~ named_type_pair? ~ "}" }
 named_type_pair = { (name_in_def | string) ~ ":" ~ typing }
+function_type = { "<" ~ args_type ~ ">" ~ "->" ~ typing }
+args_type = { typing? ~ ("," ~ typing)* }
 
 
 cols_def = { "{" ~ col_entry ~ ("," ~ col_entry)* ~ ","? ~ "}" }

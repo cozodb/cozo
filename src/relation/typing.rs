@@ -22,6 +22,7 @@ pub enum Typing {
     Homogeneous(Box<Typing>),
     UnnamedTuple(Vec<Typing>),
     NamedTuple(Vec<(String, Typing)>),
+    Function(Vec<Typing>, Box<Typing>),
 }
 
 impl Display for Typing {
@@ -47,6 +48,10 @@ impl Display for Typing {
                 write!(f, "{{")?;
                 write!(f, "{}", joined)?;
                 write!(f, "}}")
+            }
+            Typing::Function(args, ret) => {
+                let args_display = args.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(",");
+                write!(f, "<{}>->{}", args_display, ret)
             }
         }
     }
@@ -104,6 +109,13 @@ impl Typing {
                 }).collect::<Result<Vec<(String, Typing)>>>()?;
                 Typing::NamedTuple(types)
             }
+            Rule::function_type => {
+                let mut pairs = pair.into_inner();
+                let args = pairs.next().unwrap().into_inner()
+                    .map(|p| Typing::from_pair(p, env)).collect::<Result<Vec<_>>>()?;
+                let ret = Typing::from_pair(pairs.next().unwrap(), env)?;
+                Typing::Function(args, ret.into())
+            }
             _ => unreachable!()
         })
     }
@@ -153,6 +165,7 @@ impl Typing {
             }
             Typing::Any => unreachable!(),
             Typing::Nullable(_) => unreachable!(),
+            Typing::Function(_, _) => Err(CozoError::LogicError("Cannot coerce function types".to_string()))
         }
     }
     fn coerce_bool<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
@@ -226,5 +239,11 @@ mod tests {
         let res: Result<Typing> = "??Int".try_into();
         println!("{:#?}", res);
         assert!(res.is_err());
+        let res: Result<Typing> = "<Int, Int, ?Int>->Any".try_into();
+        println!("{:#?}", res);
+        assert!(res.is_ok());
+        let res: Result<Typing> = "<>->Any".try_into();
+        println!("{:#?}", res);
+        assert!(res.is_ok());
     }
 }
