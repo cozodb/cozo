@@ -8,7 +8,7 @@ use crate::error::{CozoError, Result};
 use crate::parser::text_identifier::{build_name_in_def, parse_string};
 use crate::relation::data::DataKind;
 use crate::relation::value;
-use crate::relation::value::{build_expr_primary, METHOD_MERGE, Value};
+use crate::relation::value::{build_expr_primary, METHOD_MERGE, StaticValue, Value};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum FromEl {
@@ -173,7 +173,7 @@ impl<'a> Session<'a> {
         Ok(Value::Apply(value::OP_AND.into(), conditions).to_static())
     }
 
-    pub fn parse_select_pattern<'i>(&self, pair: Pair<'i, Rule>) -> Result<Selection<'i>> {
+    pub fn parse_select_pattern(&self, pair: Pair<Rule>) -> Result<Selection> {
         let mut pairs = pair.into_inner();
         let mut nxt = pairs.next().unwrap();
         let scoped = match nxt.as_rule() {
@@ -196,7 +196,7 @@ impl<'a> Session<'a> {
                     let mut pp = p.into_inner();
                     let id = parse_string(pp.next().unwrap())?;
                     let val = Value::from_pair(pp.next().unwrap())?;
-                    keys.insert(id, val);
+                    keys.insert(id, val.to_static());
                 }
                 Rule::dict_pair => {
                     let mut inner = p.into_inner();
@@ -228,12 +228,12 @@ impl<'a> Session<'a> {
         }
 
         let vals = if merged.is_empty() {
-            Value::Dict(collected_vals)
+            Value::Dict(collected_vals).to_static()
         } else {
             if !collected_vals.is_empty() {
                 merged.push(Value::Dict(collected_vals));
             }
-            Value::Apply(METHOD_MERGE.into(), merged)
+            Value::Apply(METHOD_MERGE.into(), merged).to_static()
         };
 
         let mut ordering = vec![];
@@ -276,10 +276,10 @@ impl<'a> Session<'a> {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct Selection<'a> {
+pub struct Selection {
     pub scoped: Option<String>,
-    pub keys: BTreeMap<String, Value<'a>>,
-    pub vals: Value<'a>,
+    pub keys: BTreeMap<String, StaticValue>,
+    pub vals: StaticValue,
     pub ordering: Vec<(bool, String)>,
     pub limit: Option<i64>,
     pub offset: Option<i64>
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn parse_patterns() {
-        let db_path = "_test_db_plan";
+        let db_path = "_test_db_query";
         let engine = Engine::new(db_path.to_string(), true).unwrap();
         {
             let mut sess = engine.session().unwrap();
