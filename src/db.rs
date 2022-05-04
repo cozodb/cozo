@@ -1,5 +1,5 @@
 pub mod engine;
 pub mod eval;
-pub mod plan;
+pub mod query;
 pub mod mutation;
 pub mod table;
