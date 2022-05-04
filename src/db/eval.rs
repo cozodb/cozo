@@ -22,6 +22,32 @@ use crate::relation::value;
 /// `[Null, Int, Text, Int, Text]` inverted index for related tables
 /// `[True, Int]` table info, value is key
 
+// type TableEnv = BTreeMap<String, ()>;
+#[derive(Debug, Default)]
+pub struct TableEnv<'a> {
+    pub parent: Option<&'a TableEnv<'a>>,
+    pub current: BTreeMap<String, ()>,
+}
+
+impl<'a> TableEnv<'a> {
+    pub fn derive(&'a self) -> TableEnv<'a> {
+        TableEnv {
+            parent: Some(self),
+            current: Default::default(),
+        }
+    }
+
+    pub fn resolve(&self, key: &str) -> Option<&()> {
+        match self.current.get(key) {
+            None => match self.parent {
+                None => None,
+                Some(t) => t.resolve(key)
+            }
+            v => v
+        }
+    }
+}
+
 impl<'s> Session<'s> {
     pub fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
         let mut data = Tuple::with_data_prefix(DataKind::Value);
@@ -259,7 +285,7 @@ impl<'s> Session<'s> {
         self.define_data(&name, tuple, in_root)
     }
     pub fn partial_eval<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
-                            table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                            table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         match value {
             v @ (Value::Null |
             Value::Bool(_) |
@@ -367,7 +393,7 @@ impl<'s> Session<'s> {
     }
 
     fn coalesce_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                           table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                           table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().try_fold(vec![], |mut accum, cur| {
             match self.partial_eval(cur, params, table_bindings) {
                 Ok((ev, cur)) => {
@@ -398,7 +424,7 @@ impl<'s> Session<'s> {
         }
     }
     fn str_cat_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                          table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                          table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -414,7 +440,7 @@ impl<'s> Session<'s> {
         })
     }
     fn add_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                      table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -433,7 +459,7 @@ impl<'s> Session<'s> {
         })
     }
     fn sub_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                      table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -452,7 +478,7 @@ impl<'s> Session<'s> {
         })
     }
     fn minus_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                        table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                        table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -468,7 +494,7 @@ impl<'s> Session<'s> {
         })
     }
     fn negate_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                         table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                         table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -483,7 +509,7 @@ impl<'s> Session<'s> {
         })
     }
     fn is_null_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                          table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                          table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -495,7 +521,7 @@ impl<'s> Session<'s> {
         Ok((true, false.into()))
     }
     fn not_null_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                           table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                           table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -507,7 +533,7 @@ impl<'s> Session<'s> {
         Ok((true, true.into()))
     }
     fn pow_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                      table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -526,7 +552,7 @@ impl<'s> Session<'s> {
         })
     }
     fn gt_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                     table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -545,7 +571,7 @@ impl<'s> Session<'s> {
         })
     }
     fn lt_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                     table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -564,7 +590,7 @@ impl<'s> Session<'s> {
         })
     }
     fn ge_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                     table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -583,7 +609,7 @@ impl<'s> Session<'s> {
         })
     }
     fn le_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                     table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -602,7 +628,7 @@ impl<'s> Session<'s> {
         })
     }
     fn mod_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                      table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -618,7 +644,7 @@ impl<'s> Session<'s> {
         })
     }
     fn mul_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                      table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -637,7 +663,7 @@ impl<'s> Session<'s> {
         })
     }
     fn div_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                      table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -656,7 +682,7 @@ impl<'s> Session<'s> {
         })
     }
     fn eq_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                     table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -669,7 +695,7 @@ impl<'s> Session<'s> {
         Ok((true, (left == right).into()))
     }
     fn ne_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                     table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -682,7 +708,7 @@ impl<'s> Session<'s> {
         Ok((true, (left != right).into()))
     }
     fn or_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                     table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().map(|v| self.partial_eval(v, params, table_bindings))
             .try_fold(
                 (true, false, vec![]),
@@ -745,7 +771,7 @@ impl<'s> Session<'s> {
         }
     }
     fn concat_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                         table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                         table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut total_ret = vec![];
         let mut cur_ret = vec![];
         let mut evaluated = true;
@@ -785,7 +811,7 @@ impl<'s> Session<'s> {
         }
     }
     fn merge_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                         table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                        table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let mut total_ret = vec![];
         let mut cur_ret = BTreeMap::new();
         let mut evaluated = true;
@@ -825,7 +851,7 @@ impl<'s> Session<'s> {
         }
     }
     fn and_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &BTreeMap<String, ()>) -> Result<(bool, Value<'a>)> {
+                      table_bindings: &TableEnv) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().map(|v| self.partial_eval(v, params, table_bindings))
             .try_fold(
                 (true, false, vec![]),
@@ -1237,6 +1263,18 @@ mod tests {
         drop(sess);
         drop(engine);
         fs::remove_dir_all(db_path).unwrap();
+    }
+
+    #[test]
+    fn table_env() {
+        let mut tenv = TableEnv::default();
+        tenv.current.insert("c".into(), ());
+        let child = tenv.derive();
+        let mut another = child.derive();
+        another.current.insert("a".into(), ());
+        println!("{:?}", another.resolve("c"));
+        println!("{:?}", another.resolve("a"));
+        println!("{:?}", another.resolve("d"));
     }
 }
 
