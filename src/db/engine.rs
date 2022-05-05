@@ -162,9 +162,10 @@ impl<'a> Session<'a> {
     }
     pub fn finish_work(&mut self) -> Result<()> {
         self.txn.del_range(&self.temp_cf, Tuple::with_null_prefix(), Tuple::max_tuple())?;
-        let mut options = FlushOptionsPtr::default();
-        options.set_allow_write_stall(true).set_flush_wait(true);
-        self.txn.flush(&self.temp_cf, options)?;
+        self.txn.compact_all(&self.temp_cf)?;
+        // let mut options = FlushOptionsPtr::default();
+        // options.set_allow_write_stall(true).set_flush_wait(true);
+        // self.txn.flush(&self.temp_cf, options)?;
         Ok(())
     }
 }

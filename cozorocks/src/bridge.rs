@@ -148,6 +148,7 @@ mod ffi {
         fn del_range_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle,
                          start_key: &[u8], end_key: &[u8], status: &mut BridgeStatus);
         fn flush_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle, options: &FlushOptions, status: &mut BridgeStatus);
+        fn compact_all_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle, status: &mut BridgeStatus);
         fn iterator_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle) -> UniquePtr<IteratorBridge>;
         fn iterator_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle) -> UniquePtr<IteratorBridge>;
         fn multiget_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle,

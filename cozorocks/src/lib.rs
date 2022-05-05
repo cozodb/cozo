@@ -569,6 +569,12 @@ impl TransactionPtr {
         status.check_err(())
     }
     #[inline]
+    pub fn compact_all(&self, cf: &ColumnFamilyHandle) -> Result<()> {
+        let mut status = BridgeStatus::default();
+        self.compact_all_raw(cf, &mut status);
+        status.check_err(())
+    }
+    #[inline]
     pub fn put(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>) -> Result<()> {
         let mut status = BridgeStatus::default();
         if transact {
