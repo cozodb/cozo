@@ -12,8 +12,101 @@ use crate::relation::value;
 
 
 impl<'s> Session<'s> {
-    pub fn tuple_eval<'a>(&self, value: Value<'a>, tuples: Vec<Tuple<SlicePtr>>) -> Result<(OwnTuple, OwnTuple)> {
-        todo!()
+    pub fn tuple_eval<'a>(&self, value: Value<'a>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let res = match value {
+            v @ (Value::Null |
+            Value::Bool(_) |
+            Value::Int(_) |
+            Value::Float(_) |
+            Value::Uuid(_) |
+            Value::Text(_)) => v,
+            Value::List(l) => {
+                let l = l.into_iter().map(|v| self.tuple_eval(v, tuples)).collect::<Result<Vec<_>>>()?;
+                Value::List(l)
+            }
+            Value::Dict(d) => {
+                let d = d.into_iter()
+                    .map(|(k, v)|
+                        self.tuple_eval(v, tuples).map(|v| (k, v)))
+                    .collect::<Result<BTreeMap<_, _>>>()?;
+                Value::Dict(d)
+            }
+            Value::Variable(v) => {
+                return Err(LogicError(format!("Cannot resolve variable {}", v)));
+            }
+            Value::TupleRef(tid, cid) => {
+                let pair = tuples.get(tid.id as usize).ok_or_else(|| {
+                    LogicError("Tuple ref out of bound".to_string())
+                })?;
+                let tuple = if cid.is_key {
+                    &pair.0
+                } else {
+                    &pair.1
+                };
+                tuple.get(cid.id as usize)
+                    .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))?
+            }
+            Value::Apply(op, args) => {
+                let args = args.into_iter().map(|v| self.tuple_eval(v, tuples)).collect::<Result<Vec<_>>>()?;
+                let params = &Default::default();
+                let table_bindings = &Default::default();
+                let (ev, res) = match op.as_ref() {
+                    value::OP_STR_CAT => self.str_cat_values(args, params, table_bindings)?,
+                    value::OP_ADD => self.add_values(args, params, table_bindings)?,
+                    value::OP_SUB => self.sub_values(args, params, table_bindings)?,
+                    value::OP_MUL => self.mul_values(args, params, table_bindings)?,
+                    value::OP_DIV => self.div_values(args, params, table_bindings)?,
+                    value::OP_EQ => self.eq_values(args, params, table_bindings)?,
+                    value::OP_NE => self.ne_values(args, params, table_bindings)?,
+                    value::OP_OR => self.or_values(args, params, table_bindings)?,
+                    value::OP_AND => self.and_values(args, params, table_bindings)?,
+                    value::OP_MOD => self.mod_values(args, params, table_bindings)?,
+                    value::OP_GT => self.gt_values(args, params, table_bindings)?,
+                    value::OP_GE => self.ge_values(args, params, table_bindings)?,
+                    value::OP_LT => self.lt_values(args, params, table_bindings)?,
+                    value::OP_LE => self.le_values(args, params, table_bindings)?,
+                    value::OP_POW => self.pow_values(args, params, table_bindings)?,
+                    value::OP_COALESCE => self.coalesce_values(args, params, table_bindings)?,
+                    value::OP_NEGATE => self.negate_values(args, params, table_bindings)?,
+                    value::OP_MINUS => self.minus_values(args, params, table_bindings)?,
+                    value::METHOD_IS_NULL => self.is_null_values(args, params, table_bindings)?,
+                    value::METHOD_NOT_NULL => self.not_null_values(args, params, table_bindings)?,
+                    value::METHOD_CONCAT => self.concat_values(args, params, table_bindings)?,
+                    value::METHOD_MERGE => self.merge_values(args, params, table_bindings)?,
+                    _ => { todo!() }
+                };
+                if !ev {
+                    return Err(LogicError("Cannot evaluate completely".to_string()));
+                }
+                res
+            }
+            Value::FieldAccess(field, arg) => {
+                let arg = self.tuple_eval(*arg, tuples)?;
+                match arg {
+                    Value::Dict(mut d) => {
+                        d.remove(field.as_ref()).unwrap_or(Value::Null)
+                    }
+                    _ => return Err(LogicError("Field access failed".to_string()))
+                }
+            }
+            Value::IdxAccess(idx, arg) => {
+                let arg = self.tuple_eval(*arg, tuples)?;
+                match arg {
+                    Value::List(mut l) => {
+                        if idx >= l.len() {
+                            Value::Null
+                        } else {
+                            l.swap_remove(idx)
+                        }
+                    }
+                    _ => return Err(LogicError("Idx access failed".to_string()))
+                }
+            }
+            Value::EndSentinel => {
+                return Err(LogicError(format!("Encountered end sentinel")));
+            }
+        };
+        Ok(res)
     }
     pub fn partial_eval<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
