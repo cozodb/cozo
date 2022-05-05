@@ -1,11 +1,12 @@
 use std::borrow::Cow;
+use std::cmp::{max, min};
 use std::collections::{BTreeMap};
 use cozorocks::SlicePtr;
 use crate::db::engine::{Session};
 use crate::db::plan::AccessorMap;
 use crate::relation::value::{Value};
 use crate::error::{CozoError, Result};
-use crate::error::CozoError::LogicError;
+use crate::error::CozoError::{InvalidArgument, LogicError};
 use crate::relation::tuple::{Tuple};
 use crate::relation::value;
 
@@ -46,38 +47,31 @@ impl<'s> Session<'s> {
                     .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))?
             }
             Value::Apply(op, args) => {
-                let args = args.into_iter().map(|v| self.tuple_eval(v, tuples)).collect::<Result<Vec<_>>>()?;
-                let params = &Default::default();
-                let table_bindings = &Default::default();
-                let (ev, res) = match op.as_ref() {
-                    value::OP_STR_CAT => self.str_cat_values(args, params, table_bindings)?,
-                    value::OP_ADD => self.add_values(args, params, table_bindings)?,
-                    value::OP_SUB => self.sub_values(args, params, table_bindings)?,
-                    value::OP_MUL => self.mul_values(args, params, table_bindings)?,
-                    value::OP_DIV => self.div_values(args, params, table_bindings)?,
-                    value::OP_EQ => self.eq_values(args, params, table_bindings)?,
-                    value::OP_NE => self.ne_values(args, params, table_bindings)?,
-                    value::OP_OR => self.or_values(args, params, table_bindings)?,
-                    value::OP_AND => self.and_values(args, params, table_bindings)?,
-                    value::OP_MOD => self.mod_values(args, params, table_bindings)?,
-                    value::OP_GT => self.gt_values(args, params, table_bindings)?,
-                    value::OP_GE => self.ge_values(args, params, table_bindings)?,
-                    value::OP_LT => self.lt_values(args, params, table_bindings)?,
-                    value::OP_LE => self.le_values(args, params, table_bindings)?,
-                    value::OP_POW => self.pow_values(args, params, table_bindings)?,
-                    value::OP_COALESCE => self.coalesce_values(args, params, table_bindings)?,
-                    value::OP_NEGATE => self.negate_values(args, params, table_bindings)?,
-                    value::OP_MINUS => self.minus_values(args, params, table_bindings)?,
-                    value::METHOD_IS_NULL => self.is_null_values(args, params, table_bindings)?,
-                    value::METHOD_NOT_NULL => self.not_null_values(args, params, table_bindings)?,
-                    value::METHOD_CONCAT => self.concat_values(args, params, table_bindings)?,
-                    value::METHOD_MERGE => self.merge_values(args, params, table_bindings)?,
+                match op.as_ref() {
+                    value::OP_STR_CAT => self.str_cat_values(args, tuples)?,
+                    value::OP_ADD => self.add_values(args, tuples)?,
+                    value::OP_SUB => self.sub_values(args, tuples)?,
+                    value::OP_MUL => self.mul_values(args, tuples)?,
+                    value::OP_DIV => self.div_values(args, tuples)?,
+                    value::OP_EQ => self.eq_values(args, tuples)?,
+                    value::OP_NE => self.ne_values(args, tuples)?,
+                    value::OP_OR => self.or_values(args, tuples)?,
+                    value::OP_AND => self.and_values(args, tuples)?,
+                    value::OP_MOD => self.mod_values(args, tuples)?,
+                    value::OP_GT => self.gt_values(args, tuples)?,
+                    value::OP_GE => self.ge_values(args, tuples)?,
+                    value::OP_LT => self.lt_values(args, tuples)?,
+                    value::OP_LE => self.le_values(args, tuples)?,
+                    value::OP_POW => self.pow_values(args, tuples)?,
+                    value::OP_COALESCE => self.coalesce_values(args, tuples)?,
+                    value::OP_NEGATE => self.negate_values(args, tuples)?,
+                    value::OP_MINUS => self.minus_values(args, tuples)?,
+                    value::METHOD_IS_NULL => self.is_null_values(args, tuples)?,
+                    value::METHOD_NOT_NULL => self.not_null_values(args, tuples)?,
+                    value::METHOD_CONCAT => self.concat_values(args, tuples)?,
+                    value::METHOD_MERGE => self.merge_values(args, tuples)?,
                     _ => { todo!() }
-                };
-                if !ev {
-                    return Err(LogicError("Cannot evaluate completely".to_string()));
                 }
-                res
             }
             Value::FieldAccess(field, arg) => {
                 let arg = self.tuple_eval(*arg, tuples)?;
@@ -203,32 +197,29 @@ impl<'s> Session<'s> {
                 }
             }
             Value::Apply(op, args) => {
-                let args = args.into_iter()
-                    .map(|v| self.partial_eval(v, params, table_bindings).map(|p| p.1))
-                    .collect::<Result<Vec<_>>>()?;
                 Ok(match op.as_ref() {
-                    value::OP_STR_CAT => self.str_cat_values(args, params, table_bindings)?,
-                    value::OP_ADD => self.add_values(args, params, table_bindings)?,
-                    value::OP_SUB => self.sub_values(args, params, table_bindings)?,
-                    value::OP_MUL => self.mul_values(args, params, table_bindings)?,
-                    value::OP_DIV => self.div_values(args, params, table_bindings)?,
-                    value::OP_EQ => self.eq_values(args, params, table_bindings)?,
-                    value::OP_NE => self.ne_values(args, params, table_bindings)?,
-                    value::OP_OR => self.or_values(args, params, table_bindings)?,
-                    value::OP_AND => self.and_values(args, params, table_bindings)?,
-                    value::OP_MOD => self.mod_values(args, params, table_bindings)?,
-                    value::OP_GT => self.gt_values(args, params, table_bindings)?,
-                    value::OP_GE => self.ge_values(args, params, table_bindings)?,
-                    value::OP_LT => self.lt_values(args, params, table_bindings)?,
-                    value::OP_LE => self.le_values(args, params, table_bindings)?,
-                    value::OP_POW => self.pow_values(args, params, table_bindings)?,
-                    value::OP_COALESCE => self.coalesce_values(args, params, table_bindings)?,
-                    value::OP_NEGATE => self.negate_values(args, params, table_bindings)?,
-                    value::OP_MINUS => self.minus_values(args, params, table_bindings)?,
-                    value::METHOD_IS_NULL => self.is_null_values(args, params, table_bindings)?,
-                    value::METHOD_NOT_NULL => self.not_null_values(args, params, table_bindings)?,
-                    value::METHOD_CONCAT => self.concat_values(args, params, table_bindings)?,
-                    value::METHOD_MERGE => self.merge_values(args, params, table_bindings)?,
+                    value::OP_STR_CAT => self.str_cat_values_partial(args, params, table_bindings)?,
+                    value::OP_ADD => self.add_values_partial(args, params, table_bindings)?,
+                    value::OP_SUB => self.sub_values_partial(args, params, table_bindings)?,
+                    value::OP_MUL => self.mul_values_partial(args, params, table_bindings)?,
+                    value::OP_DIV => self.div_values_partial(args, params, table_bindings)?,
+                    value::OP_EQ => self.eq_values_partial(args, params, table_bindings)?,
+                    value::OP_NE => self.ne_values_partial(args, params, table_bindings)?,
+                    value::OP_OR => self.or_values_partial(args, params, table_bindings)?,
+                    value::OP_AND => self.and_values_partial(args, params, table_bindings)?,
+                    value::OP_MOD => self.mod_values_partial(args, params, table_bindings)?,
+                    value::OP_GT => self.gt_values_partial(args, params, table_bindings)?,
+                    value::OP_GE => self.ge_values_partial(args, params, table_bindings)?,
+                    value::OP_LT => self.lt_values_partial(args, params, table_bindings)?,
+                    value::OP_LE => self.le_values_partial(args, params, table_bindings)?,
+                    value::OP_POW => self.pow_values_partial(args, params, table_bindings)?,
+                    value::OP_COALESCE => self.coalesce_values_partial(args, params, table_bindings)?,
+                    value::OP_NEGATE => self.negate_values_partial(args, params, table_bindings)?,
+                    value::OP_MINUS => self.minus_values_partial(args, params, table_bindings)?,
+                    value::METHOD_IS_NULL => self.is_null_values_partial(args, params, table_bindings)?,
+                    value::METHOD_NOT_NULL => self.not_null_values_partial(args, params, table_bindings)?,
+                    value::METHOD_CONCAT => self.concat_values_partial(args, params, table_bindings)?,
+                    value::METHOD_MERGE => self.merge_values_partial(args, params, table_bindings)?,
                     _ => { todo!() }
                 })
             }
@@ -237,9 +228,21 @@ impl<'s> Session<'s> {
             }
         }
     }
+}
 
-    fn coalesce_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                           table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+impl<'s> Session<'s> {
+    fn coalesce_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        for v in args {
+            match self.tuple_eval(v, tuples)? {
+                Value::Null => {}
+                v => return Ok(v)
+            }
+        }
+        Ok(Value::Null)
+    }
+
+    fn coalesce_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                                   table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().try_fold(vec![], |mut accum, cur| {
             match self.partial_eval(cur, params, table_bindings) {
                 Ok((ev, cur)) => {
@@ -269,8 +272,22 @@ impl<'s> Session<'s> {
             Err(Err(e)) => Err(e)
         }
     }
-    fn str_cat_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                          table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn str_cat_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut ret = String::new();
+        for v in args {
+            let v = self.tuple_eval(v, tuples)?;
+            match v {
+                Value::Null => return Ok(Value::Null),
+                Value::Text(s) => ret += s.as_ref(),
+                _ => return Err(InvalidArgument)
+            }
+        };
+        Ok(ret.into())
+    }
+
+    fn str_cat_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                                  table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -285,8 +302,28 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn add_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn add_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (l + r).into(),
+            (Value::Float(l), Value::Int(r)) => (l + (r as f64)).into(),
+            (Value::Int(l), Value::Float(r)) => ((l as f64) + r.into_inner()).into(),
+            (Value::Float(l), Value::Float(r)) => (l.into_inner() + r.into_inner()).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn add_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -304,8 +341,28 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn sub_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn sub_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (l + r).into(),
+            (Value::Float(l), Value::Int(r)) => (l - (r as f64)).into(),
+            (Value::Int(l), Value::Float(r)) => ((l as f64) - r.into_inner()).into(),
+            (Value::Float(l), Value::Float(r)) => (l.into_inner() - r.into_inner()).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn sub_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -323,8 +380,18 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn minus_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                        table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn minus_values<'a>(&self, mut args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let left = self.tuple_eval(args.pop().unwrap(), tuples)?;
+        Ok(match left {
+            Value::Int(l) => (-l).into(),
+            Value::Float(l) => (-l).into(),
+            _ => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn minus_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                                table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -339,8 +406,17 @@ impl<'s> Session<'s> {
             _ => return Err(CozoError::InvalidArgument)
         })
     }
-    fn negate_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                         table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn negate_values<'a>(&self, mut args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let left = self.tuple_eval(args.pop().unwrap(), tuples)?;
+        Ok(match left {
+            Value::Bool(l) => (!l).into(),
+            _ => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn negate_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                                 table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -354,8 +430,14 @@ impl<'s> Session<'s> {
             _ => return Err(CozoError::InvalidArgument)
         })
     }
-    fn is_null_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                          table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn is_null_values<'a>(&self, mut args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let left = self.tuple_eval(args.pop().unwrap(), tuples)?;
+        Ok((left == Value::Null).into())
+    }
+
+    fn is_null_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                                  table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -366,8 +448,14 @@ impl<'s> Session<'s> {
         }
         Ok((true, false.into()))
     }
-    fn not_null_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                           table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn not_null_values<'a>(&self, mut args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let left = self.tuple_eval(args.pop().unwrap(), tuples)?;
+        Ok((left != Value::Null).into())
+    }
+
+    fn not_null_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                                   table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -378,8 +466,28 @@ impl<'s> Session<'s> {
         }
         Ok((true, true.into()))
     }
-    fn pow_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn pow_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => ((l as f64).powf(r as f64)).into(),
+            (Value::Float(l), Value::Int(r)) => ((l.into_inner()).powf(r as f64)).into(),
+            (Value::Int(l), Value::Float(r)) => ((l as f64).powf(r.into_inner())).into(),
+            (Value::Float(l), Value::Float(r)) => ((l.into_inner()).powf(r.into_inner())).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn pow_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -397,8 +505,28 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn gt_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn gt_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (l > r).into(),
+            (Value::Float(l), Value::Int(r)) => (l > (r as f64).into()).into(),
+            (Value::Int(l), Value::Float(r)) => ((l as f64) > r.into_inner()).into(),
+            (Value::Float(l), Value::Float(r)) => (l > r).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn gt_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -416,8 +544,28 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn lt_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn lt_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (l < r).into(),
+            (Value::Float(l), Value::Int(r)) => (l < (r as f64).into()).into(),
+            (Value::Int(l), Value::Float(r)) => ((l as f64) < r.into_inner()).into(),
+            (Value::Float(l), Value::Float(r)) => (l < r).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn lt_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -435,8 +583,28 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn ge_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn ge_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (l >= r).into(),
+            (Value::Float(l), Value::Int(r)) => (l >= (r as f64).into()).into(),
+            (Value::Int(l), Value::Float(r)) => ((l as f64) >= r.into_inner()).into(),
+            (Value::Float(l), Value::Float(r)) => (l >= r).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn ge_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -454,8 +622,28 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn le_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn le_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (l <= r).into(),
+            (Value::Float(l), Value::Int(r)) => (l <= (r as f64).into()).into(),
+            (Value::Int(l), Value::Float(r)) => ((l as f64) <= r.into_inner()).into(),
+            (Value::Float(l), Value::Float(r)) => (l <= r).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn le_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -473,8 +661,25 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn mod_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn mod_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (l % r).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn mod_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -489,8 +694,28 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn mul_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn mul_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (l * r).into(),
+            (Value::Float(l), Value::Int(r)) => (l * (r as f64)).into(),
+            (Value::Int(l), Value::Float(r)) => ((l as f64) * r.into_inner()).into(),
+            (Value::Float(l), Value::Float(r)) => (l.into_inner() * r.into_inner()).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn mul_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -508,8 +733,28 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn div_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn div_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok(match (left, right) {
+            (Value::Int(l), Value::Int(r)) => (l as f64 / r as f64).into(),
+            (Value::Float(l), Value::Int(r)) => (l / (r as f64)).into(),
+            (Value::Int(l), Value::Float(r)) => ((l as f64) / r.into_inner()).into(),
+            (Value::Float(l), Value::Float(r)) => (l.into_inner() / r.into_inner()).into(),
+            (_, _) => return Err(CozoError::InvalidArgument)
+        })
+    }
+
+    fn div_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -527,8 +772,22 @@ impl<'s> Session<'s> {
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
-    fn eq_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn eq_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok((left == right).into())
+    }
+
+    fn eq_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -540,8 +799,22 @@ impl<'s> Session<'s> {
         }
         Ok((true, (left == right).into()))
     }
-    fn ne_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn ne_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut args = args.into_iter();
+        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if left == Value::Null {
+            return Ok(Value::Null);
+        }
+        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
+        if right == Value::Null {
+            return Ok(Value::Null);
+        }
+        Ok((left != right).into())
+    }
+
+    fn ne_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -553,8 +826,27 @@ impl<'s> Session<'s> {
         }
         Ok((true, (left != right).into()))
     }
-    fn or_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                     table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn or_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut accum = -1;
+        for v in args.into_iter() {
+            let v = self.tuple_eval(v, tuples)?;
+            match v {
+                Value::Null => accum = max(accum, 0),
+                Value::Bool(false) => {}
+                Value::Bool(true) => return Ok(true.into()),
+                _ => return Err(CozoError::InvalidArgument)
+            }
+        }
+        Ok(match accum {
+            -1 => false.into(),
+            0 => Value::Null,
+            _ => unreachable!()
+        })
+    }
+
+    fn or_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().map(|v| self.partial_eval(v, params, table_bindings))
             .try_fold(
                 (true, false, vec![]),
@@ -619,8 +911,22 @@ impl<'s> Session<'s> {
             Err(Err(e)) => Err(e)
         }
     }
-    fn concat_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                         table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn concat_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut coll = vec![];
+        for v in args.into_iter() {
+            let v  = self.tuple_eval(v, tuples)?;
+            match v {
+                Value::Null => {},
+                Value::List(l) => coll.extend(l),
+                _ => return Err(CozoError::InvalidArgument)
+            }
+        }
+        Ok(coll.into())
+    }
+
+    fn concat_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                                 table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut total_ret = vec![];
         let mut cur_ret = vec![];
         let mut evaluated = true;
@@ -628,6 +934,7 @@ impl<'s> Session<'s> {
             let (ev, val) = self.partial_eval(val, params, table_bindings)?;
             evaluated = ev && evaluated;
             match val {
+                Value::Null => {},
                 Value::List(l) => {
                     if cur_ret.is_empty() {
                         cur_ret = l;
@@ -659,8 +966,22 @@ impl<'s> Session<'s> {
             Ok((false, Value::Apply(value::METHOD_CONCAT.into(), total_ret)))
         }
     }
-    fn merge_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                        table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn merge_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut coll = BTreeMap::new();
+        for v in args.into_iter() {
+            let v = self.tuple_eval(v, tuples)?;
+            match v {
+                Value::Null => {},
+                Value::Dict(d) => coll.extend(d),
+                _ => return Err(CozoError::InvalidArgument)
+            }
+        }
+        Ok(coll.into())
+    }
+
+    fn merge_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                                table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut total_ret = vec![];
         let mut cur_ret = BTreeMap::new();
         let mut evaluated = true;
@@ -668,6 +989,7 @@ impl<'s> Session<'s> {
             let (ev, val) = self.partial_eval(val, params, table_bindings)?;
             evaluated = ev && evaluated;
             match val {
+                Value::Null => {},
                 Value::Dict(d) => {
                     if cur_ret.is_empty() {
                         cur_ret = d;
@@ -699,8 +1021,27 @@ impl<'s> Session<'s> {
             Ok((false, Value::Apply(value::METHOD_MERGE.into(), total_ret)))
         }
     }
-    fn and_values<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                      table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+
+    fn and_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+        let mut accum = 1;
+        for v in args.into_iter() {
+            let v = self.tuple_eval(v, tuples)?;
+            match v {
+                Value::Null => accum = min(accum, 0),
+                Value::Bool(true) => {}
+                Value::Bool(false) => return Ok(false.into()),
+                _ => return Err(CozoError::InvalidArgument)
+            }
+        }
+        Ok(match accum {
+            1 => true.into(),
+            0 => Value::Null,
+            _ => unreachable!()
+        })
+    }
+
+    fn and_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
+                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().map(|v| self.partial_eval(v, params, table_bindings))
             .try_fold(
                 (true, false, vec![]),
