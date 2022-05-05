@@ -391,7 +391,7 @@ struct TransactionBridge {
         options.change_level = true;
         options.target_level = 0;
         options.exclusive_manual_compaction = false;
-        write_status(raw_db->CompactRange(options, nullptr, nullptr), status);
+        write_status(raw_db->CompactRange(options, const_cast<ColumnFamilyHandle *>(&cf), nullptr, nullptr), status);
     }
 
     inline std::unique_ptr<IteratorBridge> iterator_txn(

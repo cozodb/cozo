@@ -3,11 +3,10 @@ use std::collections::{BTreeMap};
 use cozorocks::SlicePtr;
 use crate::db::engine::{Session};
 use crate::db::plan::AccessorMap;
-use crate::db::table::{ColId, TableId};
 use crate::relation::value::{Value};
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::LogicError;
-use crate::relation::tuple::{OwnTuple, Tuple};
+use crate::relation::tuple::{Tuple};
 use crate::relation::value;
 
 

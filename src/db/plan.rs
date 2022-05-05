@@ -99,7 +99,7 @@ impl<'a> Session<'a> {
         };
         Ok(res)
     }
-    fn base_relation_to_accessor_map(&self, table: &str, binding: &str, info: &TableInfo) -> AccessorMap {
+    fn base_relation_to_accessor_map(&self, _table: &str, binding: &str, info: &TableInfo) -> AccessorMap {
         let mut ret = BTreeMap::new();
         for (i, (k, _)) in info.key_typing.iter().enumerate() {
             ret.insert(k.into(), (info.table_id, (true, i).into()));
@@ -179,7 +179,7 @@ mod tests {
 
             let s = r#"from p:Person select p {id, name}"#;
             let parsed = Parser::parse(Rule::relational_query, s).unwrap().next().unwrap();
-            let plan = sess.query_to_plan(parsed).unwrap();
+            let _plan = sess.query_to_plan(parsed).unwrap();
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);
