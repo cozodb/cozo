@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::db::table::{ColId, TableId};
 use crate::parser::{Parser, Rule};
 use crate::error::{CozoError, Result};
+use crate::error::CozoError::LogicError;
 use crate::parser::number::parse_int;
 use crate::parser::text_identifier::parse_string;
 
@@ -173,6 +174,52 @@ impl<'a> Value<'a> {
         let pair = Parser::parse(Rule::expr, s)?.next();
         let pair = pair.ok_or_else(|| CozoError::LogicError("Parsing value failed".to_string()))?;
         Value::from_pair(pair)
+    }
+
+
+    pub fn extract_relevant_tables(self, coll: &mut Vec<TableId>) -> Result<Self> {
+        Ok(match self {
+            v @ (Value::Null |
+            Value::Bool(_) |
+            Value::Int(_) |
+            Value::Float(_) |
+            Value::Uuid(_) |
+            Value::Text(_) |
+            Value::Variable(_)) => v,
+            Value::List(l) => {
+                Value::List(l.into_iter()
+                    .map(|v| v.extract_relevant_tables(coll))
+                    .collect::<Result<Vec<_>>>()?)
+            }
+            Value::Dict(d) => {
+                Value::Dict(d.into_iter()
+                    .map(|(k, v)|
+                        v.extract_relevant_tables(coll).map(|v| (k, v)))
+                    .collect::<Result<BTreeMap<_, _>>>()?)
+            }
+            Value::TupleRef(tid, cid) => {
+                let pos = coll.iter().position(|id| id == &tid).unwrap_or_else(|| {
+                    let olen = coll.len();
+                    coll.push(tid);
+                    olen
+                });
+                Value::TupleRef((false, pos).into(), cid)
+            }
+            Value::Apply(op, args) => {
+                Value::Apply(op, args.into_iter()
+                    .map(|v| v.extract_relevant_tables(coll))
+                    .collect::<Result<Vec<_>>>()?)
+            }
+            Value::FieldAccess(field, arg) => {
+                Value::FieldAccess(field, arg.extract_relevant_tables(coll)?.into())
+            }
+            Value::IdxAccess(idx, arg) => {
+                Value::IdxAccess(idx, arg.extract_relevant_tables(coll)?.into())
+            }
+            Value::EndSentinel => {
+                return Err(LogicError("Encountered end sentinel".to_string()));
+            }
+        })
     }
 }
 

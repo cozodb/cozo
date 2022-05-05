@@ -10,9 +10,6 @@ use crate::error::CozoError::LogicError;
 use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::value;
 
-pub fn extract_relevant_tables<'a>(value: Value<'a>) -> (Value<'a>, Vec<(TableId, ColId)>) {
-    todo!()
-}
 
 impl<'s> Session<'s> {
     pub fn tuple_eval<'a>(&self, value: Value<'a>, tuples: Vec<Tuple<SlicePtr>>) -> Result<(OwnTuple, OwnTuple)> {
@@ -68,7 +65,7 @@ impl<'s> Session<'s> {
             Value::FieldAccess(field, arg) => {
                 // convert to tuple refs
                 if let Value::Variable(v) = &*arg {
-                    if let Some(sub_dict) =  table_bindings.get(v.as_ref()) {
+                    if let Some(sub_dict) = table_bindings.get(v.as_ref()) {
                         return match sub_dict.get(field.as_ref()) {
                             None => {
                                 Err(LogicError("Cannot resolve field in bound table".to_string()))
@@ -76,7 +73,7 @@ impl<'s> Session<'s> {
                             Some(d) => {
                                 Ok((false, Value::TupleRef(d.0, d.1)))
                             }
-                        }
+                        };
                     }
                 }
 
