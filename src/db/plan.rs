@@ -48,8 +48,9 @@ pub enum QueryPlan {
         filter: StaticValue,
     },
     BaseRelation {
-        table: String,
-        binding: String,
+        // table: String,
+        // binding: String,
+        accessors: AccessorMap,
         info: TableInfo,
     },
 }
@@ -60,6 +61,9 @@ pub enum OuterJoinType {
     RightJoin,
     FullOuterJoin,
 }
+
+
+pub type AccessorMap = BTreeMap<String, BTreeMap<String, (usize, bool, usize)>>;
 
 impl<'a> Session<'a> {
     pub fn query_to_plan(&self, pair: Pair<Rule>) -> Result<()> {
@@ -85,14 +89,21 @@ impl<'a> Session<'a> {
         let res = match from_data.pop().unwrap() {
             FromEl::Simple(el) => {
                 QueryPlan::BaseRelation {
-                    table: el.table,
-                    binding: el.binding,
+                    accessors: self.single_table_accessor_map(el.binding, &el.info),
                     info: el.info,
                 }
             }
             FromEl::Chain(_) => todo!()
         };
         Ok(res)
+    }
+    fn single_table_accessor_map(&self, binding: String, info: &TableInfo) -> AccessorMap {
+        // let mut ret = BTreeMap::new();
+        // for (k, v) in &info.key_typing {}
+        // for (k, v) in &info.val_typing {
+        //
+        // }
+        todo!()
     }
     fn convert_where_data_to_plan(&self, plan: QueryPlan, where_data: StaticValue) -> Result<QueryPlan> {
         let where_data = self.partial_eval(where_data, &Default::default(), &Default::default());

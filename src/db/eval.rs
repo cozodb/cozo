@@ -113,6 +113,9 @@ impl<'s> Session<'s> {
                     _ => { todo!() }
                 })
             }
+            Value::TupleRef(_, _) => {
+                todo!()
+            }
         }
     }
 
@@ -469,6 +472,9 @@ impl<'s> Session<'s> {
                                         collected.push(cur_val);
                                         Ok((false, has_null, collected))
                                     }
+                                    Value::TupleRef(_, _) => {
+                                        todo!()
+                                    }
                                 }
                             }
                         }
@@ -611,6 +617,9 @@ impl<'s> Session<'s> {
                                     Value::Apply(_, _)) => {
                                         collected.push(cur_val);
                                         Ok((false, has_null, collected))
+                                    }
+                                    Value::TupleRef(_, _) => {
+                                        todo!()
                                     }
                                 }
                             }

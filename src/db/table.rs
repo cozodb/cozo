@@ -5,7 +5,7 @@ use crate::error::CozoError::LogicError;
 use crate::relation::data::DataKind;
 use crate::relation::typing::Typing;
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Ord, PartialOrd)]
 pub struct TableId {
     pub in_root: bool,
     pub id: i64,
@@ -18,6 +18,12 @@ impl TableId {
     pub fn is_valid(&self) -> bool {
         self.id >= 0
     }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Ord, PartialOrd)]
+pub struct ColId {
+    pub is_key: bool,
+    pub id: i64,
 }
 
 impl Default for TableId {

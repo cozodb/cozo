@@ -270,7 +270,7 @@ impl<'a> Session<'a> {
             vals,
             ordering,
             limit,
-            offset
+            offset,
         })
     }
 }
@@ -282,7 +282,7 @@ pub struct Selection {
     pub vals: StaticValue,
     pub ordering: Vec<(bool, String)>,
     pub limit: Option<i64>,
-    pub offset: Option<i64>
+    pub offset: Option<i64>,
 }
 
 #[cfg(test)]

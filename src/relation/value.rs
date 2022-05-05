@@ -7,6 +7,7 @@ use ordered_float::OrderedFloat;
 use pest::Parser as PestParser;
 use pest::iterators::Pair;
 use uuid::Uuid;
+use crate::db::table::{ColId, TableId};
 use crate::parser::{Parser, Rule};
 use crate::error::{CozoError, Result};
 use crate::parser::number::parse_int;
@@ -27,6 +28,7 @@ pub enum Tag {
     List = 128,
     Dict = 129,
 
+    TupleRef = 250,
     IdxAccess = 251,
     FieldAccess = 252,
     Variable = 253,
@@ -47,8 +49,11 @@ impl TryFrom<u8> for Tag {
             5 => Float,
             6 => Text,
             7 => Uuid,
+
             128 => List,
             129 => Dict,
+
+            250 => TupleRef,
             251 => IdxAccess,
             252 => FieldAccess,
             253 => Variable,
@@ -100,6 +105,7 @@ pub enum Value<'a> {
     Dict(BTreeMap<Cow<'a, str>, Value<'a>>),
     // not evaluated
     Variable(Cow<'a, str>),
+    TupleRef(TableId, ColId),
     Apply(Cow<'a, str>, Vec<Value<'a>>),
     FieldAccess(Cow<'a, str>, Box<Value<'a>>),
     IdxAccess(usize, Box<Value<'a>>),
@@ -135,6 +141,7 @@ impl<'a> Value<'a> {
             Value::IdxAccess(idx, value) => {
                 Value::IdxAccess(idx, value.to_static().into())
             }
+            Value::TupleRef(tid, cid) => Value::TupleRef(tid, cid)
         }
     }
     #[inline]
@@ -152,7 +159,8 @@ impl<'a> Value<'a> {
             Value::Variable(_) => false,
             Value::Apply(_, _) => false,
             Value::FieldAccess(_, _) => false,
-            Value::IdxAccess(_, _) => false
+            Value::IdxAccess(_, _) => false,
+            Value::TupleRef(_, _) => false
         }
     }
     #[inline]
@@ -313,6 +321,9 @@ impl<'a> Display for Value<'a> {
             }
             Value::IdxAccess(idx, value) => {
                 write!(f, "(.{} {})", idx, value)?;
+            }
+            Value::TupleRef(tid, cid) => {
+                write!(f, "#{}{}{}{}", if tid.in_root { 'G' } else { 'L' }, tid.id, if cid.is_key { 'K' } else { 'D' }, cid.id)?;
             }
         }
         Ok(())

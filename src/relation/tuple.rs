@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use uuid::Uuid;
+use crate::db::table::{ColId, TableId};
 use crate::relation::data::DataKind;
 use crate::relation::value::{Tag, Value};
 
@@ -90,6 +91,10 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             Tag::Dict |
             Tag::IdxAccess |
             Tag::FieldAccess => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
+            Tag::TupleRef => {
+                let temp = start + 1 + self.parse_varint(start + 1).1 + 1;
+                temp + self.parse_varint(temp).1
+            }
             Tag::MaxTag => panic!(),
         };
         self.idx_cache.borrow_mut().push(nxt);
@@ -225,11 +230,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             Tag::BoolFalse => (start, false.into()),
             Tag::Int => {
                 let (u, offset) = self.parse_varint(start);
-                let val = if u & 1 == 0 {
-                    (u >> 1) as i64
-                } else {
-                    -((u >> 1) as i64) - 1
-                };
+                let val = Self::varint_to_zigzag(u);
                 (start + offset, val.into())
             }
             Tag::Float => (start + 8, f64::from_be_bytes(data[start..start + 8].try_into().unwrap()).into()),
@@ -321,8 +322,25 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 let (val, _) = self.parse_value_at(start_pos);
                 (end_pos, Value::FieldAccess(field.into(), val.into()))
             }
+            Tag::TupleRef => {
+                let in_root = self.parse_value_at(start).0 == Value::Bool(true);
+                let (tidu, parse_len) = self.parse_varint(start + 1);
+                let is_key = self.parse_value_at(parse_len + start + 1).0 == Value::Bool(true);
+                let (cidu, parse_len2) = self.parse_varint(start + 1 + parse_len + 1);
+                (start + 1 + parse_len + 1 + parse_len2,
+                 Value::TupleRef(TableId { in_root, id: Self::varint_to_zigzag(tidu) },
+                                 ColId { is_key, id: Self::varint_to_zigzag(cidu) }))
+            }
         };
         (val, nxt)
+    }
+
+    fn varint_to_zigzag(u: u64) -> i64 {
+        if u & 1 == 0 {
+            (u >> 1) as i64
+        } else {
+            -((u >> 1) as i64) - 1
+        }
     }
     pub fn iter(&self) -> TupleIter<T> {
         TupleIter {
@@ -532,6 +550,17 @@ impl OwnTuple {
                 let length = (self.data.len() - start_pos) as u32;
                 let length_bytes = length.to_be_bytes();
                 self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
+                let mut cache = self.idx_cache.borrow_mut();
+                cache.truncate(start_len);
+                cache.push(self.data.len());
+            }
+            Value::TupleRef(tid, cid) => {
+                self.push_tag(Tag::Dict);
+                let start_len = self.idx_cache.borrow().len();
+                self.push_bool(tid.in_root);
+                self.push_int(tid.id);
+                self.push_bool(cid.is_key);
+                self.push_int(cid.id);
                 let mut cache = self.idx_cache.borrow_mut();
                 cache.truncate(start_len);
                 cache.push(self.data.len());
