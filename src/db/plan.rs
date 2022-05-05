@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use pest::iterators::Pair;
 use crate::db::engine::Session;
 use crate::db::query::{FromEl, Selection};
-use crate::db::table::TableInfo;
+use crate::db::table::{ColId, TableId, TableInfo};
 use crate::relation::value::{StaticValue, Value};
 use crate::parser::Rule;
 use crate::error::Result;
@@ -48,9 +48,9 @@ pub enum QueryPlan {
         filter: StaticValue,
     },
     BaseRelation {
-        // table: String,
-        // binding: String,
-        accessors: AccessorMap,
+        table: String,
+        binding: String,
+        // accessors: AccessorMap,
         info: TableInfo,
     },
 }
@@ -63,7 +63,7 @@ pub enum OuterJoinType {
 }
 
 
-pub type AccessorMap = BTreeMap<String, BTreeMap<String, (usize, bool, usize)>>;
+pub type AccessorMap = BTreeMap<String, BTreeMap<String, (TableId, ColId)>>;
 
 impl<'a> Session<'a> {
     pub fn query_to_plan(&self, pair: Pair<Rule>) -> Result<()> {
@@ -88,8 +88,10 @@ impl<'a> Session<'a> {
     fn convert_from_data_to_plan(&self, mut from_data: Vec<FromEl>) -> Result<QueryPlan> {
         let res = match from_data.pop().unwrap() {
             FromEl::Simple(el) => {
+                println!("{:#?}", self.base_relation_to_accessor_map(&el.table, &el.binding, &el.info));
                 QueryPlan::BaseRelation {
-                    accessors: self.single_table_accessor_map(el.binding, &el.info),
+                    table: el.table,
+                    binding: el.binding,
                     info: el.info,
                 }
             }
@@ -97,13 +99,23 @@ impl<'a> Session<'a> {
         };
         Ok(res)
     }
-    fn single_table_accessor_map(&self, binding: String, info: &TableInfo) -> AccessorMap {
-        // let mut ret = BTreeMap::new();
-        // for (k, v) in &info.key_typing {}
-        // for (k, v) in &info.val_typing {
-        //
-        // }
-        todo!()
+    fn base_relation_to_accessor_map(&self, table: &str, binding: &str, info: &TableInfo) -> AccessorMap {
+        let mut ret = BTreeMap::new();
+        for (i, (k, _)) in info.key_typing.iter().enumerate() {
+            ret.insert(k.into(), (info.table_id, (true, i).into()));
+        }
+        for (i, (k, _)) in info.val_typing.iter().enumerate() {
+            ret.insert(k.into(), (info.table_id, (false, i).into()));
+        }
+        for assoc in &info.associates {
+            for (i, (k, _)) in assoc.key_typing.iter().enumerate() {
+                ret.insert(k.into(), (assoc.table_id, (true, i).into()));
+            }
+            for (i, (k, _)) in assoc.val_typing.iter().enumerate() {
+                ret.insert(k.into(), (assoc.table_id, (false, i).into()));
+            }
+        }
+        BTreeMap::from([(binding.to_string(), ret)])
     }
     fn convert_where_data_to_plan(&self, plan: QueryPlan, where_data: StaticValue) -> Result<QueryPlan> {
         let where_data = self.partial_eval(where_data, &Default::default(), &Default::default());

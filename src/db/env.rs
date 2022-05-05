@@ -16,33 +16,6 @@ use crate::relation::tuple::{OwnTuple, Tuple};
 /// `[True, Int]` table info, value is key
 
 
-// type TableEnv = BTreeMap<String, ()>;
-#[derive(Debug, Default)]
-pub struct TableEnv<'a> {
-    pub parent: Option<&'a TableEnv<'a>>,
-    pub current: BTreeMap<String, ()>,
-}
-
-impl<'a> TableEnv<'a> {
-    pub fn derive(&'a self) -> TableEnv<'a> {
-        TableEnv {
-            parent: Some(self),
-            current: Default::default(),
-        }
-    }
-
-    pub fn resolve(&self, key: &str) -> Option<&()> {
-        match self.current.get(key) {
-            None => match self.parent {
-                None => None,
-                Some(t) => t.resolve(key)
-            }
-            v => v
-        }
-    }
-}
-
-
 impl<'s> Session<'s> {
     pub fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
         let mut data = Tuple::with_data_prefix(DataKind::Value);

@@ -20,10 +20,34 @@ impl TableId {
     }
 }
 
+impl From<(bool, usize)> for TableId {
+    fn from((in_root, id): (bool, usize)) -> Self {
+        Self { in_root, id: id as i64 }
+    }
+}
+
+impl From<(bool, i64)> for TableId {
+    fn from((in_root, id): (bool, i64)) -> Self {
+        Self { in_root, id }
+    }
+}
+
 #[derive(Eq, PartialEq, Debug, Clone, Copy, Ord, PartialOrd)]
 pub struct ColId {
     pub is_key: bool,
     pub id: i64,
+}
+
+impl From<(bool, i64)> for ColId {
+    fn from((is_key, id): (bool, i64)) -> Self {
+        Self { is_key, id }
+    }
+}
+
+impl From<(bool, usize)> for ColId {
+    fn from((is_key, id): (bool, usize)) -> Self {
+        Self { is_key, id: id as i64 }
+    }
 }
 
 impl Default for TableId {

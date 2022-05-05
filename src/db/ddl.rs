@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use pest::iterators::{Pair, Pairs};
 use cozorocks::SlicePtr;
 use crate::db::engine::Session;
+use crate::db::table::TableId;
 use crate::relation::tuple::{OwnTuple, Tuple};
 use crate::relation::typing::Typing;
 use crate::parser::Rule;
@@ -254,6 +255,12 @@ impl<'s> Session<'s> {
             self.txn.put(false, &self.temp_cf, key_entry, new_data)?;
         }
         Ok(u + 1)
+    }
+    pub fn make_table_id_valid(&self, tid: &mut TableId) -> Result<()> {
+        if !tid.is_valid() {
+            tid.id = self.get_next_storage_id(tid.in_root)?;
+        }
+        Ok(())
     }
 
     pub fn table_data(&self, id: i64, in_root: bool) -> Result<Option<Tuple<SlicePtr>>> {
