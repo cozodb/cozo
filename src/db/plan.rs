@@ -142,6 +142,7 @@ mod tests {
     use crate::db::query::FromEl;
     use crate::relation::value::Value;
     use crate::error::Result;
+    use crate::relation::tuple::{OwnTuple, Tuple};
 
     #[test]
     fn pair_value() -> Result<()> {
@@ -183,22 +184,40 @@ mod tests {
                 FromEl::Simple(s) => s,
                 FromEl::Chain(_) => panic!()
             };
-            let s = "select {id: e.id, data: e.first_name ++ ' ' ++ e.last_name}";
+            let s = r#"select {id: e.id,
+            full_name: e.first_name ++ ' ' ++ e.last_name, bibio_name: e.last_name ++ ', '
+            ++ e.first_name ++ ': ' ++ (e.phone_number ~ 'N.A.')}"#;
             let p = Parser::parse(Rule::select_pattern, s).unwrap().next().unwrap();
-            println!("{:#?}", p);
             let sel_pat = sess.parse_select_pattern(p).unwrap();
-            println!("{:?}", sel_pat);
             let amap = sess.base_relation_to_accessor_map(&from_pat.table, &from_pat.binding, &from_pat.info);
-            println!("VALS ORIGINAL {:?}", sel_pat.vals);
             let (_, vals) = sess.partial_eval(sel_pat.vals,& Default::default(), &amap).unwrap();
-            println!("VALS AFTER 1  {:?}", vals);
 
-            let (vals, rel_tbls) = vals.extract_relevant_tables().unwrap();
-            println!("VALS AFTER 2  {:?}", vals);
+            let (vals, mut rel_tbls) = vals.extract_relevant_tables().unwrap();
+            println!("VALS AFTER 2  {}", vals);
 
             println!("{:?}", from_pat);
             println!("{:?}", amap);
             println!("{:?}", rel_tbls);
+
+            let tbl = rel_tbls.pop().unwrap();
+            let key_prefix = OwnTuple::with_prefix(tbl.id as u32);
+            let it = sess.txn.iterator(true, &sess.perm_cf);
+            it.seek(&key_prefix);
+            while it.is_valid() {
+                if let Some((k, v)) = it.pair() {
+                    let k = Tuple::new(k);
+                    if !k.starts_with(&key_prefix) {
+                        break;
+                    }
+                    let v = Tuple::new(v);
+                    let tpair = [(k, v)];
+                    let extracted = sess.tuple_eval(vals.clone(), &tpair).unwrap();
+                    println!("{:?}", extracted);
+                    it.next();
+                } else {
+                    break
+                }
+            }
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

@@ -204,7 +204,6 @@ impl<'a> Session<'a> {
                     let mut inner = p.into_inner();
                     let name = parse_string(inner.next().unwrap())?;
                     let val_pair = inner.next().unwrap();
-                    println!("{:?}", val_pair);
                     let val = Value::from_pair(val_pair)?;
                     collected_vals.insert(name.into(), val);
                 }

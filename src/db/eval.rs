@@ -245,30 +245,32 @@ impl<'s> Session<'s> {
                                    table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().try_fold(vec![], |mut accum, cur| {
             match self.partial_eval(cur, params, table_bindings) {
-                Ok((ev, cur)) => {
+                Ok((ev, cur)) =>
                     if ev {
                         if cur == Value::Null {
                             Ok(accum)
                         } else {
-                            Err(Ok(cur))
+                            accum.push(cur);
+                            Err(Ok(accum))
                         }
                     } else {
                         accum.push(cur);
                         Ok(accum)
-                    }
-                }
+                    },
                 Err(e) => Err(Err(e))
             }
         });
         match res {
-            Ok(accum) => {
-                match accum.len() {
-                    0 => Ok((true, Value::Null)),
-                    1 => Ok((false, accum.into_iter().next().unwrap())),
-                    _ => Ok((false, Value::Apply(value::OP_COALESCE.into(), accum)))
-                }
+            Ok(accum) => match accum.len() {
+                0 => Ok((true, Value::Null)),
+                1 => Ok((false, accum.into_iter().next().unwrap())),
+                _ => Ok((false, Value::Apply(value::OP_COALESCE.into(), accum)))
             }
-            Err(Ok(v)) => Ok((true, v)),
+            Err(Ok(accum)) => match accum.len() {
+                0 => Ok((true, Value::Null)),
+                1 => Ok((true, accum.into_iter().next().unwrap())),
+                _ => Ok((false, Value::Apply(value::OP_COALESCE.into(), accum)))
+            },
             Err(Err(e)) => Err(e)
         }
     }
@@ -915,9 +917,9 @@ impl<'s> Session<'s> {
     fn concat_values<'a>(&self, args: Vec<Value<'a>>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
         let mut coll = vec![];
         for v in args.into_iter() {
-            let v  = self.tuple_eval(v, tuples)?;
+            let v = self.tuple_eval(v, tuples)?;
             match v {
-                Value::Null => {},
+                Value::Null => {}
                 Value::List(l) => coll.extend(l),
                 _ => return Err(CozoError::InvalidArgument)
             }
@@ -934,7 +936,7 @@ impl<'s> Session<'s> {
             let (ev, val) = self.partial_eval(val, params, table_bindings)?;
             evaluated = ev && evaluated;
             match val {
-                Value::Null => {},
+                Value::Null => {}
                 Value::List(l) => {
                     if cur_ret.is_empty() {
                         cur_ret = l;
@@ -972,7 +974,7 @@ impl<'s> Session<'s> {
         for v in args.into_iter() {
             let v = self.tuple_eval(v, tuples)?;
             match v {
-                Value::Null => {},
+                Value::Null => {}
                 Value::Dict(d) => coll.extend(d),
                 _ => return Err(CozoError::InvalidArgument)
             }
@@ -989,7 +991,7 @@ impl<'s> Session<'s> {
             let (ev, val) = self.partial_eval(val, params, table_bindings)?;
             evaluated = ev && evaluated;
             match val {
-                Value::Null => {},
+                Value::Null => {}
                 Value::Dict(d) => {
                     if cur_ret.is_empty() {
                         cur_ret = d;
