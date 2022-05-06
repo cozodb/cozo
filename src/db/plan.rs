@@ -211,7 +211,7 @@ mod tests {
                     }
                     let v = Tuple::new(v);
                     let tpair = [(k, v)];
-                    let extracted = sess.tuple_eval(vals.clone(), &tpair).unwrap();
+                    let extracted = sess.tuple_eval(&vals, &tpair).unwrap();
                     println!("{:?}", extracted);
                     it.next();
                 } else {
