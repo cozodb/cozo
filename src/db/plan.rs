@@ -187,7 +187,7 @@ mod tests {
                 FromEl::Simple(s) => s,
                 FromEl::Chain(_) => panic!()
             };
-            let s = "where e.id >= 100, e.id <= 105";
+            let s = "where e.id >= 100, e.id <= 105 || e.id == 110";
             let p = Parser::parse(Rule::where_pattern, s).unwrap().next().unwrap();
             let where_pat = sess.parse_where_pattern(p).unwrap();
 
@@ -197,10 +197,12 @@ mod tests {
             let p = Parser::parse(Rule::select_pattern, s).unwrap().next().unwrap();
             let sel_pat = sess.parse_select_pattern(p).unwrap();
             let amap = sess.base_relation_to_accessor_map(&from_pat.table, &from_pat.binding, &from_pat.info);
-            let (_, vals) = sess.partial_eval(sel_pat.vals,& Default::default(), &amap).unwrap();
-            let (_, where_vals) = sess.partial_eval(where_pat,& Default::default(), &amap).unwrap();
-            let (vals, mut rel_tbls) = vals.extract_relevant_tables().unwrap();
-            let (where_vals, _) = where_vals.extract_relevant_tables().unwrap();
+            let (_, vals) = sess.partial_eval(sel_pat.vals, &Default::default(), &amap).unwrap();
+            let (_, where_vals) = sess.partial_eval(where_pat, &Default::default(), &amap).unwrap();
+            let (vcoll, mut rel_tbls) = Value::extract_relevant_tables([vals, where_vals].into_iter()).unwrap();
+            let mut vcoll = vcoll.into_iter();
+            let vals = vcoll.next().unwrap();
+            let where_vals = vcoll.next().unwrap();
             println!("VALS AFTER 2  {} {}", vals, where_vals);
 
             println!("{:?}", from_pat);
@@ -225,18 +227,17 @@ mod tests {
                             println!("{}", extracted);
                         }
                         Value::Null |
-                        Value::Bool(_) => {},
+                        Value::Bool(_) => {}
                         _ => panic!("Bad type")
                     }
                     it.next();
                 } else {
-                    break
+                    break;
                 }
             }
             let duration = start.elapsed();
             let duration2 = start2.elapsed();
             println!("Time elapsed {:?} {:?}", duration, duration2);
-
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

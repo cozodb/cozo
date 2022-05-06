@@ -176,9 +176,12 @@ impl<'a> Value<'a> {
         Value::from_pair(pair)
     }
 
-    pub fn extract_relevant_tables(self) -> Result<(Self, Vec<TableId>)> {
+    pub fn extract_relevant_tables<T: Iterator<Item=Self>>(data: T) -> Result<(Vec<Self>, Vec<TableId>)> {
         let mut coll = vec![];
-        let res = self.do_extract_relevant_tables(&mut coll)?;
+        let mut res = Vec::with_capacity(data.size_hint().1.unwrap_or(0));
+        for v in data {
+            res.push(v.do_extract_relevant_tables(&mut coll)?);
+        }
         Ok((res, coll))
     }
 
@@ -310,11 +313,11 @@ impl<'a> From<BTreeMap<Cow<'a, str>, Value<'a>>> for Value<'a> {
 impl<'a> Display for Value<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Null => { f.write_str("null")?; }
-            Value::Bool(b) => { f.write_str(if *b { "true" } else { "false" })?; }
-            Value::Int(i) => { f.write_str(&i.to_string())?; }
-            Value::Float(n) => { f.write_str(&format!("{:e}", n.into_inner()))?; }
-            Value::Uuid(u) => { f.write_str(&u.to_string())?; }
+            Value::Null => { write!(f, "null")?; }
+            Value::Bool(b) => { write!(f, "{}", if *b { "true" } else { "false" })?; }
+            Value::Int(i) => { write!(f, "{}", i)?; }
+            Value::Float(n) => { write!(f, "{}", n.into_inner())?; }
+            Value::Uuid(u) => { write!(f, "{}", u)?; }
             Value::Text(t) => {
                 f.write_char('"')?;
                 for char in t.chars() {
