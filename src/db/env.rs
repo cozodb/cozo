@@ -17,7 +17,7 @@ use crate::relation::tuple::{OwnTuple, Tuple};
 
 impl<'s> Session<'s> {
     pub fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
-        let mut data = Tuple::with_data_prefix(DataKind::Value);
+        let mut data = Tuple::with_data_prefix(DataKind::Val);
         data.push_value(val);
         self.define_data(name, data, in_root)
     }
@@ -74,7 +74,7 @@ impl<'s> Session<'s> {
             None => Ok(None),
             Some(t) => {
                 match t.data_kind()? {
-                    DataKind::Value => Ok(Some(t.get(0)
+                    DataKind::Val => Ok(Some(t.get(0)
                         .ok_or_else(|| CozoError::LogicError("Corrupt".to_string()))?
                         .to_static())),
                     k => Err(CozoError::UnexpectedDataKind(k))

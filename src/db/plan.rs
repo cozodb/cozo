@@ -134,10 +134,23 @@ impl<'a> Session<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::fs;
     use crate::db::engine::Engine;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
+    use crate::db::query::FromEl;
+    use crate::relation::value::Value;
+    use crate::error::Result;
+
+    #[test]
+    fn pair_value() -> Result<()> {
+        let s = "{x: e.first_name ++ ' ' ++ e.last_name, y: [e.a, e.b ++ e.c]}";
+        let res = Parser::parse(Rule::expr, s).unwrap().next().unwrap();
+        let v = Value::from_pair(res)?;
+        println!("{:#?}", v);
+        Ok(())
+    }
 
     #[test]
     fn plan() {
@@ -145,31 +158,9 @@ mod tests {
         let engine = Engine::new(db_path.to_string(), true).unwrap();
         {
             let mut sess = engine.session().unwrap();
-            let s = r#"
-                create node "Person" {
-                    *id: Int,
-                    name: Text,
-                    email: ?Text,
-                    habits: ?[?Text]
-                }
+            let s = fs::read_to_string("test_data/hr.cozo").unwrap();
 
-                create edge (Person)-[Friend]->(Person) {
-                    relation: ?Text
-                }
-
-                create node Z {
-                    *id: Text
-                }
-
-                create assoc WorkInfo : Person {
-                    work_id: Int
-                }
-
-                create assoc RelationshipData: Person {
-                    status: Text
-                }
-            "#;
-            for p in Parser::parse(Rule::file, s).unwrap() {
+            for p in Parser::parse(Rule::file, &s).unwrap() {
                 if p.as_rule() == Rule::EOI {
                     break;
                 }
@@ -177,9 +168,37 @@ mod tests {
             }
             sess.commit().unwrap();
 
-            let s = r#"from p:Person select p {id, name}"#;
-            let parsed = Parser::parse(Rule::relational_query, s).unwrap().next().unwrap();
-            let _plan = sess.query_to_plan(parsed).unwrap();
+            let data = fs::read_to_string("test_data/hr.json").unwrap();
+            let value = Value::parse_str(&data).unwrap();
+            let s = "insert $data;";
+            let p = Parser::parse(Rule::file, &s).unwrap().next().unwrap();
+            let params = BTreeMap::from([("$data".into(), value)]);
+
+            assert!(sess.run_mutation(p.clone(), &params).is_ok());
+            sess.commit().unwrap();
+
+            let s = "from e:Employee";
+            let p = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
+            let from_pat = match sess.parse_from_pattern(p).unwrap().pop().unwrap() {
+                FromEl::Simple(s) => s,
+                FromEl::Chain(_) => panic!()
+            };
+            let s = "select {id: e.id, data: e.first_name ++ ' ' ++ e.last_name}";
+            let p = Parser::parse(Rule::select_pattern, s).unwrap().next().unwrap();
+            println!("{:#?}", p);
+            let sel_pat = sess.parse_select_pattern(p).unwrap();
+            println!("{:?}", sel_pat);
+            let amap = sess.base_relation_to_accessor_map(&from_pat.table, &from_pat.binding, &from_pat.info);
+            println!("VALS ORIGINAL {:?}", sel_pat.vals);
+            let (_, vals) = sess.partial_eval(sel_pat.vals,& Default::default(), &amap).unwrap();
+            println!("VALS AFTER 1  {:?}", vals);
+
+            let (vals, rel_tbls) = vals.extract_relevant_tables().unwrap();
+            println!("VALS AFTER 2  {:?}", vals);
+
+            println!("{:?}", from_pat);
+            println!("{:?}", amap);
+            println!("{:?}", rel_tbls);
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

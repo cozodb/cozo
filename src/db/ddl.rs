@@ -188,7 +188,7 @@ impl<'s> Session<'s> {
     fn extract_table_id<T: AsRef<[u8]>>(src_tbl: Tuple<T>) -> Result<(DataKind, bool, i64)> {
         let kind = src_tbl.data_kind()?;
         match kind {
-            DataKind::Data | DataKind::Value | DataKind::Type => return Err(CozoError::UnexpectedDataKind(kind)),
+            DataKind::Data | DataKind::Val | DataKind::Type => return Err(CozoError::UnexpectedDataKind(kind)),
             _ => {}
         };
         let is_global = src_tbl.get_bool(0).expect("Data corrupt");

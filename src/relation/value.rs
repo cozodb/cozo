@@ -176,8 +176,13 @@ impl<'a> Value<'a> {
         Value::from_pair(pair)
     }
 
+    pub fn extract_relevant_tables(self) -> Result<(Self, Vec<TableId>)> {
+        let mut coll = vec![];
+        let res = self.do_extract_relevant_tables(&mut coll)?;
+        Ok((res, coll))
+    }
 
-    pub fn extract_relevant_tables(self, coll: &mut Vec<TableId>) -> Result<Self> {
+    fn do_extract_relevant_tables(self, coll: &mut Vec<TableId>) -> Result<Self> {
         Ok(match self {
             v @ (Value::Null |
             Value::Bool(_) |
@@ -188,13 +193,13 @@ impl<'a> Value<'a> {
             Value::Variable(_)) => v,
             Value::List(l) => {
                 Value::List(l.into_iter()
-                    .map(|v| v.extract_relevant_tables(coll))
+                    .map(|v| v.do_extract_relevant_tables(coll))
                     .collect::<Result<Vec<_>>>()?)
             }
             Value::Dict(d) => {
                 Value::Dict(d.into_iter()
                     .map(|(k, v)|
-                        v.extract_relevant_tables(coll).map(|v| (k, v)))
+                        v.do_extract_relevant_tables(coll).map(|v| (k, v)))
                     .collect::<Result<BTreeMap<_, _>>>()?)
             }
             Value::TupleRef(tid, cid) => {
@@ -207,14 +212,14 @@ impl<'a> Value<'a> {
             }
             Value::Apply(op, args) => {
                 Value::Apply(op, args.into_iter()
-                    .map(|v| v.extract_relevant_tables(coll))
+                    .map(|v| v.do_extract_relevant_tables(coll))
                     .collect::<Result<Vec<_>>>()?)
             }
             Value::FieldAccess(field, arg) => {
-                Value::FieldAccess(field, arg.extract_relevant_tables(coll)?.into())
+                Value::FieldAccess(field, arg.do_extract_relevant_tables(coll)?.into())
             }
             Value::IdxAccess(idx, arg) => {
-                Value::IdxAccess(idx, arg.extract_relevant_tables(coll)?.into())
+                Value::IdxAccess(idx, arg.do_extract_relevant_tables(coll)?.into())
             }
             Value::EndSentinel => {
                 return Err(LogicError("Encountered end sentinel".to_string()));
@@ -445,7 +450,7 @@ fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Valu
 }
 
 
-pub fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
+fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
     match pair.as_rule() {
         Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
         Rule::term => {
@@ -466,7 +471,7 @@ pub fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                         let mut pairs = p.into_inner();
                         let method_name = pairs.next().unwrap().as_str();
                         let mut args = vec![head];
-                        args.extend(pairs.map(build_expr_primary).collect::<Result<Vec<_>>>()?);
+                        args.extend(pairs.map(Value::from_pair).collect::<Result<Vec<_>>>()?);
                         head = Value::Apply(method_name.into(), args);
                     }
                     _ => todo!()
@@ -502,10 +507,10 @@ pub fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
             let mut collected = vec![];
             for p in pair.into_inner() {
                 match p.as_rule() {
-                    Rule::expr => collected.push(build_expr_primary(p)?),
+                    Rule::expr => collected.push(Value::from_pair(p)?),
                     Rule::spreading => {
                         let el = p.into_inner().next().unwrap();
-                        let to_concat = build_expr_primary(el)?;
+                        let to_concat = Value::from_pair(el)?;
                         if !matches!(to_concat, Value::List(_) | Value::Variable(_) |
                         Value::IdxAccess(_, _) | Value:: FieldAccess(_, _) | Value::Apply(_, _)) {
                             return Err(CozoError::LogicError("Cannot spread".to_string()));
@@ -535,7 +540,7 @@ pub fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                     Rule::dict_pair => {
                         let mut inner = p.into_inner();
                         let name = parse_string(inner.next().unwrap())?;
-                        let val = build_expr_primary(inner.next().unwrap())?;
+                        let val = Value::from_pair(inner.next().unwrap())?;
                         collected.insert(name.into(), val);
                     }
                     Rule::scoped_accessor => {

@@ -11,7 +11,7 @@ pub enum DataKind {
     Edge = 2,
     Assoc = 3,
     Index = 4,
-    Value = 5,
+    Val = 5,
     Type = 6,
 }
 // In storage, key layout is `[0, name, stack_depth]` where stack_depth is a non-positive number as zigzag
@@ -27,7 +27,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             2 => Edge,
             3 => Assoc,
             4 => Index,
-            5 => Value,
+            5 => Val,
             6 => Type,
             v => return Err(CozoError::UndefinedDataKind(v))
         })

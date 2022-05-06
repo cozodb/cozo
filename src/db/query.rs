@@ -2,13 +2,12 @@ use std::collections::BTreeMap;
 use pest::iterators::Pair;
 use crate::db::engine::Session;
 use crate::db::table::TableInfo;
-use crate::error::CozoError::LogicError;
 use crate::parser::Rule;
 use crate::error::{CozoError, Result};
 use crate::parser::text_identifier::{build_name_in_def, parse_string};
 use crate::relation::data::DataKind;
 use crate::relation::value;
-use crate::relation::value::{build_expr_primary, METHOD_MERGE, StaticValue, Value};
+use crate::relation::value::{StaticValue, Value};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum FromEl {
@@ -56,7 +55,7 @@ impl<'a> Session<'a> {
         let mut pairs = pair.into_inner();
         let name = pairs.next().unwrap().as_str();
         if name.starts_with('_') {
-            return Err(LogicError("Pattern binding cannot start with underscore".to_string()));
+            return Err(CozoError::LogicError("Pattern binding cannot start with underscore".to_string()));
         }
         let table_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let table_info = self.get_table_info(&table_name)?;
@@ -117,13 +116,16 @@ impl<'a> Session<'a> {
         if !connects {
             return Err(CozoError::LogicError("Chain does not connect".to_string()));
         }
+        if res.is_empty() {
+            return Err(CozoError::LogicError("Empty chain not allowed".to_string()));
+        }
         Ok(FromEl::Chain(res))
     }
 
     fn parse_node_pattern(&self, pair: Pair<Rule>) -> Result<EdgeOrNodeEl> {
         let (table, binding, info) = self.parse_node_or_edge(pair)?;
         if info.kind != DataKind::Node {
-            return Err(LogicError(format!("{} is not a node", table)));
+            return Err(CozoError::LogicError(format!("{} is not a node", table)));
         }
         Ok(EdgeOrNodeEl {
             table,
@@ -138,7 +140,7 @@ impl<'a> Session<'a> {
     fn parse_edge_pattern(&self, pair: Pair<Rule>, is_fwd: bool) -> Result<EdgeOrNodeEl> {
         let (table, binding, info) = self.parse_node_or_edge(pair)?;
         if info.kind != DataKind::Edge {
-            return Err(LogicError(format!("{} is not an edge", table)));
+            return Err(CozoError::LogicError(format!("{} is not an edge", table)));
         }
         Ok(EdgeOrNodeEl {
             table,
@@ -201,12 +203,14 @@ impl<'a> Session<'a> {
                 Rule::dict_pair => {
                     let mut inner = p.into_inner();
                     let name = parse_string(inner.next().unwrap())?;
-                    let val = build_expr_primary(inner.next().unwrap())?;
+                    let val_pair = inner.next().unwrap();
+                    println!("{:?}", val_pair);
+                    let val = Value::from_pair(val_pair)?;
                     collected_vals.insert(name.into(), val);
                 }
                 Rule::spreading => {
                     let el = p.into_inner().next().unwrap();
-                    let to_concat = build_expr_primary(el)?;
+                    let to_concat = Value::from_pair(el)?;
                     if !matches!(to_concat, Value::Dict(_) | Value::Variable(_) |
                         Value::IdxAccess(_, _) | Value:: FieldAccess(_, _) | Value::Apply(_, _)) {
                         return Err(CozoError::LogicError("Cannot spread".to_string()));
@@ -233,7 +237,7 @@ impl<'a> Session<'a> {
             if !collected_vals.is_empty() {
                 merged.push(Value::Dict(collected_vals));
             }
-            Value::Apply(METHOD_MERGE.into(), merged).to_static()
+            Value::Apply(value::METHOD_MERGE.into(), merged).to_static()
         };
 
         let mut ordering = vec![];
