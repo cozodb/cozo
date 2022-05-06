@@ -653,7 +653,7 @@ impl<'s> Session<'s> {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Value::Apply(value::OP_GE.into(), vec![left, right])));
+            return Ok((false, Value::Apply(value::OP_LE.into(), vec![left, right])));
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l <= r).into()),

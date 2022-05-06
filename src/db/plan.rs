@@ -136,6 +136,7 @@ impl<'a> Session<'a> {
 mod tests {
     use std::collections::BTreeMap;
     use std::fs;
+    use std::time::Instant;
     use crate::db::engine::Engine;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
@@ -159,6 +160,7 @@ mod tests {
         let engine = Engine::new(db_path.to_string(), true).unwrap();
         {
             let mut sess = engine.session().unwrap();
+            let start = Instant::now();
             let s = fs::read_to_string("test_data/hr.cozo").unwrap();
 
             for p in Parser::parse(Rule::file, &s).unwrap() {
@@ -177,6 +179,7 @@ mod tests {
 
             assert!(sess.run_mutation(p.clone(), &params).is_ok());
             sess.commit().unwrap();
+            let start2 = Instant::now();
 
             let s = "from e:Employee";
             let p = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
@@ -184,6 +187,10 @@ mod tests {
                 FromEl::Simple(s) => s,
                 FromEl::Chain(_) => panic!()
             };
+            let s = "where e.id >= 100, e.id <= 105";
+            let p = Parser::parse(Rule::where_pattern, s).unwrap().next().unwrap();
+            let where_pat = sess.parse_where_pattern(p).unwrap();
+
             let s = r#"select {id: e.id,
             full_name: e.first_name ++ ' ' ++ e.last_name, bibio_name: e.last_name ++ ', '
             ++ e.first_name ++ ': ' ++ (e.phone_number ~ 'N.A.')}"#;
@@ -191,9 +198,10 @@ mod tests {
             let sel_pat = sess.parse_select_pattern(p).unwrap();
             let amap = sess.base_relation_to_accessor_map(&from_pat.table, &from_pat.binding, &from_pat.info);
             let (_, vals) = sess.partial_eval(sel_pat.vals,& Default::default(), &amap).unwrap();
-
+            let (_, where_vals) = sess.partial_eval(where_pat,& Default::default(), &amap).unwrap();
             let (vals, mut rel_tbls) = vals.extract_relevant_tables().unwrap();
-            println!("VALS AFTER 2  {}", vals);
+            let (where_vals, _) = where_vals.extract_relevant_tables().unwrap();
+            println!("VALS AFTER 2  {} {}", vals, where_vals);
 
             println!("{:?}", from_pat);
             println!("{:?}", amap);
@@ -211,13 +219,24 @@ mod tests {
                     }
                     let v = Tuple::new(v);
                     let tpair = [(k, v)];
-                    let extracted = sess.tuple_eval(&vals, &tpair).unwrap();
-                    println!("{:?}", extracted);
+                    match sess.tuple_eval(&where_vals, &tpair).unwrap() {
+                        Value::Bool(true) => {
+                            let extracted = sess.tuple_eval(&vals, &tpair).unwrap();
+                            println!("{}", extracted);
+                        }
+                        Value::Null |
+                        Value::Bool(_) => {},
+                        _ => panic!("Bad type")
+                    }
                     it.next();
                 } else {
                     break
                 }
             }
+            let duration = start.elapsed();
+            let duration2 = start2.elapsed();
+            println!("Time elapsed {:?} {:?}", duration, duration2);
+
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);
