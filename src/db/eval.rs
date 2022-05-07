@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 use std::cmp::{max, min};
-use std::collections::{BTreeMap};
+use std::collections::{BTreeMap, HashSet};
 use cozorocks::SlicePtr;
-use crate::db::cnf_transform::cnf_transform;
+use crate::db::cnf_transform::{cnf_transform, extract_tables};
 use crate::db::engine::{Session};
 use crate::db::plan::AccessorMap;
+use crate::db::table::TableId;
 use crate::relation::value::{Value};
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::{InvalidArgument, LogicError};
@@ -108,12 +109,32 @@ impl<'s> Session<'s> {
             let (ev, new_v) = self.partial_eval(value.clone(), params, table_bindings)?;
             let new_v = cnf_transform(new_v.clone());
             if new_v == value {
-                return Ok((ev, new_v))
+                return Ok((ev, new_v));
             } else {
                 value = new_v
             }
         }
     }
+
+    pub fn cnf_with_table_refs<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
+                                   table_bindings: &AccessorMap) -> Result<Vec<(Value<'a>, HashSet<TableId>)>> {
+        let (_, value) = self.partial_cnf_eval(value, params, table_bindings)?;
+        let conjunctives;
+        if let Value::Apply(op, args) = value {
+            if op == value::OP_AND {
+                conjunctives = args;
+            } else {
+                conjunctives = vec![Value::Apply(op, args)];
+            }
+        } else {
+            conjunctives = vec![value]
+        }
+        Ok(conjunctives.into_iter().map(|v| {
+            let tids = extract_tables(&v);
+            (v, tids)
+        }).collect())
+    }
+
     pub fn partial_eval<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         match value {

@@ -5,7 +5,7 @@ use crate::error::CozoError::LogicError;
 use crate::relation::data::DataKind;
 use crate::relation::typing::Typing;
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Ord, PartialOrd)]
+#[derive(Eq, PartialEq, Debug, Clone, Copy, Ord, PartialOrd, Hash)]
 pub struct TableId {
     pub in_root: bool,
     pub id: i64,

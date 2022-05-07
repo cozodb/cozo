@@ -1,5 +1,46 @@
+use std::collections::HashSet;
+use crate::db::table::TableId;
 use crate::relation::value;
 use crate::relation::value::Value;
+
+pub fn extract_tables(val: &Value) -> HashSet<TableId> {
+    let mut coll = HashSet::new();
+    do_extract_tables(val, &mut coll);
+    coll
+}
+
+fn do_extract_tables(val: &Value, coll: &mut HashSet<TableId>) {
+    match val {
+        Value::Null |
+        Value::Bool(_) |
+        Value::Int(_) |
+        Value::Float(_) |
+        Value::Uuid(_) |
+        Value::Text(_) => {}
+        Value::List(l) => {
+            for v in l {
+                do_extract_tables(v, coll);
+            }
+        }
+        Value::Dict(d) => {
+            for v in d.values() {
+                do_extract_tables(v, coll);
+            }
+        }
+        Value::Variable(_) => {}
+        Value::TupleRef(tid, _cid) => {
+            coll.insert(*tid);
+        }
+        Value::Apply(_, args) => {
+            for v in args {
+                do_extract_tables(v, coll);
+            }
+        }
+        Value::FieldAccess(_, _) => {}
+        Value::IdxAccess(_, _) => {}
+        Value::EndSentinel => {}
+    }
+}
 
 pub fn cnf_transform(mut val: Value) -> Value {
     loop {
