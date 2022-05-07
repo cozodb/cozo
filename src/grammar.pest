@@ -83,7 +83,7 @@ literal = _{ null | boolean | number | string}
 // expressions
 
 comma_sep_expr = { expr ~ ("," ~ expr)* }
-expr = {(unary | term) ~ (operation ~ (unary | term)) *}
+expr = {unary ~ (operation ~ unary) *}
 operation = _{ (op_and | op_or | op_pow | op_str_cat | op_add | op_sub | op_mul | op_div | op_mod | op_coalesce |
                 op_ge | op_le | op_gt | op_lt | op_eq | op_ne)}
 op_or = { "||" }
@@ -103,7 +103,7 @@ op_ge = { ">=" }
 op_le = { "<=" }
 op_pow = { "^" }
 
-unary = { unary_op ~ term }
+unary = { (unary_op ~ unary) | term }
 unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }

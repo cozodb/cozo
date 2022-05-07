@@ -107,7 +107,7 @@ pub enum Value<'a> {
     // not evaluated
     Variable(Cow<'a, str>),
     TupleRef(TableId, ColId),
-    Apply(Cow<'a, str>, Vec<Value<'a>>),
+    Apply(Cow<'a, str>, Vec<Value<'a>>),  // TODO optimization: special case for small number of args (esp. 0, 1, 2)
     FieldAccess(Cow<'a, str>, Box<Value<'a>>),
     IdxAccess(usize, Box<Value<'a>>),
     // cannot exist
@@ -486,13 +486,15 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
 
         Rule::unary => {
             let mut inner = pair.into_inner();
-            let op = inner.next().unwrap().as_rule();
-            let term = build_expr_primary(inner.next().unwrap())?;
+            let p = inner.next().unwrap();
+            let op = p.as_rule();
             let op = match op {
+                Rule::term => return build_expr_primary(p),
                 Rule::negate => OP_NEGATE,
                 Rule::minus => OP_MINUS,
                 _ => unreachable!()
             };
+            let term = build_expr_primary(inner.next().unwrap())?;
             Ok(Value::Apply(op.into(), vec![term]))
         }
 
