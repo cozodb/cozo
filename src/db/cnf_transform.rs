@@ -26,17 +26,66 @@ fn do_cnf_transform(val: Value) -> (bool, Value) {
 }
 
 fn cnf_transform_or(args: Vec<Value>) -> (bool, Value) {
-    todo!()
+    let mut changed = false;
+    let mut collected = Vec::with_capacity(args.len());
+    let mut to_and = None;
+    for v in args {
+        let (vc, v) = do_cnf_transform(v);
+        changed |= vc;
+        if let Value::Apply(op, args) = v {
+            match op.as_ref() {
+                value::OP_OR => {
+                    changed = true;
+                    collected.extend(args)
+                }
+                value::OP_AND => {
+                    if to_and == None {
+                        changed = true;
+                        to_and = Some(args);
+                    } else {
+                        collected.push(Value::Apply(op, args))
+                    }
+                }
+                _ => collected.push(Value::Apply(op, args))
+            }
+        } else {
+            collected.push(v);
+        }
+    }
+    if let Some(to_and) = to_and {
+        let args = to_and.into_iter().map(|v| {
+            let mut to_or = collected.clone();
+            to_or.push(v);
+            Value::Apply(value::OP_OR.into(), to_or)
+        }).collect();
+        (true, Value::Apply(value::OP_AND.into(), args))
+    } else if collected.is_empty() {
+        (true, true.into())
+    } else if collected.len() == 1 {
+        (true, collected.pop().unwrap())
+    } else {
+        (changed, Value::Apply(value::OP_OR.into(), collected))
+    }
 }
 
 fn cnf_transform_and(args: Vec<Value>) -> (bool, Value) {
     let mut changed = false;
     let mut collected = Vec::with_capacity(args.len());
+
     for v in args {
+        let (vc, v) = do_cnf_transform(v);
+        changed |= vc;
         if let Value::Apply(op, args) = v {
             match op.as_ref() {
-                value::OP_AND => todo!(),
-                _ => todo!()
+                value::OP_AND => {
+                    changed = true;
+                    for v in args {
+                        collected.push(v);
+                    }
+                }
+                _ => {
+                    collected.push(Value::Apply(op, args));
+                }
             }
         } else {
             collected.push(v);
@@ -44,6 +93,8 @@ fn cnf_transform_and(args: Vec<Value>) -> (bool, Value) {
     }
     if collected.is_empty() {
         (true, true.into())
+    } else if collected.len() == 1 {
+        (true, collected.pop().unwrap())
     } else {
         (changed, Value::Apply(value::OP_AND.into(), collected))
     }
@@ -51,23 +102,49 @@ fn cnf_transform_and(args: Vec<Value>) -> (bool, Value) {
 
 fn cnf_transform_negate(arg: Value) -> (bool, Value) {
     if let Value::Apply(op, args) = arg {
+        let mut new_args = Vec::with_capacity(args.len());
+        let mut changed = false;
+        for v in args {
+            let (vc, v) = do_cnf_transform(v);
+            changed |= vc;
+            new_args.push(v);
+        }
         match op.as_ref() {
-            value::OP_OR => (true, Value::Apply(value::OP_AND.into(), args.into_iter().map(|v| {
+            value::OP_OR => (true, Value::Apply(value::OP_AND.into(), new_args.into_iter().map(|v| {
                 let (_, v) = do_cnf_transform(v);
                 Value::Apply(value::OP_NEGATE.into(), vec![v])
             }).collect())),
-            value::OP_AND => (true, Value::Apply(value::OP_OR.into(), args.into_iter().map(|v| {
+            value::OP_AND => (true, Value::Apply(value::OP_OR.into(), new_args.into_iter().map(|v| {
                 let (_, v) = do_cnf_transform(v);
                 Value::Apply(value::OP_NEGATE.into(), vec![v])
             }).collect())),
             value::OP_NEGATE => {
-                let (_, v) = do_cnf_transform(args.into_iter().next().unwrap());
-                (true, v)
-            },
-            _ => (false, Value::Apply(value::OP_NEGATE.into(), vec![Value::Apply(op, args)]))
+                (true, new_args.into_iter().next().unwrap())
+            }
+            _ => (changed, Value::Apply(value::OP_NEGATE.into(), vec![Value::Apply(op, new_args)]))
         }
     } else {
-        let (transformed, arg) = do_cnf_transform(arg);
-        (transformed, Value::Apply(value::OP_NEGATE.into(), vec![arg]))
+        (false, Value::Apply(value::OP_NEGATE.into(), vec![arg]))
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::db::cnf_transform::cnf_transform;
+    use crate::relation::value::Value;
+    use crate::error::Result;
+
+    #[test]
+    fn test_cnf() -> Result<()> {
+        for s in ["a", "!a", "!!a", "!!!a", "!(b || c)", "a && (b && c)", "a && b || c", "a || b && c && d",
+            "a && (b || d && e)", "a && !b || c && !!d || !!!e && f", "(a || !b || !c) && (!d || e || f)", "(a || b) && c", "a || b"] {
+            let v = Value::parse_str(s)?;
+            println!("{}", v);
+            let v2 = cnf_transform(v);
+            println!("=> {}", v2);
+        }
+
+        Ok(())
     }
 }

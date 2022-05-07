@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::collections::{BTreeMap};
 use cozorocks::SlicePtr;
+use crate::db::cnf_transform::cnf_transform;
 use crate::db::engine::{Session};
 use crate::db::plan::AccessorMap;
 use crate::relation::value::{Value};
@@ -96,10 +97,22 @@ impl<'s> Session<'s> {
                 }
             }
             Value::EndSentinel => {
-                return Err(LogicError(format!("Encountered end sentinel")));
+                return Err(LogicError("Encountered end sentinel".to_string()));
             }
         };
         Ok(res)
+    }
+    pub fn partial_cnf_eval<'a>(&self, mut value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
+                                table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+        loop {
+            let (ev, new_v) = self.partial_eval(value.clone(), params, table_bindings)?;
+            let new_v = cnf_transform(new_v.clone());
+            if new_v == value {
+                return Ok((ev, new_v))
+            } else {
+                value = new_v
+            }
+        }
     }
     pub fn partial_eval<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
