@@ -1,14 +1,21 @@
 use std::collections::HashSet;
+use std::fmt::{Debug, Formatter};
 use crate::db::engine::Session;
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::LogicError;
 use crate::relation::data::DataKind;
 use crate::relation::typing::Typing;
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Ord, PartialOrd, Hash)]
+#[derive(Eq, PartialEq, Clone, Copy, Ord, PartialOrd, Hash)]
 pub struct TableId {
     pub in_root: bool,
     pub id: i64,
+}
+
+impl Debug for TableId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "#{}{}", if self.in_root { 'G' } else { 'L' }, self.id)
+    }
 }
 
 impl TableId {
@@ -32,10 +39,16 @@ impl From<(bool, i64)> for TableId {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Copy, Ord, PartialOrd)]
+#[derive(Eq, PartialEq, Clone, Copy, Ord, PartialOrd)]
 pub struct ColId {
     pub is_key: bool,
     pub id: i64,
+}
+
+impl Debug for ColId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, ".{}{}", if self.is_key { 'K' } else { 'D' }, self.id)
+    }
 }
 
 impl From<(bool, i64)> for ColId {

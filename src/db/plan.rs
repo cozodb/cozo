@@ -199,6 +199,7 @@ mod tests {
             let amap = sess.base_relation_to_accessor_map(&from_pat.table, &from_pat.binding, &from_pat.info);
             let (_, vals) = sess.partial_eval(sel_pat.vals, &Default::default(), &amap).unwrap();
             let (_, where_vals) = sess.partial_eval(where_pat, &Default::default(), &amap).unwrap();
+            println!("{:#?}", sess.cnf_with_table_refs(where_vals.clone(), &Default::default(), &amap));
             let (vcoll, mut rel_tbls) = Value::extract_relevant_tables([vals, where_vals].into_iter()).unwrap();
             let mut vcoll = vcoll.into_iter();
             let vals = vcoll.next().unwrap();

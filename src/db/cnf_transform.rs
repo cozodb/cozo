@@ -1,15 +1,15 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet};
 use crate::db::table::TableId;
 use crate::relation::value;
 use crate::relation::value::Value;
 
-pub fn extract_tables(val: &Value) -> HashSet<TableId> {
-    let mut coll = HashSet::new();
+pub fn extract_tables(val: &Value) -> BTreeSet<TableId> {
+    let mut coll = BTreeSet::new();
     do_extract_tables(val, &mut coll);
     coll
 }
 
-fn do_extract_tables(val: &Value, coll: &mut HashSet<TableId>) {
+fn do_extract_tables(val: &Value, coll: &mut BTreeSet<TableId>) {
     match val {
         Value::Null |
         Value::Bool(_) |

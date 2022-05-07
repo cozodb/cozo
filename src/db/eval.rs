@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::{max, min};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use cozorocks::SlicePtr;
 use crate::db::cnf_transform::{cnf_transform, extract_tables};
 use crate::db::engine::{Session};
@@ -117,7 +117,8 @@ impl<'s> Session<'s> {
     }
 
     pub fn cnf_with_table_refs<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
-                                   table_bindings: &AccessorMap) -> Result<Vec<(Value<'a>, HashSet<TableId>)>> {
+                                   table_bindings: &AccessorMap)
+                                   -> Result<BTreeMap<BTreeSet<TableId>, Value<'a>>> {
         let (_, value) = self.partial_cnf_eval(value, params, table_bindings)?;
         let conjunctives;
         if let Value::Apply(op, args) = value {
@@ -129,10 +130,20 @@ impl<'s> Session<'s> {
         } else {
             conjunctives = vec![value]
         }
-        Ok(conjunctives.into_iter().map(|v| {
+        let grouped = conjunctives.into_iter().fold(BTreeMap::new(), |mut coll, v| {
             let tids = extract_tables(&v);
-            (v, tids)
-        }).collect())
+            let ent = coll.entry(tids).or_insert(vec![]);
+            ent.push(v);
+            coll
+        }).into_iter().map(|(k, mut v)| {
+            let v = match v.len() {
+                0 => Value::Bool(true),
+                1 => v.pop().unwrap(),
+                _ => Value::Apply(value::OP_AND.into(), v)
+            };
+            (k, v)
+        }).collect::<BTreeMap<_, _>>();
+        Ok(grouped)
     }
 
     pub fn partial_eval<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
@@ -145,6 +156,7 @@ impl<'s> Session<'s> {
             Value::Uuid(_) |
             Value::Text(_) |
             Value::EndSentinel) => Ok((true, v)),
+            v@Value::TupleRef(_, _) => Ok((false, v)),
             Value::List(l) => {
                 let init_vec = Vec::with_capacity(l.len());
                 let res: Result<(bool, Vec<Value>)> = l.into_iter()
@@ -256,9 +268,6 @@ impl<'s> Session<'s> {
                     value::METHOD_MERGE => self.merge_values_partial(args, params, table_bindings)?,
                     _ => { todo!() }
                 })
-            }
-            Value::TupleRef(_, _) => {
-                todo!()
             }
         }
     }

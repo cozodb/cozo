@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::{Debug, Display, Formatter, Write};
 use lazy_static::lazy_static;
 use pest::prec_climber::{Assoc, PrecClimber, Operator};
 use ordered_float::OrderedFloat;
@@ -92,7 +92,7 @@ impl TryFrom<u8> for Tag {
 // C128Arr = 74,
 
 
-#[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq)]
+#[derive(Clone, PartialEq, Ord, PartialOrd, Eq)]
 pub enum Value<'a> {
     // evaluated
     Null,
@@ -115,6 +115,12 @@ pub enum Value<'a> {
 }
 
 pub type StaticValue = Value<'static>;
+
+impl <'a> Debug for Value<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Value {{ {} }}", self)
+    }
+}
 
 impl<'a> Value<'a> {
     #[inline]
@@ -378,7 +384,7 @@ impl<'a> Display for Value<'a> {
                 write!(f, "(.{} {})", idx, value)?;
             }
             Value::TupleRef(tid, cid) => {
-                write!(f, "#{}{}{}{}", if tid.in_root { 'G' } else { 'L' }, tid.id, if cid.is_key { 'K' } else { 'D' }, cid.id)?;
+                write!(f, "#{}{}.{}{}", if tid.in_root { 'G' } else { 'L' }, tid.id, if cid.is_key { 'K' } else { 'D' }, cid.id)?;
             }
         }
         Ok(())
