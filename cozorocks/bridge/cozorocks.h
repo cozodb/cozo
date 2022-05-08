@@ -15,6 +15,9 @@
 #include "rocksdb/utilities/transaction.h"
 #include "rocksdb/utilities/transaction_db.h"
 #include "rocksdb/utilities/optimistic_transaction_db.h"
+#include "rocksdb/table.h"
+#include "rocksdb/filter_policy.h"
+#include "rocksdb/slice_transform.h"
 
 
 typedef std::shared_mutex Lock;
@@ -69,6 +72,13 @@ void set_total_order_seek(ReadOptions &options, const bool v) {
     options.total_order_seek = v;
 }
 
+void set_prefix_same_as_start(ReadOptions &options, const bool v) {
+    options.prefix_same_as_start = v;
+}
+
+void set_auto_prefix_mode(ReadOptions &options, const bool v) {
+    options.auto_prefix_mode = v;
+}
 
 void set_disable_wal(WriteOptions &options, const bool v) {
     options.disableWAL = v;
@@ -155,6 +165,23 @@ inline std::unique_ptr<WriteOptions> new_write_options() {
 
 inline std::unique_ptr<Options> new_options() {
     return std::make_unique<Options>();
+}
+
+inline void set_bloom_filter(Options &options, const double bits_per_key, const bool whole_key_filtering) {
+    BlockBasedTableOptions table_options;
+    table_options.filter_policy.reset(NewBloomFilterPolicy(bits_per_key, false));
+    table_options.whole_key_filtering = whole_key_filtering;
+    options.table_factory.reset(
+            NewBlockBasedTableFactory(
+                    table_options));
+}
+
+inline void set_capped_prefix_extractor(Options &options, const size_t cap_len) {
+    options.prefix_extractor.reset(NewCappedPrefixTransform(cap_len));
+}
+
+inline void set_fixed_prefix_extractor(Options &options, const size_t prefix_len) {
+    options.prefix_extractor.reset(NewFixedPrefixTransform(prefix_len));
 }
 
 struct IteratorBridge {

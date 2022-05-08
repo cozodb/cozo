@@ -164,6 +164,21 @@ impl OptionsPtr {
         set_paranoid_checks(self.pin_mut(), v);
         self
     }
+    #[inline]
+    pub fn set_bloom_filter(&mut self, bits_per_key: f64, whole_key_filtering: bool) -> &mut Self {
+        set_bloom_filter(self.pin_mut(), bits_per_key, whole_key_filtering);
+        self
+    }
+    #[inline]
+    pub fn set_capped_prefix_extractor(&mut self, cap_len: usize) -> &mut Self {
+        set_capped_prefix_extractor(self.pin_mut(), cap_len);
+        self
+    }
+    #[inline]
+    pub fn set_fixed_prefix_extractor(&mut self, prefix_len: usize) -> &mut Self {
+        set_fixed_prefix_extractor(self.pin_mut(), prefix_len);
+        self
+    }
 }
 
 
@@ -199,6 +214,16 @@ impl ReadOptionsPtr {
     #[inline]
     pub fn set_total_order_seek(&mut self, v: bool) -> &mut Self {
         set_total_order_seek(self.pin_mut(), v);
+        self
+    }
+    #[inline]
+    pub fn set_prefix_same_as_start(&mut self, v: bool) -> &mut Self {
+        set_prefix_same_as_start(self.pin_mut(), v);
+        self
+    }
+    #[inline]
+    pub fn set_auto_prefix_mode(&mut self, v: bool) -> &mut Self {
+        set_auto_prefix_mode(self.pin_mut(), v);
         self
     }
 }

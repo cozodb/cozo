@@ -47,7 +47,9 @@ impl Engine {
             .increase_parallelism()
             .optimize_level_style_compaction()
             .set_create_if_missing(true)
-            .set_paranoid_checks(false);
+            .set_paranoid_checks(false)
+            .set_bloom_filter(10., true)
+            .set_fixed_prefix_extractor(4);
         let mut rng = rand::thread_rng();
         let uuid_ctx = Context::new(rng.gen());
 
@@ -126,6 +128,9 @@ pub struct Session<'a> {
 
 impl<'a> Session<'a> {
     pub fn start(&mut self) -> Result<()> {
+        self.start_with_total_seek(false)
+    }
+    pub fn start_with_total_seek(&mut self, total_seek: bool) -> Result<()> {
         self.perm_cf = self.engine.db.default_cf();
         assert!(!self.perm_cf.is_null());
         self.temp_cf = self.engine.db.get_cf(&self.handle.read().map_err(|_| Poisoned)?.cf_ident).ok_or(SessionErr)?;
@@ -139,9 +144,26 @@ impl<'a> Session<'a> {
             }
         };
         let mut r_opts = ReadOptionsPtr::default();
-        r_opts.set_total_order_seek(true);
         let mut rx_opts = ReadOptionsPtr::default();
-        rx_opts.set_total_order_seek(true);
+        if total_seek {
+            r_opts
+                .set_total_order_seek(true)
+                .set_prefix_same_as_start(false)
+                .set_auto_prefix_mode(true);
+            rx_opts
+                .set_total_order_seek(true)
+                .set_prefix_same_as_start(false)
+                .set_auto_prefix_mode(true);
+        } else {
+            r_opts
+                .set_total_order_seek(false)
+                .set_prefix_same_as_start(true)
+                .set_auto_prefix_mode(false);
+            rx_opts
+                .set_total_order_seek(false)
+                .set_prefix_same_as_start(true)
+                .set_auto_prefix_mode(false);
+        }
         let w_opts = WriteOptionsPtr::default();
         let mut wx_opts = WriteOptionsPtr::default();
         wx_opts.set_disable_wal(true);

@@ -87,11 +87,16 @@ mod ffi {
         fn set_create_if_missing(o: Pin<&mut Options>, v: bool);
         fn set_comparator(o: Pin<&mut Options>, cmp: &RustComparator);
         fn set_paranoid_checks(o: Pin<&mut Options>, v: bool);
+        fn set_bloom_filter(o: Pin<&mut Options>, bits_per_key: f64, whole_key_filtering: bool);
+        fn set_capped_prefix_extractor(o: Pin<&mut Options>, cap_len: usize);
+        fn set_fixed_prefix_extractor(o: Pin<&mut Options>, prefix_len: usize);
 
         type ReadOptions;
         fn new_read_options() -> UniquePtr<ReadOptions>;
         fn set_verify_checksums(o: Pin<&mut ReadOptions>, v: bool);
         fn set_total_order_seek(o: Pin<&mut ReadOptions>, v: bool);
+        fn set_prefix_same_as_start(o: Pin<&mut ReadOptions>, v: bool);
+        fn set_auto_prefix_mode(o: Pin<&mut ReadOptions>, v: bool);
         type WriteOptions;
         fn new_write_options() -> UniquePtr<WriteOptions>;
         fn set_disable_wal(o: Pin<&mut WriteOptions>, v: bool);

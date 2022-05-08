@@ -217,9 +217,9 @@ mod tests {
             while it.is_valid() {
                 if let Some((k, v)) = it.pair() {
                     let k = Tuple::new(k);
-                    if !k.starts_with(&key_prefix) {
-                        break;
-                    }
+                    // if !k.starts_with(&key_prefix) {
+                    //     break;
+                    // }
                     let v = Tuple::new(v);
                     let tpair = [(k, v)];
                     match sess.tuple_eval(&where_vals, &tpair).unwrap() {
@@ -228,7 +228,9 @@ mod tests {
                             println!("{}", extracted);
                         }
                         Value::Null |
-                        Value::Bool(_) => {}
+                        Value::Bool(_) => {
+                            println!("  Ignore {:?}", &tpair);
+                        }
                         _ => panic!("Bad type")
                     }
                     it.next();
