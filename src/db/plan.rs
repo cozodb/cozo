@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::{iter, mem};
 use pest::iterators::Pair;
 use cozorocks::{IteratorPtr, SlicePtr};
 use crate::db::engine::Session;
@@ -7,7 +8,7 @@ use crate::db::table::{ColId, TableId, TableInfo};
 use crate::relation::value::{StaticValue, Value};
 use crate::parser::Rule;
 use crate::error::Result;
-use crate::relation::tuple::{OwnTuple, Tuple};
+use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum QueryPlan {
@@ -139,12 +140,7 @@ impl<'a> Session<'a> {
         } else {
             self.txn.iterator(false, &self.temp_cf)
         };
-        let prefix = OwnTuple::with_prefix(tid.id as u32);
-        it.seek(prefix);
-        TableRowIterator {
-            it,
-            started: false,
-        }
+        TableRowIterator::new(it, tid.id as u32)
     }
 }
 
@@ -153,8 +149,19 @@ pub struct TableRowIterator<'a> {
     started: bool,
 }
 
+impl<'a> TableRowIterator<'a> {
+    pub fn new(it: IteratorPtr<'a>, prefix: u32) -> Self {
+        let prefix = OwnTuple::with_prefix(prefix);
+        it.seek(prefix);
+        Self {
+            it,
+            started: false,
+        }
+    }
+}
+
 impl<'a> Iterator for TableRowIterator<'a> {
-    type Item = (Tuple<SlicePtr>, Tuple<SlicePtr>);
+    type Item = (SliceTuple, SliceTuple);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.started {
@@ -166,6 +173,61 @@ impl<'a> Iterator for TableRowIterator<'a> {
     }
 }
 
+pub struct TableRowWithAssociatesIterator<'a> {
+    main: TableRowIterator<'a>,
+    associates: Vec<TableRowIterator<'a>>,
+    buffer: Vec<Option<(SliceTuple, SliceTuple)>>,
+}
+
+impl<'a> TableRowWithAssociatesIterator<'a> {
+    pub fn new(main: TableRowIterator<'a>, associates: Vec<TableRowIterator<'a>>) -> Self {
+        // ceremonial because type is not copy
+        let buffer = iter::repeat_with(|| None).take(associates.len()).collect();
+        Self { main, associates, buffer }
+    }
+}
+
+impl<'a> Iterator for TableRowWithAssociatesIterator<'a> {
+    type Item = (SliceTuple, SliceTuple, Vec<Option<SliceTuple>>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.main.next() {
+            None => None,
+            Some((k, v)) => {
+                let mut assoc_vals: Vec<Option<SliceTuple>> = iter::repeat_with(|| None).take(self.associates.len()).collect();
+                let l = assoc_vals.len();
+                for i in 0..l {
+                    let cached = self.buffer.get(i).unwrap();
+                    let cached = if matches!(cached, None) {
+                        self.buffer[i] = self.associates.get_mut(i).unwrap().next();
+                        self.buffer.get(i).unwrap()
+                    } else {
+                        cached
+                    };
+                    if let Some((ck, _)) = cached {
+                        if k.key_part_eq(ck) {
+                            let (_, v) = mem::replace(&mut self.buffer[i], None).unwrap();
+                            assoc_vals[i] = Some(v)
+                        }
+                    }
+                }
+                Some((k, v, assoc_vals))
+            }
+        }
+    }
+}
+
+pub struct CartesianProductIterator<'a> {
+    left: TableRowIterator<'a>,
+    right: TableRowIterator<'a>,
+}
+
+pub struct EquiJoinIterator<'a> {
+    left: TableRowIterator<'a>,
+    right: TableRowIterator<'a>,
+    outer_left: bool,
+    outer_right: bool,
+}
 
 pub struct NodeRowIterator {}
 
@@ -179,6 +241,7 @@ mod tests {
     use crate::db::engine::Engine;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
+    use crate::db::plan::TableRowWithAssociatesIterator;
     use crate::db::query::FromEl;
     use crate::db::table::TableId;
     use crate::relation::value::Value;
@@ -268,6 +331,18 @@ mod tests {
             let duration = start.elapsed();
             let duration2 = start2.elapsed();
             println!("Time elapsed {:?} {:?}", duration, duration2);
+            let a = sess.iter_table(tbl);
+            let mut b = sess.iter_table(tbl);
+            let mut c = sess.iter_table(tbl);
+            for _ in 0..5 {
+                b.next();
+                c.next();
+                c.next();
+            }
+            let it = TableRowWithAssociatesIterator::new(a, vec![b, c]);
+            for el in it {
+                println!("{:?}", el);
+            }
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

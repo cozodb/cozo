@@ -10,7 +10,7 @@ use uuid::v1::{Context, Timestamp};
 use rand::Rng;
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::{Poisoned, SessionErr};
-use crate::relation::tuple::Tuple;
+use crate::relation::tuple::{PREFIX_LEN, Tuple};
 
 pub struct EngineOptions {
     cmp: RustComparatorPtr,
@@ -49,7 +49,7 @@ impl Engine {
             .set_create_if_missing(true)
             .set_paranoid_checks(false)
             .set_bloom_filter(10., true)
-            .set_fixed_prefix_extractor(4);
+            .set_fixed_prefix_extractor(PREFIX_LEN);
         let mut rng = rand::thread_rng();
         let uuid_ctx = Context::new(rng.gen());
 

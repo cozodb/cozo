@@ -3,7 +3,7 @@ use pest::iterators::{Pair, Pairs};
 use cozorocks::SlicePtr;
 use crate::db::engine::Session;
 use crate::db::table::TableId;
-use crate::relation::tuple::{OwnTuple, Tuple};
+use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};
 use crate::relation::typing::Typing;
 use crate::parser::Rule;
 use crate::error::{CozoError, Result};
@@ -263,7 +263,7 @@ impl<'s> Session<'s> {
         Ok(())
     }
 
-    pub fn table_data(&self, id: i64, in_root: bool) -> Result<Option<Tuple<SlicePtr>>> {
+    pub fn table_data(&self, id: i64, in_root: bool) -> Result<Option<SliceTuple>> {
         let mut key = Tuple::with_null_prefix();
         key.push_bool(true);
         key.push_int(id);
@@ -276,7 +276,7 @@ impl<'s> Session<'s> {
         }
     }
 
-    pub fn resolve_related_tables(&self, name: &str) -> Result<Vec<(String, Tuple<SlicePtr>)>> {
+    pub fn resolve_related_tables(&self, name: &str) -> Result<Vec<(String, SliceTuple)>> {
         let mut prefix = Tuple::with_prefix(0);
         prefix.push_null();
         prefix.push_str(name);

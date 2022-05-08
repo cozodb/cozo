@@ -3,7 +3,7 @@ use crate::db::engine::Session;
 use crate::relation::value::Value;
 use crate::error::{CozoError, Result};
 use crate::relation::data::DataKind;
-use crate::relation::tuple::{OwnTuple, Tuple};
+use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};
 
 /// # layouts for sector 0
 ///
@@ -173,7 +173,7 @@ impl<'s> Session<'s> {
         Ok(())
     }
 
-    pub fn resolve(&self, name: &str) -> Result<Option<Tuple<SlicePtr>>> {
+    pub fn resolve(&self, name: &str) -> Result<Option<SliceTuple>> {
         let mut tuple = Tuple::with_null_prefix();
         tuple.push_str(name);
         let it = self.txn.iterator(false, &self.temp_cf);

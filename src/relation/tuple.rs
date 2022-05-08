@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use uuid::Uuid;
+use cozorocks::SlicePtr;
 use crate::db::table::{ColId, TableId};
 use crate::relation::data::DataKind;
 use crate::relation::value::{Tag, Value};
@@ -23,13 +24,19 @@ impl<T> AsRef<[u8]> for Tuple<T> where T: AsRef<[u8]> {
 }
 
 pub type OwnTuple = Tuple<Vec<u8>>;
+pub type SliceTuple = Tuple<SlicePtr>;
 
-const PREFIX_LEN: usize = 4;
+pub const PREFIX_LEN: usize = 4;
 
 impl<T: AsRef<[u8]>> Tuple<T> {
     #[inline]
     pub fn starts_with<T2: AsRef<[u8]>>(&self, other: &Tuple<T2>) -> bool {
         self.data.as_ref().starts_with(other.data.as_ref())
+    }
+
+    #[inline]
+    pub fn key_part_eq<T2: AsRef<[u8]>>(&self, other: &Tuple<T2>) -> bool {
+        self.data.as_ref()[PREFIX_LEN..] == other.data.as_ref()[PREFIX_LEN..]
     }
 
     #[inline]

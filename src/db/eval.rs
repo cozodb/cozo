@@ -9,12 +9,12 @@ use crate::db::table::TableId;
 use crate::relation::value::{Value};
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::{InvalidArgument, LogicError};
-use crate::relation::tuple::{Tuple};
+use crate::relation::tuple::{SliceTuple, Tuple};
 use crate::relation::value;
 
 
 impl<'s> Session<'s> {
-    pub fn tuple_eval<'a>(&self, value: &'a Value<'a>, tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    pub fn tuple_eval<'a>(&self, value: &'a Value<'a>, tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let res: Value = match value {
             v @ (Value::Null |
             Value::Bool(_) |
@@ -274,7 +274,7 @@ impl<'s> Session<'s> {
 }
 
 impl<'s> Session<'s> {
-    fn coalesce_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn coalesce_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         for v in args {
             match self.tuple_eval(v, tuples)? {
                 Value::Null => {}
@@ -318,7 +318,7 @@ impl<'s> Session<'s> {
         }
     }
 
-    fn str_cat_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn str_cat_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut ret = String::new();
         for v in args {
             let v = self.tuple_eval(v, tuples)?;
@@ -348,7 +348,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn add_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn add_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -387,7 +387,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn sub_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn sub_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -426,7 +426,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn minus_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn minus_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let left = self.tuple_eval(args.get(0).unwrap(), tuples)?;
         Ok(match left {
             Value::Int(l) => (-l).into(),
@@ -452,7 +452,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn negate_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn negate_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let left = self.tuple_eval(args.get(0).unwrap(), tuples)?;
         Ok(match left {
             Value::Bool(l) => (!l).into(),
@@ -476,7 +476,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn is_null_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn is_null_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let left = self.tuple_eval(args.get(0).unwrap(), tuples)?;
         Ok((left == Value::Null).into())
     }
@@ -494,7 +494,7 @@ impl<'s> Session<'s> {
         Ok((true, false.into()))
     }
 
-    fn not_null_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn not_null_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let left = self.tuple_eval(args.get(0).unwrap(), tuples)?;
         Ok((left != Value::Null).into())
     }
@@ -512,7 +512,7 @@ impl<'s> Session<'s> {
         Ok((true, true.into()))
     }
 
-    fn pow_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn pow_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -551,7 +551,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn gt_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn gt_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -590,7 +590,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn lt_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn lt_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -629,7 +629,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn ge_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn ge_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -668,7 +668,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn le_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn le_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -707,7 +707,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn mod_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn mod_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -740,7 +740,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn mul_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn mul_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -779,7 +779,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn div_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn div_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -818,7 +818,7 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn eq_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn eq_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -845,7 +845,7 @@ impl<'s> Session<'s> {
         Ok((true, (left == right).into()))
     }
 
-    fn ne_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn ne_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut args = args.into_iter();
         let left = self.tuple_eval(args.next().unwrap(), tuples)?;
         if left == Value::Null {
@@ -872,7 +872,7 @@ impl<'s> Session<'s> {
         Ok((true, (left != right).into()))
     }
 
-    fn or_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn or_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut accum = -1;
         for v in args.into_iter() {
             let v = self.tuple_eval(v, tuples)?;
@@ -957,7 +957,7 @@ impl<'s> Session<'s> {
         }
     }
 
-    fn concat_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn concat_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut coll = vec![];
         for v in args.into_iter() {
             let v = self.tuple_eval(v, tuples)?;
@@ -1012,7 +1012,7 @@ impl<'s> Session<'s> {
         }
     }
 
-    fn merge_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn merge_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut coll = BTreeMap::new();
         for v in args.into_iter() {
             let v = self.tuple_eval(v, tuples)?;
@@ -1067,7 +1067,7 @@ impl<'s> Session<'s> {
         }
     }
 
-    fn and_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(Tuple<SlicePtr>, Tuple<SlicePtr>)]) -> Result<Value<'a>> {
+    fn and_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a [(SliceTuple, SliceTuple)]) -> Result<Value<'a>> {
         let mut accum = 1;
         for v in args.into_iter() {
             let v = self.tuple_eval(v, tuples)?;
