@@ -101,8 +101,7 @@ impl<'s> Session<'s> {
         let it = self.txn.iterator(false, &self.temp_cf);
         it.seek(&prefix);
         let mut to_delete = vec![];
-        while it.is_valid() {
-            let val = it.key().ok_or_else(|| CozoError::LogicError("Failed to get tuple".to_string()))?;
+        while let Some(val) = it.key() {
             let cur = Tuple::new(val);
             if cur.starts_with(&prefix) {
                 if let Some(name) = cur.get(1) {
@@ -144,8 +143,7 @@ impl<'s> Session<'s> {
         prefix.push_int(self.stack_depth as i64);
         let it = self.txn.iterator(false, &self.temp_cf);
         it.seek(&prefix);
-        while it.is_valid() {
-            let val = it.key().ok_or_else(|| CozoError::LogicError("Failed to get tuple".to_string()))?;
+        while let Some(val) = it.key() {
             let cur = Tuple::new(val);
             if cur.starts_with(&prefix) {
                 let mut ikey = Tuple::with_prefix(cur.get_prefix());

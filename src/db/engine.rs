@@ -241,8 +241,7 @@ mod tests {
             }
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
-            while it.is_valid() {
-                let (key, val) = it.pair().unwrap();
+            while let Some((key, val)) = it.pair() {
                 println!("a: {:?} {:?}", key.as_ref(), val.as_ref());
                 println!("v: {:?} {:?}", Tuple::new(key), Tuple::new(val));
                 it.next();

@@ -284,8 +284,7 @@ impl<'s> Session<'s> {
 
         let it = self.txn.iterator(true, &self.perm_cf);
         it.seek(&prefix);
-        while it.is_valid() {
-            let val  = it.key().ok_or_else(|| CozoError::LogicError("Failed to get tuple".to_string()))?;
+        while let Some(val) = it.key() {
             let cur = Tuple::new(val);
             if !cur.starts_with(&prefix) {
                 break;
@@ -301,8 +300,7 @@ impl<'s> Session<'s> {
 
         let it = self.txn.iterator(false, &self.temp_cf);
         it.seek(&prefix);
-        while it.is_valid() {
-            let val  = it.key().ok_or_else(|| CozoError::LogicError("Failed to get tuple".to_string()))?;
+        while let Some(val) = it.key() {
             let cur = Tuple::new(val);
             if !cur.starts_with(&prefix) {
                 break;

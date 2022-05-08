@@ -156,7 +156,7 @@ impl<'s> Session<'s> {
             Value::Uuid(_) |
             Value::Text(_) |
             Value::EndSentinel) => Ok((true, v)),
-            v@Value::TupleRef(_, _) => Ok((false, v)),
+            v @ Value::TupleRef(_, _) => Ok((false, v)),
             Value::List(l) => {
                 let init_vec = Vec::with_capacity(l.len());
                 let res: Result<(bool, Vec<Value>)> = l.into_iter()
@@ -1210,16 +1210,14 @@ mod tests {
 
             let it = env.txn.iterator(false, &env.perm_cf);
             it.to_first();
-            while it.is_valid() {
-                let (k, v) = it.pair().unwrap();
+            while let Some((k, v)) = it.pair() {
                 println!("{:?}, {:?}", Tuple::new(k), Tuple::new(v));
                 it.next();
             }
 
             let it = env.txn.iterator(false, &env.temp_cf);
             it.to_first();
-            while it.is_valid() {
-                let (k, v) = it.pair().unwrap();
+            while let Some((k, v)) = it.pair() {
                 println!("{:?}, {:?}", Tuple::new(k), Tuple::new(v));
                 it.next();
             }

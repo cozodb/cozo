@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 use pest::iterators::Pair;
+use cozorocks::{IteratorPtr, SlicePtr};
 use crate::db::engine::Session;
 use crate::db::query::{FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
 use crate::relation::value::{StaticValue, Value};
 use crate::parser::Rule;
 use crate::error::Result;
-use crate::relation::tuple::OwnTuple;
+use crate::relation::tuple::{OwnTuple, Tuple};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum QueryPlan {
@@ -132,7 +133,7 @@ impl<'a> Session<'a> {
         Ok(QueryPlan::Projection { arg: Box::new(plan), projection: select_data })
     }
 
-    pub fn iter_table(&self, tid: TableId) -> ! {
+    pub fn iter_table(&self, tid: TableId) -> TableRowIterator {
         let it = if tid.in_root {
             self.txn.iterator(true, &self.perm_cf)
         } else {
@@ -140,18 +141,33 @@ impl<'a> Session<'a> {
         };
         let prefix = OwnTuple::with_prefix(tid.id as u32);
         it.seek(prefix);
-        // it.iter()
-        todo!()
+        TableRowIterator {
+            it,
+            started: false,
+        }
     }
 }
 
-pub struct NodeRowIterator {
-
+pub struct TableRowIterator<'a> {
+    it: IteratorPtr<'a>,
+    started: bool,
 }
 
-pub struct EdgeRowIterator {
+impl<'a> Iterator for TableRowIterator<'a> {
+    type Item = (Tuple<SlicePtr>, Tuple<SlicePtr>);
 
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.started {
+            self.next();
+        }
+        self.it.pair().map(|(k, v)| (Tuple::new(k), Tuple::new(v)))
+    }
 }
+
+
+pub struct NodeRowIterator {}
+
+pub struct EdgeRowIterator {}
 
 #[cfg(test)]
 mod tests {
