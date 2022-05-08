@@ -1210,14 +1210,18 @@ mod tests {
 
             let it = env.txn.iterator(false, &env.perm_cf);
             it.to_first();
-            for (k, v) in it.iter() {
+            while it.is_valid() {
+                let (k, v) = it.pair().unwrap();
                 println!("{:?}, {:?}", Tuple::new(k), Tuple::new(v));
+                it.next();
             }
 
             let it = env.txn.iterator(false, &env.temp_cf);
             it.to_first();
-            for (k, v) in it.iter() {
+            while it.is_valid() {
+                let (k, v) = it.pair().unwrap();
                 println!("{:?}, {:?}", Tuple::new(k), Tuple::new(v));
+                it.next();
             }
         }
         fs::remove_dir_all(db_path).unwrap();

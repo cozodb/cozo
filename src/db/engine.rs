@@ -130,7 +130,7 @@ impl<'a> Session<'a> {
     pub fn start(&mut self) -> Result<()> {
         self.start_with_total_seek(false)
     }
-    pub fn start_with_total_seek(&mut self, total_seek: bool) -> Result<()> {
+    fn start_with_total_seek(&mut self, total_seek: bool) -> Result<()> {
         self.perm_cf = self.engine.db.default_cf();
         assert!(!self.perm_cf.is_null());
         self.temp_cf = self.engine.db.get_cf(&self.handle.read().map_err(|_| Poisoned)?.cf_ident).ok_or(SessionErr)?;
@@ -241,9 +241,11 @@ mod tests {
             }
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
-            for (key, val) in it.iter() {
+            while it.is_valid() {
+                let (key, val) = it.pair().unwrap();
                 println!("a: {:?} {:?}", key.as_ref(), val.as_ref());
                 println!("v: {:?} {:?}", Tuple::new(key), Tuple::new(val));
+                it.next();
             }
         }
         let _ = fs::remove_dir_all("_push_get");

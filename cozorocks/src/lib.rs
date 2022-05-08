@@ -4,6 +4,7 @@ use bridge::*;
 
 use std::fmt::{Display, Formatter};
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use cxx::{let_cxx_string};
 pub use cxx::{UniquePtr, SharedPtr};
@@ -390,18 +391,21 @@ impl OTxnDBOptionsPtr {
     }
 }
 
-pub struct IteratorPtr(UniquePtr<IteratorBridge>);
+pub struct IteratorPtr<'a> {
+    inner: UniquePtr<IteratorBridge>,
+    txn: PhantomData<&'a TransactionPtr>,
+}
 
-impl Deref for IteratorPtr {
+impl<'a> Deref for IteratorPtr<'a> {
     type Target = UniquePtr<IteratorBridge>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.inner
     }
 }
 
-impl IteratorPtr {
+impl<'a> IteratorPtr<'a> {
     #[inline]
     pub fn to_first(&self) {
         IteratorBridge::seek_to_first(self)
@@ -454,49 +458,6 @@ impl IteratorPtr {
     #[inline]
     pub fn status(&self) -> BridgeStatus {
         IteratorBridge::status(self)
-    }
-    #[inline]
-    pub fn iter(&self) -> KVIterator {
-        KVIterator { it: self, should_next: false }
-    }
-    #[inline]
-    pub fn keys(&self) -> KeyIterator {
-        KeyIterator { it: self, should_next: false }
-    }
-}
-
-pub struct KVIterator<'a> {
-    it: &'a IteratorPtr,
-    should_next: bool,
-}
-
-impl Iterator for KVIterator<'_> {
-    type Item = (SlicePtr, SlicePtr);
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.should_next {
-            self.it.next();
-        }
-        self.should_next = true;
-        self.it.pair()
-    }
-}
-
-
-pub struct KeyIterator<'a> {
-    it: &'a IteratorPtr,
-    should_next: bool,
-}
-
-impl Iterator for KeyIterator<'_> {
-    type Item = SlicePtr;
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.should_next {
-            self.it.next();
-        }
-        self.should_next = true;
-        self.it.key()
     }
 }
 
@@ -613,9 +574,15 @@ impl TransactionPtr {
     #[inline]
     pub fn iterator(&self, transact: bool, cf: &ColumnFamilyHandle) -> IteratorPtr {
         if transact {
-            IteratorPtr(self.iterator_txn(cf))
+            IteratorPtr {
+                inner: self.iterator_txn(cf),
+                txn: PhantomData
+            }
         } else {
-            IteratorPtr(self.iterator_raw(cf))
+            IteratorPtr {
+                inner: self.iterator_raw(cf),
+                txn: PhantomData
+            }
         }
     }
 }

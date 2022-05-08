@@ -6,6 +6,7 @@ use crate::db::table::{ColId, TableId, TableInfo};
 use crate::relation::value::{StaticValue, Value};
 use crate::parser::Rule;
 use crate::error::Result;
+use crate::relation::tuple::OwnTuple;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum QueryPlan {
@@ -130,6 +131,26 @@ impl<'a> Session<'a> {
     fn convert_select_data_to_plan(&self, plan: QueryPlan, select_data: Selection) -> Result<QueryPlan> {
         Ok(QueryPlan::Projection { arg: Box::new(plan), projection: select_data })
     }
+
+    pub fn iter_table(&self, tid: TableId) -> ! {
+        let it = if tid.in_root {
+            self.txn.iterator(true, &self.perm_cf)
+        } else {
+            self.txn.iterator(false, &self.temp_cf)
+        };
+        let prefix = OwnTuple::with_prefix(tid.id as u32);
+        it.seek(prefix);
+        // it.iter()
+        todo!()
+    }
+}
+
+pub struct NodeRowIterator {
+
+}
+
+pub struct EdgeRowIterator {
+
 }
 
 #[cfg(test)]
@@ -141,6 +162,7 @@ mod tests {
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
     use crate::db::query::FromEl;
+    use crate::db::table::TableId;
     use crate::relation::value::Value;
     use crate::error::Result;
     use crate::relation::tuple::{OwnTuple, Tuple};
@@ -211,33 +233,25 @@ mod tests {
             println!("{:?}", rel_tbls);
 
             let tbl = rel_tbls.pop().unwrap();
-            let key_prefix = OwnTuple::with_prefix(tbl.id as u32);
-            let it = sess.txn.iterator(true, &sess.perm_cf);
-            it.seek(&key_prefix);
-            while it.is_valid() {
-                if let Some((k, v)) = it.pair() {
-                    let k = Tuple::new(k);
-                    // if !k.starts_with(&key_prefix) {
-                    //     break;
-                    // }
-                    let v = Tuple::new(v);
-                    let tpair = [(k, v)];
-                    match sess.tuple_eval(&where_vals, &tpair).unwrap() {
-                        Value::Bool(true) => {
-                            let extracted = sess.tuple_eval(&vals, &tpair).unwrap();
-                            println!("{}", extracted);
-                        }
-                        Value::Null |
-                        Value::Bool(_) => {
-                            println!("  Ignore {:?}", &tpair);
-                        }
-                        _ => panic!("Bad type")
-                    }
-                    it.next();
-                } else {
-                    break;
-                }
-            }
+            // for (k, v) in sess.iter_table(tbl) {
+            //     let k = Tuple::new(k);
+            //     // if !k.starts_with(&key_prefix) {
+            //     //     break;
+            //     // }
+            //     let v = Tuple::new(v);
+            //     let tpair = [(k, v)];
+            //     match sess.tuple_eval(&where_vals, &tpair).unwrap() {
+            //         Value::Bool(true) => {
+            //             let extracted = sess.tuple_eval(&vals, &tpair).unwrap();
+            //             println!("{}", extracted);
+            //         }
+            //         Value::Null |
+            //         Value::Bool(_) => {
+            //             println!("  Ignore {:?}", &tpair);
+            //         }
+            //         _ => panic!("Bad type")
+            //     }
+            // }
             let duration = start.elapsed();
             let duration2 = start2.elapsed();
             println!("Time elapsed {:?} {:?}", duration, duration2);

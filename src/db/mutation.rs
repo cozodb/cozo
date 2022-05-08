@@ -289,8 +289,10 @@ mod tests {
             sess.rollback().unwrap();
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
-            for (k, v) in it.iter() {
+            while it.is_valid() {
+                let (k, v) = it.pair().unwrap();
                 println!("K: {:?}, V: {:?}", Tuple::new(k), Tuple::new(v));
+                it.next();
             }
         }
 
@@ -338,8 +340,10 @@ mod tests {
 
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
-            for (k, v) in it.iter() {
+            while it.is_valid() {
+                let (k, v) = it.pair().unwrap();
                 println!("K: {:?}, V: {:?}", Tuple::new(k), Tuple::new(v));
+                it.next();
             }
             println!("Time elapsed {:?}", duration);
         }
