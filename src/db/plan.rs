@@ -158,7 +158,9 @@ impl<'a> Iterator for TableRowIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.started {
-            self.next();
+            self.it.next();
+        } else {
+            self.started = true;
         }
         self.it.pair().map(|(k, v)| (Tuple::new(k), Tuple::new(v)))
     }
@@ -249,25 +251,20 @@ mod tests {
             println!("{:?}", rel_tbls);
 
             let tbl = rel_tbls.pop().unwrap();
-            // for (k, v) in sess.iter_table(tbl) {
-            //     let k = Tuple::new(k);
-            //     // if !k.starts_with(&key_prefix) {
-            //     //     break;
-            //     // }
-            //     let v = Tuple::new(v);
-            //     let tpair = [(k, v)];
-            //     match sess.tuple_eval(&where_vals, &tpair).unwrap() {
-            //         Value::Bool(true) => {
-            //             let extracted = sess.tuple_eval(&vals, &tpair).unwrap();
-            //             println!("{}", extracted);
-            //         }
-            //         Value::Null |
-            //         Value::Bool(_) => {
-            //             println!("  Ignore {:?}", &tpair);
-            //         }
-            //         _ => panic!("Bad type")
-            //     }
-            // }
+            for (k, v) in sess.iter_table(tbl) {
+                let tpair = [(k, v)];
+                match sess.tuple_eval(&where_vals, &tpair).unwrap() {
+                    Value::Bool(true) => {
+                        let extracted = sess.tuple_eval(&vals, &tpair).unwrap();
+                        println!("{}", extracted);
+                    }
+                    Value::Null |
+                    Value::Bool(_) => {
+                        println!("  Ignore {:?}", &tpair);
+                    }
+                    _ => panic!("Bad type")
+                }
+            }
             let duration = start.elapsed();
             let duration2 = start2.elapsed();
             println!("Time elapsed {:?} {:?}", duration, duration2);
