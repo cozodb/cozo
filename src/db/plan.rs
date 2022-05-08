@@ -222,6 +222,12 @@ impl<'a> IntoIterator for &'a TableRowWithAssociatesIterable<'a> {
     }
 }
 
+pub enum MegaTupleIterable<'a> {
+    TableRowIt(IteratorPtr<'a>),
+    TableRowWithAssocIt(IteratorPtr<'a>, Vec<IteratorPtr<'a>>),
+    CartesianProdIt(Box<MegaTupleIterable<'a>>, Box<MegaTupleIterable<'a>>),
+}
+
 impl<'a> Iterator for TableRowWithAssociatesIterator<'a> {
     type Item = MegaTuple;
 
@@ -277,13 +283,12 @@ impl<'a, A, B, AI, BI> IntoIterator for &'a CartesianProductIterable<A, B>
           AI: Iterator<Item=MegaTuple>,
           BI: Iterator<Item=MegaTuple> {
     type Item = MegaTuple;
-    type IntoIter = CartesianProductIterator<'a, A, B, AI, BI>;
+    type IntoIter = CartesianProductIterator<'a, B, AI, BI>;
 
     fn into_iter(self) -> Self::IntoIter {
         let mut left = (&self.left).into_iter();
         let left_cache = left.next();
         Self::IntoIter {
-            left_source: &self.left,
             right_source: &self.right,
             left,
             right: (&self.right).into_iter(),
@@ -292,18 +297,16 @@ impl<'a, A, B, AI, BI> IntoIterator for &'a CartesianProductIterable<A, B>
     }
 }
 
-pub struct CartesianProductIterator<'a, A, B, AI, BI>
-    where &'a A: IntoIterator<Item=MegaTuple, IntoIter=AI>, &'a B: IntoIterator<Item=MegaTuple, IntoIter=BI> {
-    left_source: &'a A,
+pub struct CartesianProductIterator<'a, B, AI, BI>
+    where &'a B: IntoIterator<Item=MegaTuple, IntoIter=BI> {
     right_source: &'a B,
     left: AI,
     right: BI,
     left_cache: Option<MegaTuple>,
 }
 
-impl<'a, A, B, AI, BI> Iterator for CartesianProductIterator<'a, A, B, AI, BI>
-    where &'a A: IntoIterator<Item=MegaTuple, IntoIter=AI>,
-          &'a B: IntoIterator<Item=MegaTuple, IntoIter=BI>,
+impl<'a, B, AI, BI> Iterator for CartesianProductIterator<'a, B, AI, BI>
+    where &'a B: IntoIterator<Item=MegaTuple, IntoIter=BI>,
           AI: Iterator<Item=MegaTuple>,
           BI: Iterator<Item=MegaTuple> {
     type Item = MegaTuple;
@@ -318,7 +321,7 @@ impl<'a, A, B, AI, BI> Iterator for CartesianProductIterator<'a, A, B, AI, BI>
                         keys.extend(t2.keys);
                         let mut vals = t.vals.clone();
                         vals.extend(t2.vals);
-                        Some(MegaTuple {keys, vals})
+                        Some(MegaTuple { keys, vals })
                     }
                     None => {
                         self.left_cache = self.left.next();
@@ -448,22 +451,28 @@ mod tests {
             let a = TableRowWithAssociatesIterable::new(a, vec![]);
             let b = sess.iter_table(tbl);
             let b = TableRowWithAssociatesIterable::new(b, vec![]);
-            let c_it = CartesianProductIterable {left: a, right: b};
+            let c_it = CartesianProductIterable { left: a, right: b };
             let c = sess.iter_table(tbl);
             let c = TableRowWithAssociatesIterable::new(c, vec![]);
-            let c_it = CartesianProductIterable {left: c, right: c_it};
+            let mut c_it = CartesianProductIterable { left: c, right: c_it };
+
             let start = Instant::now();
 
             println!("Now cartesian product");
 
-            for (i, el) in (&c_it).into_iter().enumerate() {
-                if i % 1024 == 0 {
-                    println!("{}: {:?}", i, el)
-                }
+            let mut n = 0;
+
+            for el in &c_it {
+                // if i % 4096 == 0 {
+                //     println!("{}: {:?}", i, el)
+                // }
+                n += el.keys.len();
             }
             let duration = start.elapsed();
-            println!("Time elapsed {:?}", duration);
-
+            println!("Time elapsed {:?} for {}", duration, n / 3);
+            let a = sess.iter_table(tbl);
+            let ac = (&a).into_iter().count();
+            println!("{}", ac);
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

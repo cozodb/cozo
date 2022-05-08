@@ -215,13 +215,13 @@ struct IteratorBridge {
         inner->SeekForPrev(k);
     }
 
-    inline std::unique_ptr<Slice> key_raw() const {
+    inline std::shared_ptr<Slice> key_raw() const {
 //        std::cout << "c++ get  " << inner->key().size() << std::endl;
-        return std::make_unique<Slice>(inner->key());
+        return std::make_shared<Slice>(inner->key());
     }
 
-    inline std::unique_ptr<Slice> value_raw() const {
-        return std::make_unique<Slice>(inner->value());
+    inline std::shared_ptr<Slice> value_raw() const {
+        return std::make_shared<Slice>(inner->value());
     }
 
     BridgeStatus status() const;
@@ -289,12 +289,12 @@ struct TransactionBridge {
             rust::Slice<BridgeStatus> statuses) const;
 
 
-    inline unique_ptr<PinnableSlice> get_txn(
+    inline shared_ptr<PinnableSlice> get_txn(
             const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
     ) const {
-        auto pinnable_val = std::make_unique<PinnableSlice>();
+        auto pinnable_val = std::make_shared<PinnableSlice>();
         write_status(
                 inner->Get(*r_ops,
                            const_cast<ColumnFamilyHandle *>(&cf),
@@ -305,12 +305,12 @@ struct TransactionBridge {
         return pinnable_val;
     }
 
-    inline unique_ptr<PinnableSlice> get_for_update_txn(
+    inline shared_ptr<PinnableSlice> get_for_update_txn(
             const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
     ) const {
-        auto pinnable_val = std::make_unique<PinnableSlice>();
+        auto pinnable_val = std::make_shared<PinnableSlice>();
         write_status(
                 inner->GetForUpdate(*r_ops,
                                     const_cast<ColumnFamilyHandle *>(&cf),
@@ -321,12 +321,12 @@ struct TransactionBridge {
         return pinnable_val;
     }
 
-    inline std::unique_ptr<PinnableSlice> get_raw(
+    inline std::shared_ptr<PinnableSlice> get_raw(
             const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
     ) const {
-        auto pinnable_val = std::make_unique<PinnableSlice>();
+        auto pinnable_val = std::make_shared<PinnableSlice>();
         write_status(
                 raw_db->Get(*r_ops,
                             const_cast<ColumnFamilyHandle *>(&cf),

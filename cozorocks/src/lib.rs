@@ -75,9 +75,10 @@ impl From<BridgeStatus> for Option<BridgeError> {
 
 type Result<T> = std::result::Result<T, BridgeError>;
 
+#[derive(Clone)]
 pub enum SlicePtr {
-    Plain(UniquePtr<Slice>),
-    Pinnable(UniquePtr<PinnableSlice>),
+    Plain(SharedPtr<Slice>),
+    Pinnable(SharedPtr<PinnableSlice>),
 }
 
 impl AsRef<[u8]> for SlicePtr {

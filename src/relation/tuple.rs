@@ -23,6 +23,7 @@ impl<T> AsRef<[u8]> for Tuple<T> where T: AsRef<[u8]> {
     }
 }
 
+#[derive(Clone)]
 pub enum CowSlice {
     Ptr(SlicePtr),
     Own(Vec<u8>),
@@ -40,14 +41,14 @@ impl From<Vec<u8>> for CowSlice {
     }
 }
 
-impl Clone for CowSlice {
-    fn clone(&self) -> Self {
-        match self {
-            CowSlice::Ptr(p) => { CowSlice::Own(p.as_ref().to_vec()) }
-            CowSlice::Own(o) => { CowSlice::Own(o.clone()) }
-        }
-    }
-}
+// impl Clone for CowSlice {
+//     fn clone(&self) -> Self {
+//         match self {
+//             CowSlice::Ptr(p) => { CowSlice::Ptr(p.clone()) }
+//             CowSlice::Own(o) => { CowSlice::Own(o.clone()) }
+//         }
+//     }
+// }
 
 impl AsRef<[u8]> for CowSlice {
     fn as_ref(&self) -> &[u8] {

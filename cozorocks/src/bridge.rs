@@ -125,8 +125,8 @@ mod ffi {
         fn is_valid(self: &IteratorBridge) -> bool;
         fn do_seek(self: &IteratorBridge, key: &[u8]);
         fn do_seek_for_prev(self: &IteratorBridge, key: &[u8]);
-        fn key_raw(self: &IteratorBridge) -> UniquePtr<Slice>;
-        fn value_raw(self: &IteratorBridge) -> UniquePtr<Slice>;
+        fn key_raw(self: &IteratorBridge) -> SharedPtr<Slice>;
+        fn value_raw(self: &IteratorBridge) -> SharedPtr<Slice>;
         fn status(self: &IteratorBridge) -> BridgeStatus;
 
         type TransactionBridge;
@@ -137,11 +137,11 @@ mod ffi {
         fn rollback_to_savepoint(self: &TransactionBridge, status: &mut BridgeStatus);
         fn pop_savepoint(self: &TransactionBridge, status: &mut BridgeStatus);
         fn get_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle, key: &[u8],
-                   status: &mut BridgeStatus) -> UniquePtr<PinnableSlice>;
+                   status: &mut BridgeStatus) -> SharedPtr<PinnableSlice>;
         fn get_for_update_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle, key: &[u8],
-                              status: &mut BridgeStatus) -> UniquePtr<PinnableSlice>;
+                              status: &mut BridgeStatus) -> SharedPtr<PinnableSlice>;
         fn get_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle, key: &[u8],
-                   status: &mut BridgeStatus) -> UniquePtr<PinnableSlice>;
+                   status: &mut BridgeStatus) -> SharedPtr<PinnableSlice>;
         fn put_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle, key: &[u8], val: &[u8],
                    status: &mut BridgeStatus);
         fn put_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle, key: &[u8], val: &[u8],
@@ -156,10 +156,10 @@ mod ffi {
         fn compact_all_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle, status: &mut BridgeStatus);
         fn iterator_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle) -> UniquePtr<IteratorBridge>;
         fn iterator_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle) -> UniquePtr<IteratorBridge>;
-        fn multiget_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle,
-                        keys: &[&[u8]], statuses: &mut [BridgeStatus]) -> UniquePtr<CxxVector<PinnableSlice>>;
-        fn multiget_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle,
-                        keys: &[&[u8]], statuses: &mut [BridgeStatus]) -> UniquePtr<CxxVector<PinnableSlice>>;
+        // fn multiget_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle,
+        //                 keys: &[&[u8]], statuses: &mut [BridgeStatus]) -> UniquePtr<CxxVector<PinnableSlice>>;
+        // fn multiget_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle,
+        //                 keys: &[&[u8]], statuses: &mut [BridgeStatus]) -> UniquePtr<CxxVector<PinnableSlice>>;
 
         pub type ColumnFamilyHandle;
 
