@@ -11,6 +11,8 @@ use crate::parser::text_identifier::build_name_in_def;
 use crate::relation::data::DataKind;
 use crate::relation::value::Value;
 
+const STORAGE_ID_START: i64 = 10000;
+
 impl<'s> Session<'s> {
     pub fn encode_definable_key(&self, name: &str, in_root: bool) -> OwnTuple {
         let depth_code = if in_root { 0 } else { self.get_stack_depth() as i64 };
@@ -246,7 +248,7 @@ impl<'s> Session<'s> {
             } else {
                 panic!("Unexpected value in storage id");
             }
-        } else { 0 };
+        } else { STORAGE_ID_START };
         let mut new_data = Tuple::with_null_prefix();
         new_data.push_int(u + 1);
         if in_root {

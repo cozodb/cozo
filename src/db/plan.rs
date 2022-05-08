@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 use std::{iter, mem};
+use std::vec::IntoIter;
+use chrono::format::Item;
 use pest::iterators::Pair;
 use cozorocks::{IteratorPtr, SlicePtr};
 use crate::db::engine::Session;
@@ -8,7 +10,9 @@ use crate::db::table::{ColId, TableId, TableInfo};
 use crate::relation::value::{StaticValue, Value};
 use crate::parser::Rule;
 use crate::error::Result;
-use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};
+use crate::relation::data::EMPTY_DATA;
+use crate::relation::table::MegaTuple;
+use crate::relation::tuple::{CowSlice, CowTuple, OwnTuple, SliceTuple, Tuple};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum QueryPlan {
@@ -134,30 +138,45 @@ impl<'a> Session<'a> {
         Ok(QueryPlan::Projection { arg: Box::new(plan), projection: select_data })
     }
 
-    pub fn iter_table(&self, tid: TableId) -> TableRowIterator {
+    pub fn iter_table(&self, tid: TableId) -> TableRowIterable {
         let it = if tid.in_root {
             self.txn.iterator(true, &self.perm_cf)
         } else {
             self.txn.iterator(false, &self.temp_cf)
         };
-        TableRowIterator::new(it, tid.id as u32)
+        TableRowIterable::new(it, tid.id as u32)
+    }
+}
+
+pub struct TableRowIterable<'a> {
+    it: IteratorPtr<'a>,
+    prefix: u32,
+}
+
+impl<'a> TableRowIterable<'a> {
+    pub fn new(it: IteratorPtr<'a>, prefix: u32) -> Self {
+        Self {
+            it,
+            prefix,
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a TableRowIterable<'a> {
+    type Item = (SliceTuple, SliceTuple);
+    type IntoIter = TableRowIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let prefix_tuple = OwnTuple::with_prefix(self.prefix);
+        self.it.seek(prefix_tuple);
+
+        Self::IntoIter { it: &self.it, started: false }
     }
 }
 
 pub struct TableRowIterator<'a> {
-    it: IteratorPtr<'a>,
+    it: &'a IteratorPtr<'a>,
     started: bool,
-}
-
-impl<'a> TableRowIterator<'a> {
-    pub fn new(it: IteratorPtr<'a>, prefix: u32) -> Self {
-        let prefix = OwnTuple::with_prefix(prefix);
-        it.seek(prefix);
-        Self {
-            it,
-            started: false,
-        }
-    }
 }
 
 impl<'a> Iterator for TableRowIterator<'a> {
@@ -173,28 +192,45 @@ impl<'a> Iterator for TableRowIterator<'a> {
     }
 }
 
+pub struct TableRowWithAssociatesIterable<'a> {
+    main: TableRowIterable<'a>,
+    associates: Vec<TableRowIterable<'a>>,
+}
+
+impl<'a> TableRowWithAssociatesIterable<'a> {
+    pub fn new(main: TableRowIterable<'a>, associates: Vec<TableRowIterable<'a>>) -> Self {
+        Self { main, associates }
+    }
+}
+
 pub struct TableRowWithAssociatesIterator<'a> {
     main: TableRowIterator<'a>,
     associates: Vec<TableRowIterator<'a>>,
     buffer: Vec<Option<(SliceTuple, SliceTuple)>>,
 }
 
-impl<'a> TableRowWithAssociatesIterator<'a> {
-    pub fn new(main: TableRowIterator<'a>, associates: Vec<TableRowIterator<'a>>) -> Self {
-        // ceremonial because type is not copy
-        let buffer = iter::repeat_with(|| None).take(associates.len()).collect();
-        Self { main, associates, buffer }
+impl<'a> IntoIterator for &'a TableRowWithAssociatesIterable<'a> {
+    type Item = MegaTuple;
+    type IntoIter = TableRowWithAssociatesIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            main: (&self.main).into_iter(),
+            associates: self.associates.iter().map(|v| v.into_iter()).collect(),
+            buffer: iter::repeat_with(|| None).take(self.associates.len()).collect(),
+        }
     }
 }
 
 impl<'a> Iterator for TableRowWithAssociatesIterator<'a> {
-    type Item = (SliceTuple, SliceTuple, Vec<Option<SliceTuple>>);
+    type Item = MegaTuple;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.main.next() {
             None => None,
             Some((k, v)) => {
-                let mut assoc_vals: Vec<Option<SliceTuple>> = iter::repeat_with(|| None).take(self.associates.len()).collect();
+                let l = self.associates.len();
+                let mut assoc_vals: Vec<Option<CowTuple>> = iter::repeat_with(|| None).take(l).collect();
                 let l = assoc_vals.len();
                 for i in 0..l {
                     let cached = self.buffer.get(i).unwrap();
@@ -207,31 +243,93 @@ impl<'a> Iterator for TableRowWithAssociatesIterator<'a> {
                     if let Some((ck, _)) = cached {
                         if k.key_part_eq(ck) {
                             let (_, v) = mem::replace(&mut self.buffer[i], None).unwrap();
-                            assoc_vals[i] = Some(v)
+                            assoc_vals[i] = Some(v.into())
                         }
                     }
                 }
-                Some((k, v, assoc_vals))
+                let mut vals: Vec<CowTuple> = Vec::with_capacity(assoc_vals.len());
+                vals.push(v.into());
+                vals.extend(assoc_vals.into_iter().map(|v|
+                    match v {
+                        None => {
+                            CowTuple::new(CowSlice::Own(EMPTY_DATA.into()))
+                        }
+                        Some(v) => v
+                    }));
+                Some(MegaTuple {
+                    keys: vec![k.into()],
+                    vals,
+                })
             }
         }
     }
 }
 
-pub struct CartesianProductIterator<'a> {
-    left: TableRowIterator<'a>,
-    right: TableRowIterator<'a>,
+
+pub struct CartesianProductIterable<A, B> {
+    left: A,
+    right: B,
 }
 
-pub struct EquiJoinIterator<'a> {
-    left: TableRowIterator<'a>,
-    right: TableRowIterator<'a>,
-    outer_left: bool,
-    outer_right: bool,
+impl<'a, A, B, AI, BI> IntoIterator for &'a CartesianProductIterable<A, B>
+    where &'a A: IntoIterator<Item=MegaTuple, IntoIter=AI>,
+          &'a B: IntoIterator<Item=MegaTuple, IntoIter=BI>,
+          AI: Iterator<Item=MegaTuple>,
+          BI: Iterator<Item=MegaTuple> {
+    type Item = MegaTuple;
+    type IntoIter = CartesianProductIterator<'a, A, B, AI, BI>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut left = (&self.left).into_iter();
+        let left_cache = left.next();
+        Self::IntoIter {
+            left_source: &self.left,
+            right_source: &self.right,
+            left,
+            right: (&self.right).into_iter(),
+            left_cache,
+        }
+    }
 }
 
-pub struct NodeRowIterator {}
+pub struct CartesianProductIterator<'a, A, B, AI, BI>
+    where &'a A: IntoIterator<Item=MegaTuple, IntoIter=AI>, &'a B: IntoIterator<Item=MegaTuple, IntoIter=BI> {
+    left_source: &'a A,
+    right_source: &'a B,
+    left: AI,
+    right: BI,
+    left_cache: Option<MegaTuple>,
+}
 
-pub struct EdgeRowIterator {}
+impl<'a, A, B, AI, BI> Iterator for CartesianProductIterator<'a, A, B, AI, BI>
+    where &'a A: IntoIterator<Item=MegaTuple, IntoIter=AI>,
+          &'a B: IntoIterator<Item=MegaTuple, IntoIter=BI>,
+          AI: Iterator<Item=MegaTuple>,
+          BI: Iterator<Item=MegaTuple> {
+    type Item = MegaTuple;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &self.left_cache {
+            None => None,
+            Some(t) => {
+                match self.right.next() {
+                    Some(t2) => {
+                        let mut keys = t.keys.clone();
+                        keys.extend(t2.keys);
+                        let mut vals = t.vals.clone();
+                        vals.extend(t2.vals);
+                        Some(MegaTuple {keys, vals})
+                    }
+                    None => {
+                        self.left_cache = self.left.next();
+                        self.right = self.right_source.into_iter();
+                        self.next()
+                    }
+                }
+            }
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -241,7 +339,7 @@ mod tests {
     use crate::db::engine::Engine;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
-    use crate::db::plan::TableRowWithAssociatesIterator;
+    use crate::db::plan::{CartesianProductIterable, TableRowWithAssociatesIterable, TableRowWithAssociatesIterator};
     use crate::db::query::FromEl;
     use crate::db::table::TableId;
     use crate::relation::value::Value;
@@ -314,7 +412,7 @@ mod tests {
             println!("{:?}", rel_tbls);
 
             let tbl = rel_tbls.pop().unwrap();
-            for (k, v) in sess.iter_table(tbl) {
+            for (k, v) in &sess.iter_table(tbl) {
                 let tpair = [(k, v)];
                 match sess.tuple_eval(&where_vals, &tpair).unwrap() {
                     Value::Bool(true) => {
@@ -332,17 +430,40 @@ mod tests {
             let duration2 = start2.elapsed();
             println!("Time elapsed {:?} {:?}", duration, duration2);
             let a = sess.iter_table(tbl);
-            let mut b = sess.iter_table(tbl);
-            let mut c = sess.iter_table(tbl);
-            for _ in 0..5 {
-                b.next();
-                c.next();
-                c.next();
+            let b = sess.iter_table(tbl);
+            let c = sess.iter_table(tbl);
+            let it = TableRowWithAssociatesIterable::new(a, vec![b, c]);
+            {
+                for el in &it {
+                    println!("{:?}", el);
+                }
             }
-            let it = TableRowWithAssociatesIterator::new(a, vec![b, c]);
-            for el in it {
-                println!("{:?}", el);
+            println!("XXXXX");
+            {
+                for el in &it {
+                    println!("{:?}", el);
+                }
             }
+            let a = sess.iter_table(tbl);
+            let a = TableRowWithAssociatesIterable::new(a, vec![]);
+            let b = sess.iter_table(tbl);
+            let b = TableRowWithAssociatesIterable::new(b, vec![]);
+            let c_it = CartesianProductIterable {left: a, right: b};
+            let c = sess.iter_table(tbl);
+            let c = TableRowWithAssociatesIterable::new(c, vec![]);
+            let c_it = CartesianProductIterable {left: c, right: c_it};
+            let start = Instant::now();
+
+            println!("Now cartesian product");
+
+            for (i, el) in (&c_it).into_iter().enumerate() {
+                if i % 1024 == 0 {
+                    println!("{}: {:?}", i, el)
+                }
+            }
+            let duration = start.elapsed();
+            println!("Time elapsed {:?}", duration);
+
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

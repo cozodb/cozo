@@ -1,3 +1,4 @@
+use crate::relation::tuple::{CowSlice, CowTuple};
 use crate::relation::typing::Typing;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
@@ -37,4 +38,10 @@ pub enum Table {
         src: Box<Table>,
         stored: StoredRelation,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MegaTuple {
+    pub keys: Vec<CowTuple>,
+    pub vals: Vec<CowTuple>
 }

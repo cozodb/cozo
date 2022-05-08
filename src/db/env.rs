@@ -2,7 +2,7 @@ use cozorocks::SlicePtr;
 use crate::db::engine::Session;
 use crate::relation::value::Value;
 use crate::error::{CozoError, Result};
-use crate::relation::data::DataKind;
+use crate::relation::data::{DataKind, EMPTY_DATA};
 use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};
 
 /// # layouts for sector 0
@@ -31,7 +31,7 @@ impl<'s> Session<'s> {
             ikey.push_int(self.stack_depth as i64);
             ikey.push_str(name);
             self.txn.put(false, &self.temp_cf, key, data)?;
-            self.txn.put(false, &self.temp_cf, ikey, "")?;
+            self.txn.put(false, &self.temp_cf, ikey, EMPTY_DATA)?;
         }
         Ok(())
     }
@@ -50,7 +50,7 @@ impl<'s> Session<'s> {
         if in_root {
             match value {
                 None => {
-                    self.txn.put(true, &self.perm_cf, key, "")?;
+                    self.txn.put(true, &self.perm_cf, key, EMPTY_DATA)?;
                 }
                 Some(v) => {
                     self.txn.put(true, &self.perm_cf, key, &v)?;
@@ -59,7 +59,7 @@ impl<'s> Session<'s> {
         } else {
             match value {
                 None => {
-                    self.txn.put(false, &self.temp_cf, key, "")?;
+                    self.txn.put(false, &self.temp_cf, key, EMPTY_DATA)?;
                 }
                 Some(v) => {
                     self.txn.put(false, &self.temp_cf, key, &v)?;

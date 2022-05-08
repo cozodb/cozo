@@ -23,6 +23,63 @@ impl<T> AsRef<[u8]> for Tuple<T> where T: AsRef<[u8]> {
     }
 }
 
+pub enum CowSlice {
+    Ptr(SlicePtr),
+    Own(Vec<u8>),
+}
+
+impl From<SlicePtr> for CowSlice {
+    fn from(p: SlicePtr) -> Self {
+        CowSlice::Ptr(p)
+    }
+}
+
+impl From<Vec<u8>> for CowSlice {
+    fn from(v: Vec<u8>) -> Self {
+        CowSlice::Own(v)
+    }
+}
+
+impl Clone for CowSlice {
+    fn clone(&self) -> Self {
+        match self {
+            CowSlice::Ptr(p) => { CowSlice::Own(p.as_ref().to_vec()) }
+            CowSlice::Own(o) => { CowSlice::Own(o.clone()) }
+        }
+    }
+}
+
+impl AsRef<[u8]> for CowSlice {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            CowSlice::Ptr(s) => s.as_ref(),
+            CowSlice::Own(o) => o.as_ref()
+        }
+    }
+}
+
+impl From<SliceTuple> for CowTuple {
+    fn from(s: SliceTuple) -> Self {
+        Tuple::new(CowSlice::Ptr(s.data))
+    }
+}
+
+impl From<OwnTuple> for CowTuple {
+    fn from(o: OwnTuple) -> Self {
+        Tuple::new(CowSlice::Own(o.data))
+    }
+}
+
+impl CowTuple {
+    pub fn to_owned(self) -> OwnTuple {
+        match self.data {
+            CowSlice::Ptr(p) => OwnTuple::new(p.as_ref().to_vec()),
+            CowSlice::Own(o) => OwnTuple::new(o)
+        }
+    }
+}
+
+pub type CowTuple = Tuple<CowSlice>;
 pub type OwnTuple = Tuple<Vec<u8>>;
 pub type SliceTuple = Tuple<SlicePtr>;
 
@@ -359,12 +416,9 @@ impl<T: AsRef<[u8]>> Tuple<T> {
 
 impl<T: AsRef<[u8]>> Debug for Tuple<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.data.as_ref().is_empty() {
-            return write!(f, "Empty");
-        }
         match self.data_kind() {
             Ok(data_kind) => {
-                write!(f, "Tuple<{}:{:?}>{{", self.get_prefix(), data_kind)?;
+                write!(f, "Tuple<{:?}>{{", data_kind)?;
             }
             Err(_) => {
                 write!(f, "Tuple<{}>{{", self.get_prefix())?;
