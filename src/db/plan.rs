@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
 use std::{iter, mem};
-use std::vec::IntoIter;
-use chrono::format::Item;
 use pest::iterators::Pair;
-use cozorocks::{IteratorPtr, SlicePtr};
+use cozorocks::{IteratorPtr};
 use crate::db::engine::Session;
 use crate::db::query::{FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
@@ -342,12 +340,10 @@ mod tests {
     use crate::db::engine::Engine;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
-    use crate::db::plan::{CartesianProductIterable, TableRowWithAssociatesIterable, TableRowWithAssociatesIterator};
+    use crate::db::plan::{CartesianProductIterable, TableRowWithAssociatesIterable};
     use crate::db::query::FromEl;
-    use crate::db::table::TableId;
     use crate::relation::value::Value;
     use crate::error::Result;
-    use crate::relation::tuple::{OwnTuple, Tuple};
 
     #[test]
     fn pair_value() -> Result<()> {
@@ -455,7 +451,7 @@ mod tests {
             let c_it = CartesianProductIterable { left: a, right: b };
             let c = sess.iter_table(tbl);
             let c = TableRowWithAssociatesIterable::new(c, vec![]);
-            let mut c_it = CartesianProductIterable { left: c, right: c_it };
+            let c_it = CartesianProductIterable { left: c, right: c_it };
 
             let start = Instant::now();
 
@@ -465,8 +461,8 @@ mod tests {
                 // if i % 4096 == 0 {
                 //     println!("{}: {:?}", i, el)
                 // }
-                let _x = el.keys.into_iter().map(|v| v.iter().map(|v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
-                let _y = el.vals.into_iter().map(|v| v.iter().map(|v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
+                let _x = el.keys.into_iter().map(|v| v.iter().map(|_v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
+                let _y = el.vals.into_iter().map(|v| v.iter().map(|_v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
             }
             let duration = start.elapsed();
             println!("Time elapsed {:?}", duration);

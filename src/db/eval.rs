@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet};
-use cozorocks::SlicePtr;
 use crate::db::cnf_transform::{cnf_transform, extract_tables};
 use crate::db::engine::{Session};
 use crate::db::plan::AccessorMap;
@@ -11,7 +10,6 @@ use crate::error::{CozoError, Result};
 use crate::error::CozoError::{InvalidArgument, LogicError};
 use crate::relation::data::DataKind;
 use crate::relation::table::MegaTuple;
-use crate::relation::tuple::{SliceTuple, Tuple};
 use crate::relation::value;
 
 

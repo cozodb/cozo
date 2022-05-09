@@ -1,4 +1,3 @@
-use cozorocks::SlicePtr;
 use crate::db::engine::Session;
 use crate::relation::value::Value;
 use crate::error::{CozoError, Result};

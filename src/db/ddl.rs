@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use pest::iterators::{Pair, Pairs};
-use cozorocks::SlicePtr;
 use crate::db::engine::Session;
 use crate::db::table::TableId;
 use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};

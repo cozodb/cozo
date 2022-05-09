@@ -1,4 +1,4 @@
-use crate::relation::tuple::{CowSlice, CowTuple};
+use crate::relation::tuple::{CowTuple};
 use crate::relation::typing::Typing;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
