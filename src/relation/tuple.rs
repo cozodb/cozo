@@ -1,5 +1,6 @@
 use std::borrow::{Cow};
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
@@ -95,6 +96,11 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     #[inline]
     pub fn key_part_eq<T2: AsRef<[u8]>>(&self, other: &Tuple<T2>) -> bool {
         self.data.as_ref()[PREFIX_LEN..] == other.data.as_ref()[PREFIX_LEN..]
+    }
+
+    #[inline]
+    pub fn key_part_cmp<T2: AsRef<[u8]>>(&self, other: &Tuple<T2>) -> Ordering {
+        self.iter().cmp(other.iter())
     }
 
     #[inline]

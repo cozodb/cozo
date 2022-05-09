@@ -43,5 +43,14 @@ pub enum Table {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MegaTuple {
     pub keys: Vec<CowTuple>,
-    pub vals: Vec<CowTuple>
+    pub vals: Vec<CowTuple>,
+}
+
+impl MegaTuple {
+    pub fn empty_tuple() -> Self {
+        MegaTuple { keys: vec![], vals: vec![] }
+    }
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
 }
