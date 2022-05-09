@@ -163,6 +163,7 @@ pub enum MegaTupleIt<'a> {
     CartesianProdIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>> },
     MergeJoinIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>>, left_keys: Vec<(TableId, ColId)>, right_keys: Vec<(TableId, ColId)> },
     FilterIt { it: Box<MegaTupleIt<'a>>, filter: Value<'a> },
+    EvalIt { it: Box<MegaTupleIt<'a>>, keys: Vec<Value<'a>>, vals: Vec<Value<'a>>, prefix: u32 },
 }
 
 impl<'a> MegaTupleIt<'a> {
@@ -225,6 +226,14 @@ impl<'a> MegaTupleIt<'a> {
                 Box::new(FilterIterator {
                     it: Box::new(it.iter()),
                     filter,
+                })
+            }
+            MegaTupleIt::EvalIt { it, keys, vals, prefix } => {
+                Box::new(EvalIterator {
+                    it: Box::new(it.iter()),
+                    keys,
+                    vals,
+                    prefix: *prefix,
                 })
             }
         }
@@ -513,6 +522,41 @@ impl<'a> Iterator for OutputIterator<'a> {
     }
 }
 
+pub struct EvalIterator<'a> {
+    it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    keys: &'a [Value<'a>],
+    vals: &'a [Value<'a>],
+    prefix: u32,
+}
+
+impl<'a> Iterator for EvalIterator<'a> {
+    type Item = Result<MegaTuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.it.next() {
+            None => None,
+            Some(Err(e)) => Some(Err(e)),
+            Some(Ok(t)) => {
+                let mut key_tuple = OwnTuple::with_prefix(self.prefix);
+                let mut val_tuple = OwnTuple::with_data_prefix(DataKind::Data);
+                for k in self.keys {
+                    match tuple_eval(k, &t) {
+                        Ok(v) => key_tuple.push_value(&v),
+                        Err(e) => return Some(Err(e))
+                    }
+                }
+                for k in self.vals {
+                    match tuple_eval(k, &t) {
+                        Ok(v) => val_tuple.push_value(&v),
+                        Err(e) => return Some(Err(e))
+                    }
+                }
+                Some(Ok(MegaTuple { keys: vec![key_tuple.into()], vals: vec![val_tuple.into()] }))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -521,7 +565,6 @@ mod tests {
     use crate::db::engine::Engine;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
-    use crate::db::eval::tuple_eval;
     use crate::db::plan::{MegaTupleIt, OutputIterator};
     use crate::db::query::FromEl;
     use crate::relation::value::Value;
