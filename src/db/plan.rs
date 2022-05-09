@@ -415,16 +415,17 @@ mod tests {
             println!("{:?}", rel_tbls);
 
             let tbl = rel_tbls.pop().unwrap();
-            for (k, v) in &sess.iter_table(tbl) {
-                let tpair = [(k, v)];
-                match sess.tuple_eval(&where_vals, &tpair).unwrap() {
+            let it = sess.iter_table(tbl);
+            let it = TableRowWithAssociatesIterable::new(it, vec![]);
+            for tuple in &it {
+                match sess.tuple_eval(&where_vals, &tuple).unwrap() {
                     Value::Bool(true) => {
-                        let extracted = sess.tuple_eval(&vals, &tpair).unwrap();
+                        let extracted = sess.tuple_eval(&vals, &tuple).unwrap();
                         println!("{}", extracted);
                     }
                     Value::Null |
                     Value::Bool(_) => {
-                        println!("  Ignore {:?}", &tpair);
+                        println!("  Ignore {:?}", &tuple);
                     }
                     _ => panic!("Bad type")
                 }
@@ -460,16 +461,15 @@ mod tests {
 
             println!("Now cartesian product");
 
-            let mut n = 0;
-
             for el in &c_it {
                 // if i % 4096 == 0 {
                 //     println!("{}: {:?}", i, el)
                 // }
-                n += el.keys.len();
+                let _x = el.keys.into_iter().map(|v| v.iter().map(|v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
+                let _y = el.vals.into_iter().map(|v| v.iter().map(|v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
             }
             let duration = start.elapsed();
-            println!("Time elapsed {:?} for {}", duration, n / 3);
+            println!("Time elapsed {:?}", duration);
             let a = sess.iter_table(tbl);
             let ac = (&a).into_iter().count();
             println!("{}", ac);
