@@ -487,6 +487,31 @@ impl<'a> Iterator for FilterIterator<'a> {
     }
 }
 
+pub struct OutputIterator<'a> {
+    it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    transform: &'a Value<'a>,
+}
+
+impl<'a> OutputIterator<'a> {
+    pub fn new(it: &'a MegaTupleIt<'a>, transform: &'a Value<'a>) -> Self {
+        Self {
+            it: Box::new(it.iter()),
+            transform,
+        }
+    }
+}
+
+impl<'a> Iterator for OutputIterator<'a> {
+    type Item = Result<Value<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.it.next() {
+            None => None,
+            Some(Err(e)) => Some(Err(e)),
+            Some(Ok(t)) => Some(tuple_eval(self.transform, &t).map(|v| v.to_static()))
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -497,7 +522,7 @@ mod tests {
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
     use crate::db::eval::tuple_eval;
-    use crate::db::plan::{MegaTupleIt};
+    use crate::db::plan::{MegaTupleIt, OutputIterator};
     use crate::db::query::FromEl;
     use crate::relation::value::Value;
     use crate::error::Result;
@@ -570,19 +595,9 @@ mod tests {
             let tbl = rel_tbls.pop().unwrap();
             let it = sess.iter_node(tbl);
             let it = MegaTupleIt::FilterIt { filter: where_vals, it: it.into() };
-            for tuple in it.iter() {
-                let tuple = tuple.unwrap();
-                // match tuple_eval(&where_vals, &tuple).unwrap() {
-                //     Value::Bool(true) => {
-                let extracted = tuple_eval(&vals, &tuple).unwrap();
-                println!("{}", extracted);
-                // }
-                // Value::Null |
-                // Value::Bool(_) => {
-                //     println!("  Ignore {:?}", &tuple);
-                // }
-                // _ => panic!("Bad type")
-                // }
+            let it = OutputIterator::new(&it, &vals);
+            for val in it {
+                println!("{}", val.unwrap());
             }
             let duration = start.elapsed();
             let duration2 = start2.elapsed();
