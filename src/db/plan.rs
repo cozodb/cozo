@@ -162,38 +162,35 @@ pub enum MegaTupleIt<'a> {
     MergeJoinIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>>, left_keys: Vec<(TableId, ColId)>, right_keys: Vec<(TableId, ColId)> },
 }
 
-impl<'a> IntoIterator for &'a MegaTupleIt<'a> {
-    type Item = MegaTuple;
-    type IntoIter = MegaTupleIterator<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
+impl<'a> MegaTupleIt<'a> {
+    pub fn iter(&'a self) -> Box<dyn Iterator<Item=MegaTuple> + 'a> {
         match self {
             MegaTupleIt::NodeIt { it, tid } => {
                 let prefix_tuple = OwnTuple::with_prefix(*tid);
                 it.seek(prefix_tuple);
 
-                MegaTupleIterator::NodeIterator {
+                Box::new(NodeIterator {
                     it,
                     started: false,
-                }
+                })
             }
             MegaTupleIt::EdgeIt { it, tid } => {
                 let prefix_tuple = OwnTuple::with_prefix(*tid);
                 it.seek(prefix_tuple);
 
-                MegaTupleIterator::EdgeIterator {
+                Box::new(EdgeIterator {
                     it,
                     started: false,
-                }
+                })
             }
             MegaTupleIt::EdgeKeyOnlyBwdIt { it, tid } => {
                 let prefix_tuple = OwnTuple::with_prefix(*tid);
                 it.seek(prefix_tuple);
 
-                MegaTupleIterator::EdgeKeyOnlyBwdIterator {
+                Box::new(EdgeKeyOnlyBwdIterator {
                     it,
                     started: false,
-                }
+                })
             }
             MegaTupleIt::KeySortedWithAssocIt { main, associates } => {
                 let buffer = iter::repeat_with(|| None).take(associates.len()).collect();
@@ -201,196 +198,226 @@ impl<'a> IntoIterator for &'a MegaTupleIt<'a> {
                     let prefix_tuple = OwnTuple::with_prefix(*tid);
                     it.seek(prefix_tuple);
 
-                    MegaTupleIterator::NodeIterator {
+                    NodeIterator {
                         it,
                         started: false,
                     }
                 }).collect();
-                MegaTupleIterator::KeySortedWithAssocIterator {
-                    main: Box::new(main.as_ref().into_iter()),
+                Box::new(KeySortedWithAssocIterator {
+                    main: Box::new(main.iter()),
                     associates,
                     buffer,
-                }
+                })
             }
             MegaTupleIt::CartesianProdIt { left, right } => {
-                MegaTupleIterator::CartesianProdIterator {
-                    left: Box::new(left.as_ref().into_iter()),
+                Box::new(CartesianProdIterator {
+                    left: Box::new(left.iter()),
                     left_cache: MegaTuple::empty_tuple(),
                     right_source: right.as_ref(),
-                    right: Box::new(right.as_ref().into_iter()),
-                }
+                    right: Box::new(right.as_ref().iter()),
+                })
             }
             MegaTupleIt::MergeJoinIt { .. } => todo!(),
         }
     }
 }
 
-pub enum MegaTupleIterator<'a> {
-    NodeIterator { it: &'a IteratorPtr<'a>, started: bool },
-    EdgeIterator { it: &'a IteratorPtr<'a>, started: bool },
-    EdgeKeyOnlyBwdIterator { it: &'a IteratorPtr<'a>, started: bool },
-    KeySortedWithAssocIterator { main: Box<MegaTupleIterator<'a>>, associates: Vec<MegaTupleIterator<'a>>, buffer: Vec<Option<(CowTuple, CowTuple)>> },
-    CartesianProdIterator {
-        left: Box<MegaTupleIterator<'a>>,
-        left_cache: MegaTuple,
-        right_source: &'a MegaTupleIt<'a>,
-        right: Box<MegaTupleIterator<'a>>,
-    },
+pub struct NodeIterator<'a> {
+    it: &'a IteratorPtr<'a>,
+    started: bool,
 }
 
-impl<'a> Iterator for MegaTupleIterator<'a> {
+impl<'a> Iterator for NodeIterator<'a> {
+    type Item = MegaTuple;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.started {
+            self.it.next();
+        } else {
+            self.started = true;
+        }
+        self.it.pair().map(|(k, v)| {
+            MegaTuple {
+                keys: vec![Tuple::new(k).into()],
+                vals: vec![Tuple::new(v).into()],
+            }
+        })
+    }
+}
+
+pub struct EdgeIterator<'a> {
+    it: &'a IteratorPtr<'a>,
+    started: bool,
+}
+
+impl<'a> Iterator for EdgeIterator<'a> {
     type Item = MegaTuple;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            MegaTupleIterator::NodeIterator { it, started } => {
-                if *started {
-                    it.next();
-                } else {
-                    *started = true;
-                }
-                it.pair().map(|(k, v)| {
-                    MegaTuple {
-                        keys: vec![Tuple::new(k).into()],
-                        vals: vec![Tuple::new(v).into()],
-                    }
-                })
-            }
-            MegaTupleIterator::EdgeIterator { it, started } => {
-                if *started {
-                    it.next();
-                } else {
-                    *started = true;
-                }
-                loop {
-                    match it.pair() {
-                        None => return None,
-                        Some((k, v)) => {
-                            let vt = Tuple::new(v);
-                            if matches!(vt.data_kind(), Ok(DataKind::Edge)) {
-                                it.next()
-                            } else {
-                                let kt = Tuple::new(k);
-                                return Some(MegaTuple {
-                                    keys: vec![kt.into()],
-                                    vals: vec![vt.into()],
-                                });
-                            }
-                        }
+        if self.started {
+            self.it.next();
+        } else {
+            self.started = true;
+        }
+        loop {
+            match self.it.pair() {
+                None => return None,
+                Some((k, v)) => {
+                    let vt = Tuple::new(v);
+                    if matches!(vt.data_kind(), Ok(DataKind::Edge)) {
+                        self.it.next()
+                    } else {
+                        let kt = Tuple::new(k);
+                        return Some(MegaTuple {
+                            keys: vec![kt.into()],
+                            vals: vec![vt.into()],
+                        });
                     }
                 }
-            }
-            MegaTupleIterator::EdgeKeyOnlyBwdIterator { it, started } => {
-                if *started {
-                    it.next();
-                } else {
-                    *started = true;
-                }
-                loop {
-                    match it.pair() {
-                        None => return None,
-                        Some((_k, rev_k)) => {
-                            let rev_k_tuple = Tuple::new(rev_k);
-                            if !matches!(rev_k_tuple.data_kind(), Ok(DataKind::Edge)) {
-                                it.next()
-                            } else {
-                                return Some(MegaTuple {
-                                    keys: vec![rev_k_tuple.into()],
-                                    vals: vec![],
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            MegaTupleIterator::KeySortedWithAssocIterator { main, associates, buffer } => {
-                // first get a tuple from main
-                match main.next() {
-                    None => None, // main exhausted, we are finished
-                    Some(MegaTuple { mut keys, mut vals }) => {
-                        // extract key from main
-                        let k = keys.pop().unwrap();
-                        let l = associates.len();
-                        // initialize vector for associate values
-                        let mut assoc_vals: Vec<Option<CowTuple>> = iter::repeat_with(|| None).take(l).collect();
-                        let l = assoc_vals.len();
-                        for i in 0..l {
-                            // for each associate
-                            let cached = buffer.get(i).unwrap();
-                            // if no cache, try to get cache filled first
-                            if matches!(cached, None) {
-                                let assoc_data = associates.get_mut(i).unwrap().next()
-                                    .map(|mut mt| (mt.keys.pop().unwrap(), mt.vals.pop().unwrap()));
-                                buffer[i] = assoc_data;
-                            }
-
-                            // if we have cache
-                            while let Some((ck, _)) = buffer.get(i).unwrap() {
-                                match k.key_part_cmp(ck) {
-                                    Ordering::Less => {
-                                        // target key less than cache key, no value for current iteration
-                                        break;
-                                    }
-                                    Ordering::Equal => {
-                                        // target key equals cache key, we put it into collected values
-                                        let (_, v) = mem::replace(&mut buffer[i], None).unwrap();
-                                        assoc_vals[i] = Some(v.into());
-                                        break;
-                                    }
-                                    Ordering::Greater => {
-                                        // target key greater than cache key, meaning that the source has holes (maybe due to filtering)
-                                        // get a new one into buffer
-                                        let assoc_data = associates.get_mut(i).unwrap().next()
-                                            .map(|mut mt| (mt.keys.pop().unwrap(), mt.vals.pop().unwrap()));
-                                        buffer[i] = assoc_data;
-                                    }
-                                }
-                            }
-                        }
-                        vals.extend(assoc_vals.into_iter().map(|v|
-                            match v {
-                                None => {
-                                    CowTuple::new(CowSlice::Own(EMPTY_DATA.into()))
-                                }
-                                Some(v) => v
-                            }));
-                        Some(MegaTuple {
-                            keys: vec![k],
-                            vals,
-                        })
-                    }
-                }
-            }
-            MegaTupleIterator::CartesianProdIterator { left, left_cache, right, right_source } => {
-                if left_cache.is_empty() {
-                    *left_cache = match left.next() {
-                        None => return None,
-                        Some(v) => v
-                    }
-                }
-                let r_tpl = match right.next() {
-                    None => {
-                        *right = Box::new((*right_source).into_iter());
-                        *left_cache = match left.next() {
-                            None => return None,
-                            Some(v) => v
-                        };
-                        match right.next() {
-                            // early return in case right is empty
-                            None => return None,
-                            Some(r_tpl) => r_tpl
-                        }
-                    }
-                    Some(r_tpl) => r_tpl
-                };
-                let mut ret = left_cache.clone();
-                ret.keys.extend(r_tpl.keys);
-                ret.vals.extend(r_tpl.vals);
-                Some(ret)
             }
         }
     }
 }
+
+pub struct EdgeKeyOnlyBwdIterator<'a> {
+    it: &'a IteratorPtr<'a>,
+    started: bool,
+}
+
+impl<'a> Iterator for EdgeKeyOnlyBwdIterator<'a> {
+    type Item = MegaTuple;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.started {
+            self.it.next();
+        } else {
+            self.started = true;
+        }
+        loop {
+            match self.it.pair() {
+                None => return None,
+                Some((_k, rev_k)) => {
+                    let rev_k_tuple = Tuple::new(rev_k);
+                    if !matches!(rev_k_tuple.data_kind(), Ok(DataKind::Edge)) {
+                        self.it.next()
+                    } else {
+                        return Some(MegaTuple {
+                            keys: vec![rev_k_tuple.into()],
+                            vals: vec![],
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub struct KeySortedWithAssocIterator<'a> {
+    main: Box<dyn Iterator<Item=MegaTuple> + 'a>,
+    associates: Vec<NodeIterator<'a>>,
+    buffer: Vec<Option<(CowTuple, CowTuple)>>,
+}
+
+impl<'a> Iterator for KeySortedWithAssocIterator<'a> {
+    type Item = MegaTuple;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.main.next() {
+            None => None, // main exhausted, we are finished
+            Some(MegaTuple { mut keys, mut vals }) => {
+                // extract key from main
+                let k = keys.pop().unwrap();
+                let l = self.associates.len();
+                // initialize vector for associate values
+                let mut assoc_vals: Vec<Option<CowTuple>> = iter::repeat_with(|| None).take(l).collect();
+                let l = assoc_vals.len();
+                for i in 0..l {
+                    // for each associate
+                    let cached = self.buffer.get(i).unwrap();
+                    // if no cache, try to get cache filled first
+                    if matches!(cached, None) {
+                        let assoc_data = self.associates.get_mut(i).unwrap().next()
+                            .map(|mut mt| (mt.keys.pop().unwrap(), mt.vals.pop().unwrap()));
+                        self.buffer[i] = assoc_data;
+                    }
+
+                    // if we have cache
+                    while let Some((ck, _)) = self.buffer.get(i).unwrap() {
+                        match k.key_part_cmp(ck) {
+                            Ordering::Less => {
+                                // target key less than cache key, no value for current iteration
+                                break;
+                            }
+                            Ordering::Equal => {
+                                // target key equals cache key, we put it into collected values
+                                let (_, v) = mem::replace(&mut self.buffer[i], None).unwrap();
+                                assoc_vals[i] = Some(v.into());
+                                break;
+                            }
+                            Ordering::Greater => {
+                                // target key greater than cache key, meaning that the source has holes (maybe due to filtering)
+                                // get a new one into buffer
+                                let assoc_data = self.associates.get_mut(i).unwrap().next()
+                                    .map(|mut mt| (mt.keys.pop().unwrap(), mt.vals.pop().unwrap()));
+                                self.buffer[i] = assoc_data;
+                            }
+                        }
+                    }
+                }
+                vals.extend(assoc_vals.into_iter().map(|v|
+                    match v {
+                        None => {
+                            CowTuple::new(CowSlice::Own(EMPTY_DATA.into()))
+                        }
+                        Some(v) => v
+                    }));
+                Some(MegaTuple {
+                    keys: vec![k],
+                    vals,
+                })
+            }
+        }
+    }
+}
+
+pub struct CartesianProdIterator<'a> {
+    left: Box<dyn Iterator<Item=MegaTuple> + 'a>,
+    left_cache: MegaTuple,
+    right_source: &'a MegaTupleIt<'a>,
+    right: Box<dyn Iterator<Item=MegaTuple> + 'a>,
+}
+
+impl<'a> Iterator for CartesianProdIterator<'a> {
+    type Item = MegaTuple;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.left_cache.is_empty() {
+            self.left_cache = match self.left.next() {
+                None => return None,
+                Some(v) => v
+            }
+        }
+        let r_tpl = match self.right.next() {
+            None => {
+                self.right = Box::new(self.right_source.iter());
+                self.left_cache = match self.left.next() {
+                    None => return None,
+                    Some(v) => v
+                };
+                match self.right.next() {
+                    // early return in case right is empty
+                    None => return None,
+                    Some(r_tpl) => r_tpl
+                }
+            }
+            Some(r_tpl) => r_tpl
+        };
+        let mut ret = self.left_cache.clone();
+        ret.keys.extend(r_tpl.keys);
+        ret.vals.extend(r_tpl.vals);
+        Some(ret)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -472,7 +499,7 @@ mod tests {
 
             let tbl = rel_tbls.pop().unwrap();
             let it = sess.iter_node(tbl);
-            for tuple in &it {
+            for tuple in it.iter() {
                 match sess.tuple_eval(&where_vals, &tuple).unwrap() {
                     Value::Bool(true) => {
                         let extracted = sess.tuple_eval(&vals, &tuple).unwrap();
@@ -495,18 +522,18 @@ mod tests {
                                  (tbl.id as u32, sess.raw_iterator(true))],
             };
             {
-                for el in &it {
+                for el in it.iter() {
                     println!("{:?}", el);
                 }
             }
             println!("XXXXX");
             {
-                for el in &it {
+                for el in it.iter() {
                     println!("{:?}", el);
                 }
             }
             let mut it = sess.iter_node(tbl);
-            for _ in 0..2 {
+            for _ in 0..3 {
                 it = MegaTupleIt::CartesianProdIt {
                     left: Box::new(it),
                     right: Box::new(sess.iter_node(tbl)),
@@ -517,7 +544,7 @@ mod tests {
 
             println!("Now cartesian product");
             let mut n = 0;
-            for el in &it {
+            for el in it.iter() {
                 if n % 4096 == 0 {
                     println!("{}: {:?}", n, el)
                 }
