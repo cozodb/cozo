@@ -4,11 +4,13 @@ use std::cmp::Ordering;
 use pest::iterators::Pair;
 use cozorocks::{IteratorPtr};
 use crate::db::engine::Session;
+use crate::db::eval::tuple_eval;
 use crate::db::query::{FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
+use crate::error::CozoError::LogicError;
 use crate::relation::value::{StaticValue, Value};
 use crate::parser::Rule;
-use crate::error::Result;
+use crate::error::{Result};
 use crate::relation::data::{DataKind, EMPTY_DATA};
 use crate::relation::table::MegaTuple;
 use crate::relation::tuple::{CowSlice, CowTuple, OwnTuple, Tuple};
@@ -160,6 +162,7 @@ pub enum MegaTupleIt<'a> {
     KeySortedWithAssocIt { main: Box<MegaTupleIt<'a>>, associates: Vec<(u32, IteratorPtr<'a>)> },
     CartesianProdIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>> },
     MergeJoinIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>>, left_keys: Vec<(TableId, ColId)>, right_keys: Vec<(TableId, ColId)> },
+    FilterIt { it: Box<MegaTupleIt<'a>>, filter: Value<'a> },
 }
 
 impl<'a> MegaTupleIt<'a> {
@@ -218,6 +221,12 @@ impl<'a> MegaTupleIt<'a> {
                 })
             }
             MegaTupleIt::MergeJoinIt { .. } => todo!(),
+            MegaTupleIt::FilterIt { it, filter } => {
+                Box::new(FilterIterator {
+                    it: Box::new(it.iter()),
+                    filter,
+                })
+            }
         }
     }
 }
@@ -326,7 +335,10 @@ impl<'a> Iterator for KeySortedWithAssocIterator<'a> {
             Some(Err(e)) => return Some(Err(e)),
             Some(Ok(MegaTuple { mut keys, mut vals })) => {
                 // extract key from main
-                let k = keys.pop().unwrap();
+                let k = match keys.pop() {
+                    None => return Some(Err(LogicError("Empty keys".to_string()))),
+                    Some(k) => k
+                };
                 let l = self.associates.len();
                 // initialize vector for associate values
                 let mut assoc_vals: Vec<Option<CowTuple>> = iter::repeat_with(|| None).take(l).collect();
@@ -447,6 +459,34 @@ impl<'a> Iterator for CartesianProdIterator<'a> {
     }
 }
 
+pub struct FilterIterator<'a> {
+    it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    filter: &'a Value<'a>,
+}
+
+impl<'a> Iterator for FilterIterator<'a> {
+    type Item = Result<MegaTuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for t in self.it.by_ref() {
+            match t {
+                Ok(t) => {
+                    match tuple_eval(self.filter, &t) {
+                        Ok(Value::Bool(true)) => {
+                            return Some(Ok(t));
+                        }
+                        Ok(Value::Bool(false)) | Ok(Value::Null) => {}
+                        Ok(_v) => return Some(Err(LogicError("Unexpected type in filter".to_string()))),
+                        Err(e) => return Some(Err(e))
+                    }
+                }
+                Err(e) => return Some(Err(e))
+            }
+        }
+        None
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -456,6 +496,7 @@ mod tests {
     use crate::db::engine::Engine;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
+    use crate::db::eval::tuple_eval;
     use crate::db::plan::{MegaTupleIt};
     use crate::db::query::FromEl;
     use crate::relation::value::Value;
@@ -528,19 +569,20 @@ mod tests {
 
             let tbl = rel_tbls.pop().unwrap();
             let it = sess.iter_node(tbl);
+            let it = MegaTupleIt::FilterIt { filter: where_vals, it: it.into() };
             for tuple in it.iter() {
                 let tuple = tuple.unwrap();
-                match sess.tuple_eval(&where_vals, &tuple).unwrap() {
-                    Value::Bool(true) => {
-                        let extracted = sess.tuple_eval(&vals, &tuple).unwrap();
-                        println!("{}", extracted);
-                    }
-                    Value::Null |
-                    Value::Bool(_) => {
-                        println!("  Ignore {:?}", &tuple);
-                    }
-                    _ => panic!("Bad type")
-                }
+                // match tuple_eval(&where_vals, &tuple).unwrap() {
+                //     Value::Bool(true) => {
+                let extracted = tuple_eval(&vals, &tuple).unwrap();
+                println!("{}", extracted);
+                // }
+                // Value::Null |
+                // Value::Bool(_) => {
+                //     println!("  Ignore {:?}", &tuple);
+                // }
+                // _ => panic!("Bad type")
+                // }
             }
             let duration = start.elapsed();
             let duration2 = start2.elapsed();
@@ -576,9 +618,9 @@ mod tests {
             let mut n = 0;
             for el in it.iter() {
                 let el = el.unwrap();
-                if n % 4096 == 0 {
-                    println!("{}: {:?}", n, el)
-                }
+                // if n % 4096 == 0 {
+                //     println!("{}: {:?}", n, el)
+                // }
                 let _x = el.keys.into_iter().map(|v| v.iter().map(|_v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
                 let _y = el.vals.into_iter().map(|v| v.iter().map(|_v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
                 n += 1;

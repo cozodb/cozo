@@ -13,96 +13,423 @@ use crate::relation::table::MegaTuple;
 use crate::relation::value;
 
 
-impl<'s> Session<'s> {
-    pub fn tuple_eval<'a>(&self, value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let res: Value = match value {
-            v @ (Value::Null |
-            Value::Bool(_) |
-            Value::Int(_) |
-            Value::Float(_) |
-            Value::Uuid(_) |
-            Value::Text(_)) => v.clone(),
-            Value::List(l) => {
-                let l = l.into_iter().map(|v| self.tuple_eval(v, tuples)).collect::<Result<Vec<_>>>()?;
-                Value::List(l)
+pub fn tuple_eval<'a>(value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let res: Value = match value {
+        v @ (Value::Null |
+        Value::Bool(_) |
+        Value::Int(_) |
+        Value::Float(_) |
+        Value::Uuid(_) |
+        Value::Text(_)) => v.clone(),
+        Value::List(l) => {
+            let l = l.into_iter().map(|v| tuple_eval(v, tuples)).collect::<Result<Vec<_>>>()?;
+            Value::List(l)
+        }
+        Value::Dict(d) => {
+            let d = d.into_iter()
+                .map(|(k, v)|
+                    tuple_eval(v, tuples).map(|v| (k.clone(), v)))
+                .collect::<Result<BTreeMap<_, _>>>()?;
+            Value::Dict(d)
+        }
+        Value::Variable(v) => {
+            return Err(LogicError(format!("Cannot resolve variable {}", v)));
+        }
+        Value::TupleRef(tid, cid) => {
+            let targets = if cid.is_key { &tuples.keys } else { &tuples.vals };
+            let target = targets.get(tid.id as usize).ok_or_else(|| {
+                LogicError("Tuple ref out of bound".to_string())
+            })?;
+            if matches!(target.data_kind(), Ok(DataKind::Empty)) {
+                Value::Null
+            } else {
+                target.get(cid.id as usize)
+                    .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))?
             }
-            Value::Dict(d) => {
-                let d = d.into_iter()
-                    .map(|(k, v)|
-                        self.tuple_eval(v, tuples).map(|v| (k.clone(), v)))
-                    .collect::<Result<BTreeMap<_, _>>>()?;
-                Value::Dict(d)
+        }
+        Value::Apply(op, args) => {
+            match op.as_ref() {
+                value::OP_STR_CAT => str_cat_values(args, tuples)?,
+                value::OP_ADD => add_values(args, tuples)?,
+                value::OP_SUB => sub_values(args, tuples)?,
+                value::OP_MUL => mul_values(args, tuples)?,
+                value::OP_DIV => div_values(args, tuples)?,
+                value::OP_EQ => eq_values(args, tuples)?,
+                value::OP_NE => ne_values(args, tuples)?,
+                value::OP_OR => or_values(args, tuples)?,
+                value::OP_AND => and_values(args, tuples)?,
+                value::OP_MOD => mod_values(args, tuples)?,
+                value::OP_GT => gt_values(args, tuples)?,
+                value::OP_GE => ge_values(args, tuples)?,
+                value::OP_LT => lt_values(args, tuples)?,
+                value::OP_LE => le_values(args, tuples)?,
+                value::OP_POW => pow_values(args, tuples)?,
+                value::OP_COALESCE => coalesce_values(args, tuples)?,
+                value::OP_NEGATE => negate_values(args, tuples)?,
+                value::OP_MINUS => minus_values(args, tuples)?,
+                value::METHOD_IS_NULL => is_null_values(args, tuples)?,
+                value::METHOD_NOT_NULL => not_null_values(args, tuples)?,
+                value::METHOD_CONCAT => concat_values(args, tuples)?,
+                value::METHOD_MERGE => merge_values(args, tuples)?,
+                _ => { todo!() }
             }
-            Value::Variable(v) => {
-                return Err(LogicError(format!("Cannot resolve variable {}", v)));
-            }
-            Value::TupleRef(tid, cid) => {
-                let targets = if cid.is_key { &tuples.keys } else { &tuples.vals };
-                let target = targets.get(tid.id as usize).ok_or_else(|| {
-                    LogicError("Tuple ref out of bound".to_string())
-                })?;
-                if matches!(target.data_kind(), Ok(DataKind::Empty)) {
-                    Value::Null
-                } else {
-                    target.get(cid.id as usize)
-                        .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))?
+        }
+        Value::FieldAccess(field, arg) => {
+            let arg = tuple_eval(arg, tuples)?;
+            match arg {
+                Value::Dict(mut d) => {
+                    d.remove(field.as_ref()).unwrap_or(Value::Null)
                 }
+                _ => return Err(LogicError("Field access failed".to_string()))
             }
-            Value::Apply(op, args) => {
-                match op.as_ref() {
-                    value::OP_STR_CAT => self.str_cat_values(args, tuples)?,
-                    value::OP_ADD => self.add_values(args, tuples)?,
-                    value::OP_SUB => self.sub_values(args, tuples)?,
-                    value::OP_MUL => self.mul_values(args, tuples)?,
-                    value::OP_DIV => self.div_values(args, tuples)?,
-                    value::OP_EQ => self.eq_values(args, tuples)?,
-                    value::OP_NE => self.ne_values(args, tuples)?,
-                    value::OP_OR => self.or_values(args, tuples)?,
-                    value::OP_AND => self.and_values(args, tuples)?,
-                    value::OP_MOD => self.mod_values(args, tuples)?,
-                    value::OP_GT => self.gt_values(args, tuples)?,
-                    value::OP_GE => self.ge_values(args, tuples)?,
-                    value::OP_LT => self.lt_values(args, tuples)?,
-                    value::OP_LE => self.le_values(args, tuples)?,
-                    value::OP_POW => self.pow_values(args, tuples)?,
-                    value::OP_COALESCE => self.coalesce_values(args, tuples)?,
-                    value::OP_NEGATE => self.negate_values(args, tuples)?,
-                    value::OP_MINUS => self.minus_values(args, tuples)?,
-                    value::METHOD_IS_NULL => self.is_null_values(args, tuples)?,
-                    value::METHOD_NOT_NULL => self.not_null_values(args, tuples)?,
-                    value::METHOD_CONCAT => self.concat_values(args, tuples)?,
-                    value::METHOD_MERGE => self.merge_values(args, tuples)?,
-                    _ => { todo!() }
-                }
-            }
-            Value::FieldAccess(field, arg) => {
-                let arg = self.tuple_eval(arg, tuples)?;
-                match arg {
-                    Value::Dict(mut d) => {
-                        d.remove(field.as_ref()).unwrap_or(Value::Null)
+        }
+        Value::IdxAccess(idx, arg) => {
+            let arg = tuple_eval(arg, tuples)?;
+            match arg {
+                Value::List(mut l) => {
+                    if *idx >= l.len() {
+                        Value::Null
+                    } else {
+                        l.swap_remove(*idx)
                     }
-                    _ => return Err(LogicError("Field access failed".to_string()))
                 }
+                _ => return Err(LogicError("Idx access failed".to_string()))
             }
-            Value::IdxAccess(idx, arg) => {
-                let arg = self.tuple_eval(arg, tuples)?;
-                match arg {
-                    Value::List(mut l) => {
-                        if *idx >= l.len() {
-                            Value::Null
-                        } else {
-                            l.swap_remove(*idx)
-                        }
-                    }
-                    _ => return Err(LogicError("Idx access failed".to_string()))
-                }
-            }
-            Value::EndSentinel => {
-                return Err(LogicError("Encountered end sentinel".to_string()));
-            }
-        };
-        Ok(res)
+        }
+        Value::EndSentinel => {
+            return Err(LogicError("Encountered end sentinel".to_string()));
+        }
+    };
+    Ok(res)
+}
+
+fn coalesce_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    for v in args {
+        match tuple_eval(v, tuples)? {
+            Value::Null => {}
+            v => return Ok(v)
+        }
     }
+    Ok(Value::Null)
+}
+
+
+fn str_cat_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut ret = String::new();
+    for v in args {
+        let v = tuple_eval(v, tuples)?;
+        match v {
+            Value::Null => return Ok(Value::Null),
+            Value::Text(s) => ret += s.as_ref(),
+            _ => return Err(InvalidArgument)
+        }
+    };
+    Ok(ret.into())
+}
+
+fn add_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => (l + r).into(),
+        (Value::Float(l), Value::Int(r)) => (l + (r as f64)).into(),
+        (Value::Int(l), Value::Float(r)) => ((l as f64) + r.into_inner()).into(),
+        (Value::Float(l), Value::Float(r)) => (l.into_inner() + r.into_inner()).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn sub_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => (l + r).into(),
+        (Value::Float(l), Value::Int(r)) => (l - (r as f64)).into(),
+        (Value::Int(l), Value::Float(r)) => ((l as f64) - r.into_inner()).into(),
+        (Value::Float(l), Value::Float(r)) => (l.into_inner() - r.into_inner()).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn minus_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let left = tuple_eval(args.get(0).unwrap(), tuples)?;
+    Ok(match left {
+        Value::Int(l) => (-l).into(),
+        Value::Float(l) => (-l).into(),
+        _ => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn negate_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let left = tuple_eval(args.get(0).unwrap(), tuples)?;
+    Ok(match left {
+        Value::Bool(l) => (!l).into(),
+        _ => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn is_null_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let left = tuple_eval(args.get(0).unwrap(), tuples)?;
+    Ok((left == Value::Null).into())
+}
+
+fn not_null_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let left = tuple_eval(args.get(0).unwrap(), tuples)?;
+    Ok((left != Value::Null).into())
+}
+
+fn pow_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => ((l as f64).powf(r as f64)).into(),
+        (Value::Float(l), Value::Int(r)) => ((l.into_inner()).powf(r as f64)).into(),
+        (Value::Int(l), Value::Float(r)) => ((l as f64).powf(r.into_inner())).into(),
+        (Value::Float(l), Value::Float(r)) => ((l.into_inner()).powf(r.into_inner())).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn gt_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => (l > r).into(),
+        (Value::Float(l), Value::Int(r)) => (l > (r as f64).into()).into(),
+        (Value::Int(l), Value::Float(r)) => ((l as f64) > r.into_inner()).into(),
+        (Value::Float(l), Value::Float(r)) => (l > r).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn lt_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => (l < r).into(),
+        (Value::Float(l), Value::Int(r)) => (l < (r as f64).into()).into(),
+        (Value::Int(l), Value::Float(r)) => ((l as f64) < r.into_inner()).into(),
+        (Value::Float(l), Value::Float(r)) => (l < r).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn ge_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => (l >= r).into(),
+        (Value::Float(l), Value::Int(r)) => (l >= (r as f64).into()).into(),
+        (Value::Int(l), Value::Float(r)) => ((l as f64) >= r.into_inner()).into(),
+        (Value::Float(l), Value::Float(r)) => (l >= r).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn le_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => (l <= r).into(),
+        (Value::Float(l), Value::Int(r)) => (l <= (r as f64).into()).into(),
+        (Value::Int(l), Value::Float(r)) => ((l as f64) <= r.into_inner()).into(),
+        (Value::Float(l), Value::Float(r)) => (l <= r).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn mod_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => (l % r).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn mul_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => (l * r).into(),
+        (Value::Float(l), Value::Int(r)) => (l * (r as f64)).into(),
+        (Value::Int(l), Value::Float(r)) => ((l as f64) * r.into_inner()).into(),
+        (Value::Float(l), Value::Float(r)) => (l.into_inner() * r.into_inner()).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn div_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok(match (left, right) {
+        (Value::Int(l), Value::Int(r)) => (l as f64 / r as f64).into(),
+        (Value::Float(l), Value::Int(r)) => (l / (r as f64)).into(),
+        (Value::Int(l), Value::Float(r)) => ((l as f64) / r.into_inner()).into(),
+        (Value::Float(l), Value::Float(r)) => (l.into_inner() / r.into_inner()).into(),
+        (_, _) => return Err(CozoError::InvalidArgument)
+    })
+}
+
+fn eq_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok((left == right).into())
+}
+
+fn ne_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut args = args.into_iter();
+    let left = tuple_eval(args.next().unwrap(), tuples)?;
+    if left == Value::Null {
+        return Ok(Value::Null);
+    }
+    let right = tuple_eval(args.next().unwrap(), tuples)?;
+    if right == Value::Null {
+        return Ok(Value::Null);
+    }
+    Ok((left != right).into())
+}
+
+fn or_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut accum = -1;
+    for v in args.into_iter() {
+        let v = tuple_eval(v, tuples)?;
+        match v {
+            Value::Null => accum = max(accum, 0),
+            Value::Bool(false) => {}
+            Value::Bool(true) => return Ok(true.into()),
+            _ => return Err(CozoError::InvalidArgument)
+        }
+    }
+    Ok(match accum {
+        -1 => false.into(),
+        0 => Value::Null,
+        _ => unreachable!()
+    })
+}
+
+fn concat_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut coll = vec![];
+    for v in args.into_iter() {
+        let v = tuple_eval(v, tuples)?;
+        match v {
+            Value::Null => {}
+            Value::List(l) => coll.extend(l),
+            _ => return Err(CozoError::InvalidArgument)
+        }
+    }
+    Ok(coll.into())
+}
+
+fn merge_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut coll = BTreeMap::new();
+    for v in args.into_iter() {
+        let v = tuple_eval(v, tuples)?;
+        match v {
+            Value::Null => {}
+            Value::Dict(d) => coll.extend(d),
+            _ => return Err(CozoError::InvalidArgument)
+        }
+    }
+    Ok(coll.into())
+}
+
+fn and_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
+    let mut accum = 1;
+    for v in args.into_iter() {
+        let v = tuple_eval(v, tuples)?;
+        match v {
+            Value::Null => accum = min(accum, 0),
+            Value::Bool(true) => {}
+            Value::Bool(false) => return Ok(false.into()),
+            _ => return Err(CozoError::InvalidArgument)
+        }
+    }
+    Ok(match accum {
+        1 => true.into(),
+        0 => Value::Null,
+        _ => unreachable!()
+    })
+}
+
+impl<'s> Session<'s> {
     pub fn partial_cnf_eval<'a>(&self, mut value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
                                 table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         loop {
@@ -274,16 +601,6 @@ impl<'s> Session<'s> {
 }
 
 impl<'s> Session<'s> {
-    fn coalesce_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        for v in args {
-            match self.tuple_eval(v, tuples)? {
-                Value::Null => {}
-                v => return Ok(v)
-            }
-        }
-        Ok(Value::Null)
-    }
-
     fn coalesce_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                                    table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().try_fold(vec![], |mut accum, cur| {
@@ -318,19 +635,6 @@ impl<'s> Session<'s> {
         }
     }
 
-    fn str_cat_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut ret = String::new();
-        for v in args {
-            let v = self.tuple_eval(v, tuples)?;
-            match v {
-                Value::Null => return Ok(Value::Null),
-                Value::Text(s) => ret += s.as_ref(),
-                _ => return Err(InvalidArgument)
-            }
-        };
-        Ok(ret.into())
-    }
-
     fn str_cat_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                                   table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -344,25 +648,6 @@ impl<'s> Session<'s> {
         }
         Ok(match (left, right) {
             (Value::Text(l), Value::Text(r)) => (true, (l.to_string() + r.as_ref()).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
-    }
-
-    fn add_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l + r).into(),
-            (Value::Float(l), Value::Int(r)) => (l + (r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) + r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l.into_inner() + r.into_inner()).into(),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -387,25 +672,6 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn sub_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l + r).into(),
-            (Value::Float(l), Value::Int(r)) => (l - (r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) - r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l.into_inner() - r.into_inner()).into(),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
-    }
-
     fn sub_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                               table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -426,15 +692,6 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn minus_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let left = self.tuple_eval(args.get(0).unwrap(), tuples)?;
-        Ok(match left {
-            Value::Int(l) => (-l).into(),
-            Value::Float(l) => (-l).into(),
-            _ => return Err(CozoError::InvalidArgument)
-        })
-    }
-
     fn minus_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                                 table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -448,14 +705,6 @@ impl<'s> Session<'s> {
         Ok(match left {
             Value::Int(l) => (true, (-l).into()),
             Value::Float(l) => (true, (-l).into()),
-            _ => return Err(CozoError::InvalidArgument)
-        })
-    }
-
-    fn negate_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let left = self.tuple_eval(args.get(0).unwrap(), tuples)?;
-        Ok(match left {
-            Value::Bool(l) => (!l).into(),
             _ => return Err(CozoError::InvalidArgument)
         })
     }
@@ -476,11 +725,6 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn is_null_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let left = self.tuple_eval(args.get(0).unwrap(), tuples)?;
-        Ok((left == Value::Null).into())
-    }
-
     fn is_null_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                                   table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -494,11 +738,6 @@ impl<'s> Session<'s> {
         Ok((true, false.into()))
     }
 
-    fn not_null_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let left = self.tuple_eval(args.get(0).unwrap(), tuples)?;
-        Ok((left != Value::Null).into())
-    }
-
     fn not_null_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                                    table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -510,25 +749,6 @@ impl<'s> Session<'s> {
             return Ok((false, Value::Apply(value::METHOD_NOT_NULL.into(), vec![left])));
         }
         Ok((true, true.into()))
-    }
-
-    fn pow_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => ((l as f64).powf(r as f64)).into(),
-            (Value::Float(l), Value::Int(r)) => ((l.into_inner()).powf(r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64).powf(r.into_inner())).into(),
-            (Value::Float(l), Value::Float(r)) => ((l.into_inner()).powf(r.into_inner())).into(),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
     }
 
     fn pow_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
@@ -547,25 +767,6 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, ((l.into_inner()).powf(r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64).powf(r.into_inner())).into()),
             (Value::Float(l), Value::Float(r)) => (true, ((l.into_inner()).powf(r.into_inner())).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
-    }
-
-    fn gt_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l > r).into(),
-            (Value::Float(l), Value::Int(r)) => (l > (r as f64).into()).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) > r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l > r).into(),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -590,25 +791,6 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn lt_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l < r).into(),
-            (Value::Float(l), Value::Int(r)) => (l < (r as f64).into()).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) < r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l < r).into(),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
-    }
-
     fn lt_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -625,25 +807,6 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, (l < (r as f64).into()).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) < r.into_inner()).into()),
             (Value::Float(l), Value::Float(r)) => (true, (l < r).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
-    }
-
-    fn ge_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l >= r).into(),
-            (Value::Float(l), Value::Int(r)) => (l >= (r as f64).into()).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) >= r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l >= r).into(),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -668,25 +831,6 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn le_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l <= r).into(),
-            (Value::Float(l), Value::Int(r)) => (l <= (r as f64).into()).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) <= r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l <= r).into(),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
-    }
-
     fn le_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -707,22 +851,6 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn mod_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l % r).into(),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
-    }
-
     fn mod_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                               table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -736,25 +864,6 @@ impl<'s> Session<'s> {
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l % r).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
-    }
-
-    fn mul_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l * r).into(),
-            (Value::Float(l), Value::Int(r)) => (l * (r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) * r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l.into_inner() * r.into_inner()).into(),
             (_, _) => return Err(CozoError::InvalidArgument)
         })
     }
@@ -779,25 +888,6 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn div_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok(match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l as f64 / r as f64).into(),
-            (Value::Float(l), Value::Int(r)) => (l / (r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) / r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l.into_inner() / r.into_inner()).into(),
-            (_, _) => return Err(CozoError::InvalidArgument)
-        })
-    }
-
     fn div_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                               table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -818,19 +908,6 @@ impl<'s> Session<'s> {
         })
     }
 
-    fn eq_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok((left == right).into())
-    }
-
     fn eq_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -845,19 +922,6 @@ impl<'s> Session<'s> {
         Ok((true, (left == right).into()))
     }
 
-    fn ne_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut args = args.into_iter();
-        let left = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if left == Value::Null {
-            return Ok(Value::Null);
-        }
-        let right = self.tuple_eval(args.next().unwrap(), tuples)?;
-        if right == Value::Null {
-            return Ok(Value::Null);
-        }
-        Ok((left != right).into())
-    }
-
     fn ne_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
@@ -870,24 +934,6 @@ impl<'s> Session<'s> {
             return Ok((false, Value::Apply(value::OP_NE.into(), vec![left, right])));
         }
         Ok((true, (left != right).into()))
-    }
-
-    fn or_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut accum = -1;
-        for v in args.into_iter() {
-            let v = self.tuple_eval(v, tuples)?;
-            match v {
-                Value::Null => accum = max(accum, 0),
-                Value::Bool(false) => {}
-                Value::Bool(true) => return Ok(true.into()),
-                _ => return Err(CozoError::InvalidArgument)
-            }
-        }
-        Ok(match accum {
-            -1 => false.into(),
-            0 => Value::Null,
-            _ => unreachable!()
-        })
     }
 
     fn or_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
@@ -957,19 +1003,6 @@ impl<'s> Session<'s> {
         }
     }
 
-    fn concat_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut coll = vec![];
-        for v in args.into_iter() {
-            let v = self.tuple_eval(v, tuples)?;
-            match v {
-                Value::Null => {}
-                Value::List(l) => coll.extend(l),
-                _ => return Err(CozoError::InvalidArgument)
-            }
-        }
-        Ok(coll.into())
-    }
-
     fn concat_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                                  table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut total_ret = vec![];
@@ -1012,19 +1045,6 @@ impl<'s> Session<'s> {
         }
     }
 
-    fn merge_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut coll = BTreeMap::new();
-        for v in args.into_iter() {
-            let v = self.tuple_eval(v, tuples)?;
-            match v {
-                Value::Null => {}
-                Value::Dict(d) => coll.extend(d),
-                _ => return Err(CozoError::InvalidArgument)
-            }
-        }
-        Ok(coll.into())
-    }
-
     fn merge_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
                                 table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
         let mut total_ret = vec![];
@@ -1065,24 +1085,6 @@ impl<'s> Session<'s> {
             }
             Ok((false, Value::Apply(value::METHOD_MERGE.into(), total_ret)))
         }
-    }
-
-    fn and_values<'a>(&self, args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-        let mut accum = 1;
-        for v in args.into_iter() {
-            let v = self.tuple_eval(v, tuples)?;
-            match v {
-                Value::Null => accum = min(accum, 0),
-                Value::Bool(true) => {}
-                Value::Bool(false) => return Ok(false.into()),
-                _ => return Err(CozoError::InvalidArgument)
-            }
-        }
-        Ok(match accum {
-            1 => true.into(),
-            0 => Value::Null,
-            _ => unreachable!()
-        })
     }
 
     fn and_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
