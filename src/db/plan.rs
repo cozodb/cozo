@@ -252,8 +252,12 @@ impl<'a> MegaTupleIt<'a> {
             MegaTupleIt::KeyedDifferenceIt { .. } => {
                 todo!()
             }
-            MegaTupleIt::BagsUnionIt { .. } => {
-                todo!()
+            MegaTupleIt::BagsUnionIt { bags } => {
+                let bags = bags.iter().map(|i| i.iter()).collect();
+                Box::new(BagsUnionIterator {
+                    bags,
+                    current: 0
+                })
             }
         }
     }
