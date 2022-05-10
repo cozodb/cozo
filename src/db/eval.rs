@@ -1240,14 +1240,14 @@ mod tests {
 
             let it = env.txn.iterator(false, &env.perm_cf);
             it.to_first();
-            while let Some((k, v)) = it.pair() {
+            while let Some((k, v)) = unsafe { it.pair() } {
                 println!("{:?}, {:?}", Tuple::new(k), Tuple::new(v));
                 it.next();
             }
 
             let it = env.txn.iterator(false, &env.temp_cf);
             it.to_first();
-            while let Some((k, v)) = it.pair() {
+            while let Some((k, v)) = unsafe { it.pair() } {
                 println!("{:?}, {:?}", Tuple::new(k), Tuple::new(v));
                 it.next();
             }

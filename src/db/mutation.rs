@@ -289,7 +289,7 @@ mod tests {
             sess.rollback().unwrap();
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
-            while let Some((k, v)) = it.pair() {
+            while let Some((k, v)) = unsafe { it.pair() } {
                 println!("K: {:?}, V: {:?}", Tuple::new(k), Tuple::new(v));
                 it.next();
             }
@@ -339,7 +339,7 @@ mod tests {
 
             let it = sess.txn.iterator(true, &sess.perm_cf);
             it.to_first();
-            while let Some((k, v)) = it.pair() {
+            while let Some((k, v)) = unsafe { it.pair() } {
                 println!("K: {:?}, V: {:?}", Tuple::new(k), Tuple::new(v));
                 it.next();
             }

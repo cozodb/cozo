@@ -5,7 +5,7 @@ use cozorocks::IteratorPtr;
 use crate::db::eval::{compare_tuple_by_keys, tuple_eval};
 use crate::db::table::{ColId, TableId};
 use crate::error::CozoError::LogicError;
-use crate::error::{CozoError, Result};
+use crate::error::{Result};
 use crate::relation::data::{DataKind, EMPTY_DATA};
 use crate::relation::table::MegaTuple;
 use crate::relation::tuple::{CowSlice, CowTuple, OwnTuple, Tuple};
@@ -404,12 +404,14 @@ impl<'a> Iterator for NodeIterator<'a> {
         } else {
             self.started = true;
         }
-        self.it.pair().map(|(k, v)| {
-            Ok(MegaTuple {
-                keys: vec![Tuple::new(k).into()],
-                vals: vec![Tuple::new(v).into()],
+        unsafe {
+            self.it.pair().map(|(k, v)| {
+                Ok(MegaTuple {
+                    keys: vec![Tuple::new(k).into()],
+                    vals: vec![Tuple::new(v).into()],
+                })
             })
-        })
+        }
     }
 }
 
@@ -428,7 +430,7 @@ impl<'a> Iterator for EdgeIterator<'a> {
             self.started = true;
         }
         loop {
-            match self.it.pair() {
+            match unsafe { self.it.pair() } {
                 None => return None,
                 Some((k, v)) => {
                     let vt = Tuple::new(v);
@@ -462,7 +464,7 @@ impl<'a> Iterator for EdgeKeyOnlyBwdIterator<'a> {
             self.started = true;
         }
         loop {
-            match self.it.pair() {
+            match unsafe { self.it.pair() } {
                 None => return None,
                 Some((_k, rev_k)) => {
                     let rev_k_tuple = Tuple::new(rev_k);

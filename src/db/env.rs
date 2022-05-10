@@ -100,7 +100,7 @@ impl<'s> Session<'s> {
         let it = self.txn.iterator(false, &self.temp_cf);
         it.seek(&prefix);
         let mut to_delete = vec![];
-        while let Some(val) = it.key() {
+        while let Some(val) = unsafe { it.key() } {
             let cur = Tuple::new(val);
             if cur.starts_with(&prefix) {
                 if let Some(name) = cur.get(1) {
@@ -142,7 +142,7 @@ impl<'s> Session<'s> {
         prefix.push_int(self.stack_depth as i64);
         let it = self.txn.iterator(false, &self.temp_cf);
         it.seek(&prefix);
-        while let Some(val) = it.key() {
+        while let Some(val) = unsafe { it.key() } {
             let cur = Tuple::new(val);
             if cur.starts_with(&prefix) {
                 let mut ikey = Tuple::with_prefix(cur.get_prefix());
@@ -177,7 +177,7 @@ impl<'s> Session<'s> {
         tuple.push_str(name);
         let it = self.txn.iterator(false, &self.temp_cf);
         it.seek(&tuple);
-        if let Some((tk, vk)) = it.pair() {
+        if let Some((tk, vk)) = unsafe { it.pair() } {
             let k = Tuple::new(tk);
             if k.starts_with(&tuple) {
                 return Ok(Some(Tuple::new(vk)));

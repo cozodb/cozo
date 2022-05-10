@@ -431,8 +431,11 @@ impl<'a> IteratorPtr<'a> {
     pub fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
         IteratorBridge::do_seek_for_prev(self, key.as_ref())
     }
+
     #[inline]
-    pub fn key(&self) -> Option<SlicePtr> {
+    /// # Safety
+    /// `next()` must not be called on the iterator when the returned value is still used
+    pub unsafe fn key(&self) -> Option<SlicePtr> {
         if self.is_valid() {
             Some(SlicePtr::Plain(IteratorBridge::key_raw(self)))
         } else {
@@ -440,7 +443,9 @@ impl<'a> IteratorPtr<'a> {
         }
     }
     #[inline]
-    pub fn val(&self) -> Option<SlicePtr> {
+    /// # Safety
+    /// `next()` must not be called on the iterator when the returned value is still used
+    pub unsafe fn val(&self) -> Option<SlicePtr> {
         if self.is_valid() {
             Some(SlicePtr::Plain(IteratorBridge::value_raw(self)))
         } else {
@@ -448,7 +453,9 @@ impl<'a> IteratorPtr<'a> {
         }
     }
     #[inline]
-    pub fn pair(&self) -> Option<(SlicePtr, SlicePtr)> {
+    /// # Safety
+    /// `next()` must not be called on the iterator when the returned value is still used
+    pub unsafe fn pair(&self) -> Option<(SlicePtr, SlicePtr)> {
         if self.is_valid() {
             Some((SlicePtr::Plain(IteratorBridge::key_raw(self)),
                   SlicePtr::Plain(IteratorBridge::value_raw(self))))

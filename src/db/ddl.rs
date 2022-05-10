@@ -285,7 +285,7 @@ impl<'s> Session<'s> {
 
         let it = self.txn.iterator(true, &self.perm_cf);
         it.seek(&prefix);
-        while let Some(val) = it.key() {
+        while let Some(val) = unsafe { it.key() } {
             let cur = Tuple::new(val);
             if !cur.starts_with(&prefix) {
                 break;
@@ -301,7 +301,7 @@ impl<'s> Session<'s> {
 
         let it = self.txn.iterator(false, &self.temp_cf);
         it.seek(&prefix);
-        while let Some(val) = it.key() {
+        while let Some(val) = unsafe { it.key() } {
             let cur = Tuple::new(val);
             if !cur.starts_with(&prefix) {
                 break;
@@ -325,7 +325,7 @@ impl<'s> Session<'s> {
         } else {
             let it = self.txn.iterator(false, &self.temp_cf);
             it.seek(&key);
-            if let Some(found_key) = it.key() {
+            if let Some(found_key) = unsafe { it.key() } {
                 let found_key_tuple = Tuple::new(found_key);
                 if found_key_tuple.starts_with(&key) {
                     let mut ikey = Tuple::with_null_prefix();
