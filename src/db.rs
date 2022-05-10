@@ -7,3 +7,4 @@ pub mod plan;
 pub mod ddl;
 pub mod env;
 pub mod cnf_transform;
+pub mod iterator;
