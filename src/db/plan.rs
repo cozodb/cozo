@@ -211,28 +211,28 @@ impl<'a> MegaTupleIt<'a> {
                     }
                 }).collect();
                 Box::new(KeySortedWithAssocIterator {
-                    main: Box::new(main.iter()),
+                    main: main.iter(),
                     associates,
                     buffer,
                 })
             }
             MegaTupleIt::CartesianProdIt { left, right } => {
                 Box::new(CartesianProdIterator {
-                    left: Box::new(left.iter()),
+                    left: left.iter(),
                     left_cache: MegaTuple::empty_tuple(),
                     right_source: right.as_ref(),
-                    right: Box::new(right.as_ref().iter()),
+                    right: right.as_ref().iter(),
                 })
             }
             MegaTupleIt::FilterIt { it, filter } => {
                 Box::new(FilterIterator {
-                    it: Box::new(it.iter()),
+                    it: it.iter(),
                     filter,
                 })
             }
             MegaTupleIt::EvalIt { it, keys, vals, prefix } => {
                 Box::new(EvalIterator {
-                    it: Box::new(it.iter()),
+                    it: it.iter(),
                     keys,
                     vals,
                     prefix: *prefix,
@@ -240,14 +240,17 @@ impl<'a> MegaTupleIt<'a> {
             }
             MegaTupleIt::MergeJoinIt { left, right, left_keys, right_keys } => {
                 Box::new(MergeJoinIterator {
-                    left: Box::new(left.iter()),
-                    right: Box::new(right.iter()),
+                    left: left.iter(),
+                    right: right.iter(),
                     left_keys,
                     right_keys,
                 })
             }
-            MegaTupleIt::KeyedUnionIt { .. } => {
-                todo!()
+            MegaTupleIt::KeyedUnionIt { left, right } => {
+                Box::new(KeyedUnionIterator {
+                    left: left.iter(),
+                    right: right.iter(),
+                })
             }
             MegaTupleIt::KeyedDifferenceIt { .. } => {
                 todo!()
@@ -256,10 +259,23 @@ impl<'a> MegaTupleIt<'a> {
                 let bags = bags.iter().map(|i| i.iter()).collect();
                 Box::new(BagsUnionIterator {
                     bags,
-                    current: 0
+                    current: 0,
                 })
             }
         }
+    }
+}
+
+pub struct KeyedUnionIterator<'a> {
+    left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+}
+
+impl<'a> Iterator for KeyedUnionIterator<'a> {
+    type Item = Result<MegaTuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
     }
 }
 
@@ -551,7 +567,7 @@ impl<'a> Iterator for CartesianProdIterator<'a> {
         }
         let r_tpl = match self.right.next() {
             None => {
-                self.right = Box::new(self.right_source.iter());
+                self.right = self.right_source.iter();
                 self.left_cache = match self.left.next() {
                     None => return None,
                     Some(Ok(v)) => v,
@@ -610,7 +626,7 @@ pub struct OutputIterator<'a> {
 impl<'a> OutputIterator<'a> {
     pub fn new(it: &'a MegaTupleIt<'a>, transform: &'a Value<'a>) -> Self {
         Self {
-            it: Box::new(it.iter()),
+            it: it.iter(),
             transform,
         }
     }
