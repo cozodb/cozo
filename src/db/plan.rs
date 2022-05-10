@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use pest::iterators::Pair;
 use cozorocks::{IteratorPtr};
 use crate::db::engine::Session;
-use crate::db::eval::{compare_tuple_by_keys, extract_table_ref, tuple_eval};
+use crate::db::eval::{compare_tuple_by_keys, tuple_eval};
 use crate::db::query::{FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
 use crate::error::CozoError::LogicError;
@@ -166,6 +166,7 @@ pub enum MegaTupleIt<'a> {
     KeyedDifferenceIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>> },
     FilterIt { it: Box<MegaTupleIt<'a>>, filter: Value<'a> },
     EvalIt { it: Box<MegaTupleIt<'a>>, keys: Vec<Value<'a>>, vals: Vec<Value<'a>>, prefix: u32 },
+    BagsUnionIt { bags: Vec<MegaTupleIt<'a>> },
 }
 
 impl<'a> MegaTupleIt<'a> {
@@ -251,6 +252,33 @@ impl<'a> MegaTupleIt<'a> {
             MegaTupleIt::KeyedDifferenceIt { .. } => {
                 todo!()
             }
+            MegaTupleIt::BagsUnionIt { .. } => {
+                todo!()
+            }
+        }
+    }
+}
+
+pub struct BagsUnionIterator<'a> {
+    bags: Vec<Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>>,
+    current: usize,
+}
+
+impl<'a> Iterator for BagsUnionIterator<'a> {
+    type Item = Result<MegaTuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let cur_it = self.bags.get_mut(self.current).unwrap();
+        match cur_it.next() {
+            None => {
+                if self.current == self.bags.len() - 1 {
+                    None
+                } else {
+                    self.current += 1;
+                    self.next()
+                }
+            }
+            v => v
         }
     }
 }
