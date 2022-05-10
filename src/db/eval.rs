@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::cmp::{max, min};
+use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeMap, BTreeSet};
 use crate::db::cnf_transform::{cnf_transform, extract_tables};
 use crate::db::engine::{Session};
@@ -24,6 +24,20 @@ pub fn extract_table_ref<'a>(tuples: &'a MegaTuple, tid: &TableId, cid: &ColId) 
         target.get(cid.id as usize)
             .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))
     }
+}
+
+pub fn compare_tuple_by_keys<'a>(
+    left: (&'a MegaTuple, &'a [(TableId, ColId)]),
+    right: (&'a MegaTuple, &'a [(TableId, ColId)])) -> Result<Ordering> {
+    for ((l_tid, l_cid), (r_tid, r_cid)) in left.1.iter().zip(right.1) {
+        let left_val = extract_table_ref(left.0, l_tid, l_cid)?;
+        let right_val = extract_table_ref(right.0, r_tid, r_cid)?;
+        match left_val.cmp(&right_val) {
+            Ordering::Equal => {}
+            v => return Ok(v)
+        }
+    }
+    Ok(Ordering::Equal)
 }
 
 pub fn tuple_eval<'a>(value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Value<'a>> {
