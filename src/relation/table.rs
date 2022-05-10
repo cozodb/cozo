@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use crate::relation::tuple::{CowTuple};
 use crate::relation::typing::Typing;
 
@@ -56,5 +57,25 @@ impl MegaTuple {
     pub fn extend(&mut self, other: Self) {
         self.keys.extend(other.keys);
         self.vals.extend(other.vals);
+    }
+    pub fn all_keys_eq(&self, other: &Self) -> bool {
+        if self.keys.len() != other.keys.len() {
+            return false;
+        }
+        for (l, r) in self.keys.iter().zip(&other.keys) {
+            if !l.key_part_eq(r) {
+                return false;
+            }
+        }
+        true
+    }
+    pub fn all_keys_cmp(&self, other: &Self) -> Ordering {
+        for (l, r) in self.keys.iter().zip(&other.keys) {
+            match l.key_part_cmp(r) {
+                Ordering::Equal => {},
+                v => return v
+            }
+        }
+        Ordering::Equal
     }
 }

@@ -275,7 +275,46 @@ impl<'a> Iterator for KeyedUnionIterator<'a> {
     type Item = Result<MegaTuple>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        let mut left_cache = match self.left.next() {
+            None => return None,
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(t)) => t
+        };
+
+        let mut right_cache = match self.right.next() {
+            None => return None,
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(t)) => t
+        };
+
+        loop {
+            let cmp_res = left_cache.all_keys_cmp(&right_cache);
+            match cmp_res {
+                Ordering::Equal => {
+                    return Some(Ok(left_cache));
+                }
+                Ordering::Less => {
+                    // Advance the left one
+                    match self.left.next() {
+                        None => return None,
+                        Some(Err(e)) => return Some(Err(e)),
+                        Some(Ok(t)) => {
+                            left_cache = t;
+                        }
+                    };
+                }
+                Ordering::Greater => {
+                    // Advance the right one
+                    match self.right.next() {
+                        None => return None,
+                        Some(Err(e)) => return Some(Err(e)),
+                        Some(Ok(t)) => {
+                            right_cache = t;
+                        }
+                    };
+                }
+            }
+        }
     }
 }
 
