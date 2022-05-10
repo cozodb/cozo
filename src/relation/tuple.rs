@@ -457,6 +457,10 @@ impl<'a, T: AsRef<[u8]>> Iterator for TupleIter<'a, T> {
 
 impl OwnTuple {
     #[inline]
+    pub fn empty_tuple() -> OwnTuple {
+        OwnTuple::with_data_prefix(DataKind::Empty)
+    }
+    #[inline]
     pub fn with_null_prefix() -> Self {
         Tuple::with_prefix(0)
     }
