@@ -11,14 +11,34 @@ use crate::relation::tuple::{CowSlice, CowTuple, OwnTuple, Tuple};
 use crate::relation::value::Value;
 
 pub enum MegaTupleIt<'a> {
-    NodeIt { it: IteratorPtr<'a>, tid: u32 },
-    EdgeIt { it: IteratorPtr<'a>, tid: u32 },
-    EdgeKeyOnlyBwdIt { it: IteratorPtr<'a>, tid: u32 },
+    NodeIt {
+        it: IteratorPtr<'a>,
+        tid: u32
+    },
+    EdgeIt {
+        it: IteratorPtr<'a>,
+        tid: u32
+    },
+    EdgeKeyOnlyBwdIt {
+        it: IteratorPtr<'a>,
+        tid: u32
+    },
     // EdgeBwdIt { it: IteratorPtr<'a>, sess: &'a Session<'a>, tid: u32 },
     // IndexIt {it: ..}
-    KeySortedWithAssocIt { main: Box<MegaTupleIt<'a>>, associates: Vec<(u32, IteratorPtr<'a>)> },
-    CartesianProdIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>> },
-    MergeJoinIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>>, left_keys: Vec<(TableId, ColId)>, right_keys: Vec<(TableId, ColId)> },
+    KeySortedWithAssocIt {
+        main: Box<MegaTupleIt<'a>>,
+        associates: Vec<(u32, IteratorPtr<'a>)>
+    },
+    CartesianProdIt {
+        left: Box<MegaTupleIt<'a>>,
+        right: Box<MegaTupleIt<'a>>
+    },
+    MergeJoinIt {
+        left: Box<MegaTupleIt<'a>>,
+        right: Box<MegaTupleIt<'a>>,
+        left_keys: Vec<(TableId, ColId)>,
+        right_keys: Vec<(TableId, ColId)>
+    },
     OuterMergeJoinIt {
         left: Box<MegaTupleIt<'a>>,
         right: Box<MegaTupleIt<'a>>,
@@ -29,11 +49,27 @@ pub enum MegaTupleIt<'a> {
         left_len: (usize, usize),
         right_len: (usize, usize),
     },
-    KeyedUnionIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>> },
-    KeyedDifferenceIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>> },
-    FilterIt { it: Box<MegaTupleIt<'a>>, filter: Value<'a> },
-    EvalIt { it: Box<MegaTupleIt<'a>>, keys: Vec<Value<'a>>, vals: Vec<Value<'a>>, prefix: u32 },
-    BagsUnionIt { bags: Vec<MegaTupleIt<'a>> },
+    KeyedUnionIt {
+        left: Box<MegaTupleIt<'a>>,
+        right: Box<MegaTupleIt<'a>>
+    },
+    KeyedDifferenceIt {
+        left: Box<MegaTupleIt<'a>>,
+        right: Box<MegaTupleIt<'a>>
+    },
+    FilterIt {
+        it: Box<MegaTupleIt<'a>>,
+        filter: Value<'a>
+    },
+    EvalIt {
+        it: Box<MegaTupleIt<'a>>,
+        keys: Vec<Value<'a>>,
+        vals: Vec<Value<'a>>,
+        out_prefix: u32
+    },
+    BagsUnionIt {
+        bags: Vec<MegaTupleIt<'a>>
+    },
 }
 
 impl<'a> MegaTupleIt<'a> {
@@ -97,7 +133,7 @@ impl<'a> MegaTupleIt<'a> {
                     filter,
                 })
             }
-            MegaTupleIt::EvalIt { it, keys, vals, prefix } => {
+            MegaTupleIt::EvalIt { it, keys, vals, out_prefix: prefix } => {
                 Box::new(EvalIterator {
                     it: it.iter(),
                     keys,
