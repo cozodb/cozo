@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::db::cnf_transform::{cnf_transform, extract_tables};
 use crate::db::engine::{Session};
 use crate::db::plan::AccessorMap;
-use crate::db::table::TableId;
+use crate::db::table::{ColId, TableId};
 use crate::relation::value::{Value};
 use crate::error::{CozoError, Result};
 use crate::error::CozoError::{InvalidArgument, LogicError};
@@ -12,6 +12,19 @@ use crate::relation::data::DataKind;
 use crate::relation::table::MegaTuple;
 use crate::relation::value;
 
+
+pub fn extract_table_ref<'a>(tuples: &'a MegaTuple, tid: &TableId, cid: &ColId) -> Result<Value<'a>> {
+    let targets = if cid.is_key { &tuples.keys } else { &tuples.vals };
+    let target = targets.get(tid.id as usize).ok_or_else(|| {
+        LogicError("Tuple ref out of bound".to_string())
+    })?;
+    if matches!(target.data_kind(), Ok(DataKind::Empty)) {
+        Ok(Value::Null)
+    } else {
+        target.get(cid.id as usize)
+            .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))
+    }
+}
 
 pub fn tuple_eval<'a>(value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Value<'a>> {
     let res: Value = match value {
@@ -36,16 +49,17 @@ pub fn tuple_eval<'a>(value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Val
             return Err(LogicError(format!("Cannot resolve variable {}", v)));
         }
         Value::TupleRef(tid, cid) => {
-            let targets = if cid.is_key { &tuples.keys } else { &tuples.vals };
-            let target = targets.get(tid.id as usize).ok_or_else(|| {
-                LogicError("Tuple ref out of bound".to_string())
-            })?;
-            if matches!(target.data_kind(), Ok(DataKind::Empty)) {
-                Value::Null
-            } else {
-                target.get(cid.id as usize)
-                    .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))?
-            }
+            extract_table_ref(tuples, tid, cid)?
+            // let targets = if cid.is_key { &tuples.keys } else { &tuples.vals };
+            // let target = targets.get(tid.id as usize).ok_or_else(|| {
+            //     LogicError("Tuple ref out of bound".to_string())
+            // })?;
+            // if matches!(target.data_kind(), Ok(DataKind::Empty)) {
+            //     Value::Null
+            // } else {
+            //     target.get(cid.id as usize)
+            //         .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))?
+            // }
         }
         Value::Apply(op, args) => {
             match op.as_ref() {

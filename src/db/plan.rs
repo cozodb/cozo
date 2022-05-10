@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 use pest::iterators::Pair;
 use cozorocks::{IteratorPtr};
 use crate::db::engine::Session;
-use crate::db::eval::tuple_eval;
+use crate::db::eval::{extract_table_ref, tuple_eval};
 use crate::db::query::{FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
 use crate::error::CozoError::LogicError;
@@ -162,6 +162,8 @@ pub enum MegaTupleIt<'a> {
     KeySortedWithAssocIt { main: Box<MegaTupleIt<'a>>, associates: Vec<(u32, IteratorPtr<'a>)> },
     CartesianProdIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>> },
     MergeJoinIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>>, left_keys: Vec<(TableId, ColId)>, right_keys: Vec<(TableId, ColId)> },
+    KeyedUnionIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>> },
+    KeyedDifferenceIt { left: Box<MegaTupleIt<'a>>, right: Box<MegaTupleIt<'a>> },
     FilterIt { it: Box<MegaTupleIt<'a>>, filter: Value<'a> },
     EvalIt { it: Box<MegaTupleIt<'a>>, keys: Vec<Value<'a>>, vals: Vec<Value<'a>>, prefix: u32 },
 }
@@ -221,7 +223,6 @@ impl<'a> MegaTupleIt<'a> {
                     right: Box::new(right.as_ref().iter()),
                 })
             }
-            MegaTupleIt::MergeJoinIt { .. } => todo!(),
             MegaTupleIt::FilterIt { it, filter } => {
                 Box::new(FilterIterator {
                     it: Box::new(it.iter()),
@@ -235,6 +236,23 @@ impl<'a> MegaTupleIt<'a> {
                     vals,
                     prefix: *prefix,
                 })
+            }
+            MegaTupleIt::MergeJoinIt { left, right, left_keys, right_keys } => {
+                Box::new(MergeJoinIterator {
+                    left: Box::new(left.iter()),
+                    right: Box::new(right.iter()),
+                    left_keys,
+                    right_keys,
+                    left_cache: None,
+                    right_cache: None,
+                    started: false,
+                })
+            }
+            MegaTupleIt::KeyedUnionIt { .. } => {
+                todo!()
+            }
+            MegaTupleIt::KeyedDifferenceIt { .. } => {
+                todo!()
             }
         }
     }
@@ -420,6 +438,93 @@ impl<'a> Iterator for KeySortedWithAssocIterator<'a> {
                     keys: vec![k],
                     vals,
                 }))
+            }
+        }
+    }
+}
+
+pub struct MergeJoinIterator<'a> {
+    left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    left_keys: &'a [(TableId, ColId)],
+    right_keys: &'a [(TableId, ColId)],
+    left_cache: Option<MegaTuple>,
+    right_cache: Option<MegaTuple>,
+    started: bool,
+}
+
+impl<'a> Iterator for MergeJoinIterator<'a> {
+    type Item = Result<MegaTuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut left_cache;
+        let mut right_cache;
+        let mut left_val_cache;
+        let mut right_val_cache;
+
+        match self.left.next() {
+            None => return None,
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(t)) => {
+                left_cache = t;
+                left_val_cache = match self.left_keys.iter().map(|(tid, cid)|
+                    // to_static() here is to convince the borrow checker. It is really unnecessary.
+                    // fortunately the val_cache is only for keys, which presumably isn't too big
+                    extract_table_ref(&left_cache, tid, cid).map(|v| v.to_static())).collect::<Result<Vec<_>>>() {
+                    Err(e) => return Some(Err(e)),
+                    Ok(t) => t
+                };
+            }
+        };
+        match self.right.next() {
+            None => return None,
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(t)) => {
+                right_cache = t;
+                right_val_cache = match self.right_keys.iter().map(|(tid, cid)|
+                    extract_table_ref(&right_cache, tid, cid).map(|v| v.to_static())).collect::<Result<Vec<_>>>() {
+                    Err(e) => return Some(Err(e)),
+                    Ok(t) => t
+                };
+            }
+        };
+
+        loop {
+            match left_val_cache.cmp(&right_val_cache) {
+                Ordering::Equal => {
+                    left_cache.extend(right_cache);
+                    return Some(Ok(left_cache));
+                }
+                Ordering::Less => {
+                    // Advance the left one
+                    match self.left.next() {
+                        None => return None,
+                        Some(Err(e)) => return Some(Err(e)),
+                        Some(Ok(t)) => {
+                            left_cache = t;
+                            left_val_cache = match self.left_keys.iter().map(|(tid, cid)|
+                                extract_table_ref(&left_cache, tid, cid).map(|v| v.to_static())).collect::<Result<Vec<_>>>() {
+                                Err(e) => return Some(Err(e)),
+                                Ok(t) => t
+                            };
+                        }
+                    };
+                }
+                Ordering::Greater => {
+                    // Advance the right one
+                    match self.right.next() {
+                        None => return None,
+                        Some(Err(e)) => return Some(Err(e)),
+                        Some(Ok(t)) => {
+                            right_cache = t;
+                            right_val_cache = match self.right_keys.iter().map(|(tid, cid)|
+                                extract_table_ref(&right_cache, tid, cid).map(|v| v.to_static())).collect::<Result<Vec<_>>>() {
+                                Err(e) => return Some(Err(e)),
+                                Ok(t) => t
+                            };
+                        }
+                    };
+                }
             }
         }
     }

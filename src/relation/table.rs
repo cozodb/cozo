@@ -53,4 +53,8 @@ impl MegaTuple {
     pub fn is_empty(&self) -> bool {
         self.keys.is_empty()
     }
+    pub fn extend(&mut self, other: Self) {
+        self.keys.extend(other.keys);
+        self.vals.extend(other.vals);
+    }
 }
