@@ -252,8 +252,13 @@ impl<'a> MegaTupleIt<'a> {
                     right: right.iter(),
                 })
             }
-            MegaTupleIt::KeyedDifferenceIt { .. } => {
-                todo!()
+            MegaTupleIt::KeyedDifferenceIt { left, right } => {
+                Box::new(KeyedDifferenceIterator {
+                    left: left.iter(),
+                    right: right.iter(),
+                    right_cache: None,
+                    started: false
+                })
             }
             MegaTupleIt::BagsUnionIt { bags } => {
                 let bags = bags.iter().map(|i| i.iter()).collect();
@@ -310,6 +315,76 @@ impl<'a> Iterator for KeyedUnionIterator<'a> {
                         Some(Err(e)) => return Some(Err(e)),
                         Some(Ok(t)) => {
                             right_cache = t;
+                        }
+                    };
+                }
+            }
+        }
+    }
+}
+
+pub struct KeyedDifferenceIterator<'a> {
+    left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    right_cache: Option<MegaTuple>,
+    started: bool,
+}
+
+impl<'a> Iterator for KeyedDifferenceIterator<'a> {
+    type Item = Result<MegaTuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.started {
+            self.right_cache = match self.right.next() {
+                None => None,
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(t)) => Some(t)
+            };
+
+            self.started = true;
+        }
+
+        let mut left_cache = match self.left.next() {
+            None => return None,
+            Some(Err(e)) => return Some(Err(e)),
+            Some(Ok(t)) => t
+        };
+
+
+        loop {
+            let right = match &self.right_cache {
+                None => {
+                    // right is exhausted, so all left ones can be returned
+                    return Some(Ok(left_cache))
+                }
+                Some(r) => r
+            };
+            let cmp_res = left_cache.all_keys_cmp(right);
+            match cmp_res {
+                Ordering::Equal => {
+                    // Discard, since we are interested in difference
+                    left_cache = match self.left.next() {
+                        None => return None,
+                        Some(Err(e)) => return Some(Err(e)),
+                        Some(Ok(t)) => t
+                    };
+                    self.right_cache = match self.right.next() {
+                        None => None,
+                        Some(Err(e)) => return Some(Err(e)),
+                        Some(Ok(t)) => Some(t)
+                    };
+                }
+                Ordering::Less => {
+                    // the left one has no match, so return it
+                    return Some(Ok(left_cache));
+                }
+                Ordering::Greater => {
+                    // Advance the right one
+                    match self.right.next() {
+                        None => self.right_cache = None,
+                        Some(Err(e)) => return Some(Err(e)),
+                        Some(Ok(t)) => {
+                            self.right_cache = Some(t);
                         }
                     };
                 }
