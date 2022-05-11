@@ -110,23 +110,40 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::NodeItPlan { .. } => (1, 1),
             ExecPlan::EdgeItPlan { .. } => (1, 1),
             ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => (1, 0),
-            ExecPlan::KeySortedWithAssocItPlan { .. } => todo!(),
+            ExecPlan::KeySortedWithAssocItPlan { main, associates } => {
+                let (k, v) = main.tuple_widths();
+                (k, v + associates.len())
+            }
             ExecPlan::CartesianProdItPlan { left, right } => {
                 let (l1, l2) = left.tuple_widths();
                 let (r1, r2) = right.tuple_widths();
                 (l1 + r1, l2 + r2)
             }
-            ExecPlan::MergeJoinItPlan { .. } => todo!(),
-            ExecPlan::OuterMergeJoinItPlan { .. } => todo!(),
-            ExecPlan::KeyedUnionItPlan { .. } => todo!(),
-            ExecPlan::KeyedDifferenceItPlan { .. } => todo!(),
+            ExecPlan::MergeJoinItPlan { left, right, .. } => {
+                let (l1, l2) = left.tuple_widths();
+                let (r1, r2) = right.tuple_widths();
+                (l1 + r1, l2 + r2)
+            }
+            ExecPlan::OuterMergeJoinItPlan { left, right, .. } => {
+                let (l1, l2) = left.tuple_widths();
+                let (r1, r2) = right.tuple_widths();
+                (l1 + r1, l2 + r2)
+            }
+            ExecPlan::KeyedUnionItPlan { left, .. } => left.tuple_widths(),
+            ExecPlan::KeyedDifferenceItPlan { left, .. } => left.tuple_widths(),
             ExecPlan::FilterItPlan { source, .. } => {
                 source.tuple_widths()
             }
             ExecPlan::EvalItPlan { source, .. } => {
                 source.tuple_widths()
             }
-            ExecPlan::BagsUnionIt { .. } => todo!()
+            ExecPlan::BagsUnionIt { bags } => {
+                if bags.is_empty() {
+                    (0, 0)
+                } else {
+                    bags.get(0).unwrap().tuple_widths()
+                }
+            }
         }
     }
 }
@@ -1149,7 +1166,6 @@ mod tests {
 
             let duration = start.elapsed();
             println!("Time elapsed {:?}", duration);
-
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);
