@@ -36,7 +36,7 @@ impl<'a> Session<'a> {
     fn do_reify_intermediate_plan(&'a self, plan: ExecPlan<'a>) -> Result<(ExecPlan<'a>, AccessorMap)> {
         let res = match plan {
             ExecPlan::NodeItPlan { info, binding, .. } => {
-                let amap = self.base_relation_to_accessor_map(&binding, &info);
+                let amap = self.node_accessor_map(&binding, &info);
                 let amap = self.convert_to_relative_amap(amap);
                 let it = if info.table_id.in_root {
                     self.txn.iterator(true, &self.perm_cf)
@@ -51,7 +51,22 @@ impl<'a> Session<'a> {
                 };
                 (plan, amap)
             }
-            ExecPlan::EdgeItPlan { .. } => todo!(),
+            ExecPlan::EdgeItPlan { info, binding, .. } => {
+                let amap = self.edge_accessor_map(&binding, &info);
+                let amap = self.convert_to_relative_amap(amap);
+                let it = if info.table_id.in_root {
+                    self.txn.iterator(true, &self.perm_cf)
+                } else {
+                    self.txn.iterator(true, &self.temp_cf)
+                };
+                let it = IteratorSlot::Reified(it);
+                let plan = ExecPlan::EdgeItPlan {
+                    it,
+                    info,
+                    binding,
+                };
+                (plan, amap)
+            }
             ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => todo!(),
             ExecPlan::KeySortedWithAssocItPlan { .. } => todo!(),
             ExecPlan::CartesianProdItPlan { .. } => todo!(),
@@ -152,7 +167,7 @@ impl<'a> Session<'a> {
         };
         Ok(res)
     }
-    pub(crate) fn base_relation_to_accessor_map(
+    pub(crate) fn node_accessor_map(
         &self,
         binding: &str,
         info: &TableInfo,
@@ -160,6 +175,36 @@ impl<'a> Session<'a> {
         let mut ret = BTreeMap::new();
         for (i, (k, _)) in info.key_typing.iter().enumerate() {
             ret.insert(k.into(), (info.table_id, (true, i).into()));
+        }
+        for (i, (k, _)) in info.val_typing.iter().enumerate() {
+            ret.insert(k.into(), (info.table_id, (false, i).into()));
+        }
+        for assoc in &info.associates {
+            for (i, (k, _)) in assoc.key_typing.iter().enumerate() {
+                ret.insert(k.into(), (assoc.table_id, (true, i).into()));
+            }
+            for (i, (k, _)) in assoc.val_typing.iter().enumerate() {
+                ret.insert(k.into(), (assoc.table_id, (false, i).into()));
+            }
+        }
+        BTreeMap::from([(binding.to_string(), ret)])
+    }
+    pub(crate) fn edge_accessor_map(
+        &self,
+        binding: &str,
+        info: &TableInfo,
+    ) -> AccessorMap {
+        let mut ret = BTreeMap::new();
+        let src_key_len = info.src_key_typing.len();
+        let dst_key_len = info.dst_key_typing.len();
+        for (i, (k, _)) in info.src_key_typing.iter().enumerate() {
+            ret.insert("_src_".to_string() + k, (info.table_id, (true, 1 + i).into()));
+        }
+        for (i, (k, _)) in info.dst_key_typing.iter().enumerate() {
+            ret.insert("_dst_".to_string() + k, (info.table_id, (true, 2 + src_key_len + i).into()));
+        }
+        for (i, (k, _)) in info.key_typing.iter().enumerate() {
+            ret.insert(k.into(), (info.table_id, (true, 2 + src_key_len + dst_key_len + i).into()));
         }
         for (i, (k, _)) in info.val_typing.iter().enumerate() {
             ret.insert(k.into(), (info.table_id, (false, i).into()));

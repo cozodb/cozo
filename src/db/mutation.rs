@@ -193,7 +193,7 @@ impl<'a, 'b> MutationManager<'a, 'b> {
                     .iter()
                     .zip(src_key_list.into_iter())
                 {
-                    let v = t.coerce(v)?;
+                    let v = t.1.coerce(v)?;
                     key_tuple.push_value(&v);
                     src_keys.push(v);
                 }
@@ -215,7 +215,7 @@ impl<'a, 'b> MutationManager<'a, 'b> {
                     .iter()
                     .zip(dst_key_list.into_iter())
                 {
-                    let v = t.coerce(v)?;
+                    let v = t.1.coerce(v)?;
                     key_tuple.push_value(&v);
                     ikey_tuple.push_value(&v);
                 }

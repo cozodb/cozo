@@ -87,8 +87,8 @@ pub struct TableInfo {
     pub data_keys: HashSet<String>,
     pub key_typing: Vec<(String, Typing)>,
     pub val_typing: Vec<(String, Typing)>,
-    pub src_key_typing: Vec<Typing>,
-    pub dst_key_typing: Vec<Typing>,
+    pub src_key_typing: Vec<(String, Typing)>,
+    pub dst_key_typing: Vec<(String, Typing)>,
     pub associates: Vec<TableInfo>,
 }
 
@@ -183,7 +183,7 @@ impl<'a> Session<'a> {
                         )?
                         .extract_named_tuple()
                         .ok_or_else(|| CozoError::LogicError("Corrupt data".to_string()))?;
-                        let src_key_typing = src_key.into_iter().map(|(_, v)| v).collect();
+                        let src_key_typing = src_key.into_iter().collect();
 
                         let dst = self.table_data(dst_id, dst_in_root)?.ok_or_else(|| {
                             CozoError::LogicError("Getting dst failed".to_string())
@@ -197,7 +197,7 @@ impl<'a> Session<'a> {
                         )?
                         .extract_named_tuple()
                         .ok_or_else(|| CozoError::LogicError("Corrupt data".to_string()))?;
-                        let dst_key_typing = dst_key.into_iter().map(|(_, v)| v).collect();
+                        let dst_key_typing = dst_key.into_iter().collect();
 
                         let in_root = tpl.get_bool(0).ok_or_else(|| {
                             CozoError::LogicError("Cannot extract in root".to_string())

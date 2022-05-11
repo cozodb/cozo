@@ -131,17 +131,19 @@ impl<'a> ExecPlan<'a> {
             }
             ExecPlan::EdgeItPlan { it, info, .. } => {
                 let it = it.try_get()?;
-                let prefix_tuple = OwnTuple::with_prefix(info.table_id.id as u32);
+                let mut prefix_tuple = OwnTuple::with_prefix(info.table_id.id as u32);
+                prefix_tuple.push_int(info.src_table_id.id);
                 it.seek(prefix_tuple);
 
-                Ok(Box::new(EdgeIterator { it, started: false }))
+                Ok(Box::new(EdgeIterator { it, started: false, src_table_id: info.src_table_id.id }))
             }
             ExecPlan::EdgeKeyOnlyBwdItPlan { it, info } => {
                 let it = it.try_get()?;
-                let prefix_tuple = OwnTuple::with_prefix(info.table_id.id as u32);
+                let mut prefix_tuple = OwnTuple::with_prefix(info.table_id.id as u32);
+                prefix_tuple.push_int(info.dst_table_id.id);
                 it.seek(prefix_tuple);
 
-                Ok(Box::new(EdgeKeyOnlyBwdIterator { it, started: false }))
+                Ok(Box::new(EdgeKeyOnlyBwdIterator { it, started: false, dst_table_id: info.dst_table_id.id }))
             }
             ExecPlan::KeySortedWithAssocItPlan { main, associates } => {
                 let buffer = iter::repeat_with(|| None).take(associates.len()).collect();
@@ -405,6 +407,7 @@ impl<'a> Iterator for NodeIterator<'a> {
 pub struct EdgeIterator<'a> {
     it: &'a IteratorPtr<'a>,
     started: bool,
+    src_table_id: i64,
 }
 
 impl<'a> Iterator for EdgeIterator<'a> {
@@ -420,15 +423,18 @@ impl<'a> Iterator for EdgeIterator<'a> {
             match unsafe { self.it.pair() } {
                 None => return None,
                 Some((k, v)) => {
+                    let kt = Tuple::new(k);
                     let vt = Tuple::new(v);
-                    if matches!(vt.data_kind(), Ok(DataKind::Edge)) {
-                        self.it.next()
-                    } else {
-                        let kt = Tuple::new(k);
+                    if kt.get_int(0) != Some(self.src_table_id) {
+                        return None;
+                    }
+                    if matches!(vt.data_kind(), Ok(DataKind::Data)) {
                         return Some(Ok(MegaTuple {
                             keys: vec![kt.into()],
                             vals: vec![vt.into()],
                         }));
+                    } else {
+                        self.it.next();
                     }
                 }
             }
@@ -439,6 +445,7 @@ impl<'a> Iterator for EdgeIterator<'a> {
 pub struct EdgeKeyOnlyBwdIterator<'a> {
     it: &'a IteratorPtr<'a>,
     started: bool,
+    dst_table_id: i64,
 }
 
 impl<'a> Iterator for EdgeKeyOnlyBwdIterator<'a> {
@@ -455,6 +462,9 @@ impl<'a> Iterator for EdgeKeyOnlyBwdIterator<'a> {
                 None => return None,
                 Some((_k, rev_k)) => {
                     let rev_k_tuple = Tuple::new(rev_k);
+                    if rev_k_tuple.get_int(0) != Some(self.dst_table_id) {
+                        return None;
+                    }
                     if !matches!(rev_k_tuple.data_kind(), Ok(DataKind::Edge)) {
                         self.it.next()
                     } else {
@@ -975,7 +985,7 @@ mod tests {
                 .unwrap();
             let sel_pat = sess.parse_select_pattern(p).unwrap();
             let sel_vals = Value::Dict(sel_pat.vals.into_iter().map(|(k, v)| (k.into(), v)).collect());
-            let amap = sess.base_relation_to_accessor_map(
+            let amap = sess.node_accessor_map(
                 &from_pat.binding,
                 &from_pat.info,
             );
@@ -1080,6 +1090,19 @@ mod tests {
             println!("{:?}", plan);
             for val in plan.iter()? {
                 println!("{}", val?)
+            }
+
+            let s = r##"from hj:HasJob
+            where hj.salary < 5000 || hj._dst_id == 19
+            select {src_id: hj._src_id, dst_id: hj._dst_id, salary: hj.salary, hire_date: hj.hire_date}"##;
+
+            let parsed = Parser::parse(Rule::relational_query, s)?.next().unwrap();
+            let plan = sess.query_to_plan(parsed)?;
+            println!("{:?}", plan);
+            let plan = sess.reify_output_plan(plan)?;
+            println!("{:?}", plan);
+            for val in plan.iter()? {
+                println!("{:?}", val)
             }
         }
         drop(engine);
