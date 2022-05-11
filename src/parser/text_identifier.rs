@@ -1,11 +1,17 @@
-use pest::iterators::Pair;
-use crate::parser::Rule;
 use crate::error::{CozoError, Result};
 use crate::parser::number::parse_int;
+use crate::parser::Rule;
+use pest::iterators::Pair;
 
 #[inline]
 fn parse_raw_string(pair: Pair<Rule>) -> Result<String> {
-    Ok(pair.into_inner().into_iter().next().unwrap().as_str().to_string())
+    Ok(pair
+        .into_inner()
+        .into_iter()
+        .next()
+        .unwrap()
+        .as_str()
+        .to_string())
 }
 
 #[inline]
@@ -29,12 +35,11 @@ fn parse_quoted_string(pair: Pair<Rule>) -> Result<String> {
                 ret.push(ch);
             }
             s if s.starts_with('\\') => return Err(CozoError::InvalidEscapeSequence),
-            s => ret.push_str(s)
+            s => ret.push_str(s),
         }
     }
     Ok(ret)
 }
-
 
 #[inline]
 fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
@@ -57,7 +62,7 @@ fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
                 ret.push(ch);
             }
             s if s.starts_with('\\') => return Err(CozoError::InvalidEscapeSequence),
-            s => ret.push_str(s)
+            s => ret.push_str(s),
         }
     }
     Ok(ret)
@@ -70,7 +75,7 @@ pub fn parse_string(pair: Pair<Rule>) -> Result<String> {
         Rule::s_quoted_string => Ok(parse_s_quoted_string(pair)?),
         Rule::raw_string => Ok(parse_raw_string(pair)?),
         Rule::ident => Ok(pair.as_str().to_string()),
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
 
@@ -83,7 +88,7 @@ pub fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<St
     let name = match inner.as_rule() {
         Rule::ident => parse_ident(inner),
         Rule::raw_string | Rule::s_quoted_string | Rule::quoted_string => parse_string(inner)?,
-        _ => unreachable!()
+        _ => unreachable!(),
     };
     if forbid_underscore && name.starts_with('_') {
         Err(CozoError::ReservedIdent)

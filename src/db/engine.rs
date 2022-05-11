@@ -1,16 +1,15 @@
 // single engine per db storage
 // will be shared among threads
 
-
+use crate::error::CozoError::{Poisoned, SessionErr};
+use crate::error::{CozoError, Result};
+use crate::relation::tuple::{Tuple, PREFIX_LEN};
 use cozorocks::*;
+use rand::Rng;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
-use uuid::Uuid;
 use uuid::v1::{Context, Timestamp};
-use rand::Rng;
-use crate::error::{CozoError, Result};
-use crate::error::CozoError::{Poisoned, SessionErr};
-use crate::relation::tuple::{PREFIX_LEN, Tuple};
+use uuid::Uuid;
 
 pub struct EngineOptions {
     cmp: RustComparatorPtr,
@@ -37,10 +36,7 @@ impl Engine {
         } else {
             TDBOptions::Pessimistic(PTxnDBOptionsPtr::default())
         };
-        let cmp = RustComparatorPtr::new(
-            "cozo_cmp_v1",
-            crate::relation::key_order::compare,
-            false);
+        let cmp = RustComparatorPtr::new("cozo_cmp_v1", crate::relation::key_order::compare, false);
         let mut options = OptionsPtr::default();
         options
             .set_comparator(&cmp)
@@ -71,13 +67,17 @@ impl Engine {
     pub fn session(&self) -> Result<Session> {
         // find a handle if there is one available
         // otherwise create a new one
-        let mut guard = self.session_handles.lock().map_err(|_| CozoError::Poisoned)?;
-        let old_handle = guard.iter().find(|v| {
-            match v.read() {
+        let mut guard = self
+            .session_handles
+            .lock()
+            .map_err(|_| CozoError::Poisoned)?;
+        let old_handle = guard
+            .iter()
+            .find(|v| match v.read() {
                 Ok(content) => content.status == SessionStatus::Completed,
-                Err(_) => false
-            }
-        }).cloned();
+                Err(_) => false,
+            })
+            .cloned();
         let handle = match old_handle {
             None => {
                 let now = SystemTime::now();
@@ -88,7 +88,17 @@ impl Engine {
                     since_epoch.subsec_nanos(),
                 );
                 let mut rng = rand::thread_rng();
-                let id = Uuid::new_v1(ts, &[rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen(), rng.gen()])?;
+                let id = Uuid::new_v1(
+                    ts,
+                    &[
+                        rng.gen(),
+                        rng.gen(),
+                        rng.gen(),
+                        rng.gen(),
+                        rng.gen(),
+                        rng.gen(),
+                    ],
+                )?;
                 let cf_ident = id.to_string();
                 self.db.create_cf(&self.options_store.options, &cf_ident)?;
 
@@ -99,7 +109,7 @@ impl Engine {
                 guard.push(ret.clone());
                 ret
             }
-            Some(h) => h
+            Some(h) => h,
         };
 
         let mut sess = Session {
@@ -133,12 +143,14 @@ impl<'a> Session<'a> {
     fn start_with_total_seek(&mut self, total_seek: bool) -> Result<()> {
         self.perm_cf = self.engine.db.default_cf();
         assert!(!self.perm_cf.is_null());
-        self.temp_cf = self.engine.db.get_cf(&self.handle.read().map_err(|_| Poisoned)?.cf_ident).ok_or(SessionErr)?;
+        self.temp_cf = self
+            .engine
+            .db
+            .get_cf(&self.handle.read().map_err(|_| Poisoned)?.cf_ident)
+            .ok_or(SessionErr)?;
         assert!(!self.temp_cf.is_null());
         let t_options = match self.engine.options_store.t_options {
-            TDBOptions::Pessimistic(_) => {
-                TransactOptions::Pessimistic(PTxnOptionsPtr::default())
-            }
+            TDBOptions::Pessimistic(_) => TransactOptions::Pessimistic(PTxnOptionsPtr::default()),
             TDBOptions::Optimistic(_) => {
                 TransactOptions::Optimistic(OTxnOptionsPtr::new(&self.engine.options_store.cmp))
             }
@@ -167,7 +179,10 @@ impl<'a> Session<'a> {
         let w_opts = WriteOptionsPtr::default();
         let mut wx_opts = WriteOptionsPtr::default();
         wx_opts.set_disable_wal(true);
-        self.txn = self.engine.db.make_transaction(t_options, r_opts, rx_opts, w_opts, wx_opts);
+        self.txn = self
+            .engine
+            .db
+            .make_transaction(t_options, r_opts, rx_opts, w_opts, wx_opts);
         if self.txn.is_null() {
             panic!("Starting session failed as opening transaction failed");
         }
@@ -183,7 +198,8 @@ impl<'a> Session<'a> {
         Ok(())
     }
     pub fn finish_work(&mut self) -> Result<()> {
-        self.txn.del_range(&self.temp_cf, Tuple::with_null_prefix(), Tuple::max_tuple())?;
+        self.txn
+            .del_range(&self.temp_cf, Tuple::with_null_prefix(), Tuple::max_tuple())?;
         self.txn.compact_all(&self.temp_cf)?;
         // let mut options = FlushOptionsPtr::default();
         // options.set_allow_write_stall(true).set_flush_wait(true);
@@ -220,9 +236,9 @@ pub enum SessionStatus {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, thread};
-    use crate::relation::tuple::Tuple;
     use super::*;
+    use crate::relation::tuple::Tuple;
+    use std::{fs, thread};
 
     #[test]
     fn push_get() {
@@ -328,14 +344,19 @@ mod tests {
                 }))
             }
 
-
             for t in thread_handles {
                 t.join().unwrap();
             }
             println!("All OK");
             {
                 let handles = engine2.session_handles.lock().unwrap();
-                println!("got handles {:#?}", handles.iter().map(|h| h.read().unwrap().cf_ident.to_string()).collect::<Vec<_>>());
+                println!(
+                    "got handles {:#?}",
+                    handles
+                        .iter()
+                        .map(|h| h.read().unwrap().cf_ident.to_string())
+                        .collect::<Vec<_>>()
+                );
             }
         }
         let _ = fs::remove_dir_all(p1);

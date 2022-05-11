@@ -1,6 +1,6 @@
-use std::cmp::Ordering;
-use crate::relation::tuple::{CowTuple};
+use crate::relation::tuple::CowTuple;
 use crate::relation::typing::Typing;
+use std::cmp::Ordering;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub struct StorageId {
@@ -49,7 +49,10 @@ pub struct MegaTuple {
 
 impl MegaTuple {
     pub fn empty_tuple() -> Self {
-        MegaTuple { keys: vec![], vals: vec![] }
+        MegaTuple {
+            keys: vec![],
+            vals: vec![],
+        }
     }
     pub fn is_empty(&self) -> bool {
         self.keys.is_empty()
@@ -72,8 +75,8 @@ impl MegaTuple {
     pub fn all_keys_cmp(&self, other: &Self) -> Ordering {
         for (l, r) in self.keys.iter().zip(&other.keys) {
             match l.key_part_cmp(r) {
-                Ordering::Equal => {},
-                v => return v
+                Ordering::Equal => {}
+                v => return v,
             }
         }
         Ordering::Equal

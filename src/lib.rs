@@ -11,10 +11,10 @@ extern crate core;
 // pub mod storage;
 // pub mod mutation;
 // pub mod plan;
-pub mod relation;
 pub mod db;
 pub mod error;
 pub mod parser;
+pub mod relation;
 
 #[cfg(test)]
 mod tests {

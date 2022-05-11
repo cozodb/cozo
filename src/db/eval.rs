@@ -1,40 +1,49 @@
-use std::borrow::Cow;
-use std::cmp::{max, min, Ordering};
-use std::collections::{BTreeMap, BTreeSet};
 use crate::db::cnf_transform::{cnf_transform, extract_tables};
-use crate::db::engine::{Session};
+use crate::db::engine::Session;
 use crate::db::plan::AccessorMap;
 use crate::db::table::{ColId, TableId};
-use crate::relation::value::{Value};
-use crate::error::{CozoError, Result};
 use crate::error::CozoError::{InvalidArgument, LogicError};
+use crate::error::{CozoError, Result};
 use crate::relation::data::DataKind;
 use crate::relation::table::MegaTuple;
 use crate::relation::value;
+use crate::relation::value::Value;
+use std::borrow::Cow;
+use std::cmp::{max, min, Ordering};
+use std::collections::{BTreeMap, BTreeSet};
 
-
-pub fn extract_table_ref<'a>(tuples: &'a MegaTuple, tid: &TableId, cid: &ColId) -> Result<Value<'a>> {
-    let targets = if cid.is_key { &tuples.keys } else { &tuples.vals };
-    let target = targets.get(tid.id as usize).ok_or_else(|| {
-        LogicError("Tuple ref out of bound".to_string())
-    })?;
+pub fn extract_table_ref<'a>(
+    tuples: &'a MegaTuple,
+    tid: &TableId,
+    cid: &ColId,
+) -> Result<Value<'a>> {
+    let targets = if cid.is_key {
+        &tuples.keys
+    } else {
+        &tuples.vals
+    };
+    let target = targets
+        .get(tid.id as usize)
+        .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))?;
     if matches!(target.data_kind(), Ok(DataKind::Empty)) {
         Ok(Value::Null)
     } else {
-        target.get(cid.id as usize)
+        target
+            .get(cid.id as usize)
             .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))
     }
 }
 
 pub fn compare_tuple_by_keys<'a>(
     left: (&'a MegaTuple, &'a [(TableId, ColId)]),
-    right: (&'a MegaTuple, &'a [(TableId, ColId)])) -> Result<Ordering> {
+    right: (&'a MegaTuple, &'a [(TableId, ColId)]),
+) -> Result<Ordering> {
     for ((l_tid, l_cid), (r_tid, r_cid)) in left.1.iter().zip(right.1) {
         let left_val = extract_table_ref(left.0, l_tid, l_cid)?;
         let right_val = extract_table_ref(right.0, r_tid, r_cid)?;
         match left_val.cmp(&right_val) {
             Ordering::Equal => {}
-            v => return Ok(v)
+            v => return Ok(v),
         }
     }
     Ok(Ordering::Equal)
@@ -42,20 +51,23 @@ pub fn compare_tuple_by_keys<'a>(
 
 pub fn tuple_eval<'a>(value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Value<'a>> {
     let res: Value = match value {
-        v @ (Value::Null |
-        Value::Bool(_) |
-        Value::Int(_) |
-        Value::Float(_) |
-        Value::Uuid(_) |
-        Value::Text(_)) => v.clone(),
+        v @ (Value::Null
+        | Value::Bool(_)
+        | Value::Int(_)
+        | Value::Float(_)
+        | Value::Uuid(_)
+        | Value::Text(_)) => v.clone(),
         Value::List(l) => {
-            let l = l.into_iter().map(|v| tuple_eval(v, tuples)).collect::<Result<Vec<_>>>()?;
+            let l = l
+                .iter()
+                .map(|v| tuple_eval(v, tuples))
+                .collect::<Result<Vec<_>>>()?;
             Value::List(l)
         }
         Value::Dict(d) => {
-            let d = d.into_iter()
-                .map(|(k, v)|
-                    tuple_eval(v, tuples).map(|v| (k.clone(), v)))
+            let d = d
+                .iter()
+                .map(|(k, v)| tuple_eval(v, tuples).map(|v| (k.clone(), v)))
                 .collect::<Result<BTreeMap<_, _>>>()?;
             Value::Dict(d)
         }
@@ -75,40 +87,38 @@ pub fn tuple_eval<'a>(value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Val
             //         .ok_or_else(|| LogicError("Tuple ref out of bound".to_string()))?
             // }
         }
-        Value::Apply(op, args) => {
-            match op.as_ref() {
-                value::OP_STR_CAT => str_cat_values(args, tuples)?,
-                value::OP_ADD => add_values(args, tuples)?,
-                value::OP_SUB => sub_values(args, tuples)?,
-                value::OP_MUL => mul_values(args, tuples)?,
-                value::OP_DIV => div_values(args, tuples)?,
-                value::OP_EQ => eq_values(args, tuples)?,
-                value::OP_NE => ne_values(args, tuples)?,
-                value::OP_OR => or_values(args, tuples)?,
-                value::OP_AND => and_values(args, tuples)?,
-                value::OP_MOD => mod_values(args, tuples)?,
-                value::OP_GT => gt_values(args, tuples)?,
-                value::OP_GE => ge_values(args, tuples)?,
-                value::OP_LT => lt_values(args, tuples)?,
-                value::OP_LE => le_values(args, tuples)?,
-                value::OP_POW => pow_values(args, tuples)?,
-                value::OP_COALESCE => coalesce_values(args, tuples)?,
-                value::OP_NEGATE => negate_values(args, tuples)?,
-                value::OP_MINUS => minus_values(args, tuples)?,
-                value::METHOD_IS_NULL => is_null_values(args, tuples)?,
-                value::METHOD_NOT_NULL => not_null_values(args, tuples)?,
-                value::METHOD_CONCAT => concat_values(args, tuples)?,
-                value::METHOD_MERGE => merge_values(args, tuples)?,
-                _ => { todo!() }
+        Value::Apply(op, args) => match op.as_ref() {
+            value::OP_STR_CAT => str_cat_values(args, tuples)?,
+            value::OP_ADD => add_values(args, tuples)?,
+            value::OP_SUB => sub_values(args, tuples)?,
+            value::OP_MUL => mul_values(args, tuples)?,
+            value::OP_DIV => div_values(args, tuples)?,
+            value::OP_EQ => eq_values(args, tuples)?,
+            value::OP_NE => ne_values(args, tuples)?,
+            value::OP_OR => or_values(args, tuples)?,
+            value::OP_AND => and_values(args, tuples)?,
+            value::OP_MOD => mod_values(args, tuples)?,
+            value::OP_GT => gt_values(args, tuples)?,
+            value::OP_GE => ge_values(args, tuples)?,
+            value::OP_LT => lt_values(args, tuples)?,
+            value::OP_LE => le_values(args, tuples)?,
+            value::OP_POW => pow_values(args, tuples)?,
+            value::OP_COALESCE => coalesce_values(args, tuples)?,
+            value::OP_NEGATE => negate_values(args, tuples)?,
+            value::OP_MINUS => minus_values(args, tuples)?,
+            value::METHOD_IS_NULL => is_null_values(args, tuples)?,
+            value::METHOD_NOT_NULL => not_null_values(args, tuples)?,
+            value::METHOD_CONCAT => concat_values(args, tuples)?,
+            value::METHOD_MERGE => merge_values(args, tuples)?,
+            _ => {
+                todo!()
             }
-        }
+        },
         Value::FieldAccess(field, arg) => {
             let arg = tuple_eval(arg, tuples)?;
             match arg {
-                Value::Dict(mut d) => {
-                    d.remove(field.as_ref()).unwrap_or(Value::Null)
-                }
-                _ => return Err(LogicError("Field access failed".to_string()))
+                Value::Dict(mut d) => d.remove(field.as_ref()).unwrap_or(Value::Null),
+                _ => return Err(LogicError("Field access failed".to_string())),
             }
         }
         Value::IdxAccess(idx, arg) => {
@@ -121,7 +131,7 @@ pub fn tuple_eval<'a>(value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Val
                         l.swap_remove(*idx)
                     }
                 }
-                _ => return Err(LogicError("Idx access failed".to_string()))
+                _ => return Err(LogicError("Idx access failed".to_string())),
             }
         }
         Value::EndSentinel => {
@@ -135,12 +145,11 @@ fn coalesce_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<V
     for v in args {
         match tuple_eval(v, tuples)? {
             Value::Null => {}
-            v => return Ok(v)
+            v => return Ok(v),
         }
     }
     Ok(Value::Null)
 }
-
 
 fn str_cat_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
     let mut ret = String::new();
@@ -149,14 +158,14 @@ fn str_cat_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Va
         match v {
             Value::Null => return Ok(Value::Null),
             Value::Text(s) => ret += s.as_ref(),
-            _ => return Err(InvalidArgument)
+            _ => return Err(InvalidArgument),
         }
-    };
+    }
     Ok(ret.into())
 }
 
 fn add_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -170,12 +179,12 @@ fn add_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<
         (Value::Float(l), Value::Int(r)) => (l + (r as f64)).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64) + r.into_inner()).into(),
         (Value::Float(l), Value::Float(r)) => (l.into_inner() + r.into_inner()).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
 fn sub_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -189,7 +198,7 @@ fn sub_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<
         (Value::Float(l), Value::Int(r)) => (l - (r as f64)).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64) - r.into_inner()).into(),
         (Value::Float(l), Value::Float(r)) => (l.into_inner() - r.into_inner()).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
@@ -198,7 +207,7 @@ fn minus_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Valu
     Ok(match left {
         Value::Int(l) => (-l).into(),
         Value::Float(l) => (-l).into(),
-        _ => return Err(CozoError::InvalidArgument)
+        _ => return Err(CozoError::InvalidArgument),
     })
 }
 
@@ -206,7 +215,7 @@ fn negate_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Val
     let left = tuple_eval(args.get(0).unwrap(), tuples)?;
     Ok(match left {
         Value::Bool(l) => (!l).into(),
-        _ => return Err(CozoError::InvalidArgument)
+        _ => return Err(CozoError::InvalidArgument),
     })
 }
 
@@ -221,7 +230,7 @@ fn not_null_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<V
 }
 
 fn pow_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -235,12 +244,12 @@ fn pow_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<
         (Value::Float(l), Value::Int(r)) => ((l.into_inner()).powf(r as f64)).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64).powf(r.into_inner())).into(),
         (Value::Float(l), Value::Float(r)) => ((l.into_inner()).powf(r.into_inner())).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
 fn gt_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -254,12 +263,12 @@ fn gt_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'
         (Value::Float(l), Value::Int(r)) => (l > (r as f64).into()).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64) > r.into_inner()).into(),
         (Value::Float(l), Value::Float(r)) => (l > r).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
 fn lt_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -273,12 +282,12 @@ fn lt_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'
         (Value::Float(l), Value::Int(r)) => (l < (r as f64).into()).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64) < r.into_inner()).into(),
         (Value::Float(l), Value::Float(r)) => (l < r).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
 fn ge_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -292,12 +301,12 @@ fn ge_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'
         (Value::Float(l), Value::Int(r)) => (l >= (r as f64).into()).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64) >= r.into_inner()).into(),
         (Value::Float(l), Value::Float(r)) => (l >= r).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
 fn le_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -311,12 +320,12 @@ fn le_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'
         (Value::Float(l), Value::Int(r)) => (l <= (r as f64).into()).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64) <= r.into_inner()).into(),
         (Value::Float(l), Value::Float(r)) => (l <= r).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
 fn mod_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -327,12 +336,12 @@ fn mod_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<
     }
     Ok(match (left, right) {
         (Value::Int(l), Value::Int(r)) => (l % r).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
 fn mul_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -346,12 +355,12 @@ fn mul_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<
         (Value::Float(l), Value::Int(r)) => (l * (r as f64)).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64) * r.into_inner()).into(),
         (Value::Float(l), Value::Float(r)) => (l.into_inner() * r.into_inner()).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
 fn div_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -365,12 +374,12 @@ fn div_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<
         (Value::Float(l), Value::Int(r)) => (l / (r as f64)).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64) / r.into_inner()).into(),
         (Value::Float(l), Value::Float(r)) => (l.into_inner() / r.into_inner()).into(),
-        (_, _) => return Err(CozoError::InvalidArgument)
+        (_, _) => return Err(CozoError::InvalidArgument),
     })
 }
 
 fn eq_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -383,7 +392,7 @@ fn eq_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'
 }
 
 fn ne_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = tuple_eval(args.next().unwrap(), tuples)?;
     if left == Value::Null {
         return Ok(Value::Null);
@@ -397,30 +406,30 @@ fn ne_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'
 
 fn or_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
     let mut accum = -1;
-    for v in args.into_iter() {
+    for v in args.iter() {
         let v = tuple_eval(v, tuples)?;
         match v {
             Value::Null => accum = max(accum, 0),
             Value::Bool(false) => {}
             Value::Bool(true) => return Ok(true.into()),
-            _ => return Err(CozoError::InvalidArgument)
+            _ => return Err(CozoError::InvalidArgument),
         }
     }
     Ok(match accum {
         -1 => false.into(),
         0 => Value::Null,
-        _ => unreachable!()
+        _ => unreachable!(),
     })
 }
 
 fn concat_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
     let mut coll = vec![];
-    for v in args.into_iter() {
+    for v in args.iter() {
         let v = tuple_eval(v, tuples)?;
         match v {
             Value::Null => {}
             Value::List(l) => coll.extend(l),
-            _ => return Err(CozoError::InvalidArgument)
+            _ => return Err(CozoError::InvalidArgument),
         }
     }
     Ok(coll.into())
@@ -428,12 +437,12 @@ fn concat_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Val
 
 fn merge_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
     let mut coll = BTreeMap::new();
-    for v in args.into_iter() {
+    for v in args.iter() {
         let v = tuple_eval(v, tuples)?;
         match v {
             Value::Null => {}
             Value::Dict(d) => coll.extend(d),
-            _ => return Err(CozoError::InvalidArgument)
+            _ => return Err(CozoError::InvalidArgument),
         }
     }
     Ok(coll.into())
@@ -441,25 +450,29 @@ fn merge_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Valu
 
 fn and_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<'a>> {
     let mut accum = 1;
-    for v in args.into_iter() {
+    for v in args.iter() {
         let v = tuple_eval(v, tuples)?;
         match v {
             Value::Null => accum = min(accum, 0),
             Value::Bool(true) => {}
             Value::Bool(false) => return Ok(false.into()),
-            _ => return Err(CozoError::InvalidArgument)
+            _ => return Err(CozoError::InvalidArgument),
         }
     }
     Ok(match accum {
         1 => true.into(),
         0 => Value::Null,
-        _ => unreachable!()
+        _ => unreachable!(),
     })
 }
 
 impl<'s> Session<'s> {
-    pub fn partial_cnf_eval<'a>(&self, mut value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
-                                table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    pub fn partial_cnf_eval<'a>(
+        &self,
+        mut value: Value<'a>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         loop {
             let (ev, new_v) = self.partial_eval(value.clone(), params, table_bindings)?;
             let new_v = cnf_transform(new_v.clone());
@@ -471,9 +484,12 @@ impl<'s> Session<'s> {
         }
     }
 
-    pub fn cnf_with_table_refs<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
-                                   table_bindings: &AccessorMap)
-                                   -> Result<BTreeMap<BTreeSet<TableId>, Value<'a>>> {
+    pub fn cnf_with_table_refs<'a>(
+        &self,
+        value: Value<'a>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<BTreeMap<BTreeSet<TableId>, Value<'a>>> {
         let (_, value) = self.partial_cnf_eval(value, params, table_bindings)?;
         let conjunctives;
         if let Value::Apply(op, args) = value {
@@ -485,51 +501,63 @@ impl<'s> Session<'s> {
         } else {
             conjunctives = vec![value]
         }
-        let grouped = conjunctives.into_iter().fold(BTreeMap::new(), |mut coll, v| {
-            let tids = extract_tables(&v);
-            let ent = coll.entry(tids).or_insert(vec![]);
-            ent.push(v);
-            coll
-        }).into_iter().map(|(k, mut v)| {
-            let v = match v.len() {
-                0 => Value::Bool(true),
-                1 => v.pop().unwrap(),
-                _ => Value::Apply(value::OP_AND.into(), v)
-            };
-            (k, v)
-        }).collect::<BTreeMap<_, _>>();
+        let grouped = conjunctives
+            .into_iter()
+            .fold(BTreeMap::new(), |mut coll, v| {
+                let tids = extract_tables(&v);
+                let ent = coll.entry(tids).or_insert(vec![]);
+                ent.push(v);
+                coll
+            })
+            .into_iter()
+            .map(|(k, mut v)| {
+                let v = match v.len() {
+                    0 => Value::Bool(true),
+                    1 => v.pop().unwrap(),
+                    _ => Value::Apply(value::OP_AND.into(), v),
+                };
+                (k, v)
+            })
+            .collect::<BTreeMap<_, _>>();
         Ok(grouped)
     }
 
-    pub fn partial_eval<'a>(&self, value: Value<'a>, params: &BTreeMap<String, Value<'a>>,
-                            table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    pub fn partial_eval<'a>(
+        &self,
+        value: Value<'a>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         match value {
-            v @ (Value::Null |
-            Value::Bool(_) |
-            Value::Int(_) |
-            Value::Float(_) |
-            Value::Uuid(_) |
-            Value::Text(_) |
-            Value::EndSentinel) => Ok((true, v)),
+            v @ (Value::Null
+            | Value::Bool(_)
+            | Value::Int(_)
+            | Value::Float(_)
+            | Value::Uuid(_)
+            | Value::Text(_)
+            | Value::EndSentinel) => Ok((true, v)),
             v @ Value::TupleRef(_, _) => Ok((false, v)),
             Value::List(l) => {
                 let init_vec = Vec::with_capacity(l.len());
-                let res: Result<(bool, Vec<Value>)> = l.into_iter()
-                    .try_fold((true, init_vec), |(is_evaluated, mut accum), val| {
-                        let (ev, new_val) = self.partial_eval(val, params, table_bindings)?;
-                        accum.push(new_val);
-                        Ok((ev && is_evaluated, accum))
-                    });
+                let res: Result<(bool, Vec<Value>)> =
+                    l.into_iter()
+                        .try_fold((true, init_vec), |(is_evaluated, mut accum), val| {
+                            let (ev, new_val) = self.partial_eval(val, params, table_bindings)?;
+                            accum.push(new_val);
+                            Ok((ev && is_evaluated, accum))
+                        });
                 let (is_ev, v) = res?;
                 Ok((is_ev, v.into()))
             }
             Value::Dict(d) => {
-                let res: Result<(bool, BTreeMap<Cow<str>, Value>)> = d.into_iter()
-                    .try_fold((true, BTreeMap::new()), |(is_evaluated, mut accum), (k, v)| {
+                let res: Result<(bool, BTreeMap<Cow<str>, Value>)> = d.into_iter().try_fold(
+                    (true, BTreeMap::new()),
+                    |(is_evaluated, mut accum), (k, v)| {
                         let (ev, new_val) = self.partial_eval(v, params, table_bindings)?;
                         accum.insert(k, new_val);
                         Ok((ev && is_evaluated, accum))
-                    });
+                    },
+                );
                 let (is_ev, v) = res?;
                 Ok((is_ev, v.into()))
             }
@@ -543,9 +571,7 @@ impl<'s> Session<'s> {
                 } else {
                     Ok(match self.resolve_value(&v)? {
                         None => (false, Value::Variable(v)),
-                        Some(rs) => {
-                            (rs.is_evaluated(), rs.to_static())
-                        }
+                        Some(rs) => (rs.is_evaluated(), rs.to_static()),
                     })
                 }
             }
@@ -554,12 +580,10 @@ impl<'s> Session<'s> {
                 if let Value::Variable(v) = &*arg {
                     if let Some(sub_dict) = table_bindings.get(v.as_ref()) {
                         return match sub_dict.get(field.as_ref()) {
-                            None => {
-                                Err(LogicError("Cannot resolve field in bound table".to_string()))
-                            }
-                            Some(d) => {
-                                Ok((false, Value::TupleRef(d.0, d.1)))
-                            }
+                            None => Err(LogicError(
+                                "Cannot resolve field in bound table".to_string(),
+                            )),
+                            Some(d) => Ok((false, Value::TupleRef(d.0, d.1))),
                         };
                     }
                 }
@@ -567,25 +591,24 @@ impl<'s> Session<'s> {
                 // normal evaluation flow
                 let (_is_ev, arg) = self.partial_eval(*arg, params, table_bindings)?;
                 match arg {
-                    v @ (Value::Variable(_) |
-                    Value::IdxAccess(_, _) |
-                    Value::FieldAccess(_, _) |
-                    Value::Apply(_, _)) => Ok((false, Value::FieldAccess(field, v.into()))),
-                    Value::Dict(mut d) => {
-                        Ok(d.remove(field.as_ref())
-                            .map(|v| (v.is_evaluated(), v))
-                            .unwrap_or((true, Value::Null)))
-                    }
-                    _ => Err(LogicError("Field access failed".to_string()))
+                    v @ (Value::Variable(_)
+                    | Value::IdxAccess(_, _)
+                    | Value::FieldAccess(_, _)
+                    | Value::Apply(_, _)) => Ok((false, Value::FieldAccess(field, v.into()))),
+                    Value::Dict(mut d) => Ok(d
+                        .remove(field.as_ref())
+                        .map(|v| (v.is_evaluated(), v))
+                        .unwrap_or((true, Value::Null))),
+                    _ => Err(LogicError("Field access failed".to_string())),
                 }
             }
             Value::IdxAccess(idx, arg) => {
                 let (_is_ev, arg) = self.partial_eval(*arg, params, table_bindings)?;
                 match arg {
-                    v @ (Value::Variable(_) |
-                    Value::IdxAccess(_, _) |
-                    Value::FieldAccess(_, _) |
-                    Value::Apply(_, _)) => Ok((false, Value::IdxAccess(idx, v.into()))),
+                    v @ (Value::Variable(_)
+                    | Value::IdxAccess(_, _)
+                    | Value::FieldAccess(_, _)
+                    | Value::Apply(_, _)) => Ok((false, Value::IdxAccess(idx, v.into()))),
                     Value::List(mut l) => {
                         if idx >= l.len() {
                             Ok((true, Value::Null))
@@ -594,46 +617,54 @@ impl<'s> Session<'s> {
                             Ok((v.is_evaluated(), v))
                         }
                     }
-                    _ => Err(LogicError("Idx access failed".to_string()))
+                    _ => Err(LogicError("Idx access failed".to_string())),
                 }
             }
-            Value::Apply(op, args) => {
-                Ok(match op.as_ref() {
-                    value::OP_STR_CAT => self.str_cat_values_partial(args, params, table_bindings)?,
-                    value::OP_ADD => self.add_values_partial(args, params, table_bindings)?,
-                    value::OP_SUB => self.sub_values_partial(args, params, table_bindings)?,
-                    value::OP_MUL => self.mul_values_partial(args, params, table_bindings)?,
-                    value::OP_DIV => self.div_values_partial(args, params, table_bindings)?,
-                    value::OP_EQ => self.eq_values_partial(args, params, table_bindings)?,
-                    value::OP_NE => self.ne_values_partial(args, params, table_bindings)?,
-                    value::OP_OR => self.or_values_partial(args, params, table_bindings)?,
-                    value::OP_AND => self.and_values_partial(args, params, table_bindings)?,
-                    value::OP_MOD => self.mod_values_partial(args, params, table_bindings)?,
-                    value::OP_GT => self.gt_values_partial(args, params, table_bindings)?,
-                    value::OP_GE => self.ge_values_partial(args, params, table_bindings)?,
-                    value::OP_LT => self.lt_values_partial(args, params, table_bindings)?,
-                    value::OP_LE => self.le_values_partial(args, params, table_bindings)?,
-                    value::OP_POW => self.pow_values_partial(args, params, table_bindings)?,
-                    value::OP_COALESCE => self.coalesce_values_partial(args, params, table_bindings)?,
-                    value::OP_NEGATE => self.negate_values_partial(args, params, table_bindings)?,
-                    value::OP_MINUS => self.minus_values_partial(args, params, table_bindings)?,
-                    value::METHOD_IS_NULL => self.is_null_values_partial(args, params, table_bindings)?,
-                    value::METHOD_NOT_NULL => self.not_null_values_partial(args, params, table_bindings)?,
-                    value::METHOD_CONCAT => self.concat_values_partial(args, params, table_bindings)?,
-                    value::METHOD_MERGE => self.merge_values_partial(args, params, table_bindings)?,
-                    _ => { todo!() }
-                })
-            }
+            Value::Apply(op, args) => Ok(match op.as_ref() {
+                value::OP_STR_CAT => self.str_cat_values_partial(args, params, table_bindings)?,
+                value::OP_ADD => self.add_values_partial(args, params, table_bindings)?,
+                value::OP_SUB => self.sub_values_partial(args, params, table_bindings)?,
+                value::OP_MUL => self.mul_values_partial(args, params, table_bindings)?,
+                value::OP_DIV => self.div_values_partial(args, params, table_bindings)?,
+                value::OP_EQ => self.eq_values_partial(args, params, table_bindings)?,
+                value::OP_NE => self.ne_values_partial(args, params, table_bindings)?,
+                value::OP_OR => self.or_values_partial(args, params, table_bindings)?,
+                value::OP_AND => self.and_values_partial(args, params, table_bindings)?,
+                value::OP_MOD => self.mod_values_partial(args, params, table_bindings)?,
+                value::OP_GT => self.gt_values_partial(args, params, table_bindings)?,
+                value::OP_GE => self.ge_values_partial(args, params, table_bindings)?,
+                value::OP_LT => self.lt_values_partial(args, params, table_bindings)?,
+                value::OP_LE => self.le_values_partial(args, params, table_bindings)?,
+                value::OP_POW => self.pow_values_partial(args, params, table_bindings)?,
+                value::OP_COALESCE => self.coalesce_values_partial(args, params, table_bindings)?,
+                value::OP_NEGATE => self.negate_values_partial(args, params, table_bindings)?,
+                value::OP_MINUS => self.minus_values_partial(args, params, table_bindings)?,
+                value::METHOD_IS_NULL => {
+                    self.is_null_values_partial(args, params, table_bindings)?
+                }
+                value::METHOD_NOT_NULL => {
+                    self.not_null_values_partial(args, params, table_bindings)?
+                }
+                value::METHOD_CONCAT => self.concat_values_partial(args, params, table_bindings)?,
+                value::METHOD_MERGE => self.merge_values_partial(args, params, table_bindings)?,
+                _ => {
+                    todo!()
+                }
+            }),
         }
     }
 }
 
 impl<'s> Session<'s> {
-    fn coalesce_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                                   table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn coalesce_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let res = args.into_iter().try_fold(vec![], |mut accum, cur| {
             match self.partial_eval(cur, params, table_bindings) {
-                Ok((ev, cur)) =>
+                Ok((ev, cur)) => {
                     if ev {
                         if cur == Value::Null {
                             Ok(accum)
@@ -644,27 +675,32 @@ impl<'s> Session<'s> {
                     } else {
                         accum.push(cur);
                         Ok(accum)
-                    },
-                Err(e) => Err(Err(e))
+                    }
+                }
+                Err(e) => Err(Err(e)),
             }
         });
         match res {
             Ok(accum) => match accum.len() {
                 0 => Ok((true, Value::Null)),
                 1 => Ok((false, accum.into_iter().next().unwrap())),
-                _ => Ok((false, Value::Apply(value::OP_COALESCE.into(), accum)))
-            }
+                _ => Ok((false, Value::Apply(value::OP_COALESCE.into(), accum))),
+            },
             Err(Ok(accum)) => match accum.len() {
                 0 => Ok((true, Value::Null)),
                 1 => Ok((true, accum.into_iter().next().unwrap())),
-                _ => Ok((false, Value::Apply(value::OP_COALESCE.into(), accum)))
+                _ => Ok((false, Value::Apply(value::OP_COALESCE.into(), accum))),
             },
-            Err(Err(e)) => Err(e)
+            Err(Err(e)) => Err(e),
         }
     }
 
-    fn str_cat_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                                  table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn str_cat_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -672,16 +708,23 @@ impl<'s> Session<'s> {
             return Ok((true, Value::Null));
         }
         if !le || !re {
-            return Ok((false, Value::Apply(value::OP_STR_CAT.into(), vec![left, right])));
+            return Ok((
+                false,
+                Value::Apply(value::OP_STR_CAT.into(), vec![left, right]),
+            ));
         }
         Ok(match (left, right) {
             (Value::Text(l), Value::Text(r)) => (true, (l.to_string() + r.as_ref()).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn add_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn add_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -696,12 +739,16 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, (l + (r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) + r.into_inner()).into()),
             (Value::Float(l), Value::Float(r)) => (true, (l.into_inner() + r.into_inner()).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn sub_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn sub_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -716,12 +763,16 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, (l - (r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) - r.into_inner()).into()),
             (Value::Float(l), Value::Float(r)) => (true, (l.into_inner() - r.into_inner()).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn minus_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                                table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn minus_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -733,12 +784,16 @@ impl<'s> Session<'s> {
         Ok(match left {
             Value::Int(l) => (true, (-l).into()),
             Value::Float(l) => (true, (-l).into()),
-            _ => return Err(CozoError::InvalidArgument)
+            _ => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn negate_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                                 table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn negate_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
@@ -749,38 +804,56 @@ impl<'s> Session<'s> {
         }
         Ok(match left {
             Value::Bool(l) => (true, (!l).into()),
-            _ => return Err(CozoError::InvalidArgument)
+            _ => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn is_null_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                                  table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn is_null_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
             return Ok((true, true.into()));
         }
         if !le {
-            return Ok((false, Value::Apply(value::METHOD_IS_NULL.into(), vec![left])));
+            return Ok((
+                false,
+                Value::Apply(value::METHOD_IS_NULL.into(), vec![left]),
+            ));
         }
         Ok((true, false.into()))
     }
 
-    fn not_null_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                                   table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn not_null_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         if left == Value::Null {
             return Ok((true, false.into()));
         }
         if !le {
-            return Ok((false, Value::Apply(value::METHOD_NOT_NULL.into(), vec![left])));
+            return Ok((
+                false,
+                Value::Apply(value::METHOD_NOT_NULL.into(), vec![left]),
+            ));
         }
         Ok((true, true.into()))
     }
 
-    fn pow_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn pow_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -794,13 +867,19 @@ impl<'s> Session<'s> {
             (Value::Int(l), Value::Int(r)) => (true, ((l as f64).powf(r as f64)).into()),
             (Value::Float(l), Value::Int(r)) => (true, ((l.into_inner()).powf(r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64).powf(r.into_inner())).into()),
-            (Value::Float(l), Value::Float(r)) => (true, ((l.into_inner()).powf(r.into_inner())).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (Value::Float(l), Value::Float(r)) => {
+                (true, ((l.into_inner()).powf(r.into_inner())).into())
+            }
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn gt_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn gt_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -815,12 +894,16 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, (l > (r as f64).into()).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) > r.into_inner()).into()),
             (Value::Float(l), Value::Float(r)) => (true, (l > r).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn lt_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn lt_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -835,12 +918,16 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, (l < (r as f64).into()).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) < r.into_inner()).into()),
             (Value::Float(l), Value::Float(r)) => (true, (l < r).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn ge_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn ge_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -855,12 +942,16 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, (l >= (r as f64).into()).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) >= r.into_inner()).into()),
             (Value::Float(l), Value::Float(r)) => (true, (l >= r).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn le_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn le_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -875,12 +966,16 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, (l <= (r as f64).into()).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) <= r.into_inner()).into()),
             (Value::Float(l), Value::Float(r)) => (true, (l <= r).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn mod_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn mod_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -892,12 +987,16 @@ impl<'s> Session<'s> {
         }
         Ok(match (left, right) {
             (Value::Int(l), Value::Int(r)) => (true, (l % r).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn mul_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn mul_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -912,12 +1011,16 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, (l * (r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) * r.into_inner()).into()),
             (Value::Float(l), Value::Float(r)) => (true, (l.into_inner() * r.into_inner()).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn div_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn div_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -932,12 +1035,16 @@ impl<'s> Session<'s> {
             (Value::Float(l), Value::Int(r)) => (true, (l / (r as f64)).into()),
             (Value::Int(l), Value::Float(r)) => (true, ((l as f64) / r.into_inner()).into()),
             (Value::Float(l), Value::Float(r)) => (true, (l.into_inner() / r.into_inner()).into()),
-            (_, _) => return Err(CozoError::InvalidArgument)
+            (_, _) => return Err(CozoError::InvalidArgument),
         })
     }
 
-    fn eq_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn eq_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -950,8 +1057,12 @@ impl<'s> Session<'s> {
         Ok((true, (left == right).into()))
     }
 
-    fn ne_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn ne_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut args = args.into_iter();
         let (le, left) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
         let (re, right) = self.partial_eval(args.next().unwrap(), params, table_bindings)?;
@@ -964,9 +1075,15 @@ impl<'s> Session<'s> {
         Ok((true, (left != right).into()))
     }
 
-    fn or_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                             table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
-        let res = args.into_iter().map(|v| self.partial_eval(v, params, table_bindings))
+    fn or_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
+        let res = args
+            .into_iter()
+            .map(|v| self.partial_eval(v, params, table_bindings))
             .try_fold(
                 (true, false, vec![]),
                 |(is_evaluated, has_null, mut collected), x| {
@@ -974,31 +1091,32 @@ impl<'s> Session<'s> {
                         Ok((cur_eval, cur_val)) => {
                             if cur_eval {
                                 match cur_val {
-                                    Value::Null => {
-                                        Ok((is_evaluated, true, collected))
+                                    Value::Null => Ok((is_evaluated, true, collected)),
+                                    Value::Bool(b) => {
+                                        if b {
+                                            Err(Ok((true, Value::Bool(true)))) // Early return on true
+                                        } else {
+                                            Ok((is_evaluated, has_null, collected))
+                                        }
                                     }
-                                    Value::Bool(b) => if b {
-                                        Err(Ok((true, Value::Bool(true)))) // Early return on true
-                                    } else {
-                                        Ok((is_evaluated, has_null, collected))
-                                    },
-                                    _ => Err(Err(CozoError::InvalidArgument))
+                                    _ => Err(Err(CozoError::InvalidArgument)),
                                 }
                             } else {
                                 match cur_val {
-                                    Value::Null |
-                                    Value::Bool(_) |
-                                    Value::Int(_) |
-                                    Value::Float(_) |
-                                    Value::Uuid(_) |
-                                    Value::EndSentinel |
-                                    Value::Text(_) => unreachable!(),
-                                    Value::List(_) |
-                                    Value::Dict(_) => Err(Err(CozoError::InvalidArgument)),
-                                    cur_val @ (Value::Variable(_) |
-                                    Value::IdxAccess(_, _) |
-                                    Value::FieldAccess(_, _) |
-                                    Value::Apply(_, _)) => {
+                                    Value::Null
+                                    | Value::Bool(_)
+                                    | Value::Int(_)
+                                    | Value::Float(_)
+                                    | Value::Uuid(_)
+                                    | Value::EndSentinel
+                                    | Value::Text(_) => unreachable!(),
+                                    Value::List(_) | Value::Dict(_) => {
+                                        Err(Err(CozoError::InvalidArgument))
+                                    }
+                                    cur_val @ (Value::Variable(_)
+                                    | Value::IdxAccess(_, _)
+                                    | Value::FieldAccess(_, _)
+                                    | Value::Apply(_, _)) => {
                                         collected.push(cur_val);
                                         Ok((false, has_null, collected))
                                     }
@@ -1008,9 +1126,10 @@ impl<'s> Session<'s> {
                                 }
                             }
                         }
-                        Err(e) => Err(Err(e))
+                        Err(e) => Err(Err(e)),
                     }
-                });
+                },
+            );
         match res {
             Ok((is_evaluated, has_null, mut unevaluated)) => {
                 if is_evaluated {
@@ -1027,12 +1146,16 @@ impl<'s> Session<'s> {
                 }
             }
             Err(Ok(res)) => Ok(res),
-            Err(Err(e)) => Err(e)
+            Err(Err(e)) => Err(e),
         }
     }
 
-    fn concat_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                                 table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn concat_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut total_ret = vec![];
         let mut cur_ret = vec![];
         let mut evaluated = true;
@@ -1048,10 +1171,10 @@ impl<'s> Session<'s> {
                         cur_ret.extend(l);
                     }
                 }
-                v @ (Value::Variable(_) |
-                Value::Apply(_, _) |
-                Value::FieldAccess(_, _) |
-                Value::IdxAccess(_, _)) => {
+                v @ (Value::Variable(_)
+                | Value::Apply(_, _)
+                | Value::FieldAccess(_, _)
+                | Value::IdxAccess(_, _)) => {
                     if !cur_ret.is_empty() {
                         total_ret.push(Value::List(cur_ret));
                         cur_ret = vec![];
@@ -1073,8 +1196,12 @@ impl<'s> Session<'s> {
         }
     }
 
-    fn merge_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                                table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
+    fn merge_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
         let mut total_ret = vec![];
         let mut cur_ret = BTreeMap::new();
         let mut evaluated = true;
@@ -1090,10 +1217,10 @@ impl<'s> Session<'s> {
                         cur_ret.extend(d);
                     }
                 }
-                v @ (Value::Variable(_) |
-                Value::Apply(_, _) |
-                Value::FieldAccess(_, _) |
-                Value::IdxAccess(_, _)) => {
+                v @ (Value::Variable(_)
+                | Value::Apply(_, _)
+                | Value::FieldAccess(_, _)
+                | Value::IdxAccess(_, _)) => {
                     if !cur_ret.is_empty() {
                         total_ret.push(Value::Dict(cur_ret));
                         cur_ret = BTreeMap::new();
@@ -1115,9 +1242,15 @@ impl<'s> Session<'s> {
         }
     }
 
-    fn and_values_partial<'a>(&self, args: Vec<Value<'a>>, params: &BTreeMap<String, Value<'a>>,
-                              table_bindings: &AccessorMap) -> Result<(bool, Value<'a>)> {
-        let res = args.into_iter().map(|v| self.partial_eval(v, params, table_bindings))
+    fn and_values_partial<'a>(
+        &self,
+        args: Vec<Value<'a>>,
+        params: &BTreeMap<String, Value<'a>>,
+        table_bindings: &AccessorMap,
+    ) -> Result<(bool, Value<'a>)> {
+        let res = args
+            .into_iter()
+            .map(|v| self.partial_eval(v, params, table_bindings))
             .try_fold(
                 (true, false, vec![]),
                 |(is_evaluated, has_null, mut collected), x| {
@@ -1125,31 +1258,32 @@ impl<'s> Session<'s> {
                         Ok((cur_eval, cur_val)) => {
                             if cur_eval {
                                 match cur_val {
-                                    Value::Null => {
-                                        Ok((is_evaluated, true, collected))
+                                    Value::Null => Ok((is_evaluated, true, collected)),
+                                    Value::Bool(b) => {
+                                        if b {
+                                            Ok((is_evaluated, has_null, collected))
+                                        } else {
+                                            Err(Ok((true, Value::Bool(false)))) // Early return on true
+                                        }
                                     }
-                                    Value::Bool(b) => if b {
-                                        Ok((is_evaluated, has_null, collected))
-                                    } else {
-                                        Err(Ok((true, Value::Bool(false)))) // Early return on true
-                                    },
-                                    _ => Err(Err(CozoError::InvalidArgument))
+                                    _ => Err(Err(CozoError::InvalidArgument)),
                                 }
                             } else {
                                 match cur_val {
-                                    Value::Null |
-                                    Value::Bool(_) |
-                                    Value::Int(_) |
-                                    Value::Float(_) |
-                                    Value::Uuid(_) |
-                                    Value::EndSentinel |
-                                    Value::Text(_) => unreachable!(),
-                                    Value::List(_) |
-                                    Value::Dict(_) => Err(Err(CozoError::InvalidArgument)),
-                                    cur_val @ (Value::Variable(_) |
-                                    Value::IdxAccess(_, _) |
-                                    Value::FieldAccess(_, _) |
-                                    Value::Apply(_, _)) => {
+                                    Value::Null
+                                    | Value::Bool(_)
+                                    | Value::Int(_)
+                                    | Value::Float(_)
+                                    | Value::Uuid(_)
+                                    | Value::EndSentinel
+                                    | Value::Text(_) => unreachable!(),
+                                    Value::List(_) | Value::Dict(_) => {
+                                        Err(Err(CozoError::InvalidArgument))
+                                    }
+                                    cur_val @ (Value::Variable(_)
+                                    | Value::IdxAccess(_, _)
+                                    | Value::FieldAccess(_, _)
+                                    | Value::Apply(_, _)) => {
                                         collected.push(cur_val);
                                         Ok((false, has_null, collected))
                                     }
@@ -1159,9 +1293,10 @@ impl<'s> Session<'s> {
                                 }
                             }
                         }
-                        Err(e) => Err(Err(e))
+                        Err(e) => Err(Err(e)),
                     }
-                });
+                },
+            );
         match res {
             Ok((is_evaluated, has_null, mut unevaluated)) => {
                 if is_evaluated {
@@ -1178,20 +1313,19 @@ impl<'s> Session<'s> {
                 }
             }
             Err(Ok(res)) => Ok(res),
-            Err(Err(e)) => Err(e)
+            Err(Err(e)) => Err(e),
         }
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use super::*;
-    use crate::parser::{Parser, Rule};
-    use pest::Parser as PestParser;
     use crate::db::engine::Engine;
+    use crate::parser::{Parser, Rule};
     use crate::relation::tuple::Tuple;
+    use pest::Parser as PestParser;
+    use std::fs;
 
     #[test]
     fn node() {
@@ -1262,18 +1396,37 @@ mod tests {
         let sess = engine.session().unwrap();
 
         let parse_expr_from_str = |s: &str| -> (bool, Value) {
-            let (b, v) = sess.partial_eval(
-                Value::from_pair(Parser::parse(Rule::expr, s)
-                    .unwrap().next().unwrap()).unwrap(),
-                &Default::default(), &Default::default()).unwrap();
+            let (b, v) = sess
+                .partial_eval(
+                    Value::from_pair(Parser::parse(Rule::expr, s).unwrap().next().unwrap())
+                        .unwrap(),
+                    &Default::default(),
+                    &Default::default(),
+                )
+                .unwrap();
             (b, v.to_static())
         };
 
-        assert_eq!((true, Value::from(1024.1)), parse_expr_from_str("1/10+(-2+3)*4^5"));
-        assert_eq!((true, Value::from(false)), parse_expr_from_str("true && false"));
-        assert_eq!((true, Value::from(true)), parse_expr_from_str("true || false"));
-        assert_eq!((true, Value::from(true)), parse_expr_from_str("true || null"));
-        assert_eq!((true, Value::from(true)), parse_expr_from_str("null || true"));
+        assert_eq!(
+            (true, Value::from(1024.1)),
+            parse_expr_from_str("1/10+(-2+3)*4^5")
+        );
+        assert_eq!(
+            (true, Value::from(false)),
+            parse_expr_from_str("true && false")
+        );
+        assert_eq!(
+            (true, Value::from(true)),
+            parse_expr_from_str("true || false")
+        );
+        assert_eq!(
+            (true, Value::from(true)),
+            parse_expr_from_str("true || null")
+        );
+        assert_eq!(
+            (true, Value::from(true)),
+            parse_expr_from_str("null || true")
+        );
         assert_eq!((true, Value::Null), parse_expr_from_str("true && null"));
         let ex = parse_expr_from_str("a + b - 1*2*3*100*c * d");
         println!("{:?} {}", ex.0, ex.1);

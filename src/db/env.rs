@@ -1,8 +1,8 @@
 use crate::db::engine::Session;
-use crate::relation::value::Value;
 use crate::error::{CozoError, Result};
 use crate::relation::data::{DataKind, EMPTY_DATA};
 use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};
+use crate::relation::value::Value;
 
 /// # layouts for sector 0
 ///
@@ -12,7 +12,6 @@ use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};
 /// `[Null, Text, Int, Int, Text]` inverted index for related tables
 /// `[Null, Int, Text, Int, Text]` inverted index for related tables
 /// `[True, Int]` table info, value is key
-
 
 impl<'s> Session<'s> {
     pub fn define_variable(&mut self, name: &str, val: &Value, in_root: bool) -> Result<()> {
@@ -36,16 +35,37 @@ impl<'s> Session<'s> {
     }
 
     pub fn key_exists(&self, key: &OwnTuple, in_root: bool) -> Result<bool> {
-        let res = self.txn.get(in_root, if in_root { &self.perm_cf } else { &self.temp_cf }, key)?;
+        let res = self.txn.get(
+            in_root,
+            if in_root {
+                &self.perm_cf
+            } else {
+                &self.temp_cf
+            },
+            key,
+        )?;
         Ok(res.is_some())
     }
 
     pub fn del_key(&self, key: &OwnTuple, in_root: bool) -> Result<()> {
-        self.txn.del(in_root, if in_root { &self.perm_cf } else { &self.temp_cf }, key)?;
+        self.txn.del(
+            in_root,
+            if in_root {
+                &self.perm_cf
+            } else {
+                &self.temp_cf
+            },
+            key,
+        )?;
         Ok(())
     }
 
-    pub fn define_raw_key(&self, key: &OwnTuple, value: Option<&OwnTuple>, in_root: bool) -> Result<()> {
+    pub fn define_raw_key(
+        &self,
+        key: &OwnTuple,
+        value: Option<&OwnTuple>,
+        in_root: bool,
+    ) -> Result<()> {
         if in_root {
             match value {
                 None => {
@@ -71,14 +91,14 @@ impl<'s> Session<'s> {
     pub fn resolve_value(&self, name: &str) -> Result<Option<Value>> {
         match self.resolve(name)? {
             None => Ok(None),
-            Some(t) => {
-                match t.data_kind()? {
-                    DataKind::Val => Ok(Some(t.get(0)
+            Some(t) => match t.data_kind()? {
+                DataKind::Val => Ok(Some(
+                    t.get(0)
                         .ok_or_else(|| CozoError::LogicError("Corrupt".to_string()))?
-                        .to_static())),
-                    k => Err(CozoError::UnexpectedDataKind(k))
-                }
-            }
+                        .to_static(),
+                )),
+                k => Err(CozoError::UnexpectedDataKind(k)),
+            },
         }
     }
     pub fn get_stack_depth(&self) -> i32 {
@@ -108,15 +128,16 @@ impl<'s> Session<'s> {
                     ikey.push_value(&name);
                     ikey.push_int(self.stack_depth as i64);
 
-                    let data = self.txn.get(false, &self.temp_cf, &ikey)?
+                    let data = self
+                        .txn
+                        .get(false, &self.temp_cf, &ikey)?
                         .ok_or_else(|| CozoError::LogicError("Bad format for ikey".to_string()))?;
                     let data = Tuple::new(data);
                     match data.data_kind()? {
-                        DataKind::Node |
-                        DataKind::Edge |
-                        DataKind::Assoc |
-                        DataKind::Index => {
-                            let id = data.get_int(1).ok_or_else(|| CozoError::LogicError("Bad table index".to_string()))?;
+                        DataKind::Node | DataKind::Edge | DataKind::Assoc | DataKind::Index => {
+                            let id = data.get_int(1).ok_or_else(|| {
+                                CozoError::LogicError("Bad table index".to_string())
+                            })?;
                             let mut rkey = Tuple::with_null_prefix();
                             rkey.push_bool(true);
                             rkey.push_int(id);
@@ -184,7 +205,10 @@ impl<'s> Session<'s> {
             }
         }
         let root_key = self.encode_definable_key(name, true);
-        let res = self.txn.get(true, &self.perm_cf, root_key).map(|v| v.map(Tuple::new))?;
+        let res = self
+            .txn
+            .get(true, &self.perm_cf, root_key)
+            .map(|v| v.map(Tuple::new))?;
         Ok(res)
     }
 }

@@ -1,5 +1,5 @@
-use std::cmp::Ordering;
 use crate::relation::tuple::Tuple;
+use std::cmp::Ordering;
 
 impl<T: AsRef<[u8]>, T2: AsRef<[u8]>> PartialOrd<Tuple<T2>> for Tuple<T> {
     fn partial_cmp(&self, other: &Tuple<T2>) -> Option<Ordering> {
@@ -24,16 +24,16 @@ pub fn compare(a: &[u8], b: &[u8]) -> i8 {
     match ta.cmp(&tb) {
         Ordering::Less => -1,
         Ordering::Greater => 1,
-        Ordering::Equal => 0
+        Ordering::Equal => 0,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use crate::relation::key_order::compare;
     use crate::relation::tuple::Tuple;
     use crate::relation::value::Value;
+    use std::collections::BTreeMap;
 
     #[test]
     fn ordering() {
@@ -56,7 +56,14 @@ mod tests {
         t2.push_int(123);
         assert_eq!(compare(t.as_ref(), t2.as_ref()), -1);
         assert_eq!(compare(t.as_ref(), t.as_ref()), 0);
-        let vals: Value = vec![().into(), BTreeMap::new().into(), 1e23.into(), false.into(), "xxyx".into()].into();
+        let vals: Value = vec![
+            ().into(),
+            BTreeMap::new().into(),
+            1e23.into(),
+            false.into(),
+            "xxyx".into(),
+        ]
+        .into();
         t.push_value(&vals);
         assert_eq!(compare(t.as_ref(), t.as_ref()), 0);
     }

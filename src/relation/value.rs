@@ -1,19 +1,18 @@
+use crate::db::table::{ColId, TableId};
+use crate::error::CozoError::LogicError;
+use crate::error::{CozoError, Result};
+use crate::parser::number::parse_int;
+use crate::parser::text_identifier::parse_string;
+use crate::parser::{Parser, Rule};
+use lazy_static::lazy_static;
+use ordered_float::OrderedFloat;
+use pest::iterators::Pair;
+use pest::prec_climber::{Assoc, Operator, PrecClimber};
+use pest::Parser as PestParser;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter, Write};
-use lazy_static::lazy_static;
-use pest::prec_climber::{Assoc, PrecClimber, Operator};
-use ordered_float::OrderedFloat;
-use pest::Parser as PestParser;
-use pest::iterators::Pair;
 use uuid::Uuid;
-use crate::db::table::{ColId, TableId};
-use crate::parser::{Parser, Rule};
-use crate::error::{CozoError, Result};
-use crate::error::CozoError::LogicError;
-use crate::parser::number::parse_int;
-use crate::parser::text_identifier::parse_string;
-
 
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
@@ -60,7 +59,7 @@ impl TryFrom<u8> for Tag {
             253 => Variable,
             254 => Apply,
             255 => MaxTag,
-            v => return Err(v)
+            v => return Err(v),
         })
     }
 }
@@ -91,7 +90,6 @@ impl TryFrom<u8> for Tag {
 // C64Arr = 73,
 // C128Arr = 74,
 
-
 #[derive(Clone, PartialEq, Ord, PartialOrd, Eq)]
 pub enum Value<'a> {
     // evaluated
@@ -107,7 +105,7 @@ pub enum Value<'a> {
     // not evaluated
     Variable(Cow<'a, str>),
     TupleRef(TableId, ColId),
-    Apply(Cow<'a, str>, Vec<Value<'a>>),  // TODO optimization: special case for small number of args (esp. 0, 1, 2)
+    Apply(Cow<'a, str>, Vec<Value<'a>>), // TODO optimization: special case for small number of args (esp. 0, 1, 2)
     FieldAccess(Cow<'a, str>, Box<Value<'a>>),
     IdxAccess(usize, Box<Value<'a>>),
     // cannot exist
@@ -116,7 +114,7 @@ pub enum Value<'a> {
 
 pub type StaticValue = Value<'static>;
 
-impl <'a> Debug for Value<'a> {
+impl<'a> Debug for Value<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Value {{ {} }}", self)
     }
@@ -133,41 +131,47 @@ impl<'a> Value<'a> {
             Value::Uuid(u) => Value::from(u),
             Value::Text(t) => Value::from(t.into_owned()),
             Value::Variable(s) => Value::Variable(Cow::Owned(s.into_owned())),
-            Value::List(l) => l.into_iter().map(|v| v.to_static()).collect::<Vec<StaticValue>>().into(),
-            Value::Apply(op, args) => {
-                Value::Apply(Cow::Owned(op.into_owned()),
-                             args.into_iter().map(|v| v.to_static()).collect::<Vec<StaticValue>>())
-            }
-            Value::Dict(d) => d.into_iter()
+            Value::List(l) => l
+                .into_iter()
+                .map(|v| v.to_static())
+                .collect::<Vec<StaticValue>>()
+                .into(),
+            Value::Apply(op, args) => Value::Apply(
+                Cow::Owned(op.into_owned()),
+                args.into_iter()
+                    .map(|v| v.to_static())
+                    .collect::<Vec<StaticValue>>(),
+            ),
+            Value::Dict(d) => d
+                .into_iter()
                 .map(|(k, v)| (Cow::Owned(k.into_owned()), v.to_static()))
-                .collect::<BTreeMap<Cow<'static, str>, StaticValue>>().into(),
+                .collect::<BTreeMap<Cow<'static, str>, StaticValue>>()
+                .into(),
             Value::EndSentinel => panic!("Cannot process sentinel value"),
             Value::FieldAccess(field, value) => {
                 Value::FieldAccess(Cow::from(field.into_owned()), value.to_static().into())
             }
-            Value::IdxAccess(idx, value) => {
-                Value::IdxAccess(idx, value.to_static().into())
-            }
-            Value::TupleRef(tid, cid) => Value::TupleRef(tid, cid)
+            Value::IdxAccess(idx, value) => Value::IdxAccess(idx, value.to_static().into()),
+            Value::TupleRef(tid, cid) => Value::TupleRef(tid, cid),
         }
     }
     #[inline]
     pub fn is_evaluated(&self) -> bool {
         match self {
-            Value::Null |
-            Value::Bool(_) |
-            Value::Int(_) |
-            Value::Float(_) |
-            Value::Uuid(_) |
-            Value::Text(_) |
-            Value::EndSentinel => true,
+            Value::Null
+            | Value::Bool(_)
+            | Value::Int(_)
+            | Value::Float(_)
+            | Value::Uuid(_)
+            | Value::Text(_)
+            | Value::EndSentinel => true,
             Value::List(l) => l.iter().all(|v| v.is_evaluated()),
             Value::Dict(d) => d.values().all(|v| v.is_evaluated()),
             Value::Variable(_) => false,
             Value::Apply(_, _) => false,
             Value::FieldAccess(_, _) => false,
             Value::IdxAccess(_, _) => false,
-            Value::TupleRef(_, _) => false
+            Value::TupleRef(_, _) => false,
         }
     }
     #[inline]
@@ -182,7 +186,9 @@ impl<'a> Value<'a> {
         Value::from_pair(pair)
     }
 
-    pub fn extract_relevant_tables<T: Iterator<Item=Self>>(data: T) -> Result<(Vec<Self>, Vec<TableId>)> {
+    pub fn extract_relevant_tables<T: Iterator<Item = Self>>(
+        data: T,
+    ) -> Result<(Vec<Self>, Vec<TableId>)> {
         let mut coll = vec![];
         let mut res = Vec::with_capacity(data.size_hint().1.unwrap_or(0));
         for v in data {
@@ -193,24 +199,23 @@ impl<'a> Value<'a> {
 
     fn do_extract_relevant_tables(self, coll: &mut Vec<TableId>) -> Result<Self> {
         Ok(match self {
-            v @ (Value::Null |
-            Value::Bool(_) |
-            Value::Int(_) |
-            Value::Float(_) |
-            Value::Uuid(_) |
-            Value::Text(_) |
-            Value::Variable(_)) => v,
-            Value::List(l) => {
-                Value::List(l.into_iter()
+            v @ (Value::Null
+            | Value::Bool(_)
+            | Value::Int(_)
+            | Value::Float(_)
+            | Value::Uuid(_)
+            | Value::Text(_)
+            | Value::Variable(_)) => v,
+            Value::List(l) => Value::List(
+                l.into_iter()
                     .map(|v| v.do_extract_relevant_tables(coll))
-                    .collect::<Result<Vec<_>>>()?)
-            }
-            Value::Dict(d) => {
-                Value::Dict(d.into_iter()
-                    .map(|(k, v)|
-                        v.do_extract_relevant_tables(coll).map(|v| (k, v)))
-                    .collect::<Result<BTreeMap<_, _>>>()?)
-            }
+                    .collect::<Result<Vec<_>>>()?,
+            ),
+            Value::Dict(d) => Value::Dict(
+                d.into_iter()
+                    .map(|(k, v)| v.do_extract_relevant_tables(coll).map(|v| (k, v)))
+                    .collect::<Result<BTreeMap<_, _>>>()?,
+            ),
             Value::TupleRef(tid, cid) => {
                 let pos = coll.iter().position(|id| id == &tid).unwrap_or_else(|| {
                     let olen = coll.len();
@@ -219,11 +224,12 @@ impl<'a> Value<'a> {
                 });
                 Value::TupleRef((false, pos).into(), cid)
             }
-            Value::Apply(op, args) => {
-                Value::Apply(op, args.into_iter()
+            Value::Apply(op, args) => Value::Apply(
+                op,
+                args.into_iter()
                     .map(|v| v.do_extract_relevant_tables(coll))
-                    .collect::<Result<Vec<_>>>()?)
-            }
+                    .collect::<Result<Vec<_>>>()?,
+            ),
             Value::FieldAccess(field, arg) => {
                 Value::FieldAccess(field, arg.do_extract_relevant_tables(coll)?.into())
             }
@@ -272,7 +278,6 @@ impl From<f64> for StaticValue {
     }
 }
 
-
 impl From<OrderedFloat<f64>> for StaticValue {
     #[inline]
     fn from(f: OrderedFloat<f64>) -> Self {
@@ -315,28 +320,55 @@ impl<'a> From<BTreeMap<Cow<'a, str>, Value<'a>>> for Value<'a> {
     }
 }
 
-
 impl<'a> Display for Value<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Null => { write!(f, "null")?; }
-            Value::Bool(b) => { write!(f, "{}", if *b { "true" } else { "false" })?; }
-            Value::Int(i) => { write!(f, "{}", i)?; }
-            Value::Float(n) => { write!(f, "{}", n.into_inner())?; }
-            Value::Uuid(u) => { write!(f, "{}", u)?; }
+            Value::Null => {
+                write!(f, "null")?;
+            }
+            Value::Bool(b) => {
+                write!(f, "{}", if *b { "true" } else { "false" })?;
+            }
+            Value::Int(i) => {
+                write!(f, "{}", i)?;
+            }
+            Value::Float(n) => {
+                write!(f, "{}", n.into_inner())?;
+            }
+            Value::Uuid(u) => {
+                write!(f, "{}", u)?;
+            }
             Value::Text(t) => {
                 f.write_char('"')?;
                 for char in t.chars() {
                     match char {
-                        '"' => { f.write_str("\\\"")?; }
-                        '\\' => { f.write_str("\\\\")?; }
-                        '/' => { f.write_str("\\/")?; }
-                        '\x08' => { f.write_str("\\b")?; }
-                        '\x0c' => { f.write_str("\\f")?; }
-                        '\n' => { f.write_str("\\n")?; }
-                        '\r' => { f.write_str("\\r")?; }
-                        '\t' => { f.write_str("\\t")?; }
-                        c => { f.write_char(c)?; }
+                        '"' => {
+                            f.write_str("\\\"")?;
+                        }
+                        '\\' => {
+                            f.write_str("\\\\")?;
+                        }
+                        '/' => {
+                            f.write_str("\\/")?;
+                        }
+                        '\x08' => {
+                            f.write_str("\\b")?;
+                        }
+                        '\x0c' => {
+                            f.write_str("\\f")?;
+                        }
+                        '\n' => {
+                            f.write_str("\\n")?;
+                        }
+                        '\r' => {
+                            f.write_str("\\r")?;
+                        }
+                        '\t' => {
+                            f.write_str("\\t")?;
+                        }
+                        c => {
+                            f.write_char(c)?;
+                        }
                     }
                 }
                 f.write_char('"')?;
@@ -367,15 +399,18 @@ impl<'a> Display for Value<'a> {
                 }
                 f.write_char('}')?;
             }
-            Value::Variable(s) => {
-                write!(f, "`{}`", s)?
-            }
-            Value::EndSentinel => {
-                write!(f, "Sentinel")?
-            }
+            Value::Variable(s) => write!(f, "`{}`", s)?,
+            Value::EndSentinel => write!(f, "Sentinel")?,
             Value::Apply(op, args) => {
-                write!(f, "({} {})", op,
-                       args.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" "))?;
+                write!(
+                    f,
+                    "({} {})",
+                    op,
+                    args.iter()
+                        .map(|v| v.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )?;
             }
             Value::FieldAccess(field, value) => {
                 write!(f, "(.{} {})", field, value)?;
@@ -384,7 +419,14 @@ impl<'a> Display for Value<'a> {
                 write!(f, "(.{} {})", idx, value)?;
             }
             Value::TupleRef(tid, cid) => {
-                write!(f, "#{}{}.{}{}", if tid.in_root { 'G' } else { 'L' }, tid.id, if cid.is_key { 'K' } else { 'D' }, cid.id)?;
+                write!(
+                    f,
+                    "#{}{}.{}{}",
+                    if tid.in_root { 'G' } else { 'L' },
+                    tid.id,
+                    if cid.is_key { 'K' } else { 'D' },
+                    cid.id
+                )?;
             }
         }
         Ok(())
@@ -398,13 +440,18 @@ lazy_static! {
         PrecClimber::new(vec![
             Operator::new(Rule::op_or, Left),
             Operator::new(Rule::op_and, Left),
-            Operator::new(Rule::op_gt, Left) | Operator::new(Rule::op_lt, Left) | Operator::new(Rule::op_ge,Left) | Operator::new(Rule::op_le, Left),
+            Operator::new(Rule::op_gt, Left)
+                | Operator::new(Rule::op_lt, Left)
+                | Operator::new(Rule::op_ge, Left)
+                | Operator::new(Rule::op_le, Left),
             Operator::new(Rule::op_mod, Left),
             Operator::new(Rule::op_eq, Left) | Operator::new(Rule::op_ne, Left),
-            Operator::new(Rule::op_add, Left) | Operator::new(Rule::op_sub, Left) | Operator::new(Rule::op_str_cat, Left),
+            Operator::new(Rule::op_add, Left)
+                | Operator::new(Rule::op_sub, Left)
+                | Operator::new(Rule::op_str_cat, Left),
             Operator::new(Rule::op_mul, Left) | Operator::new(Rule::op_div, Left),
             Operator::new(Rule::op_pow, Assoc::Right),
-            Operator::new(Rule::op_coalesce, Assoc::Left)
+            Operator::new(Rule::op_coalesce, Assoc::Left),
         ])
     };
 }
@@ -432,8 +479,11 @@ pub const METHOD_NOT_NULL: &str = "not_null";
 pub const METHOD_CONCAT: &str = "concat";
 pub const METHOD_MERGE: &str = "merge";
 
-
-fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Value<'a>>) -> Result<Value<'a>> {
+fn build_expr_infix<'a>(
+    lhs: Result<Value<'a>>,
+    op: Pair<Rule>,
+    rhs: Result<Value<'a>>,
+) -> Result<Value<'a>> {
     let lhs = lhs?;
     let rhs = rhs?;
     let op = match op.as_rule() {
@@ -453,11 +503,10 @@ fn build_expr_infix<'a>(lhs: Result<Value<'a>>, op: Pair<Rule>, rhs: Result<Valu
         Rule::op_le => OP_LE,
         Rule::op_pow => OP_POW,
         Rule::op_coalesce => OP_COALESCE,
-        _ => unreachable!()
+        _ => unreachable!(),
     };
     Ok(Value::Apply(op.into(), vec![lhs, rhs]))
 }
-
 
 fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
     match pair.as_rule() {
@@ -483,7 +532,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                         args.extend(pairs.map(Value::from_pair).collect::<Result<Vec<_>>>()?);
                         head = Value::Apply(method_name.into(), args);
                     }
-                    _ => todo!()
+                    _ => todo!(),
                 }
             }
             Ok(head)
@@ -498,7 +547,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                 Rule::term => return build_expr_primary(p),
                 Rule::negate => OP_NEGATE,
                 Rule::minus => OP_MINUS,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             let term = build_expr_primary(inner.next().unwrap())?;
             Ok(Value::Apply(op.into(), vec![term]))
@@ -508,11 +557,14 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
         Rule::hex_pos_int => Ok(Value::Int(parse_int(pair.as_str(), 16))),
         Rule::octo_pos_int => Ok(Value::Int(parse_int(pair.as_str(), 8))),
         Rule::bin_pos_int => Ok(Value::Int(parse_int(pair.as_str(), 2))),
-        Rule::dot_float | Rule::sci_float => Ok(Value::Float(pair.as_str().replace('_', "").parse::<f64>()?.into())),
+        Rule::dot_float | Rule::sci_float => Ok(Value::Float(
+            pair.as_str().replace('_', "").parse::<f64>()?.into(),
+        )),
         Rule::null => Ok(Value::Null),
         Rule::boolean => Ok(Value::Bool(pair.as_str() == "true")),
-        Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => Ok(
-            Value::Text(Cow::Owned(parse_string(pair)?))),
+        Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
+            Ok(Value::Text(Cow::Owned(parse_string(pair)?)))
+        }
         Rule::list => {
             let mut spread_collected = vec![];
             let mut collected = vec![];
@@ -522,8 +574,14 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                     Rule::spreading => {
                         let el = p.into_inner().next().unwrap();
                         let to_concat = Value::from_pair(el)?;
-                        if !matches!(to_concat, Value::List(_) | Value::Variable(_) |
-                        Value::IdxAccess(_, _) | Value:: FieldAccess(_, _) | Value::Apply(_, _)) {
+                        if !matches!(
+                            to_concat,
+                            Value::List(_)
+                                | Value::Variable(_)
+                                | Value::IdxAccess(_, _)
+                                | Value::FieldAccess(_, _)
+                                | Value::Apply(_, _)
+                        ) {
                             return Err(CozoError::LogicError("Cannot spread".to_string()));
                         }
                         if !collected.is_empty() {
@@ -532,7 +590,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                         }
                         spread_collected.push(to_concat);
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
             if spread_collected.is_empty() {
@@ -556,15 +614,23 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                     }
                     Rule::scoped_accessor => {
                         let name = parse_string(p.into_inner().next().unwrap())?;
-                        let val = Value::FieldAccess(name.clone().into(),
-                                                     Value::Variable("_".into()).into());
+                        let val = Value::FieldAccess(
+                            name.clone().into(),
+                            Value::Variable("_".into()).into(),
+                        );
                         collected.insert(name.into(), val);
                     }
                     Rule::spreading => {
                         let el = p.into_inner().next().unwrap();
                         let to_concat = build_expr_primary(el)?;
-                        if !matches!(to_concat, Value::Dict(_) | Value::Variable(_) |
-                        Value::IdxAccess(_, _) | Value:: FieldAccess(_, _) | Value::Apply(_, _)) {
+                        if !matches!(
+                            to_concat,
+                            Value::Dict(_)
+                                | Value::Variable(_)
+                                | Value::IdxAccess(_, _)
+                                | Value::FieldAccess(_, _)
+                                | Value::Apply(_, _)
+                        ) {
                             return Err(CozoError::LogicError("Cannot spread".to_string()));
                         }
                         if !collected.is_empty() {
@@ -573,7 +639,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
                         }
                         spread_collected.push(to_concat);
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
 
@@ -586,19 +652,14 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Value> {
             }
             Ok(Value::Apply(METHOD_MERGE.into(), spread_collected))
         }
-        Rule::param => {
-            Ok(Value::Variable(pair.as_str().into()))
-        }
-        Rule::ident => {
-            Ok(Value::Variable(pair.as_str().into()))
-        }
+        Rule::param => Ok(Value::Variable(pair.as_str().into())),
+        Rule::ident => Ok(Value::Variable(pair.as_str().into())),
         _ => {
             println!("Unhandled rule {:?}", pair.as_rule());
             unimplemented!()
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -607,7 +668,10 @@ mod tests {
     use pest::Parser as PestParser;
 
     fn parse_expr_from_str<S: AsRef<str>>(s: S) -> Result<StaticValue> {
-        let pair = Parser::parse(Rule::expr, s.as_ref()).unwrap().next().unwrap();
+        let pair = Parser::parse(Rule::expr, s.as_ref())
+            .unwrap()
+            .next()
+            .unwrap();
         Value::from_pair(pair).map(|v| v.to_static())
     }
 
@@ -628,22 +692,55 @@ mod tests {
         assert_eq!(parse_expr_from_str("1").unwrap(), Value::Int(1));
         assert_eq!(parse_expr_from_str("12_3").unwrap(), Value::Int(123));
         assert_eq!(parse_expr_from_str("0xaf").unwrap(), Value::Int(0xaf));
-        assert_eq!(parse_expr_from_str("0xafcE_f").unwrap(), Value::Int(0xafcef));
-        assert_eq!(parse_expr_from_str("0o1234_567").unwrap(), Value::Int(0o1234567));
-        assert_eq!(parse_expr_from_str("0o0001234_567").unwrap(), Value::Int(0o1234567));
-        assert_eq!(parse_expr_from_str("0b101010").unwrap(), Value::Int(0b101010));
+        assert_eq!(
+            parse_expr_from_str("0xafcE_f").unwrap(),
+            Value::Int(0xafcef)
+        );
+        assert_eq!(
+            parse_expr_from_str("0o1234_567").unwrap(),
+            Value::Int(0o1234567)
+        );
+        assert_eq!(
+            parse_expr_from_str("0o0001234_567").unwrap(),
+            Value::Int(0o1234567)
+        );
+        assert_eq!(
+            parse_expr_from_str("0b101010").unwrap(),
+            Value::Int(0b101010)
+        );
 
-        assert_eq!(parse_expr_from_str("0.0").unwrap(), Value::Float((0.).into()));
-        assert_eq!(parse_expr_from_str("10.022_3").unwrap(), Value::Float(10.0223.into()));
-        assert_eq!(parse_expr_from_str("10.022_3e-100").unwrap(), Value::Float(10.0223e-100.into()));
+        assert_eq!(
+            parse_expr_from_str("0.0").unwrap(),
+            Value::Float((0.).into())
+        );
+        assert_eq!(
+            parse_expr_from_str("10.022_3").unwrap(),
+            Value::Float(10.0223.into())
+        );
+        assert_eq!(
+            parse_expr_from_str("10.022_3e-100").unwrap(),
+            Value::Float(10.0223e-100.into())
+        );
 
         assert_eq!(parse_expr_from_str("null").unwrap(), Value::Null);
         assert_eq!(parse_expr_from_str("true").unwrap(), Value::Bool(true));
         assert_eq!(parse_expr_from_str("false").unwrap(), Value::Bool(false));
-        assert_eq!(parse_expr_from_str(r#""x \n \ty \"""#).unwrap(), Value::Text(Cow::Borrowed("x \n \ty \"")));
-        assert_eq!(parse_expr_from_str(r#""x'""#).unwrap(), Value::Text("x'".into()));
-        assert_eq!(parse_expr_from_str(r#"'"x"'"#).unwrap(), Value::Text(r##""x""##.into()));
-        assert_eq!(parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(), (Value::Text(r##"x"yz"##.into())));
+        assert_eq!(
+            parse_expr_from_str(r#""x \n \ty \"""#).unwrap(),
+            Value::Text(Cow::Borrowed("x \n \ty \""))
+        );
+        assert_eq!(
+            parse_expr_from_str(r#""x'""#).unwrap(),
+            Value::Text("x'".into())
+        );
+        assert_eq!(
+            parse_expr_from_str(r#"'"x"'"#).unwrap(),
+            Value::Text(r##""x""##.into())
+        );
+        assert_eq!(
+            parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(),
+            (Value::Text(r##"x"yz"##.into()))
+        );
     }
 
     #[test]

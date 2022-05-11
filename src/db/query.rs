@@ -1,13 +1,13 @@
-use std::collections::BTreeMap;
-use pest::iterators::Pair;
 use crate::db::engine::Session;
 use crate::db::table::TableInfo;
-use crate::parser::Rule;
 use crate::error::{CozoError, Result};
 use crate::parser::text_identifier::{build_name_in_def, parse_string};
+use crate::parser::Rule;
 use crate::relation::data::DataKind;
 use crate::relation::value;
 use crate::relation::value::{StaticValue, Value};
+use pest::iterators::Pair;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum FromEl {
@@ -41,13 +41,14 @@ pub struct EdgeOrNodeEl {
 
 impl<'a> Session<'a> {
     pub fn parse_from_pattern(&self, pair: Pair<Rule>) -> Result<Vec<FromEl>> {
-        let res: Result<Vec<_>> = pair.into_inner().map(|p| {
-            match p.as_rule() {
+        let res: Result<Vec<_>> = pair
+            .into_inner()
+            .map(|p| match p.as_rule() {
                 Rule::simple_from_pattern => self.parse_simple_from_pattern(p),
                 Rule::node_edge_pattern => self.parse_node_edge_pattern(p),
-                _ => unreachable!()
-            }
-        }).collect();
+                _ => unreachable!(),
+            })
+            .collect();
         res
     }
 
@@ -55,17 +56,24 @@ impl<'a> Session<'a> {
         let mut pairs = pair.into_inner();
         let name = pairs.next().unwrap().as_str();
         if name.starts_with('_') {
-            return Err(CozoError::LogicError("Pattern binding cannot start with underscore".to_string()));
+            return Err(CozoError::LogicError(
+                "Pattern binding cannot start with underscore".to_string(),
+            ));
         }
         let table_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let table_info = self.get_table_info(&table_name)?;
-        let ret = FromEl::Simple(Box::new(SimpleFromEl { binding: name.to_string(), table: table_name, info: table_info }));
+        let ret = FromEl::Simple(Box::new(SimpleFromEl {
+            binding: name.to_string(),
+            table: table_name,
+            info: table_info,
+        }));
         Ok(ret)
     }
 
     fn parse_node_edge_pattern(&self, pair: Pair<Rule>) -> Result<FromEl> {
-        let res: Result<Vec<_>> = pair.into_inner().map(|p| {
-            match p.as_rule() {
+        let res: Result<Vec<_>> = pair
+            .into_inner()
+            .map(|p| match p.as_rule() {
                 Rule::node_pattern => self.parse_node_pattern(p),
                 Rule::edge_pattern => {
                     let right_join;
@@ -78,21 +86,17 @@ impl<'a> Session<'a> {
                         right_join = false;
                     }
                     let mut edge = match nxt.as_rule() {
-                        Rule::fwd_edge_pattern => {
-                            self.parse_edge_pattern(nxt, true)?
-                        }
-                        Rule::bwd_edge_pattern => {
-                            self.parse_edge_pattern(nxt, false)?
-                        }
-                        _ => unreachable!()
+                        Rule::fwd_edge_pattern => self.parse_edge_pattern(nxt, true)?,
+                        Rule::bwd_edge_pattern => self.parse_edge_pattern(nxt, false)?,
+                        _ => unreachable!(),
                     };
                     edge.left_outer_marker = pairs.next().is_some();
                     edge.right_outer_marker = right_join;
                     Ok(edge)
                 }
-                _ => unreachable!()
-            }
-        }).collect();
+                _ => unreachable!(),
+            })
+            .collect();
         let res = res?;
         let connects = res.windows(2).all(|v| {
             let left = &v[0];
@@ -110,7 +114,7 @@ impl<'a> Session<'a> {
                 (EdgeOrNodeKind::Node, EdgeOrNodeKind::BwdEdge) => {
                     left.info.table_id == right.info.dst_table_id
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         });
         if !connects {
@@ -146,7 +150,11 @@ impl<'a> Session<'a> {
             table,
             binding,
             info,
-            kind: if is_fwd { EdgeOrNodeKind::FwdEdge } else { EdgeOrNodeKind::BwdEdge },
+            kind: if is_fwd {
+                EdgeOrNodeKind::FwdEdge
+            } else {
+                EdgeOrNodeKind::BwdEdge
+            },
             left_outer_marker: false,
             right_outer_marker: false,
         })
@@ -171,7 +179,10 @@ impl<'a> Session<'a> {
     }
 
     pub fn parse_where_pattern(&self, pair: Pair<Rule>) -> Result<Value> {
-        let conditions = pair.into_inner().map(Value::from_pair).collect::<Result<Vec<_>>>()?;
+        let conditions = pair
+            .into_inner()
+            .map(Value::from_pair)
+            .collect::<Result<Vec<_>>>()?;
         Ok(Value::Apply(value::OP_AND.into(), conditions).to_static())
     }
 
@@ -185,7 +196,7 @@ impl<'a> Session<'a> {
                 nxt = pp.next().unwrap();
                 Some(name.to_string())
             }
-            _ => None
+            _ => None,
         };
 
         let mut keys = BTreeMap::new();
@@ -210,8 +221,14 @@ impl<'a> Session<'a> {
                 Rule::spreading => {
                     let el = p.into_inner().next().unwrap();
                     let to_concat = Value::from_pair(el)?;
-                    if !matches!(to_concat, Value::Dict(_) | Value::Variable(_) |
-                        Value::IdxAccess(_, _) | Value:: FieldAccess(_, _) | Value::Apply(_, _)) {
+                    if !matches!(
+                        to_concat,
+                        Value::Dict(_)
+                            | Value::Variable(_)
+                            | Value::IdxAccess(_, _)
+                            | Value::FieldAccess(_, _)
+                            | Value::Apply(_, _)
+                    ) {
                         return Err(CozoError::LogicError("Cannot spread".to_string()));
                     }
                     if !collected_vals.is_empty() {
@@ -222,11 +239,11 @@ impl<'a> Session<'a> {
                 }
                 Rule::scoped_accessor => {
                     let name = parse_string(p.into_inner().next().unwrap())?;
-                    let val = Value::FieldAccess(name.clone().into(),
-                                                 Value::Variable("_".into()).into());
+                    let val =
+                        Value::FieldAccess(name.clone().into(), Value::Variable("_".into()).into());
                     collected_vals.insert(name.into(), val);
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
 
@@ -247,23 +264,40 @@ impl<'a> Session<'a> {
             match p.as_rule() {
                 Rule::order_pattern => {
                     for p in p.into_inner() {
-                        ordering.push((p.as_rule() == Rule::order_asc, parse_string(p.into_inner().next().unwrap())?))
+                        ordering.push((
+                            p.as_rule() == Rule::order_asc,
+                            parse_string(p.into_inner().next().unwrap())?,
+                        ))
                     }
                 }
                 Rule::offset_pattern => {
                     for p in p.into_inner() {
                         match p.as_rule() {
                             Rule::limit_clause => {
-                                limit = Some(p.into_inner().next().unwrap().as_str().replace('_', "").parse::<i64>()?);
+                                limit = Some(
+                                    p.into_inner()
+                                        .next()
+                                        .unwrap()
+                                        .as_str()
+                                        .replace('_', "")
+                                        .parse::<i64>()?,
+                                );
                             }
                             Rule::offset_clause => {
-                                offset = Some(p.into_inner().next().unwrap().as_str().replace('_', "").parse::<i64>()?);
+                                offset = Some(
+                                    p.into_inner()
+                                        .next()
+                                        .unwrap()
+                                        .as_str()
+                                        .replace('_', "")
+                                        .parse::<i64>()?,
+                                );
                             }
-                            _ => unreachable!()
+                            _ => unreachable!(),
                         }
                     }
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
 
@@ -292,9 +326,9 @@ pub struct Selection {
 mod tests {
     use std::fs;
     // use super::*;
+    use crate::db::engine::Engine;
     use crate::parser::{Parser, Rule};
     use pest::Parser as PestParser;
-    use crate::db::engine::Engine;
 
     #[test]
     fn parse_patterns() {
@@ -335,23 +369,35 @@ mod tests {
             sess.commit().unwrap();
 
             let s = "from a:Friend, (b:Person)-[:Friend]->(c:Z), x:Person";
-            let parsed = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
+            let parsed = Parser::parse(Rule::from_pattern, s)
+                .unwrap()
+                .next()
+                .unwrap();
             assert_eq!(parsed.as_rule(), Rule::from_pattern);
             assert!(sess.parse_from_pattern(parsed).is_err());
 
             let s = "from a:Friend, (b:Person)-[:Friend]->?(c:Person), x:Person";
-            let parsed = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
+            let parsed = Parser::parse(Rule::from_pattern, s)
+                .unwrap()
+                .next()
+                .unwrap();
             assert_eq!(parsed.as_rule(), Rule::from_pattern);
             let from_pattern = sess.parse_from_pattern(parsed).unwrap();
             println!("{:#?}", from_pattern);
 
             let s = "where b.id > c.id || x.name.is_null(), a.id == 5, x.name == 'Joe', x.name.len() == 3";
-            let parsed = Parser::parse(Rule::where_pattern, s).unwrap().next().unwrap();
+            let parsed = Parser::parse(Rule::where_pattern, s)
+                .unwrap()
+                .next()
+                .unwrap();
             let where_result = sess.parse_where_pattern(parsed).unwrap();
             println!("{:#?}", where_result);
 
             let s = "select {*id: a.id, b: a.b, c: a.c} ordered [e, +c, -b] limit 1 offset 2";
-            let parsed = Parser::parse(Rule::select_pattern, s).unwrap().next().unwrap();
+            let parsed = Parser::parse(Rule::select_pattern, s)
+                .unwrap()
+                .next()
+                .unwrap();
             let select_result = sess.parse_select_pattern(parsed).unwrap();
             println!("{:#?}", select_result);
         }

@@ -2,25 +2,28 @@ mod bridge;
 
 use bridge::*;
 
-use std::fmt::{Display, Formatter};
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-use cxx::{let_cxx_string};
-pub use cxx::{UniquePtr, SharedPtr};
 pub use bridge::BridgeStatus;
+pub use bridge::ColumnFamilyHandle;
+pub use bridge::PinnableSlice;
+pub use bridge::Slice;
 pub use bridge::StatusBridgeCode;
 pub use bridge::StatusCode;
-pub use bridge::StatusSubCode;
 pub use bridge::StatusSeverity;
-pub use bridge::Slice;
-pub use bridge::PinnableSlice;
-pub use bridge::ColumnFamilyHandle;
-
+pub use bridge::StatusSubCode;
+use cxx::let_cxx_string;
+pub use cxx::{SharedPtr, UniquePtr};
+use std::fmt::Debug;
+use std::fmt::{Display, Formatter};
+use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 impl std::fmt::Display for BridgeStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BridgeStatus({}, {}, {}, {})", self.code, self.subcode, self.severity, self.bridge_code)
+        write!(
+            f,
+            "BridgeStatus({}, {}, {}, {})",
+            self.code, self.subcode, self.severity, self.bridge_code
+        )
     }
 }
 
@@ -31,7 +34,11 @@ pub struct BridgeError {
 
 impl Display for BridgeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "BridgeError({}, {}, {}, {})", self.status.code, self.status.subcode, self.status.severity, self.status.bridge_code)
+        write!(
+            f,
+            "BridgeError({}, {}, {}, {})",
+            self.status.code, self.status.subcode, self.status.severity, self.status.bridge_code
+        )
     }
 }
 
@@ -55,7 +62,7 @@ impl BridgeStatus {
         let err: Option<BridgeError> = self.into();
         match err {
             Some(e) => Err(e),
-            None => Ok(data)
+            None => Ok(data),
         }
     }
 }
@@ -63,9 +70,10 @@ impl BridgeStatus {
 impl From<BridgeStatus> for Option<BridgeError> {
     #[inline]
     fn from(s: BridgeStatus) -> Self {
-        if s.severity == StatusSeverity::kNoError &&
-            s.bridge_code == StatusBridgeCode::OK &&
-            s.code == StatusCode::kOk {
+        if s.severity == StatusSeverity::kNoError
+            && s.bridge_code == StatusBridgeCode::OK
+            && s.code == StatusCode::kOk
+        {
             None
         } else {
             Some(BridgeError { status: s })
@@ -85,12 +93,8 @@ impl AsRef<[u8]> for SlicePtr {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         match self {
-            SlicePtr::Plain(s) => {
-                convert_slice_back(s)
-            }
-            SlicePtr::Pinnable(s) => {
-                convert_pinnable_slice_back(s)
-            }
+            SlicePtr::Plain(s) => convert_slice_back(s),
+            SlicePtr::Pinnable(s) => convert_pinnable_slice_back(s),
         }
     }
 }
@@ -183,7 +187,6 @@ impl OptionsPtr {
     }
 }
 
-
 pub struct ReadOptionsPtr(UniquePtr<ReadOptions>);
 
 impl Deref for ReadOptionsPtr {
@@ -201,7 +204,6 @@ impl DerefMut for ReadOptionsPtr {
         &mut self.0
     }
 }
-
 
 impl ReadOptionsPtr {
     #[inline]
@@ -457,8 +459,10 @@ impl<'a> IteratorPtr<'a> {
     /// `next()` must not be called on the iterator when the returned value is still used
     pub unsafe fn pair(&self) -> Option<(SlicePtr, SlicePtr)> {
         if self.is_valid() {
-            Some((SlicePtr::Plain(IteratorBridge::key_raw(self)),
-                  SlicePtr::Plain(IteratorBridge::value_raw(self))))
+            Some((
+                SlicePtr::Plain(IteratorBridge::key_raw(self)),
+                SlicePtr::Plain(IteratorBridge::value_raw(self)),
+            ))
         } else {
             None
         }
@@ -478,7 +482,6 @@ impl Deref for TransactionPtr {
         &self.0
     }
 }
-
 
 impl TransactionPtr {
     #[inline]
@@ -518,7 +521,12 @@ impl TransactionPtr {
         status.check_err(())
     }
     #[inline]
-    pub fn get(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<Option<SlicePtr>> {
+    pub fn get(
+        &self,
+        transact: bool,
+        cf: &ColumnFamilyHandle,
+        key: impl AsRef<[u8]>,
+    ) -> Result<Option<SlicePtr>> {
         let mut status = BridgeStatus::default();
         let res = if transact {
             let ret = self.get_txn(cf, key.as_ref(), &mut status);
@@ -529,18 +537,27 @@ impl TransactionPtr {
         };
         match res {
             Ok(r) => Ok(Some(r)),
-            Err(e)  if e.status.code == StatusCode::kNotFound => Ok(None),
-            res => res.map(|_| None)
+            Err(e) if e.status.code == StatusCode::kNotFound => Ok(None),
+            res => res.map(|_| None),
         }
     }
     #[inline]
-    pub fn get_for_update(&self, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<SlicePtr> {
+    pub fn get_for_update(
+        &self,
+        cf: &ColumnFamilyHandle,
+        key: impl AsRef<[u8]>,
+    ) -> Result<SlicePtr> {
         let mut status = BridgeStatus::default();
         let ret = self.get_for_update_txn(cf, key.as_ref(), &mut status);
         status.check_err(SlicePtr::Pinnable(ret))
     }
     #[inline]
-    pub fn del(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>) -> Result<()> {
+    pub fn del(
+        &self,
+        transact: bool,
+        cf: &ColumnFamilyHandle,
+        key: impl AsRef<[u8]>,
+    ) -> Result<()> {
         let mut status = BridgeStatus::default();
         if transact {
             let ret = self.del_txn(cf, key.as_ref(), &mut status);
@@ -551,7 +568,12 @@ impl TransactionPtr {
         }
     }
     #[inline]
-    pub fn del_range(&self, cf: &ColumnFamilyHandle, start_key: impl AsRef<[u8]>, end_key: impl AsRef<[u8]>) -> Result<()> {
+    pub fn del_range(
+        &self,
+        cf: &ColumnFamilyHandle,
+        start_key: impl AsRef<[u8]>,
+        end_key: impl AsRef<[u8]>,
+    ) -> Result<()> {
         let mut status = BridgeStatus::default();
         let ret = self.del_range_raw(cf, start_key.as_ref(), end_key.as_ref(), &mut status);
         status.check_err(ret)
@@ -569,7 +591,13 @@ impl TransactionPtr {
         status.check_err(())
     }
     #[inline]
-    pub fn put(&self, transact: bool, cf: &ColumnFamilyHandle, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>) -> Result<()> {
+    pub fn put(
+        &self,
+        transact: bool,
+        cf: &ColumnFamilyHandle,
+        key: impl AsRef<[u8]>,
+        val: impl AsRef<[u8]>,
+    ) -> Result<()> {
         let mut status = BridgeStatus::default();
         if transact {
             let ret = self.put_txn(cf, key.as_ref(), val.as_ref(), &mut status);
@@ -584,12 +612,12 @@ impl TransactionPtr {
         if transact {
             IteratorPtr {
                 inner: self.iterator_txn(cf),
-                txn: PhantomData
+                txn: PhantomData,
             }
         } else {
             IteratorPtr {
                 inner: self.iterator_raw(cf),
-                txn: PhantomData
+                txn: PhantomData,
             }
         }
     }
@@ -621,43 +649,44 @@ pub enum TDBOptions {
 }
 
 impl DBPtr {
-    pub fn open(options: &OptionsPtr, t_options: &TDBOptions, path: impl AsRef<str>) -> Result<Self> {
+    pub fn open(
+        options: &OptionsPtr,
+        t_options: &TDBOptions,
+        path: impl AsRef<str>,
+    ) -> Result<Self> {
         let_cxx_string!(cname = path.as_ref());
         let mut status = BridgeStatus::default();
         let ret = match t_options {
             TDBOptions::Pessimistic(o) => open_tdb_raw(options, o, &cname, &mut status),
-            TDBOptions::Optimistic(o) => open_odb_raw(options, o, &cname, &mut status)
+            TDBOptions::Optimistic(o) => open_odb_raw(options, o, &cname, &mut status),
         };
         status.check_err(Self(ret))
     }
 
     #[inline]
-    pub fn make_transaction(&self,
-                            options: TransactOptions,
-                            read_ops: ReadOptionsPtr,
-                            raw_read_ops: ReadOptionsPtr,
-                            write_ops: WriteOptionsPtr,
-                            raw_write_ops: WriteOptionsPtr,
+    pub fn make_transaction(
+        &self,
+        options: TransactOptions,
+        read_ops: ReadOptionsPtr,
+        raw_read_ops: ReadOptionsPtr,
+        write_ops: WriteOptionsPtr,
+        raw_write_ops: WriteOptionsPtr,
     ) -> TransactionPtr {
         TransactionPtr(match options {
-            TransactOptions::Optimistic(o) => {
-                self.begin_o_transaction(
-                    write_ops.0,
-                    raw_write_ops.0,
-                    read_ops.0,
-                    raw_read_ops.0,
-                    o.0,
-                )
-            }
-            TransactOptions::Pessimistic(o) => {
-                self.begin_t_transaction(
-                    write_ops.0,
-                    raw_write_ops.0,
-                    read_ops.0,
-                    raw_read_ops.0,
-                    o.0,
-                )
-            }
+            TransactOptions::Optimistic(o) => self.begin_o_transaction(
+                write_ops.0,
+                raw_write_ops.0,
+                read_ops.0,
+                raw_read_ops.0,
+                o.0,
+            ),
+            TransactOptions::Pessimistic(o) => self.begin_t_transaction(
+                write_ops.0,
+                raw_write_ops.0,
+                read_ops.0,
+                raw_read_ops.0,
+                o.0,
+            ),
         })
     }
     #[inline]
@@ -675,7 +704,11 @@ impl DBPtr {
         self.get_default_cf_handle_raw()
     }
     #[inline]
-    pub fn create_cf(&self, options: &OptionsPtr, name: impl AsRef<str>) -> Result<SharedPtr<ColumnFamilyHandle>> {
+    pub fn create_cf(
+        &self,
+        options: &OptionsPtr,
+        name: impl AsRef<str>,
+    ) -> Result<SharedPtr<ColumnFamilyHandle>> {
         let_cxx_string!(name = name.as_ref());
         let mut status = BridgeStatus::default();
         let ret = self.create_column_family_raw(options, &name, &mut status);
@@ -690,7 +723,10 @@ impl DBPtr {
     }
     #[inline]
     pub fn cf_names(&self) -> Vec<String> {
-        self.get_column_family_names_raw().iter().map(|v| v.to_string_lossy().to_string()).collect()
+        self.get_column_family_names_raw()
+            .iter()
+            .map(|v| v.to_string_lossy().to_string())
+            .collect()
     }
     pub fn drop_non_default_cfs(&self) {
         for name in self.cf_names() {

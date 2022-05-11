@@ -1,24 +1,28 @@
-use std::borrow::{Cow};
+use crate::db::table::{ColId, TableId};
+use crate::relation::data::DataKind;
+use crate::relation::value::{Tag, Value};
+use cozorocks::SlicePtr;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use uuid::Uuid;
-use cozorocks::SlicePtr;
-use crate::db::table::{ColId, TableId};
-use crate::relation::data::DataKind;
-use crate::relation::value::{Tag, Value};
 
 #[derive(Clone)]
 pub struct Tuple<T>
-    where T: AsRef<[u8]>
+where
+    T: AsRef<[u8]>,
 {
     pub data: T,
     idx_cache: RefCell<Vec<usize>>,
 }
 
-impl<T> AsRef<[u8]> for Tuple<T> where T: AsRef<[u8]> {
+impl<T> AsRef<[u8]> for Tuple<T>
+where
+    T: AsRef<[u8]>,
+{
     fn as_ref(&self) -> &[u8] {
         self.data.as_ref()
     }
@@ -55,7 +59,7 @@ impl AsRef<[u8]> for CowSlice {
     fn as_ref(&self) -> &[u8] {
         match self {
             CowSlice::Ptr(s) => s.as_ref(),
-            CowSlice::Own(o) => o.as_ref()
+            CowSlice::Own(o) => o.as_ref(),
         }
     }
 }
@@ -76,7 +80,7 @@ impl CowTuple {
     pub fn to_owned(self) -> OwnTuple {
         match self.data {
             CowSlice::Ptr(p) => OwnTuple::new(p.as_ref().to_vec()),
-            CowSlice::Own(o) => OwnTuple::new(o)
+            CowSlice::Own(o) => OwnTuple::new(o),
         }
     }
 }
@@ -120,7 +124,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     fn all_cached(&self) -> bool {
         match self.idx_cache.borrow().last() {
             None => self.data.as_ref().len() == PREFIX_LEN,
-            Some(l) => *l == self.data.as_ref().len()
+            Some(l) => *l == self.data.as_ref().len(),
         }
     }
     #[inline]
@@ -157,11 +161,9 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 let slen = slen as usize;
                 start + slen + offset
             }
-            Tag::List |
-            Tag::Apply |
-            Tag::Dict |
-            Tag::IdxAccess |
-            Tag::FieldAccess => start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize,
+            Tag::List | Tag::Apply | Tag::Dict | Tag::IdxAccess | Tag::FieldAccess => {
+                start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize
+            }
             Tag::TupleRef => {
                 let temp = start + 1 + self.parse_varint(start + 1).1 + 1;
                 temp + self.parse_varint(temp).1
@@ -202,7 +204,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 }
                 Some(val)
             }
-            None => None
+            None => None,
         }
     }
 
@@ -210,7 +212,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn get_null(&self, idx: usize) -> Option<()> {
         match self.get(idx)? {
             Value::Null => Some(()),
-            _ => None
+            _ => None,
         }
     }
 
@@ -218,7 +220,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn get_int(&self, idx: usize) -> Option<i64> {
         match self.get(idx)? {
             Value::Int(i) => Some(i),
-            _ => None
+            _ => None,
         }
     }
 
@@ -226,7 +228,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn get_text(&self, idx: usize) -> Option<Cow<str>> {
         match self.get(idx)? {
             Value::Text(d) => Some(d),
-            _ => None
+            _ => None,
         }
     }
 
@@ -234,16 +236,15 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn get_bool(&self, idx: usize) -> Option<bool> {
         match self.get(idx)? {
             Value::Bool(b) => Some(b),
-            _ => None
+            _ => None,
         }
     }
-
 
     #[inline]
     pub fn get_float(&self, idx: usize) -> Option<f64> {
         match self.get(idx)? {
             Value::Float(f) => Some(f.into_inner()),
-            _ => None
+            _ => None,
         }
     }
 
@@ -251,7 +252,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn get_uuid(&self, idx: usize) -> Option<Uuid> {
         match self.get(idx)? {
             Value::Uuid(u) => Some(u),
-            _ => None
+            _ => None,
         }
     }
 
@@ -259,7 +260,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn get_list(&self, idx: usize) -> Option<Vec<Value>> {
         match self.get(idx)? {
             Value::List(u) => Some(u),
-            _ => None
+            _ => None,
         }
     }
 
@@ -267,7 +268,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn get_dict(&self, idx: usize) -> Option<BTreeMap<Cow<str>, Value>> {
         match self.get(idx)? {
             Value::Dict(u) => Some(u),
-            _ => None
+            _ => None,
         }
     }
 
@@ -275,7 +276,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn get_variable(&self, idx: usize) -> Option<Cow<str>> {
         match self.get(idx)? {
             Value::Variable(u) => Some(u),
-            _ => None
+            _ => None,
         }
     }
 
@@ -283,7 +284,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn get_apply(&self, idx: usize) -> Option<(Cow<str>, Vec<Value>)> {
         match self.get(idx)? {
             Value::Apply(n, l) => Some((n, l)),
-            _ => None
+            _ => None,
         }
     }
 
@@ -293,7 +294,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         let start = pos + 1;
         let tag = match Tag::try_from(data[pos]) {
             Ok(t) => t,
-            Err(e) => panic!("Cannot parse tag {} for {:?}", e, data)
+            Err(e) => panic!("Cannot parse tag {} for {:?}", e, data),
         };
         let (nxt, val): (usize, Value) = match tag {
             Tag::Null => (start, ().into()),
@@ -304,8 +305,14 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 let val = Self::varint_to_zigzag(u);
                 (start + offset, val.into())
             }
-            Tag::Float => (start + 8, f64::from_be_bytes(data[start..start + 8].try_into().unwrap()).into()),
-            Tag::Uuid => (start + 16, Uuid::from_slice(&data[start..start + 16]).unwrap().into()),
+            Tag::Float => (
+                start + 8,
+                f64::from_be_bytes(data[start..start + 8].try_into().unwrap()).into(),
+            ),
+            Tag::Uuid => (
+                start + 16,
+                Uuid::from_slice(&data[start..start + 16]).unwrap().into(),
+            ),
             Tag::Text => {
                 let (slen, offset) = self.parse_varint(start);
                 let slen = slen as usize;
@@ -325,7 +332,8 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 (start + slen + offset, Value::Variable(s.into()))
             }
             Tag::List => {
-                let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
+                let end_pos =
+                    start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
                 let mut start_pos = start + 4;
                 let mut collected = vec![];
                 while start_pos < end_pos {
@@ -336,14 +344,15 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 (end_pos, collected.into())
             }
             Tag::Apply => {
-                let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
+                let end_pos =
+                    start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
                 let mut start_pos = start + 4;
                 let mut collected = vec![];
                 let (val, new_pos) = self.parse_value_at(start_pos);
                 start_pos = new_pos;
                 let op = match val {
                     Value::Variable(s) => s,
-                    _ => panic!("Corrupt data when parsing Apply")
+                    _ => panic!("Corrupt data when parsing Apply"),
                 };
                 while start_pos < end_pos {
                     let (val, new_pos) = self.parse_value_at(start_pos);
@@ -353,7 +362,8 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 (end_pos, Value::Apply(op, collected))
             }
             Tag::Dict => {
-                let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
+                let end_pos =
+                    start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
                 let mut start_pos = start + 4;
                 let mut collected: BTreeMap<Cow<str>, Value> = BTreeMap::new();
                 while start_pos < end_pos {
@@ -371,7 +381,8 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             }
             Tag::MaxTag => (start, Value::EndSentinel),
             Tag::IdxAccess => {
-                let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
+                let end_pos =
+                    start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
                 let mut start_pos = start + 4;
                 let (idx, offset) = self.parse_varint(start_pos);
                 start_pos += offset;
@@ -379,7 +390,8 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 (end_pos, Value::IdxAccess(idx as usize, val.into()))
             }
             Tag::FieldAccess => {
-                let end_pos = start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
+                let end_pos =
+                    start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize;
                 let mut start_pos = start + 4;
 
                 let (slen, offset) = self.parse_varint(start);
@@ -398,9 +410,19 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 let (tidu, parse_len) = self.parse_varint(start + 1);
                 let is_key = self.parse_value_at(parse_len + start + 1).0 == Value::Bool(true);
                 let (cidu, parse_len2) = self.parse_varint(start + 1 + parse_len + 1);
-                (start + 1 + parse_len + 1 + parse_len2,
-                 Value::TupleRef(TableId { in_root, id: Self::varint_to_zigzag(tidu) },
-                                 ColId { is_key, id: Self::varint_to_zigzag(cidu) }))
+                (
+                    start + 1 + parse_len + 1 + parse_len2,
+                    Value::TupleRef(
+                        TableId {
+                            in_root,
+                            id: Self::varint_to_zigzag(tidu),
+                        },
+                        ColId {
+                            is_key,
+                            id: Self::varint_to_zigzag(cidu),
+                        },
+                    ),
+                )
             }
         };
         (val, nxt)
@@ -431,8 +453,12 @@ impl<T: AsRef<[u8]>> Debug for Tuple<T> {
                 write!(f, "Tuple<{}>{{", self.get_prefix())?;
             }
         }
-        let strings = self.iter().enumerate().map(|(i, v)| format!("{}: {}", i, v))
-            .collect::<Vec<_>>().join(", ");
+        let strings = self
+            .iter()
+            .enumerate()
+            .map(|(i, v)| format!("{}: {}", i, v))
+            .collect::<Vec<_>>()
+            .join(", ");
         write!(f, "{}}}", strings)
     }
 }
@@ -641,7 +667,6 @@ impl OwnTuple {
         }
     }
 
-
     #[inline]
     fn push_varint(&mut self, u: u64) {
         let mut u = u;
@@ -687,7 +712,7 @@ impl OwnTuple {
 
 impl<'a> Extend<Value<'a>> for OwnTuple {
     #[inline]
-    fn extend<T: IntoIterator<Item=Value<'a>>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = Value<'a>>>(&mut self, iter: T) {
         for v in iter {
             self.push_value(&v)
         }
@@ -709,11 +734,10 @@ impl<T: AsRef<[u8]>> Hash for Tuple<T> {
 
 impl<T: AsRef<[u8]>> Eq for Tuple<T> {}
 
-
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use super::*;
+    use std::collections::BTreeMap;
 
     #[test]
     fn serde() {
@@ -724,11 +748,7 @@ mod tests {
         t.push_null();
         t.push_str("abcdef");
         t.push_null();
-        t.push_value(&vec![
-            true.into(),
-            1e236.into(),
-            "xxyyzz".into(),
-        ].into());
+        t.push_value(&vec![true.into(), 1e236.into(), "xxyyzz".into()].into());
         t.push_int(-123345);
         t.push_value(&BTreeMap::from([]).into());
         t.push_int(12121212);
@@ -758,11 +778,14 @@ mod tests {
         assert_eq!(Value::Null, t.get(5).unwrap());
         t3.get_pos(6);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
-        assert_eq!(Value::from(Value::from(vec![
-            true.into(),
-            1e236.into(),
-            "xxyyzz".into(),
-        ])), t.get(6).unwrap());
+        assert_eq!(
+            Value::from(Value::from(vec![
+                true.into(),
+                1e236.into(),
+                "xxyyzz".into(),
+            ])),
+            t.get(6).unwrap()
+        );
         t3.get_pos(7);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
         assert_eq!(Value::from(-123345i64), t.get(7).unwrap());
@@ -774,7 +797,10 @@ mod tests {
         assert_eq!(Value::from(12121212i64), t.get(9).unwrap());
         t3.get_pos(10);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
-        assert_eq!(Value::from(BTreeMap::from([("yzyz".into(), "fifo".into())])), t.get(10).unwrap());
+        assert_eq!(
+            Value::from(BTreeMap::from([("yzyz".into(), "fifo".into())])),
+            t.get(10).unwrap()
+        );
         t3.get_pos(11);
         assert_eq!(t.idx_cache.borrow().last(), t3.idx_cache.borrow().last());
         assert_eq!(Value::from(1e245), t.get(11).unwrap());
@@ -797,14 +823,20 @@ mod tests {
         assert_eq!(Value::from(BTreeMap::new()), t.get(8).unwrap());
         assert_eq!(Value::Null, t.get(3).unwrap());
         assert_eq!(Value::from("abcdef"), t.get(4).unwrap());
-        assert_eq!(Value::from(Value::from(vec![
-            true.into(),
-            1e236.into(),
-            "xxyyzz".into(),
-        ])), t.get(6).unwrap());
+        assert_eq!(
+            Value::from(Value::from(vec![
+                true.into(),
+                1e236.into(),
+                "xxyyzz".into(),
+            ])),
+            t.get(6).unwrap()
+        );
         assert_eq!(None, t.get(13));
         assert_eq!(Value::from(-123345i64), t.get(7).unwrap());
-        assert_eq!(Value::from(BTreeMap::from([("yzyz".into(), "fifo".into())])), t.get(10).unwrap());
+        assert_eq!(
+            Value::from(BTreeMap::from([("yzyz".into(), "fifo".into())])),
+            t.get(10).unwrap()
+        );
         assert_eq!(None, t.get(13131));
 
         println!("{:?}", t.iter().collect::<Vec<Value>>());

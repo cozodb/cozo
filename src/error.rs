@@ -1,11 +1,11 @@
-use std::result;
-use std::time::SystemTimeError;
-use thiserror::Error;
-use cozorocks::BridgeError;
 use crate::parser::Rule;
 use crate::relation::data::DataKind;
 use crate::relation::tuple::OwnTuple;
-use crate::relation::value::{StaticValue};
+use crate::relation::value::StaticValue;
+use cozorocks::BridgeError;
+use std::result;
+use std::time::SystemTimeError;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum CozoError {
@@ -15,15 +15,14 @@ pub enum CozoError {
     #[error("Invalid escape sequence")]
     InvalidEscapeSequence,
 
-//     #[error("Type mismatch")]
-//     TypeError,
-
+    //     #[error("Type mismatch")]
+    //     TypeError,
     #[error("Reserved identifier")]
     ReservedIdent,
 
     //     #[error("The requested name exists")]
-//     NameConflict,
-//
+    //     NameConflict,
+    //
     #[error("Undefined type '{0}'")]
     UndefinedType(String),
 
@@ -50,31 +49,30 @@ pub enum CozoError {
 
     #[error("Undefined parameter {0}")]
     UndefinedParam(String),
-//
-//     #[error("Undefined table")]
-//     UndefinedTable,
-//
-//     #[error("Undefined parameter")]
-//     UndefinedParam,
-//
-//     #[error("Value required")]
-//     ValueRequired,
-//
-//     #[error("Incompatible value")]
-//     IncompatibleValue,
-//
-//     #[error("Wrong type")]
-//     WrongType,
-//
-//     #[error("Cannot have global edge between local nodes")]
-//     IncompatibleEdge,
-//
-//     #[error("Unexpected index columns found")]
-//     UnexpectedIndexColumns,
-//
-//     #[error("Database already closed")]
-//     DatabaseClosed,
-
+    //
+    //     #[error("Undefined table")]
+    //     UndefinedTable,
+    //
+    //     #[error("Undefined parameter")]
+    //     UndefinedParam,
+    //
+    //     #[error("Value required")]
+    //     ValueRequired,
+    //
+    //     #[error("Incompatible value")]
+    //     IncompatibleValue,
+    //
+    //     #[error("Wrong type")]
+    //     WrongType,
+    //
+    //     #[error("Cannot have global edge between local nodes")]
+    //     IncompatibleEdge,
+    //
+    //     #[error("Unexpected index columns found")]
+    //     UnexpectedIndexColumns,
+    //
+    //     #[error("Database already closed")]
+    //     DatabaseClosed,
     #[error("InvalidArgument")]
     InvalidArgument,
 
@@ -94,8 +92,8 @@ pub enum CozoError {
     TypeMismatch,
 
     //     #[error(transparent)]
-//     Storage(#[from] cozo_rocks::BridgeStatus),
-//
+    //     Storage(#[from] cozo_rocks::BridgeStatus),
+    //
     #[error(transparent)]
     Io(#[from] std::io::Error),
 

@@ -1,16 +1,15 @@
-use std::cmp::Ordering;
-use std::{iter, mem};
-use std::fmt::{Debug, Formatter};
-use cozorocks::IteratorPtr;
 use crate::db::eval::{compare_tuple_by_keys, tuple_eval};
 use crate::db::table::{ColId, TableId};
 use crate::error::CozoError::LogicError;
-use crate::error::{Result};
+use crate::error::Result;
 use crate::relation::data::{DataKind, EMPTY_DATA};
 use crate::relation::table::MegaTuple;
 use crate::relation::tuple::{CowSlice, CowTuple, OwnTuple, Tuple};
 use crate::relation::value::Value;
-
+use cozorocks::IteratorPtr;
+use std::cmp::Ordering;
+use std::fmt::{Debug, Formatter};
+use std::{iter, mem};
 
 pub enum IteratorSlot<'a> {
     Dummy,
@@ -21,7 +20,7 @@ impl<'a> Debug for IteratorSlot<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             IteratorSlot::Dummy => write!(f, "DummyIterator"),
-            IteratorSlot::Reified(_) => write!(f, "BaseIterator")
+            IteratorSlot::Reified(_) => write!(f, "BaseIterator"),
         }
     }
 }
@@ -36,7 +35,7 @@ impl<'a> IteratorSlot<'a> {
     pub fn try_get(&self) -> Result<&IteratorPtr<'a>> {
         match self {
             IteratorSlot::Dummy => Err(LogicError("Cannot iter over dummy".to_string())),
-            IteratorSlot::Reified(r) => Ok(r)
+            IteratorSlot::Reified(r) => Ok(r),
         }
     }
 }
@@ -100,7 +99,7 @@ pub enum ExecPlan<'a> {
         out_prefix: u32,
     },
     BagsUnionIt {
-        bags: Vec<ExecPlan<'a>>
+        bags: Vec<ExecPlan<'a>>,
     },
 }
 
@@ -126,120 +125,109 @@ impl<'a> ExecPlan<'a> {
                 let prefix_tuple = OwnTuple::with_prefix(*tid);
                 it.seek(prefix_tuple);
 
-                Ok(Box::new(NodeIterator {
-                    it,
-                    started: false,
-                }))
+                Ok(Box::new(NodeIterator { it, started: false }))
             }
             ExecPlan::EdgeIt { it, tid } => {
                 let it = it.try_get()?;
                 let prefix_tuple = OwnTuple::with_prefix(*tid);
                 it.seek(prefix_tuple);
 
-                Ok(Box::new(EdgeIterator {
-                    it,
-                    started: false,
-                }))
+                Ok(Box::new(EdgeIterator { it, started: false }))
             }
             ExecPlan::EdgeKeyOnlyBwdIt { it, tid } => {
                 let it = it.try_get()?;
                 let prefix_tuple = OwnTuple::with_prefix(*tid);
                 it.seek(prefix_tuple);
 
-                Ok(Box::new(EdgeKeyOnlyBwdIterator {
-                    it,
-                    started: false,
-                }))
+                Ok(Box::new(EdgeKeyOnlyBwdIterator { it, started: false }))
             }
             ExecPlan::KeySortedWithAssocIt { main, associates } => {
                 let buffer = iter::repeat_with(|| None).take(associates.len()).collect();
-                let associates = associates.into_iter().map(|(tid, it)| {
-                    it.try_get().map(|it| {
-                        let prefix_tuple = OwnTuple::with_prefix(*tid);
-                        it.seek(prefix_tuple);
+                let associates = associates
+                    .iter()
+                    .map(|(tid, it)| {
+                        it.try_get().map(|it| {
+                            let prefix_tuple = OwnTuple::with_prefix(*tid);
+                            it.seek(prefix_tuple);
 
-                        NodeIterator {
-                            it,
-                            started: false,
-                        }
+                            NodeIterator { it, started: false }
+                        })
                     })
-                }).collect::<Result<Vec<_>>>()?;
+                    .collect::<Result<Vec<_>>>()?;
                 Ok(Box::new(KeySortedWithAssocIterator {
                     main: main.iter()?,
                     associates,
                     buffer,
                 }))
             }
-            ExecPlan::CartesianProdIt { left, right } => {
-                Ok(Box::new(CartesianProdIterator {
-                    left: left.iter()?,
-                    left_cache: MegaTuple::empty_tuple(),
-                    right_source: right.as_ref(),
-                    right: right.as_ref().iter()?,
-                }))
-            }
-            ExecPlan::FilterIt { it, filter } => {
-                Ok(Box::new(FilterIterator {
-                    it: it.iter()?,
-                    filter,
-                }))
-            }
-            ExecPlan::EvalIt { it, keys, vals, out_prefix: prefix } => {
-                Ok(Box::new(EvalIterator {
-                    it: it.iter()?,
-                    keys,
-                    vals,
-                    prefix: *prefix,
-                }))
-            }
-            ExecPlan::MergeJoinIt { left, right, left_keys, right_keys } => {
-                Ok(Box::new(MergeJoinIterator {
-                    left: left.iter()?,
-                    right: right.iter()?,
-                    left_keys,
-                    right_keys,
-                }))
-            }
+            ExecPlan::CartesianProdIt { left, right } => Ok(Box::new(CartesianProdIterator {
+                left: left.iter()?,
+                left_cache: MegaTuple::empty_tuple(),
+                right_source: right.as_ref(),
+                right: right.as_ref().iter()?,
+            })),
+            ExecPlan::FilterIt { it, filter } => Ok(Box::new(FilterIterator {
+                it: it.iter()?,
+                filter,
+            })),
+            ExecPlan::EvalIt {
+                it,
+                keys,
+                vals,
+                out_prefix: prefix,
+            } => Ok(Box::new(EvalIterator {
+                it: it.iter()?,
+                keys,
+                vals,
+                prefix: *prefix,
+            })),
+            ExecPlan::MergeJoinIt {
+                left,
+                right,
+                left_keys,
+                right_keys,
+            } => Ok(Box::new(MergeJoinIterator {
+                left: left.iter()?,
+                right: right.iter()?,
+                left_keys,
+                right_keys,
+            })),
             ExecPlan::OuterMergeJoinIt {
-                left, right,
-                left_keys, right_keys, left_outer, right_outer,
-                left_len, right_len
-            } => {
-                Ok(Box::new(OuterMergeJoinIterator {
-                    left: left.iter()?,
-                    right: right.iter()?,
-                    left_outer: *left_outer,
-                    right_outer: *right_outer,
-                    left_keys,
-                    right_keys,
-                    left_len: *left_len,
-                    right_len: *right_len,
-                    left_cache: None,
-                    right_cache: None,
-                    pull_left: true,
-                    pull_right: true,
-                }))
-            }
-            ExecPlan::KeyedUnionIt { left, right } => {
-                Ok(Box::new(KeyedUnionIterator {
-                    left: left.iter()?,
-                    right: right.iter()?,
-                }))
-            }
-            ExecPlan::KeyedDifferenceIt { left, right } => {
-                Ok(Box::new(KeyedDifferenceIterator {
-                    left: left.iter()?,
-                    right: right.iter()?,
-                    right_cache: None,
-                    started: false,
-                }))
-            }
+                left,
+                right,
+                left_keys,
+                right_keys,
+                left_outer,
+                right_outer,
+                left_len,
+                right_len,
+            } => Ok(Box::new(OuterMergeJoinIterator {
+                left: left.iter()?,
+                right: right.iter()?,
+                left_outer: *left_outer,
+                right_outer: *right_outer,
+                left_keys,
+                right_keys,
+                left_len: *left_len,
+                right_len: *right_len,
+                left_cache: None,
+                right_cache: None,
+                pull_left: true,
+                pull_right: true,
+            })),
+            ExecPlan::KeyedUnionIt { left, right } => Ok(Box::new(KeyedUnionIterator {
+                left: left.iter()?,
+                right: right.iter()?,
+            })),
+            ExecPlan::KeyedDifferenceIt { left, right } => Ok(Box::new(KeyedDifferenceIterator {
+                left: left.iter()?,
+                right: right.iter()?,
+                right_cache: None,
+                started: false,
+            })),
             ExecPlan::BagsUnionIt { bags } => {
                 let bags = bags.iter().map(|i| i.iter()).collect::<Result<Vec<_>>>()?;
-                Ok(Box::new(BagsUnionIterator {
-                    bags,
-                    current: 0,
-                }))
+                Ok(Box::new(BagsUnionIterator { bags, current: 0 }))
             }
         }
     }
@@ -257,13 +245,13 @@ impl<'a> Iterator for KeyedUnionIterator<'a> {
         let mut left_cache = match self.left.next() {
             None => return None,
             Some(Err(e)) => return Some(Err(e)),
-            Some(Ok(t)) => t
+            Some(Ok(t)) => t,
         };
 
         let mut right_cache = match self.right.next() {
             None => return None,
             Some(Err(e)) => return Some(Err(e)),
-            Some(Ok(t)) => t
+            Some(Ok(t)) => t,
         };
 
         loop {
@@ -312,7 +300,7 @@ impl<'a> Iterator for KeyedDifferenceIterator<'a> {
             self.right_cache = match self.right.next() {
                 None => None,
                 Some(Err(e)) => return Some(Err(e)),
-                Some(Ok(t)) => Some(t)
+                Some(Ok(t)) => Some(t),
             };
 
             self.started = true;
@@ -321,9 +309,8 @@ impl<'a> Iterator for KeyedDifferenceIterator<'a> {
         let mut left_cache = match self.left.next() {
             None => return None,
             Some(Err(e)) => return Some(Err(e)),
-            Some(Ok(t)) => t
+            Some(Ok(t)) => t,
         };
-
 
         loop {
             let right = match &self.right_cache {
@@ -331,7 +318,7 @@ impl<'a> Iterator for KeyedDifferenceIterator<'a> {
                     // right is exhausted, so all left ones can be returned
                     return Some(Ok(left_cache));
                 }
-                Some(r) => r
+                Some(r) => r,
             };
             let cmp_res = left_cache.all_keys_cmp(right);
             match cmp_res {
@@ -340,12 +327,12 @@ impl<'a> Iterator for KeyedDifferenceIterator<'a> {
                     left_cache = match self.left.next() {
                         None => return None,
                         Some(Err(e)) => return Some(Err(e)),
-                        Some(Ok(t)) => t
+                        Some(Ok(t)) => t,
                     };
                     self.right_cache = match self.right.next() {
                         None => None,
                         Some(Err(e)) => return Some(Err(e)),
-                        Some(Ok(t)) => Some(t)
+                        Some(Ok(t)) => Some(t),
                     };
                 }
                 Ordering::Less => {
@@ -386,7 +373,7 @@ impl<'a> Iterator for BagsUnionIterator<'a> {
                     self.next()
                 }
             }
-            v => v
+            v => v,
         }
     }
 }
@@ -494,36 +481,30 @@ impl<'a> Iterator for KeySortedWithAssocIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.main.next() {
             None => None, // main exhausted, we are finished
-            Some(Err(e)) => return Some(Err(e)),
+            Some(Err(e)) => Some(Err(e)),
             Some(Ok(MegaTuple { mut keys, mut vals })) => {
                 // extract key from main
                 let k = match keys.pop() {
                     None => return Some(Err(LogicError("Empty keys".to_string()))),
-                    Some(k) => k
+                    Some(k) => k,
                 };
                 let l = self.associates.len();
                 // initialize vector for associate values
                 let mut assoc_vals: Vec<Option<CowTuple>> = iter::repeat_with(|| None).take(l).collect();
-                let l = assoc_vals.len();
+                // let l = assoc_vals.len();
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..l {
                     // for each associate
                     let cached = self.buffer.get(i).unwrap();
                     // if no cache, try to get cache filled first
                     if matches!(cached, None) {
-                        let assoc_data = self.associates.get_mut(i).unwrap().next()
-                            .map(|mt| {
-                                mt.map(|mut mt| {
-                                    (mt.keys.pop().unwrap(), mt.vals.pop().unwrap())
-                                })
-                            });
+                        let assoc_data = self.associates.get_mut(i).unwrap().next().map(|mt| {
+                            mt.map(|mut mt| (mt.keys.pop().unwrap(), mt.vals.pop().unwrap()))
+                        });
                         match assoc_data {
-                            None => {
-                                self.buffer[i] = None
-                            }
-                            Some(Ok(data)) => {
-                                self.buffer[i] = Some(data)
-                            }
-                            Some(Err(e)) => return Some(Err(e))
+                            None => self.buffer[i] = None,
+                            Some(Ok(data)) => self.buffer[i] = Some(data),
+                            Some(Err(e)) => return Some(Err(e)),
                         }
                     }
 
@@ -537,38 +518,31 @@ impl<'a> Iterator for KeySortedWithAssocIterator<'a> {
                             Ordering::Equal => {
                                 // target key equals cache key, we put it into collected values
                                 let (_, v) = mem::replace(&mut self.buffer[i], None).unwrap();
-                                assoc_vals[i] = Some(v.into());
+                                assoc_vals[i] = Some(v);
                                 break;
                             }
                             Ordering::Greater => {
                                 // target key greater than cache key, meaning that the source has holes (maybe due to filtering)
                                 // get a new one into buffer
-                                let assoc_data = self.associates.get_mut(i).unwrap().next()
-                                    .map(|mt| {
+                                let assoc_data =
+                                    self.associates.get_mut(i).unwrap().next().map(|mt| {
                                         mt.map(|mut mt| {
                                             (mt.keys.pop().unwrap(), mt.vals.pop().unwrap())
                                         })
                                     });
                                 match assoc_data {
-                                    None => {
-                                        self.buffer[i] = None
-                                    }
-                                    Some(Ok(data)) => {
-                                        self.buffer[i] = Some(data)
-                                    }
-                                    Some(Err(e)) => return Some(Err(e))
+                                    None => self.buffer[i] = None,
+                                    Some(Ok(data)) => self.buffer[i] = Some(data),
+                                    Some(Err(e)) => return Some(Err(e)),
                                 }
                             }
                         }
                     }
                 }
-                vals.extend(assoc_vals.into_iter().map(|v|
-                    match v {
-                        None => {
-                            CowTuple::new(CowSlice::Own(EMPTY_DATA.into()))
-                        }
-                        Some(v) => v
-                    }));
+                vals.extend(assoc_vals.into_iter().map(|v| match v {
+                    None => CowTuple::new(CowSlice::Own(EMPTY_DATA.into())),
+                    Some(v) => v,
+                }));
                 Some(Ok(MegaTuple {
                     keys: vec![k],
                     vals,
@@ -601,7 +575,7 @@ impl<'a> Iterator for OuterMergeJoinIterator<'a> {
             self.left_cache = match self.left.next() {
                 None => None,
                 Some(Err(e)) => return Some(Err(e)),
-                Some(Ok(t)) => Some(t)
+                Some(Ok(t)) => Some(t),
             };
             self.pull_left = false;
         }
@@ -610,15 +584,23 @@ impl<'a> Iterator for OuterMergeJoinIterator<'a> {
             self.right_cache = match self.right.next() {
                 None => None,
                 Some(Err(e)) => return Some(Err(e)),
-                Some(Ok(t)) => Some(t)
+                Some(Ok(t)) => Some(t),
             };
             self.pull_right = false;
         }
 
         let make_empty_tuple = |is_left: bool| -> MegaTuple {
-            let lengths = if is_left { self.left_len } else { self.right_len };
-            let keys = iter::repeat_with(|| OwnTuple::empty_tuple().into()).take(lengths.0).collect();
-            let vals = iter::repeat_with(|| OwnTuple::empty_tuple().into()).take(lengths.1).collect();
+            let lengths = if is_left {
+                self.left_len
+            } else {
+                self.right_len
+            };
+            let keys = iter::repeat_with(|| OwnTuple::empty_tuple().into())
+                .take(lengths.0)
+                .collect();
+            let vals = iter::repeat_with(|| OwnTuple::empty_tuple().into())
+                .take(lengths.1)
+                .collect();
             MegaTuple { keys, vals }
         };
 
@@ -640,7 +622,7 @@ impl<'a> Iterator for OuterMergeJoinIterator<'a> {
                         }
                     };
                 }
-                Some(t) => t
+                Some(t) => t,
             };
             let right_cache = match &self.right_cache {
                 None => {
@@ -659,12 +641,14 @@ impl<'a> Iterator for OuterMergeJoinIterator<'a> {
                         }
                     };
                 }
-                Some(t) => t
+                Some(t) => t,
             };
-            let cmp_res = match compare_tuple_by_keys((&left_cache, self.left_keys),
-                                                      (&right_cache, self.right_keys)) {
+            let cmp_res = match compare_tuple_by_keys(
+                (left_cache, self.left_keys),
+                (right_cache, self.right_keys),
+            ) {
                 Ok(r) => r,
-                Err(e) => return Some(Err(e))
+                Err(e) => return Some(Err(e)),
             };
             match cmp_res {
                 Ordering::Equal => {
@@ -731,20 +715,22 @@ impl<'a> Iterator for MergeJoinIterator<'a> {
         let mut left_cache = match self.left.next() {
             None => return None,
             Some(Err(e)) => return Some(Err(e)),
-            Some(Ok(t)) => t
+            Some(Ok(t)) => t,
         };
 
         let mut right_cache = match self.right.next() {
             None => return None,
             Some(Err(e)) => return Some(Err(e)),
-            Some(Ok(t)) => t
+            Some(Ok(t)) => t,
         };
 
         loop {
-            let cmp_res = match compare_tuple_by_keys((&left_cache, self.left_keys),
-                                                      (&right_cache, self.right_keys)) {
+            let cmp_res = match compare_tuple_by_keys(
+                (&left_cache, self.left_keys),
+                (&right_cache, self.right_keys),
+            ) {
                 Ok(r) => r,
-                Err(e) => return Some(Err(e))
+                Err(e) => return Some(Err(e)),
             };
             match cmp_res {
                 Ordering::Equal => {
@@ -791,29 +777,29 @@ impl<'a> Iterator for CartesianProdIterator<'a> {
             self.left_cache = match self.left.next() {
                 None => return None,
                 Some(Ok(v)) => v,
-                Some(Err(e)) => return Some(Err(e))
+                Some(Err(e)) => return Some(Err(e)),
             }
         }
         let r_tpl = match self.right.next() {
             None => {
                 self.right = match self.right_source.iter() {
                     Ok(it) => it,
-                    Err(e) => return Some(Err(e))
+                    Err(e) => return Some(Err(e)),
                 };
                 self.left_cache = match self.left.next() {
                     None => return None,
                     Some(Ok(v)) => v,
-                    Some(Err(e)) => return Some(Err(e))
+                    Some(Err(e)) => return Some(Err(e)),
                 };
                 match self.right.next() {
                     // early return in case right is empty
                     None => return None,
                     Some(Ok(r_tpl)) => r_tpl,
-                    Some(Err(e)) => return Some(Err(e))
+                    Some(Err(e)) => return Some(Err(e)),
                 }
             }
             Some(Ok(r_tpl)) => r_tpl,
-            Some(Err(e)) => return Some(Err(e))
+            Some(Err(e)) => return Some(Err(e)),
         };
         let mut ret = self.left_cache.clone();
         ret.keys.extend(r_tpl.keys);
@@ -833,17 +819,17 @@ impl<'a> Iterator for FilterIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         for t in self.it.by_ref() {
             match t {
-                Ok(t) => {
-                    match tuple_eval(self.filter, &t) {
-                        Ok(Value::Bool(true)) => {
-                            return Some(Ok(t));
-                        }
-                        Ok(Value::Bool(false)) | Ok(Value::Null) => {}
-                        Ok(_v) => return Some(Err(LogicError("Unexpected type in filter".to_string()))),
-                        Err(e) => return Some(Err(e))
+                Ok(t) => match tuple_eval(self.filter, &t) {
+                    Ok(Value::Bool(true)) => {
+                        return Some(Ok(t));
                     }
-                }
-                Err(e) => return Some(Err(e))
+                    Ok(Value::Bool(false)) | Ok(Value::Null) => {}
+                    Ok(_v) => {
+                        return Some(Err(LogicError("Unexpected type in filter".to_string())));
+                    }
+                    Err(e) => return Some(Err(e)),
+                },
+                Err(e) => return Some(Err(e)),
             }
         }
         None
@@ -871,7 +857,7 @@ impl<'a> Iterator for OutputIterator<'a> {
         match self.it.next() {
             None => None,
             Some(Err(e)) => Some(Err(e)),
-            Some(Ok(t)) => Some(tuple_eval(self.transform, &t).map(|v| v.to_static()))
+            Some(Ok(t)) => Some(tuple_eval(self.transform, &t).map(|v| v.to_static())),
         }
     }
 }
@@ -896,16 +882,19 @@ impl<'a> Iterator for EvalIterator<'a> {
                 for k in self.keys {
                     match tuple_eval(k, &t) {
                         Ok(v) => key_tuple.push_value(&v),
-                        Err(e) => return Some(Err(e))
+                        Err(e) => return Some(Err(e)),
                     }
                 }
                 for k in self.vals {
                     match tuple_eval(k, &t) {
                         Ok(v) => val_tuple.push_value(&v),
-                        Err(e) => return Some(Err(e))
+                        Err(e) => return Some(Err(e)),
                     }
                 }
-                Some(Ok(MegaTuple { keys: vec![key_tuple.into()], vals: vec![val_tuple.into()] }))
+                Some(Ok(MegaTuple {
+                    keys: vec![key_tuple.into()],
+                    vals: vec![val_tuple.into()],
+                }))
             }
         }
     }
@@ -913,16 +902,16 @@ impl<'a> Iterator for EvalIterator<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::db::engine::Engine;
+    use crate::db::iterator::{ExecPlan, OutputIterator};
+    use crate::db::query::FromEl;
+    use crate::error::Result;
+    use crate::parser::{Parser, Rule};
+    use crate::relation::value::Value;
+    use pest::Parser as PestParser;
     use std::collections::BTreeMap;
     use std::fs;
     use std::time::Instant;
-    use crate::db::engine::Engine;
-    use crate::parser::{Parser, Rule};
-    use pest::Parser as PestParser;
-    use crate::db::iterator::{ExecPlan, OutputIterator};
-    use crate::db::query::FromEl;
-    use crate::relation::value::Value;
-    use crate::error::Result;
 
     #[test]
     fn pair_value() -> Result<()> {
@@ -961,25 +950,46 @@ mod tests {
             let start2 = Instant::now();
 
             let s = "from e:Employee";
-            let p = Parser::parse(Rule::from_pattern, s).unwrap().next().unwrap();
+            let p = Parser::parse(Rule::from_pattern, s)
+                .unwrap()
+                .next()
+                .unwrap();
             let from_pat = match sess.parse_from_pattern(p).unwrap().pop().unwrap() {
                 FromEl::Simple(s) => s,
-                FromEl::Chain(_) => panic!()
+                FromEl::Chain(_) => panic!(),
             };
             let s = "where e.id >= 100, e.id <= 105 || e.id == 110";
-            let p = Parser::parse(Rule::where_pattern, s).unwrap().next().unwrap();
+            let p = Parser::parse(Rule::where_pattern, s)
+                .unwrap()
+                .next()
+                .unwrap();
             let where_pat = sess.parse_where_pattern(p).unwrap();
 
             let s = r#"select {id: e.id,
             full_name: e.first_name ++ ' ' ++ e.last_name, bibio_name: e.last_name ++ ', '
             ++ e.first_name ++ ': ' ++ (e.phone_number ~ 'N.A.')}"#;
-            let p = Parser::parse(Rule::select_pattern, s).unwrap().next().unwrap();
+            let p = Parser::parse(Rule::select_pattern, s)
+                .unwrap()
+                .next()
+                .unwrap();
             let sel_pat = sess.parse_select_pattern(p).unwrap();
-            let amap = sess.base_relation_to_accessor_map(&from_pat.table, &from_pat.binding, &from_pat.info);
-            let (_, vals) = sess.partial_eval(sel_pat.vals, &Default::default(), &amap).unwrap();
-            let (_, where_vals) = sess.partial_eval(where_pat, &Default::default(), &amap).unwrap();
-            println!("{:#?}", sess.cnf_with_table_refs(where_vals.clone(), &Default::default(), &amap));
-            let (vcoll, mut rel_tbls) = Value::extract_relevant_tables([vals, where_vals].into_iter()).unwrap();
+            let amap = sess.base_relation_to_accessor_map(
+                &from_pat.table,
+                &from_pat.binding,
+                &from_pat.info,
+            );
+            let (_, vals) = sess
+                .partial_eval(sel_pat.vals, &Default::default(), &amap)
+                .unwrap();
+            let (_, where_vals) = sess
+                .partial_eval(where_pat, &Default::default(), &amap)
+                .unwrap();
+            println!(
+                "{:#?}",
+                sess.cnf_with_table_refs(where_vals.clone(), &Default::default(), &amap)
+            );
+            let (vcoll, mut rel_tbls) =
+                Value::extract_relevant_tables([vals, where_vals].into_iter()).unwrap();
             let mut vcoll = vcoll.into_iter();
             let vals = vcoll.next().unwrap();
             let where_vals = vcoll.next().unwrap();
@@ -991,7 +1001,10 @@ mod tests {
 
             let tbl = rel_tbls.pop().unwrap();
             let it = sess.iter_node(tbl);
-            let it = ExecPlan::FilterIt { filter: where_vals, it: it.into() };
+            let it = ExecPlan::FilterIt {
+                filter: where_vals,
+                it: it.into(),
+            };
             let it = OutputIterator::new(&it, &vals)?;
             for val in it {
                 println!("{}", val.unwrap());
@@ -1001,9 +1014,11 @@ mod tests {
             println!("Time elapsed {:?} {:?}", duration, duration2);
             let it = ExecPlan::KeySortedWithAssocIt {
                 main: Box::new(sess.iter_node(tbl)),
-                associates: vec![(tbl.id as u32, sess.raw_iterator(true).into()),
-                                 (tbl.id as u32, sess.raw_iterator(true).into()),
-                                 (tbl.id as u32, sess.raw_iterator(true).into())],
+                associates: vec![
+                    (tbl.id as u32, sess.raw_iterator(true).into()),
+                    (tbl.id as u32, sess.raw_iterator(true).into()),
+                    (tbl.id as u32, sess.raw_iterator(true).into()),
+                ],
             };
             {
                 for el in it.iter()? {
@@ -1033,12 +1048,23 @@ mod tests {
                 // if n % 4096 == 0 {
                 //     println!("{}: {:?}", n, el)
                 // }
-                let _x = el.keys.into_iter().map(|v| v.iter().map(|_v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
-                let _y = el.vals.into_iter().map(|v| v.iter().map(|_v| ()).collect::<Vec<_>>()).collect::<Vec<_>>();
+                let _x = el
+                    .keys
+                    .into_iter()
+                    .map(|v| v.iter().map(|_v| ()).collect::<Vec<_>>())
+                    .collect::<Vec<_>>();
+                let _y = el
+                    .vals
+                    .into_iter()
+                    .map(|v| v.iter().map(|_v| ()).collect::<Vec<_>>())
+                    .collect::<Vec<_>>();
                 n += 1;
             }
             let duration = start.elapsed();
-            println!("{} items per second", 1e9 * (n as f64) / (duration.as_nanos() as f64));
+            println!(
+                "{} items per second",
+                1e9 * (n as f64) / (duration.as_nanos() as f64)
+            );
             // let a = sess.iter_table(tbl);
             // let ac = (&a).into_iter().count();
             // println!("{}", ac);
