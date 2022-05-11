@@ -1,5 +1,5 @@
 use crate::db::eval::{compare_tuple_by_keys, tuple_eval};
-use crate::db::table::{ColId, TableId};
+use crate::db::table::{ColId, TableId, TableInfo};
 use crate::error::CozoError::LogicError;
 use crate::error::Result;
 use crate::relation::data::{DataKind, EMPTY_DATA};
@@ -19,7 +19,7 @@ pub enum IteratorSlot<'a> {
 impl<'a> Debug for IteratorSlot<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            IteratorSlot::Dummy => write!(f, "DummyIterator"),
+            IteratorSlot::Dummy { .. } => write!(f, "DummyIterator"),
             IteratorSlot::Reified(_) => write!(f, "BaseIterator"),
         }
     }
@@ -42,35 +42,37 @@ impl<'a> IteratorSlot<'a> {
 
 #[derive(Debug)]
 pub enum ExecPlan<'a> {
-    NodeIt {
+    NodeItPlan {
         it: IteratorSlot<'a>,
-        tid: u32,
+        info: TableInfo,
+        binding: String,
     },
-    EdgeIt {
+    EdgeItPlan {
         it: IteratorSlot<'a>,
-        tid: u32,
+        info: TableInfo,
+        binding: String,
     },
-    EdgeKeyOnlyBwdIt {
+    EdgeKeyOnlyBwdItPlan {
         it: IteratorSlot<'a>,
-        tid: u32,
+        info: TableInfo,
     },
     // EdgeBwdIt { it: IteratorPtr<'a>, sess: &'a Session<'a>, tid: u32 },
     // IndexIt {it: ..}
-    KeySortedWithAssocIt {
+    KeySortedWithAssocItPlan {
         main: Box<ExecPlan<'a>>,
         associates: Vec<(u32, IteratorSlot<'a>)>,
     },
-    CartesianProdIt {
+    CartesianProdItPlan {
         left: Box<ExecPlan<'a>>,
         right: Box<ExecPlan<'a>>,
     },
-    MergeJoinIt {
+    MergeJoinItPlan {
         left: Box<ExecPlan<'a>>,
         right: Box<ExecPlan<'a>>,
         left_keys: Vec<(TableId, ColId)>,
         right_keys: Vec<(TableId, ColId)>,
     },
-    OuterMergeJoinIt {
+    OuterMergeJoinItPlan {
         left: Box<ExecPlan<'a>>,
         right: Box<ExecPlan<'a>>,
         left_keys: Vec<(TableId, ColId)>,
@@ -80,39 +82,39 @@ pub enum ExecPlan<'a> {
         left_len: (usize, usize),
         right_len: (usize, usize),
     },
-    KeyedUnionIt {
+    KeyedUnionItPlan {
         left: Box<ExecPlan<'a>>,
         right: Box<ExecPlan<'a>>,
     },
-    KeyedDifferenceIt {
+    KeyedDifferenceItPlan {
         left: Box<ExecPlan<'a>>,
         right: Box<ExecPlan<'a>>,
     },
-    FilterIt {
-        it: Box<ExecPlan<'a>>,
+    FilterItPlan {
+        source: Box<ExecPlan<'a>>,
         filter: Value<'a>,
     },
-    EvalIt {
-        it: Box<ExecPlan<'a>>,
-        keys: Vec<Value<'a>>,
-        vals: Vec<Value<'a>>,
-        out_prefix: u32,
+    EvalItPlan {
+        source: Box<ExecPlan<'a>>,
+        keys: Vec<(String, Value<'a>)>,
+        vals: Vec<(String, Value<'a>)>,
     },
     BagsUnionIt {
         bags: Vec<ExecPlan<'a>>,
     },
 }
 
-pub struct OutputIt<'a> {
-    it: ExecPlan<'a>,
-    filter: Value<'a>,
+#[derive(Debug)]
+pub struct OutputItPlan<'a> {
+    pub source: ExecPlan<'a>,
+    pub value: Value<'a>,
 }
 
-impl<'a> OutputIt<'a> {
+impl<'a> OutputItPlan<'a> {
     pub fn iter(&self) -> Result<OutputIterator> {
         Ok(OutputIterator {
-            it: self.it.iter()?,
-            transform: &self.filter,
+            it: self.source.iter()?,
+            transform: &self.value,
         })
     }
 }
@@ -120,28 +122,28 @@ impl<'a> OutputIt<'a> {
 impl<'a> ExecPlan<'a> {
     pub fn iter(&'a self) -> Result<Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>> {
         match self {
-            ExecPlan::NodeIt { it, tid } => {
+            ExecPlan::NodeItPlan { it, info, .. } => {
                 let it = it.try_get()?;
-                let prefix_tuple = OwnTuple::with_prefix(*tid);
+                let prefix_tuple = OwnTuple::with_prefix(info.table_id.id as u32);
                 it.seek(prefix_tuple);
 
                 Ok(Box::new(NodeIterator { it, started: false }))
             }
-            ExecPlan::EdgeIt { it, tid } => {
+            ExecPlan::EdgeItPlan { it, info, .. } => {
                 let it = it.try_get()?;
-                let prefix_tuple = OwnTuple::with_prefix(*tid);
+                let prefix_tuple = OwnTuple::with_prefix(info.table_id.id as u32);
                 it.seek(prefix_tuple);
 
                 Ok(Box::new(EdgeIterator { it, started: false }))
             }
-            ExecPlan::EdgeKeyOnlyBwdIt { it, tid } => {
+            ExecPlan::EdgeKeyOnlyBwdItPlan { it, info } => {
                 let it = it.try_get()?;
-                let prefix_tuple = OwnTuple::with_prefix(*tid);
+                let prefix_tuple = OwnTuple::with_prefix(info.table_id.id as u32);
                 it.seek(prefix_tuple);
 
                 Ok(Box::new(EdgeKeyOnlyBwdIterator { it, started: false }))
             }
-            ExecPlan::KeySortedWithAssocIt { main, associates } => {
+            ExecPlan::KeySortedWithAssocItPlan { main, associates } => {
                 let buffer = iter::repeat_with(|| None).take(associates.len()).collect();
                 let associates = associates
                     .iter()
@@ -160,28 +162,26 @@ impl<'a> ExecPlan<'a> {
                     buffer,
                 }))
             }
-            ExecPlan::CartesianProdIt { left, right } => Ok(Box::new(CartesianProdIterator {
+            ExecPlan::CartesianProdItPlan { left, right } => Ok(Box::new(CartesianProdIterator {
                 left: left.iter()?,
                 left_cache: MegaTuple::empty_tuple(),
                 right_source: right.as_ref(),
                 right: right.as_ref().iter()?,
             })),
-            ExecPlan::FilterIt { it, filter } => Ok(Box::new(FilterIterator {
+            ExecPlan::FilterItPlan { source: it, filter } => Ok(Box::new(FilterIterator {
                 it: it.iter()?,
                 filter,
             })),
-            ExecPlan::EvalIt {
-                it,
+            ExecPlan::EvalItPlan {
+                source: it,
                 keys,
-                vals,
-                out_prefix: prefix,
+                vals
             } => Ok(Box::new(EvalIterator {
                 it: it.iter()?,
                 keys,
                 vals,
-                prefix: *prefix,
             })),
-            ExecPlan::MergeJoinIt {
+            ExecPlan::MergeJoinItPlan {
                 left,
                 right,
                 left_keys,
@@ -192,7 +192,7 @@ impl<'a> ExecPlan<'a> {
                 left_keys,
                 right_keys,
             })),
-            ExecPlan::OuterMergeJoinIt {
+            ExecPlan::OuterMergeJoinItPlan {
                 left,
                 right,
                 left_keys,
@@ -215,11 +215,11 @@ impl<'a> ExecPlan<'a> {
                 pull_left: true,
                 pull_right: true,
             })),
-            ExecPlan::KeyedUnionIt { left, right } => Ok(Box::new(KeyedUnionIterator {
+            ExecPlan::KeyedUnionItPlan { left, right } => Ok(Box::new(KeyedUnionIterator {
                 left: left.iter()?,
                 right: right.iter()?,
             })),
-            ExecPlan::KeyedDifferenceIt { left, right } => Ok(Box::new(KeyedDifferenceIterator {
+            ExecPlan::KeyedDifferenceItPlan { left, right } => Ok(Box::new(KeyedDifferenceIterator {
                 left: left.iter()?,
                 right: right.iter()?,
                 right_cache: None,
@@ -864,10 +864,11 @@ impl<'a> Iterator for OutputIterator<'a> {
 
 pub struct EvalIterator<'a> {
     it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
-    keys: &'a [Value<'a>],
-    vals: &'a [Value<'a>],
-    prefix: u32,
+    keys: &'a [(String, Value<'a>)],
+    vals: &'a [(String, Value<'a>)],
 }
+
+pub const EVAL_TEMP_PREFIX: u32 = u32::MAX - 1;
 
 impl<'a> Iterator for EvalIterator<'a> {
     type Item = Result<MegaTuple>;
@@ -877,16 +878,16 @@ impl<'a> Iterator for EvalIterator<'a> {
             None => None,
             Some(Err(e)) => Some(Err(e)),
             Some(Ok(t)) => {
-                let mut key_tuple = OwnTuple::with_prefix(self.prefix);
+                let mut key_tuple = OwnTuple::with_prefix(EVAL_TEMP_PREFIX);
                 let mut val_tuple = OwnTuple::with_data_prefix(DataKind::Data);
                 for k in self.keys {
-                    match tuple_eval(k, &t) {
+                    match tuple_eval(&k.1, &t) {
                         Ok(v) => key_tuple.push_value(&v),
                         Err(e) => return Some(Err(e)),
                     }
                 }
                 for k in self.vals {
-                    match tuple_eval(k, &t) {
+                    match tuple_eval(&k.1, &t) {
                         Ok(v) => val_tuple.push_value(&v),
                         Err(e) => return Some(Err(e)),
                     }
@@ -973,13 +974,13 @@ mod tests {
                 .next()
                 .unwrap();
             let sel_pat = sess.parse_select_pattern(p).unwrap();
+            let sel_vals = Value::Dict(sel_pat.vals.into_iter().map(|(k, v)| (k.into(), v)).collect());
             let amap = sess.base_relation_to_accessor_map(
-                &from_pat.table,
                 &from_pat.binding,
                 &from_pat.info,
             );
             let (_, vals) = sess
-                .partial_eval(sel_pat.vals, &Default::default(), &amap)
+                .partial_eval(sel_vals, &Default::default(), &amap)
                 .unwrap();
             let (_, where_vals) = sess
                 .partial_eval(where_pat, &Default::default(), &amap)
@@ -1001,9 +1002,9 @@ mod tests {
 
             let tbl = rel_tbls.pop().unwrap();
             let it = sess.iter_node(tbl);
-            let it = ExecPlan::FilterIt {
+            let it = ExecPlan::FilterItPlan {
                 filter: where_vals,
-                it: it.into(),
+                source: it.into(),
             };
             let it = OutputIterator::new(&it, &vals)?;
             for val in it {
@@ -1012,7 +1013,7 @@ mod tests {
             let duration = start.elapsed();
             let duration2 = start2.elapsed();
             println!("Time elapsed {:?} {:?}", duration, duration2);
-            let it = ExecPlan::KeySortedWithAssocIt {
+            let it = ExecPlan::KeySortedWithAssocItPlan {
                 main: Box::new(sess.iter_node(tbl)),
                 associates: vec![
                     (tbl.id as u32, sess.raw_iterator(true).into()),
@@ -1032,8 +1033,8 @@ mod tests {
                 }
             }
             let mut it = sess.iter_node(tbl);
-            for _ in 0..3 {
-                it = ExecPlan::CartesianProdIt {
+            for _ in 0..2 {
+                it = ExecPlan::CartesianProdItPlan {
                     left: Box::new(it),
                     right: Box::new(sess.iter_node(tbl)),
                 }
@@ -1065,9 +1066,21 @@ mod tests {
                 "{} items per second",
                 1e9 * (n as f64) / (duration.as_nanos() as f64)
             );
-            // let a = sess.iter_table(tbl);
-            // let ac = (&a).into_iter().count();
-            // println!("{}", ac);
+
+            let s = r##"from e:Employee
+            where e.id >= 100, e.id <= 105 || e.id == 110
+            select {id: e.id,
+            full_name: e.first_name ++ ' ' ++ e.last_name, bibio_name: e.last_name ++ ', '
+            ++ e.first_name ++ ': ' ++ (e.phone_number ~ 'N.A.')}"##;
+
+            let parsed = Parser::parse(Rule::relational_query, s)?.next().unwrap();
+            let plan = sess.query_to_plan(parsed)?;
+            println!("{:?}", plan);
+            let plan = sess.reify_output_plan(plan)?;
+            println!("{:?}", plan);
+            for val in plan.iter()? {
+                println!("{}", val?)
+            }
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

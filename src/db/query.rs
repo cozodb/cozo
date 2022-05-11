@@ -199,7 +199,7 @@ impl<'a> Session<'a> {
             _ => None,
         };
 
-        let mut keys = BTreeMap::new();
+        let mut keys = vec![];
         let mut merged = vec![];
         let mut collected_vals = BTreeMap::new();
 
@@ -209,7 +209,7 @@ impl<'a> Session<'a> {
                     let mut pp = p.into_inner();
                     let id = parse_string(pp.next().unwrap())?;
                     let val = Value::from_pair(pp.next().unwrap())?;
-                    keys.insert(id, val.to_static());
+                    keys.push((id, val.to_static()));
                 }
                 Rule::dict_pair => {
                     let mut inner = p.into_inner();
@@ -248,12 +248,14 @@ impl<'a> Session<'a> {
         }
 
         let vals = if merged.is_empty() {
-            Value::Dict(collected_vals).to_static()
+            collected_vals.into_iter().map(|(k, v)| (k.to_string(), v.to_static())).collect::<Vec<_>>()
         } else {
-            if !collected_vals.is_empty() {
-                merged.push(Value::Dict(collected_vals));
-            }
-            Value::Apply(value::METHOD_MERGE.into(), merged).to_static()
+            // construct it with help of partial eval
+            todo!()
+            // if !collected_vals.is_empty() {
+            //     merged.push(Value::Dict(collected_vals));
+            // }
+            // Value::Apply(value::METHOD_MERGE.into(), merged).to_static()
         };
 
         let mut ordering = vec![];
@@ -315,8 +317,8 @@ impl<'a> Session<'a> {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Selection {
     pub scoped: Option<String>,
-    pub keys: BTreeMap<String, StaticValue>,
-    pub vals: StaticValue,
+    pub keys: Vec<(String, StaticValue)>,
+    pub vals: Vec<(String, StaticValue)>,
     pub ordering: Vec<(bool, String)>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
