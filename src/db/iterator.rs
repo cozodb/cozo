@@ -104,6 +104,33 @@ pub enum ExecPlan<'a> {
     },
 }
 
+impl<'a> ExecPlan<'a> {
+    pub fn tuple_widths(&self) -> (usize, usize) {
+        match self {
+            ExecPlan::NodeItPlan { .. } => (1, 1),
+            ExecPlan::EdgeItPlan { .. } => (1, 1),
+            ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => (1, 0),
+            ExecPlan::KeySortedWithAssocItPlan { .. } => todo!(),
+            ExecPlan::CartesianProdItPlan { left, right } => {
+                let (l1, l2) = left.tuple_widths();
+                let (r1, r2) = right.tuple_widths();
+                (l1 + r1, l2 + r2)
+            }
+            ExecPlan::MergeJoinItPlan { .. } => todo!(),
+            ExecPlan::OuterMergeJoinItPlan { .. } => todo!(),
+            ExecPlan::KeyedUnionItPlan { .. } => todo!(),
+            ExecPlan::KeyedDifferenceItPlan { .. } => todo!(),
+            ExecPlan::FilterItPlan { source, .. } => {
+                source.tuple_widths()
+            }
+            ExecPlan::EvalItPlan { source, .. } => {
+                source.tuple_widths()
+            }
+            ExecPlan::BagsUnionIt { .. } => todo!()
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct OutputItPlan<'a> {
     pub source: ExecPlan<'a>,
@@ -1104,6 +1131,25 @@ mod tests {
             for val in plan.iter()? {
                 println!("{}", val?)
             }
+
+            let start = Instant::now();
+
+            let s = r##"from e1:Employee, e2:Employee
+            where e1.id == e2.id - 10
+            select { fid: e1.id, fname: e1.first_name, sid: e2.id, sname: e2.first_name }"##;
+
+            let parsed = Parser::parse(Rule::relational_query, s)?.next().unwrap();
+            let plan = sess.query_to_plan(parsed)?;
+            println!("{:?}", plan);
+            let plan = sess.reify_output_plan(plan)?;
+            println!("{:?}", plan);
+            for val in plan.iter()? {
+                println!("{}", val?)
+            }
+
+            let duration = start.elapsed();
+            println!("Time elapsed {:?}", duration);
+
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

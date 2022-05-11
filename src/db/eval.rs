@@ -194,7 +194,7 @@ fn sub_values<'a>(args: &'a [Value<'a>], tuples: &'a MegaTuple) -> Result<Value<
         return Ok(Value::Null);
     }
     Ok(match (left, right) {
-        (Value::Int(l), Value::Int(r)) => (l + r).into(),
+        (Value::Int(l), Value::Int(r)) => (l - r).into(),
         (Value::Float(l), Value::Int(r)) => (l - (r as f64)).into(),
         (Value::Int(l), Value::Float(r)) => ((l as f64) - r.into_inner()).into(),
         (Value::Float(l), Value::Float(r)) => (l.into_inner() - r.into_inner()).into(),

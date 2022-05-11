@@ -1,3 +1,4 @@
+use std::collections::btree_map::Entry;
 use crate::db::engine::Session;
 use crate::db::iterator::{ExecPlan, IteratorSlot, OutputItPlan};
 use crate::db::query::{FromEl, Selection};
@@ -20,24 +21,54 @@ pub enum OuterJoinType {
 
 pub type AccessorMap = BTreeMap<String, BTreeMap<String, (TableId, ColId)>>;
 
+fn merge_accessor_map(mut left: AccessorMap, right: AccessorMap) -> AccessorMap {
+    // println!("Before {:?} {:?}", left, right);
+    for (k, vs) in right.into_iter() {
+        let entry = left.entry(k);
+        match &entry {
+            Entry::Vacant(_) => {
+                entry.or_insert(vs);
+            }
+            Entry::Occupied(_) => {
+                entry.and_modify(|existing| existing.extend(vs));
+            }
+        }
+    }
+    // println!("After {:?}", left);
+    left
+}
+
+fn convert_to_relative_accessor_map(amap: AccessorMap) -> AccessorMap {
+    // TODO this only handles the simplest case
+    fn convert_inner(inner: BTreeMap<String, (TableId, ColId)>) -> BTreeMap<String, (TableId, ColId)> {
+        inner.into_iter().map(|(k, (_tid, cid))| {
+            (k, (TableId::new(false, 0), cid))
+        }).collect()
+    }
+    amap.into_iter().map(|(k, v)| (k, convert_inner(v))).collect()
+}
+
+fn shift_accessor_map(amap: AccessorMap, (keyshift, valshift): (usize, usize)) -> AccessorMap {
+    let shift_inner = |inner: BTreeMap<String, (TableId, ColId)>| -> BTreeMap<String, (TableId, ColId)> {
+        inner.into_iter().map(|(k, (tid, cid))| {
+            (k, (TableId::new(tid.in_root, tid.id + if cid.is_key { keyshift as i64 } else { valshift as i64 }), cid))
+        }).collect()
+    };
+    amap.into_iter().map(|(k, v)| (k, shift_inner(v))).collect()
+}
+
 impl<'a> Session<'a> {
     pub fn reify_intermediate_plan(&'a self, plan: ExecPlan<'a>) -> Result<ExecPlan<'a>> {
-        self.do_reify_intermediate_plan(plan).map(|v| v.0)
-    }
-    fn convert_to_relative_amap(&self, amap: AccessorMap) -> AccessorMap {
-        // TODO this only handles the simplest case
-        fn convert_inner(inner: BTreeMap<String, (TableId, ColId)>) -> BTreeMap<String, (TableId, ColId)> {
-            inner.into_iter().map(|(k, (_tid, cid))| {
-                (k, (TableId::new(false, 0), cid))
-            }).collect()
-        }
-        amap.into_iter().map(|(k, v)| (k, convert_inner(v))).collect()
+        self.do_reify_intermediate_plan(plan).map(|v| {
+            // println!("Accessor map {:#?}", v.1);
+            v.0
+        })
     }
     fn do_reify_intermediate_plan(&'a self, plan: ExecPlan<'a>) -> Result<(ExecPlan<'a>, AccessorMap)> {
         let res = match plan {
             ExecPlan::NodeItPlan { info, binding, .. } => {
                 let amap = self.node_accessor_map(&binding, &info);
-                let amap = self.convert_to_relative_amap(amap);
+                let amap = convert_to_relative_accessor_map(amap);
                 let it = if info.table_id.in_root {
                     self.txn.iterator(true, &self.perm_cf)
                 } else {
@@ -53,7 +84,7 @@ impl<'a> Session<'a> {
             }
             ExecPlan::EdgeItPlan { info, binding, .. } => {
                 let amap = self.edge_accessor_map(&binding, &info);
-                let amap = self.convert_to_relative_amap(amap);
+                let amap = convert_to_relative_accessor_map(amap);
                 let it = if info.table_id.in_root {
                     self.txn.iterator(true, &self.perm_cf)
                 } else {
@@ -69,7 +100,16 @@ impl<'a> Session<'a> {
             }
             ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => todo!(),
             ExecPlan::KeySortedWithAssocItPlan { .. } => todo!(),
-            ExecPlan::CartesianProdItPlan { .. } => todo!(),
+            ExecPlan::CartesianProdItPlan { left, right } => {
+                let (l_plan, l_map) = self.do_reify_intermediate_plan(*left)?;
+                let (r_plan, r_map) = self.do_reify_intermediate_plan(*right)?;
+                let r_map = shift_accessor_map(r_map, l_plan.tuple_widths());
+                let plan = ExecPlan::CartesianProdItPlan {
+                    left: l_plan.into(),
+                    right: r_plan.into()
+                };
+                (plan, merge_accessor_map(l_map, r_map))
+            }
             ExecPlan::MergeJoinItPlan { .. } => todo!(),
             ExecPlan::OuterMergeJoinItPlan { .. } => todo!(),
             ExecPlan::KeyedUnionItPlan { .. } => todo!(),
@@ -138,7 +178,7 @@ impl<'a> Session<'a> {
         let plan = self.convert_where_data_to_plan(plan, where_data)?;
         self.convert_select_data_to_plan(plan, select_data)
     }
-    fn convert_from_data_to_plan(&self, mut from_data: Vec<FromEl>) -> Result<ExecPlan> {
+    fn convert_from_data_to_plan(&self, from_data: Vec<FromEl>) -> Result<ExecPlan> {
         let convert_el = |el|
             match el {
                 FromEl::Simple(el) => {
@@ -165,9 +205,13 @@ impl<'a> Session<'a> {
         let mut from_data = from_data.into_iter();
         let fst = from_data.next().ok_or_else(||
             LogicError("Empty from clause".to_string()))?;
-        let res = convert_el(fst)?;
-        for _nxt in from_data {
-            // TODO build cartesian product
+        let mut res = convert_el(fst)?;
+        for nxt in from_data {
+            let nxt = convert_el(nxt)?;
+            res = ExecPlan::CartesianProdItPlan {
+                left: res.into(),
+                right: nxt.into()
+            };
         }
         Ok(res)
     }
