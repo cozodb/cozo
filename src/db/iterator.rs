@@ -1018,7 +1018,7 @@ mod tests {
             };
             let it = OutputIterator::new(&it, &vals)?;
             for val in it {
-                println!("{}", val.unwrap());
+                println!("{}", val?);
             }
             let duration = start.elapsed();
             let duration2 = start2.elapsed();
@@ -1033,13 +1033,13 @@ mod tests {
             };
             {
                 for el in it.iter()? {
-                    println!("{:?}", el);
+                    println!("{:?}", el?);
                 }
             }
             println!("XXXXX");
             {
                 for el in it.iter()? {
-                    println!("{:?}", el);
+                    println!("{:?}", el?);
                 }
             }
             let mut it = sess.iter_node(tbl);
@@ -1102,7 +1102,7 @@ mod tests {
             let plan = sess.reify_output_plan(plan)?;
             println!("{:?}", plan);
             for val in plan.iter()? {
-                println!("{:?}", val)
+                println!("{}", val?)
             }
         }
         drop(engine);

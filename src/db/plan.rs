@@ -139,32 +139,36 @@ impl<'a> Session<'a> {
         self.convert_select_data_to_plan(plan, select_data)
     }
     fn convert_from_data_to_plan(&self, mut from_data: Vec<FromEl>) -> Result<ExecPlan> {
-        let res = match from_data.pop().unwrap() {
-            FromEl::Simple(el) => {
-                // println!(
-                //     "{:#?}",
-                //     self.base_relation_to_accessor_map(&el.table, &el.binding, &el.info)
-                // );
-                match el.info.kind {
-                    DataKind::Node => {
-                        ExecPlan::NodeItPlan {
-                            it: IteratorSlot::Dummy,
-                            info: el.info,
-                            binding: el.binding,
+        let convert_el = |el|
+            match el {
+                FromEl::Simple(el) => {
+                    match el.info.kind {
+                        DataKind::Node => {
+                            Ok(ExecPlan::NodeItPlan {
+                                it: IteratorSlot::Dummy,
+                                info: el.info,
+                                binding: el.binding,
+                            })
                         }
-                    }
-                    DataKind::Edge => {
-                        ExecPlan::EdgeItPlan {
-                            it: IteratorSlot::Dummy,
-                            info: el.info,
-                            binding: el.binding,
+                        DataKind::Edge => {
+                            Ok(ExecPlan::EdgeItPlan {
+                                it: IteratorSlot::Dummy,
+                                info: el.info,
+                                binding: el.binding,
+                            })
                         }
+                        _ => Err(LogicError("Wrong type for table binding".to_string()))
                     }
-                    _ => return Err(LogicError("Wrong type for table binding".to_string()))
                 }
-            }
-            FromEl::Chain(_) => todo!(),
-        };
+                FromEl::Chain(_) => todo!(),
+            };
+        let mut from_data = from_data.into_iter();
+        let fst = from_data.next().ok_or_else(||
+            LogicError("Empty from clause".to_string()))?;
+        let res = convert_el(fst)?;
+        for _nxt in from_data {
+            // TODO build cartesian product
+        }
         Ok(res)
     }
     pub(crate) fn node_accessor_map(
