@@ -22,7 +22,7 @@ pub struct SimpleFromEl {
     pub info: TableInfo,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum EdgeOrNodeKind {
     FwdEdge,
     BwdEdge,

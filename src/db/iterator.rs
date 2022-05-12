@@ -25,6 +25,16 @@ impl<'a> Debug for IteratorSlot<'a> {
     }
 }
 
+pub enum TableRowGetter {
+    Dummy,
+}
+
+impl Debug for TableRowGetter {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self { TableRowGetter::Dummy => write!(f, "DummyRowGetter") }
+    }
+}
+
 impl<'a> From<IteratorPtr<'a>> for IteratorSlot<'a> {
     fn from(it: IteratorPtr<'a>) -> Self {
         Self::Reified(it)
@@ -40,23 +50,45 @@ impl<'a> IteratorSlot<'a> {
     }
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ChainJoinKind {
+    NodeToFwdEdge,
+    NodeToBwdEdge,
+    FwdEdgeToNode,
+    BwdEdgeToNode
+}
+
 #[derive(Debug)]
 pub enum ExecPlan<'a> {
     NodeItPlan {
         it: IteratorSlot<'a>,
         info: TableInfo,
-        binding: String,
+        binding: Option<String>,
     },
     EdgeItPlan {
         it: IteratorSlot<'a>,
         info: TableInfo,
-        binding: String,
+        binding: Option<String>,
     },
     EdgeKeyOnlyBwdItPlan {
         it: IteratorSlot<'a>,
         info: TableInfo,
+        binding: Option<String>,
     },
-    // EdgeBwdIt { it: IteratorPtr<'a>, sess: &'a Session<'a>, tid: u32 },
+    EdgeBwdItPlan {
+        it: IteratorSlot<'a>,
+        info: TableInfo,
+        binding: Option<String>,
+        getter: TableRowGetter,
+    },
+    ChainJoinItPlan {
+        left: Box<ExecPlan<'a>>,
+        right: TableRowGetter,
+        right_info: TableInfo,
+        kind: ChainJoinKind,
+        left_outer: bool,
+        right_outer: bool
+    },
     // IndexIt {it: ..}
     KeySortedWithAssocItPlan {
         main: Box<ExecPlan<'a>>,
@@ -144,6 +176,12 @@ impl<'a> ExecPlan<'a> {
                     bags.get(0).unwrap().tuple_widths()
                 }
             }
+            ExecPlan::EdgeBwdItPlan { .. } => {
+                todo!()
+            }
+            ExecPlan::ChainJoinItPlan { .. } => {
+                todo!()
+            }
         }
     }
 }
@@ -181,7 +219,7 @@ impl<'a> ExecPlan<'a> {
 
                 Ok(Box::new(EdgeIterator { it, started: false, src_table_id: info.src_table_id.id }))
             }
-            ExecPlan::EdgeKeyOnlyBwdItPlan { it, info } => {
+            ExecPlan::EdgeKeyOnlyBwdItPlan { it, info, .. } => {
                 let it = it.try_get()?;
                 let mut prefix_tuple = OwnTuple::with_prefix(info.table_id.id as u32);
                 prefix_tuple.push_int(info.dst_table_id.id);
@@ -274,6 +312,12 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::BagsUnionIt { bags } => {
                 let bags = bags.iter().map(|i| i.iter()).collect::<Result<Vec<_>>>()?;
                 Ok(Box::new(BagsUnionIterator { bags, current: 0 }))
+            }
+            ExecPlan::EdgeBwdItPlan { .. } => {
+                todo!()
+            }
+            ExecPlan::ChainJoinItPlan { .. } => {
+                todo!()
             }
         }
     }
@@ -1166,6 +1210,20 @@ mod tests {
 
             let duration = start.elapsed();
             println!("Time elapsed {:?}", duration);
+
+
+            let s = r##"from (e:Employee)-[hj:HasJob]->(j:Job)
+            where e.id == 110
+            select { fname: e.first_name, salary: hj.salary, job: j.title }"##;
+
+            let parsed = Parser::parse(Rule::relational_query, s)?.next().unwrap();
+            let plan = sess.query_to_plan(parsed)?;
+            println!("{:?}", plan);
+            let plan = sess.reify_output_plan(plan)?;
+            println!("{:?}", plan);
+            for val in plan.iter()? {
+                println!("{}", val?)
+            }
         }
         drop(engine);
         let _ = fs::remove_dir_all(db_path);

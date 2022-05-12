@@ -1,7 +1,7 @@
 use std::collections::btree_map::Entry;
 use crate::db::engine::Session;
-use crate::db::iterator::{ExecPlan, IteratorSlot, OutputItPlan};
-use crate::db::query::{FromEl, Selection};
+use crate::db::iterator::{ChainJoinKind, ExecPlan, IteratorSlot, OutputItPlan, TableRowGetter};
+use crate::db::query::{EdgeOrNodeEl, EdgeOrNodeKind, FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
 use crate::error::Result;
 use crate::parser::Rule;
@@ -67,8 +67,13 @@ impl<'a> Session<'a> {
     fn do_reify_intermediate_plan(&'a self, plan: ExecPlan<'a>) -> Result<(ExecPlan<'a>, AccessorMap)> {
         let res = match plan {
             ExecPlan::NodeItPlan { info, binding, .. } => {
-                let amap = self.node_accessor_map(&binding, &info);
-                let amap = convert_to_relative_accessor_map(amap);
+                let amap = match &binding {
+                    None => Default::default(),
+                    Some(binding) => {
+                        let amap = self.node_accessor_map(binding, &info);
+                        convert_to_relative_accessor_map(amap)
+                    }
+                };
                 let it = if info.table_id.in_root {
                     self.txn.iterator(true, &self.perm_cf)
                 } else {
@@ -83,8 +88,13 @@ impl<'a> Session<'a> {
                 (plan, amap)
             }
             ExecPlan::EdgeItPlan { info, binding, .. } => {
-                let amap = self.edge_accessor_map(&binding, &info);
-                let amap = convert_to_relative_accessor_map(amap);
+                let amap = match &binding {
+                    None => Default::default(),
+                    Some(binding) => {
+                        let amap = self.edge_accessor_map(&binding, &info);
+                        convert_to_relative_accessor_map(amap)
+                    }
+                };
                 let it = if info.table_id.in_root {
                     self.txn.iterator(true, &self.perm_cf)
                 } else {
@@ -98,6 +108,9 @@ impl<'a> Session<'a> {
                 };
                 (plan, amap)
             }
+            ExecPlan::EdgeBwdItPlan { .. } => {
+                todo!()
+            }
             ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => todo!(),
             ExecPlan::KeySortedWithAssocItPlan { .. } => todo!(),
             ExecPlan::CartesianProdItPlan { left, right } => {
@@ -106,7 +119,7 @@ impl<'a> Session<'a> {
                 let r_map = shift_accessor_map(r_map, l_plan.tuple_widths());
                 let plan = ExecPlan::CartesianProdItPlan {
                     left: l_plan.into(),
-                    right: r_plan.into()
+                    right: r_plan.into(),
                 };
                 (plan, merge_accessor_map(l_map, r_map))
             }
@@ -141,6 +154,9 @@ impl<'a> Session<'a> {
                 (plan, amap)
             }
             ExecPlan::BagsUnionIt { .. } => todo!(),
+            ExecPlan::ChainJoinItPlan { .. } => {
+                todo!()
+            }
         };
         Ok(res)
     }
@@ -187,20 +203,70 @@ impl<'a> Session<'a> {
                             Ok(ExecPlan::NodeItPlan {
                                 it: IteratorSlot::Dummy,
                                 info: el.info,
-                                binding: el.binding,
+                                binding: Some(el.binding),
                             })
                         }
                         DataKind::Edge => {
                             Ok(ExecPlan::EdgeItPlan {
                                 it: IteratorSlot::Dummy,
                                 info: el.info,
-                                binding: el.binding,
+                                binding: Some(el.binding),
                             })
                         }
                         _ => Err(LogicError("Wrong type for table binding".to_string()))
                     }
                 }
-                FromEl::Chain(_) => todo!(),
+                FromEl::Chain(ch) => {
+                    let mut it = ch.into_iter();
+                    let nxt = it.next().ok_or_else(|| LogicError("Empty chain not allowed".to_string()))?;
+                    let mut prev_kind = nxt.kind;
+                    let mut prev_left_outer = nxt.left_outer_marker;
+                    let mut plan = match prev_kind {
+                        EdgeOrNodeKind::Node => {
+                            ExecPlan::NodeItPlan {
+                                it: IteratorSlot::Dummy,
+                                info: nxt.info,
+                                binding: nxt.binding,
+                            }
+                        }
+                        EdgeOrNodeKind::FwdEdge => {
+                            ExecPlan::EdgeItPlan {
+                                it: IteratorSlot::Dummy,
+                                info: nxt.info,
+                                binding: nxt.binding,
+                            }
+                        }
+                        EdgeOrNodeKind::BwdEdge => {
+                            ExecPlan::EdgeBwdItPlan {
+                                it: IteratorSlot::Dummy,
+                                info: nxt.info,
+                                binding: nxt.binding,
+                                getter: TableRowGetter::Dummy
+                            }
+                        }
+                    };
+                    for el in it {
+                        plan = ExecPlan::ChainJoinItPlan {
+                            left: plan.into(),
+                            right: TableRowGetter::Dummy,
+                            right_info: el.info,
+                            kind: match (prev_kind, el.kind) {
+                                (EdgeOrNodeKind::Node, EdgeOrNodeKind::FwdEdge) => ChainJoinKind::NodeToFwdEdge,
+                                (EdgeOrNodeKind::Node, EdgeOrNodeKind::BwdEdge) => ChainJoinKind::NodeToBwdEdge,
+                                (EdgeOrNodeKind::FwdEdge, EdgeOrNodeKind::Node) => ChainJoinKind::FwdEdgeToNode,
+                                (EdgeOrNodeKind::BwdEdge, EdgeOrNodeKind::Node) => ChainJoinKind::BwdEdgeToNode,
+                                _ => unreachable!()
+                            },
+                            left_outer: prev_left_outer,
+                            right_outer: el.right_outer_marker
+                        };
+
+                        prev_kind = el.kind;
+                        prev_left_outer = el.left_outer_marker;
+                    }
+                    println!("{:#?}", plan);
+                    Ok(plan)
+                }
             };
         let mut from_data = from_data.into_iter();
         let fst = from_data.next().ok_or_else(||
@@ -210,7 +276,7 @@ impl<'a> Session<'a> {
             let nxt = convert_el(nxt)?;
             res = ExecPlan::CartesianProdItPlan {
                 left: res.into(),
-                right: nxt.into()
+                right: nxt.into(),
             };
         }
         Ok(res)
@@ -321,7 +387,7 @@ impl<'a> Session<'a> {
                 dst_key_typing: vec![],
                 associates: vec![],
             },
-            binding: "".to_string(),
+            binding: None,
         }
     }
 }
