@@ -1,3 +1,4 @@
+use crate::db::engine::Session;
 use crate::db::eval::{compare_tuple_by_keys, tuple_eval};
 use crate::db::table::{ColId, TableId, TableInfo};
 use crate::error::CozoError::LogicError;
@@ -25,14 +26,20 @@ impl<'a> Debug for IteratorSlot<'a> {
     }
 }
 
-pub enum TableRowGetter {
+pub enum TableRowGetter<'a> {
     Dummy,
+    Reified {
+        sess: &'a Session<'a>,
+        key_cache: OwnTuple,
+        in_root: bool,
+    },
 }
 
-impl Debug for TableRowGetter {
+impl<'a> Debug for TableRowGetter<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             TableRowGetter::Dummy => write!(f, "DummyRowGetter"),
+            TableRowGetter::Reified { .. } => write!(f, "TableRowGetter"),
         }
     }
 }
@@ -81,12 +88,13 @@ pub enum ExecPlan<'a> {
         it: IteratorSlot<'a>,
         info: TableInfo,
         binding: Option<String>,
-        getter: TableRowGetter,
+        getter: TableRowGetter<'a>,
     },
     ChainJoinItPlan {
         left: Box<ExecPlan<'a>>,
-        right: TableRowGetter,
+        right: TableRowGetter<'a>,
         right_info: TableInfo,
+        right_binding: Option<String>,
         kind: ChainJoinKind,
         left_outer: bool,
         right_outer: bool,
@@ -177,8 +185,11 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::EdgeBwdItPlan { .. } => {
                 todo!()
             }
-            ExecPlan::ChainJoinItPlan { .. } => {
-                todo!()
+            ExecPlan::ChainJoinItPlan {
+                left, right_info, ..
+            } => {
+                let (l1, l2) = left.tuple_widths();
+                (l1 + 1, l2 + 1)
             }
         }
     }

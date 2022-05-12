@@ -19,6 +19,15 @@ where
     idx_cache: RefCell<Vec<usize>>,
 }
 
+impl<T> Tuple<T>
+where
+    T: AsRef<[u8]>,
+{
+    pub fn clear_cache(&self) {
+        self.idx_cache.borrow_mut().clear()
+    }
+}
+
 impl<T> AsRef<[u8]> for Tuple<T>
 where
     T: AsRef<[u8]>,
@@ -482,6 +491,11 @@ impl<'a, T: AsRef<[u8]>> Iterator for TupleIter<'a, T> {
 }
 
 impl OwnTuple {
+    #[inline]
+    pub fn truncate_all(&mut self) {
+        self.clear_cache();
+        self.data.truncate(PREFIX_LEN);
+    }
     #[inline]
     pub fn empty_tuple() -> OwnTuple {
         OwnTuple::with_data_prefix(DataKind::Empty)

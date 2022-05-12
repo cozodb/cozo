@@ -6,6 +6,7 @@ use crate::error::CozoError::LogicError;
 use crate::error::Result;
 use crate::parser::Rule;
 use crate::relation::data::DataKind;
+use crate::relation::tuple::OwnTuple;
 use crate::relation::value::{StaticValue, Value};
 use cozorocks::IteratorPtr;
 use pest::iterators::Pair;
@@ -113,7 +114,7 @@ impl<'a> Session<'a> {
                 let amap = match &binding {
                     None => Default::default(),
                     Some(binding) => {
-                        let amap = self.edge_accessor_map(&binding, &info);
+                        let amap = self.edge_accessor_map(binding, &info);
                         convert_to_relative_accessor_map(amap)
                     }
                 };
@@ -189,8 +190,35 @@ impl<'a> Session<'a> {
                 kind,
                 left_outer,
                 right_outer,
+                right_binding,
             } => {
-                todo!()
+                let (l_plan, l_map) = self.do_reify_intermediate_plan(*left)?;
+                let r_map = match &right_binding {
+                    None => Default::default(),
+                    Some(binding) => match kind {
+                        ChainJoinKind::NodeToFwdEdge | ChainJoinKind::NodeToBwdEdge => {
+                            self.edge_accessor_map(binding, &right_info)
+                        }
+                        ChainJoinKind::FwdEdgeToNode | ChainJoinKind::BwdEdgeToNode => {
+                            self.node_accessor_map(binding, &right_info)
+                        }
+                    },
+                };
+                let r_map = shift_accessor_map(r_map, l_plan.tuple_widths());
+                let plan = ExecPlan::ChainJoinItPlan {
+                    left: l_plan.into(),
+                    right: TableRowGetter::Reified {
+                        sess: self,
+                        key_cache: OwnTuple::with_prefix(right_info.table_id.id as u32),
+                        in_root: right_info.table_id.in_root,
+                    },
+                    right_info,
+                    right_binding,
+                    kind,
+                    left_outer,
+                    right_outer,
+                };
+                (plan, merge_accessor_map(l_map, r_map))
             }
         };
         Ok(res)
@@ -295,6 +323,7 @@ impl<'a> Session<'a> {
                         },
                         left_outer: prev_left_outer,
                         right_outer: el.right_outer_marker,
+                        right_binding: el.binding,
                     };
 
                     prev_kind = el.kind;
