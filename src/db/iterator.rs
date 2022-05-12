@@ -31,7 +31,9 @@ pub enum TableRowGetter {
 
 impl Debug for TableRowGetter {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self { TableRowGetter::Dummy => write!(f, "DummyRowGetter") }
+        match self {
+            TableRowGetter::Dummy => write!(f, "DummyRowGetter"),
+        }
     }
 }
 
@@ -55,7 +57,7 @@ pub enum ChainJoinKind {
     NodeToFwdEdge,
     NodeToBwdEdge,
     FwdEdgeToNode,
-    BwdEdgeToNode
+    BwdEdgeToNode,
 }
 
 #[derive(Debug)]
@@ -87,7 +89,7 @@ pub enum ExecPlan<'a> {
         right_info: TableInfo,
         kind: ChainJoinKind,
         left_outer: bool,
-        right_outer: bool
+        right_outer: bool,
     },
     // IndexIt {it: ..}
     KeySortedWithAssocItPlan {
@@ -163,12 +165,8 @@ impl<'a> ExecPlan<'a> {
             }
             ExecPlan::KeyedUnionItPlan { left, .. } => left.tuple_widths(),
             ExecPlan::KeyedDifferenceItPlan { left, .. } => left.tuple_widths(),
-            ExecPlan::FilterItPlan { source, .. } => {
-                source.tuple_widths()
-            }
-            ExecPlan::EvalItPlan { source, .. } => {
-                source.tuple_widths()
-            }
+            ExecPlan::FilterItPlan { source, .. } => source.tuple_widths(),
+            ExecPlan::EvalItPlan { source, .. } => source.tuple_widths(),
             ExecPlan::BagsUnionIt { bags } => {
                 if bags.is_empty() {
                     (0, 0)
@@ -202,7 +200,7 @@ impl<'a> OutputItPlan<'a> {
 }
 
 impl<'a> ExecPlan<'a> {
-    pub fn iter(&'a self) -> Result<Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>> {
+    pub fn iter(&'a self) -> Result<Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>> {
         match self {
             ExecPlan::NodeItPlan { it, info, .. } => {
                 let it = it.try_get()?;
@@ -217,7 +215,11 @@ impl<'a> ExecPlan<'a> {
                 prefix_tuple.push_int(info.src_table_id.id);
                 it.seek(prefix_tuple);
 
-                Ok(Box::new(EdgeIterator { it, started: false, src_table_id: info.src_table_id.id }))
+                Ok(Box::new(EdgeIterator {
+                    it,
+                    started: false,
+                    src_table_id: info.src_table_id.id,
+                }))
             }
             ExecPlan::EdgeKeyOnlyBwdItPlan { it, info, .. } => {
                 let it = it.try_get()?;
@@ -225,7 +227,11 @@ impl<'a> ExecPlan<'a> {
                 prefix_tuple.push_int(info.dst_table_id.id);
                 it.seek(prefix_tuple);
 
-                Ok(Box::new(EdgeKeyOnlyBwdIterator { it, started: false, dst_table_id: info.dst_table_id.id }))
+                Ok(Box::new(EdgeKeyOnlyBwdIterator {
+                    it,
+                    started: false,
+                    dst_table_id: info.dst_table_id.id,
+                }))
             }
             ExecPlan::KeySortedWithAssocItPlan { main, associates } => {
                 let buffer = iter::repeat_with(|| None).take(associates.len()).collect();
@@ -259,7 +265,7 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::EvalItPlan {
                 source: it,
                 keys,
-                vals
+                vals,
             } => Ok(Box::new(EvalIterator {
                 it: it.iter()?,
                 keys,
@@ -303,12 +309,14 @@ impl<'a> ExecPlan<'a> {
                 left: left.iter()?,
                 right: right.iter()?,
             })),
-            ExecPlan::KeyedDifferenceItPlan { left, right } => Ok(Box::new(KeyedDifferenceIterator {
-                left: left.iter()?,
-                right: right.iter()?,
-                right_cache: None,
-                started: false,
-            })),
+            ExecPlan::KeyedDifferenceItPlan { left, right } => {
+                Ok(Box::new(KeyedDifferenceIterator {
+                    left: left.iter()?,
+                    right: right.iter()?,
+                    right_cache: None,
+                    started: false,
+                }))
+            }
             ExecPlan::BagsUnionIt { bags } => {
                 let bags = bags.iter().map(|i| i.iter()).collect::<Result<Vec<_>>>()?;
                 Ok(Box::new(BagsUnionIterator { bags, current: 0 }))
@@ -324,8 +332,8 @@ impl<'a> ExecPlan<'a> {
 }
 
 pub struct KeyedUnionIterator<'a> {
-    left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
-    right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
+    right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
 }
 
 impl<'a> Iterator for KeyedUnionIterator<'a> {
@@ -376,8 +384,8 @@ impl<'a> Iterator for KeyedUnionIterator<'a> {
 }
 
 pub struct KeyedDifferenceIterator<'a> {
-    left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
-    right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
+    right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     right_cache: Option<MegaTuple>,
     started: bool,
 }
@@ -445,7 +453,7 @@ impl<'a> Iterator for KeyedDifferenceIterator<'a> {
 }
 
 pub struct BagsUnionIterator<'a> {
-    bags: Vec<Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>>,
+    bags: Vec<Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>>,
     current: usize,
 }
 
@@ -568,7 +576,7 @@ impl<'a> Iterator for EdgeKeyOnlyBwdIterator<'a> {
 }
 
 pub struct KeySortedWithAssocIterator<'a> {
-    main: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    main: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     associates: Vec<NodeIterator<'a>>,
     buffer: Vec<Option<(CowTuple, CowTuple)>>,
 }
@@ -588,7 +596,8 @@ impl<'a> Iterator for KeySortedWithAssocIterator<'a> {
                 };
                 let l = self.associates.len();
                 // initialize vector for associate values
-                let mut assoc_vals: Vec<Option<CowTuple>> = iter::repeat_with(|| None).take(l).collect();
+                let mut assoc_vals: Vec<Option<CowTuple>> =
+                    iter::repeat_with(|| None).take(l).collect();
                 // let l = assoc_vals.len();
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..l {
@@ -651,8 +660,8 @@ impl<'a> Iterator for KeySortedWithAssocIterator<'a> {
 }
 
 pub struct OuterMergeJoinIterator<'a> {
-    left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
-    right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
+    right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     left_outer: bool,
     right_outer: bool,
     left_keys: &'a [(TableId, ColId)],
@@ -800,8 +809,8 @@ impl<'a> Iterator for OuterMergeJoinIterator<'a> {
 }
 
 pub struct MergeJoinIterator<'a> {
-    left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
-    right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
+    right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     left_keys: &'a [(TableId, ColId)],
     right_keys: &'a [(TableId, ColId)],
 }
@@ -861,10 +870,10 @@ impl<'a> Iterator for MergeJoinIterator<'a> {
 }
 
 pub struct CartesianProdIterator<'a> {
-    left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     left_cache: MegaTuple,
     right_source: &'a ExecPlan<'a>,
-    right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
 }
 
 impl<'a> Iterator for CartesianProdIterator<'a> {
@@ -907,7 +916,7 @@ impl<'a> Iterator for CartesianProdIterator<'a> {
 }
 
 pub struct FilterIterator<'a> {
-    it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    it: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     filter: &'a Value<'a>,
 }
 
@@ -935,7 +944,7 @@ impl<'a> Iterator for FilterIterator<'a> {
 }
 
 pub struct OutputIterator<'a> {
-    it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    it: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     transform: &'a Value<'a>,
 }
 
@@ -961,7 +970,7 @@ impl<'a> Iterator for OutputIterator<'a> {
 }
 
 pub struct EvalIterator<'a> {
-    it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    it: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     keys: &'a [(String, Value<'a>)],
     vals: &'a [(String, Value<'a>)],
 }
@@ -1072,11 +1081,14 @@ mod tests {
                 .next()
                 .unwrap();
             let sel_pat = sess.parse_select_pattern(p).unwrap();
-            let sel_vals = Value::Dict(sel_pat.vals.into_iter().map(|(k, v)| (k.into(), v)).collect());
-            let amap = sess.node_accessor_map(
-                &from_pat.binding,
-                &from_pat.info,
+            let sel_vals = Value::Dict(
+                sel_pat
+                    .vals
+                    .into_iter()
+                    .map(|(k, v)| (k.into(), v))
+                    .collect(),
             );
+            let amap = sess.node_accessor_map(&from_pat.binding, &from_pat.info);
             let (_, vals) = sess
                 .partial_eval(sel_vals, &Default::default(), &amap)
                 .unwrap();
@@ -1210,7 +1222,6 @@ mod tests {
 
             let duration = start.elapsed();
             println!("Time elapsed {:?}", duration);
-
 
             let s = r##"from (e:Employee)-[hj:HasJob]->(j:Job)
             where e.id == 110

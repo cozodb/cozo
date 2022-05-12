@@ -248,7 +248,10 @@ impl<'a> Session<'a> {
         }
 
         let vals = if merged.is_empty() {
-            collected_vals.into_iter().map(|(k, v)| (k.to_string(), v.to_static())).collect::<Vec<_>>()
+            collected_vals
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_static()))
+                .collect::<Vec<_>>()
         } else {
             // construct it with help of partial eval
             todo!()

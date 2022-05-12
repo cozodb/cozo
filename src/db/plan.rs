@@ -1,16 +1,16 @@
-use std::collections::btree_map::Entry;
 use crate::db::engine::Session;
 use crate::db::iterator::{ChainJoinKind, ExecPlan, IteratorSlot, OutputItPlan, TableRowGetter};
 use crate::db::query::{EdgeOrNodeEl, EdgeOrNodeKind, FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
+use crate::error::CozoError::LogicError;
 use crate::error::Result;
 use crate::parser::Rule;
+use crate::relation::data::DataKind;
 use crate::relation::value::{StaticValue, Value};
 use cozorocks::IteratorPtr;
 use pest::iterators::Pair;
+use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
-use crate::error::CozoError::LogicError;
-use crate::relation::data::DataKind;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum OuterJoinType {
@@ -40,20 +40,43 @@ fn merge_accessor_map(mut left: AccessorMap, right: AccessorMap) -> AccessorMap 
 
 fn convert_to_relative_accessor_map(amap: AccessorMap) -> AccessorMap {
     // TODO this only handles the simplest case
-    fn convert_inner(inner: BTreeMap<String, (TableId, ColId)>) -> BTreeMap<String, (TableId, ColId)> {
-        inner.into_iter().map(|(k, (_tid, cid))| {
-            (k, (TableId::new(false, 0), cid))
-        }).collect()
+    fn convert_inner(
+        inner: BTreeMap<String, (TableId, ColId)>,
+    ) -> BTreeMap<String, (TableId, ColId)> {
+        inner
+            .into_iter()
+            .map(|(k, (_tid, cid))| (k, (TableId::new(false, 0), cid)))
+            .collect()
     }
-    amap.into_iter().map(|(k, v)| (k, convert_inner(v))).collect()
+    amap.into_iter()
+        .map(|(k, v)| (k, convert_inner(v)))
+        .collect()
 }
 
 fn shift_accessor_map(amap: AccessorMap, (keyshift, valshift): (usize, usize)) -> AccessorMap {
-    let shift_inner = |inner: BTreeMap<String, (TableId, ColId)>| -> BTreeMap<String, (TableId, ColId)> {
-        inner.into_iter().map(|(k, (tid, cid))| {
-            (k, (TableId::new(tid.in_root, tid.id + if cid.is_key { keyshift as i64 } else { valshift as i64 }), cid))
-        }).collect()
-    };
+    let shift_inner =
+        |inner: BTreeMap<String, (TableId, ColId)>| -> BTreeMap<String, (TableId, ColId)> {
+            inner
+                .into_iter()
+                .map(|(k, (tid, cid))| {
+                    (
+                        k,
+                        (
+                            TableId::new(
+                                tid.in_root,
+                                tid.id
+                                    + if cid.is_key {
+                                        keyshift as i64
+                                    } else {
+                                        valshift as i64
+                                    },
+                            ),
+                            cid,
+                        ),
+                    )
+                })
+                .collect()
+        };
     amap.into_iter().map(|(k, v)| (k, shift_inner(v))).collect()
 }
 
@@ -64,7 +87,10 @@ impl<'a> Session<'a> {
             v.0
         })
     }
-    fn do_reify_intermediate_plan(&'a self, plan: ExecPlan<'a>) -> Result<(ExecPlan<'a>, AccessorMap)> {
+    fn do_reify_intermediate_plan(
+        &'a self,
+        plan: ExecPlan<'a>,
+    ) -> Result<(ExecPlan<'a>, AccessorMap)> {
         let res = match plan {
             ExecPlan::NodeItPlan { info, binding, .. } => {
                 let amap = match &binding {
@@ -80,11 +106,7 @@ impl<'a> Session<'a> {
                     self.txn.iterator(true, &self.temp_cf)
                 };
                 let it = IteratorSlot::Reified(it);
-                let plan = ExecPlan::NodeItPlan {
-                    it,
-                    info,
-                    binding,
-                };
+                let plan = ExecPlan::NodeItPlan { it, info, binding };
                 (plan, amap)
             }
             ExecPlan::EdgeItPlan { info, binding, .. } => {
@@ -101,11 +123,7 @@ impl<'a> Session<'a> {
                     self.txn.iterator(true, &self.temp_cf)
                 };
                 let it = IteratorSlot::Reified(it);
-                let plan = ExecPlan::EdgeItPlan {
-                    it,
-                    info,
-                    binding,
-                };
+                let plan = ExecPlan::EdgeItPlan { it, info, binding };
                 (plan, amap)
             }
             ExecPlan::EdgeBwdItPlan { .. } => {
@@ -136,16 +154,26 @@ impl<'a> Session<'a> {
                 };
                 (plan, amap)
             }
-            ExecPlan::EvalItPlan { source: it, keys, vals } => {
+            ExecPlan::EvalItPlan {
+                source: it,
+                keys,
+                vals,
+            } => {
                 let (inner, amap) = self.do_reify_intermediate_plan(*it)?;
-                let keys = keys.into_iter().map(|(k, v)| -> Result<_> {
-                    let (_, v) = self.partial_eval(v, &Default::default(), &amap)?;
-                    Ok((k, v))
-                }).collect::<Result<Vec<_>>>()?;
-                let vals = vals.into_iter().map(|(k, v)| -> Result<_> {
-                    let (_, v) = self.partial_eval(v, &Default::default(), &amap)?;
-                    Ok((k, v))
-                }).collect::<Result<Vec<_>>>()?;
+                let keys = keys
+                    .into_iter()
+                    .map(|(k, v)| -> Result<_> {
+                        let (_, v) = self.partial_eval(v, &Default::default(), &amap)?;
+                        Ok((k, v))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let vals = vals
+                    .into_iter()
+                    .map(|(k, v)| -> Result<_> {
+                        let (_, v) = self.partial_eval(v, &Default::default(), &amap)?;
+                        Ok((k, v))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
                 let plan = ExecPlan::EvalItPlan {
                     source: inner.into(),
                     keys,
@@ -154,7 +182,14 @@ impl<'a> Session<'a> {
                 (plan, amap)
             }
             ExecPlan::BagsUnionIt { .. } => todo!(),
-            ExecPlan::ChainJoinItPlan { .. } => {
+            ExecPlan::ChainJoinItPlan {
+                left,
+                right,
+                right_info,
+                kind,
+                left_outer,
+                right_outer,
+            } => {
                 todo!()
             }
         };
@@ -163,7 +198,11 @@ impl<'a> Session<'a> {
     pub fn reify_output_plan(&'a self, plan: ExecPlan<'a>) -> Result<OutputItPlan<'a>> {
         let plan = self.reify_intermediate_plan(plan)?;
         let plan = match plan {
-            ExecPlan::EvalItPlan { source: it, mut keys, vals } => {
+            ExecPlan::EvalItPlan {
+                source: it,
+                mut keys,
+                vals,
+            } => {
                 keys.extend(vals);
                 let filter = Value::Dict(keys.into_iter().map(|(k, v)| (k.into(), v)).collect());
                 OutputItPlan {
@@ -195,82 +234,80 @@ impl<'a> Session<'a> {
         self.convert_select_data_to_plan(plan, select_data)
     }
     fn convert_from_data_to_plan(&self, from_data: Vec<FromEl>) -> Result<ExecPlan> {
-        let convert_el = |el|
-            match el {
-                FromEl::Simple(el) => {
-                    match el.info.kind {
-                        DataKind::Node => {
-                            Ok(ExecPlan::NodeItPlan {
-                                it: IteratorSlot::Dummy,
-                                info: el.info,
-                                binding: Some(el.binding),
-                            })
-                        }
-                        DataKind::Edge => {
-                            Ok(ExecPlan::EdgeItPlan {
-                                it: IteratorSlot::Dummy,
-                                info: el.info,
-                                binding: Some(el.binding),
-                            })
-                        }
-                        _ => Err(LogicError("Wrong type for table binding".to_string()))
-                    }
-                }
-                FromEl::Chain(ch) => {
-                    let mut it = ch.into_iter();
-                    let nxt = it.next().ok_or_else(|| LogicError("Empty chain not allowed".to_string()))?;
-                    let mut prev_kind = nxt.kind;
-                    let mut prev_left_outer = nxt.left_outer_marker;
-                    let mut plan = match prev_kind {
-                        EdgeOrNodeKind::Node => {
-                            ExecPlan::NodeItPlan {
-                                it: IteratorSlot::Dummy,
-                                info: nxt.info,
-                                binding: nxt.binding,
+        let convert_el = |el| match el {
+            FromEl::Simple(el) => match el.info.kind {
+                DataKind::Node => Ok(ExecPlan::NodeItPlan {
+                    it: IteratorSlot::Dummy,
+                    info: el.info,
+                    binding: Some(el.binding),
+                }),
+                DataKind::Edge => Ok(ExecPlan::EdgeItPlan {
+                    it: IteratorSlot::Dummy,
+                    info: el.info,
+                    binding: Some(el.binding),
+                }),
+                _ => Err(LogicError("Wrong type for table binding".to_string())),
+            },
+            FromEl::Chain(ch) => {
+                let mut it = ch.into_iter();
+                let nxt = it
+                    .next()
+                    .ok_or_else(|| LogicError("Empty chain not allowed".to_string()))?;
+                let mut prev_kind = nxt.kind;
+                let mut prev_left_outer = nxt.left_outer_marker;
+                let mut plan = match prev_kind {
+                    EdgeOrNodeKind::Node => ExecPlan::NodeItPlan {
+                        it: IteratorSlot::Dummy,
+                        info: nxt.info,
+                        binding: nxt.binding,
+                    },
+                    EdgeOrNodeKind::FwdEdge => ExecPlan::EdgeItPlan {
+                        it: IteratorSlot::Dummy,
+                        info: nxt.info,
+                        binding: nxt.binding,
+                    },
+                    EdgeOrNodeKind::BwdEdge => ExecPlan::EdgeBwdItPlan {
+                        it: IteratorSlot::Dummy,
+                        info: nxt.info,
+                        binding: nxt.binding,
+                        getter: TableRowGetter::Dummy,
+                    },
+                };
+                for el in it {
+                    plan = ExecPlan::ChainJoinItPlan {
+                        left: plan.into(),
+                        right: TableRowGetter::Dummy,
+                        right_info: el.info,
+                        kind: match (prev_kind, el.kind) {
+                            (EdgeOrNodeKind::Node, EdgeOrNodeKind::FwdEdge) => {
+                                ChainJoinKind::NodeToFwdEdge
                             }
-                        }
-                        EdgeOrNodeKind::FwdEdge => {
-                            ExecPlan::EdgeItPlan {
-                                it: IteratorSlot::Dummy,
-                                info: nxt.info,
-                                binding: nxt.binding,
+                            (EdgeOrNodeKind::Node, EdgeOrNodeKind::BwdEdge) => {
+                                ChainJoinKind::NodeToBwdEdge
                             }
-                        }
-                        EdgeOrNodeKind::BwdEdge => {
-                            ExecPlan::EdgeBwdItPlan {
-                                it: IteratorSlot::Dummy,
-                                info: nxt.info,
-                                binding: nxt.binding,
-                                getter: TableRowGetter::Dummy
+                            (EdgeOrNodeKind::FwdEdge, EdgeOrNodeKind::Node) => {
+                                ChainJoinKind::FwdEdgeToNode
                             }
-                        }
+                            (EdgeOrNodeKind::BwdEdge, EdgeOrNodeKind::Node) => {
+                                ChainJoinKind::BwdEdgeToNode
+                            }
+                            _ => unreachable!(),
+                        },
+                        left_outer: prev_left_outer,
+                        right_outer: el.right_outer_marker,
                     };
-                    for el in it {
-                        plan = ExecPlan::ChainJoinItPlan {
-                            left: plan.into(),
-                            right: TableRowGetter::Dummy,
-                            right_info: el.info,
-                            kind: match (prev_kind, el.kind) {
-                                (EdgeOrNodeKind::Node, EdgeOrNodeKind::FwdEdge) => ChainJoinKind::NodeToFwdEdge,
-                                (EdgeOrNodeKind::Node, EdgeOrNodeKind::BwdEdge) => ChainJoinKind::NodeToBwdEdge,
-                                (EdgeOrNodeKind::FwdEdge, EdgeOrNodeKind::Node) => ChainJoinKind::FwdEdgeToNode,
-                                (EdgeOrNodeKind::BwdEdge, EdgeOrNodeKind::Node) => ChainJoinKind::BwdEdgeToNode,
-                                _ => unreachable!()
-                            },
-                            left_outer: prev_left_outer,
-                            right_outer: el.right_outer_marker
-                        };
 
-                        prev_kind = el.kind;
-                        prev_left_outer = el.left_outer_marker;
-                    }
-                    println!("{:#?}", plan);
-                    Ok(plan)
+                    prev_kind = el.kind;
+                    prev_left_outer = el.left_outer_marker;
                 }
-            };
+                println!("{:#?}", plan);
+                Ok(plan)
+            }
+        };
         let mut from_data = from_data.into_iter();
-        let fst = from_data.next().ok_or_else(||
-            LogicError("Empty from clause".to_string()))?;
+        let fst = from_data
+            .next()
+            .ok_or_else(|| LogicError("Empty from clause".to_string()))?;
         let mut res = convert_el(fst)?;
         for nxt in from_data {
             let nxt = convert_el(nxt)?;
@@ -281,11 +318,7 @@ impl<'a> Session<'a> {
         }
         Ok(res)
     }
-    pub(crate) fn node_accessor_map(
-        &self,
-        binding: &str,
-        info: &TableInfo,
-    ) -> AccessorMap {
+    pub(crate) fn node_accessor_map(&self, binding: &str, info: &TableInfo) -> AccessorMap {
         let mut ret = BTreeMap::new();
         for (i, (k, _)) in info.key_typing.iter().enumerate() {
             ret.insert(k.into(), (info.table_id, (true, i).into()));
@@ -303,22 +336,30 @@ impl<'a> Session<'a> {
         }
         BTreeMap::from([(binding.to_string(), ret)])
     }
-    pub(crate) fn edge_accessor_map(
-        &self,
-        binding: &str,
-        info: &TableInfo,
-    ) -> AccessorMap {
+    pub(crate) fn edge_accessor_map(&self, binding: &str, info: &TableInfo) -> AccessorMap {
         let mut ret = BTreeMap::new();
         let src_key_len = info.src_key_typing.len();
         let dst_key_len = info.dst_key_typing.len();
         for (i, (k, _)) in info.src_key_typing.iter().enumerate() {
-            ret.insert("_src_".to_string() + k, (info.table_id, (true, 1 + i).into()));
+            ret.insert(
+                "_src_".to_string() + k,
+                (info.table_id, (true, 1 + i).into()),
+            );
         }
         for (i, (k, _)) in info.dst_key_typing.iter().enumerate() {
-            ret.insert("_dst_".to_string() + k, (info.table_id, (true, 2 + src_key_len + i).into()));
+            ret.insert(
+                "_dst_".to_string() + k,
+                (info.table_id, (true, 2 + src_key_len + i).into()),
+            );
         }
         for (i, (k, _)) in info.key_typing.iter().enumerate() {
-            ret.insert(k.into(), (info.table_id, (true, 2 + src_key_len + dst_key_len + i).into()));
+            ret.insert(
+                k.into(),
+                (
+                    info.table_id,
+                    (true, 2 + src_key_len + dst_key_len + i).into(),
+                ),
+            );
         }
         for (i, (k, _)) in info.val_typing.iter().enumerate() {
             ret.insert(k.into(), (info.table_id, (false, i).into()));
@@ -341,12 +382,10 @@ impl<'a> Session<'a> {
         let where_data = self.partial_eval(where_data, &Default::default(), &Default::default());
         let plan = match where_data?.1 {
             Value::Bool(true) => plan,
-            v => {
-                ExecPlan::FilterItPlan {
-                    source: Box::new(plan),
-                    filter: v,
-                }
-            }
+            v => ExecPlan::FilterItPlan {
+                source: Box::new(plan),
+                filter: v,
+            },
         };
         Ok(plan)
     }
