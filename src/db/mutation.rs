@@ -16,9 +16,9 @@ use std::rc::Rc;
 /// # key layouts
 ///
 /// * Node
-///   * `[table_id, keys]`
+///   * `table_id, [keys]`
 /// * Edge
-///   * `[table_id, fst_table_id, fst_keys, is_forward, snd_keys, other_keys]` twice, the backward has no data
+///   * `table_id, [fst_table_id, fst_keys, is_forward, snd_keys, other_keys]` twice, the backward has no data
 /// * Associate
 ///   * Same as the main one
 ///

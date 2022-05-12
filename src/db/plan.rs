@@ -1,5 +1,5 @@
 use crate::db::engine::Session;
-use crate::db::iterator::{ChainJoinKind, ExecPlan, IteratorSlot, OutputItPlan, TableRowGetter};
+use crate::db::iterator::{ChainJoinKind, ExecPlan, IteratorSlot, OutputItPlan, TableRowGetter, TableRowGetterSlot};
 use crate::db::query::{EdgeOrNodeEl, EdgeOrNodeKind, FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
 use crate::error::CozoError::LogicError;
@@ -67,10 +67,10 @@ fn shift_accessor_map(amap: AccessorMap, (keyshift, valshift): (usize, usize)) -
                                 tid.in_root,
                                 tid.id
                                     + if cid.is_key {
-                                        keyshift as i64
-                                    } else {
-                                        valshift as i64
-                                    },
+                                    keyshift as i64
+                                } else {
+                                    valshift as i64
+                                },
                             ),
                             cid,
                         ),
@@ -189,7 +189,6 @@ impl<'a> Session<'a> {
                 right_info,
                 kind,
                 left_outer,
-                right_outer,
                 right_binding,
             } => {
                 let (l_plan, l_map) = self.do_reify_intermediate_plan(*left)?;
@@ -207,16 +206,15 @@ impl<'a> Session<'a> {
                 let r_map = shift_accessor_map(r_map, l_plan.tuple_widths());
                 let plan = ExecPlan::ChainJoinItPlan {
                     left: l_plan.into(),
-                    right: TableRowGetter::Reified {
+                    right: TableRowGetterSlot::Reified(TableRowGetter {
                         sess: self,
                         key_cache: OwnTuple::with_prefix(right_info.table_id.id as u32),
                         in_root: right_info.table_id.in_root,
-                    },
+                    }),
                     right_info,
                     right_binding,
                     kind,
                     left_outer,
-                    right_outer,
                 };
                 (plan, merge_accessor_map(l_map, r_map))
             }
@@ -298,13 +296,13 @@ impl<'a> Session<'a> {
                         it: IteratorSlot::Dummy,
                         info: nxt.info,
                         binding: nxt.binding,
-                        getter: TableRowGetter::Dummy,
+                        getter: TableRowGetterSlot::Dummy,
                     },
                 };
                 for el in it {
                     plan = ExecPlan::ChainJoinItPlan {
                         left: plan.into(),
-                        right: TableRowGetter::Dummy,
+                        right: TableRowGetterSlot::Dummy,
                         right_info: el.info,
                         kind: match (prev_kind, el.kind) {
                             (EdgeOrNodeKind::Node, EdgeOrNodeKind::FwdEdge) => {
@@ -322,7 +320,6 @@ impl<'a> Session<'a> {
                             _ => unreachable!(),
                         },
                         left_outer: prev_left_outer,
-                        right_outer: el.right_outer_marker,
                         right_binding: el.binding,
                     };
 

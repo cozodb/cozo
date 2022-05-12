@@ -8,6 +8,7 @@ use crate::relation::value;
 use crate::relation::value::{StaticValue, Value};
 use pest::iterators::Pair;
 use std::collections::BTreeMap;
+use crate::error::CozoError::LogicError;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum FromEl {
@@ -80,8 +81,9 @@ impl<'a> Session<'a> {
                     let mut pairs = p.into_inner();
                     let mut nxt = pairs.next().unwrap();
                     if nxt.as_rule() == Rule::outer_join_marker {
-                        right_join = true;
-                        nxt = pairs.next().unwrap();
+                        // right_join = true;
+                        // nxt = pairs.next().unwrap();
+                        return Err(LogicError("Right outer join not supported here".to_string()))
                     } else {
                         right_join = false;
                     }
