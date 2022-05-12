@@ -199,10 +199,14 @@ impl<'a> Session<'a> {
                     None => Default::default(),
                     Some(binding) => match kind {
                         ChainJoinKind::NodeToFwdEdge | ChainJoinKind::NodeToBwdEdge => {
-                            convert_to_relative_accessor_map(self.edge_accessor_map(binding, &right_info))
+                            convert_to_relative_accessor_map(
+                                self.edge_accessor_map(binding, &right_info),
+                            )
                         }
                         ChainJoinKind::FwdEdgeToNode | ChainJoinKind::BwdEdgeToNode => {
-                            convert_to_relative_accessor_map(self.node_accessor_map(binding, &right_info))
+                            convert_to_relative_accessor_map(
+                                self.node_accessor_map(binding, &right_info),
+                            )
                         }
                     },
                 };

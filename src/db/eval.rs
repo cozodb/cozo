@@ -22,11 +22,13 @@ pub fn extract_table_ref<'a>(
     } else {
         &tuples.vals
     };
-    let target = targets
-        .get(tid.id as usize)
-        .ok_or_else(|| {
-            LogicError(format!("Tuple ref out of bound: wanted {:?} for {}", tid, targets.len()))
-        })?;
+    let target = targets.get(tid.id as usize).ok_or_else(|| {
+        LogicError(format!(
+            "Tuple ref out of bound: wanted {:?} for {}",
+            tid,
+            targets.len()
+        ))
+    })?;
     if matches!(target.data_kind(), Ok(DataKind::Empty)) {
         Ok(Value::Null)
     } else {

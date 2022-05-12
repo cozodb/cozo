@@ -77,7 +77,7 @@ impl<'a> Session<'a> {
             .map(|p| match p.as_rule() {
                 Rule::node_pattern => self.parse_node_pattern(p),
                 Rule::edge_pattern => {
-                    let right_join;
+                    // let right_join;
                     let mut pairs = p.into_inner();
                     let nxt = pairs.next().unwrap();
                     if nxt.as_rule() == Rule::outer_join_marker {
@@ -87,7 +87,7 @@ impl<'a> Session<'a> {
                             "Right outer join not supported here".to_string(),
                         ));
                     } else {
-                        right_join = false;
+                        // right_join = false;
                     }
                     let mut edge = match nxt.as_rule() {
                         Rule::fwd_edge_pattern => self.parse_edge_pattern(nxt, true)?,
@@ -95,7 +95,7 @@ impl<'a> Session<'a> {
                         _ => unreachable!(),
                     };
                     edge.left_outer_marker = pairs.next().is_some();
-                    edge.right_outer_marker = right_join;
+                    edge.right_outer_marker = false; // right_join;
                     Ok(edge)
                 }
                 _ => unreachable!(),
