@@ -1,6 +1,8 @@
 use crate::db::engine::Session;
-use crate::db::iterator::{ChainJoinKind, ExecPlan, IteratorSlot, OutputItPlan, TableRowGetter, TableRowGetterSlot};
-use crate::db::query::{EdgeOrNodeEl, EdgeOrNodeKind, FromEl, Selection};
+use crate::db::iterator::{
+    ChainJoinKind, ExecPlan, IteratorSlot, OutputItPlan, TableRowGetter, TableRowGetterSlot,
+};
+use crate::db::query::{EdgeOrNodeKind, FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
 use crate::error::CozoError::LogicError;
 use crate::error::Result;
@@ -67,10 +69,10 @@ fn shift_accessor_map(amap: AccessorMap, (keyshift, valshift): (usize, usize)) -
                                 tid.in_root,
                                 tid.id
                                     + if cid.is_key {
-                                    keyshift as i64
-                                } else {
-                                    valshift as i64
-                                },
+                                        keyshift as i64
+                                    } else {
+                                        valshift as i64
+                                    },
                             ),
                             cid,
                         ),
@@ -185,27 +187,29 @@ impl<'a> Session<'a> {
             ExecPlan::BagsUnionIt { .. } => todo!(),
             ExecPlan::ChainJoinItPlan {
                 left,
-                right,
+                left_info,
                 right_info,
                 kind,
                 left_outer,
                 right_binding,
+                ..
             } => {
                 let (l_plan, l_map) = self.do_reify_intermediate_plan(*left)?;
                 let r_map = match &right_binding {
                     None => Default::default(),
                     Some(binding) => match kind {
                         ChainJoinKind::NodeToFwdEdge | ChainJoinKind::NodeToBwdEdge => {
-                            self.edge_accessor_map(binding, &right_info)
+                            convert_to_relative_accessor_map(self.edge_accessor_map(binding, &right_info))
                         }
                         ChainJoinKind::FwdEdgeToNode | ChainJoinKind::BwdEdgeToNode => {
-                            self.node_accessor_map(binding, &right_info)
+                            convert_to_relative_accessor_map(self.node_accessor_map(binding, &right_info))
                         }
                     },
                 };
                 let r_map = shift_accessor_map(r_map, l_plan.tuple_widths());
                 let plan = ExecPlan::ChainJoinItPlan {
                     left: l_plan.into(),
+                    left_info,
                     right: TableRowGetterSlot::Reified(TableRowGetter {
                         sess: self,
                         key_cache: OwnTuple::with_prefix(right_info.table_id.id as u32),
@@ -281,6 +285,7 @@ impl<'a> Session<'a> {
                     .ok_or_else(|| LogicError("Empty chain not allowed".to_string()))?;
                 let mut prev_kind = nxt.kind;
                 let mut prev_left_outer = nxt.left_outer_marker;
+                let mut last_info = nxt.info.clone();
                 let mut plan = match prev_kind {
                     EdgeOrNodeKind::Node => ExecPlan::NodeItPlan {
                         it: IteratorSlot::Dummy,
@@ -302,8 +307,9 @@ impl<'a> Session<'a> {
                 for el in it {
                     plan = ExecPlan::ChainJoinItPlan {
                         left: plan.into(),
+                        left_info: last_info,
                         right: TableRowGetterSlot::Dummy,
-                        right_info: el.info,
+                        right_info: el.info.clone(),
                         kind: match (prev_kind, el.kind) {
                             (EdgeOrNodeKind::Node, EdgeOrNodeKind::FwdEdge) => {
                                 ChainJoinKind::NodeToFwdEdge
@@ -325,8 +331,9 @@ impl<'a> Session<'a> {
 
                     prev_kind = el.kind;
                     prev_left_outer = el.left_outer_marker;
+                    last_info = el.info;
                 }
-                println!("{:#?}", plan);
+                // println!("{:#?}", plan);
                 Ok(plan)
             }
         };
