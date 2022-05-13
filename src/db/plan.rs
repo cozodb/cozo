@@ -516,7 +516,7 @@ impl<'a> ExecPlan<'a> {
                     sorted: false,
                     temp_table_id: 0,
                     skv_len: (0, 0, 0),
-                    sorted_it: sess.raw_iterator(false),
+                    sorted_it: None,
                 })),
             },
         }

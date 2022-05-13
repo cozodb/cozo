@@ -23,7 +23,7 @@ pub struct SortingMaterialization<'a> {
     pub(crate) sorted: bool,
     pub(crate) temp_table_id: u32,
     pub(crate) skv_len: (usize, usize, usize),
-    pub(crate) sorted_it: IteratorPtr<'a>,
+    pub(crate) sorted_it: Option<IteratorPtr<'a>>,
 }
 
 impl<'a> SortingMaterialization<'a> {
@@ -55,11 +55,12 @@ impl<'a> SortingMaterialization<'a> {
                 .txn
                 .put(false, &self.sess.temp_cf, &key_cache, &val_cache)?;
         }
-        self.sorted_it.refresh()?;
+        let sorted_it = self.sess.raw_iterator(false);
         key_cache.truncate_all();
-        self.sorted_it.seek(&key_cache);
+        sorted_it.seek(&key_cache);
         self.skv_len = (self.ordering.len(), kv_len.0, kv_len.1);
         self.sorted = true;
+        self.sorted_it = Some(sorted_it);
         Ok(())
     }
 }
@@ -88,9 +89,18 @@ impl<'a> Iterator for SortingMaterialization<'a> {
                 return Some(Err(e));
             }
         } else {
-            self.sorted_it.next();
+            match &self.sorted_it {
+                None => unreachable!(),
+                Some(it) => {
+                    it.next();
+                }
+            }
         }
-        match unsafe { self.sorted_it.pair() } {
+        let pair = match &self.sorted_it {
+            None => unreachable!(),
+            Some(it) => unsafe { it.pair() },
+        };
+        match pair {
             None => None,
             Some((kt, vt)) => {
                 let kt = Tuple::new(kt);
