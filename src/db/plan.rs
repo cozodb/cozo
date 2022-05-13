@@ -13,7 +13,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::iter;
-use crate::db::iterator::{BagsUnionIterator, CartesianProdIterator, EdgeIterator, EdgeKeyOnlyBwdIterator, EdgeToNodeChainJoinIterator, EvalIterator, FilterIterator, KeyedDifferenceIterator, KeyedUnionIterator, KeySortedWithAssocIterator, MergeJoinIterator, NodeEdgeChainKind, NodeIterator, NodeToEdgeChainJoinIterator, OuterMergeJoinIterator, OutputIterator};
+use crate::db::iterator::{BagsUnionIterator, CartesianProdIterator, EdgeIterator, EdgeKeyOnlyBwdIterator, EdgeToNodeChainJoinIterator, EvalIterator, FilterIterator, KeyedDifferenceIterator, KeyedUnionIterator, KeySortedWithAssocIterator, LimiterIterator, MergeJoinIterator, NodeEdgeChainKind, NodeIterator, NodeToEdgeChainJoinIterator, OuterMergeJoinIterator, OutputIterator};
 use crate::relation::table::MegaTuple;
 
 
@@ -195,6 +195,11 @@ pub enum ExecPlan<'a> {
     BagsUnionIt {
         bags: Vec<ExecPlan<'a>>,
     },
+    LimiterIt {
+        source: Box<ExecPlan<'a>>,
+        offset: usize,
+        limit: usize,
+    },
 }
 
 impl<'a> ExecPlan<'a> {
@@ -239,6 +244,9 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::ChainJoinItPlan { left, right_associates, .. } => {
                 let (l1, l2) = left.tuple_widths();
                 (l1 + 1, l2 + 1 + right_associates.len())
+            }
+            ExecPlan::LimiterIt { source, .. } => {
+                source.tuple_widths()
             }
         }
     }
@@ -450,6 +458,14 @@ impl<'a> ExecPlan<'a> {
                     }),
                 }),
             },
+            ExecPlan::LimiterIt { source, limit, offset } => {
+                Ok(Box::new(LimiterIterator {
+                    source: source.iter()?,
+                    limit: *limit,
+                    offset: *offset,
+                    current: 0,
+                }))
+            }
         }
     }
 }
@@ -699,6 +715,14 @@ impl<'a> Session<'a> {
                     right_associates,
                 };
                 (plan, l_map)
+            }
+            ExecPlan::LimiterIt { source, limit, offset } => {
+                let (source, amap) = self.do_reify_intermediate_plan(*source)?;
+                (ExecPlan::LimiterIt {
+                    source: source.into(),
+                    limit,
+                    offset,
+                }, amap)
             }
         };
         Ok(res)

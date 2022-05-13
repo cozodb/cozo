@@ -22,6 +22,36 @@ pub enum NodeEdgeChainKind {
     Bidi,
 }
 
+pub struct LimiterIterator<'a> {
+    pub(crate) source: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) limit: usize,
+    pub(crate) offset: usize,
+    pub(crate) current: usize,
+}
+
+impl<'a> Iterator for LimiterIterator<'a> {
+    type Item = Result<MegaTuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.source.next() {
+                None => return None,
+                Some(Err(e)) => return Some(Err(e)),
+                Some(Ok(val)) => {
+                    self.current += 1;
+                    if self.current <= self.offset {
+                        continue;
+                    } else if self.current > self.limit + self.offset {
+                        return None;
+                    } else {
+                        return Some(Ok(val));
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub struct NodeToEdgeChainJoinIterator<'a> {
     // TODO associates, right_outer
     pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
@@ -998,7 +1028,7 @@ mod tests {
                 val_typing: vec![],
                 src_key_typing: vec![],
                 dst_key_typing: vec![],
-                associates: vec![]
+                associates: vec![],
             };
             let it = ExecPlan::KeySortedWithAssocItPlan {
                 main: Box::new(sess.iter_node(tbl)),
@@ -1007,7 +1037,7 @@ mod tests {
                     (dummy_tinfo.clone(), sess.raw_iterator(true).into()),
                     (dummy_tinfo.clone(), sess.raw_iterator(true).into()),
                 ],
-                binding: None
+                binding: None,
             };
             {
                 for el in it.iter()? {
