@@ -1148,7 +1148,8 @@ mod tests {
 
             let s = r##"from (j:Job)<-[hj:HasJob]-(e:Employee)
             where j.id == 16
-            select { eid: e.id, jid: j.id, fname: e.first_name, salary: hj.salary, job: j.title }"##;
+            select { eid: e.id, jid: j.id, fname: e.first_name, salary: hj.salary, job: j.title }
+            limit 2 offset 1"##;
 
             let parsed = Parser::parse(Rule::relational_query, s)?.next().unwrap();
             let plan = sess.query_to_plan(parsed)?;

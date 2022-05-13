@@ -946,9 +946,18 @@ impl<'a> Session<'a> {
     }
     fn convert_select_data_to_plan<'b>(
         &self,
-        plan: ExecPlan<'b>,
+        mut plan: ExecPlan<'b>,
         select_data: Selection,
     ) -> Result<ExecPlan<'b>> {
+        if select_data.limit.is_some() || select_data.offset.is_some() {
+            let limit = select_data.limit.unwrap_or(0) as usize;
+            let offset = select_data.offset.unwrap_or(0) as usize;
+            plan = ExecPlan::LimiterIt {
+                source: plan.into(),
+                offset,
+                limit,
+            }
+        }
         Ok(ExecPlan::EvalItPlan {
             source: Box::new(plan),
             keys: select_data.keys,
