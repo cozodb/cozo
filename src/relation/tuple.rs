@@ -167,7 +167,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 Tag::Int => start + self.parse_varint(start).1,
                 Tag::Float => start + 8,
                 Tag::Uuid => start + 16,
-                Tag::Text | Tag::Variable => {
+                Tag::Text | Tag::Variable | Tag::Bytes => {
                     let (slen, offset) = self.parse_varint(start);
                     let slen = slen as usize;
                     start + slen + offset
@@ -336,6 +336,13 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 let s = unsafe {
                     std::str::from_utf8_unchecked(&data[start + offset..start + offset + slen])
                 };
+
+                (start + slen + offset, s.into())
+            }
+            Tag::Bytes => {
+                let (slen, offset) = self.parse_varint(start);
+                let slen = slen as usize;
+                let s = &data[start + offset..start + offset + slen];
 
                 (start + slen + offset, s.into())
             }
@@ -584,6 +591,14 @@ impl OwnTuple {
         self.idx_cache.borrow_mut().push(self.data.len());
     }
     #[inline]
+    pub fn push_bytes(&mut self, b: impl AsRef<[u8]>) {
+        let b = b.as_ref();
+        self.push_tag(Tag::Bytes);
+        self.push_varint(b.len() as u64);
+        self.data.extend_from_slice(b);
+        self.idx_cache.borrow_mut().push(self.data.len());
+    }
+    #[inline]
     pub fn push_variable(&mut self, s: impl AsRef<str>) {
         let s = s.as_ref();
         self.push_tag(Tag::Variable);
@@ -600,6 +615,7 @@ impl OwnTuple {
             Value::Float(f) => self.push_float(f.into_inner()),
             Value::Uuid(u) => self.push_uuid(*u),
             Value::Text(t) => self.push_str(t),
+            Value::Bytes(b) => self.push_bytes(b),
             Value::Variable(s) => self.push_variable(s),
             Value::List(l) => {
                 self.push_tag(Tag::List);
@@ -782,7 +798,7 @@ mod tests {
         t.push_null();
         t.push_str("abcdef");
         t.push_null();
-        t.push_value(&vec![true.into(), 1e236.into(), "xxyyzz".into()].into());
+        t.push_value(&vec![true.into(), 1e236.into(), Value::from("xxyyzz")].into());
         t.push_int(-123345);
         t.push_value(&BTreeMap::from([]).into());
         t.push_int(12121212);
@@ -816,7 +832,7 @@ mod tests {
             Value::from(Value::from(vec![
                 true.into(),
                 1e236.into(),
-                "xxyyzz".into(),
+                Value::from("xxyyzz"),
             ])),
             t.get(6).unwrap()
         );
@@ -861,7 +877,7 @@ mod tests {
             Value::from(Value::from(vec![
                 true.into(),
                 1e236.into(),
-                "xxyyzz".into(),
+                Value::from("xxyyzz"),
             ])),
             t.get(6).unwrap()
         );

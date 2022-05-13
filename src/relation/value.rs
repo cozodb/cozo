@@ -26,6 +26,8 @@ pub enum Tag {
     Text = 6,
     Uuid = 7,
 
+    Bytes = 64,
+
     List = 128,
     Dict = 129,
 
@@ -52,6 +54,8 @@ impl TryFrom<u8> for Tag {
             5 => Float,
             6 => Text,
             7 => Uuid,
+
+            64 => Bytes,
 
             128 => List,
             129 => Dict,
@@ -104,6 +108,7 @@ pub enum Value<'a> {
     Float(OrderedFloat<f64>),
     Uuid(Uuid),
     Text(Cow<'a, str>),
+    Bytes(Cow<'a, [u8]>),
     // maybe evaluated
     List(Vec<Value<'a>>),
     Dict(BTreeMap<Cow<'a, str>, Value<'a>>),
@@ -165,7 +170,8 @@ impl<'a> Value<'a> {
             }
             Value::IdxAccess(idx, value) => Value::IdxAccess(idx, value.to_static().into()),
             Value::TupleRef(tid, cid) => Value::TupleRef(tid, cid),
-            Value::DescSort(Reverse(val)) => Value::DescSort(Reverse(val.to_static().into()))
+            Value::DescSort(Reverse(val)) => Value::DescSort(Reverse(val.to_static().into())),
+            Value::Bytes(t) => { Value::from(t.into_owned()) }
         }
     }
     #[inline]
@@ -177,6 +183,7 @@ impl<'a> Value<'a> {
             | Value::Float(_)
             | Value::Uuid(_)
             | Value::Text(_)
+            | Value::Bytes(_)
             | Value::EndSentinel => true,
             Value::List(l) => l.iter().all(|v| v.is_evaluated()),
             Value::Dict(d) => d.values().all(|v| v.is_evaluated()),
@@ -219,6 +226,7 @@ impl<'a> Value<'a> {
             | Value::Float(_)
             | Value::Uuid(_)
             | Value::Text(_)
+            | Value::Bytes(_)
             | Value::Variable(_)) => v,
             Value::List(l) => Value::List(
                 l.into_iter()
@@ -309,10 +317,24 @@ impl<'a> From<&'a str> for Value<'a> {
     }
 }
 
+impl<'a> From<&'a [u8]> for Value<'a> {
+    #[inline]
+    fn from(v: &'a [u8]) -> Self {
+        Value::Bytes(Cow::Borrowed(v))
+    }
+}
+
 impl From<String> for StaticValue {
     #[inline]
     fn from(s: String) -> Self {
         Value::Text(Cow::Owned(s))
+    }
+}
+
+impl From<Vec<u8>> for StaticValue {
+    #[inline]
+    fn from(v: Vec<u8>) -> Self {
+        Value::Bytes(Cow::Owned(v))
     }
 }
 
@@ -354,6 +376,9 @@ impl<'a> Display for Value<'a> {
             }
             Value::Uuid(u) => {
                 write!(f, "{}", u)?;
+            }
+            Value::Bytes(b) => {
+                write!(f, "<{} bytes: {:?} ..>", b.len(), &b[..8])?;
             }
             Value::Text(t) => {
                 f.write_char('"')?;

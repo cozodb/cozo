@@ -60,6 +60,7 @@ pub fn tuple_eval<'a>(value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Val
         | Value::Int(_)
         | Value::Float(_)
         | Value::Uuid(_)
+        | Value::Bytes(_)
         | Value::Text(_)) => v.clone(),
         Value::List(l) => {
             let l = l
@@ -541,6 +542,7 @@ impl<'s> Session<'s> {
             | Value::Int(_)
             | Value::Float(_)
             | Value::Uuid(_)
+            | Value::Bytes(_)
             | Value::Text(_)
             | Value::EndSentinel) => Ok((true, v)),
             v @ Value::TupleRef(_, _) => Ok((false, v)),
@@ -1119,6 +1121,7 @@ impl<'s> Session<'s> {
                                     | Value::Float(_)
                                     | Value::Uuid(_)
                                     | Value::EndSentinel
+                                    | Value::Bytes(_)
                                     | Value::Text(_) => unreachable!(),
                                     Value::List(_) | Value::Dict(_) => {
                                         Err(Err(CozoError::InvalidArgument))
@@ -1289,6 +1292,7 @@ impl<'s> Session<'s> {
                                     | Value::Float(_)
                                     | Value::Uuid(_)
                                     | Value::EndSentinel
+                                    | Value::Bytes(_)
                                     | Value::Text(_) => unreachable!(),
                                     Value::List(_) | Value::Dict(_) => {
                                         Err(Err(CozoError::InvalidArgument))

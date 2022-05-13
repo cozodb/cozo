@@ -61,7 +61,7 @@ mod tests {
             BTreeMap::new().into(),
             1e23.into(),
             false.into(),
-            "xxyx".into(),
+            Value::from("xxyx"),
         ]
         .into();
         t.push_value(&vals);

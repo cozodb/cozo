@@ -17,6 +17,7 @@ fn do_extract_tables(val: &Value, coll: &mut BTreeSet<TableId>) {
         | Value::Int(_)
         | Value::Float(_)
         | Value::Uuid(_)
+        | Value::Bytes(_)
         | Value::Text(_) => {}
         Value::List(l) => {
             for v in l {
