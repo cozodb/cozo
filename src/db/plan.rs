@@ -13,9 +13,27 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::iter;
-use crate::db::iterator::{BagsUnionIterator, CartesianProdIterator, EdgeIterator, EdgeKeyOnlyBwdIterator, EdgeToNodeChainJoinIterator, EvalIterator, FilterIterator, KeyedDifferenceIterator, KeyedUnionIterator, KeySortedWithAssocIterator, LimiterIterator, MergeJoinIterator, NodeEdgeChainKind, NodeIterator, NodeToEdgeChainJoinIterator, OuterMergeJoinIterator, OutputIterator};
+use crate::db::iterator::{BagsUnionIterator, CartesianProdIterator, EdgeIterator, EdgeKeyOnlyBwdIterator, EdgeToNodeChainJoinIterator, EvalIterator, FilterIterator, KeyedDifferenceIterator, KeyedUnionIterator, KeySortedWithAssocIterator, LimiterIterator, MergeJoinIterator, NodeEdgeChainKind, NodeIterator, NodeToEdgeChainJoinIterator, OuterMergeJoinIterator, OutputIterator, SortingMaterialization};
 use crate::relation::table::MegaTuple;
 
+
+pub enum SessionSlot<'a> {
+    Dummy,
+    Reified(&'a Session<'a>)
+}
+
+impl <'a> Debug for SessionSlot<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SessionSlot::Dummy => {
+                write!(f, "DummySession")
+            }
+            SessionSlot::Reified(_) => {
+                write!(f, "Session")
+            }
+        }
+    }
+}
 
 pub enum IteratorSlot<'a> {
     Dummy,
@@ -192,13 +210,18 @@ pub enum ExecPlan<'a> {
         keys: Vec<(String, Value<'a>)>,
         vals: Vec<(String, Value<'a>)>,
     },
-    BagsUnionIt {
+    BagsUnionItPlan {
         bags: Vec<ExecPlan<'a>>,
     },
-    LimiterIt {
+    LimiterItPlan {
         source: Box<ExecPlan<'a>>,
         offset: usize,
         limit: usize,
+    },
+    SortingMatPlan {
+        source: Box<ExecPlan<'a>>,
+        ordering: Vec<(bool, StaticValue)>,
+        sess: SessionSlot<'a>
     },
 }
 
@@ -231,7 +254,7 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::KeyedDifferenceItPlan { left, .. } => left.tuple_widths(),
             ExecPlan::FilterItPlan { source, .. } => source.tuple_widths(),
             ExecPlan::EvalItPlan { source, .. } => source.tuple_widths(),
-            ExecPlan::BagsUnionIt { bags } => {
+            ExecPlan::BagsUnionItPlan { bags } => {
                 if bags.is_empty() {
                     (0, 0)
                 } else {
@@ -245,7 +268,10 @@ impl<'a> ExecPlan<'a> {
                 let (l1, l2) = left.tuple_widths();
                 (l1 + 1, l2 + 1 + right_associates.len())
             }
-            ExecPlan::LimiterIt { source, .. } => {
+            ExecPlan::LimiterItPlan { source, .. } => {
+                source.tuple_widths()
+            }
+            ExecPlan::SortingMatPlan { source, .. } => {
                 source.tuple_widths()
             }
         }
@@ -385,7 +411,7 @@ impl<'a> ExecPlan<'a> {
                     started: false,
                 }))
             }
-            ExecPlan::BagsUnionIt { bags } => {
+            ExecPlan::BagsUnionItPlan { bags } => {
                 let bags = bags.iter().map(|i| i.iter()).collect::<Result<Vec<_>>>()?;
                 Ok(Box::new(BagsUnionIterator { bags, current: 0 }))
             }
@@ -458,13 +484,28 @@ impl<'a> ExecPlan<'a> {
                     }),
                 }),
             },
-            ExecPlan::LimiterIt { source, limit, offset } => {
+            ExecPlan::LimiterItPlan { source, limit, offset } => {
                 Ok(Box::new(LimiterIterator {
                     source: source.iter()?,
                     limit: *limit,
                     offset: *offset,
                     current: 0,
                 }))
+            }
+            ExecPlan::SortingMatPlan { source, ordering , sess } => {
+                match sess {
+                    SessionSlot::Dummy => {
+                        Err(LogicError("Uninitialized session data".to_string()))
+                    }
+                    SessionSlot::Reified(sess) => {
+                        Ok(Box::new(SortingMaterialization {
+                            source: source.iter()?,
+                            ordering,
+                            sess,
+                            sorted: false
+                        }))
+                    }
+                }
             }
         }
     }
@@ -656,7 +697,7 @@ impl<'a> Session<'a> {
                 };
                 (plan, amap)
             }
-            ExecPlan::BagsUnionIt { .. } => todo!(),
+            ExecPlan::BagsUnionItPlan { .. } => todo!(),
             ExecPlan::ChainJoinItPlan {
                 left,
                 left_info,
@@ -716,12 +757,25 @@ impl<'a> Session<'a> {
                 };
                 (plan, l_map)
             }
-            ExecPlan::LimiterIt { source, limit, offset } => {
+            ExecPlan::LimiterItPlan { source, limit, offset } => {
                 let (source, amap) = self.do_reify_intermediate_plan(*source)?;
-                (ExecPlan::LimiterIt {
+                (ExecPlan::LimiterItPlan {
                     source: source.into(),
                     limit,
                     offset,
+                }, amap)
+            }
+            ExecPlan::SortingMatPlan { source, ordering, .. } => {
+                let (source, amap) = self.do_reify_intermediate_plan(*source)?;
+                let ordering = ordering.into_iter().map(|(is_asc, val)| -> Result<(bool, StaticValue)> {
+                    let (_, val) = self.partial_eval(val, &Default::default(), &amap)?;
+                    Ok((is_asc, val))
+                }).collect::<Result<Vec<_>>>()?;
+                let temp_table_id = self.get_next_storage_id(false)?;
+                (ExecPlan::SortingMatPlan {
+                    source: source.into(),
+                    ordering,
+                    sess: SessionSlot::Reified(self)
                 }, amap)
             }
         };
@@ -949,10 +1003,17 @@ impl<'a> Session<'a> {
         mut plan: ExecPlan<'b>,
         select_data: Selection,
     ) -> Result<ExecPlan<'b>> {
+        if !select_data.ordering.is_empty() {
+            plan = ExecPlan::SortingMatPlan {
+                source: plan.into(),
+                ordering: select_data.ordering,
+                sess: SessionSlot::Dummy
+            };
+        }
         if select_data.limit.is_some() || select_data.offset.is_some() {
             let limit = select_data.limit.unwrap_or(0) as usize;
             let offset = select_data.offset.unwrap_or(0) as usize;
-            plan = ExecPlan::LimiterIt {
+            plan = ExecPlan::LimiterItPlan {
                 source: plan.into(),
                 offset,
                 limit,

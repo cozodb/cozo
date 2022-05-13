@@ -305,7 +305,7 @@ impl<'s> Session<'s> {
         self.define_data(&name, tuple, in_root)
     }
 
-    fn get_next_storage_id(&self, in_root: bool) -> Result<i64> {
+    pub fn get_next_storage_id(&self, in_root: bool) -> Result<i64> {
         let mut key_entry = Tuple::with_null_prefix();
         key_entry.push_null();
         let db_res = if in_root {

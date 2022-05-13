@@ -5,15 +5,47 @@ use crate::error::Result;
 use crate::relation::data::{DataKind, EMPTY_DATA};
 use crate::relation::table::MegaTuple;
 use crate::relation::tuple::{CowSlice, CowTuple, OwnTuple, Tuple};
-use crate::relation::value::Value;
+use crate::relation::value::{Value};
 use cozorocks::IteratorPtr;
 use std::cmp::Ordering;
 use std::{iter, mem};
+use crate::db::engine::Session;
 use crate::db::plan::{ExecPlan, TableRowGetter};
 
 // Implementation notice
 // Never define `.next()` recursively for iterators below, otherwise stackoverflow is almost
 // guaranteed (but may not show for test data)
+
+pub struct SortingMaterialization<'a> {
+    pub(crate) source: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) ordering: &'a [(bool, Value<'a>)],
+    pub(crate) sess: &'a Session<'a>,
+    pub(crate) sorted: bool
+}
+
+impl <'a> SortingMaterialization<'a> {
+    fn sort(&mut self) {
+        // todo!()
+        self.sorted = true;
+    }
+}
+
+impl<'a> Drop for SortingMaterialization<'a> {
+    fn drop(&mut self) {
+        // todo!()
+    }
+}
+
+impl <'a> Iterator for SortingMaterialization<'a> {
+    type Item = Result<MegaTuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.sorted {
+            self.sort();
+        }
+        todo!()
+    }
+}
 
 #[derive(Copy, Clone, Debug)]
 pub enum NodeEdgeChainKind {
@@ -1147,8 +1179,9 @@ mod tests {
             let start = Instant::now();
 
             let s = r##"from (j:Job)<-[hj:HasJob]-(e:Employee)
-            where j.id == 16
+            // where j.id == 16
             select { eid: e.id, jid: j.id, fname: e.first_name, salary: hj.salary, job: j.title }
+            ordered [j.id: desc, e.id]
             limit 2 offset 1"##;
 
             let parsed = Parser::parse(Rule::relational_query, s)?.next().unwrap();

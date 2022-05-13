@@ -290,7 +290,7 @@ impl<'a> Session<'a> {
                     for p in p.into_inner() {
                         ordering.push((
                             p.as_rule() == Rule::order_asc,
-                            parse_string(p.into_inner().next().unwrap())?,
+                            Value::from_pair(p.into_inner().next().unwrap())?.to_static(),
                         ))
                     }
                 }
@@ -325,6 +325,8 @@ impl<'a> Session<'a> {
             }
         }
 
+        println!("ordering {:?}", ordering);
+
         Ok(Selection {
             scoped,
             keys,
@@ -341,7 +343,7 @@ pub struct Selection {
     pub scoped: Option<String>,
     pub keys: Vec<(String, StaticValue)>,
     pub vals: Vec<(String, StaticValue)>,
-    pub ordering: Vec<(bool, String)>,
+    pub ordering: Vec<(bool, StaticValue)>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
