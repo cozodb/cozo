@@ -171,7 +171,7 @@ impl<'a> Value<'a> {
             Value::IdxAccess(idx, value) => Value::IdxAccess(idx, value.to_static().into()),
             Value::TupleRef(tid, cid) => Value::TupleRef(tid, cid),
             Value::DescSort(Reverse(val)) => Value::DescSort(Reverse(val.to_static().into())),
-            Value::Bytes(t) => { Value::from(t.into_owned()) }
+            Value::Bytes(t) => Value::from(t.into_owned()),
         }
     }
     #[inline]
@@ -192,7 +192,7 @@ impl<'a> Value<'a> {
             Value::FieldAccess(_, _) => false,
             Value::IdxAccess(_, _) => false,
             Value::TupleRef(_, _) => false,
-            Value::DescSort(Reverse(v)) => v.is_evaluated()
+            Value::DescSort(Reverse(v)) => v.is_evaluated(),
         }
     }
     #[inline]
@@ -207,7 +207,7 @@ impl<'a> Value<'a> {
         Value::from_pair(pair)
     }
 
-    pub fn extract_relevant_tables<T: Iterator<Item=Self>>(
+    pub fn extract_relevant_tables<T: Iterator<Item = Self>>(
         data: T,
     ) -> Result<(Vec<Self>, Vec<TableId>)> {
         let mut coll = vec![];

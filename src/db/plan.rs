@@ -1,10 +1,18 @@
 use crate::db::engine::Session;
+use crate::db::iterator::{
+    BagsUnionIterator, CartesianProdIterator, EdgeIterator, EdgeKeyOnlyBwdIterator,
+    EdgeToNodeChainJoinIterator, EvalIterator, FilterIterator, KeySortedWithAssocIterator,
+    KeyedDifferenceIterator, KeyedUnionIterator, LimiterIterator, MergeJoinIterator,
+    NodeEdgeChainKind, NodeIterator, NodeToEdgeChainJoinIterator, OuterMergeJoinIterator,
+    OutputIterator, SortingMaterialization,
+};
 use crate::db::query::{EdgeOrNodeKind, FromEl, Selection};
 use crate::db::table::{ColId, TableId, TableInfo};
 use crate::error::CozoError::LogicError;
 use crate::error::Result;
 use crate::parser::Rule;
 use crate::relation::data::DataKind;
+use crate::relation::table::MegaTuple;
 use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};
 use crate::relation::value::{StaticValue, Value};
 use cozorocks::IteratorPtr;
@@ -13,9 +21,6 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::iter;
-use crate::db::iterator::{BagsUnionIterator, CartesianProdIterator, EdgeIterator, EdgeKeyOnlyBwdIterator, EdgeToNodeChainJoinIterator, EvalIterator, FilterIterator, KeyedDifferenceIterator, KeyedUnionIterator, KeySortedWithAssocIterator, LimiterIterator, MergeJoinIterator, NodeEdgeChainKind, NodeIterator, NodeToEdgeChainJoinIterator, OuterMergeJoinIterator, OutputIterator, SortingMaterialization};
-use crate::relation::table::MegaTuple;
-
 
 pub enum SessionSlot<'a> {
     Dummy,
@@ -81,7 +86,7 @@ impl<'a> TableRowGetter<'a> {
             .map(Tuple::new);
         Ok(res)
     }
-    pub fn get_with_iter<'b, T: Iterator<Item=Value<'b>>>(
+    pub fn get_with_iter<'b, T: Iterator<Item = Value<'b>>>(
         &mut self,
         vals: T,
     ) -> Result<Option<SliceTuple>> {
@@ -231,7 +236,9 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::NodeItPlan { .. } => (1, 1),
             ExecPlan::EdgeItPlan { .. } => (1, 1),
             ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => (1, 0),
-            ExecPlan::KeySortedWithAssocItPlan { main, associates, .. } => {
+            ExecPlan::KeySortedWithAssocItPlan {
+                main, associates, ..
+            } => {
                 let (k, v) = main.tuple_widths();
                 (k, v + associates.len())
             }
@@ -264,16 +271,16 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::EdgeBwdItPlan { .. } => {
                 todo!()
             }
-            ExecPlan::ChainJoinItPlan { left, right_associates, .. } => {
+            ExecPlan::ChainJoinItPlan {
+                left,
+                right_associates,
+                ..
+            } => {
                 let (l1, l2) = left.tuple_widths();
                 (l1 + 1, l2 + 1 + right_associates.len())
             }
-            ExecPlan::LimiterItPlan { source, .. } => {
-                source.tuple_widths()
-            }
-            ExecPlan::SortingMatPlan { source, .. } => {
-                source.tuple_widths()
-            }
+            ExecPlan::LimiterItPlan { source, .. } => source.tuple_widths(),
+            ExecPlan::SortingMatPlan { source, .. } => source.tuple_widths(),
         }
     }
 }
@@ -294,7 +301,7 @@ impl<'a> OutputItPlan<'a> {
 }
 
 impl<'a> ExecPlan<'a> {
-    pub fn iter(&'a self) -> Result<Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>> {
+    pub fn iter(&'a self) -> Result<Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>> {
         match self {
             ExecPlan::NodeItPlan { it, info, .. } => {
                 let it = it.try_get()?;
@@ -327,7 +334,9 @@ impl<'a> ExecPlan<'a> {
                     dst_table_id: info.dst_table_id.id,
                 }))
             }
-            ExecPlan::KeySortedWithAssocItPlan { main, associates, .. } => {
+            ExecPlan::KeySortedWithAssocItPlan {
+                main, associates, ..
+            } => {
                 let buffer = iter::repeat_with(|| None).take(associates.len()).collect();
                 let associates = associates
                     .iter()
@@ -484,36 +493,35 @@ impl<'a> ExecPlan<'a> {
                     }),
                 }),
             },
-            ExecPlan::LimiterItPlan { source, limit, offset } => {
-                Ok(Box::new(LimiterIterator {
+            ExecPlan::LimiterItPlan {
+                source,
+                limit,
+                offset,
+            } => Ok(Box::new(LimiterIterator {
+                source: source.iter()?,
+                limit: *limit,
+                offset: *offset,
+                current: 0,
+            })),
+            ExecPlan::SortingMatPlan {
+                source,
+                ordering,
+                sess,
+            } => match sess {
+                SessionSlot::Dummy => Err(LogicError("Uninitialized session data".to_string())),
+                SessionSlot::Reified(sess) => Ok(Box::new(SortingMaterialization {
                     source: source.iter()?,
-                    limit: *limit,
-                    offset: *offset,
-                    current: 0,
-                }))
-            }
-            ExecPlan::SortingMatPlan { source, ordering, sess } => {
-                match sess {
-                    SessionSlot::Dummy => {
-                        Err(LogicError("Uninitialized session data".to_string()))
-                    }
-                    SessionSlot::Reified(sess) => {
-                        Ok(Box::new(SortingMaterialization {
-                            source: source.iter()?,
-                            ordering,
-                            sess,
-                            sorted: false,
-                            temp_table_id: 0,
-                            skv_len: (0, 0, 0),
-                            sorted_it: sess.raw_iterator(false)
-                        }))
-                    }
-                }
-            }
+                    ordering,
+                    sess,
+                    sorted: false,
+                    temp_table_id: 0,
+                    skv_len: (0, 0, 0),
+                    sorted_it: sess.raw_iterator(false),
+                })),
+            },
         }
     }
 }
-
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum OuterJoinType {
@@ -567,10 +575,10 @@ fn shift_accessor_map(amap: AccessorMap, (keyshift, valshift): (usize, usize)) -
                                 tid.in_root,
                                 tid.id
                                     + if cid.is_key {
-                                    keyshift as i64
-                                } else {
-                                    valshift as i64
-                                },
+                                        keyshift as i64
+                                    } else {
+                                        valshift as i64
+                                    },
                             ),
                             cid,
                         ),
@@ -631,23 +639,35 @@ impl<'a> Session<'a> {
                 todo!()
             }
             ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => todo!(),
-            ExecPlan::KeySortedWithAssocItPlan { main, associates, binding } => {
+            ExecPlan::KeySortedWithAssocItPlan {
+                main,
+                associates,
+                binding,
+            } => {
                 let (main_plan, mut amap) = self.do_reify_intermediate_plan(*main)?;
-                let associates = associates.into_iter().enumerate().map(|(i, (info, _))| {
-                    if let Some(binding) = &binding {
-                        let assoc_amap = self.assoc_accessor_map(binding, &info);
-                        let (key_shift, val_shift) = main_plan.tuple_widths();
-                        let assoc_amap = shift_accessor_map(assoc_amap, (key_shift, val_shift + i));
-                        merge_accessor_map(&mut amap, assoc_amap);
-                    }
-                    let it = self.raw_iterator(info.table_id.in_root);
-                    (info, IteratorSlot::Reified(it))
-                }).collect();
-                (ExecPlan::KeySortedWithAssocItPlan {
-                    main: main_plan.into(),
-                    associates,
-                    binding,
-                }, amap)
+                let associates = associates
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, (info, _))| {
+                        if let Some(binding) = &binding {
+                            let assoc_amap = self.assoc_accessor_map(binding, &info);
+                            let (key_shift, val_shift) = main_plan.tuple_widths();
+                            let assoc_amap =
+                                shift_accessor_map(assoc_amap, (key_shift, val_shift + i));
+                            merge_accessor_map(&mut amap, assoc_amap);
+                        }
+                        let it = self.raw_iterator(info.table_id.in_root);
+                        (info, IteratorSlot::Reified(it))
+                    })
+                    .collect();
+                (
+                    ExecPlan::KeySortedWithAssocItPlan {
+                        main: main_plan.into(),
+                        associates,
+                        binding,
+                    },
+                    amap,
+                )
             }
             ExecPlan::CartesianProdItPlan { left, right } => {
                 let (l_plan, mut l_map) = self.do_reify_intermediate_plan(*left)?;
@@ -730,20 +750,25 @@ impl<'a> Session<'a> {
                 let r_map = shift_accessor_map(r_map, l_plan.tuple_widths());
                 merge_accessor_map(&mut l_map, r_map);
 
-                let right_associates = right_associates.into_iter().enumerate().map(|(i, (tinfo, _))| {
-                    if let Some(binding) = &right_binding {
-                        let assoc_amap = self.assoc_accessor_map(binding, &tinfo);
-                        let (key_shift, val_shift) = l_plan.tuple_widths();
-                        let assoc_amap = shift_accessor_map(assoc_amap, (key_shift, val_shift + 1 + i));
-                        merge_accessor_map(&mut l_map, assoc_amap);
-                    }
-                    let getter = TableRowGetter {
-                        sess: self,
-                        key_cache: OwnTuple::with_prefix(tinfo.table_id.id as u32),
-                        in_root: tinfo.table_id.in_root,
-                    };
-                    (tinfo, TableRowGetterSlot::Reified(getter))
-                }).collect();
+                let right_associates = right_associates
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, (tinfo, _))| {
+                        if let Some(binding) = &right_binding {
+                            let assoc_amap = self.assoc_accessor_map(binding, &tinfo);
+                            let (key_shift, val_shift) = l_plan.tuple_widths();
+                            let assoc_amap =
+                                shift_accessor_map(assoc_amap, (key_shift, val_shift + 1 + i));
+                            merge_accessor_map(&mut l_map, assoc_amap);
+                        }
+                        let getter = TableRowGetter {
+                            sess: self,
+                            key_cache: OwnTuple::with_prefix(tinfo.table_id.id as u32),
+                            in_root: tinfo.table_id.in_root,
+                        };
+                        (tinfo, TableRowGetterSlot::Reified(getter))
+                    })
+                    .collect();
                 let plan = ExecPlan::ChainJoinItPlan {
                     left: l_plan.into(),
                     left_info,
@@ -760,25 +785,40 @@ impl<'a> Session<'a> {
                 };
                 (plan, l_map)
             }
-            ExecPlan::LimiterItPlan { source, limit, offset } => {
+            ExecPlan::LimiterItPlan {
+                source,
+                limit,
+                offset,
+            } => {
                 let (source, amap) = self.do_reify_intermediate_plan(*source)?;
-                (ExecPlan::LimiterItPlan {
-                    source: source.into(),
-                    limit,
-                    offset,
-                }, amap)
+                (
+                    ExecPlan::LimiterItPlan {
+                        source: source.into(),
+                        limit,
+                        offset,
+                    },
+                    amap,
+                )
             }
-            ExecPlan::SortingMatPlan { source, ordering, .. } => {
+            ExecPlan::SortingMatPlan {
+                source, ordering, ..
+            } => {
                 let (source, amap) = self.do_reify_intermediate_plan(*source)?;
-                let ordering = ordering.into_iter().map(|(is_asc, val)| -> Result<(bool, StaticValue)> {
-                    let (_, val) = self.partial_eval(val, &Default::default(), &amap)?;
-                    Ok((is_asc, val))
-                }).collect::<Result<Vec<_>>>()?;
-                (ExecPlan::SortingMatPlan {
-                    source: source.into(),
-                    ordering,
-                    sess: SessionSlot::Reified(self),
-                }, amap)
+                let ordering = ordering
+                    .into_iter()
+                    .map(|(is_asc, val)| -> Result<(bool, StaticValue)> {
+                        let (_, val) = self.partial_eval(val, &Default::default(), &amap)?;
+                        Ok((is_asc, val))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                (
+                    ExecPlan::SortingMatPlan {
+                        source: source.into(),
+                        ordering,
+                        sess: SessionSlot::Reified(self),
+                    },
+                    amap,
+                )
             }
         };
         Ok(res)
@@ -840,9 +880,11 @@ impl<'a> Session<'a> {
                 if !el.associates.is_empty() {
                     ret = ExecPlan::KeySortedWithAssocItPlan {
                         main: ret.into(),
-                        associates: el.associates.into_iter().map(|(_, info)| {
-                            (info, IteratorSlot::Dummy)
-                        }).collect(),
+                        associates: el
+                            .associates
+                            .into_iter()
+                            .map(|(_, info)| (info, IteratorSlot::Dummy))
+                            .collect(),
                         binding: Some(el.binding),
                     }
                 }
@@ -897,8 +939,11 @@ impl<'a> Session<'a> {
                         },
                         left_outer: prev_left_outer,
                         right_binding: el.binding,
-                        right_associates: el.associates.into_iter().map(|(_, tinfo)|
-                            (tinfo, TableRowGetterSlot::Dummy)).collect(),
+                        right_associates: el
+                            .associates
+                            .into_iter()
+                            .map(|(_, tinfo)| (tinfo, TableRowGetterSlot::Dummy))
+                            .collect(),
                     };
 
                     prev_kind = el.kind;

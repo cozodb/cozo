@@ -1,23 +1,23 @@
+use crate::db::engine::Session;
 use crate::db::eval::{compare_tuple_by_keys, tuple_eval};
+use crate::db::plan::{ExecPlan, TableRowGetter};
 use crate::db::table::{ColId, TableId};
 use crate::error::CozoError::LogicError;
 use crate::error::Result;
 use crate::relation::data::{DataKind, EMPTY_DATA};
 use crate::relation::table::MegaTuple;
 use crate::relation::tuple::{CowSlice, CowTuple, OwnTuple, Tuple};
-use crate::relation::value::{Value};
-use cozorocks::{IteratorPtr};
-use std::cmp::{Ordering};
+use crate::relation::value::Value;
+use cozorocks::IteratorPtr;
+use std::cmp::Ordering;
 use std::{iter, mem};
-use crate::db::engine::Session;
-use crate::db::plan::{ExecPlan, TableRowGetter};
 
 // Implementation notice
 // Never define `.next()` recursively for iterators below, otherwise stackoverflow is almost
 // guaranteed (but may not show for test data)
 
 pub struct SortingMaterialization<'a> {
-    pub(crate) source: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) source: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) ordering: &'a [(bool, Value<'a>)],
     pub(crate) sess: &'a Session<'a>,
     pub(crate) sorted: bool,
@@ -51,7 +51,9 @@ impl<'a> SortingMaterialization<'a> {
             for vt in &m_tuple.vals {
                 val_cache.push_bytes(vt);
             }
-            self.sess.txn.put(false, &self.sess.temp_cf, &key_cache, &val_cache)?;
+            self.sess
+                .txn
+                .put(false, &self.sess.temp_cf, &key_cache, &val_cache)?;
         }
         self.sorted_it.refresh()?;
         key_cache.truncate_all();
@@ -67,7 +69,11 @@ impl<'a> Drop for SortingMaterialization<'a> {
         let range_start = Tuple::with_prefix(self.temp_table_id);
         let mut range_end = Tuple::with_prefix(self.temp_table_id);
         range_end.seal_with_sentinel();
-        if let Err(e) = self.sess.txn.del_range(&self.sess.temp_cf, range_start, range_end) {
+        if let Err(e) = self
+            .sess
+            .txn
+            .del_range(&self.sess.temp_cf, range_start, range_end)
+        {
             eprintln!("Error when dropping SortingMaterialization: {:?}", e)
         }
     }
@@ -100,7 +106,7 @@ impl<'a> Iterator for SortingMaterialization<'a> {
                             let v = OwnTuple::new(v);
                             mt.keys.push(v.into());
                         }
-                        _ => return Some(Err(LogicError("Wrong type in sorted".to_string())))
+                        _ => return Some(Err(LogicError("Wrong type in sorted".to_string()))),
                     }
                 }
                 if mt.keys.len() != self.skv_len.1 {
@@ -113,7 +119,7 @@ impl<'a> Iterator for SortingMaterialization<'a> {
                             let v = OwnTuple::new(v);
                             mt.vals.push(v.into());
                         }
-                        _ => return Some(Err(LogicError("Wrong type in sorted".to_string())))
+                        _ => return Some(Err(LogicError("Wrong type in sorted".to_string()))),
                     }
                 }
                 if mt.vals.len() != self.skv_len.2 {
@@ -133,7 +139,7 @@ pub enum NodeEdgeChainKind {
 }
 
 pub struct LimiterIterator<'a> {
-    pub(crate) source: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) source: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) limit: usize,
     pub(crate) offset: usize,
     pub(crate) current: usize,
@@ -164,7 +170,7 @@ impl<'a> Iterator for LimiterIterator<'a> {
 
 pub struct NodeToEdgeChainJoinIterator<'a> {
     // TODO associates, right_outer
-    pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) right_it: IteratorPtr<'a>,
     pub(crate) right_getter: TableRowGetter<'a>,
     pub(crate) kind: NodeEdgeChainKind,
@@ -288,7 +294,7 @@ impl<'a> Iterator for NodeToEdgeChainJoinIterator<'a> {
 
 pub struct EdgeToNodeChainJoinIterator<'a> {
     // TODO associates, right_outer
-    pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) right: TableRowGetter<'a>,
     pub(crate) left_outer: bool,
     pub(crate) key_start_idx: usize,
@@ -334,8 +340,8 @@ impl<'a> Iterator for EdgeToNodeChainJoinIterator<'a> {
 }
 
 pub struct KeyedUnionIterator<'a> {
-    pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
-    pub(crate) right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
+    pub(crate) right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
 }
 
 impl<'a> Iterator for KeyedUnionIterator<'a> {
@@ -386,8 +392,8 @@ impl<'a> Iterator for KeyedUnionIterator<'a> {
 }
 
 pub struct KeyedDifferenceIterator<'a> {
-    pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
-    pub(crate) right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
+    pub(crate) right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) right_cache: Option<MegaTuple>,
     pub(crate) started: bool,
 }
@@ -455,7 +461,7 @@ impl<'a> Iterator for KeyedDifferenceIterator<'a> {
 }
 
 pub struct BagsUnionIterator<'a> {
-    pub(crate) bags: Vec<Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>>,
+    pub(crate) bags: Vec<Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>>,
     pub(crate) current: usize,
 }
 
@@ -579,7 +585,7 @@ impl<'a> Iterator for EdgeKeyOnlyBwdIterator<'a> {
 }
 
 pub struct KeySortedWithAssocIterator<'a> {
-    pub(crate) main: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) main: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) associates: Vec<NodeIterator<'a>>,
     pub(crate) buffer: Vec<Option<(CowTuple, CowTuple)>>,
 }
@@ -663,8 +669,8 @@ impl<'a> Iterator for KeySortedWithAssocIterator<'a> {
 }
 
 pub struct OuterMergeJoinIterator<'a> {
-    pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
-    pub(crate) right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
+    pub(crate) right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) left_outer: bool,
     pub(crate) right_outer: bool,
     pub(crate) left_keys: &'a [(TableId, ColId)],
@@ -812,8 +818,8 @@ impl<'a> Iterator for OuterMergeJoinIterator<'a> {
 }
 
 pub struct MergeJoinIterator<'a> {
-    pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
-    pub(crate) right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
+    pub(crate) right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) left_keys: &'a [(TableId, ColId)],
     pub(crate) right_keys: &'a [(TableId, ColId)],
 }
@@ -873,10 +879,10 @@ impl<'a> Iterator for MergeJoinIterator<'a> {
 }
 
 pub struct CartesianProdIterator<'a> {
-    pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) left: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) left_cache: MegaTuple,
     pub(crate) right_source: &'a ExecPlan<'a>,
-    pub(crate) right: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) right: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
 }
 
 impl<'a> Iterator for CartesianProdIterator<'a> {
@@ -919,7 +925,7 @@ impl<'a> Iterator for CartesianProdIterator<'a> {
 }
 
 pub struct FilterIterator<'a> {
-    pub(crate) it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) it: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) filter: &'a Value<'a>,
 }
 
@@ -947,7 +953,7 @@ impl<'a> Iterator for FilterIterator<'a> {
 }
 
 pub struct OutputIterator<'a> {
-    pub(crate) it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) it: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) transform: &'a Value<'a>,
 }
 
@@ -973,7 +979,7 @@ impl<'a> Iterator for OutputIterator<'a> {
 }
 
 pub struct EvalIterator<'a> {
-    pub(crate) it: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
+    pub(crate) it: Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>,
     pub(crate) keys: &'a [(String, Value<'a>)],
     pub(crate) vals: &'a [(String, Value<'a>)],
 }
@@ -1016,15 +1022,15 @@ mod tests {
     use crate::db::engine::Engine;
     use crate::db::iterator::{ExecPlan, OutputIterator};
     use crate::db::query::FromEl;
+    use crate::db::table::TableInfo;
     use crate::error::Result;
     use crate::parser::{Parser, Rule};
+    use crate::relation::data::DataKind;
     use crate::relation::value::Value;
     use pest::Parser as PestParser;
     use std::collections::BTreeMap;
     use std::fs;
     use std::time::Instant;
-    use crate::db::table::TableInfo;
-    use crate::relation::data::DataKind;
 
     #[test]
     fn pair_value() -> Result<()> {

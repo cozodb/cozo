@@ -182,7 +182,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 Tag::DescVal => {
                     start += 1;
                     continue;
-                },
+                }
                 Tag::MaxTag => panic!(),
             };
             break;

@@ -1137,7 +1137,9 @@ impl<'s> Session<'s> {
                                         todo!()
                                     }
                                     Value::DescSort(_) => {
-                                        return Err(Err(LogicError("Cannot process desc value".to_string())));
+                                        return Err(Err(LogicError(
+                                            "Cannot process desc value".to_string(),
+                                        )));
                                     }
                                 }
                             }
@@ -1307,9 +1309,9 @@ impl<'s> Session<'s> {
                                     Value::TupleRef(_, _) => {
                                         todo!()
                                     }
-                                    Value::DescSort(_) => {
-                                        Err(Err(LogicError("Cannot process desc value".to_string())))
-                                    }
+                                    Value::DescSort(_) => Err(Err(LogicError(
+                                        "Cannot process desc value".to_string(),
+                                    ))),
                                 }
                             }
                         }

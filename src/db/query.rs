@@ -65,11 +65,13 @@ impl<'a> Session<'a> {
         }
         let table_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let table_info = self.get_table_info(&table_name)?;
-        let associates = pairs.map(|p| -> Result<(String, TableInfo)> {
-            let a_name = build_name_in_def(p, true)?;
-            let a_info = self.get_table_info(&a_name)?;
-            Ok((a_name, a_info))
-        }).collect::<Result<Vec<_>>>()?;
+        let associates = pairs
+            .map(|p| -> Result<(String, TableInfo)> {
+                let a_name = build_name_in_def(p, true)?;
+                let a_info = self.get_table_info(&a_name)?;
+                Ok((a_name, a_info))
+            })
+            .collect::<Result<Vec<_>>>()?;
         let ret = FromEl::Simple(Box::new(SimpleFromEl {
             binding: name.to_string(),
             table: table_name,
@@ -150,7 +152,7 @@ impl<'a> Session<'a> {
             kind: EdgeOrNodeKind::Node,
             left_outer_marker: false,
             right_outer_marker: false,
-            associates
+            associates,
         })
     }
 
@@ -170,11 +172,14 @@ impl<'a> Session<'a> {
             },
             left_outer_marker: false,
             right_outer_marker: false,
-            associates
+            associates,
         })
     }
 
-    fn parse_node_or_edge(&self, pair: Pair<Rule>) -> Result<(String, Option<String>, TableInfo, Vec<(String, TableInfo)>)> {
+    fn parse_node_or_edge(
+        &self,
+        pair: Pair<Rule>,
+    ) -> Result<(String, Option<String>, TableInfo, Vec<(String, TableInfo)>)> {
         let name;
 
         let mut pairs = pair.into_inner();
@@ -188,13 +193,20 @@ impl<'a> Session<'a> {
         let table_name = build_name_in_def(cur_pair, true)?;
         let table_info = self.get_table_info(&table_name)?;
         // println!("{:?}, {}, {:?}", name, table_name, table_info);
-        let associates = pairs.map(|p| -> Result<(String, TableInfo)> {
-            let a_name = build_name_in_def(p, true)?;
-            let a_info = self.get_table_info(&a_name)?;
-            Ok((a_name, a_info))
-        }).collect::<Result<Vec<_>>>()?;
+        let associates = pairs
+            .map(|p| -> Result<(String, TableInfo)> {
+                let a_name = build_name_in_def(p, true)?;
+                let a_info = self.get_table_info(&a_name)?;
+                Ok((a_name, a_info))
+            })
+            .collect::<Result<Vec<_>>>()?;
 
-        Ok((table_name, name.map(|v| v.to_string()), table_info, associates))
+        Ok((
+            table_name,
+            name.map(|v| v.to_string()),
+            table_info,
+            associates,
+        ))
     }
 
     pub fn parse_where_pattern(&self, pair: Pair<Rule>) -> Result<Value> {
