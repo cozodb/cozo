@@ -1,6 +1,7 @@
+use std::cmp::Reverse;
 use crate::db::table::TableId;
 use crate::relation::value;
-use crate::relation::value::Value;
+use crate::relation::value::{Value};
 use std::collections::BTreeSet;
 
 pub fn extract_tables(val: &Value) -> BTreeSet<TableId> {
@@ -39,6 +40,7 @@ fn do_extract_tables(val: &Value, coll: &mut BTreeSet<TableId>) {
         Value::FieldAccess(_, _) => {}
         Value::IdxAccess(_, _) => {}
         Value::EndSentinel => {}
+        Value::DescSort(Reverse(v)) => do_extract_tables(v, coll)
     }
 }
 

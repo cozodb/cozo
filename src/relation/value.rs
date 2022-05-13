@@ -10,6 +10,7 @@ use pest::iterators::Pair;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser as PestParser;
 use std::borrow::Cow;
+use std::cmp::Reverse;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter, Write};
 use uuid::Uuid;
@@ -27,6 +28,8 @@ pub enum Tag {
 
     List = 128,
     Dict = 129,
+
+    DescVal = 192,
 
     TupleRef = 250,
     IdxAccess = 251,
@@ -52,6 +55,8 @@ impl TryFrom<u8> for Tag {
 
             128 => List,
             129 => Dict,
+
+            192 => DescVal,
 
             250 => TupleRef,
             251 => IdxAccess,
@@ -105,12 +110,18 @@ pub enum Value<'a> {
     // not evaluated
     Variable(Cow<'a, str>),
     TupleRef(TableId, ColId),
-    Apply(Cow<'a, str>, Vec<Value<'a>>), // TODO optimization: special case for small number of args (esp. 0, 1, 2)
+    Apply(Cow<'a, str>, Vec<Value<'a>>),
+    // TODO optimization: special case for small number of args (esp. 0, 1, 2)
     FieldAccess(Cow<'a, str>, Box<Value<'a>>),
     IdxAccess(usize, Box<Value<'a>>),
+    DescSort(DescVal<'a>),
     // cannot exist
     EndSentinel,
 }
+
+// #[derive(Clone, PartialEq, Ord, PartialOrd, Eq)]
+// pub struct DescVal<'a>(pub Box<Value<'a>>);
+pub type DescVal<'a> = Reverse<Box<Value<'a>>>;
 
 pub type StaticValue = Value<'static>;
 
@@ -153,6 +164,7 @@ impl<'a> Value<'a> {
             }
             Value::IdxAccess(idx, value) => Value::IdxAccess(idx, value.to_static().into()),
             Value::TupleRef(tid, cid) => Value::TupleRef(tid, cid),
+            Value::DescSort(Reverse(val)) => Value::DescSort(Reverse(val.to_static().into()))
         }
     }
     #[inline]
@@ -172,6 +184,7 @@ impl<'a> Value<'a> {
             Value::FieldAccess(_, _) => false,
             Value::IdxAccess(_, _) => false,
             Value::TupleRef(_, _) => false,
+            Value::DescSort(Reverse(v)) => v.is_evaluated()
         }
     }
     #[inline]
@@ -186,7 +199,7 @@ impl<'a> Value<'a> {
         Value::from_pair(pair)
     }
 
-    pub fn extract_relevant_tables<T: Iterator<Item = Self>>(
+    pub fn extract_relevant_tables<T: Iterator<Item=Self>>(
         data: T,
     ) -> Result<(Vec<Self>, Vec<TableId>)> {
         let mut coll = vec![];
@@ -238,6 +251,9 @@ impl<'a> Value<'a> {
             }
             Value::EndSentinel => {
                 return Err(LogicError("Encountered end sentinel".to_string()));
+            }
+            Value::DescSort(Reverse(v)) => {
+                return v.do_extract_relevant_tables(coll);
             }
         })
     }
@@ -427,6 +443,9 @@ impl<'a> Display for Value<'a> {
                     if cid.is_key { 'K' } else { 'D' },
                     cid.id
                 )?;
+            }
+            Value::DescSort(Reverse(v)) => {
+                write!(f, "~{}", v)?;
             }
         }
         Ok(())

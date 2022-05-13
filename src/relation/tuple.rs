@@ -4,7 +4,7 @@ use crate::relation::value::{Tag, Value};
 use cozorocks::SlicePtr;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::cmp::Ordering;
+use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
@@ -159,26 +159,34 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     fn skip_and_cache(&self) {
         let data = self.data.as_ref();
         let tag_start = *self.idx_cache.borrow().last().unwrap_or(&PREFIX_LEN);
-        let start = tag_start + 1;
-        let nxt = match Tag::try_from(data[tag_start]).unwrap() {
-            Tag::Null | Tag::BoolTrue | Tag::BoolFalse => start,
-            Tag::Int => start + self.parse_varint(start).1,
-            Tag::Float => start + 8,
-            Tag::Uuid => start + 16,
-            Tag::Text | Tag::Variable => {
-                let (slen, offset) = self.parse_varint(start);
-                let slen = slen as usize;
-                start + slen + offset
-            }
-            Tag::List | Tag::Apply | Tag::Dict | Tag::IdxAccess | Tag::FieldAccess => {
-                start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize
-            }
-            Tag::TupleRef => {
-                let temp = start + 1 + self.parse_varint(start + 1).1 + 1;
-                temp + self.parse_varint(temp).1
-            }
-            Tag::MaxTag => panic!(),
-        };
+        let mut start = tag_start + 1;
+        let nxt;
+        loop {
+            nxt = match Tag::try_from(data[tag_start]).unwrap() {
+                Tag::Null | Tag::BoolTrue | Tag::BoolFalse => start,
+                Tag::Int => start + self.parse_varint(start).1,
+                Tag::Float => start + 8,
+                Tag::Uuid => start + 16,
+                Tag::Text | Tag::Variable => {
+                    let (slen, offset) = self.parse_varint(start);
+                    let slen = slen as usize;
+                    start + slen + offset
+                }
+                Tag::List | Tag::Apply | Tag::Dict | Tag::IdxAccess | Tag::FieldAccess => {
+                    start + u32::from_be_bytes(data[start..start + 4].try_into().unwrap()) as usize
+                }
+                Tag::TupleRef => {
+                    let temp = start + 1 + self.parse_varint(start + 1).1 + 1;
+                    temp + self.parse_varint(temp).1
+                }
+                Tag::DescVal => {
+                    start += 1;
+                    continue;
+                },
+                Tag::MaxTag => panic!(),
+            };
+            break;
+        }
         self.idx_cache.borrow_mut().push(nxt);
     }
 
@@ -433,6 +441,10 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                     ),
                 )
             }
+            Tag::DescVal => {
+                let (val, offset) = self.parse_value_at(pos + 1);
+                (offset, Value::DescSort(Reverse(val.into())))
+            }
         };
         (val, nxt)
     }
@@ -678,6 +690,14 @@ impl OwnTuple {
                 cache.push(self.data.len());
             }
             Value::EndSentinel => panic!("Cannot push sentinel value"),
+            Value::DescSort(Reverse(v)) => {
+                self.push_tag(Tag::DescVal);
+                let start_len = self.idx_cache.borrow().len();
+                self.push_value(v);
+                let mut cache = self.idx_cache.borrow_mut();
+                cache.truncate(start_len);
+                cache.push(self.data.len());
+            }
         }
     }
 

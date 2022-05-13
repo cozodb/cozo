@@ -141,6 +141,9 @@ pub fn tuple_eval<'a>(value: &'a Value<'a>, tuples: &'a MegaTuple) -> Result<Val
         Value::EndSentinel => {
             return Err(LogicError("Encountered end sentinel".to_string()));
         }
+        Value::DescSort(_) => {
+            return Err(LogicError("Encountered desc sort value".to_string()));
+        }
     };
     Ok(res)
 }
@@ -655,6 +658,9 @@ impl<'s> Session<'s> {
                     todo!()
                 }
             }),
+            Value::DescSort(_) => {
+                return Err(LogicError("Cannot process desc value".to_string()));
+            }
         }
     }
 }
@@ -1127,6 +1133,9 @@ impl<'s> Session<'s> {
                                     Value::TupleRef(_, _) => {
                                         todo!()
                                     }
+                                    Value::DescSort(_) => {
+                                        return Err(Err(LogicError("Cannot process desc value".to_string())));
+                                    }
                                 }
                             }
                         }
@@ -1293,6 +1302,9 @@ impl<'s> Session<'s> {
                                     }
                                     Value::TupleRef(_, _) => {
                                         todo!()
+                                    }
+                                    Value::DescSort(_) => {
+                                        Err(Err(LogicError("Cannot process desc value".to_string())))
                                     }
                                 }
                             }
