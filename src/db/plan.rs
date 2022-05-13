@@ -145,6 +145,7 @@ pub enum ExecPlan<'a> {
         right: TableRowGetterSlot<'a>,
         right_info: TableInfo,
         right_binding: Option<String>,
+        right_associates: Vec<(TableInfo, TableRowGetterSlot<'a>)>,
         kind: ChainJoinKind,
         left_outer: bool,
     },
@@ -235,9 +236,9 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::EdgeBwdItPlan { .. } => {
                 todo!()
             }
-            ExecPlan::ChainJoinItPlan { left, .. } => {
+            ExecPlan::ChainJoinItPlan { left, right_associates, .. } => {
                 let (l1, l2) = left.tuple_widths();
-                (l1 + 1, l2 + 1)
+                (l1 + 1, l2 + 1 + right_associates.len())
             }
         }
     }
@@ -572,9 +573,11 @@ impl<'a> Session<'a> {
             ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => todo!(),
             ExecPlan::KeySortedWithAssocItPlan { main, associates, binding } => {
                 let (main_plan, mut amap) = self.do_reify_intermediate_plan(*main)?;
-                let associates = associates.into_iter().map(|(info, _)| {
+                let associates = associates.into_iter().enumerate().map(|(i, (info, _))| {
                     if let Some(binding) = &binding {
                         let assoc_amap = self.assoc_accessor_map(binding, &info);
+                        let (key_shift, val_shift) = main_plan.tuple_widths();
+                        let assoc_amap = shift_accessor_map(assoc_amap, (key_shift, val_shift + i));
                         merge_accessor_map(&mut amap, assoc_amap);
                     }
                     let it = self.raw_iterator(info.table_id.in_root);
@@ -583,7 +586,7 @@ impl<'a> Session<'a> {
                 (ExecPlan::KeySortedWithAssocItPlan {
                     main: main_plan.into(),
                     associates,
-                    binding
+                    binding,
                 }, amap)
             }
             ExecPlan::CartesianProdItPlan { left, right } => {
@@ -645,6 +648,7 @@ impl<'a> Session<'a> {
                 kind,
                 left_outer,
                 right_binding,
+                right_associates,
                 ..
             } => {
                 let (l_plan, mut l_map) = self.do_reify_intermediate_plan(*left)?;
@@ -664,6 +668,22 @@ impl<'a> Session<'a> {
                     },
                 };
                 let r_map = shift_accessor_map(r_map, l_plan.tuple_widths());
+                merge_accessor_map(&mut l_map, r_map);
+
+                let right_associates = right_associates.into_iter().enumerate().map(|(i, (tinfo, _))| {
+                    if let Some(binding) = &right_binding {
+                        let assoc_amap = self.assoc_accessor_map(binding, &tinfo);
+                        let (key_shift, val_shift) = l_plan.tuple_widths();
+                        let assoc_amap = shift_accessor_map(assoc_amap, (key_shift, val_shift + 1 + i));
+                        merge_accessor_map(&mut l_map, assoc_amap);
+                    }
+                    let getter = TableRowGetter {
+                        sess: self,
+                        key_cache: OwnTuple::with_prefix(tinfo.table_id.id as u32),
+                        in_root: tinfo.table_id.in_root,
+                    };
+                    (tinfo, TableRowGetterSlot::Reified(getter))
+                }).collect();
                 let plan = ExecPlan::ChainJoinItPlan {
                     left: l_plan.into(),
                     left_info,
@@ -676,8 +696,8 @@ impl<'a> Session<'a> {
                     right_binding,
                     kind,
                     left_outer,
+                    right_associates,
                 };
-                merge_accessor_map(&mut l_map, r_map);
                 (plan, l_map)
             }
         };
@@ -797,13 +817,14 @@ impl<'a> Session<'a> {
                         },
                         left_outer: prev_left_outer,
                         right_binding: el.binding,
+                        right_associates: el.associates.into_iter().map(|(_, tinfo)|
+                            (tinfo, TableRowGetterSlot::Dummy)).collect(),
                     };
 
                     prev_kind = el.kind;
                     prev_left_outer = el.left_outer_marker;
                     last_info = el.info;
                 }
-                // println!("{:#?}", plan);
                 Ok(plan)
             }
         };

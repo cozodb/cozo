@@ -23,6 +23,7 @@ pub enum NodeEdgeChainKind {
 }
 
 pub struct NodeToEdgeChainJoinIterator<'a> {
+    // TODO associates, right_outer
     pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
     pub(crate) right_it: IteratorPtr<'a>,
     pub(crate) right_getter: TableRowGetter<'a>,
@@ -146,6 +147,7 @@ impl<'a> Iterator for NodeToEdgeChainJoinIterator<'a> {
 }
 
 pub struct EdgeToNodeChainJoinIterator<'a> {
+    // TODO associates, right_outer
     pub(crate) left: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
     pub(crate) right: TableRowGetter<'a>,
     pub(crate) left_outer: bool,
