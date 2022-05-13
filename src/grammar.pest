@@ -177,14 +177,14 @@ insert = {"insert"}
 from_pattern = { "from" ~ (from_el ~ ",")* ~ from_el }
 from_el = _{ simple_from_pattern | node_edge_pattern }
 
-simple_from_pattern = { ident ~ ":" ~ name_in_def }
+simple_from_pattern = { ident ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* }
 
 node_edge_pattern = { node_pattern? ~ (edge_pattern ~ node_pattern)* ~ edge_pattern? }
-node_pattern = {"(" ~ ident? ~ ":" ~ name_in_def ~ ")"}
+node_pattern = {"(" ~ ident? ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* ~ ")"}
 edge_pattern = { outer_join_marker? ~ (fwd_edge_pattern | bwd_edge_pattern) ~ outer_join_marker? }
 fwd_edge_pattern = { "-" ~ edge_pattern_inner ~ "->" }
 bwd_edge_pattern = { "<-" ~ edge_pattern_inner ~ "-" }
-edge_pattern_inner = _{"[" ~ ident? ~ ":" ~ name_in_def ~ "]"}
+edge_pattern_inner = _{"[" ~ ident? ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* ~ "]"}
 outer_join_marker = { "?" }
 
 where_pattern = { "where" ~ (expr ~ ",")* ~ expr  }
@@ -192,8 +192,8 @@ select_pattern = { "select" ~ (select_dict | scoped_dict) ~ ( (order_pattern ~ o
 
 order_pattern = { "ordered" ~ "[" ~ order_el ~ ("," ~ order_el)* ~ "]" }
 order_el = _{order_asc | order_dsc}
-order_asc = {"+"? ~ ident}
-order_dsc = {"-" ~ ident}
+order_asc = {expr ~ (":" ~ "asc")?}
+order_dsc = {expr ~ (":" ~ "desc")}
 offset_pattern = { limit_clause? ~ offset_clause? }
 limit_clause = { "limit" ~ pos_int }
 offset_clause = { "offset" ~ pos_int }

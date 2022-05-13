@@ -119,8 +119,9 @@ pub enum Value<'a> {
     EndSentinel,
 }
 
-// #[derive(Clone, PartialEq, Ord, PartialOrd, Eq)]
-// pub struct DescVal<'a>(pub Box<Value<'a>>);
+// DescVal are kind of "write-only": you construct them, write them to keys to let the database do
+// the sorting, and never read them back in program logic. In particular there is no need for them
+// to support operators and methods.
 pub type DescVal<'a> = Reverse<Box<Value<'a>>>;
 
 pub type StaticValue = Value<'static>;

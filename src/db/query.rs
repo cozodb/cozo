@@ -19,6 +19,7 @@ pub enum FromEl {
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct SimpleFromEl {
     pub table: String,
+    pub associates: Vec<(String, TableInfo)>,
     pub binding: String,
     pub info: TableInfo,
 }
@@ -34,6 +35,7 @@ pub enum EdgeOrNodeKind {
 pub struct EdgeOrNodeEl {
     pub table: String,
     pub binding: Option<String>,
+    pub associates: Vec<(String, TableInfo)>,
     pub info: TableInfo,
     pub kind: EdgeOrNodeKind,
     pub left_outer_marker: bool,
@@ -63,10 +65,16 @@ impl<'a> Session<'a> {
         }
         let table_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let table_info = self.get_table_info(&table_name)?;
+        let associates = pairs.map(|p| -> Result<(String, TableInfo)> {
+            let a_name = build_name_in_def(p, true)?;
+            let a_info = self.get_table_info(&a_name)?;
+            Ok((a_name, a_info))
+        }).collect::<Result<Vec<_>>>()?;
         let ret = FromEl::Simple(Box::new(SimpleFromEl {
             binding: name.to_string(),
             table: table_name,
             info: table_info,
+            associates,
         }));
         Ok(ret)
     }
@@ -131,7 +139,7 @@ impl<'a> Session<'a> {
     }
 
     fn parse_node_pattern(&self, pair: Pair<Rule>) -> Result<EdgeOrNodeEl> {
-        let (table, binding, info) = self.parse_node_or_edge(pair)?;
+        let (table, binding, info, associates) = self.parse_node_or_edge(pair)?;
         if info.kind != DataKind::Node {
             return Err(CozoError::LogicError(format!("{} is not a node", table)));
         }
@@ -142,11 +150,12 @@ impl<'a> Session<'a> {
             kind: EdgeOrNodeKind::Node,
             left_outer_marker: false,
             right_outer_marker: false,
+            associates
         })
     }
 
     fn parse_edge_pattern(&self, pair: Pair<Rule>, is_fwd: bool) -> Result<EdgeOrNodeEl> {
-        let (table, binding, info) = self.parse_node_or_edge(pair)?;
+        let (table, binding, info, associates) = self.parse_node_or_edge(pair)?;
         if info.kind != DataKind::Edge {
             return Err(CozoError::LogicError(format!("{} is not an edge", table)));
         }
@@ -161,10 +170,11 @@ impl<'a> Session<'a> {
             },
             left_outer_marker: false,
             right_outer_marker: false,
+            associates
         })
     }
 
-    fn parse_node_or_edge(&self, pair: Pair<Rule>) -> Result<(String, Option<String>, TableInfo)> {
+    fn parse_node_or_edge(&self, pair: Pair<Rule>) -> Result<(String, Option<String>, TableInfo, Vec<(String, TableInfo)>)> {
         let name;
 
         let mut pairs = pair.into_inner();
@@ -178,8 +188,13 @@ impl<'a> Session<'a> {
         let table_name = build_name_in_def(cur_pair, true)?;
         let table_info = self.get_table_info(&table_name)?;
         // println!("{:?}, {}, {:?}", name, table_name, table_info);
+        let associates = pairs.map(|p| -> Result<(String, TableInfo)> {
+            let a_name = build_name_in_def(p, true)?;
+            let a_info = self.get_table_info(&a_name)?;
+            Ok((a_name, a_info))
+        }).collect::<Result<Vec<_>>>()?;
 
-        Ok((table_name, name.map(|v| v.to_string()), table_info))
+        Ok((table_name, name.map(|v| v.to_string()), table_info, associates))
     }
 
     pub fn parse_where_pattern(&self, pair: Pair<Rule>) -> Result<Value> {

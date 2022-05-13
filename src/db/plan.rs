@@ -63,7 +63,7 @@ impl<'a> TableRowGetter<'a> {
             .map(Tuple::new);
         Ok(res)
     }
-    pub fn get_with_iter<'b, T: Iterator<Item = Value<'b>>>(
+    pub fn get_with_iter<'b, T: Iterator<Item=Value<'b>>>(
         &mut self,
         vals: T,
     ) -> Result<Option<SliceTuple>> {
@@ -258,7 +258,7 @@ impl<'a> OutputItPlan<'a> {
 }
 
 impl<'a> ExecPlan<'a> {
-    pub fn iter(&'a self) -> Result<Box<dyn Iterator<Item = Result<MegaTuple>> + 'a>> {
+    pub fn iter(&'a self) -> Result<Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>> {
         match self {
             ExecPlan::NodeItPlan { it, info, .. } => {
                 let it = it.try_get()?;
@@ -507,10 +507,10 @@ fn shift_accessor_map(amap: AccessorMap, (keyshift, valshift): (usize, usize)) -
                                 tid.in_root,
                                 tid.id
                                     + if cid.is_key {
-                                        keyshift as i64
-                                    } else {
-                                        valshift as i64
-                                    },
+                                    keyshift as i64
+                                } else {
+                                    valshift as i64
+                                },
                             ),
                             cid,
                         ),
@@ -707,19 +707,22 @@ impl<'a> Session<'a> {
     }
     fn convert_from_data_to_plan(&self, from_data: Vec<FromEl>) -> Result<ExecPlan> {
         let convert_el = |el| match el {
-            FromEl::Simple(el) => match el.info.kind {
-                DataKind::Node => Ok(ExecPlan::NodeItPlan {
-                    it: IteratorSlot::Dummy,
-                    info: el.info,
-                    binding: Some(el.binding),
-                }),
-                DataKind::Edge => Ok(ExecPlan::EdgeItPlan {
-                    it: IteratorSlot::Dummy,
-                    info: el.info,
-                    binding: Some(el.binding),
-                }),
-                _ => Err(LogicError("Wrong type for table binding".to_string())),
-            },
+            FromEl::Simple(el) => {
+                let core = match el.info.kind {
+                    DataKind::Node => ExecPlan::NodeItPlan {
+                        it: IteratorSlot::Dummy,
+                        info: el.info,
+                        binding: Some(el.binding),
+                    },
+                    DataKind::Edge => ExecPlan::EdgeItPlan {
+                        it: IteratorSlot::Dummy,
+                        info: el.info,
+                        binding: Some(el.binding),
+                    },
+                    _ => return Err(LogicError("Wrong type for table binding".to_string())),
+                };
+                Ok(core)
+            }
             FromEl::Chain(ch) => {
                 let mut it = ch.into_iter();
                 let nxt = it
