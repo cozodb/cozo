@@ -6,8 +6,8 @@ use crate::relation::data::{DataKind, EMPTY_DATA};
 use crate::relation::table::MegaTuple;
 use crate::relation::tuple::{CowSlice, CowTuple, OwnTuple, Tuple};
 use crate::relation::value::{Value};
-use cozorocks::IteratorPtr;
-use std::cmp::Ordering;
+use cozorocks::{IteratorPtr};
+use std::cmp::{Ordering};
 use std::{iter, mem};
 use crate::db::engine::Session;
 use crate::db::plan::{ExecPlan, TableRowGetter};
@@ -20,30 +20,108 @@ pub struct SortingMaterialization<'a> {
     pub(crate) source: Box<dyn Iterator<Item=Result<MegaTuple>> + 'a>,
     pub(crate) ordering: &'a [(bool, Value<'a>)],
     pub(crate) sess: &'a Session<'a>,
-    pub(crate) sorted: bool
+    pub(crate) sorted: bool,
+    pub(crate) temp_table_id: u32,
+    pub(crate) skv_len: (usize, usize, usize),
+    pub(crate) sorted_it: IteratorPtr<'a>,
 }
 
-impl <'a> SortingMaterialization<'a> {
-    fn sort(&mut self) {
-        // todo!()
+impl<'a> SortingMaterialization<'a> {
+    fn sort(&mut self) -> Result<()> {
+        self.temp_table_id = self.sess.get_next_storage_id(false)? as u32;
+        let mut key_cache = OwnTuple::with_prefix(self.temp_table_id);
+        let mut val_cache = OwnTuple::with_data_prefix(DataKind::Data);
+        let mut kv_len = (0, 0);
+        for nxt in self.source.by_ref() {
+            let m_tuple = nxt?;
+            kv_len = (m_tuple.keys.len(), m_tuple.vals.len());
+            key_cache.truncate_all();
+            val_cache.truncate_all();
+            for (is_asc, val) in self.ordering {
+                let sort_val = tuple_eval(&val, &m_tuple)?;
+                if *is_asc {
+                    key_cache.push_value(&sort_val);
+                } else {
+                    key_cache.push_reverse_value(&sort_val)
+                }
+            }
+            for kt in &m_tuple.keys {
+                key_cache.push_bytes(kt);
+            }
+            for vt in &m_tuple.vals {
+                val_cache.push_bytes(vt);
+            }
+            self.sess.txn.put(false, &self.sess.temp_cf, &key_cache, &val_cache)?;
+        }
+        self.sorted_it.refresh()?;
+        key_cache.truncate_all();
+        self.sorted_it.seek(&key_cache);
+        self.skv_len = (self.ordering.len(), kv_len.0, kv_len.1);
         self.sorted = true;
+        Ok(())
     }
 }
 
 impl<'a> Drop for SortingMaterialization<'a> {
     fn drop(&mut self) {
-        // todo!()
+        let range_start = Tuple::with_prefix(self.temp_table_id);
+        let mut range_end = Tuple::with_prefix(self.temp_table_id);
+        range_end.seal_with_sentinel();
+        if let Err(e) = self.sess.txn.del_range(&self.sess.temp_cf, range_start, range_end) {
+            eprintln!("Error when dropping SortingMaterialization: {:?}", e)
+        }
     }
 }
 
-impl <'a> Iterator for SortingMaterialization<'a> {
+impl<'a> Iterator for SortingMaterialization<'a> {
     type Item = Result<MegaTuple>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if !self.sorted {
-            self.sort();
+            if let Err(e) = self.sort() {
+                return Some(Err(e));
+            }
+        } else {
+            self.sorted_it.next();
         }
-        todo!()
+        match unsafe { self.sorted_it.pair() } {
+            None => None,
+            Some((kt, vt)) => {
+                let kt = Tuple::new(kt);
+                let vt = Tuple::new(vt);
+                let mut mt = MegaTuple {
+                    keys: Vec::with_capacity(self.skv_len.1),
+                    vals: Vec::with_capacity(self.skv_len.2),
+                };
+                for k in kt.iter().skip(self.skv_len.0) {
+                    match k {
+                        Value::Bytes(b) => {
+                            let v = b.into_owned();
+                            let v = OwnTuple::new(v);
+                            mt.keys.push(v.into());
+                        }
+                        _ => return Some(Err(LogicError("Wrong type in sorted".to_string())))
+                    }
+                }
+                if mt.keys.len() != self.skv_len.1 {
+                    return Some(Err(LogicError("Wrong key len in sorted".to_string())));
+                }
+                for v in vt.iter() {
+                    match v {
+                        Value::Bytes(b) => {
+                            let v = b.into_owned();
+                            let v = OwnTuple::new(v);
+                            mt.vals.push(v.into());
+                        }
+                        _ => return Some(Err(LogicError("Wrong type in sorted".to_string())))
+                    }
+                }
+                if mt.vals.len() != self.skv_len.2 {
+                    return Some(Err(LogicError("Wrong val len in sorted".to_string())));
+                }
+                Some(Ok(mt))
+            }
+        }
     }
 }
 
@@ -1179,10 +1257,9 @@ mod tests {
             let start = Instant::now();
 
             let s = r##"from (j:Job)<-[hj:HasJob]-(e:Employee)
-            // where j.id == 16
+            where j.id >= 16
             select { eid: e.id, jid: j.id, fname: e.first_name, salary: hj.salary, job: j.title }
-            ordered [j.id: desc, e.id]
-            limit 2 offset 1"##;
+            ordered [j.id: desc, e.id]"##;
 
             let parsed = Parser::parse(Rule::relational_query, s)?.next().unwrap();
             let plan = sess.query_to_plan(parsed)?;

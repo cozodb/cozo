@@ -10,7 +10,7 @@ use pest::iterators::Pair;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser as PestParser;
 use std::borrow::Cow;
-use std::cmp::Reverse;
+use std::cmp::{min, Reverse};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter, Write};
 use uuid::Uuid;
@@ -378,7 +378,7 @@ impl<'a> Display for Value<'a> {
                 write!(f, "{}", u)?;
             }
             Value::Bytes(b) => {
-                write!(f, "<{} bytes: {:?} ..>", b.len(), &b[..8])?;
+                write!(f, "<{} bytes: {:?} ..>", b.len(), &b[..min(8, b.len())])?;
             }
             Value::Text(t) => {
                 f.write_char('"')?;

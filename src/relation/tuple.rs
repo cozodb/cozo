@@ -607,6 +607,15 @@ impl OwnTuple {
         self.idx_cache.borrow_mut().push(self.data.len());
     }
     #[inline]
+    pub fn push_reverse_value(&mut self, v: &Value) {
+        self.push_tag(Tag::DescVal);
+        let start_len = self.idx_cache.borrow().len();
+        self.push_value(v);
+        let mut cache = self.idx_cache.borrow_mut();
+        cache.truncate(start_len);
+        cache.push(self.data.len());
+    }
+    #[inline]
     pub fn push_value(&mut self, v: &Value) {
         match v {
             Value::Null => self.push_null(),
@@ -707,12 +716,7 @@ impl OwnTuple {
             }
             Value::EndSentinel => panic!("Cannot push sentinel value"),
             Value::DescSort(Reverse(v)) => {
-                self.push_tag(Tag::DescVal);
-                let start_len = self.idx_cache.borrow().len();
-                self.push_value(v);
-                let mut cache = self.idx_cache.borrow_mut();
-                cache.truncate(start_len);
-                cache.push(self.data.len());
+                self.push_reverse_value(v);
             }
         }
     }

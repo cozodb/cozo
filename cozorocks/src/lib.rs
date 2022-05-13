@@ -433,6 +433,12 @@ impl<'a> IteratorPtr<'a> {
     pub fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
         IteratorBridge::do_seek_for_prev(self, key.as_ref())
     }
+    #[inline]
+    pub fn refresh(&self) -> Result<()> {
+        let mut status = BridgeStatus::default();
+        IteratorBridge::refresh(self, &mut status);
+        status.check_err(())
+    }
 
     #[inline]
     /// # Safety

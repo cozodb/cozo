@@ -134,6 +134,7 @@ mod ffi {
         fn key_raw(self: &IteratorBridge) -> SharedPtr<Slice>;
         fn value_raw(self: &IteratorBridge) -> SharedPtr<Slice>;
         fn status(self: &IteratorBridge) -> BridgeStatus;
+        fn refresh(self: &IteratorBridge, status: &mut BridgeStatus);
 
         type TransactionBridge;
         fn set_snapshot(self: &TransactionBridge);

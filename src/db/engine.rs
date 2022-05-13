@@ -189,7 +189,7 @@ impl<'a> Session<'a> {
         self.handle.write().map_err(|_| Poisoned)?.status = SessionStatus::Running;
         Ok(())
     }
-    pub fn commit(&mut self) -> Result<()> {
+    pub fn commit(&self) -> Result<()> {
         self.txn.commit()?;
         Ok(())
     }

@@ -19,10 +19,10 @@ use crate::relation::table::MegaTuple;
 
 pub enum SessionSlot<'a> {
     Dummy,
-    Reified(&'a Session<'a>)
+    Reified(&'a Session<'a>),
 }
 
-impl <'a> Debug for SessionSlot<'a> {
+impl<'a> Debug for SessionSlot<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             SessionSlot::Dummy => {
@@ -221,7 +221,7 @@ pub enum ExecPlan<'a> {
     SortingMatPlan {
         source: Box<ExecPlan<'a>>,
         ordering: Vec<(bool, StaticValue)>,
-        sess: SessionSlot<'a>
+        sess: SessionSlot<'a>,
     },
 }
 
@@ -492,7 +492,7 @@ impl<'a> ExecPlan<'a> {
                     current: 0,
                 }))
             }
-            ExecPlan::SortingMatPlan { source, ordering , sess } => {
+            ExecPlan::SortingMatPlan { source, ordering, sess } => {
                 match sess {
                     SessionSlot::Dummy => {
                         Err(LogicError("Uninitialized session data".to_string()))
@@ -502,7 +502,10 @@ impl<'a> ExecPlan<'a> {
                             source: source.iter()?,
                             ordering,
                             sess,
-                            sorted: false
+                            sorted: false,
+                            temp_table_id: 0,
+                            skv_len: (0, 0, 0),
+                            sorted_it: sess.raw_iterator(false)
                         }))
                     }
                 }
@@ -771,11 +774,10 @@ impl<'a> Session<'a> {
                     let (_, val) = self.partial_eval(val, &Default::default(), &amap)?;
                     Ok((is_asc, val))
                 }).collect::<Result<Vec<_>>>()?;
-                let temp_table_id = self.get_next_storage_id(false)?;
                 (ExecPlan::SortingMatPlan {
                     source: source.into(),
                     ordering,
-                    sess: SessionSlot::Reified(self)
+                    sess: SessionSlot::Reified(self),
                 }, amap)
             }
         };
@@ -1007,7 +1009,7 @@ impl<'a> Session<'a> {
             plan = ExecPlan::SortingMatPlan {
                 source: plan.into(),
                 ordering: select_data.ordering,
-                sess: SessionSlot::Dummy
+                sess: SessionSlot::Dummy,
             };
         }
         if select_data.limit.is_some() || select_data.offset.is_some() {

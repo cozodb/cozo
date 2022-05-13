@@ -224,6 +224,10 @@ struct IteratorBridge {
         return std::make_shared<Slice>(inner->value());
     }
 
+    inline void refresh(BridgeStatus &status) const {
+        write_status(inner->Refresh(), status);
+    }
+
     BridgeStatus status() const;
 };
 
