@@ -151,7 +151,8 @@ pub enum ExecPlan<'a> {
     // IndexIt {it: ..}
     KeySortedWithAssocItPlan {
         main: Box<ExecPlan<'a>>,
-        associates: Vec<(u32, IteratorSlot<'a>)>,
+        associates: Vec<(TableInfo, IteratorSlot<'a>)>,
+        binding: Option<String>,
     },
     CartesianProdItPlan {
         left: Box<ExecPlan<'a>>,
@@ -201,7 +202,7 @@ impl<'a> ExecPlan<'a> {
             ExecPlan::NodeItPlan { .. } => (1, 1),
             ExecPlan::EdgeItPlan { .. } => (1, 1),
             ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => (1, 0),
-            ExecPlan::KeySortedWithAssocItPlan { main, associates } => {
+            ExecPlan::KeySortedWithAssocItPlan { main, associates, .. } => {
                 let (k, v) = main.tuple_widths();
                 (k, v + associates.len())
             }
@@ -291,13 +292,13 @@ impl<'a> ExecPlan<'a> {
                     dst_table_id: info.dst_table_id.id,
                 }))
             }
-            ExecPlan::KeySortedWithAssocItPlan { main, associates } => {
+            ExecPlan::KeySortedWithAssocItPlan { main, associates, .. } => {
                 let buffer = iter::repeat_with(|| None).take(associates.len()).collect();
                 let associates = associates
                     .iter()
                     .map(|(tid, it)| {
                         it.try_get().map(|it| {
-                            let prefix_tuple = OwnTuple::with_prefix(*tid);
+                            let prefix_tuple = OwnTuple::with_prefix(tid.table_id.id as u32);
                             it.seek(prefix_tuple);
 
                             NodeIterator { it, started: false }
@@ -462,7 +463,7 @@ pub enum OuterJoinType {
 
 pub type AccessorMap = BTreeMap<String, BTreeMap<String, (TableId, ColId)>>;
 
-fn merge_accessor_map(mut left: AccessorMap, right: AccessorMap) -> AccessorMap {
+fn merge_accessor_map(left: &mut AccessorMap, right: AccessorMap) {
     // println!("Before {:?} {:?}", left, right);
     for (k, vs) in right.into_iter() {
         let entry = left.entry(k);
@@ -475,8 +476,6 @@ fn merge_accessor_map(mut left: AccessorMap, right: AccessorMap) -> AccessorMap 
             }
         }
     }
-    // println!("After {:?}", left);
-    left
 }
 
 fn convert_to_relative_accessor_map(amap: AccessorMap) -> AccessorMap {
@@ -571,16 +570,32 @@ impl<'a> Session<'a> {
                 todo!()
             }
             ExecPlan::EdgeKeyOnlyBwdItPlan { .. } => todo!(),
-            ExecPlan::KeySortedWithAssocItPlan { .. } => todo!(),
+            ExecPlan::KeySortedWithAssocItPlan { main, associates, binding } => {
+                let (main_plan, mut amap) = self.do_reify_intermediate_plan(*main)?;
+                let associates = associates.into_iter().map(|(info, _)| {
+                    if let Some(binding) = &binding {
+                        let assoc_amap = self.assoc_accessor_map(binding, &info);
+                        merge_accessor_map(&mut amap, assoc_amap);
+                    }
+                    let it = self.raw_iterator(info.table_id.in_root);
+                    (info, IteratorSlot::Reified(it))
+                }).collect();
+                (ExecPlan::KeySortedWithAssocItPlan {
+                    main: main_plan.into(),
+                    associates,
+                    binding
+                }, amap)
+            }
             ExecPlan::CartesianProdItPlan { left, right } => {
-                let (l_plan, l_map) = self.do_reify_intermediate_plan(*left)?;
+                let (l_plan, mut l_map) = self.do_reify_intermediate_plan(*left)?;
                 let (r_plan, r_map) = self.do_reify_intermediate_plan(*right)?;
                 let r_map = shift_accessor_map(r_map, l_plan.tuple_widths());
                 let plan = ExecPlan::CartesianProdItPlan {
                     left: l_plan.into(),
                     right: r_plan.into(),
                 };
-                (plan, merge_accessor_map(l_map, r_map))
+                merge_accessor_map(&mut l_map, r_map);
+                (plan, l_map)
             }
             ExecPlan::MergeJoinItPlan { .. } => todo!(),
             ExecPlan::OuterMergeJoinItPlan { .. } => todo!(),
@@ -632,7 +647,7 @@ impl<'a> Session<'a> {
                 right_binding,
                 ..
             } => {
-                let (l_plan, l_map) = self.do_reify_intermediate_plan(*left)?;
+                let (l_plan, mut l_map) = self.do_reify_intermediate_plan(*left)?;
                 let r_map = match &right_binding {
                     None => Default::default(),
                     Some(binding) => match kind {
@@ -662,7 +677,8 @@ impl<'a> Session<'a> {
                     kind,
                     left_outer,
                 };
-                (plan, merge_accessor_map(l_map, r_map))
+                merge_accessor_map(&mut l_map, r_map);
+                (plan, l_map)
             }
         };
         Ok(res)
@@ -708,20 +724,29 @@ impl<'a> Session<'a> {
     fn convert_from_data_to_plan(&self, from_data: Vec<FromEl>) -> Result<ExecPlan> {
         let convert_el = |el| match el {
             FromEl::Simple(el) => {
-                let core = match el.info.kind {
+                let mut ret = match el.info.kind {
                     DataKind::Node => ExecPlan::NodeItPlan {
                         it: IteratorSlot::Dummy,
                         info: el.info,
-                        binding: Some(el.binding),
+                        binding: Some(el.binding.clone()),
                     },
                     DataKind::Edge => ExecPlan::EdgeItPlan {
                         it: IteratorSlot::Dummy,
                         info: el.info,
-                        binding: Some(el.binding),
+                        binding: Some(el.binding.clone()),
                     },
                     _ => return Err(LogicError("Wrong type for table binding".to_string())),
                 };
-                Ok(core)
+                if !el.associates.is_empty() {
+                    ret = ExecPlan::KeySortedWithAssocItPlan {
+                        main: ret.into(),
+                        associates: el.associates.into_iter().map(|(_, info)| {
+                            (info, IteratorSlot::Dummy)
+                        }).collect(),
+                        binding: Some(el.binding),
+                    }
+                }
+                Ok(ret)
             }
             FromEl::Chain(ch) => {
                 let mut it = ch.into_iter();
@@ -795,6 +820,13 @@ impl<'a> Session<'a> {
             };
         }
         Ok(res)
+    }
+    pub(crate) fn assoc_accessor_map(&self, binding: &str, info: &TableInfo) -> AccessorMap {
+        let mut ret = BTreeMap::new();
+        for (i, (k, _)) in info.val_typing.iter().enumerate() {
+            ret.insert(k.into(), (info.table_id, (false, i).into()));
+        }
+        BTreeMap::from([(binding.to_string(), ret)])
     }
     pub(crate) fn node_accessor_map(&self, binding: &str, info: &TableInfo) -> AccessorMap {
         let mut ret = BTreeMap::new();

@@ -881,6 +881,8 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
     use std::time::Instant;
+    use crate::db::table::TableInfo;
+    use crate::relation::data::DataKind;
 
     #[test]
     fn pair_value() -> Result<()> {
@@ -984,13 +986,26 @@ mod tests {
             let duration = start.elapsed();
             let duration2 = start2.elapsed();
             println!("Time elapsed {:?} {:?}", duration, duration2);
+            let dummy_tinfo = TableInfo {
+                kind: DataKind::Data,
+                table_id: Default::default(),
+                src_table_id: Default::default(),
+                dst_table_id: Default::default(),
+                data_keys: Default::default(),
+                key_typing: vec![],
+                val_typing: vec![],
+                src_key_typing: vec![],
+                dst_key_typing: vec![],
+                associates: vec![]
+            };
             let it = ExecPlan::KeySortedWithAssocItPlan {
                 main: Box::new(sess.iter_node(tbl)),
                 associates: vec![
-                    (tbl.id as u32, sess.raw_iterator(true).into()),
-                    (tbl.id as u32, sess.raw_iterator(true).into()),
-                    (tbl.id as u32, sess.raw_iterator(true).into()),
+                    (dummy_tinfo.clone(), sess.raw_iterator(true).into()),
+                    (dummy_tinfo.clone(), sess.raw_iterator(true).into()),
+                    (dummy_tinfo.clone(), sess.raw_iterator(true).into()),
                 ],
+                binding: None
             };
             {
                 for el in it.iter()? {
