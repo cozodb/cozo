@@ -15,6 +15,7 @@ pub mod db;
 pub mod error;
 pub mod parser;
 pub mod relation;
+pub(crate) mod eval;
 
 #[cfg(test)]
 mod tests {

@@ -100,3 +100,7 @@ Helpers
 * `print_schema(rel)`
 * `print_plan(rel)`
 * `print_optimized(rel)`
+
+Aggregation
+
+* Aggregation functions should implement `.step()` and `.result()`
