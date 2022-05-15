@@ -351,6 +351,7 @@ impl TransactionPtr {
     }
 }
 
+#[derive(Clone)]
 pub struct DBPtr(SharedPtr<TDBBridge>);
 
 impl Deref for DBPtr {
