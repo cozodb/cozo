@@ -1,7 +1,7 @@
-use std::result;
 use crate::parser::number::parse_int;
 use crate::parser::Rule;
 use pest::iterators::Pair;
+use std::result;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum TextParseError {
@@ -16,7 +16,6 @@ pub(crate) enum TextParseError {
 }
 
 type Result<T> = result::Result<T, TextParseError>;
-
 
 #[inline]
 fn parse_raw_string(pair: Pair<Rule>) -> Result<String> {
@@ -46,10 +45,13 @@ fn parse_quoted_string(pair: Pair<Rule>) -> Result<String> {
             r"\t" => ret.push('\t'),
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
-                let ch = char::from_u32(code).ok_or_else(|| TextParseError::InvalidUtfCode(code))?;
+                let ch =
+                    char::from_u32(code).ok_or_else(|| TextParseError::InvalidUtfCode(code))?;
                 ret.push(ch);
             }
-            s if s.starts_with('\\') => return Err(TextParseError::InvalidEscapeSequence(s.to_string())),
+            s if s.starts_with('\\') => {
+                return Err(TextParseError::InvalidEscapeSequence(s.to_string()))
+            }
             s => ret.push_str(s),
         }
     }
@@ -73,10 +75,13 @@ fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
             r"\t" => ret.push('\t'),
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
-                let ch = char::from_u32(code).ok_or_else(|| TextParseError::InvalidUtfCode(code))?;
+                let ch =
+                    char::from_u32(code).ok_or_else(|| TextParseError::InvalidUtfCode(code))?;
                 ret.push(ch);
             }
-            s if s.starts_with('\\') => return Err(TextParseError::InvalidEscapeSequence(s.to_string())),
+            s if s.starts_with('\\') => {
+                return Err(TextParseError::InvalidEscapeSequence(s.to_string()))
+            }
             s => ret.push_str(s),
         }
     }

@@ -1,10 +1,10 @@
 use crate::data::value::{StaticValue, Value};
+use crate::parser::text_identifier::build_name_in_def;
+use crate::parser::{CozoParser, Rule};
+use pest::iterators::Pair;
+use pest::Parser;
 use std::fmt::{Display, Formatter};
 use std::result;
-use pest::{Parser};
-use pest::iterators::Pair;
-use crate::parser::{CozoParser, Rule};
-use crate::parser::text_identifier::build_name_in_def;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum TypingError {
@@ -21,7 +21,7 @@ pub(crate) enum TypingError {
     Parse(#[from] pest::error::Error<Rule>),
 
     #[error(transparent)]
-    TextParse(#[from] crate::parser::text_identifier::TextParseError)
+    TextParse(#[from] crate::parser::text_identifier::TextParseError),
 }
 
 type Result<T> = result::Result<T, TypingError>;
@@ -143,7 +143,6 @@ impl Typing {
     }
 }
 
-
 impl TryFrom<&str> for Typing {
     type Error = TypingError;
 
@@ -152,7 +151,6 @@ impl TryFrom<&str> for Typing {
         Typing::from_pair(pair)
     }
 }
-
 
 impl<'a> TryFrom<Value<'a>> for Typing {
     type Error = TypingError;
@@ -172,13 +170,13 @@ impl Typing {
                 "Float" => Typing::Float,
                 "Text" => Typing::Text,
                 "Uuid" => Typing::Uuid,
-                t =>  return Err(TypingError::UndefinedType(t.to_string())),
+                t => return Err(TypingError::UndefinedType(t.to_string())),
             },
             Rule::nullable_type => Typing::Nullable(Box::new(Typing::from_pair(
-                pair.into_inner().next().unwrap()
+                pair.into_inner().next().unwrap(),
             )?)),
             Rule::homogeneous_list_type => Typing::Homogeneous(Box::new(Typing::from_pair(
-                pair.into_inner().next().unwrap()
+                pair.into_inner().next().unwrap(),
             )?)),
             Rule::unnamed_tuple_type => {
                 let types = pair
