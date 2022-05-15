@@ -2,7 +2,6 @@ use crate::bridge::*;
 use cxx::UniquePtr;
 use std::ops::{Deref, DerefMut};
 
-
 pub struct RustComparatorPtr(UniquePtr<RustComparator>);
 
 impl RustComparatorPtr {

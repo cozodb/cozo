@@ -144,7 +144,10 @@ mod ffi {
 
         type TransactionBridge;
         fn set_snapshot(self: &TransactionBridge);
-        fn set_readoption_snapshot_to_current(self: &TransactionBridge, opts: Pin<&mut ReadOptions>) -> bool;
+        fn set_readoption_snapshot_to_current(
+            self: &TransactionBridge,
+            opts: Pin<&mut ReadOptions>,
+        ) -> bool;
         fn commit(self: &TransactionBridge, status: &mut BridgeStatus);
         fn rollback(self: &TransactionBridge, status: &mut BridgeStatus);
         fn set_savepoint(self: &TransactionBridge);
@@ -171,12 +174,7 @@ mod ffi {
             slice: Pin<&mut PinnableSlice>,
             status: &mut BridgeStatus,
         );
-        fn put_txn(
-            self: &TransactionBridge,
-            key: &[u8],
-            val: &[u8],
-            status: &mut BridgeStatus,
-        );
+        fn put_txn(self: &TransactionBridge, key: &[u8], val: &[u8], status: &mut BridgeStatus);
         fn put_raw(
             self: &TransactionBridge,
             options: &WriteOptions,
@@ -184,11 +182,7 @@ mod ffi {
             val: &[u8],
             status: &mut BridgeStatus,
         );
-        fn del_txn(
-            self: &TransactionBridge,
-            key: &[u8],
-            status: &mut BridgeStatus,
-        );
+        fn del_txn(self: &TransactionBridge, key: &[u8], status: &mut BridgeStatus);
         fn del_raw(
             self: &TransactionBridge,
             options: &WriteOptions,
@@ -202,14 +196,16 @@ mod ffi {
             end_key: &[u8],
             status: &mut BridgeStatus,
         );
-        fn flush_raw(
-            self: &TransactionBridge,
-            options: &FlushOptions,
-            status: &mut BridgeStatus,
-        );
+        fn flush_raw(self: &TransactionBridge, options: &FlushOptions, status: &mut BridgeStatus);
         fn compact_all_raw(self: &TransactionBridge, status: &mut BridgeStatus);
-        fn iterator_txn(self: &TransactionBridge, r_opts: &ReadOptions) -> UniquePtr<IteratorBridge>;
-        fn iterator_raw(self: &TransactionBridge, r_opts: &ReadOptions) -> UniquePtr<IteratorBridge>;
+        fn iterator_txn(
+            self: &TransactionBridge,
+            r_opts: &ReadOptions,
+        ) -> UniquePtr<IteratorBridge>;
+        fn iterator_raw(
+            self: &TransactionBridge,
+            r_opts: &ReadOptions,
+        ) -> UniquePtr<IteratorBridge>;
 
         type TDBBridge;
         fn begin_t_transaction(

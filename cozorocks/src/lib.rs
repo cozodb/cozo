@@ -1,6 +1,6 @@
 mod bridge;
-mod status;
 mod options;
+mod status;
 
 use bridge::*;
 pub use options::*;
@@ -14,12 +14,8 @@ pub use bridge::StatusSeverity;
 pub use bridge::StatusSubCode;
 use cxx::let_cxx_string;
 pub use cxx::{SharedPtr, UniquePtr};
-use std::fmt::Debug;
-use std::fmt::{Display, Formatter};
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
 use status::Result;
-
+use std::ops::Deref;
 
 pub struct PinnableSlicePtr(UniquePtr<PinnableSlice>);
 
@@ -191,16 +187,16 @@ impl TransactionPtr {
     ) -> Result<bool> {
         let mut status = BridgeStatus::default();
         let res = if transact {
-            let ret = self.get_txn(options, key.as_ref(), slice.0.pin_mut(), &mut status);
+            self.get_txn(options, key.as_ref(), slice.0.pin_mut(), &mut status);
             status.check_err(())
         } else {
-            let ret = self.get_raw(options, key.as_ref(), slice.0.pin_mut(), &mut status);
+            self.get_raw(options, key.as_ref(), slice.0.pin_mut(), &mut status);
             status.check_err(())
         };
         match res {
-            Ok(r) => Ok(true),
+            Ok(_) => Ok(true),
             Err(e) if e.status.code == StatusCode::kNotFound => Ok(false),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
     #[inline]
@@ -211,20 +207,15 @@ impl TransactionPtr {
         slice: &mut PinnableSlicePtr,
     ) -> Result<bool> {
         let mut status = BridgeStatus::default();
-        let ret = self.get_for_update_txn(options, key.as_ref(), slice.0.pin_mut(), &mut status);
+        self.get_for_update_txn(options, key.as_ref(), slice.0.pin_mut(), &mut status);
         match status.check_err(()) {
-            Ok(r) => Ok(true),
+            Ok(_) => Ok(true),
             Err(e) if e.status.code == StatusCode::kNotFound => Ok(false),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
     #[inline]
-    pub fn del(
-        &self,
-        options: &WriteOptions,
-        transact: bool,
-        key: impl AsRef<[u8]>,
-    ) -> Result<()> {
+    pub fn del(&self, options: &WriteOptions, transact: bool, key: impl AsRef<[u8]>) -> Result<()> {
         let mut status = BridgeStatus::default();
         if transact {
             let ret = self.del_txn(key.as_ref(), &mut status);
@@ -275,10 +266,7 @@ impl TransactionPtr {
         }
     }
     #[inline]
-    pub fn iterator(&self,
-                    options: &ReadOptions,
-                    transact: bool,
-    ) -> IteratorPtr {
+    pub fn iterator(&self, options: &ReadOptions, transact: bool) -> IteratorPtr {
         if transact {
             IteratorPtr(self.iterator_txn(options))
         } else {
@@ -324,14 +312,8 @@ impl DBPtr {
         write_ops: WriteOptionsPtr,
     ) -> TransactionPtr {
         TransactionPtr(match options {
-            TransactOptions::Optimistic(o) => self.begin_o_transaction(
-                write_ops.0,
-                o.0,
-            ),
-            TransactOptions::Pessimistic(o) => self.begin_t_transaction(
-                write_ops.0,
-                o.0,
-            ),
+            TransactOptions::Optimistic(o) => self.begin_o_transaction(write_ops.0, o.0),
+            TransactOptions::Pessimistic(o) => self.begin_t_transaction(write_ops.0, o.0),
         })
     }
 }

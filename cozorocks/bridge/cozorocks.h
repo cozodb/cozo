@@ -513,9 +513,7 @@ open_tdb_raw(const Options &options,
     std::vector<ColumnFamilyHandle *> handles;
     TransactionDB *txn_db = nullptr;
 
-    Status s = TransactionDB::Open(options, txn_db_options, path, &txn_db);
-    auto ok = s.ok();
-    write_status(std::move(s), status);
+    write_status(TransactionDB::Open(options, txn_db_options, path, &txn_db), status);
 
     return make_shared<TDBBridge>(txn_db, txn_db, nullptr);
 }
@@ -525,11 +523,9 @@ inline shared_ptr<TDBBridge>
 open_odb_raw(const Options &options, const string &path, BridgeStatus &status) {
     OptimisticTransactionDB *txn_db = nullptr;
 
-    Status s = OptimisticTransactionDB::Open(options,
-                                             path,
-                                             &txn_db);
-    auto ok = s.ok();
-    write_status(std::move(s), status);
+    write_status(OptimisticTransactionDB::Open(options,
+                                               path,
+                                               &txn_db), status);
 
 
     unordered_map<string, shared_ptr<ColumnFamilyHandle>> handle_map;

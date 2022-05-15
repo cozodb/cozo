@@ -1,7 +1,6 @@
+use crate::bridge::{BridgeStatus, StatusBridgeCode, StatusCode, StatusSeverity, StatusSubCode};
 use std::fmt::Debug;
 use std::fmt::{Display, Formatter};
-use crate::bridge::{BridgeStatus, StatusCode, StatusSubCode, StatusSeverity, StatusBridgeCode};
-
 
 pub(crate) type Result<T> = std::result::Result<T, BridgeError>;
 

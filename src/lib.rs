@@ -3,6 +3,6 @@
 // pub mod relation;
 // pub(crate) mod eval;
 pub(crate) mod data;
+pub(crate) mod db;
 pub(crate) mod logger;
 pub(crate) mod parser;
-pub(crate) mod db;
