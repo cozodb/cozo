@@ -76,6 +76,8 @@ mod ffi {
 
         type Slice;
         type PinnableSlice;
+        fn reset_pinnable_slice(o: Pin<&mut PinnableSlice>);
+        fn new_pinnable_slice() -> UniquePtr<PinnableSlice>;
         fn convert_slice_back(s: &Slice) -> &[u8];
         fn convert_pinnable_slice_back(s: &PinnableSlice) -> &[u8];
 
@@ -131,8 +133,8 @@ mod ffi {
         fn is_valid(self: &IteratorBridge) -> bool;
         fn do_seek(self: &IteratorBridge, key: &[u8]);
         fn do_seek_for_prev(self: &IteratorBridge, key: &[u8]);
-        fn key_raw(self: &IteratorBridge) -> SharedPtr<Slice>;
-        fn value_raw(self: &IteratorBridge) -> SharedPtr<Slice>;
+        fn key_raw(self: &IteratorBridge) -> UniquePtr<Slice>;
+        fn value_raw(self: &IteratorBridge) -> UniquePtr<Slice>;
         fn status(self: &IteratorBridge) -> BridgeStatus;
         fn refresh(self: &IteratorBridge, status: &mut BridgeStatus);
 
@@ -145,78 +147,58 @@ mod ffi {
         fn pop_savepoint(self: &TransactionBridge, status: &mut BridgeStatus);
         fn get_txn(
             self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
             key: &[u8],
+            slice: Pin<&mut PinnableSlice>,
             status: &mut BridgeStatus,
-        ) -> SharedPtr<PinnableSlice>;
+        );
         fn get_for_update_txn(
             self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
             key: &[u8],
+            slice: Pin<&mut PinnableSlice>,
             status: &mut BridgeStatus,
-        ) -> SharedPtr<PinnableSlice>;
+        );
         fn get_raw(
             self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
             key: &[u8],
+            slice: Pin<&mut PinnableSlice>,
             status: &mut BridgeStatus,
-        ) -> SharedPtr<PinnableSlice>;
+        );
         fn put_txn(
             self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
             key: &[u8],
             val: &[u8],
             status: &mut BridgeStatus,
         );
         fn put_raw(
             self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
             key: &[u8],
             val: &[u8],
             status: &mut BridgeStatus,
         );
         fn del_txn(
             self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
             key: &[u8],
             status: &mut BridgeStatus,
         );
         fn del_raw(
             self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
             key: &[u8],
             status: &mut BridgeStatus,
         );
         fn del_range_raw(
             self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
             start_key: &[u8],
             end_key: &[u8],
             status: &mut BridgeStatus,
         );
         fn flush_raw(
             self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
             options: &FlushOptions,
             status: &mut BridgeStatus,
         );
-        fn compact_all_raw(
-            self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
-            status: &mut BridgeStatus,
-        );
-        fn iterator_txn(
-            self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
-        ) -> UniquePtr<IteratorBridge>;
-        fn iterator_raw(
-            self: &TransactionBridge,
-            cf: &ColumnFamilyHandle,
-        ) -> UniquePtr<IteratorBridge>;
-        // fn multiget_txn(self: &TransactionBridge, cf: &ColumnFamilyHandle,
-        //                 keys: &[&[u8]], statuses: &mut [BridgeStatus]) -> UniquePtr<CxxVector<PinnableSlice>>;
-        // fn multiget_raw(self: &TransactionBridge, cf: &ColumnFamilyHandle,
-        //                 keys: &[&[u8]], statuses: &mut [BridgeStatus]) -> UniquePtr<CxxVector<PinnableSlice>>;
+        fn compact_all_raw(self: &TransactionBridge, status: &mut BridgeStatus);
+        fn iterator_txn(self: &TransactionBridge) -> UniquePtr<IteratorBridge>;
+        fn iterator_raw(self: &TransactionBridge) -> UniquePtr<IteratorBridge>;
 
         pub type ColumnFamilyHandle;
 
@@ -237,28 +219,18 @@ mod ffi {
             raw_r_ops: UniquePtr<ReadOptions>,
             txn_options: UniquePtr<OptimisticTransactionOptions>,
         ) -> UniquePtr<TransactionBridge>;
-        fn get_cf_handle_raw(self: &TDBBridge, name: &CxxString) -> SharedPtr<ColumnFamilyHandle>;
-        fn get_default_cf_handle_raw(self: &TDBBridge) -> SharedPtr<ColumnFamilyHandle>;
-        fn create_column_family_raw(
-            self: &TDBBridge,
-            options: &Options,
-            name: &CxxString,
-            status: &mut BridgeStatus,
-        ) -> SharedPtr<ColumnFamilyHandle>;
-        fn drop_column_family_raw(self: &TDBBridge, name: &CxxString, status: &mut BridgeStatus);
-        fn get_column_family_names_raw(self: &TDBBridge) -> UniquePtr<CxxVector<CxxString>>;
         fn open_tdb_raw(
             options: &Options,
             txn_options: &TransactionDBOptions,
             path: &CxxString,
             status: &mut BridgeStatus,
-        ) -> UniquePtr<TDBBridge>;
+        ) -> SharedPtr<TDBBridge>;
         fn open_odb_raw(
             options: &Options,
-            txn_options: &OptimisticTransactionDBOptions,
+            // txn_options: &OptimisticTransactionDBOptions,
             path: &CxxString,
             status: &mut BridgeStatus,
-        ) -> UniquePtr<TDBBridge>;
+        ) -> SharedPtr<TDBBridge>;
     }
 }
 

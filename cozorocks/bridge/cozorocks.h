@@ -215,13 +215,12 @@ struct IteratorBridge {
         inner->SeekForPrev(k);
     }
 
-    inline std::shared_ptr<Slice> key_raw() const {
-//        std::cout << "c++ get  " << inner->key().size() << std::endl;
-        return std::make_shared<Slice>(inner->key());
+    inline std::unique_ptr<Slice> key_raw() const {
+        return std::make_unique<Slice>(inner->key());
     }
 
-    inline std::shared_ptr<Slice> value_raw() const {
-        return std::make_shared<Slice>(inner->value());
+    inline std::unique_ptr<Slice> value_raw() const {
+        return std::make_unique<Slice>(inner->value());
     }
 
     inline void refresh(BridgeStatus &status) const {
@@ -244,6 +243,14 @@ inline unique_ptr<OptimisticTransactionOptions> new_optimistic_transaction_optio
     auto ret = make_unique<OptimisticTransactionOptions>();
     ret->cmp = &compare;
     return ret;
+}
+
+inline void reset_pinnable_slice(PinnableSlice &slice) {
+    slice.Reset();
+}
+
+unique_ptr<PinnableSlice> new_pinnable_slice() {
+    return make_unique<PinnableSlice>();
 }
 
 struct TransactionBridge {
@@ -282,193 +289,123 @@ struct TransactionBridge {
         write_status(inner->PopSavePoint(), status);
     }
 
-    unique_ptr<vector<PinnableSlice>> multiget_txn(
-            const ColumnFamilyHandle &cf,
-            rust::Slice<const rust::Slice<const uint8_t>> keys,
-            rust::Slice<BridgeStatus> statuses) const;
-
-    unique_ptr<vector<PinnableSlice>> multiget_raw(
-            const ColumnFamilyHandle &cf,
-            rust::Slice<const rust::Slice<const uint8_t>> keys,
-            rust::Slice<BridgeStatus> statuses) const;
-
-
-    inline shared_ptr<PinnableSlice> get_txn(
-            const ColumnFamilyHandle &cf,
+    inline void get_txn(
             rust::Slice<const uint8_t> key,
+            PinnableSlice &pinnable_val,
             BridgeStatus &status
     ) const {
-        auto pinnable_val = std::make_shared<PinnableSlice>();
-        write_status(
-                inner->Get(*r_ops,
-                           const_cast<ColumnFamilyHandle *>(&cf),
-                           convert_slice(key),
-                           &*pinnable_val),
-                status
-        );
-        return pinnable_val;
+        write_status(inner->Get(*r_ops, convert_slice(key), &pinnable_val), status);
     }
 
-    inline shared_ptr<PinnableSlice> get_for_update_txn(
-            const ColumnFamilyHandle &cf,
+    inline void get_for_update_txn(
             rust::Slice<const uint8_t> key,
+            PinnableSlice &pinnable_val,
             BridgeStatus &status
     ) const {
-        auto pinnable_val = std::make_shared<PinnableSlice>();
         write_status(
                 inner->GetForUpdate(*r_ops,
-                                    const_cast<ColumnFamilyHandle *>(&cf),
+                                    raw_db->DefaultColumnFamily(),
                                     convert_slice(key),
-                                    &*pinnable_val),
+                                    &pinnable_val),
                 status
         );
-        return pinnable_val;
     }
 
-    inline std::shared_ptr<PinnableSlice> get_raw(
-            const ColumnFamilyHandle &cf,
+    inline void get_raw(
             rust::Slice<const uint8_t> key,
+            PinnableSlice &pinnable_val,
             BridgeStatus &status
     ) const {
-        auto pinnable_val = std::make_shared<PinnableSlice>();
         write_status(
                 raw_db->Get(*r_ops,
-                            const_cast<ColumnFamilyHandle *>(&cf),
+                            raw_db->DefaultColumnFamily(),
                             convert_slice(key),
-                            &*pinnable_val),
+                            &pinnable_val),
                 status
         );
-        return pinnable_val;
     }
 
     inline void put_txn(
-            const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             rust::Slice<const uint8_t> val,
             BridgeStatus &status
     ) const {
-        write_status(
-                inner->Put(const_cast<ColumnFamilyHandle *>(&cf),
-                           convert_slice(key),
-                           convert_slice(val)),
-                status
-        );
+        write_status(inner->Put(convert_slice(key), convert_slice(val)), status);
     }
 
     inline void put_raw(
-            const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             rust::Slice<const uint8_t> val,
             BridgeStatus &status
     ) const {
         auto k = convert_slice(key);
         auto v = convert_slice(val);
-//        std::cout << "c++ put  " << key.size() << "  " << k.size() << std::endl;
-        write_status(
-                raw_db->Put(
-                        *raw_w_ops,
-                        const_cast<ColumnFamilyHandle *>(&cf),
-                        k,
-                        v),
-                status
-        );
+        write_status(raw_db->Put(*raw_w_ops, k, v), status);
     }
 
     inline void del_txn(
-            const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
     ) const {
-        write_status(
-                inner->Delete(const_cast<ColumnFamilyHandle *>(&cf),
-                              convert_slice(key)),
-                status
-        );
+        write_status(inner->Delete(convert_slice(key)), status);
     }
 
     inline void del_raw(
-            const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
     ) const {
-        write_status(
-                raw_db->Delete(
-                        *raw_w_ops,
-                        const_cast<ColumnFamilyHandle *>(&cf),
-                        convert_slice(key)),
-                status
-        );
+        write_status(raw_db->Delete(*raw_w_ops, convert_slice(key)), status);
     }
 
     inline void del_range_raw(
-            const ColumnFamilyHandle &cf,
             rust::Slice<const uint8_t> start_key,
             rust::Slice<const uint8_t> end_key,
             BridgeStatus &status
     ) const {
         write_status(
                 raw_db->GetRootDB()->DeleteRange(
-                        *raw_w_ops, const_cast<ColumnFamilyHandle *>(&cf),
+                        *raw_w_ops,
+                        raw_db->DefaultColumnFamily(),
                         convert_slice(start_key), convert_slice(end_key)),
                 status);
     }
 
-    inline void flush_raw(const ColumnFamilyHandle &cf, const FlushOptions &options, BridgeStatus &status) const {
-        write_status(raw_db->Flush(options, const_cast<ColumnFamilyHandle *>(&cf)), status);
+    inline void flush_raw(const FlushOptions &options, BridgeStatus &status) const {
+        write_status(raw_db->Flush(options), status);
     }
 
-    inline void compact_all_raw(const ColumnFamilyHandle &cf, BridgeStatus &status) const {
+    inline void compact_all_raw(BridgeStatus &status) const {
         auto options = CompactRangeOptions();
         options.change_level = true;
         options.target_level = 0;
         options.exclusive_manual_compaction = false;
-        write_status(raw_db->CompactRange(options, const_cast<ColumnFamilyHandle *>(&cf), nullptr, nullptr), status);
+        write_status(raw_db->CompactRange(options,
+                                          raw_db->DefaultColumnFamily(),
+                                          nullptr, nullptr), status);
     }
 
-    inline std::unique_ptr<IteratorBridge> iterator_txn(
-            const ColumnFamilyHandle &cf) const {
+    inline std::unique_ptr<IteratorBridge> iterator_txn() const {
         return std::make_unique<IteratorBridge>(
-                inner->GetIterator(*r_ops, const_cast<ColumnFamilyHandle *>(&cf)));
+                inner->GetIterator(*r_ops));
     }
 
-    inline std::unique_ptr<IteratorBridge> iterator_raw(
-            const ColumnFamilyHandle &cf) const {
+    inline std::unique_ptr<IteratorBridge> iterator_raw() const {
         return std::make_unique<IteratorBridge>(
-                raw_db->NewIterator(*raw_r_ops, const_cast<ColumnFamilyHandle *>(&cf)));
+                raw_db->NewIterator(*raw_r_ops));
     }
 };
 
-inline tuple<vector<string>, vector<ColumnFamilyDescriptor>>
-get_cf_data(const Options &options,
-            const string &path) {
-    auto cf_names = std::vector<std::string>();
-    DB::ListColumnFamilies(options, path, &cf_names);
-    if (cf_names.empty()) {
-        cf_names.push_back(kDefaultColumnFamilyName);
-    }
-
-    std::vector<ColumnFamilyDescriptor> column_families;
-
-    for (auto el: cf_names) {
-        column_families.push_back(ColumnFamilyDescriptor(
-                el, options));
-    }
-    return std::make_tuple(cf_names, column_families);
-}
 
 struct TDBBridge {
     mutable unique_ptr<StackableDB> db;
     mutable TransactionDB *tdb;
     mutable OptimisticTransactionDB *odb;
-    mutable unordered_map<string, shared_ptr<ColumnFamilyHandle>> handles;
-    mutable Lock handle_lock;
     bool is_odb;
 
     TDBBridge(StackableDB *db_,
               TransactionDB *tdb_,
-              OptimisticTransactionDB *odb_,
-              unordered_map<string, shared_ptr<ColumnFamilyHandle>> &&handles_) :
-            db(db_), tdb(tdb_), odb(odb_), handles(handles_), handle_lock() {
+              OptimisticTransactionDB *odb_) :
+            db(db_), tdb(tdb_), odb(odb_) {
         is_odb = (tdb_ == nullptr);
     }
 
@@ -513,64 +450,6 @@ struct TDBBridge {
         ret->inner = unique_ptr<Transaction>(txn);
         return ret;
     }
-
-    inline shared_ptr<ColumnFamilyHandle> get_cf_handle_raw(const string &name) const {
-        ReadLock r_lock(handle_lock);
-        try {
-            return handles.at(name);
-        } catch (const std::out_of_range &) {
-            return shared_ptr<ColumnFamilyHandle>(nullptr);
-        }
-    }
-
-    inline shared_ptr<ColumnFamilyHandle> get_default_cf_handle_raw() const {
-        return handles.at("default");
-    }
-
-    inline shared_ptr<ColumnFamilyHandle>
-    create_column_family_raw(const Options &options, const string &name, BridgeStatus &status) const {
-        {
-            ReadLock r_lock(handle_lock);
-            if (handles.find(name) != handles.end()) {
-                write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode,
-                                  StatusSeverity::kSoftError,
-                                  2);
-                return shared_ptr<ColumnFamilyHandle>(nullptr);
-            }
-        }
-        {
-            WriteLock w_lock(handle_lock);
-            ColumnFamilyHandle *handle;
-            auto s = db->CreateColumnFamily(options, name, &handle);
-            write_status(std::move(s), status);
-            auto ret = shared_ptr<ColumnFamilyHandle>(handle);
-            handles[name] = ret;
-            return ret;
-        }
-    }
-
-    inline void drop_column_family_raw(const string &name, BridgeStatus &status) const {
-        WriteLock w_lock(handle_lock);
-        auto cf_it = handles.find(name);
-        if (cf_it != handles.end()) {
-            auto s = db->DropColumnFamily(cf_it->second.get());
-            handles.erase(cf_it);
-            write_status(std::move(s), status);
-        } else {
-            write_status_impl(status, StatusCode::kMaxCode, StatusSubCode::kMaxSubCode, StatusSeverity::kSoftError,
-                              3);
-        }
-        // When should we call DestroyColumnFamilyHandle?
-    }
-
-    inline unique_ptr<vector<string>> get_column_family_names_raw() const {
-        ReadLock r_lock(handle_lock);
-        auto ret = make_unique<vector<string >>();
-        for (auto entry: handles) {
-            ret->push_back(entry.first);
-        }
-        return ret;
-    }
 };
 
 inline unique_ptr<TransactionDBOptions> new_tdb_options() {
@@ -593,64 +472,34 @@ void set_allow_write_stall(FlushOptions &options, bool v) {
     options.allow_write_stall = v;
 }
 
-inline unique_ptr<TDBBridge>
+inline shared_ptr<TDBBridge>
 open_tdb_raw(const Options &options,
              const TransactionDBOptions &txn_db_options,
              const string &path,
              BridgeStatus &status) {
-    auto cf_info = get_cf_data(options, path);
-    auto cf_names = std::get<0>(cf_info);
-    auto column_families = std::get<1>(cf_info);
-
-
     std::vector<ColumnFamilyHandle *> handles;
     TransactionDB *txn_db = nullptr;
 
-    Status s = TransactionDB::Open(options, txn_db_options, path,
-                                   column_families, &handles,
-                                   &txn_db);
+    Status s = TransactionDB::Open(options, txn_db_options, path, &txn_db);
     auto ok = s.ok();
     write_status(std::move(s), status);
 
-    unordered_map<string, shared_ptr<ColumnFamilyHandle>> handle_map;
-    if (ok) {
-        assert(handles.size() == cf_names.size());
-        for (size_t i = 0; i < handles.size(); ++i) {
-            handle_map[cf_names[i]] = shared_ptr<ColumnFamilyHandle>(handles[i]);
-        }
-    }
-
-    return make_unique<TDBBridge>(txn_db, txn_db, nullptr, std::move(handle_map));
+    return make_shared<TDBBridge>(txn_db, txn_db, nullptr);
 }
 
 
-inline unique_ptr<TDBBridge>
-open_odb_raw(const Options &options,
-             const OptimisticTransactionDBOptions &txn_db_options,
-             const string &path,
-             BridgeStatus &status) {
-    auto cf_info = get_cf_data(options, path);
-    auto cf_names = std::get<0>(cf_info);
-    auto column_families = std::get<1>(cf_info);
-
-
-    std::vector<ColumnFamilyHandle *> handles;
+inline shared_ptr<TDBBridge>
+open_odb_raw(const Options &options, const string &path, BridgeStatus &status) {
     OptimisticTransactionDB *txn_db = nullptr;
 
-    Status s = OptimisticTransactionDB::Open(options, txn_db_options, path,
-                                             column_families, &handles,
+    Status s = OptimisticTransactionDB::Open(options,
+                                             path,
                                              &txn_db);
     auto ok = s.ok();
     write_status(std::move(s), status);
 
 
     unordered_map<string, shared_ptr<ColumnFamilyHandle>> handle_map;
-    if (ok) {
-        assert(handles.size() == cf_names.size());
-        for (size_t i = 0; i < handles.size(); ++i) {
-            handle_map[cf_names[i]] = shared_ptr<ColumnFamilyHandle>(handles[i]);
-        }
-    }
 
-    return make_unique<TDBBridge>(txn_db, nullptr, txn_db, std::move(handle_map));
+    return make_shared<TDBBridge>(txn_db, nullptr, txn_db);
 }

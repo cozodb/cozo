@@ -1,744 +1,743 @@
 mod bridge;
 
 use bridge::*;
-
-pub use bridge::BridgeStatus;
-pub use bridge::ColumnFamilyHandle;
-pub use bridge::PinnableSlice;
-pub use bridge::Slice;
-pub use bridge::StatusBridgeCode;
-pub use bridge::StatusCode;
-pub use bridge::StatusSeverity;
-pub use bridge::StatusSubCode;
-use cxx::let_cxx_string;
-pub use cxx::{SharedPtr, UniquePtr};
-use std::fmt::Debug;
-use std::fmt::{Display, Formatter};
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-
-impl std::fmt::Display for BridgeStatus {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "BridgeStatus({}, {}, {}, {})",
-            self.code, self.subcode, self.severity, self.bridge_code
-        )
-    }
-}
-
-#[derive(Debug)]
-pub struct BridgeError {
-    pub status: BridgeStatus,
-}
-
-impl Display for BridgeError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "BridgeError({}, {}, {}, {})",
-            self.status.code, self.status.subcode, self.status.severity, self.status.bridge_code
-        )
-    }
-}
-
-impl std::error::Error for BridgeError {}
-
-impl Default for BridgeStatus {
-    #[inline]
-    fn default() -> Self {
-        BridgeStatus {
-            code: StatusCode::kOk,
-            subcode: StatusSubCode::kNone,
-            severity: StatusSeverity::kNoError,
-            bridge_code: StatusBridgeCode::OK,
-        }
-    }
-}
-
-impl BridgeStatus {
-    #[inline]
-    fn check_err<T>(self, data: T) -> Result<T> {
-        let err: Option<BridgeError> = self.into();
-        match err {
-            Some(e) => Err(e),
-            None => Ok(data),
-        }
-    }
-}
-
-impl From<BridgeStatus> for Option<BridgeError> {
-    #[inline]
-    fn from(s: BridgeStatus) -> Self {
-        if s.severity == StatusSeverity::kNoError
-            && s.bridge_code == StatusBridgeCode::OK
-            && s.code == StatusCode::kOk
-        {
-            None
-        } else {
-            Some(BridgeError { status: s })
-        }
-    }
-}
-
-type Result<T> = std::result::Result<T, BridgeError>;
-
-#[derive(Clone)]
-pub enum SlicePtr {
-    Plain(SharedPtr<Slice>),
-    Pinnable(SharedPtr<PinnableSlice>),
-}
-
-impl AsRef<[u8]> for SlicePtr {
-    #[inline]
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            SlicePtr::Plain(s) => convert_slice_back(s),
-            SlicePtr::Pinnable(s) => convert_pinnable_slice_back(s),
-        }
-    }
-}
-
-pub struct RustComparatorPtr(UniquePtr<RustComparator>);
-
-impl RustComparatorPtr {
-    #[inline]
-    pub fn new(name: &str, cmp: fn(&[u8], &[u8]) -> i8, diff_bytes_can_equal: bool) -> Self {
-        Self(new_rust_comparator(name, cmp, diff_bytes_can_equal))
-    }
-}
-
-impl Deref for RustComparatorPtr {
-    type Target = UniquePtr<RustComparator>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-pub struct OptionsPtr(UniquePtr<Options>);
-
-impl Deref for OptionsPtr {
-    type Target = UniquePtr<Options>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for OptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl OptionsPtr {
-    #[inline]
-    pub fn default() -> Self {
-        Self(new_options())
-    }
-    #[inline]
-    pub fn prepare_for_bulk_load(&mut self) -> &mut Self {
-        prepare_for_bulk_load(self.pin_mut());
-        self
-    }
-    #[inline]
-    pub fn increase_parallelism(&mut self) -> &mut Self {
-        increase_parallelism(self.pin_mut());
-        self
-    }
-    #[inline]
-    pub fn optimize_level_style_compaction(&mut self) -> &mut Self {
-        optimize_level_style_compaction(self.pin_mut());
-        self
-    }
-    #[inline]
-    pub fn set_create_if_missing(&mut self, v: bool) -> &mut Self {
-        set_create_if_missing(self.pin_mut(), v);
-        self
-    }
-    #[inline]
-    pub fn set_comparator(&mut self, cmp: &RustComparatorPtr) -> &mut Self {
-        set_comparator(self.pin_mut(), cmp);
-        self
-    }
-    #[inline]
-    pub fn set_paranoid_checks(&mut self, v: bool) -> &mut Self {
-        set_paranoid_checks(self.pin_mut(), v);
-        self
-    }
-    #[inline]
-    pub fn set_bloom_filter(&mut self, bits_per_key: f64, whole_key_filtering: bool) -> &mut Self {
-        set_bloom_filter(self.pin_mut(), bits_per_key, whole_key_filtering);
-        self
-    }
-    #[inline]
-    pub fn set_capped_prefix_extractor(&mut self, cap_len: usize) -> &mut Self {
-        set_capped_prefix_extractor(self.pin_mut(), cap_len);
-        self
-    }
-    #[inline]
-    pub fn set_fixed_prefix_extractor(&mut self, prefix_len: usize) -> &mut Self {
-        set_fixed_prefix_extractor(self.pin_mut(), prefix_len);
-        self
-    }
-}
-
-pub struct ReadOptionsPtr(UniquePtr<ReadOptions>);
-
-impl Deref for ReadOptionsPtr {
-    type Target = UniquePtr<ReadOptions>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for ReadOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl ReadOptionsPtr {
-    #[inline]
-    pub fn default() -> Self {
-        Self(new_read_options())
-    }
-    #[inline]
-    pub fn set_verify_checksums(&mut self, v: bool) -> &mut Self {
-        set_verify_checksums(self.pin_mut(), v);
-        self
-    }
-    #[inline]
-    pub fn set_total_order_seek(&mut self, v: bool) -> &mut Self {
-        set_total_order_seek(self.pin_mut(), v);
-        self
-    }
-    #[inline]
-    pub fn set_prefix_same_as_start(&mut self, v: bool) -> &mut Self {
-        set_prefix_same_as_start(self.pin_mut(), v);
-        self
-    }
-    #[inline]
-    pub fn set_auto_prefix_mode(&mut self, v: bool) -> &mut Self {
-        set_auto_prefix_mode(self.pin_mut(), v);
-        self
-    }
-}
-
-pub struct WriteOptionsPtr(UniquePtr<WriteOptions>);
-
-impl Deref for WriteOptionsPtr {
-    type Target = UniquePtr<WriteOptions>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for WriteOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl WriteOptionsPtr {
-    #[inline]
-    pub fn default() -> Self {
-        Self(new_write_options())
-    }
-    #[inline]
-    pub fn set_disable_wal(&mut self, v: bool) -> &mut Self {
-        set_disable_wal(self.pin_mut(), v);
-        self
-    }
-}
-
-pub struct FlushOptionsPtr(UniquePtr<FlushOptions>);
-
-impl Deref for FlushOptionsPtr {
-    type Target = UniquePtr<FlushOptions>;
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl FlushOptionsPtr {
-    #[inline]
-    pub fn default() -> Self {
-        Self(new_flush_options())
-    }
-    #[inline]
-    pub fn set_allow_write_stall(&mut self, v: bool) -> &mut Self {
-        set_allow_write_stall(self.0.pin_mut(), v);
-        self
-    }
-    #[inline]
-    pub fn set_flush_wait(&mut self, v: bool) -> &mut Self {
-        set_flush_wait(self.0.pin_mut(), v);
-        self
-    }
-}
-
-pub struct PTxnOptionsPtr(UniquePtr<TransactionOptions>);
-
-impl Deref for PTxnOptionsPtr {
-    type Target = UniquePtr<TransactionOptions>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for PTxnOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl PTxnOptionsPtr {
-    #[inline]
-    pub fn default() -> Self {
-        Self(new_transaction_options())
-    }
-    #[inline]
-    pub fn set_deadlock_detect(&mut self, v: bool) -> &mut Self {
-        set_deadlock_detect(self.pin_mut(), v);
-        self
-    }
-}
-
-pub struct OTxnOptionsPtr(UniquePtr<OptimisticTransactionOptions>);
-
-impl Deref for OTxnOptionsPtr {
-    type Target = UniquePtr<OptimisticTransactionOptions>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for OTxnOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl OTxnOptionsPtr {
-    #[inline]
-    pub fn new(cmp: &RustComparatorPtr) -> Self {
-        Self(new_optimistic_transaction_options(cmp))
-    }
-}
-
-pub struct PTxnDBOptionsPtr(UniquePtr<TransactionDBOptions>);
-
-impl Deref for PTxnDBOptionsPtr {
-    type Target = UniquePtr<TransactionDBOptions>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for PTxnDBOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl PTxnDBOptionsPtr {
-    #[inline]
-    pub fn default() -> Self {
-        Self(new_tdb_options())
-    }
-}
-
-pub struct OTxnDBOptionsPtr(UniquePtr<OptimisticTransactionDBOptions>);
-
-impl Deref for OTxnDBOptionsPtr {
-    type Target = UniquePtr<OptimisticTransactionDBOptions>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for OTxnDBOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl OTxnDBOptionsPtr {
-    #[inline]
-    pub fn default() -> Self {
-        Self(new_odb_options())
-    }
-}
-
-pub struct IteratorPtr<'a> {
-    inner: UniquePtr<IteratorBridge>,
-    txn: PhantomData<&'a TransactionPtr>,
-}
-
-impl<'a> Deref for IteratorPtr<'a> {
-    type Target = UniquePtr<IteratorBridge>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<'a> IteratorPtr<'a> {
-    #[inline]
-    pub fn to_first(&self) {
-        IteratorBridge::seek_to_first(self)
-    }
-    #[inline]
-    pub fn to_last(&self) {
-        IteratorBridge::seek_to_last(self)
-    }
-    #[inline]
-    pub fn next(&self) {
-        IteratorBridge::next(self)
-    }
-    #[inline]
-    pub fn is_valid(&self) -> bool {
-        IteratorBridge::is_valid(self)
-    }
-    #[inline]
-    pub fn seek(&self, key: impl AsRef<[u8]>) {
-        IteratorBridge::do_seek(self, key.as_ref())
-    }
-    #[inline]
-    pub fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
-        IteratorBridge::do_seek_for_prev(self, key.as_ref())
-    }
-    #[inline]
-    pub fn refresh(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        IteratorBridge::refresh(self, &mut status);
-        status.check_err(())
-    }
-
-    #[inline]
-    /// # Safety
-    /// `next()` must not be called on the iterator when the returned value is still used
-    pub unsafe fn key(&self) -> Option<SlicePtr> {
-        if self.is_valid() {
-            Some(SlicePtr::Plain(IteratorBridge::key_raw(self)))
-        } else {
-            None
-        }
-    }
-    #[inline]
-    /// # Safety
-    /// `next()` must not be called on the iterator when the returned value is still used
-    pub unsafe fn val(&self) -> Option<SlicePtr> {
-        if self.is_valid() {
-            Some(SlicePtr::Plain(IteratorBridge::value_raw(self)))
-        } else {
-            None
-        }
-    }
-    #[inline]
-    /// # Safety
-    /// `next()` must not be called on the iterator when the returned value is still used
-    pub unsafe fn pair(&self) -> Option<(SlicePtr, SlicePtr)> {
-        if self.is_valid() {
-            Some((
-                SlicePtr::Plain(IteratorBridge::key_raw(self)),
-                SlicePtr::Plain(IteratorBridge::value_raw(self)),
-            ))
-        } else {
-            None
-        }
-    }
-    #[inline]
-    pub fn status(&self) -> BridgeStatus {
-        IteratorBridge::status(self)
-    }
-}
-
-pub struct TransactionPtr(UniquePtr<TransactionBridge>);
-
-impl Deref for TransactionPtr {
-    type Target = UniquePtr<TransactionBridge>;
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl TransactionPtr {
-    #[inline]
-    pub fn null() -> Self {
-        TransactionPtr(UniquePtr::null())
-    }
-    #[inline]
-    pub fn set_snapshot(&self) {
-        TransactionBridge::set_snapshot(self)
-    }
-    #[inline]
-    pub fn commit(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        TransactionBridge::commit(self, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn rollback(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        TransactionBridge::rollback(self, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn set_savepoint(&self) {
-        TransactionBridge::set_savepoint(self);
-    }
-    #[inline]
-    pub fn rollback_to_savepoint(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        TransactionBridge::rollback_to_savepoint(self, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn pop_savepoint(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        TransactionBridge::pop_savepoint(self, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn get(
-        &self,
-        transact: bool,
-        cf: &ColumnFamilyHandle,
-        key: impl AsRef<[u8]>,
-    ) -> Result<Option<SlicePtr>> {
-        let mut status = BridgeStatus::default();
-        let res = if transact {
-            let ret = self.get_txn(cf, key.as_ref(), &mut status);
-            status.check_err(SlicePtr::Pinnable(ret))
-        } else {
-            let ret = self.get_raw(cf, key.as_ref(), &mut status);
-            status.check_err(SlicePtr::Pinnable(ret))
-        };
-        match res {
-            Ok(r) => Ok(Some(r)),
-            Err(e) if e.status.code == StatusCode::kNotFound => Ok(None),
-            res => res.map(|_| None),
-        }
-    }
-    #[inline]
-    pub fn get_for_update(
-        &self,
-        cf: &ColumnFamilyHandle,
-        key: impl AsRef<[u8]>,
-    ) -> Result<SlicePtr> {
-        let mut status = BridgeStatus::default();
-        let ret = self.get_for_update_txn(cf, key.as_ref(), &mut status);
-        status.check_err(SlicePtr::Pinnable(ret))
-    }
-    #[inline]
-    pub fn del(
-        &self,
-        transact: bool,
-        cf: &ColumnFamilyHandle,
-        key: impl AsRef<[u8]>,
-    ) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        if transact {
-            let ret = self.del_txn(cf, key.as_ref(), &mut status);
-            status.check_err(ret)
-        } else {
-            let ret = self.del_raw(cf, key.as_ref(), &mut status);
-            status.check_err(ret)
-        }
-    }
-    #[inline]
-    pub fn del_range(
-        &self,
-        cf: &ColumnFamilyHandle,
-        start_key: impl AsRef<[u8]>,
-        end_key: impl AsRef<[u8]>,
-    ) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        let ret = self.del_range_raw(cf, start_key.as_ref(), end_key.as_ref(), &mut status);
-        status.check_err(ret)
-    }
-    #[inline]
-    pub fn flush(&self, cf: &ColumnFamilyHandle, options: FlushOptionsPtr) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        self.flush_raw(cf, &options, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn compact_all(&self, cf: &ColumnFamilyHandle) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        self.compact_all_raw(cf, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn put(
-        &self,
-        transact: bool,
-        cf: &ColumnFamilyHandle,
-        key: impl AsRef<[u8]>,
-        val: impl AsRef<[u8]>,
-    ) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        if transact {
-            let ret = self.put_txn(cf, key.as_ref(), val.as_ref(), &mut status);
-            status.check_err(ret)
-        } else {
-            let ret = self.put_raw(cf, key.as_ref(), val.as_ref(), &mut status);
-            status.check_err(ret)
-        }
-    }
-    #[inline]
-    pub fn iterator(&self, transact: bool, cf: &ColumnFamilyHandle) -> IteratorPtr {
-        if transact {
-            IteratorPtr {
-                inner: self.iterator_txn(cf),
-                txn: PhantomData,
-            }
-        } else {
-            IteratorPtr {
-                inner: self.iterator_raw(cf),
-                txn: PhantomData,
-            }
-        }
-    }
-}
-
-pub struct DBPtr(UniquePtr<TDBBridge>);
-
-impl Deref for DBPtr {
-    type Target = UniquePtr<TDBBridge>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-unsafe impl Send for DBPtr {}
-
-unsafe impl Sync for DBPtr {}
-
-pub enum TransactOptions {
-    Pessimistic(PTxnOptionsPtr),
-    Optimistic(OTxnOptionsPtr),
-}
-
-pub enum TDBOptions {
-    Pessimistic(PTxnDBOptionsPtr),
-    Optimistic(OTxnDBOptionsPtr),
-}
-
-impl DBPtr {
-    pub fn open(
-        options: &OptionsPtr,
-        t_options: &TDBOptions,
-        path: impl AsRef<str>,
-    ) -> Result<Self> {
-        let_cxx_string!(cname = path.as_ref());
-        let mut status = BridgeStatus::default();
-        let ret = match t_options {
-            TDBOptions::Pessimistic(o) => open_tdb_raw(options, o, &cname, &mut status),
-            TDBOptions::Optimistic(o) => open_odb_raw(options, o, &cname, &mut status),
-        };
-        status.check_err(Self(ret))
-    }
-
-    #[inline]
-    pub fn make_transaction(
-        &self,
-        options: TransactOptions,
-        read_ops: ReadOptionsPtr,
-        raw_read_ops: ReadOptionsPtr,
-        write_ops: WriteOptionsPtr,
-        raw_write_ops: WriteOptionsPtr,
-    ) -> TransactionPtr {
-        TransactionPtr(match options {
-            TransactOptions::Optimistic(o) => self.begin_o_transaction(
-                write_ops.0,
-                raw_write_ops.0,
-                read_ops.0,
-                raw_read_ops.0,
-                o.0,
-            ),
-            TransactOptions::Pessimistic(o) => self.begin_t_transaction(
-                write_ops.0,
-                raw_write_ops.0,
-                read_ops.0,
-                raw_read_ops.0,
-                o.0,
-            ),
-        })
-    }
-    #[inline]
-    pub fn get_cf(&self, name: impl AsRef<str>) -> Option<SharedPtr<ColumnFamilyHandle>> {
-        let_cxx_string!(cname = name.as_ref());
-        let spt = self.get_cf_handle_raw(&cname);
-        if spt.is_null() {
-            None
-        } else {
-            Some(spt)
-        }
-    }
-    #[inline]
-    pub fn default_cf(&self) -> SharedPtr<ColumnFamilyHandle> {
-        self.get_default_cf_handle_raw()
-    }
-    #[inline]
-    pub fn create_cf(
-        &self,
-        options: &OptionsPtr,
-        name: impl AsRef<str>,
-    ) -> Result<SharedPtr<ColumnFamilyHandle>> {
-        let_cxx_string!(name = name.as_ref());
-        let mut status = BridgeStatus::default();
-        let ret = self.create_column_family_raw(options, &name, &mut status);
-        status.check_err(ret)
-    }
-    #[inline]
-    pub fn drop_cf(&self, name: impl AsRef<str>) -> Result<()> {
-        let_cxx_string!(name = name.as_ref());
-        let mut status = BridgeStatus::default();
-        self.drop_column_family_raw(&name, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn cf_names(&self) -> Vec<String> {
-        self.get_column_family_names_raw()
-            .iter()
-            .map(|v| v.to_string_lossy().to_string())
-            .collect()
-    }
-    pub fn drop_non_default_cfs(&self) {
-        for name in self.cf_names() {
-            if name != "default" {
-                self.drop_cf(name).unwrap();
-            }
-        }
-    }
-}
+//
+// pub use bridge::BridgeStatus;
+// pub use bridge::ColumnFamilyHandle;
+// pub use bridge::PinnableSlice;
+// pub use bridge::Slice;
+// pub use bridge::StatusBridgeCode;
+// pub use bridge::StatusCode;
+// pub use bridge::StatusSeverity;
+// pub use bridge::StatusSubCode;
+// use cxx::let_cxx_string;
+// pub use cxx::{SharedPtr, UniquePtr};
+// use std::fmt::Debug;
+// use std::fmt::{Display, Formatter};
+// use std::marker::PhantomData;
+// use std::ops::{Deref, DerefMut};
+//
+// impl std::fmt::Display for BridgeStatus {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(
+//             f,
+//             "BridgeStatus({}, {}, {}, {})",
+//             self.code, self.subcode, self.severity, self.bridge_code
+//         )
+//     }
+// }
+//
+// #[derive(Debug)]
+// pub struct BridgeError {
+//     pub status: BridgeStatus,
+// }
+//
+// impl Display for BridgeError {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(
+//             f,
+//             "BridgeError({}, {}, {}, {})",
+//             self.status.code, self.status.subcode, self.status.severity, self.status.bridge_code
+//         )
+//     }
+// }
+//
+// impl std::error::Error for BridgeError {}
+//
+// impl Default for BridgeStatus {
+//     #[inline]
+//     fn default() -> Self {
+//         BridgeStatus {
+//             code: StatusCode::kOk,
+//             subcode: StatusSubCode::kNone,
+//             severity: StatusSeverity::kNoError,
+//             bridge_code: StatusBridgeCode::OK,
+//         }
+//     }
+// }
+//
+// impl BridgeStatus {
+//     #[inline]
+//     fn check_err<T>(self, data: T) -> Result<T> {
+//         let err: Option<BridgeError> = self.into();
+//         match err {
+//             Some(e) => Err(e),
+//             None => Ok(data),
+//         }
+//     }
+// }
+//
+// impl From<BridgeStatus> for Option<BridgeError> {
+//     #[inline]
+//     fn from(s: BridgeStatus) -> Self {
+//         if s.severity == StatusSeverity::kNoError
+//             && s.bridge_code == StatusBridgeCode::OK
+//             && s.code == StatusCode::kOk
+//         {
+//             None
+//         } else {
+//             Some(BridgeError { status: s })
+//         }
+//     }
+// }
+//
+// type Result<T> = std::result::Result<T, BridgeError>;
+//
+// pub enum SlicePtr {
+//     Plain(UniquePtr<Slice>),
+//     Pinnable(UniquePtr<PinnableSlice>),
+// }
+//
+// impl AsRef<[u8]> for SlicePtr {
+//     #[inline]
+//     fn as_ref(&self) -> &[u8] {
+//         match self {
+//             SlicePtr::Plain(s) => convert_slice_back(s),
+//             SlicePtr::Pinnable(s) => convert_pinnable_slice_back(s),
+//         }
+//     }
+// }
+//
+// pub struct RustComparatorPtr(UniquePtr<RustComparator>);
+//
+// impl RustComparatorPtr {
+//     #[inline]
+//     pub fn new(name: &str, cmp: fn(&[u8], &[u8]) -> i8, diff_bytes_can_equal: bool) -> Self {
+//         Self(new_rust_comparator(name, cmp, diff_bytes_can_equal))
+//     }
+// }
+//
+// impl Deref for RustComparatorPtr {
+//     type Target = UniquePtr<RustComparator>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// pub struct OptionsPtr(UniquePtr<Options>);
+//
+// impl Deref for OptionsPtr {
+//     type Target = UniquePtr<Options>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// impl DerefMut for OptionsPtr {
+//     #[inline]
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
+//
+// impl OptionsPtr {
+//     #[inline]
+//     pub fn default() -> Self {
+//         Self(new_options())
+//     }
+//     #[inline]
+//     pub fn prepare_for_bulk_load(&mut self) -> &mut Self {
+//         prepare_for_bulk_load(self.pin_mut());
+//         self
+//     }
+//     #[inline]
+//     pub fn increase_parallelism(&mut self) -> &mut Self {
+//         increase_parallelism(self.pin_mut());
+//         self
+//     }
+//     #[inline]
+//     pub fn optimize_level_style_compaction(&mut self) -> &mut Self {
+//         optimize_level_style_compaction(self.pin_mut());
+//         self
+//     }
+//     #[inline]
+//     pub fn set_create_if_missing(&mut self, v: bool) -> &mut Self {
+//         set_create_if_missing(self.pin_mut(), v);
+//         self
+//     }
+//     #[inline]
+//     pub fn set_comparator(&mut self, cmp: &RustComparatorPtr) -> &mut Self {
+//         set_comparator(self.pin_mut(), cmp);
+//         self
+//     }
+//     #[inline]
+//     pub fn set_paranoid_checks(&mut self, v: bool) -> &mut Self {
+//         set_paranoid_checks(self.pin_mut(), v);
+//         self
+//     }
+//     #[inline]
+//     pub fn set_bloom_filter(&mut self, bits_per_key: f64, whole_key_filtering: bool) -> &mut Self {
+//         set_bloom_filter(self.pin_mut(), bits_per_key, whole_key_filtering);
+//         self
+//     }
+//     #[inline]
+//     pub fn set_capped_prefix_extractor(&mut self, cap_len: usize) -> &mut Self {
+//         set_capped_prefix_extractor(self.pin_mut(), cap_len);
+//         self
+//     }
+//     #[inline]
+//     pub fn set_fixed_prefix_extractor(&mut self, prefix_len: usize) -> &mut Self {
+//         set_fixed_prefix_extractor(self.pin_mut(), prefix_len);
+//         self
+//     }
+// }
+//
+// pub struct ReadOptionsPtr(UniquePtr<ReadOptions>);
+//
+// impl Deref for ReadOptionsPtr {
+//     type Target = UniquePtr<ReadOptions>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// impl DerefMut for ReadOptionsPtr {
+//     #[inline]
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
+//
+// impl ReadOptionsPtr {
+//     #[inline]
+//     pub fn default() -> Self {
+//         Self(new_read_options())
+//     }
+//     #[inline]
+//     pub fn set_verify_checksums(&mut self, v: bool) -> &mut Self {
+//         set_verify_checksums(self.pin_mut(), v);
+//         self
+//     }
+//     #[inline]
+//     pub fn set_total_order_seek(&mut self, v: bool) -> &mut Self {
+//         set_total_order_seek(self.pin_mut(), v);
+//         self
+//     }
+//     #[inline]
+//     pub fn set_prefix_same_as_start(&mut self, v: bool) -> &mut Self {
+//         set_prefix_same_as_start(self.pin_mut(), v);
+//         self
+//     }
+//     #[inline]
+//     pub fn set_auto_prefix_mode(&mut self, v: bool) -> &mut Self {
+//         set_auto_prefix_mode(self.pin_mut(), v);
+//         self
+//     }
+// }
+//
+// pub struct WriteOptionsPtr(UniquePtr<WriteOptions>);
+//
+// impl Deref for WriteOptionsPtr {
+//     type Target = UniquePtr<WriteOptions>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// impl DerefMut for WriteOptionsPtr {
+//     #[inline]
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
+//
+// impl WriteOptionsPtr {
+//     #[inline]
+//     pub fn default() -> Self {
+//         Self(new_write_options())
+//     }
+//     #[inline]
+//     pub fn set_disable_wal(&mut self, v: bool) -> &mut Self {
+//         set_disable_wal(self.pin_mut(), v);
+//         self
+//     }
+// }
+//
+// pub struct FlushOptionsPtr(UniquePtr<FlushOptions>);
+//
+// impl Deref for FlushOptionsPtr {
+//     type Target = UniquePtr<FlushOptions>;
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// impl FlushOptionsPtr {
+//     #[inline]
+//     pub fn default() -> Self {
+//         Self(new_flush_options())
+//     }
+//     #[inline]
+//     pub fn set_allow_write_stall(&mut self, v: bool) -> &mut Self {
+//         set_allow_write_stall(self.0.pin_mut(), v);
+//         self
+//     }
+//     #[inline]
+//     pub fn set_flush_wait(&mut self, v: bool) -> &mut Self {
+//         set_flush_wait(self.0.pin_mut(), v);
+//         self
+//     }
+// }
+//
+// pub struct PTxnOptionsPtr(UniquePtr<TransactionOptions>);
+//
+// impl Deref for PTxnOptionsPtr {
+//     type Target = UniquePtr<TransactionOptions>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// impl DerefMut for PTxnOptionsPtr {
+//     #[inline]
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
+//
+// impl PTxnOptionsPtr {
+//     #[inline]
+//     pub fn default() -> Self {
+//         Self(new_transaction_options())
+//     }
+//     #[inline]
+//     pub fn set_deadlock_detect(&mut self, v: bool) -> &mut Self {
+//         set_deadlock_detect(self.pin_mut(), v);
+//         self
+//     }
+// }
+//
+// pub struct OTxnOptionsPtr(UniquePtr<OptimisticTransactionOptions>);
+//
+// impl Deref for OTxnOptionsPtr {
+//     type Target = UniquePtr<OptimisticTransactionOptions>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// impl DerefMut for OTxnOptionsPtr {
+//     #[inline]
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
+//
+// impl OTxnOptionsPtr {
+//     #[inline]
+//     pub fn new(cmp: &RustComparatorPtr) -> Self {
+//         Self(new_optimistic_transaction_options(cmp))
+//     }
+// }
+//
+// pub struct PTxnDBOptionsPtr(UniquePtr<TransactionDBOptions>);
+//
+// impl Deref for PTxnDBOptionsPtr {
+//     type Target = UniquePtr<TransactionDBOptions>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// impl DerefMut for PTxnDBOptionsPtr {
+//     #[inline]
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
+//
+// impl PTxnDBOptionsPtr {
+//     #[inline]
+//     pub fn default() -> Self {
+//         Self(new_tdb_options())
+//     }
+// }
+//
+// pub struct OTxnDBOptionsPtr(UniquePtr<OptimisticTransactionDBOptions>);
+//
+// impl Deref for OTxnDBOptionsPtr {
+//     type Target = UniquePtr<OptimisticTransactionDBOptions>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// impl DerefMut for OTxnDBOptionsPtr {
+//     #[inline]
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.0
+//     }
+// }
+//
+// impl OTxnDBOptionsPtr {
+//     #[inline]
+//     pub fn default() -> Self {
+//         Self(new_odb_options())
+//     }
+// }
+//
+// pub struct IteratorPtr<'a> {
+//     inner: UniquePtr<IteratorBridge>,
+//     txn: PhantomData<&'a TransactionPtr>,
+// }
+//
+// impl<'a> Deref for IteratorPtr<'a> {
+//     type Target = UniquePtr<IteratorBridge>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.inner
+//     }
+// }
+//
+// impl<'a> IteratorPtr<'a> {
+//     #[inline]
+//     pub fn to_first(&self) {
+//         IteratorBridge::seek_to_first(self)
+//     }
+//     #[inline]
+//     pub fn to_last(&self) {
+//         IteratorBridge::seek_to_last(self)
+//     }
+//     #[inline]
+//     pub fn next(&self) {
+//         IteratorBridge::next(self)
+//     }
+//     #[inline]
+//     pub fn is_valid(&self) -> bool {
+//         IteratorBridge::is_valid(self)
+//     }
+//     #[inline]
+//     pub fn seek(&self, key: impl AsRef<[u8]>) {
+//         IteratorBridge::do_seek(self, key.as_ref())
+//     }
+//     #[inline]
+//     pub fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
+//         IteratorBridge::do_seek_for_prev(self, key.as_ref())
+//     }
+//     #[inline]
+//     pub fn refresh(&self) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         IteratorBridge::refresh(self, &mut status);
+//         status.check_err(())
+//     }
+//
+//     #[inline]
+//     /// # Safety
+//     /// `next()` must not be called on the iterator when the returned value is still used
+//     pub unsafe fn key(&self) -> Option<SlicePtr> {
+//         if self.is_valid() {
+//             Some(SlicePtr::Plain(IteratorBridge::key_raw(self)))
+//         } else {
+//             None
+//         }
+//     }
+//     #[inline]
+//     /// # Safety
+//     /// `next()` must not be called on the iterator when the returned value is still used
+//     pub unsafe fn val(&self) -> Option<SlicePtr> {
+//         if self.is_valid() {
+//             Some(SlicePtr::Plain(IteratorBridge::value_raw(self)))
+//         } else {
+//             None
+//         }
+//     }
+//     #[inline]
+//     /// # Safety
+//     /// `next()` must not be called on the iterator when the returned value is still used
+//     pub unsafe fn pair(&self) -> Option<(SlicePtr, SlicePtr)> {
+//         if self.is_valid() {
+//             Some((
+//                 SlicePtr::Plain(IteratorBridge::key_raw(self)),
+//                 SlicePtr::Plain(IteratorBridge::value_raw(self)),
+//             ))
+//         } else {
+//             None
+//         }
+//     }
+//     #[inline]
+//     pub fn status(&self) -> BridgeStatus {
+//         IteratorBridge::status(self)
+//     }
+// }
+//
+// pub struct TransactionPtr(UniquePtr<TransactionBridge>);
+//
+// impl Deref for TransactionPtr {
+//     type Target = UniquePtr<TransactionBridge>;
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// impl TransactionPtr {
+//     #[inline]
+//     pub fn null() -> Self {
+//         TransactionPtr(UniquePtr::null())
+//     }
+//     #[inline]
+//     pub fn set_snapshot(&self) {
+//         TransactionBridge::set_snapshot(self)
+//     }
+//     #[inline]
+//     pub fn commit(&self) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         TransactionBridge::commit(self, &mut status);
+//         status.check_err(())
+//     }
+//     #[inline]
+//     pub fn rollback(&self) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         TransactionBridge::rollback(self, &mut status);
+//         status.check_err(())
+//     }
+//     #[inline]
+//     pub fn set_savepoint(&self) {
+//         TransactionBridge::set_savepoint(self);
+//     }
+//     #[inline]
+//     pub fn rollback_to_savepoint(&self) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         TransactionBridge::rollback_to_savepoint(self, &mut status);
+//         status.check_err(())
+//     }
+//     #[inline]
+//     pub fn pop_savepoint(&self) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         TransactionBridge::pop_savepoint(self, &mut status);
+//         status.check_err(())
+//     }
+//     #[inline]
+//     pub fn get(
+//         &self,
+//         transact: bool,
+//         cf: &ColumnFamilyHandle,
+//         key: impl AsRef<[u8]>,
+//     ) -> Result<Option<SlicePtr>> {
+//         let mut status = BridgeStatus::default();
+//         let res = if transact {
+//             let ret = self.get_txn(cf, key.as_ref(), &mut status);
+//             status.check_err(SlicePtr::Pinnable(ret))
+//         } else {
+//             let ret = self.get_raw(cf, key.as_ref(), &mut status);
+//             status.check_err(SlicePtr::Pinnable(ret))
+//         };
+//         match res {
+//             Ok(r) => Ok(Some(r)),
+//             Err(e) if e.status.code == StatusCode::kNotFound => Ok(None),
+//             res => res.map(|_| None),
+//         }
+//     }
+//     #[inline]
+//     pub fn get_for_update(
+//         &self,
+//         cf: &ColumnFamilyHandle,
+//         key: impl AsRef<[u8]>,
+//     ) -> Result<SlicePtr> {
+//         let mut status = BridgeStatus::default();
+//         let ret = self.get_for_update_txn(cf, key.as_ref(), &mut status);
+//         status.check_err(SlicePtr::Pinnable(ret))
+//     }
+//     #[inline]
+//     pub fn del(
+//         &self,
+//         transact: bool,
+//         cf: &ColumnFamilyHandle,
+//         key: impl AsRef<[u8]>,
+//     ) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         if transact {
+//             let ret = self.del_txn(cf, key.as_ref(), &mut status);
+//             status.check_err(ret)
+//         } else {
+//             let ret = self.del_raw(cf, key.as_ref(), &mut status);
+//             status.check_err(ret)
+//         }
+//     }
+//     #[inline]
+//     pub fn del_range(
+//         &self,
+//         cf: &ColumnFamilyHandle,
+//         start_key: impl AsRef<[u8]>,
+//         end_key: impl AsRef<[u8]>,
+//     ) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         let ret = self.del_range_raw(cf, start_key.as_ref(), end_key.as_ref(), &mut status);
+//         status.check_err(ret)
+//     }
+//     #[inline]
+//     pub fn flush(&self, cf: &ColumnFamilyHandle, options: FlushOptionsPtr) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         self.flush_raw(cf, &options, &mut status);
+//         status.check_err(())
+//     }
+//     #[inline]
+//     pub fn compact_all(&self, cf: &ColumnFamilyHandle) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         self.compact_all_raw(cf, &mut status);
+//         status.check_err(())
+//     }
+//     #[inline]
+//     pub fn put(
+//         &self,
+//         transact: bool,
+//         cf: &ColumnFamilyHandle,
+//         key: impl AsRef<[u8]>,
+//         val: impl AsRef<[u8]>,
+//     ) -> Result<()> {
+//         let mut status = BridgeStatus::default();
+//         if transact {
+//             let ret = self.put_txn(cf, key.as_ref(), val.as_ref(), &mut status);
+//             status.check_err(ret)
+//         } else {
+//             let ret = self.put_raw(cf, key.as_ref(), val.as_ref(), &mut status);
+//             status.check_err(ret)
+//         }
+//     }
+//     #[inline]
+//     pub fn iterator(&self, transact: bool, cf: &ColumnFamilyHandle) -> IteratorPtr {
+//         if transact {
+//             IteratorPtr {
+//                 inner: self.iterator_txn(cf),
+//                 txn: PhantomData,
+//             }
+//         } else {
+//             IteratorPtr {
+//                 inner: self.iterator_raw(cf),
+//                 txn: PhantomData,
+//             }
+//         }
+//     }
+// }
+//
+// pub struct DBPtr(SharedPtr<TDBBridge>);
+//
+// impl Deref for DBPtr {
+//     type Target = SharedPtr<TDBBridge>;
+//
+//     #[inline]
+//     fn deref(&self) -> &Self::Target {
+//         &self.0
+//     }
+// }
+//
+// unsafe impl Send for DBPtr {}
+//
+// unsafe impl Sync for DBPtr {}
+//
+// pub enum TransactOptions {
+//     Pessimistic(PTxnOptionsPtr),
+//     Optimistic(OTxnOptionsPtr),
+// }
+//
+// pub enum TDBOptions {
+//     Pessimistic(PTxnDBOptionsPtr),
+//     Optimistic(OTxnDBOptionsPtr),
+// }
+//
+// impl DBPtr {
+//     pub fn open(
+//         options: &OptionsPtr,
+//         t_options: &TDBOptions,
+//         path: impl AsRef<str>,
+//     ) -> Result<Self> {
+//         let_cxx_string!(cname = path.as_ref());
+//         let mut status = BridgeStatus::default();
+//         let ret = match t_options {
+//             TDBOptions::Pessimistic(o) => open_tdb_raw(options, o, &cname, &mut status),
+//             TDBOptions::Optimistic(o) => open_odb_raw(options, o, &cname, &mut status),
+//         };
+//         status.check_err(Self(ret))
+//     }
+//
+//     #[inline]
+//     pub fn make_transaction(
+//         &self,
+//         options: TransactOptions,
+//         read_ops: ReadOptionsPtr,
+//         raw_read_ops: ReadOptionsPtr,
+//         write_ops: WriteOptionsPtr,
+//         raw_write_ops: WriteOptionsPtr,
+//     ) -> TransactionPtr {
+//         TransactionPtr(match options {
+//             TransactOptions::Optimistic(o) => self.begin_o_transaction(
+//                 write_ops.0,
+//                 raw_write_ops.0,
+//                 read_ops.0,
+//                 raw_read_ops.0,
+//                 o.0,
+//             ),
+//             TransactOptions::Pessimistic(o) => self.begin_t_transaction(
+//                 write_ops.0,
+//                 raw_write_ops.0,
+//                 read_ops.0,
+//                 raw_read_ops.0,
+//                 o.0,
+//             ),
+//         })
+//     }
+//     #[inline]
+//     pub fn get_cf(&self, name: impl AsRef<str>) -> Option<SharedPtr<ColumnFamilyHandle>> {
+//         let_cxx_string!(cname = name.as_ref());
+//         let spt = self.get_cf_handle_raw(&cname);
+//         if spt.is_null() {
+//             None
+//         } else {
+//             Some(spt)
+//         }
+//     }
+//     #[inline]
+//     pub fn default_cf(&self) -> SharedPtr<ColumnFamilyHandle> {
+//         self.get_default_cf_handle_raw()
+//     }
+//     #[inline]
+//     pub fn create_cf(
+//         &self,
+//         options: &OptionsPtr,
+//         name: impl AsRef<str>,
+//     ) -> Result<SharedPtr<ColumnFamilyHandle>> {
+//         let_cxx_string!(name = name.as_ref());
+//         let mut status = BridgeStatus::default();
+//         let ret = self.create_column_family_raw(options, &name, &mut status);
+//         status.check_err(ret)
+//     }
+//     #[inline]
+//     pub fn drop_cf(&self, name: impl AsRef<str>) -> Result<()> {
+//         let_cxx_string!(name = name.as_ref());
+//         let mut status = BridgeStatus::default();
+//         self.drop_column_family_raw(&name, &mut status);
+//         status.check_err(())
+//     }
+//     #[inline]
+//     pub fn cf_names(&self) -> Vec<String> {
+//         self.get_column_family_names_raw()
+//             .iter()
+//             .map(|v| v.to_string_lossy().to_string())
+//             .collect()
+//     }
+//     pub fn drop_non_default_cfs(&self) {
+//         for name in self.cf_names() {
+//             if name != "default" {
+//                 self.drop_cf(name).unwrap();
+//             }
+//         }
+//     }
+// }
