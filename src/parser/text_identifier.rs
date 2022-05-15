@@ -1,7 +1,22 @@
-use crate::error::{CozoError, Result};
+use std::result;
 use crate::parser::number::parse_int;
 use crate::parser::Rule;
 use pest::iterators::Pair;
+
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum TextParseError {
+    #[error("Invalid UTF code {0}")]
+    InvalidUtfCode(u32),
+
+    #[error("Invalid escape sequence {0}")]
+    InvalidEscapeSequence(String),
+
+    #[error("Reserved identifier: {0}")]
+    ReservedIdent(String),
+}
+
+type Result<T> = result::Result<T, TextParseError>;
+
 
 #[inline]
 fn parse_raw_string(pair: Pair<Rule>) -> Result<String> {
@@ -31,10 +46,10 @@ fn parse_quoted_string(pair: Pair<Rule>) -> Result<String> {
             r"\t" => ret.push('\t'),
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
-                let ch = char::from_u32(code).ok_or(CozoError::InvalidUtfCode)?;
+                let ch = char::from_u32(code).ok_or_else(|| TextParseError::InvalidUtfCode(code))?;
                 ret.push(ch);
             }
-            s if s.starts_with('\\') => return Err(CozoError::InvalidEscapeSequence),
+            s if s.starts_with('\\') => return Err(TextParseError::InvalidEscapeSequence(s.to_string())),
             s => ret.push_str(s),
         }
     }
@@ -58,10 +73,10 @@ fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
             r"\t" => ret.push('\t'),
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
-                let ch = char::from_u32(code).ok_or(CozoError::InvalidUtfCode)?;
+                let ch = char::from_u32(code).ok_or_else(|| TextParseError::InvalidUtfCode(code))?;
                 ret.push(ch);
             }
-            s if s.starts_with('\\') => return Err(CozoError::InvalidEscapeSequence),
+            s if s.starts_with('\\') => return Err(TextParseError::InvalidEscapeSequence(s.to_string())),
             s => ret.push_str(s),
         }
     }
@@ -69,7 +84,7 @@ fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
 }
 
 #[inline]
-pub fn parse_string(pair: Pair<Rule>) -> Result<String> {
+pub(crate) fn parse_string(pair: Pair<Rule>) -> Result<String> {
     match pair.as_rule() {
         Rule::quoted_string => Ok(parse_quoted_string(pair)?),
         Rule::s_quoted_string => Ok(parse_s_quoted_string(pair)?),
@@ -79,11 +94,11 @@ pub fn parse_string(pair: Pair<Rule>) -> Result<String> {
     }
 }
 
-pub fn parse_ident(pair: Pair<Rule>) -> String {
+pub(crate) fn parse_ident(pair: Pair<Rule>) -> String {
     pair.as_str().to_string()
 }
 
-pub fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<String> {
+pub(crate) fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<String> {
     let inner = pair.into_inner().next().unwrap();
     let name = match inner.as_rule() {
         Rule::ident => parse_ident(inner),
@@ -91,13 +106,13 @@ pub fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<St
         _ => unreachable!(),
     };
     if forbid_underscore && name.starts_with('_') {
-        Err(CozoError::ReservedIdent)
+        Err(TextParseError::ReservedIdent(name))
     } else {
         Ok(name)
     }
 }
 
-pub fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool)> {
+pub(crate) fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool)> {
     let mut pairs = pair.into_inner();
     let mut is_key = false;
     let mut nxt_pair = pairs.next().unwrap();
