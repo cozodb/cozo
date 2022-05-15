@@ -56,7 +56,6 @@ impl Op for OpSub {
     }
 }
 
-
 pub(crate) struct OpMul;
 
 impl Op for OpMul {
@@ -68,7 +67,6 @@ impl Op for OpMul {
         "*"
     }
 }
-
 
 pub(crate) struct OpDiv;
 
@@ -82,7 +80,6 @@ impl Op for OpDiv {
     }
 }
 
-
 pub(crate) struct OpStrCat;
 
 impl Op for OpStrCat {
@@ -94,7 +91,6 @@ impl Op for OpStrCat {
         "++"
     }
 }
-
 
 pub(crate) struct OpEq;
 
@@ -108,7 +104,6 @@ impl Op for OpEq {
     }
 }
 
-
 pub(crate) struct OpNe;
 
 impl Op for OpNe {
@@ -121,7 +116,6 @@ impl Op for OpNe {
     }
 }
 
-
 pub(crate) struct OpOr;
 
 impl Op for OpOr {
@@ -133,8 +127,6 @@ impl Op for OpOr {
         "||"
     }
 }
-
-
 
 pub(crate) struct OpAnd;
 
@@ -171,7 +163,6 @@ impl Op for OpGt {
         ">"
     }
 }
-
 
 pub(crate) struct OpGe;
 
@@ -245,7 +236,6 @@ impl Op for OpNegate {
     }
 }
 
-
 pub(crate) struct OpMinus;
 
 impl Op for OpMinus {
@@ -293,7 +283,6 @@ impl Op for OpConcat {
         "concat"
     }
 }
-
 
 pub(crate) struct OpMerge;
 

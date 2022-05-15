@@ -2,7 +2,7 @@ use crate::data::op::{AggOp, Op, UnresolvedOp};
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::collections::BTreeMap;
-use std::fmt::{Debug, format, Formatter, write};
+use std::fmt::{format, write, Debug, Formatter};
 use std::result;
 use std::sync::Arc;
 
@@ -46,10 +46,12 @@ impl<'a> PartialEq for Expr<'a> {
             (TableCol(lt, lc), TableCol(rt, rc)) => (lt == rt) && (lc == rc),
             (TupleSetIdx(l), TupleSetIdx(r)) => l == r,
             (Apply(lo, la), Apply(ro, ra)) => (lo.name() == ro.name()) && (la == ra),
-            (ApplyAgg(lo, laa, la), ApplyAgg(ro, raa, ra)) => (lo.name() == ro.name()) && (laa == raa) && (la == ra),
+            (ApplyAgg(lo, laa, la), ApplyAgg(ro, raa, ra)) => {
+                (lo.name() == ro.name()) && (laa == raa) && (la == ra)
+            }
             (FieldAcc(lf, la), FieldAcc(rf, ra)) => (lf == rf) && (la == ra),
             (IdxAcc(li, la), IdxAcc(ri, ra)) => (li == ri) && (la == ra),
-            _ => false
+            _ => false,
         }
     }
 }
@@ -64,16 +66,30 @@ impl<'a> Debug for Expr<'a> {
             Expr::TableCol(tid, cid) => write!(f, "{:?}{:?}", tid, cid),
             Expr::TupleSetIdx(sid) => write!(f, "{:?}", sid),
             Expr::Apply(op, args) => write!(
-                f, "({} {})",
+                f,
+                "({} {})",
                 op.name(),
-                args.iter().map(|v| format!("{:?}", v)).collect::<Vec<_>>().join(" ")),
+                args.iter()
+                    .map(|v| format!("{:?}", v))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
             Expr::ApplyAgg(op, a_args, args) => write!(
-                f, "[|{} {} | {}|]",
+                f,
+                "[|{} {} | {}|]",
                 op.name(),
-                a_args.iter().map(|v| format!("{:?}", v)).collect::<Vec<_>>().join(" "),
-                args.iter().map(|v| format!("{:?}", v)).collect::<Vec<_>>().join(" ")),
+                a_args
+                    .iter()
+                    .map(|v| format!("{:?}", v))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                args.iter()
+                    .map(|v| format!("{:?}", v))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
             Expr::FieldAcc(field, arg) => write!(f, "(.{} {:?})", field, arg),
-            Expr::IdxAcc(i, arg) => write!(f, "(.{} {:?})", i, arg)
+            Expr::IdxAcc(i, arg) => write!(f, "(.{} {:?})", i, arg),
         }
     }
 }
@@ -104,58 +120,71 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                 "Const" => Ok(Expr::Const(v)),
                 "List" => {
                     let l = extract_list_from_value(v, 0)?;
-                    Ok(Expr::List(l.into_iter().map(Expr::try_from).collect::<Result<Vec<_>>>()?))
+                    Ok(Expr::List(
+                        l.into_iter()
+                            .map(Expr::try_from)
+                            .collect::<Result<Vec<_>>>()?,
+                    ))
                 }
-                "Dict" => {
-                    match v {
-                        Value::Dict(d) => {
-                            Ok(Expr::Dict(d.into_iter().map(|(k, v)| -> Result<(String, Expr)> {
+                "Dict" => match v {
+                    Value::Dict(d) => Ok(Expr::Dict(
+                        d.into_iter()
+                            .map(|(k, v)| -> Result<(String, Expr)> {
                                 Ok((k.to_string(), Expr::try_from(v)?))
-                            }).collect::<Result<BTreeMap<_, _>>>()?))
-                        }
-                        v => return Err(ExprError::ConversionFailure(Value::Dict(BTreeMap::from([(k, v)])).to_static()))
+                            })
+                            .collect::<Result<BTreeMap<_, _>>>()?,
+                    )),
+                    v => {
+                        return Err(ExprError::ConversionFailure(
+                            Value::Dict(BTreeMap::from([(k, v)])).to_static(),
+                        ))
                     }
-                }
+                },
                 "Variable" => {
                     if let Value::Text(t) = v {
                         Ok(Expr::Variable(t.to_string()))
                     } else {
-                        return Err(ExprError::ConversionFailure(Value::Dict(BTreeMap::from([(k, v)])).to_static()));
+                        return Err(ExprError::ConversionFailure(
+                            Value::Dict(BTreeMap::from([(k, v)])).to_static(),
+                        ));
                     }
                 }
                 "TableCol" => {
                     let mut l = extract_list_from_value(v, 4)?.into_iter();
                     let in_root = match l.next().unwrap() {
                         Value::Bool(b) => b,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     let tid = match l.next().unwrap() {
                         Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     let is_key = match l.next().unwrap() {
                         Value::Bool(b) => b,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     let cid = match l.next().unwrap() {
                         Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
-                    Ok(Expr::TableCol((in_root, tid as u32).into(), (is_key, cid as usize).into()))
+                    Ok(Expr::TableCol(
+                        (in_root, tid as u32).into(),
+                        (is_key, cid as usize).into(),
+                    ))
                 }
                 "TupleSetIdx" => {
                     let mut l = extract_list_from_value(v, 3)?.into_iter();
                     let is_key = match l.next().unwrap() {
                         Value::Bool(b) => b,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     let tid = match l.next().unwrap() {
                         Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     let cid = match l.next().unwrap() {
                         Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     Ok(Expr::TupleSetIdx(TupleSetIdx {
                         is_key,
@@ -167,31 +196,40 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let name = match ll.next().unwrap() {
                         Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     let op = Arc::new(UnresolvedOp(name.to_string()));
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
-                    let args = l.into_iter().map(Expr::try_from).collect::<Result<Vec<_>>>()?;
+                    let args = l
+                        .into_iter()
+                        .map(Expr::try_from)
+                        .collect::<Result<Vec<_>>>()?;
                     Ok(Expr::Apply(op, args))
                 }
                 "ApplyAgg" => {
                     let mut ll = extract_list_from_value(v, 3)?.into_iter();
                     let name = match ll.next().unwrap() {
                         Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     let op = Arc::new(UnresolvedOp(name.to_string()));
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
-                    let a_args = l.into_iter().map(Expr::try_from).collect::<Result<Vec<_>>>()?;
+                    let a_args = l
+                        .into_iter()
+                        .map(Expr::try_from)
+                        .collect::<Result<Vec<_>>>()?;
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
-                    let args = l.into_iter().map(Expr::try_from).collect::<Result<Vec<_>>>()?;
+                    let args = l
+                        .into_iter()
+                        .map(Expr::try_from)
+                        .collect::<Result<Vec<_>>>()?;
                     Ok(Expr::ApplyAgg(op, a_args, args))
                 }
                 "FieldAcc" => {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let field = match ll.next().unwrap() {
                         Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     let arg = Expr::try_from(ll.next().unwrap())?;
                     Ok(Expr::FieldAcc(field.to_string(), arg.into()))
@@ -200,12 +238,12 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let idx = match ll.next().unwrap() {
                         Value::Int(i) => i as usize,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()))
+                        v => return Err(ExprError::ConversionFailure(v.to_static())),
                     };
                     let arg = Expr::try_from(ll.next().unwrap())?;
                     Ok(Expr::IdxAcc(idx, arg.into()))
                 }
-                k => Err(ExprError::UnknownExprTag(k.to_string()))
+                k => Err(ExprError::UnknownExprTag(k.to_string())),
             }
         } else {
             Err(ExprError::ConversionFailure(value.to_static()))
@@ -237,7 +275,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     cid.is_key.into(),
                     Value::from(cid.id as i64),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::TupleSetIdx(sid) => build_tagged_value(
                 "TupleSetIdx",
@@ -246,7 +284,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(sid.t_set as i64),
                     Value::from(sid.col_idx as i64),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::Apply(op, args) => build_tagged_value(
                 "Apply",
@@ -254,7 +292,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(op.name().to_string()),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::ApplyAgg(op, a_args, args) => build_tagged_value(
                 "ApplyAgg",
@@ -267,7 +305,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                         .into(),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::FieldAcc(f, v) => {
                 build_tagged_value("FieldAcc", vec![f.into(), Value::from(*v)].into())
@@ -278,7 +316,6 @@ impl<'a> From<Expr<'a>> for Value<'a> {
         }
     }
 }
-
 
 fn build_tagged_value<'a>(tag: &'static str, val: Value<'a>) -> Value<'a> {
     Value::Dict(BTreeMap::from([(tag.into(), val)]))

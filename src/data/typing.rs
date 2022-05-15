@@ -212,7 +212,6 @@ impl TryFrom<Pair<'_, Rule>> for Typing {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

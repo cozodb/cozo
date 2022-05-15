@@ -67,9 +67,14 @@ pub(crate) struct TupleSetIdx {
     pub(crate) col_idx: usize,
 }
 
-
 impl Debug for TupleSetIdx {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "@{}{}{}", self.t_set, if self.is_key { 'K' } else { 'D' }, self.col_idx)
+        write!(
+            f,
+            "@{}{}{}",
+            self.t_set,
+            if self.is_key { 'K' } else { 'D' },
+            self.col_idx
+        )
     }
 }

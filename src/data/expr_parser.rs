@@ -1,16 +1,19 @@
-use std::borrow::Cow;
-use std::collections::BTreeMap;
-use pest::prec_climber::{Assoc, Operator, PrecClimber};
-use std::result;
-use std::sync::Arc;
-use lazy_static::lazy_static;
-use pest::iterators::Pair;
 use crate::data::expr::{Expr, ExprError};
-use crate::data::op::{Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt, OpLe, OpLt, OpMerge, OpMinus, OpMod, OpMul, OpNe, OpNegate, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp};
+use crate::data::op::{
+    Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt, OpLe, OpLt, OpMerge, OpMinus,
+    OpMod, OpMul, OpNe, OpNegate, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
+};
 use crate::data::value::Value;
 use crate::parser::number::parse_int;
+use crate::parser::text_identifier::parse_string;
 use crate::parser::Rule;
-use crate::parser::text_identifier::{parse_string};
+use lazy_static::lazy_static;
+use pest::iterators::Pair;
+use pest::prec_climber::{Assoc, Operator, PrecClimber};
+use std::borrow::Cow;
+use std::collections::BTreeMap;
+use std::result;
+use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ExprParseError {
@@ -106,7 +109,9 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
             Ok(Expr::Apply(op, vec![term]))
         }
 
-        Rule::pos_int => Ok(Expr::Const(Value::Int(pair.as_str().replace('_', "").parse::<i64>()?))),
+        Rule::pos_int => Ok(Expr::Const(Value::Int(
+            pair.as_str().replace('_', "").parse::<i64>()?,
+        ))),
         Rule::hex_pos_int => Ok(Expr::Const(Value::Int(parse_int(pair.as_str(), 16)))),
         Rule::octo_pos_int => Ok(Expr::Const(Value::Int(parse_int(pair.as_str(), 8)))),
         Rule::bin_pos_int => Ok(Expr::Const(Value::Int(parse_int(pair.as_str(), 2)))),
@@ -167,10 +172,8 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
                     }
                     Rule::scoped_accessor => {
                         let name = parse_string(p.into_inner().next().unwrap())?;
-                        let val = Expr::FieldAcc(
-                            name.clone().into(),
-                            Expr::Variable("_".into()).into(),
-                        );
+                        let val =
+                            Expr::FieldAcc(name.clone().into(), Expr::Variable("_".into()).into());
                         collected.insert(name.into(), val);
                     }
                     Rule::spreading => {
@@ -214,7 +217,6 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
     }
 }
 
-
 fn build_expr_infix<'a>(
     lhs: Result<Expr<'a>>,
     op: Pair<Rule>,
@@ -244,13 +246,12 @@ fn build_expr_infix<'a>(
     Ok(Expr::Apply(op, vec![lhs, rhs]))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::expr::StaticExpr;
     use crate::parser::CozoParser;
     use pest::Parser;
-    use crate::data::expr::StaticExpr;
 
     fn parse_expr_from_str(s: &str) -> Result<Expr> {
         let pair = CozoParser::parse(Rule::expr, s.as_ref())
@@ -272,58 +273,76 @@ mod tests {
 
     #[test]
     fn parse_literals() {
-        assert_eq!(parse_expr_from_str("1").unwrap(), Expr::Const(Value::Int(1)));
-        assert_eq!(parse_expr_from_str("12_3").unwrap(), Expr::Const(Value::Int(123)));
-        assert_eq!(parse_expr_from_str("0xaf").unwrap(), Expr::Const(Value::Int(0xaf)));
+        assert_eq!(
+            parse_expr_from_str("1").unwrap(),
+            Expr::Const(Value::Int(1))
+        );
+        assert_eq!(
+            parse_expr_from_str("12_3").unwrap(),
+            Expr::Const(Value::Int(123))
+        );
+        assert_eq!(
+            parse_expr_from_str("0xaf").unwrap(),
+            Expr::Const(Value::Int(0xaf))
+        );
         assert_eq!(
             parse_expr_from_str("0xafcE_f").unwrap(),
-            Expr::Const(Value::Int(0xafcef)
-            ));
+            Expr::Const(Value::Int(0xafcef))
+        );
         assert_eq!(
             parse_expr_from_str("0o1234_567").unwrap(),
-            Expr::Const(Value::Int(0o1234567)
-            ));
+            Expr::Const(Value::Int(0o1234567))
+        );
         assert_eq!(
             parse_expr_from_str("0o0001234_567").unwrap(),
-            Expr::Const(Value::Int(0o1234567)
-            ));
+            Expr::Const(Value::Int(0o1234567))
+        );
         assert_eq!(
             parse_expr_from_str("0b101010").unwrap(),
-            Expr::Const(Value::Int(0b101010)
-            ));
+            Expr::Const(Value::Int(0b101010))
+        );
 
         assert_eq!(
             parse_expr_from_str("0.0").unwrap(),
-            Expr::Const(Value::Float((0.).into())
-            ));
+            Expr::Const(Value::Float((0.).into()))
+        );
         assert_eq!(
             parse_expr_from_str("10.022_3").unwrap(),
-            Expr::Const(Value::Float(10.0223.into())
-            ));
+            Expr::Const(Value::Float(10.0223.into()))
+        );
         assert_eq!(
             parse_expr_from_str("10.022_3e-100").unwrap(),
-            Expr::Const(Value::Float(10.0223e-100.into())
-            ));
+            Expr::Const(Value::Float(10.0223e-100.into()))
+        );
 
-        assert_eq!(parse_expr_from_str("null").unwrap(), Expr::Const(Value::Null));
-        assert_eq!(parse_expr_from_str("true").unwrap(), Expr::Const(Value::Bool(true)));
-        assert_eq!(parse_expr_from_str("false").unwrap(), Expr::Const(Value::Bool(false)));
+        assert_eq!(
+            parse_expr_from_str("null").unwrap(),
+            Expr::Const(Value::Null)
+        );
+        assert_eq!(
+            parse_expr_from_str("true").unwrap(),
+            Expr::Const(Value::Bool(true))
+        );
+        assert_eq!(
+            parse_expr_from_str("false").unwrap(),
+            Expr::Const(Value::Bool(false))
+        );
         assert_eq!(
             parse_expr_from_str(r#""x \n \ty \"""#).unwrap(),
-            Expr::Const(Value::Text(Cow::Borrowed("x \n \ty \""))
-            ));
+            Expr::Const(Value::Text(Cow::Borrowed("x \n \ty \"")))
+        );
         assert_eq!(
             parse_expr_from_str(r#""x'""#).unwrap(),
-            Expr::Const(Value::Text("x'".into())
-            ));
+            Expr::Const(Value::Text("x'".into()))
+        );
         assert_eq!(
             parse_expr_from_str(r#"'"x"'"#).unwrap(),
-            Expr::Const(Value::Text(r##""x""##.into())
-            ));
+            Expr::Const(Value::Text(r##""x""##.into()))
+        );
         assert_eq!(
             parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(),
-            (Expr::Const(Value::Text(r##"x"yz"##.into()))
-            ));
+            (Expr::Const(Value::Text(r##"x"yz"##.into())))
+        );
     }
 
     #[test]
