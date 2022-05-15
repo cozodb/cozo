@@ -92,6 +92,10 @@ mod ffi {
         fn set_bloom_filter(o: Pin<&mut Options>, bits_per_key: f64, whole_key_filtering: bool);
         fn set_capped_prefix_extractor(o: Pin<&mut Options>, cap_len: usize);
         fn set_fixed_prefix_extractor(o: Pin<&mut Options>, prefix_len: usize);
+        fn set_enable_blob_files(o: Pin<&mut Options>, v: bool);
+        fn set_enable_blob_garbage_collection(o: Pin<&mut Options>, v: bool);
+        fn set_min_blob_size(o: Pin<&mut Options>, size: u64);
+        fn set_blob_file_size(o: Pin<&mut Options>, size: u64);
 
         type ReadOptions;
         fn new_read_options() -> UniquePtr<ReadOptions>;

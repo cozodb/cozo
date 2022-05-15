@@ -155,6 +155,29 @@ inline void set_paranoid_checks(Options &inner, bool v) {
     inner.paranoid_checks = v;
 }
 
+inline void set_enable_blob_files(Options &inner, bool v) {
+    inner.enable_blob_files = v;
+}
+
+inline void set_min_blob_size(Options &inner, uint64_t size) {
+    inner.min_blob_size = size;
+}
+
+inline void set_blob_file_size(Options &inner, uint64_t size) {
+    inner.blob_file_size = size;
+}
+
+inline void set_enable_blob_garbage_collection(Options &inner, bool v) {
+    inner.enable_blob_garbage_collection = v;
+}
+
+// TODO: more API for Options
+// blob_compression_type,
+// blob_garbage_collection_age_cutoff,
+// blob_garbage_collection_force_threshold,
+// blob_compaction_readahead_size
+
+
 inline std::unique_ptr<ReadOptions> new_read_options() {
     return std::make_unique<ReadOptions>();
 }
@@ -267,7 +290,7 @@ struct TransactionBridge {
         inner->SetSnapshot();
     }
 
-    inline bool set_readoption_snapshot_to_current(ReadOptions& read_opts) const {
+    inline bool set_readoption_snapshot_to_current(ReadOptions &read_opts) const {
         read_opts.snapshot = inner->GetSnapshot();
         return read_opts.snapshot != nullptr;
     }
