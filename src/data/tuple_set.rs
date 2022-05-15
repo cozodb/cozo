@@ -60,8 +60,16 @@ impl From<(bool, usize)> for ColId {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq)]
 pub(crate) struct TupleSetIdx {
     pub(crate) is_key: bool,
     pub(crate) t_set: usize,
     pub(crate) col_idx: usize,
+}
+
+
+impl Debug for TupleSetIdx {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "@{}{}{}", self.t_set, if self.is_key { 'K' } else { 'D' }, self.col_idx)
+    }
 }

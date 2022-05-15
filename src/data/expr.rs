@@ -2,6 +2,7 @@ use crate::data::op::{AggOp, Op, UnresolvedOp};
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::collections::BTreeMap;
+use std::fmt::{Debug, Formatter, write};
 use std::result;
 use std::sync::Arc;
 
@@ -19,6 +20,7 @@ pub(crate) enum ExprError {
 
 type Result<T> = result::Result<T, ExprError>;
 
+#[derive(Clone)]
 pub(crate) enum Expr<'a> {
     Const(Value<'a>),
     List(Vec<Expr<'a>>),
@@ -30,6 +32,23 @@ pub(crate) enum Expr<'a> {
     ApplyAgg(Arc<dyn AggOp>, Vec<Expr<'a>>, Vec<Expr<'a>>),
     FieldAcc(String, Box<Expr<'a>>),
     IdxAcc(usize, Box<Expr<'a>>),
+}
+
+impl<'a> Debug for Expr<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Const(c) => write!(f, "{}", c),
+            Expr::List(l) => write!(f, "{:?}", l),
+            Expr::Dict(d) => write!(f, "{:?}", d),
+            Expr::Variable(v) => write!(f, "`{}`", v),
+            Expr::TableCol(tid, cid) => write!(f, "{:?}{:?}", tid, cid),
+            Expr::TupleSetIdx(sid) => write!(f, "{:?}", sid),
+            Expr::Apply(op, args) => write!(f, "({} {:?})", op.name(), args),
+            Expr::ApplyAgg(op, a_args, args) => write!(f, "({} {:?} {:?})", op.name(), a_args, args),
+            Expr::FieldAcc(field, arg) => write!(f, "(.{} {:?})", field, arg),
+            Expr::IdxAcc(i, arg) => write!(f, "(.{} {:?})", i, arg)
+        }
+    }
 }
 
 pub(crate) type StaticExpr = Expr<'static>;
