@@ -243,3 +243,96 @@ fn build_expr_infix<'a>(
     };
     Ok(Expr::Apply(op, vec![lhs, rhs]))
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::CozoParser;
+    use pest::Parser;
+    use crate::data::expr::StaticExpr;
+
+    fn parse_expr_from_str(s: &str) -> Result<Expr> {
+        let pair = CozoParser::parse(Rule::expr, s.as_ref())
+            .unwrap()
+            .next()
+            .unwrap();
+        Expr::try_from(pair)
+    }
+
+    #[test]
+    fn raw_string() {
+        assert!(dbg!(parse_expr_from_str(r#####"r#"x"#"#####)).is_ok());
+    }
+
+    #[test]
+    fn unevaluated() {
+        assert!(dbg!(parse_expr_from_str("a+b*c+d")).is_ok());
+    }
+
+    #[test]
+    fn parse_literals() {
+        assert_eq!(parse_expr_from_str("1").unwrap(), Expr::Const(Value::Int(1)));
+        assert_eq!(parse_expr_from_str("12_3").unwrap(), Expr::Const(Value::Int(123)));
+        assert_eq!(parse_expr_from_str("0xaf").unwrap(), Expr::Const(Value::Int(0xaf)));
+        assert_eq!(
+            parse_expr_from_str("0xafcE_f").unwrap(),
+            Expr::Const(Value::Int(0xafcef)
+            ));
+        assert_eq!(
+            parse_expr_from_str("0o1234_567").unwrap(),
+            Expr::Const(Value::Int(0o1234567)
+            ));
+        assert_eq!(
+            parse_expr_from_str("0o0001234_567").unwrap(),
+            Expr::Const(Value::Int(0o1234567)
+            ));
+        assert_eq!(
+            parse_expr_from_str("0b101010").unwrap(),
+            Expr::Const(Value::Int(0b101010)
+            ));
+
+        assert_eq!(
+            parse_expr_from_str("0.0").unwrap(),
+            Expr::Const(Value::Float((0.).into())
+            ));
+        assert_eq!(
+            parse_expr_from_str("10.022_3").unwrap(),
+            Expr::Const(Value::Float(10.0223.into())
+            ));
+        assert_eq!(
+            parse_expr_from_str("10.022_3e-100").unwrap(),
+            Expr::Const(Value::Float(10.0223e-100.into())
+            ));
+
+        assert_eq!(parse_expr_from_str("null").unwrap(), Expr::Const(Value::Null));
+        assert_eq!(parse_expr_from_str("true").unwrap(), Expr::Const(Value::Bool(true)));
+        assert_eq!(parse_expr_from_str("false").unwrap(), Expr::Const(Value::Bool(false)));
+        assert_eq!(
+            parse_expr_from_str(r#""x \n \ty \"""#).unwrap(),
+            Expr::Const(Value::Text(Cow::Borrowed("x \n \ty \""))
+            ));
+        assert_eq!(
+            parse_expr_from_str(r#""x'""#).unwrap(),
+            Expr::Const(Value::Text("x'".into())
+            ));
+        assert_eq!(
+            parse_expr_from_str(r#"'"x"'"#).unwrap(),
+            Expr::Const(Value::Text(r##""x""##.into())
+            ));
+        assert_eq!(
+            parse_expr_from_str(r#####"r###"x"yz"###"#####).unwrap(),
+            (Expr::Const(Value::Text(r##"x"yz"##.into()))
+            ));
+    }
+
+    #[test]
+    fn complex_cases() -> Result<()> {
+        dbg!(parse_expr_from_str("{}")?);
+        dbg!(parse_expr_from_str("{b:1,a,c:2,d,...e,}")?);
+        dbg!(parse_expr_from_str("{...a,...b,c:1,d:2,...e,f:3}")?);
+        dbg!(parse_expr_from_str("[]")?);
+        dbg!(parse_expr_from_str("[...a,...b,1,2,...e,3]")?);
+        Ok(())
+    }
+}

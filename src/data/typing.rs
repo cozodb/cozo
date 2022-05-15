@@ -3,7 +3,7 @@ use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{CozoParser, Rule};
 use pest::iterators::Pair;
 use pest::Parser;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::result;
 
 #[derive(thiserror::Error, Debug)]
@@ -26,7 +26,7 @@ pub(crate) enum TypingError {
 
 type Result<T> = result::Result<T, TypingError>;
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub(crate) enum Typing {
     Any,
     Bool,
@@ -67,6 +67,12 @@ impl Display for Typing {
                 write!(f, "}}")
             }
         }
+    }
+}
+
+impl Debug for Typing {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Typing<{}>", self)
     }
 }
 
@@ -148,7 +154,7 @@ impl TryFrom<&str> for Typing {
 
     fn try_from(value: &str) -> Result<Self> {
         let pair = CozoParser::parse(Rule::typing, value)?.next().unwrap();
-        Typing::from_pair(pair)
+        Typing::try_from(pair)
     }
 }
 
@@ -160,8 +166,10 @@ impl<'a> TryFrom<Value<'a>> for Typing {
     }
 }
 
-impl Typing {
-    pub fn from_pair<'a>(pair: Pair<Rule>) -> Result<Self> {
+impl TryFrom<Pair<'_, Rule>> for Typing {
+    type Error = TypingError;
+
+    fn try_from(pair: Pair<Rule>) -> Result<Self> {
         Ok(match pair.as_rule() {
             Rule::simple_type => match pair.as_str() {
                 "Any" => Typing::Any,
@@ -172,16 +180,16 @@ impl Typing {
                 "Uuid" => Typing::Uuid,
                 t => return Err(TypingError::UndefinedType(t.to_string())),
             },
-            Rule::nullable_type => Typing::Nullable(Box::new(Typing::from_pair(
+            Rule::nullable_type => Typing::Nullable(Box::new(Typing::try_from(
                 pair.into_inner().next().unwrap(),
             )?)),
-            Rule::homogeneous_list_type => Typing::Homogeneous(Box::new(Typing::from_pair(
+            Rule::homogeneous_list_type => Typing::Homogeneous(Box::new(Typing::try_from(
                 pair.into_inner().next().unwrap(),
             )?)),
             Rule::unnamed_tuple_type => {
                 let types = pair
                     .into_inner()
-                    .map(|p| Typing::from_pair(p))
+                    .map(Typing::try_from)
                     .collect::<Result<Vec<Typing>>>()?;
                 Typing::UnnamedTuple(types)
             }
@@ -193,7 +201,7 @@ impl Typing {
                         let name_pair = ps.next().unwrap();
                         let name = build_name_in_def(name_pair, true)?;
                         let typ_pair = ps.next().unwrap();
-                        let typ = Typing::from_pair(typ_pair)?;
+                        let typ = Typing::try_from(typ_pair)?;
                         Ok((name, typ))
                     })
                     .collect::<Result<Vec<(String, Typing)>>>()?;
@@ -201,5 +209,31 @@ impl Typing {
             }
             _ => unreachable!(),
         })
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_string() {
+        assert_eq!(
+            format!(
+                "{}",
+                Typing::Nullable(Box::new(Typing::Homogeneous(Box::new(Typing::Text))))
+            ),
+            "?[Text]"
+        );
+    }
+
+    #[test]
+    fn from_string() {
+        assert!(dbg!(Typing::try_from("?[Text]")).is_ok());
+        assert!(dbg!(Typing::try_from("?(Text, [Int], ?Uuid)")).is_ok());
+        assert!(dbg!(Typing::try_from("{xzzx : Text}")).is_ok());
+        assert!(dbg!(Typing::try_from("?({x : Text, ppqp: ?Int}, [Int], ?Uuid)")).is_ok());
+        assert!(dbg!(Typing::try_from("??Int")).is_err());
     }
 }

@@ -257,4 +257,15 @@ mod tests {
         dbg!(size_of::<HashMap<(), ()>>());
         dbg!(size_of::<Value>());
     }
+
+    #[test]
+    fn conversions() {
+        assert!(matches!(Value::from(()), Value::Null));
+        assert!(matches!(Value::from(10i64), Value::Int(_)));
+        assert!(matches!(Value::from(10.1f64), Value::Float(_)));
+        assert!(matches!(Value::from("abc"), Value::Text(_)));
+        assert!(matches!(Value::from("abc".to_string()), Value::Text(_)));
+        assert!(matches!(Value::from(vec![Value::Null]), Value::List(_)));
+        assert!(matches!(Value::from(BTreeMap::new()), Value::Dict(_)));
+    }
 }

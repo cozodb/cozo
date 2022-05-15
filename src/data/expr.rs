@@ -2,7 +2,7 @@ use crate::data::op::{AggOp, Op, UnresolvedOp};
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::collections::BTreeMap;
-use std::fmt::{Debug, Formatter, write};
+use std::fmt::{Debug, format, Formatter, write};
 use std::result;
 use std::sync::Arc;
 
@@ -34,6 +34,26 @@ pub(crate) enum Expr<'a> {
     IdxAcc(usize, Box<Expr<'a>>),
 }
 
+impl<'a> PartialEq for Expr<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        use Expr::*;
+
+        match (self, other) {
+            (Const(l), Const(r)) => l == r,
+            (List(l), List(r)) => l == r,
+            (Dict(l), Dict(r)) => l == r,
+            (Variable(l), Variable(r)) => l == r,
+            (TableCol(lt, lc), TableCol(rt, rc)) => (lt == rt) && (lc == rc),
+            (TupleSetIdx(l), TupleSetIdx(r)) => l == r,
+            (Apply(lo, la), Apply(ro, ra)) => (lo.name() == ro.name()) && (la == ra),
+            (ApplyAgg(lo, laa, la), ApplyAgg(ro, raa, ra)) => (lo.name() == ro.name()) && (laa == raa) && (la == ra),
+            (FieldAcc(lf, la), FieldAcc(rf, ra)) => (lf == rf) && (la == ra),
+            (IdxAcc(li, la), IdxAcc(ri, ra)) => (li == ri) && (la == ra),
+            _ => false
+        }
+    }
+}
+
 impl<'a> Debug for Expr<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -43,8 +63,15 @@ impl<'a> Debug for Expr<'a> {
             Expr::Variable(v) => write!(f, "`{}`", v),
             Expr::TableCol(tid, cid) => write!(f, "{:?}{:?}", tid, cid),
             Expr::TupleSetIdx(sid) => write!(f, "{:?}", sid),
-            Expr::Apply(op, args) => write!(f, "({} {:?})", op.name(), args),
-            Expr::ApplyAgg(op, a_args, args) => write!(f, "({} {:?} {:?})", op.name(), a_args, args),
+            Expr::Apply(op, args) => write!(
+                f, "({} {})",
+                op.name(),
+                args.iter().map(|v| format!("{:?}", v)).collect::<Vec<_>>().join(" ")),
+            Expr::ApplyAgg(op, a_args, args) => write!(
+                f, "[|{} {} | {}|]",
+                op.name(),
+                a_args.iter().map(|v| format!("{:?}", v)).collect::<Vec<_>>().join(" "),
+                args.iter().map(|v| format!("{:?}", v)).collect::<Vec<_>>().join(" ")),
             Expr::FieldAcc(field, arg) => write!(f, "(.{} {:?})", field, arg),
             Expr::IdxAcc(i, arg) => write!(f, "(.{} {:?})", i, arg)
         }

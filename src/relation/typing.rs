@@ -230,45 +230,45 @@ impl TryFrom<&str> for Typing {
         Typing::from_pair(pair, None)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::error::Result;
-
-    #[test]
-    fn to_string() {
-        assert_eq!(
-            format!(
-                "{}",
-                Typing::Nullable(Box::new(Typing::Homogeneous(Box::new(Typing::Text))))
-            ),
-            "?[Text]"
-        );
-    }
-
-    #[test]
-    fn from_string() {
-        let res: Result<Typing> = "?[Text]".try_into();
-        println!("{:#?}", res);
-        assert!(res.is_ok());
-        let res: Result<Typing> = "?(Text, [Int], ?Uuid)".try_into();
-        println!("{:#?}", res);
-        assert!(res.is_ok());
-        let res: Result<Typing> = "{xzzx : Text}".try_into();
-        println!("{:#?}", res);
-        assert!(res.is_ok());
-        let res: Result<Typing> = "?({x : Text, ppqp: ?Int}, [Int], ?Uuid)".try_into();
-        println!("{:#?}", res);
-        assert!(res.is_ok());
-        let res: Result<Typing> = "??Int".try_into();
-        println!("{:#?}", res);
-        assert!(res.is_err());
-        let res: Result<Typing> = "<Int, Int, ?Int>->Any".try_into();
-        println!("{:#?}", res);
-        assert!(res.is_ok());
-        let res: Result<Typing> = "<>->Any".try_into();
-        println!("{:#?}", res);
-        assert!(res.is_ok());
-    }
-}
+//
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use crate::error::Result;
+//
+//     #[test]
+//     fn to_string() {
+//         assert_eq!(
+//             format!(
+//                 "{}",
+//                 Typing::Nullable(Box::new(Typing::Homogeneous(Box::new(Typing::Text))))
+//             ),
+//             "?[Text]"
+//         );
+//     }
+//
+//     #[test]
+//     fn from_string() {
+//         let res: Result<Typing> = "?[Text]".try_into();
+//         println!("{:#?}", res);
+//         assert!(res.is_ok());
+//         let res: Result<Typing> = "?(Text, [Int], ?Uuid)".try_into();
+//         println!("{:#?}", res);
+//         assert!(res.is_ok());
+//         let res: Result<Typing> = "{xzzx : Text}".try_into();
+//         println!("{:#?}", res);
+//         assert!(res.is_ok());
+//         let res: Result<Typing> = "?({x : Text, ppqp: ?Int}, [Int], ?Uuid)".try_into();
+//         println!("{:#?}", res);
+//         assert!(res.is_ok());
+//         let res: Result<Typing> = "??Int".try_into();
+//         println!("{:#?}", res);
+//         assert!(res.is_err());
+//         let res: Result<Typing> = "<Int, Int, ?Int>->Any".try_into();
+//         println!("{:#?}", res);
+//         assert!(res.is_ok());
+//         let res: Result<Typing> = "<>->Any".try_into();
+//         println!("{:#?}", res);
+//         assert!(res.is_ok());
+//     }
+// }
