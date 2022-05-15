@@ -258,19 +258,23 @@ struct TransactionBridge {
     unique_ptr<Transaction> inner;
     mutable unique_ptr<TransactionOptions> t_ops; // Put here to make sure ownership works
     mutable unique_ptr<OptimisticTransactionOptions> o_ops; // same as above
-    mutable unique_ptr<ReadOptions> r_ops;
-    mutable unique_ptr<ReadOptions> raw_r_ops;
+//    mutable unique_ptr<ReadOptions> r_ops;
+//    mutable unique_ptr<ReadOptions> raw_r_ops;
     mutable unique_ptr<WriteOptions> w_ops;
-    mutable unique_ptr<WriteOptions> raw_w_ops;
+//    mutable unique_ptr<WriteOptions> raw_w_ops;
 
     inline void set_snapshot() const {
         inner->SetSnapshot();
-        r_ops->snapshot = inner->GetSnapshot();
+    }
+
+    inline bool set_readoption_snapshot_to_current(ReadOptions& read_opts) const {
+        read_opts.snapshot = inner->GetSnapshot();
+        return read_opts.snapshot != nullptr;
     }
 
     inline void commit(BridgeStatus &status) const {
         write_status(inner->Commit(), status);
-        r_ops->snapshot = nullptr;
+//        r_ops->snapshot = nullptr;
     }
 
     inline void rollback(BridgeStatus &status) const {
@@ -290,20 +294,22 @@ struct TransactionBridge {
     }
 
     inline void get_txn(
+            const ReadOptions &r_ops,
             rust::Slice<const uint8_t> key,
             PinnableSlice &pinnable_val,
             BridgeStatus &status
     ) const {
-        write_status(inner->Get(*r_ops, convert_slice(key), &pinnable_val), status);
+        write_status(inner->Get(r_ops, convert_slice(key), &pinnable_val), status);
     }
 
     inline void get_for_update_txn(
+            const ReadOptions &r_ops,
             rust::Slice<const uint8_t> key,
             PinnableSlice &pinnable_val,
             BridgeStatus &status
     ) const {
         write_status(
-                inner->GetForUpdate(*r_ops,
+                inner->GetForUpdate(r_ops,
                                     raw_db->DefaultColumnFamily(),
                                     convert_slice(key),
                                     &pinnable_val),
@@ -312,12 +318,13 @@ struct TransactionBridge {
     }
 
     inline void get_raw(
+            const ReadOptions &r_ops,
             rust::Slice<const uint8_t> key,
             PinnableSlice &pinnable_val,
             BridgeStatus &status
     ) const {
         write_status(
-                raw_db->Get(*r_ops,
+                raw_db->Get(r_ops,
                             raw_db->DefaultColumnFamily(),
                             convert_slice(key),
                             &pinnable_val),
@@ -334,13 +341,14 @@ struct TransactionBridge {
     }
 
     inline void put_raw(
+            const WriteOptions &raw_w_ops,
             rust::Slice<const uint8_t> key,
             rust::Slice<const uint8_t> val,
             BridgeStatus &status
     ) const {
         auto k = convert_slice(key);
         auto v = convert_slice(val);
-        write_status(raw_db->Put(*raw_w_ops, k, v), status);
+        write_status(raw_db->Put(raw_w_ops, k, v), status);
     }
 
     inline void del_txn(
@@ -351,20 +359,22 @@ struct TransactionBridge {
     }
 
     inline void del_raw(
+            const WriteOptions &raw_w_ops,
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
     ) const {
-        write_status(raw_db->Delete(*raw_w_ops, convert_slice(key)), status);
+        write_status(raw_db->Delete(raw_w_ops, convert_slice(key)), status);
     }
 
     inline void del_range_raw(
+            const WriteOptions &raw_w_ops,
             rust::Slice<const uint8_t> start_key,
             rust::Slice<const uint8_t> end_key,
             BridgeStatus &status
     ) const {
         write_status(
                 raw_db->GetRootDB()->DeleteRange(
-                        *raw_w_ops,
+                        raw_w_ops,
                         raw_db->DefaultColumnFamily(),
                         convert_slice(start_key), convert_slice(end_key)),
                 status);
@@ -384,14 +394,14 @@ struct TransactionBridge {
                                           nullptr, nullptr), status);
     }
 
-    inline std::unique_ptr<IteratorBridge> iterator_txn() const {
+    inline std::unique_ptr<IteratorBridge> iterator_txn(const ReadOptions &r_ops) const {
         return std::make_unique<IteratorBridge>(
-                inner->GetIterator(*r_ops));
+                inner->GetIterator(r_ops));
     }
 
-    inline std::unique_ptr<IteratorBridge> iterator_raw() const {
+    inline std::unique_ptr<IteratorBridge> iterator_raw(const ReadOptions &raw_r_ops) const {
         return std::make_unique<IteratorBridge>(
-                raw_db->NewIterator(*raw_r_ops));
+                raw_db->NewIterator(raw_r_ops));
     }
 };
 
@@ -411,19 +421,19 @@ struct TDBBridge {
 
     inline unique_ptr<TransactionBridge> begin_t_transaction(
             unique_ptr<WriteOptions> w_ops,
-            unique_ptr<WriteOptions> raw_w_ops,
-            unique_ptr<ReadOptions> r_ops,
-            unique_ptr<ReadOptions> raw_r_ops,
+//            unique_ptr<WriteOptions> raw_w_ops,
+//            unique_ptr<ReadOptions> r_ops,
+//            unique_ptr<ReadOptions> raw_r_ops,
             unique_ptr<TransactionOptions> txn_options) const {
         if (tdb == nullptr) {
             return unique_ptr<TransactionBridge>(nullptr);
         }
         auto ret = make_unique<TransactionBridge>();
         ret->raw_db = tdb;
-        ret->r_ops = std::move(r_ops);
+//        ret->r_ops = std::move(r_ops);
         ret->w_ops = std::move(w_ops);
-        ret->raw_r_ops = std::move(raw_r_ops);
-        ret->raw_w_ops = std::move(raw_w_ops);
+//        ret->raw_r_ops = std::move(raw_r_ops);
+//        ret->raw_w_ops = std::move(raw_w_ops);
         ret->t_ops = std::move(txn_options);
         Transaction *txn = tdb->BeginTransaction(*ret->w_ops, *ret->t_ops);
         ret->inner = unique_ptr<Transaction>(txn);
@@ -432,19 +442,19 @@ struct TDBBridge {
 
     inline unique_ptr<TransactionBridge> begin_o_transaction(
             unique_ptr<WriteOptions> w_ops,
-            unique_ptr<WriteOptions> raw_w_ops,
-            unique_ptr<ReadOptions> r_ops,
-            unique_ptr<ReadOptions> raw_r_ops,
+//            unique_ptr<WriteOptions> raw_w_ops,
+//            unique_ptr<ReadOptions> r_ops,
+//            unique_ptr<ReadOptions> raw_r_ops,
             unique_ptr<OptimisticTransactionOptions> txn_options) const {
         if (odb == nullptr) {
             return unique_ptr<TransactionBridge>(nullptr);
         }
         auto ret = make_unique<TransactionBridge>();
         ret->raw_db = odb;
-        ret->r_ops = std::move(r_ops);
+//        ret->r_ops = std::move(r_ops);
         ret->w_ops = std::move(w_ops);
-        ret->raw_r_ops = std::move(raw_r_ops);
-        ret->raw_w_ops = std::move(raw_w_ops);
+//        ret->raw_r_ops = std::move(raw_r_ops);
+//        ret->raw_w_ops = std::move(raw_w_ops);
         ret->o_ops = std::move(txn_options);
         Transaction *txn = odb->BeginTransaction(*ret->w_ops, *ret->o_ops);
         ret->inner = unique_ptr<Transaction>(txn);

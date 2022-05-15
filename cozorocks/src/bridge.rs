@@ -140,6 +140,7 @@ mod ffi {
 
         type TransactionBridge;
         fn set_snapshot(self: &TransactionBridge);
+        fn set_readoption_snapshot_to_current(self: &TransactionBridge, opts: Pin<&mut ReadOptions>) -> bool;
         fn commit(self: &TransactionBridge, status: &mut BridgeStatus);
         fn rollback(self: &TransactionBridge, status: &mut BridgeStatus);
         fn set_savepoint(self: &TransactionBridge);
@@ -147,18 +148,21 @@ mod ffi {
         fn pop_savepoint(self: &TransactionBridge, status: &mut BridgeStatus);
         fn get_txn(
             self: &TransactionBridge,
+            options: &ReadOptions,
             key: &[u8],
             slice: Pin<&mut PinnableSlice>,
             status: &mut BridgeStatus,
         );
         fn get_for_update_txn(
             self: &TransactionBridge,
+            options: &ReadOptions,
             key: &[u8],
             slice: Pin<&mut PinnableSlice>,
             status: &mut BridgeStatus,
         );
         fn get_raw(
             self: &TransactionBridge,
+            options: &ReadOptions,
             key: &[u8],
             slice: Pin<&mut PinnableSlice>,
             status: &mut BridgeStatus,
@@ -171,6 +175,7 @@ mod ffi {
         );
         fn put_raw(
             self: &TransactionBridge,
+            options: &WriteOptions,
             key: &[u8],
             val: &[u8],
             status: &mut BridgeStatus,
@@ -182,11 +187,13 @@ mod ffi {
         );
         fn del_raw(
             self: &TransactionBridge,
+            options: &WriteOptions,
             key: &[u8],
             status: &mut BridgeStatus,
         );
         fn del_range_raw(
             self: &TransactionBridge,
+            options: &WriteOptions,
             start_key: &[u8],
             end_key: &[u8],
             status: &mut BridgeStatus,
@@ -197,8 +204,8 @@ mod ffi {
             status: &mut BridgeStatus,
         );
         fn compact_all_raw(self: &TransactionBridge, status: &mut BridgeStatus);
-        fn iterator_txn(self: &TransactionBridge) -> UniquePtr<IteratorBridge>;
-        fn iterator_raw(self: &TransactionBridge) -> UniquePtr<IteratorBridge>;
+        fn iterator_txn(self: &TransactionBridge, r_opts: &ReadOptions) -> UniquePtr<IteratorBridge>;
+        fn iterator_raw(self: &TransactionBridge, r_opts: &ReadOptions) -> UniquePtr<IteratorBridge>;
 
         pub type ColumnFamilyHandle;
 
@@ -206,17 +213,11 @@ mod ffi {
         fn begin_t_transaction(
             self: &TDBBridge,
             w_ops: UniquePtr<WriteOptions>,
-            raw_w_ops: UniquePtr<WriteOptions>,
-            r_ops: UniquePtr<ReadOptions>,
-            raw_r_ops: UniquePtr<ReadOptions>,
             txn_options: UniquePtr<TransactionOptions>,
         ) -> UniquePtr<TransactionBridge>;
         fn begin_o_transaction(
             self: &TDBBridge,
             w_ops: UniquePtr<WriteOptions>,
-            raw_w_ops: UniquePtr<WriteOptions>,
-            r_ops: UniquePtr<ReadOptions>,
-            raw_r_ops: UniquePtr<ReadOptions>,
             txn_options: UniquePtr<OptimisticTransactionOptions>,
         ) -> UniquePtr<TransactionBridge>;
         fn open_tdb_raw(
