@@ -211,8 +211,6 @@ mod ffi {
         fn iterator_txn(self: &TransactionBridge, r_opts: &ReadOptions) -> UniquePtr<IteratorBridge>;
         fn iterator_raw(self: &TransactionBridge, r_opts: &ReadOptions) -> UniquePtr<IteratorBridge>;
 
-        pub type ColumnFamilyHandle;
-
         type TDBBridge;
         fn begin_t_transaction(
             self: &TDBBridge,
