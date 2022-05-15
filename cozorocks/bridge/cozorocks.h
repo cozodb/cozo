@@ -41,6 +41,17 @@ typedef Status::Code StatusCode;
 typedef Status::SubCode StatusSubCode;
 typedef Status::Severity StatusSeverity;
 
+inline shared_ptr<Slice> make_shared_slice(unique_ptr<Slice> s) {
+    shared_ptr<Slice> ret = std::move(s);
+    return ret;
+}
+
+inline shared_ptr<PinnableSlice> make_shared_pinnable_slice(unique_ptr<PinnableSlice> s) {
+    shared_ptr<PinnableSlice> ret = std::move(s);
+    return ret;
+}
+
+
 inline Slice convert_slice(rust::Slice<const uint8_t> d) {
     return Slice(reinterpret_cast<const char *>(d.data()), d.size());
 }

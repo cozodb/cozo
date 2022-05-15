@@ -45,12 +45,53 @@ impl Deref for PinnableSlicePtr {
     }
 }
 
+pub struct PinnableSlicePtrShared(SharedPtr<PinnableSlice>);
+
+impl AsRef<[u8]> for PinnableSlicePtrShared {
+    fn as_ref(&self) -> &[u8] {
+        convert_pinnable_slice_back(&self.0)
+    }
+}
+
+impl Deref for PinnableSlicePtrShared {
+    type Target = PinnableSlice;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 pub struct SlicePtr(UniquePtr<Slice>);
 
 impl AsRef<[u8]> for SlicePtr {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         convert_slice_back(&self.0)
+    }
+}
+
+impl Deref for SlicePtr {
+    type Target = Slice;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub struct SlicePtrShared(SharedPtr<Slice>);
+
+impl AsRef<[u8]> for SlicePtrShared {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        convert_slice_back(&self.0)
+    }
+}
+
+impl Deref for SlicePtrShared {
+    type Target = Slice;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

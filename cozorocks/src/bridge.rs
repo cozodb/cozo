@@ -75,7 +75,9 @@ mod ffi {
         type StatusSeverity;
 
         type Slice;
+        fn make_shared_slice(o: UniquePtr<Slice>) -> SharedPtr<Slice>;
         type PinnableSlice;
+        fn make_shared_pinnable_slice(o: UniquePtr<PinnableSlice>) -> SharedPtr<PinnableSlice>;
         fn reset_pinnable_slice(o: Pin<&mut PinnableSlice>);
         fn new_pinnable_slice() -> UniquePtr<PinnableSlice>;
         fn convert_slice_back(s: &Slice) -> &[u8];
