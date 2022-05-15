@@ -25,6 +25,11 @@ impl PinnableSlicePtr {
     pub fn pinned_slice(&mut self) -> Pin<&mut PinnableSlice> {
         self.0.pin_mut()
     }
+
+    #[inline]
+    pub fn to_shared(self) -> PinnableSlicePtrShared {
+        PinnableSlicePtrShared(make_shared_pinnable_slice(self.0))
+    }
 }
 
 impl Default for PinnableSlicePtr {
@@ -57,6 +62,7 @@ impl Deref for PinnableSlicePtr {
     }
 }
 
+#[derive(Clone)]
 pub struct PinnableSlicePtrShared(SharedPtr<PinnableSlice>);
 
 impl AsRef<[u8]> for PinnableSlicePtrShared {
@@ -82,6 +88,11 @@ impl SlicePtr {
     pub fn pinned_slice(&mut self) -> Pin<&mut Slice> {
         self.0.pin_mut()
     }
+
+    #[inline]
+    pub fn to_shared(self) -> SlicePtrShared {
+        SlicePtrShared(make_shared_slice(self.0))
+    }
 }
 
 impl AsRef<[u8]> for SlicePtr {
@@ -100,6 +111,7 @@ impl Deref for SlicePtr {
     }
 }
 
+#[derive(Clone)]
 pub struct SlicePtrShared(SharedPtr<Slice>);
 
 impl AsRef<[u8]> for SlicePtrShared {
