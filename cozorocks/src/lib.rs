@@ -16,22 +16,33 @@ use cxx::let_cxx_string;
 pub use cxx::{SharedPtr, UniquePtr};
 use status::Result;
 use std::ops::Deref;
+use std::pin::Pin;
 
 pub struct PinnableSlicePtr(UniquePtr<PinnableSlice>);
 
+impl PinnableSlicePtr {
+    #[inline]
+    pub fn pinned_slice(&mut self) -> Pin<&mut PinnableSlice> {
+        self.0.pin_mut()
+    }
+}
+
 impl Default for PinnableSlicePtr {
+    #[inline]
     fn default() -> Self {
         PinnableSlicePtr(new_pinnable_slice())
     }
 }
 
 impl PinnableSlicePtr {
+    #[inline]
     pub fn reset(&mut self) {
-        reset_pinnable_slice(self.0.pin_mut());
+        reset_pinnable_slice(self.pinned_slice());
     }
 }
 
 impl AsRef<[u8]> for PinnableSlicePtr {
+    #[inline]
     fn as_ref(&self) -> &[u8] {
         convert_pinnable_slice_back(&self.0)
     }
@@ -40,6 +51,7 @@ impl AsRef<[u8]> for PinnableSlicePtr {
 impl Deref for PinnableSlicePtr {
     type Target = PinnableSlice;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -48,6 +60,7 @@ impl Deref for PinnableSlicePtr {
 pub struct PinnableSlicePtrShared(SharedPtr<PinnableSlice>);
 
 impl AsRef<[u8]> for PinnableSlicePtrShared {
+    #[inline]
     fn as_ref(&self) -> &[u8] {
         convert_pinnable_slice_back(&self.0)
     }
@@ -56,12 +69,20 @@ impl AsRef<[u8]> for PinnableSlicePtrShared {
 impl Deref for PinnableSlicePtrShared {
     type Target = PinnableSlice;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 pub struct SlicePtr(UniquePtr<Slice>);
+
+impl SlicePtr {
+    #[inline]
+    pub fn pinned_slice(&mut self) -> Pin<&mut Slice> {
+        self.0.pin_mut()
+    }
+}
 
 impl AsRef<[u8]> for SlicePtr {
     #[inline]
@@ -73,6 +94,7 @@ impl AsRef<[u8]> for SlicePtr {
 impl Deref for SlicePtr {
     type Target = Slice;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -90,6 +112,7 @@ impl AsRef<[u8]> for SlicePtrShared {
 impl Deref for SlicePtrShared {
     type Target = Slice;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -228,10 +251,10 @@ impl TransactionPtr {
     ) -> Result<bool> {
         let mut status = BridgeStatus::default();
         let res = if transact {
-            self.get_txn(options, key.as_ref(), slice.0.pin_mut(), &mut status);
+            self.get_txn(options, key.as_ref(), slice.pinned_slice(), &mut status);
             status.check_err(())
         } else {
-            self.get_raw(options, key.as_ref(), slice.0.pin_mut(), &mut status);
+            self.get_raw(options, key.as_ref(), slice.pinned_slice(), &mut status);
             status.check_err(())
         };
         match res {
@@ -248,7 +271,7 @@ impl TransactionPtr {
         slice: &mut PinnableSlicePtr,
     ) -> Result<bool> {
         let mut status = BridgeStatus::default();
-        self.get_for_update_txn(options, key.as_ref(), slice.0.pin_mut(), &mut status);
+        self.get_for_update_txn(options, key.as_ref(), slice.pinned_slice(), &mut status);
         match status.check_err(()) {
             Ok(_) => Ok(true),
             Err(e) if e.status.code == StatusCode::kNotFound => Ok(false),
