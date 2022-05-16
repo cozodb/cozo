@@ -276,6 +276,17 @@ impl TransactionPtr {
         }
     }
     #[inline]
+    pub fn get_owned(&self, options: &ReadOptions,
+                     key: impl AsRef<[u8]>) -> Result<Option<PinnableSlicePtr>> {
+        let mut slice = PinnableSlicePtr::default();
+        if self.get(options, key, &mut slice)? {
+            Ok(Some(slice))
+        } else {
+            Ok(None)
+
+        }
+    }
+    #[inline]
     pub fn get_for_update(
         &self,
         options: &ReadOptions,
@@ -377,6 +388,17 @@ impl DbPtr {
         }
     }
     #[inline]
+    pub fn get_owned(&self, options: &ReadOptions,
+                     key: impl AsRef<[u8]>) -> Result<Option<PinnableSlicePtr>> {
+        let mut slice = PinnableSlicePtr::default();
+        if self.get(options, key, &mut slice)? {
+            Ok(Some(slice))
+        } else {
+            Ok(None)
+
+        }
+    }
+    #[inline]
     pub fn del(&self, options: &WriteOptions, key: impl AsRef<[u8]>) -> Result<()> {
         let mut status = BridgeStatus::default();
         let ret = self.del_raw(options, key.as_ref(), &mut status);
@@ -399,7 +421,7 @@ impl DbPtr {
     }
 
     #[inline]
-    pub fn make_transaction(
+    pub fn txn(
         &self,
         options: TransactOptions,
         write_ops: WriteOptionsPtr,

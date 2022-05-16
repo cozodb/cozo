@@ -1,17 +1,27 @@
 use std::{mem, result};
-use cozorocks::{BridgeError, DbPtr, destroy_db, OptionsPtrShared, TDbOptions};
+use std::collections::BTreeMap;
+use cozorocks::{BridgeError, DbPtr, destroy_db, OptionsPtrShared, PinnableSlicePtr, ReadOptionsPtr, TDbOptions, TransactionPtr, TransactOptions, WriteOptionsPtr};
 use std::sync::{Arc, LockResult, Mutex, PoisonError};
+use std::sync::atomic::{AtomicU32, Ordering};
+use lazy_static::lazy_static;
 use log::error;
-use crate::data::tuple::Tuple;
-use crate::runtime::options::{default_options, default_txn_options, default_write_options};
+use crate::data::expr::StaticExpr;
+use crate::data::tuple::{DataKind, OwnTuple, Tuple, TupleError};
+use crate::data::tuple_set::MIN_TABLE_ID_BOUND;
+use crate::data::typing::Typing;
+use crate::data::value::{StaticValue, Value};
+use crate::runtime::options::{default_options, default_read_options, default_txn_db_options, default_txn_options, default_write_options};
 
 #[derive(thiserror::Error, Debug)]
 pub enum DbInstanceError {
     #[error(transparent)]
-    DbBridgeError(#[from] BridgeError),
+    DbBridge(#[from] BridgeError),
 
     #[error("Cannot obtain session lock")]
-    SessionLockError,
+    SessionLock,
+
+    #[error(transparent)]
+    Tuple(#[from] TupleError),
 }
 
 type Result<T> = result::Result<T, DbInstanceError>;
@@ -27,6 +37,7 @@ pub enum SessionStatus {
 struct SessionHandle {
     id: usize,
     db: DbPtr,
+    next_table_id: u32,
     status: SessionStatus,
 }
 
@@ -36,18 +47,20 @@ pub struct DbInstance {
     tdb_options: TDbOptions,
     path: String,
     session_handles: Mutex<Vec<Arc<Mutex<SessionHandle>>>>,
+    optimistic: bool,
     destroy_on_close: bool,
 }
 
 impl DbInstance {
     pub fn new(path: &str, optimistic: bool) -> Result<Self> {
         let options = default_options().make_shared();
-        let tdb_options = default_txn_options(optimistic);
+        let tdb_options = default_txn_db_options(optimistic);
         let main = DbPtr::open(&options, &tdb_options, path)?;
         Ok(Self {
             options,
             tdb_options,
             main,
+            optimistic,
             path: path.to_string(),
             session_handles: vec![].into(),
             destroy_on_close: false,
@@ -58,7 +71,7 @@ impl DbInstance {
 impl DbInstance {
     pub fn session(&self) -> Result<Session> {
         let mut handles = self.session_handles.lock()
-            .map_err(|_| DbInstanceError::SessionLockError)?;
+            .map_err(|_| DbInstanceError::SessionLock)?;
         let handle = handles.iter().find_map(|handle| {
             match handle.try_lock() {
                 Ok(inner) => {
@@ -84,6 +97,7 @@ impl DbInstance {
                     status: SessionStatus::Prepared,
                     id: idx,
                     db: temp.clone(),
+                    next_table_id: MIN_TABLE_ID_BOUND,
                 }));
                 handles.push(handle.clone());
 
@@ -94,10 +108,21 @@ impl DbInstance {
 
         drop(handles);
 
+        let mut w_opts_temp = default_write_options();
+        w_opts_temp.set_disable_wal(true);
+
         Ok(Session {
             main: self.main.clone(),
             temp,
             session_handle: handle,
+            optimistic: self.optimistic,
+            w_opts_main: default_write_options(),
+            w_opts_temp,
+            r_opts_main: default_read_options(),
+            r_opts_temp: default_read_options(),
+            stack: vec![],
+            cur_table_id: 0.into(),
+            params: Default::default(),
         })
     }
 
@@ -153,24 +178,71 @@ impl Drop for DbInstance {
     }
 }
 
+enum SessionDefinable {
+    Value(StaticValue),
+    Expr(StaticExpr),
+    Typing(Typing)
+    // TODO
+}
+
+type SessionStackFrame = BTreeMap<String, SessionDefinable>;
+
 pub struct Session {
     pub(crate) main: DbPtr,
     pub(crate) temp: DbPtr,
+    pub(crate) r_opts_main: ReadOptionsPtr,
+    pub(crate) r_opts_temp: ReadOptionsPtr,
+    pub(crate) w_opts_main: WriteOptionsPtr,
+    pub(crate) w_opts_temp: WriteOptionsPtr,
+    optimistic: bool,
+    cur_table_id: AtomicU32,
+    stack: Vec<SessionStackFrame>,
+    params: BTreeMap<String, StaticValue>,
     session_handle: Arc<Mutex<SessionHandle>>,
 }
 
+pub(crate) struct InterpretContext<'a> {
+    session: &'a Session,
+}
+
+impl <'a> InterpretContext<'a> {
+    pub(crate) fn resolve(&self, key: impl AsRef<str>) {
+
+    }
+    pub(crate) fn resolve_value(&self, key: impl AsRef<str>) {
+
+    }
+    pub(crate) fn resolve_typing(&self, key: impl AsRef<str>) {
+        todo!()
+    }
+    // also for expr, table, etc..
+}
+
 impl Session {
-    pub fn start(&mut self) -> Result<()> {
-        let mut handle = self.session_handle.lock()
-            .map_err(|_| DbInstanceError::SessionLockError)?;
-        handle.status = SessionStatus::Running;
-        Ok(())
+    pub fn start(mut self) -> Result<Self> {
+        {
+            self.push_env();
+            let mut handle = self.session_handle.lock()
+                .map_err(|_| DbInstanceError::SessionLock)?;
+            handle.status = SessionStatus::Running;
+            self.cur_table_id = handle.next_table_id.into();
+        }
+        Ok(self)
+    }
+    pub(crate) fn push_env(&mut self) {
+        self.stack.push(BTreeMap::new());
+    }
+    pub(crate) fn pop_env(&mut self) {
+        if self.stack.len() > 1 {
+            self.stack.pop();
+        }
     }
     fn clear_data(&self) -> Result<()> {
-        let w_opts = default_write_options();
-        self.temp
-            .del_range(&w_opts, Tuple::with_null_prefix(), Tuple::max_tuple())?;
-        // self.temp.compact_all()?;
+        self.temp.del_range(
+            &self.w_opts_temp,
+            Tuple::with_null_prefix(),
+            Tuple::max_tuple(),
+        )?;
         Ok(())
     }
     pub fn stop(&mut self) -> Result<()> {
@@ -178,11 +250,51 @@ impl Session {
         let mut handle = self.session_handle.lock()
             .map_err(|_| {
                 error!("failed to stop interpreter");
-                DbInstanceError::SessionLockError
+                DbInstanceError::SessionLock
             })?;
+        handle.next_table_id = self.cur_table_id.load(Ordering::SeqCst);
         handle.status = SessionStatus::Completed;
         Ok(())
     }
+
+    pub(crate) fn get_next_temp_table_id(&self) -> u32 {
+        let mut res = self.cur_table_id.fetch_add(1, Ordering::SeqCst);
+        while res.wrapping_add(1) < MIN_TABLE_ID_BOUND {
+            res = self.cur_table_id.fetch_add(MIN_TABLE_ID_BOUND, Ordering::SeqCst);
+        }
+        res + 1
+    }
+
+    pub(crate) fn txn(&self, w_opts: Option<WriteOptionsPtr>) -> TransactionPtr {
+        self.main.txn(default_txn_options(self.optimistic),
+                      w_opts.unwrap_or_else(default_write_options))
+    }
+
+    pub(crate) fn get_next_main_table_id(&self) -> Result<u32> {
+        let txn = self.txn(None);
+        let key = MAIN_DB_TABLE_ID_SEQ_KEY.as_ref();
+        let cur_id = match txn.get_owned(&self.r_opts_main, key)? {
+            None => {
+                let val = OwnTuple::from(
+                    (DataKind::Data, &[(MIN_TABLE_ID_BOUND as i64).into()]));
+                txn.put(key, &val)?;
+                MIN_TABLE_ID_BOUND
+            }
+            Some(pt) => {
+                let pt = Tuple::from(pt);
+                let prev_id = pt.get_int(0)?;
+                let val = OwnTuple::from((DataKind::Data, &[(prev_id + 1).into()]));
+                txn.put(key, &val)?;
+                (prev_id + 1) as u32
+            }
+        };
+        txn.commit()?;
+        Ok(cur_id + 1)
+    }
+}
+
+lazy_static! {
+    static ref MAIN_DB_TABLE_ID_SEQ_KEY: OwnTuple = OwnTuple::from((0u32, &[Value::Null]));
 }
 
 impl Drop for Session {
@@ -201,7 +313,7 @@ mod tests {
     use super::*;
     use crate::runtime::instance::DbInstance;
 
-    fn test_send_sync<T: Send + Sync>(_x: T) {}
+    fn test_send<T: Send>(_x: T) {}
 
     #[test]
     fn creation() -> Result<()> {
@@ -214,9 +326,11 @@ mod tests {
         let start = Instant::now();
         let mut db2 = DbInstance::new("_test2", true)?;
         db2.set_destroy_on_close(true);
-        for _ in 0..1000 {
-            let i1 = db2.session()?;
-            test_send_sync(i1);
+        for _ in 0..100 {
+            let i1 = db2.session()?.start()?;
+            dbg!(i1.get_next_temp_table_id());
+            dbg!(i1.get_next_main_table_id()?);
+            test_send(i1);
         }
         dbg!(start.elapsed());
         Ok(())

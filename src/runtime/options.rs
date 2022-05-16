@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use cozorocks::{FlushOptionsPtr, OptionsPtr, OTxnDbOptionsPtr, OTxnOptionsPtr, PTxnDbOptionsPtr, PTxnOptionsPtr, ReadOptionsPtr, RustComparatorPtr, TDbOptions, WriteOptionsPtr};
+use cozorocks::{FlushOptionsPtr, OptionsPtr, OTxnDbOptionsPtr, OTxnOptionsPtr, PTxnDbOptionsPtr, PTxnOptionsPtr, ReadOptionsPtr, RustComparatorPtr, TDbOptions, TransactOptions, WriteOptionsPtr};
 use crate::data::tuple::PREFIX_LEN;
 
 const COMPARATOR_NAME: &str = "cozo_cmp_v1";
@@ -34,10 +34,21 @@ pub fn default_flush_options() -> FlushOptionsPtr {
     FlushOptionsPtr::default()
 }
 
-pub fn default_txn_options(optimistic: bool) -> TDbOptions {
+pub fn default_txn_db_options(optimistic: bool) -> TDbOptions {
     if optimistic {
         TDbOptions::Optimistic(OTxnDbOptionsPtr::default())
     } else {
         TDbOptions::Pessimistic(PTxnDbOptionsPtr::default())
+    }
+}
+
+pub fn default_txn_options(optimistic: bool) -> TransactOptions {
+    if optimistic {
+        let o = OTxnOptionsPtr::new(&DEFAULT_COMPARATOR);
+        TransactOptions::Optimistic(o)
+    } else {
+        let mut o = PTxnOptionsPtr::default();
+        o.set_deadlock_detect(true);
+        TransactOptions::Pessimistic(o)
     }
 }

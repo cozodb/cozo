@@ -128,6 +128,10 @@ impl OptionsPtr {
 
 pub struct ReadOptionsPtr(UniquePtr<ReadOptions>);
 
+unsafe impl Send for ReadOptionsPtr {}
+// unsafe impl Sync for ReadOptionsPtr {}
+
+
 impl Deref for ReadOptionsPtr {
     type Target = UniquePtr<ReadOptions>;
 
@@ -173,6 +177,9 @@ impl ReadOptionsPtr {
 }
 
 pub struct WriteOptionsPtr(pub(crate) UniquePtr<WriteOptions>);
+
+unsafe impl Send for WriteOptionsPtr {}
+// unsafe impl Sync for WriteOptionsPtr {}
 
 impl Deref for WriteOptionsPtr {
     type Target = UniquePtr<WriteOptions>;

@@ -28,8 +28,8 @@ pub(crate) enum Expr<'a> {
     Variable(String),
     TableCol(TableId, ColId),
     TupleSetIdx(TupleSetIdx),
-    Apply(Arc<dyn Op>, Vec<Expr<'a>>),
-    ApplyAgg(Arc<dyn AggOp>, Vec<Expr<'a>>, Vec<Expr<'a>>),
+    Apply(Arc<dyn Op + Send + Sync>, Vec<Expr<'a>>),
+    ApplyAgg(Arc<dyn AggOp + Send + Sync>, Vec<Expr<'a>>, Vec<Expr<'a>>),
     FieldAcc(String, Box<Expr<'a>>),
     IdxAcc(usize, Box<Expr<'a>>),
 }

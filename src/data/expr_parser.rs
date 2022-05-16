@@ -99,7 +99,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
             let mut inner = pair.into_inner();
             let p = inner.next().unwrap();
             let op = p.as_rule();
-            let op: Arc<dyn Op> = match op {
+            let op: Arc<dyn Op + Send + Sync> = match op {
                 Rule::term => return build_expr_primary(p),
                 Rule::negate => Arc::new(OpNegate),
                 Rule::minus => Arc::new(OpMinus),
@@ -224,7 +224,7 @@ fn build_expr_infix<'a>(
 ) -> Result<Expr<'a>> {
     let lhs = lhs?;
     let rhs = rhs?;
-    let op: Arc<dyn Op> = match op.as_rule() {
+    let op: Arc<dyn Op + Send + Sync> = match op.as_rule() {
         Rule::op_add => Arc::new(OpAdd),
         Rule::op_str_cat => Arc::new(OpStrCat),
         Rule::op_sub => Arc::new(OpSub),

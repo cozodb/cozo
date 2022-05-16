@@ -7,10 +7,11 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::result;
+use chrono::format::Item;
 use uuid::Uuid;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum TupleError {
+pub enum TupleError {
     #[error("Undefined data kind {0}")]
     UndefinedDataKind(u32),
 
@@ -108,13 +109,29 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     }
 }
 
+impl From<DataKind> for u32 {
+    fn from(dk: DataKind) -> Self {
+        dk as u32
+    }
+}
+
 #[derive(Clone)]
-pub(crate) struct Tuple<T>
+pub struct Tuple<T>
     where
         T: AsRef<[u8]>,
 {
     pub(crate) data: T,
     idx_cache: RefCell<Vec<usize>>,
+}
+
+unsafe impl<T: AsRef<[u8]>> Send for Tuple<T> {}
+
+unsafe impl<T: AsRef<[u8]>> Sync for Tuple<T> {}
+
+impl<T> From<T> for Tuple<T> where T: AsRef<[u8]> {
+    fn from(data: T) -> Self {
+        Tuple::new(data)
+    }
 }
 
 impl<T> Tuple<T>
@@ -135,7 +152,7 @@ impl<T> AsRef<[u8]> for Tuple<T>
     }
 }
 
-pub(crate) type OwnTuple = Tuple<Vec<u8>>;
+pub type OwnTuple = Tuple<Vec<u8>>;
 
 pub(crate) const PREFIX_LEN: usize = 4;
 
@@ -698,3 +715,16 @@ impl<T: AsRef<[u8]>> Hash for Tuple<T> {
 }
 
 impl<T: AsRef<[u8]>> Eq for Tuple<T> {}
+
+
+impl<'a, P, T> From<(P, T)> for OwnTuple
+    where T: IntoIterator<Item=&'a Value<'a>>,
+          P: Into<u32> {
+    fn from((prefix, it): (P, T)) -> Self {
+        let mut ret = OwnTuple::with_prefix(prefix.into());
+        for item in it.into_iter() {
+            ret.push_value(item);
+        }
+        ret
+    }
+}

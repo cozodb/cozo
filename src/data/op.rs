@@ -1,11 +1,11 @@
 use std::fmt::{Debug, Formatter};
 
-pub(crate) trait Op {
+pub(crate) trait Op: Send + Sync {
     fn is_resolved(&self) -> bool;
     fn name(&self) -> &str;
 }
 
-pub(crate) trait AggOp {
+pub(crate) trait AggOp: Send + Sync {
     fn is_resolved(&self) -> bool;
     fn name(&self) -> &str;
 }

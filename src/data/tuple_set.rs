@@ -9,7 +9,7 @@ pub(crate) enum TypingError {
 
 type Result<T> = result::Result<T, TypingError>;
 
-const MIN_TABLE_ID: u32 = 10001;
+pub(crate) const MIN_TABLE_ID_BOUND: u32 = 10000;
 
 #[derive(Eq, PartialEq, Clone, Copy, Ord, PartialOrd, Hash)]
 pub(crate) struct TableId {
@@ -25,14 +25,14 @@ impl Debug for TableId {
 
 impl TableId {
     pub(crate) fn new(in_root: bool, id: u32) -> Result<Self> {
-        if id < MIN_TABLE_ID {
+        if id <= MIN_TABLE_ID_BOUND {
             Err(TypingError::InvalidTableId(id))
         } else {
             Ok(TableId { in_root, id })
         }
     }
     pub(crate) fn is_valid(&self) -> bool {
-        self.id >= MIN_TABLE_ID
+        self.id > MIN_TABLE_ID_BOUND
     }
 }
 
