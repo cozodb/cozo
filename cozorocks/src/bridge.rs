@@ -85,8 +85,9 @@ mod ffi {
 
         type Options;
         fn new_options() -> UniquePtr<Options>;
+        fn make_shared_options(o: UniquePtr<Options>) -> SharedPtr<Options>;
         fn prepare_for_bulk_load(o: Pin<&mut Options>);
-        fn increase_parallelism(o: Pin<&mut Options>);
+        fn increase_parallelism(o: Pin<&mut Options>, n_threads: u32);
         fn optimize_level_style_compaction(o: Pin<&mut Options>);
         fn set_create_if_missing(o: Pin<&mut Options>, v: bool);
         fn set_comparator(o: Pin<&mut Options>, cmp: &RustComparator);
@@ -116,9 +117,9 @@ mod ffi {
             cmp: &RustComparator,
         ) -> UniquePtr<OptimisticTransactionOptions>;
         type TransactionDBOptions;
-        fn new_tdb_options() -> UniquePtr<TransactionDBOptions>;
+        fn new_tdb_options() -> SharedPtr<TransactionDBOptions>;
         type OptimisticTransactionDBOptions;
-        fn new_odb_options() -> UniquePtr<OptimisticTransactionDBOptions>;
+        fn new_odb_options() -> SharedPtr<OptimisticTransactionDBOptions>;
 
         type FlushOptions;
         fn new_flush_options() -> UniquePtr<FlushOptions>;
@@ -169,42 +170,9 @@ mod ffi {
             slice: Pin<&mut PinnableSlice>,
             status: &mut BridgeStatus,
         );
-        fn get_raw(
-            self: &TransactionBridge,
-            options: &ReadOptions,
-            key: &[u8],
-            slice: Pin<&mut PinnableSlice>,
-            status: &mut BridgeStatus,
-        );
         fn put_txn(self: &TransactionBridge, key: &[u8], val: &[u8], status: &mut BridgeStatus);
-        fn put_raw(
-            self: &TransactionBridge,
-            options: &WriteOptions,
-            key: &[u8],
-            val: &[u8],
-            status: &mut BridgeStatus,
-        );
         fn del_txn(self: &TransactionBridge, key: &[u8], status: &mut BridgeStatus);
-        fn del_raw(
-            self: &TransactionBridge,
-            options: &WriteOptions,
-            key: &[u8],
-            status: &mut BridgeStatus,
-        );
-        fn del_range_raw(
-            self: &TransactionBridge,
-            options: &WriteOptions,
-            start_key: &[u8],
-            end_key: &[u8],
-            status: &mut BridgeStatus,
-        );
-        fn flush_raw(self: &TransactionBridge, options: &FlushOptions, status: &mut BridgeStatus);
-        fn compact_all_raw(self: &TransactionBridge, status: &mut BridgeStatus);
         fn iterator_txn(
-            self: &TransactionBridge,
-            r_opts: &ReadOptions,
-        ) -> UniquePtr<IteratorBridge>;
-        fn iterator_raw(
             self: &TransactionBridge,
             r_opts: &ReadOptions,
         ) -> UniquePtr<IteratorBridge>;
@@ -232,6 +200,58 @@ mod ffi {
             path: &CxxString,
             status: &mut BridgeStatus,
         ) -> SharedPtr<TDBBridge>;
+
+        fn get_raw(
+            self: &TDBBridge,
+            options: &ReadOptions,
+            key: &[u8],
+            slice: Pin<&mut PinnableSlice>,
+            status: &mut BridgeStatus,
+        );
+        fn put_raw(
+            self: &TDBBridge,
+            options: &WriteOptions,
+            key: &[u8],
+            val: &[u8],
+            status: &mut BridgeStatus,
+        );
+        fn del_raw(
+            self: &TDBBridge,
+            options: &WriteOptions,
+            key: &[u8],
+            status: &mut BridgeStatus,
+        );
+        fn iterator_raw(
+            self: &TDBBridge,
+            r_opts: &ReadOptions,
+        ) -> UniquePtr<IteratorBridge>;
+
+        fn open_db_raw(
+            options: &Options,
+            // txn_options: &OptimisticTransactionDBOptions,
+            path: &CxxString,
+            status: &mut BridgeStatus,
+        ) -> SharedPtr<TDBBridge>;
+        fn del_range_raw(
+            self: &TDBBridge,
+            options: &WriteOptions,
+            start_key: &[u8],
+            end_key: &[u8],
+            status: &mut BridgeStatus,
+        );
+        fn flush_raw(self: &TDBBridge, options: &FlushOptions, status: &mut BridgeStatus);
+        fn compact_all_raw(self: &TDBBridge, status: &mut BridgeStatus);
+        fn get_approximate_sizes_raw(
+            self: &TDBBridge,
+            ranges: &[&[u8]],
+            sizes: &mut [u64],
+            status: &mut BridgeStatus,
+        );
+        fn close_raw(self: &TDBBridge, status: &mut BridgeStatus);
+
+        // raw functions
+        fn destroy_db_raw(options: &Options, path: &CxxString, status: &mut BridgeStatus);
+        fn repair_db_raw(options: &Options, path: &CxxString, status: &mut BridgeStatus);
     }
 }
 

@@ -51,6 +51,10 @@ inline shared_ptr<PinnableSlice> make_shared_pinnable_slice(unique_ptr<PinnableS
     return ret;
 }
 
+inline shared_ptr<Options> make_shared_options(unique_ptr<Options> o) {
+    shared_ptr<Options> ret = std::move(o);
+    return ret;
+}
 
 inline Slice convert_slice(rust::Slice<const uint8_t> d) {
     return Slice(reinterpret_cast<const char *>(d.data()), d.size());
@@ -146,8 +150,8 @@ inline void prepare_for_bulk_load(Options &inner) {
     inner.PrepareForBulkLoad();
 }
 
-inline void increase_parallelism(Options &inner) {
-    inner.IncreaseParallelism();
+inline void increase_parallelism(Options &inner, uint32_t size) {
+    inner.IncreaseParallelism(size);
 }
 
 inline void optimize_level_style_compaction(Options &inner) {
@@ -351,20 +355,6 @@ struct TransactionBridge {
         );
     }
 
-    inline void get_raw(
-            const ReadOptions &r_ops,
-            rust::Slice<const uint8_t> key,
-            PinnableSlice &pinnable_val,
-            BridgeStatus &status
-    ) const {
-        write_status(
-                raw_db->Get(r_ops,
-                            raw_db->DefaultColumnFamily(),
-                            convert_slice(key),
-                            &pinnable_val),
-                status
-        );
-    }
 
     inline void put_txn(
             rust::Slice<const uint8_t> key,
@@ -374,17 +364,6 @@ struct TransactionBridge {
         write_status(inner->Put(convert_slice(key), convert_slice(val)), status);
     }
 
-    inline void put_raw(
-            const WriteOptions &raw_w_ops,
-            rust::Slice<const uint8_t> key,
-            rust::Slice<const uint8_t> val,
-            BridgeStatus &status
-    ) const {
-        auto k = convert_slice(key);
-        auto v = convert_slice(val);
-        write_status(raw_db->Put(raw_w_ops, k, v), status);
-    }
-
     inline void del_txn(
             rust::Slice<const uint8_t> key,
             BridgeStatus &status
@@ -392,61 +371,20 @@ struct TransactionBridge {
         write_status(inner->Delete(convert_slice(key)), status);
     }
 
-    inline void del_raw(
-            const WriteOptions &raw_w_ops,
-            rust::Slice<const uint8_t> key,
-            BridgeStatus &status
-    ) const {
-        write_status(raw_db->Delete(raw_w_ops, convert_slice(key)), status);
-    }
-
-    inline void del_range_raw(
-            const WriteOptions &raw_w_ops,
-            rust::Slice<const uint8_t> start_key,
-            rust::Slice<const uint8_t> end_key,
-            BridgeStatus &status
-    ) const {
-        write_status(
-                raw_db->GetRootDB()->DeleteRange(
-                        raw_w_ops,
-                        raw_db->DefaultColumnFamily(),
-                        convert_slice(start_key), convert_slice(end_key)),
-                status);
-    }
-
-    inline void flush_raw(const FlushOptions &options, BridgeStatus &status) const {
-        write_status(raw_db->Flush(options), status);
-    }
-
-    inline void compact_all_raw(BridgeStatus &status) const {
-        auto options = CompactRangeOptions();
-        options.change_level = true;
-        options.target_level = 0;
-        options.exclusive_manual_compaction = false;
-        write_status(raw_db->CompactRange(options,
-                                          raw_db->DefaultColumnFamily(),
-                                          nullptr, nullptr), status);
-    }
-
     inline std::unique_ptr<IteratorBridge> iterator_txn(const ReadOptions &r_ops) const {
         return std::make_unique<IteratorBridge>(
                 inner->GetIterator(r_ops));
-    }
-
-    inline std::unique_ptr<IteratorBridge> iterator_raw(const ReadOptions &raw_r_ops) const {
-        return std::make_unique<IteratorBridge>(
-                raw_db->NewIterator(raw_r_ops));
     }
 };
 
 
 struct TDBBridge {
-    mutable unique_ptr<StackableDB> db;
+    mutable unique_ptr<DB> db;
     mutable TransactionDB *tdb;
     mutable OptimisticTransactionDB *odb;
     bool is_odb;
 
-    TDBBridge(StackableDB *db_,
+    TDBBridge(DB *db_,
               TransactionDB *tdb_,
               OptimisticTransactionDB *odb_) :
             db(db_), tdb(tdb_), odb(odb_) {
@@ -494,14 +432,107 @@ struct TDBBridge {
         ret->inner = unique_ptr<Transaction>(txn);
         return ret;
     }
+
+    inline void close_raw(BridgeStatus &status) const {
+        write_status(db->Close(), status);
+    }
+
+    inline void get_approximate_sizes_raw(
+            rust::Slice<const rust::Slice<const uint8_t>> ranges,
+            rust::Slice<uint64_t> sizes,
+            BridgeStatus &status) const {
+        uint64_t n = sizes.size();
+        vector<Range> cpp_ranges;
+        cpp_ranges.reserve(n);
+        for (uint64_t i = 0; i < n; ++i) {
+            auto x = ranges.at(2 * i);
+            auto start = convert_slice(x);
+            auto end = convert_slice(ranges.at(2 * i + 1));
+            auto rg = Range(start, end);
+            cpp_ranges.emplace_back(rg);
+        };
+        write_status(
+                db->GetApproximateSizes(db->DefaultColumnFamily(),
+                                        cpp_ranges.data(), (int) n, sizes.data()),
+                status
+        );
+    }
+
+    inline void del_range_raw(
+            const WriteOptions &raw_w_ops,
+            rust::Slice<const uint8_t> start_key,
+            rust::Slice<const uint8_t> end_key,
+            BridgeStatus &status
+    ) const {
+        write_status(
+                db->GetRootDB()->DeleteRange(
+                        raw_w_ops,
+                        db->DefaultColumnFamily(),
+                        convert_slice(start_key), convert_slice(end_key)),
+                status);
+    }
+
+    inline void flush_raw(const FlushOptions &options, BridgeStatus &status) const {
+        write_status(db->Flush(options), status);
+    }
+
+    inline void compact_all_raw(BridgeStatus &status) const {
+        auto options = CompactRangeOptions();
+        options.change_level = true;
+        options.target_level = 0;
+        options.exclusive_manual_compaction = false;
+        write_status(db->CompactRange(options,
+                                      db->DefaultColumnFamily(),
+                                      nullptr, nullptr), status);
+    }
+
+
+    inline void get_raw(
+            const ReadOptions &r_ops,
+            rust::Slice<const uint8_t> key,
+            PinnableSlice &pinnable_val,
+            BridgeStatus &status
+    ) const {
+        write_status(
+                db->Get(r_ops,
+                        db->DefaultColumnFamily(),
+                        convert_slice(key),
+                        &pinnable_val),
+                status
+        );
+    }
+
+    inline void put_raw(
+            const WriteOptions &raw_w_ops,
+            rust::Slice<const uint8_t> key,
+            rust::Slice<const uint8_t> val,
+            BridgeStatus &status
+    ) const {
+        auto k = convert_slice(key);
+        auto v = convert_slice(val);
+        write_status(db->Put(raw_w_ops, k, v), status);
+    }
+
+    inline void del_raw(
+            const WriteOptions &raw_w_ops,
+            rust::Slice<const uint8_t> key,
+            BridgeStatus &status
+    ) const {
+        write_status(db->Delete(raw_w_ops, convert_slice(key)), status);
+    }
+
+    inline std::unique_ptr<IteratorBridge> iterator_raw(const ReadOptions &raw_r_ops) const {
+        return std::make_unique<IteratorBridge>(
+                db->NewIterator(raw_r_ops));
+    }
 };
 
-inline unique_ptr<TransactionDBOptions> new_tdb_options() {
-    return make_unique<TransactionDBOptions>();
+inline shared_ptr<TransactionDBOptions> new_tdb_options() {
+    return make_shared<TransactionDBOptions>();
 }
 
-inline unique_ptr<OptimisticTransactionDBOptions> new_odb_options() {
-    return make_unique<OptimisticTransactionDBOptions>();
+inline shared_ptr<OptimisticTransactionDBOptions> new_odb_options() {
+    return make_shared<OptimisticTransactionDBOptions>();
 }
 
 inline unique_ptr<FlushOptions> new_flush_options() {
@@ -542,4 +573,25 @@ open_odb_raw(const Options &options, const string &path, BridgeStatus &status) {
     unordered_map<string, shared_ptr<ColumnFamilyHandle>> handle_map;
 
     return make_shared<TDBBridge>(txn_db, nullptr, txn_db);
+}
+
+inline shared_ptr<TDBBridge>
+open_db_raw(const Options &options, const string &path, BridgeStatus &status) {
+    DB *db = nullptr;
+
+    write_status(DB::Open(options,
+                          path,
+                          &db), status);
+
+    unordered_map<string, shared_ptr<ColumnFamilyHandle>> handle_map;
+
+    return make_shared<TDBBridge>(db, nullptr, nullptr);
+}
+
+inline void repair_db_raw(const Options &options, const string &path, BridgeStatus &status) {
+    write_status(RepairDB(path, options), status);
+}
+
+inline void destroy_db_raw(const Options &options, const string &path, BridgeStatus &status) {
+    write_status(DestroyDB(path, options), status);
 }

@@ -12,6 +12,7 @@ pub use bridge::StatusBridgeCode;
 pub use bridge::StatusCode;
 pub use bridge::StatusSeverity;
 pub use bridge::StatusSubCode;
+pub use status::BridgeError;
 use cxx::let_cxx_string;
 pub use cxx::{SharedPtr, UniquePtr};
 use status::Result;
@@ -22,7 +23,7 @@ pub struct PinnableSlicePtr(UniquePtr<PinnableSlice>);
 
 impl PinnableSlicePtr {
     #[inline]
-    pub fn pinned_slice(&mut self) -> Pin<&mut PinnableSlice> {
+    pub fn pin_mut(&mut self) -> Pin<&mut PinnableSlice> {
         self.0.pin_mut()
     }
 
@@ -42,7 +43,7 @@ impl Default for PinnableSlicePtr {
 impl PinnableSlicePtr {
     #[inline]
     pub fn reset(&mut self) {
-        reset_pinnable_slice(self.pinned_slice());
+        reset_pinnable_slice(self.pin_mut());
     }
 }
 
@@ -85,7 +86,7 @@ pub struct SlicePtr(UniquePtr<Slice>);
 
 impl SlicePtr {
     #[inline]
-    pub fn pinned_slice(&mut self) -> Pin<&mut Slice> {
+    pub fn pin_mut(&mut self) -> Pin<&mut Slice> {
         self.0.pin_mut()
     }
 
@@ -217,8 +218,11 @@ impl Deref for TransactionPtr {
 }
 
 impl TransactionPtr {
+    /// # Safety
+    ///
+    /// Only for testing use, as a placeholder
     #[inline]
-    pub fn null() -> Self {
+    pub unsafe fn null() -> Self {
         TransactionPtr(UniquePtr::null())
     }
     #[inline]
@@ -257,16 +261,12 @@ impl TransactionPtr {
     pub fn get(
         &self,
         options: &ReadOptions,
-        transact: bool,
         key: impl AsRef<[u8]>,
         slice: &mut PinnableSlicePtr,
     ) -> Result<bool> {
         let mut status = BridgeStatus::default();
-        let res = if transact {
-            self.get_txn(options, key.as_ref(), slice.pinned_slice(), &mut status);
-            status.check_err(())
-        } else {
-            self.get_raw(options, key.as_ref(), slice.pinned_slice(), &mut status);
+        let res = {
+            self.get_txn(options, key.as_ref(), slice.pin_mut(), &mut status);
             status.check_err(())
         };
         match res {
@@ -283,7 +283,7 @@ impl TransactionPtr {
         slice: &mut PinnableSlicePtr,
     ) -> Result<bool> {
         let mut status = BridgeStatus::default();
-        self.get_for_update_txn(options, key.as_ref(), slice.pinned_slice(), &mut status);
+        self.get_for_update_txn(options, key.as_ref(), slice.pin_mut(), &mut status);
         match status.check_err(()) {
             Ok(_) => Ok(true),
             Err(e) if e.status.code == StatusCode::kNotFound => Ok(false),
@@ -291,16 +291,125 @@ impl TransactionPtr {
         }
     }
     #[inline]
-    pub fn del(&self, options: &WriteOptions, transact: bool, key: impl AsRef<[u8]>) -> Result<()> {
+    pub fn del(&self, key: impl AsRef<[u8]>) -> Result<()> {
         let mut status = BridgeStatus::default();
-        if transact {
-            let ret = self.del_txn(key.as_ref(), &mut status);
-            status.check_err(ret)
-        } else {
-            let ret = self.del_raw(options, key.as_ref(), &mut status);
-            status.check_err(ret)
+        let ret = self.del_txn(key.as_ref(), &mut status);
+        status.check_err(ret)
+    }
+    #[inline]
+    pub fn put(
+        &self,
+        key: impl AsRef<[u8]>,
+        val: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        let mut status = BridgeStatus::default();
+        let ret = self.put_txn(key.as_ref(), val.as_ref(), &mut status);
+        status.check_err(ret)
+    }
+    #[inline]
+    pub fn iterator(&self, options: &ReadOptions) -> IteratorPtr {
+        IteratorPtr(self.iterator_txn(options))
+    }
+}
+
+#[derive(Clone)]
+pub struct DbPtr(SharedPtr<TDBBridge>);
+
+impl Deref for DbPtr {
+    type Target = SharedPtr<TDBBridge>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+unsafe impl Send for DbPtr {}
+
+unsafe impl Sync for DbPtr {}
+
+impl DbPtr {
+    /// # Safety
+    ///
+    /// Only for testing use, as a placeholder
+    pub unsafe fn null() -> Self {
+        DbPtr(SharedPtr::null())
+    }
+
+    pub fn open_non_txn(options: &Options,
+                        path: impl AsRef<str>, ) -> Result<Self> {
+        let_cxx_string!(cname = path.as_ref());
+        let mut status = BridgeStatus::default();
+        let ret = open_db_raw(options, &cname, &mut status);
+        status.check_err(Self(ret))
+    }
+
+    pub fn open(
+        options: &Options,
+        t_options: &TDbOptions,
+        path: impl AsRef<str>,
+    ) -> Result<Self> {
+        let_cxx_string!(cname = path.as_ref());
+        let mut status = BridgeStatus::default();
+        let ret = match t_options {
+            TDbOptions::Pessimistic(o) => open_tdb_raw(options, o, &cname, &mut status),
+            TDbOptions::Optimistic(_o) => open_odb_raw(options, &cname, &mut status),
+        };
+        status.check_err(Self(ret))
+    }
+
+    #[inline]
+    pub fn get(
+        &self,
+        options: &ReadOptions,
+        key: impl AsRef<[u8]>,
+        slice: &mut PinnableSlicePtr,
+    ) -> Result<bool> {
+        let mut status = BridgeStatus::default();
+        let res = {
+            self.get_raw(options, key.as_ref(), slice.pin_mut(), &mut status);
+            status.check_err(())
+        };
+        match res {
+            Ok(_) => Ok(true),
+            Err(e) if e.status.code == StatusCode::kNotFound => Ok(false),
+            Err(e) => Err(e),
         }
     }
+    #[inline]
+    pub fn del(&self, options: &WriteOptions, key: impl AsRef<[u8]>) -> Result<()> {
+        let mut status = BridgeStatus::default();
+        let ret = self.del_raw(options, key.as_ref(), &mut status);
+        status.check_err(ret)
+    }
+    #[inline]
+    pub fn put(
+        &self,
+        options: &WriteOptions,
+        key: impl AsRef<[u8]>,
+        val: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        let mut status = BridgeStatus::default();
+        let ret = self.put_raw(options, key.as_ref(), val.as_ref(), &mut status);
+        status.check_err(ret)
+    }
+    #[inline]
+    pub fn iterator(&self, options: &ReadOptions) -> IteratorPtr {
+        IteratorPtr(self.iterator_raw(options))
+    }
+
+    #[inline]
+    pub fn make_transaction(
+        &self,
+        options: TransactOptions,
+        write_ops: WriteOptionsPtr,
+    ) -> TransactionPtr {
+        TransactionPtr(match options {
+            TransactOptions::Optimistic(o) => self.begin_o_transaction(write_ops.0, o.0),
+            TransactOptions::Pessimistic(o) => self.begin_t_transaction(write_ops.0, o.0),
+        })
+    }
+
     #[inline]
     pub fn del_range(
         &self,
@@ -324,73 +433,44 @@ impl TransactionPtr {
         self.compact_all_raw(&mut status);
         status.check_err(())
     }
+
     #[inline]
-    pub fn put(
-        &self,
-        options: &WriteOptions,
-        transact: bool,
-        key: impl AsRef<[u8]>,
-        val: impl AsRef<[u8]>,
-    ) -> Result<()> {
+    pub fn get_approximate_sizes<T: AsRef<[u8]>>(&self, ranges: &[(T, T)]) -> Result<Vec<u64>> {
         let mut status = BridgeStatus::default();
-        if transact {
-            let ret = self.put_txn(key.as_ref(), val.as_ref(), &mut status);
-            status.check_err(ret)
-        } else {
-            let ret = self.put_raw(options, key.as_ref(), val.as_ref(), &mut status);
-            status.check_err(ret)
+        let n = ranges.len();
+        let mut ret = vec![0u64; n];
+
+        let mut bridge_range = Vec::with_capacity(2 * n);
+        for (start, end) in ranges {
+            let start = start.as_ref();
+            let end = end.as_ref();
+            bridge_range.push(start);
+            bridge_range.push(end);
         }
+
+        self.get_approximate_sizes_raw(&bridge_range, &mut ret, &mut status);
+
+        status.check_err(ret)
     }
+
     #[inline]
-    pub fn iterator(&self, options: &ReadOptions, transact: bool) -> IteratorPtr {
-        if transact {
-            IteratorPtr(self.iterator_txn(options))
-        } else {
-            IteratorPtr(self.iterator_raw(options))
-        }
+    pub fn close(&self) -> Result<()> {
+        let mut status = BridgeStatus::default();
+        self.close_raw(&mut status);
+        status.check_err(())
     }
 }
 
-#[derive(Clone)]
-pub struct DBPtr(SharedPtr<TDBBridge>);
-
-impl Deref for DBPtr {
-    type Target = SharedPtr<TDBBridge>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+pub fn destroy_db(options: &Options, path: impl AsRef<str>) -> Result<()> {
+    let_cxx_string!(cname = path.as_ref());
+    let mut status = BridgeStatus::default();
+    destroy_db_raw(options, &cname, &mut status);
+    status.check_err(())
 }
 
-unsafe impl Send for DBPtr {}
-
-unsafe impl Sync for DBPtr {}
-
-impl DBPtr {
-    pub fn open(
-        options: &OptionsPtr,
-        t_options: &TDBOptions,
-        path: impl AsRef<str>,
-    ) -> Result<Self> {
-        let_cxx_string!(cname = path.as_ref());
-        let mut status = BridgeStatus::default();
-        let ret = match t_options {
-            TDBOptions::Pessimistic(o) => open_tdb_raw(options, o, &cname, &mut status),
-            TDBOptions::Optimistic(_o) => open_odb_raw(options, &cname, &mut status),
-        };
-        status.check_err(Self(ret))
-    }
-
-    #[inline]
-    pub fn make_transaction(
-        &self,
-        options: TransactOptions,
-        write_ops: WriteOptionsPtr,
-    ) -> TransactionPtr {
-        TransactionPtr(match options {
-            TransactOptions::Optimistic(o) => self.begin_o_transaction(write_ops.0, o.0),
-            TransactOptions::Pessimistic(o) => self.begin_t_transaction(write_ops.0, o.0),
-        })
-    }
+pub fn repair_db(options: &Options, path: impl AsRef<str>) -> Result<()> {
+    let_cxx_string!(cname = path.as_ref());
+    let mut status = BridgeStatus::default();
+    repair_db_raw(options, &cname, &mut status);
+    status.check_err(())
 }

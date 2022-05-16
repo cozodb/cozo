@@ -9,7 +9,3 @@
 // pub mod query;
 // pub mod table;
 
-pub struct DBInstance {
-    pub(crate) main_db: (),
-    session_handles: (),
-}

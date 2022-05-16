@@ -1,8 +1,12 @@
 use crate::bridge::*;
-use cxx::UniquePtr;
-use std::ops::{Deref, DerefMut};
+use cxx::{SharedPtr, UniquePtr};
+use std::ops::Deref;
+use std::pin::Pin;
 
 pub struct RustComparatorPtr(UniquePtr<RustComparator>);
+
+unsafe impl Send for RustComparatorPtr {}
+unsafe impl Sync for RustComparatorPtr {}
 
 impl RustComparatorPtr {
     #[inline]
@@ -12,7 +16,7 @@ impl RustComparatorPtr {
 }
 
 impl Deref for RustComparatorPtr {
-    type Target = UniquePtr<RustComparator>;
+    type Target = RustComparator;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -23,7 +27,7 @@ impl Deref for RustComparatorPtr {
 pub struct OptionsPtr(UniquePtr<Options>);
 
 impl Deref for OptionsPtr {
-    type Target = UniquePtr<Options>;
+    type Target = Options;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -31,14 +35,26 @@ impl Deref for OptionsPtr {
     }
 }
 
-impl DerefMut for OptionsPtr {
+pub struct OptionsPtrShared(SharedPtr<Options>);
+
+impl Deref for OptionsPtrShared {
+    type Target = Options;
+
     #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
 impl OptionsPtr {
+    #[inline]
+    pub fn pin_mut(&mut self) -> Pin<&mut Options> {
+        self.0.pin_mut()
+    }
+    #[inline]
+    pub fn make_shared(self) -> OptionsPtrShared {
+        OptionsPtrShared(make_shared_options(self.0))
+    }
     #[inline]
     pub fn default() -> Self {
         Self(new_options())
@@ -49,8 +65,8 @@ impl OptionsPtr {
         self
     }
     #[inline]
-    pub fn increase_parallelism(&mut self) -> &mut Self {
-        increase_parallelism(self.pin_mut());
+    pub fn increase_parallelism(&mut self, n_threads: u32) -> &mut Self {
+        increase_parallelism(self.pin_mut(), n_threads);
         self
     }
     #[inline]
@@ -121,14 +137,11 @@ impl Deref for ReadOptionsPtr {
     }
 }
 
-impl DerefMut for ReadOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl ReadOptionsPtr {
+    #[inline]
+    pub fn pin_mut(&mut self) -> Pin<&mut ReadOptions> {
+        self.0.pin_mut()
+    }
     #[inline]
     pub fn default() -> Self {
         Self(new_read_options())
@@ -170,14 +183,11 @@ impl Deref for WriteOptionsPtr {
     }
 }
 
-impl DerefMut for WriteOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl WriteOptionsPtr {
+    #[inline]
+    pub fn pin_mut(&mut self) -> Pin<&mut WriteOptions> {
+        self.0.pin_mut()
+    }
     #[inline]
     pub fn default() -> Self {
         Self(new_write_options())
@@ -227,14 +237,11 @@ impl Deref for PTxnOptionsPtr {
     }
 }
 
-impl DerefMut for PTxnOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl PTxnOptionsPtr {
+    #[inline]
+    pub fn pin_mut(&mut self) -> Pin<&mut TransactionOptions> {
+        self.0.pin_mut()
+    }
     #[inline]
     pub fn default() -> Self {
         Self(new_transaction_options())
@@ -249,18 +256,11 @@ impl PTxnOptionsPtr {
 pub struct OTxnOptionsPtr(pub(crate) UniquePtr<OptimisticTransactionOptions>);
 
 impl Deref for OTxnOptionsPtr {
-    type Target = UniquePtr<OptimisticTransactionOptions>;
+    type Target = OptimisticTransactionOptions;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl DerefMut for OTxnOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
     }
 }
 
@@ -271,10 +271,11 @@ impl OTxnOptionsPtr {
     }
 }
 
-pub struct PTxnDBOptionsPtr(UniquePtr<TransactionDBOptions>);
+#[derive(Clone)]
+pub struct PTxnDbOptionsPtr(SharedPtr<TransactionDBOptions>);
 
-impl Deref for PTxnDBOptionsPtr {
-    type Target = UniquePtr<TransactionDBOptions>;
+impl Deref for PTxnDbOptionsPtr {
+    type Target = TransactionDBOptions;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -282,24 +283,18 @@ impl Deref for PTxnDBOptionsPtr {
     }
 }
 
-impl DerefMut for PTxnDBOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl PTxnDBOptionsPtr {
+impl PTxnDbOptionsPtr {
     #[inline]
     pub fn default() -> Self {
         Self(new_tdb_options())
     }
 }
 
-pub struct OTxnDBOptionsPtr(UniquePtr<OptimisticTransactionDBOptions>);
+#[derive(Clone)]
+pub struct OTxnDbOptionsPtr(SharedPtr<OptimisticTransactionDBOptions>);
 
-impl Deref for OTxnDBOptionsPtr {
-    type Target = UniquePtr<OptimisticTransactionDBOptions>;
+impl Deref for OTxnDbOptionsPtr {
+    type Target = OptimisticTransactionDBOptions;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -307,14 +302,7 @@ impl Deref for OTxnDBOptionsPtr {
     }
 }
 
-impl DerefMut for OTxnDBOptionsPtr {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-impl OTxnDBOptionsPtr {
+impl OTxnDbOptionsPtr {
     #[inline]
     pub fn default() -> Self {
         Self(new_odb_options())
@@ -326,7 +314,8 @@ pub enum TransactOptions {
     Optimistic(OTxnOptionsPtr),
 }
 
-pub enum TDBOptions {
-    Pessimistic(PTxnDBOptionsPtr),
-    Optimistic(OTxnDBOptionsPtr),
+#[derive(Clone)]
+pub enum TDbOptions {
+    Pessimistic(PTxnDbOptionsPtr),
+    Optimistic(OTxnDbOptionsPtr),
 }

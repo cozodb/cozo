@@ -110,16 +110,16 @@ impl<T: AsRef<[u8]>> Tuple<T> {
 
 #[derive(Clone)]
 pub(crate) struct Tuple<T>
-where
-    T: AsRef<[u8]>,
+    where
+        T: AsRef<[u8]>,
 {
     pub(crate) data: T,
     idx_cache: RefCell<Vec<usize>>,
 }
 
 impl<T> Tuple<T>
-where
-    T: AsRef<[u8]>,
+    where
+        T: AsRef<[u8]>,
 {
     pub(crate) fn clear_cache(&self) {
         self.idx_cache.borrow_mut().clear()
@@ -127,13 +127,14 @@ where
 }
 
 impl<T> AsRef<[u8]> for Tuple<T>
-where
-    T: AsRef<[u8]>,
+    where
+        T: AsRef<[u8]>,
 {
     fn as_ref(&self) -> &[u8] {
         self.data.as_ref()
     }
 }
+
 pub(crate) type OwnTuple = Tuple<Vec<u8>>;
 
 pub(crate) const PREFIX_LEN: usize = 4;
@@ -160,8 +161,8 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     #[inline]
     pub(crate) fn key_part_cmp<T2: AsRef<[u8]>>(&self, other: &Tuple<T2>) -> Ordering {
         self.iter()
-            .filter_map(|v| v.ok())
-            .cmp(other.iter().filter_map(|v| v.ok()))
+            .map(|v| v.expect("Key comparison failed"))
+            .cmp(other.iter().map(|v| v.expect("Key comparison failed")))
     }
 
     #[inline]
@@ -408,7 +409,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 let (val, offset) = self.parse_value_at(pos + 1)?;
                 (offset, Value::DescVal(Reverse(val.into())))
             }
-            StorageTag::Max => return Err(UndefinedDataTag(StorageTag::Max as u8)),
+            StorageTag::Max => (start, Value::EndSentinel),
         };
         Ok((val, nxt))
     }
@@ -676,7 +677,7 @@ impl OwnTuple {
 
 impl<'a> Extend<Value<'a>> for OwnTuple {
     #[inline]
-    fn extend<T: IntoIterator<Item = Value<'a>>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item=Value<'a>>>(&mut self, iter: T) {
         for v in iter {
             self.push_value(&v)
         }
