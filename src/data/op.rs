@@ -1,13 +1,41 @@
 use std::fmt::{Debug, Formatter};
+use crate::data::expr::Expr;
+use crate::data::typing::Typing;
 
 pub(crate) trait Op: Send + Sync {
     fn is_resolved(&self) -> bool;
     fn name(&self) -> &str;
+    fn non_null_args(&self) -> bool {
+        true
+    }
+    fn typing_eval(&self, args: ()) -> Typing {
+        Typing::Any
+    }
+    fn row_eval(&self, ctx: (), args: ()) -> () {
+        unimplemented!()
+    }
+    fn row_eval_non_null(&self) -> () {
+        panic!()
+    }
+    fn expr_eval(&self, ctx: (), args: ()) -> () {
+        self.row_eval(ctx, args)
+    }
 }
 
 pub(crate) trait AggOp: Send + Sync {
     fn is_resolved(&self) -> bool;
     fn name(&self) -> &str;
+    fn row_eval(&self, ctx: (), args: ()) -> () {
+        unimplemented!()
+    }
+    fn expr_eval(&self, ctx: (), args: ()) -> () {
+        self.row_eval(ctx, args)
+    }
+}
+
+impl<'a> Expr<'a> {
+    pub(crate) fn expr_eval() {}
+    pub(crate) fn row_eval() {}
 }
 
 pub(crate) struct UnresolvedOp(pub String);

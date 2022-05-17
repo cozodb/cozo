@@ -1,7 +1,7 @@
 use std::{mem, result};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use cozorocks::{BridgeError, DbPtr, destroy_db, OptionsPtrShared, PinnableSlicePtr, ReadOptionsPtr, TDbOptions, TransactionPtr, TransactOptions, WriteOptionsPtr};
-use std::sync::{Arc, LockResult, Mutex, PoisonError};
+use std::sync::{Arc, LockResult, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::atomic::{AtomicU32, Ordering};
 use lazy_static::lazy_static;
 use log::error;
@@ -10,6 +10,7 @@ use crate::data::tuple::{DataKind, OwnTuple, Tuple, TupleError};
 use crate::data::tuple_set::MIN_TABLE_ID_BOUND;
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
+use crate::runtime::instance::DbInstanceError::TableDoesNotExist;
 use crate::runtime::options::{default_options, default_read_options, default_txn_db_options, default_txn_options, default_write_options};
 
 #[derive(thiserror::Error, Debug)]
@@ -22,6 +23,15 @@ pub enum DbInstanceError {
 
     #[error(transparent)]
     Tuple(#[from] TupleError),
+
+    #[error("Cannot obtain table access lock")]
+    TableAccessLock,
+
+    #[error("Cannot obtain table mutation lock")]
+    TableMutationLock,
+
+    #[error("Table does not exist: {0}")]
+    TableDoesNotExist(u32),
 }
 
 type Result<T> = result::Result<T, DbInstanceError>;
@@ -41,6 +51,8 @@ struct SessionHandle {
     status: SessionStatus,
 }
 
+type TableLock = Arc<RwLock<()>>;
+
 pub struct DbInstance {
     pub(crate) main: DbPtr,
     options: OptionsPtrShared,
@@ -49,6 +61,7 @@ pub struct DbInstance {
     session_handles: Mutex<Vec<Arc<Mutex<SessionHandle>>>>,
     optimistic: bool,
     destroy_on_close: bool,
+    table_locks: TableLock,
 }
 
 impl DbInstance {
@@ -64,6 +77,7 @@ impl DbInstance {
             path: path.to_string(),
             session_handles: vec![].into(),
             destroy_on_close: false,
+            table_locks: Default::default(),
         })
     }
 }
@@ -123,6 +137,7 @@ impl DbInstance {
             stack: vec![],
             cur_table_id: 0.into(),
             params: Default::default(),
+            table_locks: self.table_locks.clone(),
         })
     }
 
@@ -181,7 +196,7 @@ impl Drop for DbInstance {
 enum SessionDefinable {
     Value(StaticValue),
     Expr(StaticExpr),
-    Typing(Typing)
+    Typing(Typing),
     // TODO
 }
 
@@ -199,19 +214,16 @@ pub struct Session {
     stack: Vec<SessionStackFrame>,
     params: BTreeMap<String, StaticValue>,
     session_handle: Arc<Mutex<SessionHandle>>,
+    table_locks: TableLock,
 }
 
 pub(crate) struct InterpretContext<'a> {
     session: &'a Session,
 }
 
-impl <'a> InterpretContext<'a> {
-    pub(crate) fn resolve(&self, key: impl AsRef<str>) {
-
-    }
-    pub(crate) fn resolve_value(&self, key: impl AsRef<str>) {
-
-    }
+impl<'a> InterpretContext<'a> {
+    pub(crate) fn resolve(&self, key: impl AsRef<str>) {}
+    pub(crate) fn resolve_value(&self, key: impl AsRef<str>) {}
     pub(crate) fn resolve_typing(&self, key: impl AsRef<str>) {
         todo!()
     }
@@ -290,6 +302,12 @@ impl Session {
         };
         txn.commit()?;
         Ok(cur_id + 1)
+    }
+    pub(crate) fn table_access_guard(&self, ids: BTreeSet<u32>) -> Result<RwLockReadGuard<()>> {
+            self.table_locks.try_read().map_err(|_| DbInstanceError::TableAccessLock)
+    }
+    pub(crate) fn table_mutation_guard(&self, ids: BTreeSet<u32>) -> Result<RwLockWriteGuard<()>> {
+        self.table_locks.write().map_err(|_| DbInstanceError::TableAccessLock)
     }
 }
 

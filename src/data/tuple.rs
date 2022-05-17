@@ -9,6 +9,7 @@ use std::hash::{Hash, Hasher};
 use std::result;
 use chrono::format::Item;
 use uuid::Uuid;
+use cozorocks::{PinnableSlicePtr, PinnableSlicePtrShared, SlicePtr, SlicePtrShared};
 
 #[derive(thiserror::Error, Debug)]
 pub enum TupleError {
@@ -426,7 +427,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 let (val, offset) = self.parse_value_at(pos + 1)?;
                 (offset, Value::DescVal(Reverse(val.into())))
             }
-            StorageTag::Max => (start, Value::EndSentinel),
+            StorageTag::Max => (start, Value::Sentinel),
         };
         Ok((val, nxt))
     }
@@ -534,6 +535,7 @@ impl OwnTuple {
     #[inline]
     pub(crate) fn seal_with_sentinel(&mut self) {
         self.push_tag(StorageTag::Max);
+        self.idx_cache.borrow_mut().push(self.data.len());
     }
     #[inline]
     fn push_tag(&mut self, tag: StorageTag) {
@@ -638,7 +640,7 @@ impl OwnTuple {
                 cache.truncate(start_len);
                 cache.push(self.data.len());
             }
-            Value::EndSentinel => panic!("Cannot push sentinel value"),
+            Value::Sentinel => self.seal_with_sentinel(),
             Value::DescVal(Reverse(v)) => {
                 self.push_reverse_value(v);
             }
@@ -726,5 +728,116 @@ impl<'a, P, T> From<(P, T)> for OwnTuple
             ret.push_value(item);
         }
         ret
+    }
+}
+
+
+pub(crate) enum ReifiedTupleData {
+    Own(Vec<u8>),
+    Slice(SlicePtr),
+    SharedSlice(SlicePtrShared),
+    PinnableSlice(PinnableSlicePtr),
+    PinnableSliceShared(PinnableSlicePtrShared),
+}
+
+impl Clone for ReifiedTupleData {
+    fn clone(&self) -> Self {
+        match self {
+            ReifiedTupleData::Own(o) => ReifiedTupleData::Own(o.clone()),
+            ReifiedTupleData::Slice(s) => ReifiedTupleData::Own(s.as_ref().to_vec()),
+            ReifiedTupleData::SharedSlice(s) => ReifiedTupleData::SharedSlice(s.clone()),
+            ReifiedTupleData::PinnableSlice(s) => ReifiedTupleData::Own(s.as_ref().to_vec()),
+            ReifiedTupleData::PinnableSliceShared(s) => ReifiedTupleData::PinnableSliceShared(s.clone())
+        }
+    }
+}
+
+impl From<Vec<u8>> for ReifiedTupleData {
+    fn from(d: Vec<u8>) -> Self {
+        ReifiedTupleData::Own(d)
+    }
+}
+
+impl From<SlicePtr> for ReifiedTupleData {
+    fn from(d: SlicePtr) -> Self {
+        ReifiedTupleData::Slice(d)
+    }
+}
+
+impl From<SlicePtrShared> for ReifiedTupleData {
+    fn from(d: SlicePtrShared) -> Self {
+        ReifiedTupleData::SharedSlice(d)
+    }
+}
+
+impl From<PinnableSlicePtr> for ReifiedTupleData {
+    fn from(d: PinnableSlicePtr) -> Self {
+        ReifiedTupleData::PinnableSlice(d)
+    }
+}
+
+impl From<PinnableSlicePtrShared> for ReifiedTupleData {
+    fn from(d: PinnableSlicePtrShared) -> Self {
+        ReifiedTupleData::PinnableSliceShared(d)
+    }
+}
+
+
+impl AsRef<[u8]> for ReifiedTupleData {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            ReifiedTupleData::Own(o) => o.as_ref(),
+            ReifiedTupleData::Slice(s) => s.as_ref(),
+            ReifiedTupleData::SharedSlice(s) => s.as_ref(),
+            ReifiedTupleData::PinnableSlice(s) => s.as_ref(),
+            ReifiedTupleData::PinnableSliceShared(s) => s.as_ref()
+        }
+    }
+}
+
+pub(crate) type ReifiedTuple = Tuple<ReifiedTupleData>;
+
+impl From<OwnTuple> for ReifiedTuple {
+    fn from(t: OwnTuple) -> Self {
+        ReifiedTuple {
+            data: t.data.into(),
+            idx_cache: t.idx_cache,
+        }
+    }
+}
+
+impl From<Tuple<SlicePtr>> for ReifiedTuple {
+    fn from(t: Tuple<SlicePtr>) -> Self {
+        ReifiedTuple {
+            data: t.data.into(),
+            idx_cache: t.idx_cache,
+        }
+    }
+}
+
+impl From<Tuple<SlicePtrShared>> for ReifiedTuple {
+    fn from(t: Tuple<SlicePtrShared>) -> Self {
+        ReifiedTuple {
+            data: t.data.into(),
+            idx_cache: t.idx_cache,
+        }
+    }
+}
+
+impl From<Tuple<PinnableSlicePtr>> for ReifiedTuple {
+    fn from(t: Tuple<PinnableSlicePtr>) -> Self {
+        ReifiedTuple {
+            data: t.data.into(),
+            idx_cache: t.idx_cache,
+        }
+    }
+}
+
+impl From<Tuple<PinnableSlicePtrShared>> for ReifiedTuple {
+    fn from(t: Tuple<PinnableSlicePtrShared>) -> Self {
+        ReifiedTuple {
+            data: t.data.into(),
+            idx_cache: t.idx_cache,
+        }
     }
 }

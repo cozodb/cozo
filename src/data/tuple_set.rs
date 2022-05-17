@@ -1,13 +1,21 @@
+use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::result;
+use cozorocks::{PinnableSlicePtr, PinnableSlicePtrShared, SlicePtr, SlicePtrShared};
+use crate::data::tuple::{OwnTuple, ReifiedTuple, Tuple, TupleError};
+use crate::data::value::Value;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum TypingError {
+pub(crate) enum TupleSetError {
     #[error("table id not allowed: {0}")]
     InvalidTableId(u32),
+    #[error("Index out of bound: {0}")]
+    IndexOutOfBound(usize),
+    #[error(transparent)]
+    Tuple(#[from] TupleError),
 }
 
-type Result<T> = result::Result<T, TypingError>;
+type Result<T> = result::Result<T, TupleSetError>;
 
 pub(crate) const MIN_TABLE_ID_BOUND: u32 = 10000;
 
@@ -26,7 +34,7 @@ impl Debug for TableId {
 impl TableId {
     pub(crate) fn new(in_root: bool, id: u32) -> Result<Self> {
         if id <= MIN_TABLE_ID_BOUND {
-            Err(TypingError::InvalidTableId(id))
+            Err(TupleSetError::InvalidTableId(id))
         } else {
             Ok(TableId { in_root, id })
         }
@@ -76,5 +84,91 @@ impl Debug for TupleSetIdx {
             if self.is_key { 'K' } else { 'D' },
             self.col_idx
         )
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) struct TupleSet {
+    keys: Vec<ReifiedTuple>,
+    vals: Vec<ReifiedTuple>,
+}
+
+impl TupleSet {
+    pub(crate) fn push_key(&mut self, t: ReifiedTuple) {
+        self.keys.push(t);
+    }
+    pub(crate) fn push_val(&mut self, v: ReifiedTuple) {
+        self.vals.push(v);
+    }
+    pub(crate) fn merge(&mut self, o: TupleSet) {
+        self.keys.extend(o.keys);
+        self.vals.extend(o.vals);
+    }
+    pub(crate) fn extend_keys<I, T>(&mut self, keys: I)
+        where I: IntoIterator<Item=T>,
+              ReifiedTuple: From<T> {
+        self.keys.extend(keys.into_iter().map(ReifiedTuple::from));
+    }
+    pub(crate) fn extend_vals<I, T>(&mut self, keys: I)
+        where I: IntoIterator<Item=T>,
+              ReifiedTuple: From<T> {
+        self.vals.extend(keys.into_iter().map(ReifiedTuple::from));
+    }
+
+    pub(crate) fn all_keys_eq(&self, other: &Self) -> bool {
+        if self.keys.len() != other.keys.len() {
+            return false;
+        }
+        for (l, r) in self.keys.iter().zip(&other.keys) {
+            if !l.key_part_eq(r) {
+                return false;
+            }
+        }
+        true
+    }
+    pub(crate) fn all_keys_cmp(&self, other: &Self) -> Ordering {
+        for (l, r) in self.keys.iter().zip(&other.keys) {
+            match l.key_part_cmp(r) {
+                Ordering::Equal => {}
+                v => return v,
+            }
+        }
+        Ordering::Equal
+    }
+
+    pub(crate) fn get_value(&self, TupleSetIdx { is_key, t_set, col_idx }: TupleSetIdx) -> Result<Value> {
+        let tuples = if is_key { &self.keys } else { &self.vals };
+        let tuple = tuples.get(t_set).ok_or(TupleSetError::IndexOutOfBound(t_set))?;
+        let res = tuple.get(col_idx)?;
+        Ok(res)
+    }
+}
+
+impl<I1, T1, I2, T2> From<(I1, I2)> for TupleSet
+    where I1: IntoIterator<Item=T1>,
+          ReifiedTuple: From<T1>,
+          I2: IntoIterator<Item=T2>,
+          ReifiedTuple: From<T2> {
+    fn from((keys, vals): (I1, I2)) -> Self {
+        TupleSet {
+            keys: keys.into_iter().map(ReifiedTuple::from).collect(),
+            vals: vals.into_iter().map(ReifiedTuple::from).collect(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::mem;
+    use super::*;
+
+    #[test]
+    fn sizes() {
+        let t = OwnTuple::with_prefix(0);
+        let t2 = OwnTuple::with_prefix(0);
+        let ts = TupleSet::from(([t], [t2]));
+        dbg!(ts);
+        dbg!(mem::size_of::<ReifiedTuple>());
+        dbg!(mem::size_of::<TupleSet>());
     }
 }

@@ -77,6 +77,9 @@ impl Debug for Typing {
 }
 
 impl Typing {
+    pub(crate) fn representative_value(&self) -> StaticValue {
+        todo!()
+    }
     pub(crate) fn coerce<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         if *self == Typing::Any {
             return Ok(v);

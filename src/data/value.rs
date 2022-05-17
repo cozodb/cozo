@@ -20,7 +20,7 @@ pub enum Value<'a> {
 
     DescVal(Reverse<Box<Value<'a>>>),
 
-    EndSentinel,
+    Sentinel, // Acts as "any" in type inference, end value in sorting
 }
 
 pub(crate) type StaticValue = Value<'static>;
@@ -204,7 +204,7 @@ impl<'a> Display for Value<'a> {
                 }
                 f.write_char('}')?;
             }
-            Value::EndSentinel => write!(f, "Sentinel")?,
+            Value::Sentinel => write!(f, "Sentinel")?,
             Value::DescVal(Reverse(v)) => {
                 write!(f, "~{}", v)?;
             }
@@ -233,7 +233,7 @@ impl<'a> Value<'a> {
                 .map(|(k, v)| (Cow::Owned(k.into_owned()), v.to_static()))
                 .collect::<BTreeMap<Cow<'static, str>, StaticValue>>()
                 .into(),
-            Value::EndSentinel => panic!("Cannot process sentinel value"),
+            Value::Sentinel => panic!("Cannot process sentinel value"),
             Value::Bytes(t) => Value::from(t.into_owned()),
             Value::DescVal(Reverse(val)) => Value::DescVal(Reverse(val.to_static().into())),
         }
