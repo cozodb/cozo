@@ -1,9 +1,9 @@
-use std::result;
 use crate::data::eval::EvalError;
 use crate::data::expr::Expr;
 use crate::data::op::Op;
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
+use std::result;
 
 type Result<T> = result::Result<T, EvalError>;
 
@@ -64,7 +64,7 @@ impl Op for OpCoalesce {
     fn eval_two<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
         match (left, right) {
             (Value::Null, v) => Ok(v),
-            (l, _r) => Ok(l)
+            (l, _r) => Ok(l),
         }
     }
     fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {
@@ -90,10 +90,12 @@ impl Op for OpOr {
                 Value::Null => {}
                 Value::Bool(true) => return Ok(Value::Bool(true)),
                 Value::Bool(false) => {}
-                v => return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![v.to_static()],
-                )),
+                v => {
+                    return Err(EvalError::OpTypeMismatch(
+                        self.name().to_string(),
+                        vec![v.to_static()],
+                    ))
+                }
             }
         }
         if has_null {
@@ -112,7 +114,7 @@ impl Op for OpOr {
             (l, r) => Err(EvalError::OpTypeMismatch(
                 self.name().to_string(),
                 vec![l.to_static(), r.to_static()],
-            ))
+            )),
         }
     }
     fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {
@@ -138,10 +140,12 @@ impl Op for OpAnd {
                 Value::Null => {}
                 Value::Bool(false) => return Ok(Value::Bool(false)),
                 Value::Bool(true) => {}
-                v => return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![v.to_static()],
-                )),
+                v => {
+                    return Err(EvalError::OpTypeMismatch(
+                        self.name().to_string(),
+                        vec![v.to_static()],
+                    ))
+                }
             }
         }
         if has_null {
@@ -160,7 +164,7 @@ impl Op for OpAnd {
             (l, r) => Err(EvalError::OpTypeMismatch(
                 self.name().to_string(),
                 vec![l.to_static(), r.to_static()],
-            ))
+            )),
         }
     }
     fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {

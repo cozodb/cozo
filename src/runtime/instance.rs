@@ -8,8 +8,8 @@ use crate::runtime::options::{
     default_write_options,
 };
 use cozorocks::{
-    destroy_db, BridgeError, DbPtr, OptionsPtrShared,  ReadOptionsPtr, TDbOptions,
-    TransactionPtr, WriteOptionsPtr,
+    destroy_db, BridgeError, DbPtr, OptionsPtrShared, ReadOptionsPtr, TDbOptions, TransactionPtr,
+    WriteOptionsPtr,
 };
 use lazy_static::lazy_static;
 use log::error;

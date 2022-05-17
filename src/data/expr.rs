@@ -1,4 +1,7 @@
-use crate::data::op::{AggOp, Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMinus, OpMod, OpMul, OpNe, OpNegate, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp};
+use crate::data::op::{
+    AggOp, Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMinus,
+    OpMod, OpMul, OpNe, OpNegate, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
+};
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::collections::BTreeMap;
@@ -298,7 +301,8 @@ fn build_value_from_binop<'a>(name: &str, (left, right): (Expr<'a>, Expr<'a>)) -
         vec![
             Value::from(name.to_string()),
             Value::from(vec![Value::from(left), Value::from(right)]),
-        ].into(),
+        ]
+        .into(),
     )
 }
 
@@ -308,7 +312,8 @@ fn build_value_from_uop<'a>(name: &str, arg: Expr<'a>) -> Value<'a> {
         vec![
             Value::from(name.to_string()),
             Value::from(vec![Value::from(arg)]),
-        ].into(),
+        ]
+        .into(),
     )
 }
 
@@ -336,7 +341,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     cid.is_key.into(),
                     Value::from(cid.id as i64),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::TupleSetIdx(sid) => build_tagged_value(
                 "TupleSetIdx",
@@ -345,7 +350,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(sid.t_set as i64),
                     Value::from(sid.col_idx as i64),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::Add(arg) => build_value_from_binop(OpAdd.name(), *arg),
             Expr::Sub(arg) => build_value_from_binop(OpSub.name(), *arg),
@@ -373,7 +378,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(op.name().to_string()),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::ApplyAgg(op, a_args, args) => build_tagged_value(
                 "ApplyAgg",
@@ -386,7 +391,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                         .into(),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::FieldAcc(f, v) => {
                 build_tagged_value("FieldAcc", vec![f.into(), Value::from(*v)].into())

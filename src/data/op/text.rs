@@ -1,10 +1,9 @@
-use std::result;
 use crate::data::eval::EvalError;
 use crate::data::op::Op;
 use crate::data::value::Value;
+use std::result;
 
 type Result<T> = result::Result<T, EvalError>;
-
 
 pub(crate) struct OpStrCat;
 

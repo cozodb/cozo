@@ -1,20 +1,20 @@
 mod arithmetic;
-mod text;
-mod comparison;
 mod boolean;
 mod combine;
+mod comparison;
+mod text;
 
-use crate::data::eval::{EvalError};
+use crate::data::eval::EvalError;
 use crate::data::expr::Expr;
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use std::result;
 
 pub(crate) use arithmetic::*;
-pub(crate) use text::*;
-pub(crate) use comparison::*;
 pub(crate) use boolean::*;
 pub(crate) use combine::*;
+pub(crate) use comparison::*;
+pub(crate) use text::*;
 
 type Result<T> = result::Result<T, EvalError>;
 
@@ -101,24 +101,26 @@ pub(crate) trait Op: Send + Sync {
         // usually those functions that needs specialized implementations are those with arity None
         if let Some(arity) = self.arity() {
             if arity != args.len() {
-                return Err(EvalError::ArityMismatch(self.name().to_string(), arity))
+                return Err(EvalError::ArityMismatch(self.name().to_string(), arity));
             }
         }
         let mut has_null = false;
-        match args.iter().map(|v| {
-            match v {
+        match args
+            .iter()
+            .map(|v| match v {
                 Expr::Const(v) => {
                     if *v == Value::Null {
                         has_null = true;
                     }
                     Some(v.clone())
                 }
-                _ => None
-            }
-        }).collect::<Vec<_>>().into_iter().collect::<Option<Vec<Value>>>() {
-            Some(args) => {
-                Ok(Some(Expr::Const(self.eval(has_null, args)?)))
-            }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .collect::<Option<Vec<Value>>>()
+        {
+            Some(args) => Ok(Some(Expr::Const(self.eval(has_null, args)?))),
             None => {
                 if self.non_null_args() && has_null {
                     Ok(Some(Expr::Const(Value::Null)))
@@ -141,7 +143,11 @@ pub(crate) trait AggOp: Send + Sync {
         false
     }
     fn name(&self) -> &str;
-    fn partial_eval<'a>(&self, a_args: Vec<Expr<'a>>, args: Vec<Expr<'a>>) -> Result<Option<Expr<'a>>> {
+    fn partial_eval<'a>(
+        &self,
+        a_args: Vec<Expr<'a>>,
+        args: Vec<Expr<'a>>,
+    ) -> Result<Option<Expr<'a>>> {
         todo!()
     }
 }
@@ -163,8 +169,6 @@ impl AggOp for UnresolvedOp {
         &self.0
     }
 }
-
-
 
 pub(crate) struct OpNegate;
 

@@ -1,7 +1,7 @@
-use std::result;
 use crate::data::eval::EvalError;
 use crate::data::op::Op;
 use crate::data::value::Value;
+use std::result;
 
 type Result<T> = result::Result<T, EvalError>;
 
@@ -157,7 +157,6 @@ impl Op for OpPow {
         Ok(res)
     }
 }
-
 
 pub(crate) struct OpMinus;
 
