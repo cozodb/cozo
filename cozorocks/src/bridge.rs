@@ -215,16 +215,8 @@ mod ffi {
             val: &[u8],
             status: &mut BridgeStatus,
         );
-        fn del_raw(
-            self: &TDBBridge,
-            options: &WriteOptions,
-            key: &[u8],
-            status: &mut BridgeStatus,
-        );
-        fn iterator_raw(
-            self: &TDBBridge,
-            r_opts: &ReadOptions,
-        ) -> UniquePtr<IteratorBridge>;
+        fn del_raw(self: &TDBBridge, options: &WriteOptions, key: &[u8], status: &mut BridgeStatus);
+        fn iterator_raw(self: &TDBBridge, r_opts: &ReadOptions) -> UniquePtr<IteratorBridge>;
 
         fn open_db_raw(
             options: &Options,

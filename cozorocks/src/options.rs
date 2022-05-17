@@ -131,7 +131,6 @@ pub struct ReadOptionsPtr(UniquePtr<ReadOptions>);
 unsafe impl Send for ReadOptionsPtr {}
 // unsafe impl Sync for ReadOptionsPtr {}
 
-
 impl Deref for ReadOptionsPtr {
     type Target = UniquePtr<ReadOptions>;
 

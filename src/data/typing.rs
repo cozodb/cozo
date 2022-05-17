@@ -3,8 +3,10 @@ use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{CozoParser, Rule};
 use pest::iterators::Pair;
 use pest::Parser;
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::result;
+use uuid::Uuid;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum TypingError {
@@ -34,6 +36,7 @@ pub(crate) enum Typing {
     Float,
     Text,
     Uuid,
+    Bytes,
     Nullable(Box<Typing>),
     Homogeneous(Box<Typing>),
     UnnamedTuple(Vec<Typing>),
@@ -66,6 +69,7 @@ impl Display for Typing {
                 write!(f, "{}", joined)?;
                 write!(f, "}}")
             }
+            Typing::Bytes => write!(f, "Bytes"),
         }
     }
 }
@@ -78,7 +82,29 @@ impl Debug for Typing {
 
 impl Typing {
     pub(crate) fn representative_value(&self) -> StaticValue {
-        todo!()
+        match self {
+            Typing::Any => Value::Bottom,
+            Typing::Bool => Value::Bool(false),
+            Typing::Int => Value::Int(0),
+            Typing::Float => Value::Float((0.).into()),
+            Typing::Text => Value::Text("".into()),
+            Typing::Uuid => Value::Uuid(Uuid::nil()),
+            Typing::Nullable(n) => n.representative_value(),
+            Typing::Homogeneous(h) => vec![h.representative_value()].into(),
+            Typing::UnnamedTuple(v) => v
+                .iter()
+                .map(|v| v.representative_value())
+                .collect::<Vec<_>>()
+                .into(),
+            Typing::NamedTuple(nt) => {
+                let map = nt
+                    .iter()
+                    .map(|(k, v)| (k.clone().into(), v.representative_value()))
+                    .collect::<BTreeMap<_, _>>();
+                Value::from(map)
+            }
+            Typing::Bytes => Value::from(b"".as_ref()),
+        }
     }
     pub(crate) fn coerce<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         if *self == Typing::Any {
@@ -102,6 +128,7 @@ impl Typing {
             Typing::Float => self.coerce_float(v),
             Typing::Text => self.coerce_text(v),
             Typing::Uuid => self.coerce_uuid(v),
+            Typing::Bytes => self.coerce_bytes(v),
             Typing::Homogeneous(t) => match v {
                 Value::List(vs) => Ok(Value::List(
                     vs.into_iter()
@@ -150,6 +177,30 @@ impl Typing {
             _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static())),
         }
     }
+    fn coerce_bytes<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
+        match v {
+            v @ Value::Bytes(_) => Ok(v),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static())),
+        }
+    }
+}
+
+impl<'a> Value<'a> {
+    pub(crate) fn deduce_typing(&self) -> Typing {
+        match self {
+            Value::Null => Typing::Any,
+            Value::Bool(_) => Typing::Bool,
+            Value::Int(_) => Typing::Int,
+            Value::Float(_) => Typing::Float,
+            Value::Uuid(_) => Typing::Uuid,
+            Value::Text(_) => Typing::Text,
+            Value::Bytes(_) => Typing::Bytes,
+            Value::List(_) => Typing::Any,
+            Value::Dict(_) => Typing::Any,
+            Value::DescVal(_) => Typing::Any,
+            Value::Bottom => Typing::Any,
+        }
+    }
 }
 
 impl TryFrom<&str> for Typing {
@@ -158,14 +209,6 @@ impl TryFrom<&str> for Typing {
     fn try_from(value: &str) -> Result<Self> {
         let pair = CozoParser::parse(Rule::typing, value)?.next().unwrap();
         Typing::try_from(pair)
-    }
-}
-
-impl<'a> TryFrom<Value<'a>> for Typing {
-    type Error = TypingError;
-
-    fn try_from(value: Value<'a>) -> result::Result<Self, Self::Error> {
-        todo!()
     }
 }
 

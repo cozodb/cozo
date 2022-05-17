@@ -1,9 +1,9 @@
+use crate::data::tuple::{OwnTuple, ReifiedTuple, Tuple, TupleError};
+use crate::data::value::Value;
+use cozorocks::{PinnableSlicePtr, PinnableSlicePtrShared, SlicePtr, SlicePtrShared};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::result;
-use cozorocks::{PinnableSlicePtr, PinnableSlicePtrShared, SlicePtr, SlicePtrShared};
-use crate::data::tuple::{OwnTuple, ReifiedTuple, Tuple, TupleError};
-use crate::data::value::Value;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum TupleSetError {
@@ -105,13 +105,17 @@ impl TupleSet {
         self.vals.extend(o.vals);
     }
     pub(crate) fn extend_keys<I, T>(&mut self, keys: I)
-        where I: IntoIterator<Item=T>,
-              ReifiedTuple: From<T> {
+    where
+        I: IntoIterator<Item = T>,
+        ReifiedTuple: From<T>,
+    {
         self.keys.extend(keys.into_iter().map(ReifiedTuple::from));
     }
     pub(crate) fn extend_vals<I, T>(&mut self, keys: I)
-        where I: IntoIterator<Item=T>,
-              ReifiedTuple: From<T> {
+    where
+        I: IntoIterator<Item = T>,
+        ReifiedTuple: From<T>,
+    {
         self.vals.extend(keys.into_iter().map(ReifiedTuple::from));
     }
 
@@ -136,19 +140,30 @@ impl TupleSet {
         Ordering::Equal
     }
 
-    pub(crate) fn get_value(&self, TupleSetIdx { is_key, t_set, col_idx }: TupleSetIdx) -> Result<Value> {
+    pub(crate) fn get_value(
+        &self,
+        TupleSetIdx {
+            is_key,
+            t_set,
+            col_idx,
+        }: TupleSetIdx,
+    ) -> Result<Value> {
         let tuples = if is_key { &self.keys } else { &self.vals };
-        let tuple = tuples.get(t_set).ok_or(TupleSetError::IndexOutOfBound(t_set))?;
+        let tuple = tuples
+            .get(t_set)
+            .ok_or(TupleSetError::IndexOutOfBound(t_set))?;
         let res = tuple.get(col_idx)?;
         Ok(res)
     }
 }
 
 impl<I1, T1, I2, T2> From<(I1, I2)> for TupleSet
-    where I1: IntoIterator<Item=T1>,
-          ReifiedTuple: From<T1>,
-          I2: IntoIterator<Item=T2>,
-          ReifiedTuple: From<T2> {
+where
+    I1: IntoIterator<Item = T1>,
+    ReifiedTuple: From<T1>,
+    I2: IntoIterator<Item = T2>,
+    ReifiedTuple: From<T2>,
+{
     fn from((keys, vals): (I1, I2)) -> Self {
         TupleSet {
             keys: keys.into_iter().map(ReifiedTuple::from).collect(),
@@ -159,8 +174,8 @@ impl<I1, T1, I2, T2> From<(I1, I2)> for TupleSet
 
 #[cfg(test)]
 mod tests {
-    use std::mem;
     use super::*;
+    use std::mem;
 
     #[test]
     fn sizes() {

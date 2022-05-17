@@ -1,5 +1,7 @@
 use crate::data::tuple::TupleError::UndefinedDataTag;
 use crate::data::value::Value;
+use chrono::format::Item;
+use cozorocks::{PinnableSlicePtr, PinnableSlicePtrShared, SlicePtr, SlicePtrShared};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::{Ordering, Reverse};
@@ -7,9 +9,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::result;
-use chrono::format::Item;
 use uuid::Uuid;
-use cozorocks::{PinnableSlicePtr, PinnableSlicePtrShared, SlicePtr, SlicePtrShared};
 
 #[derive(thiserror::Error, Debug)]
 pub enum TupleError {
@@ -118,8 +118,8 @@ impl From<DataKind> for u32 {
 
 #[derive(Clone)]
 pub struct Tuple<T>
-    where
-        T: AsRef<[u8]>,
+where
+    T: AsRef<[u8]>,
 {
     pub(crate) data: T,
     idx_cache: RefCell<Vec<usize>>,
@@ -129,15 +129,18 @@ unsafe impl<T: AsRef<[u8]>> Send for Tuple<T> {}
 
 unsafe impl<T: AsRef<[u8]>> Sync for Tuple<T> {}
 
-impl<T> From<T> for Tuple<T> where T: AsRef<[u8]> {
+impl<T> From<T> for Tuple<T>
+where
+    T: AsRef<[u8]>,
+{
     fn from(data: T) -> Self {
         Tuple::new(data)
     }
 }
 
 impl<T> Tuple<T>
-    where
-        T: AsRef<[u8]>,
+where
+    T: AsRef<[u8]>,
 {
     pub(crate) fn clear_cache(&self) {
         self.idx_cache.borrow_mut().clear()
@@ -145,8 +148,8 @@ impl<T> Tuple<T>
 }
 
 impl<T> AsRef<[u8]> for Tuple<T>
-    where
-        T: AsRef<[u8]>,
+where
+    T: AsRef<[u8]>,
 {
     fn as_ref(&self) -> &[u8] {
         self.data.as_ref()
@@ -427,7 +430,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 let (val, offset) = self.parse_value_at(pos + 1)?;
                 (offset, Value::DescVal(Reverse(val.into())))
             }
-            StorageTag::Max => (start, Value::Sentinel),
+            StorageTag::Max => (start, Value::Bottom),
         };
         Ok((val, nxt))
     }
@@ -640,7 +643,7 @@ impl OwnTuple {
                 cache.truncate(start_len);
                 cache.push(self.data.len());
             }
-            Value::Sentinel => self.seal_with_sentinel(),
+            Value::Bottom => self.seal_with_sentinel(),
             Value::DescVal(Reverse(v)) => {
                 self.push_reverse_value(v);
             }
@@ -696,7 +699,7 @@ impl OwnTuple {
 
 impl<'a> Extend<Value<'a>> for OwnTuple {
     #[inline]
-    fn extend<T: IntoIterator<Item=Value<'a>>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = Value<'a>>>(&mut self, iter: T) {
         for v in iter {
             self.push_value(&v)
         }
@@ -718,10 +721,11 @@ impl<T: AsRef<[u8]>> Hash for Tuple<T> {
 
 impl<T: AsRef<[u8]>> Eq for Tuple<T> {}
 
-
 impl<'a, P, T> From<(P, T)> for OwnTuple
-    where T: IntoIterator<Item=&'a Value<'a>>,
-          P: Into<u32> {
+where
+    T: IntoIterator<Item = &'a Value<'a>>,
+    P: Into<u32>,
+{
     fn from((prefix, it): (P, T)) -> Self {
         let mut ret = OwnTuple::with_prefix(prefix.into());
         for item in it.into_iter() {
@@ -730,7 +734,6 @@ impl<'a, P, T> From<(P, T)> for OwnTuple
         ret
     }
 }
-
 
 pub(crate) enum ReifiedTupleData {
     Own(Vec<u8>),
@@ -747,7 +750,9 @@ impl Clone for ReifiedTupleData {
             ReifiedTupleData::Slice(s) => ReifiedTupleData::Own(s.as_ref().to_vec()),
             ReifiedTupleData::SharedSlice(s) => ReifiedTupleData::SharedSlice(s.clone()),
             ReifiedTupleData::PinnableSlice(s) => ReifiedTupleData::Own(s.as_ref().to_vec()),
-            ReifiedTupleData::PinnableSliceShared(s) => ReifiedTupleData::PinnableSliceShared(s.clone())
+            ReifiedTupleData::PinnableSliceShared(s) => {
+                ReifiedTupleData::PinnableSliceShared(s.clone())
+            }
         }
     }
 }
@@ -782,7 +787,6 @@ impl From<PinnableSlicePtrShared> for ReifiedTupleData {
     }
 }
 
-
 impl AsRef<[u8]> for ReifiedTupleData {
     fn as_ref(&self) -> &[u8] {
         match self {
@@ -790,7 +794,7 @@ impl AsRef<[u8]> for ReifiedTupleData {
             ReifiedTupleData::Slice(s) => s.as_ref(),
             ReifiedTupleData::SharedSlice(s) => s.as_ref(),
             ReifiedTupleData::PinnableSlice(s) => s.as_ref(),
-            ReifiedTupleData::PinnableSliceShared(s) => s.as_ref()
+            ReifiedTupleData::PinnableSliceShared(s) => s.as_ref(),
         }
     }
 }

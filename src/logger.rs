@@ -8,7 +8,6 @@ pub(crate) fn init_test_logger() {
         .try_init();
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -12,9 +12,9 @@ pub use bridge::StatusBridgeCode;
 pub use bridge::StatusCode;
 pub use bridge::StatusSeverity;
 pub use bridge::StatusSubCode;
-pub use status::BridgeError;
 use cxx::let_cxx_string;
 pub use cxx::{SharedPtr, UniquePtr};
+pub use status::BridgeError;
 use status::Result;
 use std::ops::Deref;
 use std::pin::Pin;
@@ -276,14 +276,16 @@ impl TransactionPtr {
         }
     }
     #[inline]
-    pub fn get_owned(&self, options: &ReadOptions,
-                     key: impl AsRef<[u8]>) -> Result<Option<PinnableSlicePtr>> {
+    pub fn get_owned(
+        &self,
+        options: &ReadOptions,
+        key: impl AsRef<[u8]>,
+    ) -> Result<Option<PinnableSlicePtr>> {
         let mut slice = PinnableSlicePtr::default();
         if self.get(options, key, &mut slice)? {
             Ok(Some(slice))
         } else {
             Ok(None)
-
         }
     }
     #[inline]
@@ -308,11 +310,7 @@ impl TransactionPtr {
         status.check_err(ret)
     }
     #[inline]
-    pub fn put(
-        &self,
-        key: impl AsRef<[u8]>,
-        val: impl AsRef<[u8]>,
-    ) -> Result<()> {
+    pub fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>) -> Result<()> {
         let mut status = BridgeStatus::default();
         let ret = self.put_txn(key.as_ref(), val.as_ref(), &mut status);
         status.check_err(ret)
@@ -347,19 +345,14 @@ impl DbPtr {
         DbPtr(SharedPtr::null())
     }
 
-    pub fn open_non_txn(options: &Options,
-                        path: impl AsRef<str>, ) -> Result<Self> {
+    pub fn open_non_txn(options: &Options, path: impl AsRef<str>) -> Result<Self> {
         let_cxx_string!(cname = path.as_ref());
         let mut status = BridgeStatus::default();
         let ret = open_db_raw(options, &cname, &mut status);
         status.check_err(Self(ret))
     }
 
-    pub fn open(
-        options: &Options,
-        t_options: &TDbOptions,
-        path: impl AsRef<str>,
-    ) -> Result<Self> {
+    pub fn open(options: &Options, t_options: &TDbOptions, path: impl AsRef<str>) -> Result<Self> {
         let_cxx_string!(cname = path.as_ref());
         let mut status = BridgeStatus::default();
         let ret = match t_options {
@@ -388,14 +381,16 @@ impl DbPtr {
         }
     }
     #[inline]
-    pub fn get_owned(&self, options: &ReadOptions,
-                     key: impl AsRef<[u8]>) -> Result<Option<PinnableSlicePtr>> {
+    pub fn get_owned(
+        &self,
+        options: &ReadOptions,
+        key: impl AsRef<[u8]>,
+    ) -> Result<Option<PinnableSlicePtr>> {
         let mut slice = PinnableSlicePtr::default();
         if self.get(options, key, &mut slice)? {
             Ok(Some(slice))
         } else {
             Ok(None)
-
         }
     }
     #[inline]
@@ -421,11 +416,7 @@ impl DbPtr {
     }
 
     #[inline]
-    pub fn txn(
-        &self,
-        options: TransactOptions,
-        write_ops: WriteOptionsPtr,
-    ) -> TransactionPtr {
+    pub fn txn(&self, options: TransactOptions, write_ops: WriteOptionsPtr) -> TransactionPtr {
         TransactionPtr(match options {
             TransactOptions::Optimistic(o) => self.begin_o_transaction(write_ops.0, o.0),
             TransactOptions::Pessimistic(o) => self.begin_t_transaction(write_ops.0, o.0),

@@ -1,15 +1,17 @@
-use lazy_static::lazy_static;
-use cozorocks::{FlushOptionsPtr, OptionsPtr, OTxnDbOptionsPtr, OTxnOptionsPtr, PTxnDbOptionsPtr, PTxnOptionsPtr, ReadOptionsPtr, RustComparatorPtr, TDbOptions, TransactOptions, WriteOptionsPtr};
 use crate::data::tuple::PREFIX_LEN;
+use cozorocks::{
+    FlushOptionsPtr, OTxnDbOptionsPtr, OTxnOptionsPtr, OptionsPtr, PTxnDbOptionsPtr,
+    PTxnOptionsPtr, ReadOptionsPtr, RustComparatorPtr, TDbOptions, TransactOptions,
+    WriteOptionsPtr,
+};
+use lazy_static::lazy_static;
 
 const COMPARATOR_NAME: &str = "cozo_cmp_v1";
 
 lazy_static! {
-    static ref DEFAULT_COMPARATOR: RustComparatorPtr = RustComparatorPtr::new(
-        COMPARATOR_NAME,
-        crate::data::key_order::compare,
-        false);
-    }
+    static ref DEFAULT_COMPARATOR: RustComparatorPtr =
+        RustComparatorPtr::new(COMPARATOR_NAME, crate::data::key_order::compare, false);
+}
 
 pub fn default_options() -> OptionsPtr {
     let mut options = OptionsPtr::default();
