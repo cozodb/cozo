@@ -45,12 +45,103 @@ impl RowEvalContext for () {
 
 pub(crate) trait ExprEvalContext {}
 
+fn extract_optimized_bin_args(args: Vec<Expr>) -> (Expr, Expr) {
+    let mut args = args.into_iter();
+    (args.next().unwrap().optimize_ops(), args.next().unwrap().optimize_ops())
+}
+
+fn extract_optimized_u_args(args: Vec<Expr>) -> Expr {
+    args.into_iter().next().unwrap().optimize_ops()
+}
+
 impl<'a> Expr<'a> {
     pub(crate) fn partial_eval<C: ExprEvalContext + 'a>(&'a self, ctx: &'a C) -> Result<Self> {
         todo!()
     }
     pub(crate) fn optimize_ops(self) -> Self {
-        todo!()
+        match self {
+            Expr::List(l) => Expr::List(l.into_iter().map(|v| v.optimize_ops()).collect()),
+            Expr::Dict(d) => Expr::Dict(d.into_iter().map(|(k, v)| (k, v.optimize_ops())).collect()),
+            Expr::Apply(op, args) => {
+                match op.name() {
+                    name if name == OpAdd.name() => Expr::Add(extract_optimized_bin_args(args).into()),
+                    name if name == OpSub.name() => Expr::Sub(extract_optimized_bin_args(args).into()),
+                    name if name == OpMul.name() => Expr::Mul(extract_optimized_bin_args(args).into()),
+                    name if name == OpDiv.name() => Expr::Div(extract_optimized_bin_args(args).into()),
+                    name if name == OpPow.name() => Expr::Pow(extract_optimized_bin_args(args).into()),
+                    name if name == OpMod.name() => Expr::Mod(extract_optimized_bin_args(args).into()),
+                    name if name == OpStrCat.name() => Expr::StrCat(extract_optimized_bin_args(args).into()),
+                    name if name == OpEq.name() => Expr::Eq(extract_optimized_bin_args(args).into()),
+                    name if name == OpNe.name() => Expr::Ne(extract_optimized_bin_args(args).into()),
+                    name if name == OpGt.name() => Expr::Gt(extract_optimized_bin_args(args).into()),
+                    name if name == OpGe.name() => Expr::Ge(extract_optimized_bin_args(args).into()),
+                    name if name == OpLt.name() => Expr::Lt(extract_optimized_bin_args(args).into()),
+                    name if name == OpLe.name() => Expr::Le(extract_optimized_bin_args(args).into()),
+                    name if name == OpNegate.name() => Expr::Negate(extract_optimized_u_args(args).into()),
+                    name if name == OpMinus.name() => Expr::Minus(extract_optimized_u_args(args).into()),
+                    name if name == OpIsNull.name() => Expr::IsNull(extract_optimized_u_args(args).into()),
+                    name if name == OpNotNull.name() => Expr::NotNull(extract_optimized_u_args(args).into()),
+                    name if name == OpCoalesce.name() => {
+                        let mut args = args.into_iter();
+                        let mut arg = args.next().unwrap().optimize_ops();
+                        for nxt in args {
+                            arg = Expr::Coalesce((arg, nxt.optimize_ops()).into());
+                        }
+                        arg
+                    }
+                    name if name == OpOr.name() => {
+                        let mut args = args.into_iter();
+                        let mut arg = args.next().unwrap().optimize_ops();
+                        for nxt in args {
+                            arg = Expr::Or((arg, nxt.optimize_ops()).into());
+                        }
+                        arg
+                    }
+                    name if name == OpAnd.name() => {
+                        let mut args = args.into_iter();
+                        let mut arg = args.next().unwrap().optimize_ops();
+                        for nxt in args {
+                            arg = Expr::And((arg, nxt.optimize_ops()).into());
+                        }
+                        arg
+                    }
+                    _ => Expr::Apply(op, args.into_iter().map(|v| v.optimize_ops()).collect())
+                }
+            }
+            Expr::ApplyAgg(op, a_args, args) => {
+                Expr::ApplyAgg(op,
+                               a_args.into_iter().map(|v| v.optimize_ops()).collect(),
+                               args.into_iter().map(|v| v.optimize_ops()).collect(),
+                )
+            }
+            Expr::FieldAcc(f, arg) => Expr::FieldAcc(f, arg.optimize_ops().into()),
+            Expr::IdxAcc(i, arg) => Expr::IdxAcc(i, arg.optimize_ops().into()),
+
+            v @ (Expr::Const(_) |
+            Expr::Variable(_) |
+            Expr::TableCol(_, _) |
+            Expr::TupleSetIdx(_) |
+            Expr::Add(_) |
+            Expr::Sub(_) |
+            Expr::Mul(_) |
+            Expr::Div(_) |
+            Expr::Pow(_) |
+            Expr::Mod(_) |
+            Expr::StrCat(_) |
+            Expr::Eq(_) |
+            Expr::Ne(_) |
+            Expr::Gt(_) |
+            Expr::Ge(_) |
+            Expr::Lt(_) |
+            Expr::Le(_) |
+            Expr::Negate(_) |
+            Expr::Minus(_) |
+            Expr::IsNull(_) |
+            Expr::NotNull(_) |
+            Expr::Coalesce(_) |
+            Expr::Or(_) |
+            Expr::And(_)) => v
+        }
     }
     pub(crate) fn row_eval<C: RowEvalContext + 'a>(&'a self, ctx: &'a C) -> Result<Value<'a>> {
         let res: Value = match self {
@@ -246,13 +337,13 @@ impl<'a> Expr<'a> {
                 OpNotNull.eval_one(arg.as_ref().row_eval(ctx)?)?
             }
             Expr::Coalesce(args) => {
-                OpCoalesce.eval_two(args.as_ref().0.row_eval(ctx)? ,  args.as_ref().1.row_eval(ctx)?)?
+                OpCoalesce.eval_two(args.as_ref().0.row_eval(ctx)?, args.as_ref().1.row_eval(ctx)?)?
             }
             Expr::Or(args) => {
-                OpOr.eval_two(args.as_ref().0.row_eval(ctx)? ,  args.as_ref().1.row_eval(ctx)?)?
+                OpOr.eval_two(args.as_ref().0.row_eval(ctx)?, args.as_ref().1.row_eval(ctx)?)?
             }
             Expr::And(args) => {
-                OpAnd.eval_two(args.as_ref().0.row_eval(ctx)? ,  args.as_ref().1.row_eval(ctx)?)?
+                OpAnd.eval_two(args.as_ref().0.row_eval(ctx)?, args.as_ref().1.row_eval(ctx)?)?
             }
         };
         Ok(res)
