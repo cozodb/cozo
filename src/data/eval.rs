@@ -1,4 +1,4 @@
-use crate::data::expr::Expr;
+use crate::data::expr::{Expr, StaticExpr};
 use crate::data::expr_parser::ExprParseError;
 use crate::data::op::{
     Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMinus, OpMod,
@@ -38,6 +38,9 @@ pub(crate) enum EvalError {
 
     #[error("Arity mismatch for {0}, {1} arguments given ")]
     ArityMismatch(String, usize),
+
+    #[error("Incomplete evaluation {0}")]
+    IncompleteEvaluation(String),
 }
 
 type Result<T> = result::Result<T, EvalError>;
@@ -70,6 +73,13 @@ fn extract_optimized_u_args(args: Vec<Expr>) -> Expr {
 }
 
 impl<'a> Expr<'a> {
+    pub(crate) fn interpret_eval<C: ExprEvalContext + 'a>(self, ctx: &'a C) -> Result<Value> {
+        match self.partial_eval(ctx)? {
+            Expr::Const(v) => Ok(v),
+            v => Err(EvalError::IncompleteEvaluation(format!("{:?}", v)))
+        }
+    }
+
     pub(crate) fn partial_eval<C: ExprEvalContext + 'a>(self, ctx: &'a C) -> Result<Self> {
         let res = match self {
             v @ (Expr::Const(_) | Expr::TableCol(_, _) | Expr::TupleSetIdx(_)) => v,
@@ -171,7 +181,10 @@ impl<'a> Expr<'a> {
                     }
                 }
             }
-            Expr::Add(_)
+            Expr::ApplyZero(_)
+            | Expr::ApplyOne(_, _)
+            | Expr::ApplyTwo(_, _)
+            | Expr::Add(_)
             | Expr::Sub(_)
             | Expr::Mul(_)
             | Expr::Div(_)
@@ -252,7 +265,19 @@ impl<'a> Expr<'a> {
                     }
                     arg
                 }
-                _ => Expr::Apply(op, args.into_iter().map(|v| v.optimize_ops()).collect()),
+                _ => {
+                    match op.arity() {
+                        Some(0) => Expr::ApplyZero(op),
+                        Some(1) => Expr::ApplyOne(op, args.into_iter().next().unwrap().into()),
+                        Some(2) => {
+                            let mut args = args.into_iter();
+                            let left = args.next().unwrap();
+                            let right = args.next().unwrap();
+                            Expr::ApplyTwo(op, (left, right).into())
+                        }
+                        _ => Expr::Apply(op, args.into_iter().map(|v| v.optimize_ops()).collect())
+                    }
+                }
             },
             Expr::ApplyAgg(op, a_args, args) => Expr::ApplyAgg(
                 op,
@@ -266,6 +291,9 @@ impl<'a> Expr<'a> {
             | Expr::Variable(_)
             | Expr::TableCol(_, _)
             | Expr::TupleSetIdx(_)
+            | Expr::ApplyZero(_)
+            | Expr::ApplyOne(_, _)
+            | Expr::ApplyTwo(_, _)
             | Expr::Add(_)
             | Expr::Sub(_)
             | Expr::Mul(_)
@@ -308,7 +336,6 @@ impl<'a> Expr<'a> {
             Expr::TableCol(tid, cid) => return Err(EvalError::UnresolveTableCol(*tid, *cid)),
             Expr::TupleSetIdx(idx) => ctx.resolve(idx)?.clone(),
             Expr::Apply(op, vals) => {
-                // TODO for non-null operators, short-circuit
                 let (has_null, args) = vals.iter().try_fold(
                     (false, Vec::with_capacity(vals.len())),
                     |(has_null, mut acc), v| {
@@ -325,6 +352,36 @@ impl<'a> Expr<'a> {
                     },
                 )?;
                 op.eval(has_null, args)?
+            }
+            Expr::ApplyZero(op) => op.eval_zero()?,
+            Expr::ApplyOne(op, arg) => {
+                let arg = arg.row_eval(ctx)?;
+                if op.non_null_args() {
+                    if arg == Value::Null {
+                        Value::Null
+                    } else {
+                        op.eval_one_non_null(arg)?
+                    }
+                } else {
+                    op.eval_one(arg)?
+                }
+            }
+            Expr::ApplyTwo(op, args) => {
+                if op.non_null_args() {
+                    let left = args.as_ref().0.row_eval(ctx)?;
+                    if left == Value::Null {
+                        return Ok(Value::Null);
+                    }
+                    let right = args.as_ref().0.row_eval(ctx)?;
+                    if right == Value::Null {
+                        return Ok(Value::Null);
+                    }
+                    op.eval_two_non_null(left, right)?
+                } else {
+                    let left = args.as_ref().0.row_eval(ctx)?;
+                    let right = args.as_ref().0.row_eval(ctx)?;
+                    op.eval_two(left, right)?
+                }
             }
             Expr::ApplyAgg(_, _, _) => {
                 todo!()

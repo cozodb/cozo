@@ -36,6 +36,9 @@ pub(crate) enum Expr<'a> {
     FieldAcc(String, Box<Expr<'a>>),
     IdxAcc(usize, Box<Expr<'a>>),
     // optimized
+    ApplyZero(Arc<dyn Op + Send + Sync>),
+    ApplyOne(Arc<dyn Op + Send + Sync>, Box<Expr<'a>>),
+    ApplyTwo(Arc<dyn Op + Send + Sync>, Box<(Expr<'a>, Expr<'a>)>),
     Add(Box<(Expr<'a>, Expr<'a>)>),
     Sub(Box<(Expr<'a>, Expr<'a>)>),
     Mul(Box<(Expr<'a>, Expr<'a>)>),
@@ -98,6 +101,9 @@ impl<'a> Debug for Expr<'a> {
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
+            Expr::ApplyZero(op) => write!(f, "({})", op.name()),
+            Expr::ApplyOne(op, arg) => write!(f, "({} {:?})", op.name(), arg),
+            Expr::ApplyTwo(op, args) => write!(f, "({} {:?} {:?})", op.name(), args.as_ref().0, args.as_ref().1),
             Expr::Add(args) => write!(f, "(`+ {:?} {:?})", args.as_ref().0, args.as_ref().1),
             Expr::Sub(args) => write!(f, "(`- {:?} {:?})", args.as_ref().0, args.as_ref().1),
             Expr::Mul(args) => write!(f, "(`* {:?} {:?})", args.as_ref().0, args.as_ref().1),
@@ -302,7 +308,7 @@ fn build_value_from_binop<'a>(name: &str, (left, right): (Expr<'a>, Expr<'a>)) -
             Value::from(name.to_string()),
             Value::from(vec![Value::from(left), Value::from(right)]),
         ]
-        .into(),
+            .into(),
     )
 }
 
@@ -313,7 +319,7 @@ fn build_value_from_uop<'a>(name: &str, arg: Expr<'a>) -> Value<'a> {
             Value::from(name.to_string()),
             Value::from(vec![Value::from(arg)]),
         ]
-        .into(),
+            .into(),
     )
 }
 
@@ -341,7 +347,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     cid.is_key.into(),
                     Value::from(cid.id as i64),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::TupleSetIdx(sid) => build_tagged_value(
                 "TupleSetIdx",
@@ -350,8 +356,16 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(sid.t_set as i64),
                     Value::from(sid.col_idx as i64),
                 ]
-                .into(),
+                    .into(),
             ),
+            Expr::ApplyZero(op) => {
+                build_tagged_value(
+                    "Apply",
+                    vec![Value::from(op.name().to_string()), Value::List(vec![])].into(),
+                )
+            }
+            Expr::ApplyOne(op, arg) => build_value_from_uop(op.name(), *arg),
+            Expr::ApplyTwo(op, args) => build_value_from_binop(op.name(), *args),
             Expr::Add(arg) => build_value_from_binop(OpAdd.name(), *arg),
             Expr::Sub(arg) => build_value_from_binop(OpSub.name(), *arg),
             Expr::Mul(arg) => build_value_from_binop(OpMul.name(), *arg),
@@ -378,7 +392,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(op.name().to_string()),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::ApplyAgg(op, a_args, args) => build_tagged_value(
                 "ApplyAgg",
@@ -391,7 +405,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                         .into(),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::FieldAcc(f, v) => {
                 build_tagged_value("FieldAcc", vec![f.into(), Value::from(*v)].into())
