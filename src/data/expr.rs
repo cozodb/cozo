@@ -2,7 +2,7 @@ use crate::data::op::{AggOp, Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, Op
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::collections::BTreeMap;
-use std::fmt::{format, write, Debug, Formatter};
+use std::fmt::{Debug, Formatter};
 use std::result;
 use std::sync::Arc;
 

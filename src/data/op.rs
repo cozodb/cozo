@@ -1,11 +1,20 @@
-use std::cmp::max;
-use std::collections::BTreeMap;
-use crate::data::eval::{EvalError, ExprEvalContext, RowEvalContext};
+mod arithmetic;
+mod text;
+mod comparison;
+mod boolean;
+mod combine;
+
+use crate::data::eval::{EvalError};
 use crate::data::expr::Expr;
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
-use std::fmt::{Debug, Formatter};
 use std::result;
+
+pub(crate) use arithmetic::*;
+pub(crate) use text::*;
+pub(crate) use comparison::*;
+pub(crate) use boolean::*;
+pub(crate) use combine::*;
 
 type Result<T> = result::Result<T, EvalError>;
 
@@ -15,6 +24,9 @@ pub(crate) trait Op: Send + Sync {
     }
     fn arity(&self) -> Option<usize> {
         Some(1)
+    }
+    fn has_side_effect(&self) -> bool {
+        false
     }
     fn name(&self) -> &str;
     fn non_null_args(&self) -> bool {
@@ -85,7 +97,36 @@ pub(crate) trait Op: Send + Sync {
             self.name()
         )
     }
-    fn expr_eval(&self, ctx: &dyn ExprEvalContext, args: ()) -> () {}
+    fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> Result<Option<Expr<'a>>> {
+        if let Some(arity) = self.arity() {
+            if arity != args.len() {
+                return Err(EvalError::ArityMismatch(self.name().to_string(), arity))
+            }
+        }
+        let mut has_null = false;
+        match args.iter().map(|v| {
+            match v {
+                Expr::Const(v) => {
+                    if *v == Value::Null {
+                        has_null = true;
+                    }
+                    Some(v.clone())
+                }
+                _ => None
+            }
+        }).collect::<Vec<_>>().into_iter().collect::<Option<Vec<Value>>>() {
+            Some(args) => {
+                Ok(Some(Expr::Const(self.eval(has_null, args)?)))
+            }
+            None => {
+                if self.non_null_args() && has_null {
+                    Ok(Some(Expr::Const(Value::Null)))
+                } else {
+                    Ok(None)
+                }
+            }
+        }
+    }
 }
 
 pub(crate) trait AggOp: Send + Sync {
@@ -95,12 +136,12 @@ pub(crate) trait AggOp: Send + Sync {
     fn arity(&self) -> Option<usize> {
         Some(1)
     }
-    fn name(&self) -> &str;
-    fn row_eval(&self, ctx: (), args: ()) -> () {
-        unimplemented!()
+    fn has_side_effect(&self) -> bool {
+        false
     }
-    fn expr_eval(&self, ctx: (), args: ()) -> () {
-        self.row_eval(ctx, args)
+    fn name(&self) -> &str;
+    fn partial_eval<'a>(&self, a_args: Vec<Expr<'a>>, args: Vec<Expr<'a>>) -> Result<Option<Expr<'a>>> {
+        todo!()
     }
 }
 
@@ -122,318 +163,7 @@ impl AggOp for UnresolvedOp {
     }
 }
 
-pub(crate) struct OpAdd;
 
-impl Op for OpAdd {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "+"
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l + r).into(),
-            (Value::Float(l), Value::Int(r)) => (l + (r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) + r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l.into_inner() + r.into_inner()).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
-
-pub(crate) struct OpSub;
-
-impl Op for OpSub {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "-"
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l - r).into(),
-            (Value::Float(l), Value::Int(r)) => (l - (r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) - r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l.into_inner() - r.into_inner()).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
-
-pub(crate) struct OpMul;
-
-impl Op for OpMul {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "*"
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l * r).into(),
-            (Value::Float(l), Value::Int(r)) => (l * (r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) * r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l.into_inner() * r.into_inner()).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
-
-pub(crate) struct OpDiv;
-
-impl Op for OpDiv {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "/"
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l as f64 / r as f64).into(),
-            (Value::Float(l), Value::Int(r)) => (l / (r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) / r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l.into_inner() / r.into_inner()).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
-
-pub(crate) struct OpMod;
-
-impl Op for OpMod {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "%"
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l % r).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
-
-pub(crate) struct OpPow;
-
-impl Op for OpPow {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "**"
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => ((l as f64).powf(r as f64)).into(),
-            (Value::Float(l), Value::Int(r)) => ((l.into_inner()).powf(r as f64)).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64).powf(r.into_inner())).into(),
-            (Value::Float(l), Value::Float(r)) => ((l.into_inner()).powf(r.into_inner())).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
-
-pub(crate) struct OpStrCat;
-
-impl Op for OpStrCat {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "++"
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        match (left, right) {
-            (Value::Text(l), Value::Text(r)) => {
-                let mut l = l.into_owned();
-                l += r.as_ref();
-                Ok(l.into())
-            }
-            (l, r) => Err(EvalError::OpTypeMismatch(
-                self.name().to_string(),
-                vec![l.to_static(), r.to_static()],
-            )),
-        }
-    }
-}
-
-pub(crate) struct OpEq;
-
-impl Op for OpEq {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "=="
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        Ok((left == right).into())
-    }
-}
-
-pub(crate) struct OpNe;
-
-impl Op for OpNe {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "!="
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        Ok((left != right).into())
-    }
-}
-
-pub(crate) struct OpGt;
-
-impl Op for OpGt {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        ">"
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l > r).into(),
-            (Value::Float(l), Value::Int(r)) => (l > (r as f64).into()).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) > r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l > r).into(),
-            (Value::Text(l), Value::Text(r)) => (l > r).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
-
-pub(crate) struct OpGe;
-
-impl Op for OpGe {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        ">="
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l >= r).into(),
-            (Value::Float(l), Value::Int(r)) => (l >= (r as f64).into()).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) >= r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l >= r).into(),
-            (Value::Text(l), Value::Text(r)) => (l >= r).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
-
-pub(crate) struct OpLt;
-
-impl Op for OpLt {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "<"
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l < r).into(),
-            (Value::Float(l), Value::Int(r)) => (l < (r as f64).into()).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) < r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l < r).into(),
-            (Value::Text(l), Value::Text(r)) => (l < r).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
-
-pub(crate) struct OpLe;
-
-impl Op for OpLe {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
-    }
-    fn name(&self) -> &str {
-        "<="
-    }
-    fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        let res: Value = match (left, right) {
-            (Value::Int(l), Value::Int(r)) => (l <= r).into(),
-            (Value::Float(l), Value::Int(r)) => (l <= (r as f64).into()).into(),
-            (Value::Int(l), Value::Float(r)) => ((l as f64) <= r.into_inner()).into(),
-            (Value::Float(l), Value::Float(r)) => (l <= r).into(),
-            (Value::Text(l), Value::Text(r)) => (l <= r).into(),
-            (l, r) => {
-                return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
-                ));
-            }
-        };
-        Ok(res)
-    }
-}
 
 pub(crate) struct OpNegate;
 
@@ -449,231 +179,5 @@ impl Op for OpNegate {
                 vec![v.to_static()],
             )),
         }
-    }
-}
-
-pub(crate) struct OpMinus;
-
-impl Op for OpMinus {
-    fn name(&self) -> &str {
-        "--"
-    }
-    fn eval_one_non_null<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
-        match arg {
-            Value::Int(i) => Ok((-i).into()),
-            Value::Float(i) => Ok((-i).into()),
-            v => Err(EvalError::OpTypeMismatch(
-                self.name().to_string(),
-                vec![v.to_static()],
-            )),
-        }
-    }
-}
-
-pub(crate) struct OpIsNull;
-
-impl Op for OpIsNull {
-    fn name(&self) -> &str {
-        "is_null"
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, has_null: bool, _args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        Ok(has_null.into())
-    }
-    fn eval_one<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
-        Ok((arg == Value::Null).into())
-    }
-}
-
-pub(crate) struct OpNotNull;
-
-impl Op for OpNotNull {
-    fn name(&self) -> &str {
-        "not_null"
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, has_null: bool, _args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        Ok((!has_null).into())
-    }
-    fn eval_one<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
-        Ok((arg != Value::Null).into())
-    }
-}
-
-pub(crate) struct OpCoalesce;
-
-impl Op for OpCoalesce {
-    fn arity(&self) -> Option<usize> {
-        None
-    }
-    fn name(&self) -> &str {
-        "~~"
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, _has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        for arg in args {
-            if arg != Value::Null {
-                return Ok(arg);
-            }
-        }
-        Ok(Value::Null)
-    }
-    fn eval_two<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        match (left, right) {
-            (Value::Null, v) => Ok(v),
-            (l, _r) => Ok(l)
-        }
-    }
-}
-
-pub(crate) struct OpOr;
-
-impl Op for OpOr {
-    fn arity(&self) -> Option<usize> {
-        None
-    }
-    fn name(&self) -> &str {
-        "||"
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        for arg in args {
-            match arg {
-                Value::Null => {}
-                Value::Bool(true) => return Ok(Value::Bool(true)),
-                Value::Bool(false) => {}
-                v => return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![v.to_static()],
-                )),
-            }
-        }
-        if has_null {
-            Ok(Value::Null)
-        } else {
-            Ok(Value::Bool(false))
-        }
-    }
-    fn eval_two<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        match (left, right) {
-            (Value::Null, Value::Bool(true)) => Ok(true.into()),
-            (Value::Null, Value::Bool(false)) => Ok(Value::Null),
-            (Value::Bool(true), Value::Null) => Ok(true.into()),
-            (Value::Bool(false), Value::Null) => Ok(Value::Null),
-            (Value::Bool(l), Value::Bool(r)) => Ok((l || r).into()),
-            (l, r) => Err(EvalError::OpTypeMismatch(
-                self.name().to_string(),
-                vec![l.to_static(), r.to_static()],
-            ))
-        }
-    }
-}
-
-pub(crate) struct OpAnd;
-
-impl Op for OpAnd {
-    fn arity(&self) -> Option<usize> {
-        None
-    }
-    fn name(&self) -> &str {
-        "&&"
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        for arg in args {
-            match arg {
-                Value::Null => {}
-                Value::Bool(false) => return Ok(Value::Bool(false)),
-                Value::Bool(true) => {}
-                v => return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![v.to_static()],
-                )),
-            }
-        }
-        if has_null {
-            Ok(Value::Null)
-        } else {
-            Ok(Value::Bool(true))
-        }
-    }
-    fn eval_two<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
-        match (left, right) {
-            (Value::Null, Value::Bool(false)) => Ok(false.into()),
-            (Value::Null, Value::Bool(true)) => Ok(Value::Null),
-            (Value::Bool(false), Value::Null) => Ok(false.into()),
-            (Value::Bool(true), Value::Null) => Ok(Value::Null),
-            (Value::Bool(l), Value::Bool(r)) => Ok((l && r).into()),
-            (l, r) => Err(EvalError::OpTypeMismatch(
-                self.name().to_string(),
-                vec![l.to_static(), r.to_static()],
-            ))
-        }
-    }
-}
-
-pub(crate) struct OpConcat;
-
-impl Op for OpConcat {
-    fn arity(&self) -> Option<usize> {
-        None
-    }
-    fn name(&self) -> &str {
-        "concat"
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, _has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        let mut coll = vec![];
-        for v in args.into_iter() {
-            match v {
-                Value::Null => {}
-                Value::List(l) => coll.extend(l),
-                v => return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![v.to_static()],
-                )),
-            }
-        }
-        Ok(coll.into())
-    }
-}
-
-pub(crate) struct OpMerge;
-
-impl Op for OpMerge {
-    fn arity(&self) -> Option<usize> {
-        None
-    }
-    fn name(&self) -> &str {
-        "merge"
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        let mut coll = BTreeMap::new();
-        for v in args.into_iter() {
-            match v {
-                Value::Null => {}
-                Value::Dict(d) => coll.extend(d),
-                v => return Err(EvalError::OpTypeMismatch(
-                    self.name().to_string(),
-                    vec![v.to_static()],
-                )),
-            }
-        }
-        Ok(coll.into())
     }
 }

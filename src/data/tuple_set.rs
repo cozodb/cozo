@@ -1,6 +1,5 @@
-use crate::data::tuple::{OwnTuple, ReifiedTuple, Tuple, TupleError};
+use crate::data::tuple::{OwnTuple, ReifiedTuple, TupleError};
 use crate::data::value::Value;
-use cozorocks::{PinnableSlicePtr, PinnableSlicePtrShared, SlicePtr, SlicePtrShared};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::result;

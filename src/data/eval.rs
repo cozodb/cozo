@@ -29,6 +29,12 @@ pub(crate) enum EvalError {
 
     #[error("Cannot apply `{0}` to `{1:?}`")]
     OpTypeMismatch(String, Vec<StaticValue>),
+
+    #[error("Optimized before partial eval")]
+    OptimizedBeforePartialEval,
+
+    #[error("Arity mismatch for {0}, {1} arguments given ")]
+    ArityMismatch(String, usize),
 }
 
 type Result<T> = result::Result<T, EvalError>;
@@ -43,7 +49,10 @@ impl RowEvalContext for () {
     }
 }
 
-pub(crate) trait ExprEvalContext {}
+pub(crate) trait ExprEvalContext {
+    fn resolve<'a>(&'a self, key: &str) -> Option<Expr<'a>>;
+    fn resolve_table_col<'a>(&'a self, binding: &str, col: &str) -> Option<(TableId, ColId)>;
+}
 
 fn extract_optimized_bin_args(args: Vec<Expr>) -> (Expr, Expr) {
     let mut args = args.into_iter();
@@ -55,8 +64,120 @@ fn extract_optimized_u_args(args: Vec<Expr>) -> Expr {
 }
 
 impl<'a> Expr<'a> {
-    pub(crate) fn partial_eval<C: ExprEvalContext + 'a>(&'a self, ctx: &'a C) -> Result<Self> {
-        todo!()
+    pub(crate) fn partial_eval<C: ExprEvalContext + 'a>(self, ctx: &'a C) -> Result<Self> {
+        let res = match self {
+            v @ (Expr::Const(_) |
+            Expr::TableCol(_, _) |
+            Expr::TupleSetIdx(_)) => v,
+            Expr::List(l) => Expr::List(l.into_iter().map(|v| v.partial_eval(ctx)).collect::<Result<Vec<_>>>()?),
+            Expr::Dict(d) => Expr::Dict(d.into_iter().map(|(k, v)| -> Result<(String, Expr)> {
+                Ok((k, v.partial_eval(ctx)?))
+            }).collect::<Result<BTreeMap<_, _>>>()?),
+            Expr::Variable(var) => ctx.resolve(&var).ok_or(EvalError::UnresolvedVariable(var))?,
+            Expr::FieldAcc(f, arg) => {
+                let expr = match *arg {
+                    Expr::Variable(var) => {
+                        if let Some((tid, cid)) = ctx.resolve_table_col(&var, &f) {
+                            return Ok(Expr::TableCol(tid, cid));
+                        } else {
+                            ctx.resolve(&var)
+                                .ok_or(EvalError::UnresolvedVariable(var))?
+                                .partial_eval(ctx)?
+                        }
+                    }
+                    expr => expr.partial_eval(ctx)?
+                };
+                match expr {
+                    Expr::Const(Value::Null) => Expr::Const(Value::Null),
+                    Expr::Const(Value::Dict(mut d)) => {
+                        Expr::Const(d.remove(&f as &str).unwrap_or(Value::Null))
+                    }
+                    v @ (Expr::IdxAcc(_, _) |
+                    Expr::FieldAcc(_, _) |
+                    Expr::TableCol(_, _) |
+                    Expr::Apply(_, _) |
+                    Expr::ApplyAgg(_, _, _)) => {
+                        Expr::FieldAcc(f, v.into())
+                    }
+                    Expr::Dict(mut d) => {
+                        d.remove(&f as &str).unwrap_or(Expr::Const(Value::Null))
+                    }
+                    v => return Err(EvalError::FieldAccess(f, Value::from(v).to_static()))
+                }
+            }
+            Expr::IdxAcc(i, arg) => {
+                let arg = arg.partial_eval(ctx)?;
+                match arg {
+                    Expr::Const(Value::Null) => Expr::Const(Value::Null),
+                    Expr::Const(Value::List(mut l)) => {
+                        if i >= l.len() {
+                            Expr::Const(Value::Null)
+                        } else {
+                            Expr::Const(l.swap_remove(i))
+                        }
+                    }
+                    Expr::List(mut l) => {
+                        if i >= l.len() {
+                            Expr::Const(Value::Null)
+                        } else {
+                            l.swap_remove(i)
+                        }
+                    }
+                    v @ (Expr::IdxAcc(_, _) |
+                    Expr::FieldAcc(_, _) |
+                    Expr::TableCol(_, _) |
+                    Expr::Apply(_, _) |
+                    Expr::ApplyAgg(_, _, _)) => {
+                        Expr::IdxAcc(i, v.into())
+                    }
+                    v => return Err(EvalError::IndexAccess(i, Value::from(v).to_static()))
+                }
+            }
+            Expr::Apply(op, args) => {
+                let args = args.into_iter().map(|v| v.partial_eval(ctx)).collect::<Result<Vec<_>>>()?;
+                if op.has_side_effect() {
+                    Expr::Apply(op, args)
+                } else {
+                    match op.partial_eval(args.clone())? {
+                        Some(v) => v,
+                        None => Expr::Apply(op, args)
+                    }
+                }
+            }
+            Expr::ApplyAgg(op, a_args, args) => {
+                let a_args = a_args.into_iter().map(|v| v.partial_eval(ctx)).collect::<Result<Vec<_>>>()?;
+                let args = args.into_iter().map(|v| v.partial_eval(ctx)).collect::<Result<Vec<_>>>()?;
+                if op.has_side_effect() {
+                    Expr::ApplyAgg(op, a_args, args)
+                } else {
+                    match op.partial_eval(a_args.clone(), args.clone())? {
+                        Some(v) => v,
+                        None => Expr::ApplyAgg(op, a_args, args)
+                    }
+                }
+            }
+            Expr::Add(_) |
+            Expr::Sub(_) |
+            Expr::Mul(_) |
+            Expr::Div(_) |
+            Expr::Pow(_) |
+            Expr::Mod(_) |
+            Expr::StrCat(_) |
+            Expr::Eq(_) |
+            Expr::Ne(_) |
+            Expr::Gt(_) |
+            Expr::Ge(_) |
+            Expr::Lt(_) |
+            Expr::Le(_) |
+            Expr::Negate(_) |
+            Expr::Minus(_) |
+            Expr::IsNull(_) |
+            Expr::NotNull(_) |
+            Expr::Coalesce(_) |
+            Expr::Or(_) |
+            Expr::And(_) => return Err(EvalError::OptimizedBeforePartialEval)
+        };
+        Ok(res)
     }
     pub(crate) fn optimize_ops(self) -> Self {
         match self {

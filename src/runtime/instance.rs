@@ -3,20 +3,19 @@ use crate::data::tuple::{DataKind, OwnTuple, Tuple, TupleError};
 use crate::data::tuple_set::MIN_TABLE_ID_BOUND;
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
-use crate::runtime::instance::DbInstanceError::TableDoesNotExist;
 use crate::runtime::options::{
     default_options, default_read_options, default_txn_db_options, default_txn_options,
     default_write_options,
 };
 use cozorocks::{
-    destroy_db, BridgeError, DbPtr, OptionsPtrShared, PinnableSlicePtr, ReadOptionsPtr, TDbOptions,
-    TransactOptions, TransactionPtr, WriteOptionsPtr,
+    destroy_db, BridgeError, DbPtr, OptionsPtrShared,  ReadOptionsPtr, TDbOptions,
+    TransactionPtr, WriteOptionsPtr,
 };
 use lazy_static::lazy_static;
 use log::error;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, LockResult, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::{mem, result};
 
 #[derive(thiserror::Error, Debug)]
