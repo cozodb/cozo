@@ -1,4 +1,4 @@
-use crate::data::op::{AggOp, Op, UnresolvedOp};
+use crate::data::op::{AggOp, Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMinus, OpMod, OpMul, OpNe, OpNegate, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp};
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::collections::BTreeMap;
@@ -32,6 +32,27 @@ pub(crate) enum Expr<'a> {
     ApplyAgg(Arc<dyn AggOp + Send + Sync>, Vec<Expr<'a>>, Vec<Expr<'a>>),
     FieldAcc(String, Box<Expr<'a>>),
     IdxAcc(usize, Box<Expr<'a>>),
+    // optimized
+    Add(Box<(Expr<'a>, Expr<'a>)>),
+    Sub(Box<(Expr<'a>, Expr<'a>)>),
+    Mul(Box<(Expr<'a>, Expr<'a>)>),
+    Div(Box<(Expr<'a>, Expr<'a>)>),
+    Pow(Box<(Expr<'a>, Expr<'a>)>),
+    Mod(Box<(Expr<'a>, Expr<'a>)>),
+    StrCat(Box<(Expr<'a>, Expr<'a>)>),
+    Eq(Box<(Expr<'a>, Expr<'a>)>),
+    Ne(Box<(Expr<'a>, Expr<'a>)>),
+    Gt(Box<(Expr<'a>, Expr<'a>)>),
+    Ge(Box<(Expr<'a>, Expr<'a>)>),
+    Lt(Box<(Expr<'a>, Expr<'a>)>),
+    Le(Box<(Expr<'a>, Expr<'a>)>),
+    Negate(Box<Expr<'a>>),
+    Minus(Box<Expr<'a>>),
+    IsNull(Box<Expr<'a>>),
+    NotNull(Box<Expr<'a>>),
+    Coalesce(Box<(Expr<'a>, Expr<'a>)>),
+    Or(Box<(Expr<'a>, Expr<'a>)>),
+    And(Box<(Expr<'a>, Expr<'a>)>),
 }
 
 impl<'a> PartialEq for Expr<'a> {
@@ -74,6 +95,26 @@ impl<'a> Debug for Expr<'a> {
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
+            Expr::Add(args) => write!(f, "(`+ {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Sub(args) => write!(f, "(`- {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Mul(args) => write!(f, "(`* {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Div(args) => write!(f, "(`/ {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Pow(args) => write!(f, "(`** {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Mod(args) => write!(f, "(`% {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::StrCat(args) => write!(f, "(`++ {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Eq(args) => write!(f, "(`== {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Ne(args) => write!(f, "(`!= {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Gt(args) => write!(f, "(`> {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Ge(args) => write!(f, "(`>= {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Lt(args) => write!(f, "(`< {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Le(args) => write!(f, "(`<= {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Negate(arg) => write!(f, "(`! {:?})", arg.as_ref()),
+            Expr::Minus(arg) => write!(f, "(`-- {:?})", arg.as_ref()),
+            Expr::IsNull(arg) => write!(f, "(`is_null {:?})", arg.as_ref()),
+            Expr::NotNull(arg) => write!(f, "(`not_null {:?})", arg.as_ref()),
+            Expr::Coalesce(args) => write!(f, "(`~ {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::Or(args) => write!(f, "(`|| {:?} {:?})", args.as_ref().0, args.as_ref().1),
+            Expr::And(args) => write!(f, "(`&& {:?} {:?})", args.as_ref().0, args.as_ref().1),
             Expr::ApplyAgg(op, a_args, args) => write!(
                 f,
                 "[|{} {} | {}|]",
@@ -137,7 +178,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     v => {
                         return Err(ExprError::ConversionFailure(
                             Value::Dict(BTreeMap::from([(k, v)])).to_static(),
-                        ))
+                        ));
                     }
                 },
                 "Variable" => {
@@ -251,6 +292,26 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
     }
 }
 
+fn build_value_from_binop<'a>(name: &str, (left, right): (Expr<'a>, Expr<'a>)) -> Value<'a> {
+    build_tagged_value(
+        "Apply",
+        vec![
+            Value::from(name.to_string()),
+            Value::from(vec![Value::from(left), Value::from(right)]),
+        ].into(),
+    )
+}
+
+fn build_value_from_uop<'a>(name: &str, arg: Expr<'a>) -> Value<'a> {
+    build_tagged_value(
+        "Apply",
+        vec![
+            Value::from(name.to_string()),
+            Value::from(vec![Value::from(arg)]),
+        ].into(),
+    )
+}
+
 impl<'a> From<Expr<'a>> for Value<'a> {
     fn from(expr: Expr<'a>) -> Self {
         match expr {
@@ -275,7 +336,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     cid.is_key.into(),
                     Value::from(cid.id as i64),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::TupleSetIdx(sid) => build_tagged_value(
                 "TupleSetIdx",
@@ -284,15 +345,35 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(sid.t_set as i64),
                     Value::from(sid.col_idx as i64),
                 ]
-                .into(),
+                    .into(),
             ),
+            Expr::Add(arg) => build_value_from_binop(OpAdd.name(), *arg),
+            Expr::Sub(arg) => build_value_from_binop(OpSub.name(), *arg),
+            Expr::Mul(arg) => build_value_from_binop(OpMul.name(), *arg),
+            Expr::Div(arg) => build_value_from_binop(OpDiv.name(), *arg),
+            Expr::Pow(arg) => build_value_from_binop(OpPow.name(), *arg),
+            Expr::Mod(arg) => build_value_from_binop(OpMod.name(), *arg),
+            Expr::StrCat(arg) => build_value_from_binop(OpStrCat.name(), *arg),
+            Expr::Eq(arg) => build_value_from_binop(OpEq.name(), *arg),
+            Expr::Ne(arg) => build_value_from_binop(OpNe.name(), *arg),
+            Expr::Gt(arg) => build_value_from_binop(OpGt.name(), *arg),
+            Expr::Ge(arg) => build_value_from_binop(OpGe.name(), *arg),
+            Expr::Lt(arg) => build_value_from_binop(OpLt.name(), *arg),
+            Expr::Le(arg) => build_value_from_binop(OpLe.name(), *arg),
+            Expr::Negate(arg) => build_value_from_uop(OpNegate.name(), *arg),
+            Expr::Minus(arg) => build_value_from_uop(OpMinus.name(), *arg),
+            Expr::IsNull(arg) => build_value_from_uop(OpIsNull.name(), *arg),
+            Expr::NotNull(arg) => build_value_from_uop(OpNotNull.name(), *arg),
+            Expr::Coalesce(arg) => build_value_from_binop(OpCoalesce.name(), *arg),
+            Expr::Or(arg) => build_value_from_binop(OpOr.name(), *arg),
+            Expr::And(arg) => build_value_from_binop(OpAnd.name(), *arg),
             Expr::Apply(op, args) => build_tagged_value(
                 "Apply",
                 vec![
                     Value::from(op.name().to_string()),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::ApplyAgg(op, a_args, args) => build_tagged_value(
                 "ApplyAgg",
@@ -305,7 +386,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                         .into(),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::FieldAcc(f, v) => {
                 build_tagged_value("FieldAcc", vec![f.into(), Value::from(*v)].into())

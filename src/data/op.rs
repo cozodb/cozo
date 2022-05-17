@@ -73,6 +73,18 @@ pub(crate) trait Op: Send + Sync {
             self.name()
         )
     }
+    fn eval_one<'a>(&self, _arg: Value<'a>) -> Result<Value<'a>> {
+        panic!(
+            "Required method `eval_one` not implemented for `{}`",
+            self.name()
+        )
+    }
+    fn eval_two<'a>(&self, _left: Value<'a>, _right: Value<'a>) -> Result<Value<'a>> {
+        panic!(
+            "Required method `eval_two` not implemented for `{}`",
+            self.name()
+        )
+    }
     fn expr_eval(&self, ctx: &dyn ExprEvalContext, args: ()) -> () {}
 }
 
@@ -470,6 +482,9 @@ impl Op for OpIsNull {
     fn eval<'a>(&self, has_null: bool, _args: Vec<Value<'a>>) -> Result<Value<'a>> {
         Ok(has_null.into())
     }
+    fn eval_one<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
+        Ok((arg == Value::Null).into())
+    }
 }
 
 pub(crate) struct OpNotNull;
@@ -483,6 +498,9 @@ impl Op for OpNotNull {
     }
     fn eval<'a>(&self, has_null: bool, _args: Vec<Value<'a>>) -> Result<Value<'a>> {
         Ok((!has_null).into())
+    }
+    fn eval_one<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
+        Ok((arg != Value::Null).into())
     }
 }
 
@@ -505,6 +523,12 @@ impl Op for OpCoalesce {
             }
         }
         Ok(Value::Null)
+    }
+    fn eval_two<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+        match (left, right) {
+            (Value::Null, v) => Ok(v),
+            (l, _r) => Ok(l)
+        }
     }
 }
 
@@ -538,6 +562,19 @@ impl Op for OpOr {
             Ok(Value::Bool(false))
         }
     }
+    fn eval_two<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+        match (left, right) {
+            (Value::Null, Value::Bool(true)) => Ok(true.into()),
+            (Value::Null, Value::Bool(false)) => Ok(Value::Null),
+            (Value::Bool(true), Value::Null) => Ok(true.into()),
+            (Value::Bool(false), Value::Null) => Ok(Value::Null),
+            (Value::Bool(l), Value::Bool(r)) => Ok((l || r).into()),
+            (l, r) => Err(EvalError::OpTypeMismatch(
+                self.name().to_string(),
+                vec![l.to_static(), r.to_static()],
+            ))
+        }
+    }
 }
 
 pub(crate) struct OpAnd;
@@ -568,6 +605,19 @@ impl Op for OpAnd {
             Ok(Value::Null)
         } else {
             Ok(Value::Bool(true))
+        }
+    }
+    fn eval_two<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+        match (left, right) {
+            (Value::Null, Value::Bool(false)) => Ok(false.into()),
+            (Value::Null, Value::Bool(true)) => Ok(Value::Null),
+            (Value::Bool(false), Value::Null) => Ok(false.into()),
+            (Value::Bool(true), Value::Null) => Ok(Value::Null),
+            (Value::Bool(l), Value::Bool(r)) => Ok((l && r).into()),
+            (l, r) => Err(EvalError::OpTypeMismatch(
+                self.name().to_string(),
+                vec![l.to_static(), r.to_static()],
+            ))
         }
     }
 }
