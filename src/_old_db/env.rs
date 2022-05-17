@@ -1,9 +1,3 @@
-use crate::db::engine::Session;
-use crate::error::{CozoError, Result};
-use crate::relation::data::{DataKind, EMPTY_DATA};
-use crate::relation::tuple::{OwnTuple, SliceTuple, Tuple};
-use crate::relation::value::Value;
-
 /// # layouts for sector 0
 ///
 /// `[Null]`: stores information about table_ids

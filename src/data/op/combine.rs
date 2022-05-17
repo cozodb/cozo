@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
 use std::result;
 use crate::data::eval::EvalError;
+use crate::data::expr::Expr;
 use crate::data::op::Op;
-use crate::data::value::Value;
+use crate::data::typing::Typing;
+use crate::data::value::{StaticValue, Value};
 
 type Result<T> = result::Result<T, EvalError>;
 
@@ -32,6 +34,9 @@ impl Op for OpConcat {
         }
         Ok(coll.into())
     }
+    fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {
+        todo!()
+    }
 }
 
 pub(crate) struct OpMerge;
@@ -59,5 +64,8 @@ impl Op for OpMerge {
             }
         }
         Ok(coll.into())
+    }
+    fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {
+        todo!()
     }
 }

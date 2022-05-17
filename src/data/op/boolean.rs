@@ -1,7 +1,9 @@
 use std::result;
 use crate::data::eval::EvalError;
+use crate::data::expr::Expr;
 use crate::data::op::Op;
-use crate::data::value::Value;
+use crate::data::typing::Typing;
+use crate::data::value::{StaticValue, Value};
 
 type Result<T> = result::Result<T, EvalError>;
 
@@ -65,6 +67,9 @@ impl Op for OpCoalesce {
             (l, _r) => Ok(l)
         }
     }
+    fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {
+        todo!()
+    }
 }
 
 pub(crate) struct OpOr;
@@ -110,6 +115,9 @@ impl Op for OpOr {
             ))
         }
     }
+    fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {
+        todo!()
+    }
 }
 
 pub(crate) struct OpAnd;
@@ -154,5 +162,8 @@ impl Op for OpAnd {
                 vec![l.to_static(), r.to_static()],
             ))
         }
+    }
+    fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {
+        todo!()
     }
 }

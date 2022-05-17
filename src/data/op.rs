@@ -98,6 +98,7 @@ pub(crate) trait Op: Send + Sync {
         )
     }
     fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> Result<Option<Expr<'a>>> {
+        // usually those functions that needs specialized implementations are those with arity None
         if let Some(arity) = self.arity() {
             if arity != args.len() {
                 return Err(EvalError::ArityMismatch(self.name().to_string(), arity))

@@ -1,17 +1,3 @@
-use crate::db::cnf_transform::{cnf_transform, extract_tables};
-use crate::db::engine::Session;
-use crate::db::plan::AccessorMap;
-use crate::db::table::{ColId, TableId};
-use crate::error::CozoError::{InvalidArgument, LogicError};
-use crate::error::{CozoError, Result};
-use crate::relation::data::DataKind;
-use crate::relation::table::MegaTuple;
-use crate::relation::value;
-use crate::relation::value::Value;
-use std::borrow::Cow;
-use std::cmp::{max, min, Ordering};
-use std::collections::{BTreeMap, BTreeSet};
-
 pub fn extract_table_ref<'a>(
     tuples: &'a MegaTuple,
     tid: &TableId,
