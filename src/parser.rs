@@ -6,6 +6,9 @@ use pest_derive::Parser;
 #[grammar = "grammar.pest"]
 pub(crate) struct CozoParser;
 
+pub(crate) type Pair<'a> = pest::iterators::Pair<'a, Rule>;
+pub(crate) type Pairs<'a> = pest::iterators::Pairs<'a, Rule>;
+
 #[cfg(test)]
 mod tests {
     use super::*;

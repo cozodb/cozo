@@ -38,7 +38,7 @@ enum MutationKind {
 impl<'a> Session<'a> {
     pub fn run_mutation(
         &mut self,
-        pair: Pair<Rule>,
+        pair: Pair,
         params: &BTreeMap<String, Value>,
     ) -> Result<()> {
         let mut pairs = pair.into_inner();

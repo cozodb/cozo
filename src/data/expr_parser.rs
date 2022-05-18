@@ -6,9 +6,8 @@ use crate::data::op::{
 use crate::data::value::Value;
 use crate::parser::number::parse_int;
 use crate::parser::text_identifier::parse_string;
-use crate::parser::Rule;
+use crate::parser::{Pair, Rule};
 use lazy_static::lazy_static;
-use pest::iterators::Pair;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -32,10 +31,10 @@ pub(crate) enum ExprParseError {
 
 type Result<T> = result::Result<T, ExprParseError>;
 
-impl<'a> TryFrom<Pair<'a, Rule>> for Expr<'a> {
+impl<'a> TryFrom<Pair<'a>> for Expr<'a> {
     type Error = ExprParseError;
 
-    fn try_from(pair: Pair<'a, Rule>) -> Result<Self> {
+    fn try_from(pair: Pair<'a>) -> Result<Self> {
         PREC_CLIMBER.climb(pair.into_inner(), build_expr_primary, build_expr_infix)
     }
 }
@@ -63,7 +62,7 @@ lazy_static! {
     };
 }
 
-fn build_if_expr(pair: Pair<Rule>) -> Result<Expr> {
+fn build_if_expr(pair: Pair) -> Result<Expr> {
     let mut if_parts = vec![];
     let mut else_part = Expr::Const(Value::Null);
     for pair in pair.into_inner() {
@@ -73,13 +72,52 @@ fn build_if_expr(pair: Pair<Rule>) -> Result<Expr> {
             if_parts.push(build_if_clause(pair)?)
         }
     }
-    Ok(if_parts.into_iter().rev().fold(else_part, |accum, (cond, expr)| {
-        Expr::IfExpr((cond, expr, accum).into())
-    }))
-
+    Ok(if_parts
+        .into_iter()
+        .rev()
+        .fold(else_part, |accum, (cond, expr)| {
+            Expr::IfExpr((cond, expr, accum).into())
+        }))
 }
 
-fn build_if_clause(pair: Pair<Rule>) -> Result<(Expr, Expr)> {
+fn build_cond_expr(pair: Pair) -> Result<Expr> {
+    let mut res = Expr::Const(Value::Null);
+    for pair in pair.into_inner().rev() {
+        let (cond, expr) = build_switch_pattern(pair)?;
+        res = Expr::IfExpr((cond, expr, res).into());
+    }
+    Ok(res)
+}
+
+fn build_switch_expr(pair: Pair) -> Result<Expr> {
+    let mut pairs = pair.into_inner();
+    let expr = pairs.next().unwrap();
+    let expr = Expr::try_from(expr)?;
+    let mut collected = vec![(expr, Expr::Const(Value::Null))];
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::switch_pattern => {
+                collected.push(build_switch_pattern(pair)?);
+            }
+            Rule::default_pattern => {
+                collected[0].1 = Expr::try_from(pair.into_inner().next().unwrap())?;
+                break;
+            }
+            _ => unreachable!(),
+        }
+    }
+    Ok(Expr::SwitchExpr(collected))
+}
+
+fn build_switch_pattern(pair: Pair) -> Result<(Expr, Expr)> {
+    let mut pairs = pair.into_inner();
+    Ok((
+        Expr::try_from(pairs.next().unwrap())?,
+        Expr::try_from(pairs.next().unwrap())?,
+    ))
+}
+
+fn build_if_clause(pair: Pair) -> Result<(Expr, Expr)> {
     let mut pairs = pair.into_inner();
     let cond = pairs.next().unwrap();
     let cond = Expr::try_from(cond)?;
@@ -88,7 +126,7 @@ fn build_if_clause(pair: Pair<Rule>) -> Result<(Expr, Expr)> {
     Ok((cond, expr))
 }
 
-fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
+fn build_expr_primary(pair: Pair) -> Result<Expr> {
     match pair.as_rule() {
         Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
         Rule::term => {
@@ -129,6 +167,8 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
                 Rule::negate => Arc::new(OpNot),
                 Rule::minus => Arc::new(OpMinus),
                 Rule::if_expr => return build_if_expr(p),
+                Rule::cond_expr => return build_cond_expr(p),
+                Rule::switch_expr => return build_switch_expr(p),
                 _ => unreachable!(),
             };
             let term = build_expr_primary(inner.next().unwrap())?;
@@ -245,7 +285,7 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
 
 fn build_expr_infix<'a>(
     lhs: Result<Expr<'a>>,
-    op: Pair<Rule>,
+    op: Pair,
     rhs: Result<Expr<'a>>,
 ) -> Result<Expr<'a>> {
     let lhs = lhs?;
@@ -365,28 +405,26 @@ pub(crate) mod tests {
     #[test]
     fn conditionals() -> Result<()> {
         let s = r#"if a { b + c * d } else if (x) { y } else {z}"#;
-        dbg!(str2expr(s));
+        dbg!(str2expr(s))?;
         let s = r#"if a { b + c * d }"#;
-        dbg!(str2expr(s));
+        dbg!(str2expr(s))?;
 
         let s = r#"(if a { b + c * d } else if (x) { y } else {z})+1"#;
-        dbg!(str2expr(s));
+        dbg!(str2expr(s))?;
 
-        // let s = r#"cond {
-        //     a > 1 => 1,
-        //     a == 1 => 2,
-        //     true => 3
-        // }"#;
-        // let pair = CozoParser::parse(Rule::expr, s).unwrap();
-        // dbg!(pair);
-        //
-        // let s = r#"switch(a) {
-        //     1 => 1,
-        //     2 => 2,
-        //     .. => 3
-        // }"#;
-        // let pair = CozoParser::parse(Rule::expr, s).unwrap();
-        // dbg!(pair);
+        let s = r#"cond {
+            a > 1 => 1,
+            a == 1 => 2,
+            true => 3
+        }"#;
+        dbg!(str2expr(s))?;
+
+        let s = r#"switch(a) {
+            1 => 1,
+            2 => 2,
+            .. => 3
+        }"#;
+        dbg!(str2expr(s))?;
 
         Ok(())
     }

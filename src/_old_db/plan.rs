@@ -844,7 +844,7 @@ impl<'a> Session<'a> {
         };
         Ok(plan)
     }
-    pub fn query_to_plan(&self, pair: Pair<Rule>) -> Result<ExecPlan> {
+    pub fn query_to_plan(&self, pair: Pair) -> Result<ExecPlan> {
         let mut pairs = pair.into_inner();
         let from_data = self.parse_from_pattern(pairs.next().unwrap())?;
         let mut nxt = pairs.next().unwrap();

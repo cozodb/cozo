@@ -24,7 +24,7 @@ impl<'s> Session<'s> {
         tuple.push_int(depth_code);
         tuple
     }
-    fn parse_cols(&self, pair: Pair<Rule>) -> Result<(Typing, Typing)> {
+    fn parse_cols(&self, pair: Pair) -> Result<(Typing, Typing)> {
         let col_res = pair
             .into_inner()
             .map(|p| {
@@ -69,7 +69,7 @@ impl<'s> Session<'s> {
     #[allow(clippy::type_complexity)]
     fn parse_definition(
         &self,
-        pair: Pair<Rule>,
+        pair: Pair,
         in_root: bool,
     ) -> Result<(bool, (String, OwnTuple, Vec<OwnTuple>))> {
         Ok(match pair.as_rule() {
@@ -83,7 +83,7 @@ impl<'s> Session<'s> {
     }
     fn parse_assoc_def(
         &self,
-        mut pairs: Pairs<Rule>,
+        mut pairs: Pairs,
         in_root: bool,
     ) -> Result<(String, OwnTuple, Vec<OwnTuple>)> {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
@@ -137,7 +137,7 @@ impl<'s> Session<'s> {
     }
     fn parse_type_def(
         &self,
-        mut pairs: Pairs<Rule>,
+        mut pairs: Pairs,
         _in_root: bool,
     ) -> Result<(String, OwnTuple, Vec<OwnTuple>)> {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
@@ -149,7 +149,7 @@ impl<'s> Session<'s> {
 
     fn parse_edge_def(
         &self,
-        mut pairs: Pairs<Rule>,
+        mut pairs: Pairs,
         in_root: bool,
     ) -> Result<(String, OwnTuple, Vec<OwnTuple>)> {
         let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
@@ -269,7 +269,7 @@ impl<'s> Session<'s> {
     }
     fn parse_node_def(
         &self,
-        mut pairs: Pairs<Rule>,
+        mut pairs: Pairs,
         _in_root: bool,
     ) -> Result<(String, OwnTuple, Vec<OwnTuple>)> {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
@@ -282,7 +282,7 @@ impl<'s> Session<'s> {
         tuple.push_null(); // TODO default values for cols
         Ok((name, tuple, vec![]))
     }
-    pub fn run_definition(&mut self, pair: Pair<Rule>) -> Result<()> {
+    pub fn run_definition(&mut self, pair: Pair) -> Result<()> {
         let in_root = match pair.as_rule() {
             Rule::global_def => true,
             Rule::local_def => false,

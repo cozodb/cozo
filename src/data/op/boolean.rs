@@ -76,7 +76,10 @@ impl Op for OpOr {
     }
 }
 
-pub(crate) fn partial_eval_or<'a, T: ExprEvalContext + 'a>(ctx: &'a T, args: Vec<Expr<'a>>) -> Result<Expr<'a>> {
+pub(crate) fn partial_eval_or<'a, T: ExprEvalContext + 'a>(
+    ctx: &'a T,
+    args: Vec<Expr<'a>>,
+) -> Result<Expr<'a>> {
     let mut collected = vec![];
     let mut has_null = false;
     for arg in args {
@@ -100,7 +103,7 @@ pub(crate) fn partial_eval_or<'a, T: ExprEvalContext + 'a>(ctx: &'a T, args: Vec
                 }
                 collected.extend(args);
             }
-            expr => collected.push(expr)
+            expr => collected.push(expr),
         }
     }
     if has_null {
@@ -109,12 +112,15 @@ pub(crate) fn partial_eval_or<'a, T: ExprEvalContext + 'a>(ctx: &'a T, args: Vec
     Ok(match collected.len() {
         0 => Expr::Const(Value::Bool(false)),
         1 => collected.pop().unwrap(),
-        _ => Expr::Apply(Arc::new(OpOr), collected)
+        _ => Expr::Apply(Arc::new(OpOr), collected),
     })
 }
 
-
-pub(crate) fn row_eval_or<'a, T: RowEvalContext + 'a>(ctx: &'a T, left: &'a Expr<'a>, right: &'a Expr<'a>) -> Result<Value<'a>> {
+pub(crate) fn row_eval_or<'a, T: RowEvalContext + 'a>(
+    ctx: &'a T,
+    left: &'a Expr<'a>,
+    right: &'a Expr<'a>,
+) -> Result<Value<'a>> {
     let left = left.row_eval(ctx)?;
     if left == Value::Bool(true) {
         return Ok(Value::Bool(true));
@@ -166,7 +172,10 @@ impl Op for OpAnd {
     }
 }
 
-pub(crate) fn partial_eval_and<'a, T: ExprEvalContext + 'a>(ctx: &'a T, args: Vec<Expr<'a>>) -> Result<Expr<'a>> {
+pub(crate) fn partial_eval_and<'a, T: ExprEvalContext + 'a>(
+    ctx: &'a T,
+    args: Vec<Expr<'a>>,
+) -> Result<Expr<'a>> {
     let mut collected = vec![];
     let mut has_null = false;
     for arg in args {
@@ -190,7 +199,7 @@ pub(crate) fn partial_eval_and<'a, T: ExprEvalContext + 'a>(ctx: &'a T, args: Ve
                 }
                 collected.extend(args);
             }
-            expr => collected.push(expr)
+            expr => collected.push(expr),
         }
     }
     if has_null {
@@ -199,11 +208,15 @@ pub(crate) fn partial_eval_and<'a, T: ExprEvalContext + 'a>(ctx: &'a T, args: Ve
     Ok(match collected.len() {
         0 => Expr::Const(Value::Bool(true)),
         1 => collected.pop().unwrap(),
-        _ => Expr::Apply(Arc::new(OpAnd), collected)
+        _ => Expr::Apply(Arc::new(OpAnd), collected),
     })
 }
 
-pub(crate) fn row_eval_and<'a, T: RowEvalContext + 'a>(ctx: &'a T, left: &'a Expr<'a>, right: &'a Expr<'a>) -> Result<Value<'a>> {
+pub(crate) fn row_eval_and<'a, T: RowEvalContext + 'a>(
+    ctx: &'a T,
+    left: &'a Expr<'a>,
+    right: &'a Expr<'a>,
+) -> Result<Value<'a>> {
     let left = left.row_eval(ctx)?;
     if left == Value::Bool(false) {
         return Ok(Value::Bool(false));
@@ -220,7 +233,6 @@ pub(crate) fn row_eval_and<'a, T: RowEvalContext + 'a>(ctx: &'a T, left: &'a Exp
         )),
     }
 }
-
 
 pub(crate) struct OpNot;
 

@@ -1,6 +1,12 @@
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::expr_parser::ExprParseError;
-use crate::data::op::{Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMerge, OpMinus, OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, partial_eval_and, partial_eval_coalesce, partial_eval_if_expr, partial_eval_or, row_eval_and, row_eval_coalesce, row_eval_if_expr, row_eval_or};
+use crate::data::op::{
+    partial_eval_and, partial_eval_coalesce, partial_eval_if_expr, partial_eval_or,
+    partial_eval_switch_expr, row_eval_and, row_eval_coalesce, row_eval_if_expr, row_eval_or,
+    row_eval_switch_expr, Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt,
+    OpIsNull, OpLe, OpLt, OpMerge, OpMinus, OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow,
+    OpStrCat, OpSub,
+};
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::borrow::Cow;
@@ -82,7 +88,7 @@ impl<'a> Expr<'a> {
     pub(crate) fn interpret_eval<C: ExprEvalContext + 'a>(self, ctx: &'a C) -> Result<Value> {
         match self.partial_eval(ctx)? {
             Expr::Const(v) => Ok(v),
-            v => Err(EvalError::IncompleteEvaluation(format!("{:?}", v)))
+            v => Err(EvalError::IncompleteEvaluation(format!("{:?}", v))),
         }
     }
 
@@ -174,18 +180,19 @@ impl<'a> Expr<'a> {
                                     has_null = true;
                                 }
                                 v
-                            }).collect::<Result<Vec<_>>>()?;
+                            })
+                            .collect::<Result<Vec<_>>>()?;
                         if has_unevaluated {
                             Expr::Apply(op, args)
                         } else {
-                            let args = args.into_iter().map(|v| {
-                                match v {
+                            let args = args
+                                .into_iter()
+                                .map(|v| match v {
                                     Expr::Const(v) => v,
-                                    _ => unreachable!()
-                                }
-                            }).collect();
-                            op.eval(has_null, args)
-                                .map(Expr::Const)?
+                                    _ => unreachable!(),
+                                })
+                                .collect();
+                            op.eval(has_null, args).map(Expr::Const)?
                         }
                     }
                 }
@@ -205,6 +212,7 @@ impl<'a> Expr<'a> {
                 let (cond, if_part, else_part) = *args;
                 partial_eval_if_expr(ctx, cond, if_part, else_part)?
             }
+            Expr::SwitchExpr(args) => partial_eval_switch_expr(ctx, args)?,
             Expr::ApplyZero(_)
             | Expr::ApplyOne(_, _)
             | Expr::ApplyTwo(_, _)
@@ -254,9 +262,7 @@ impl<'a> Expr<'a> {
                 name if name == OpGe.name() => Expr::Ge(extract_optimized_bin_args(args).into()),
                 name if name == OpLt.name() => Expr::Lt(extract_optimized_bin_args(args).into()),
                 name if name == OpLe.name() => Expr::Le(extract_optimized_bin_args(args).into()),
-                name if name == OpNot.name() => {
-                    Expr::Not(extract_optimized_u_args(args).into())
-                }
+                name if name == OpNot.name() => Expr::Not(extract_optimized_u_args(args).into()),
                 name if name == OpMinus.name() => {
                     Expr::Minus(extract_optimized_u_args(args).into())
                 }
@@ -290,19 +296,17 @@ impl<'a> Expr<'a> {
                     }
                     arg
                 }
-                _ => {
-                    match op.arity() {
-                        Some(0) => Expr::ApplyZero(op),
-                        Some(1) => Expr::ApplyOne(op, args.into_iter().next().unwrap().into()),
-                        Some(2) => {
-                            let mut args = args.into_iter();
-                            let left = args.next().unwrap();
-                            let right = args.next().unwrap();
-                            Expr::ApplyTwo(op, (left, right).into())
-                        }
-                        _ => Expr::Apply(op, args.into_iter().map(|v| v.optimize_ops()).collect())
+                _ => match op.arity() {
+                    Some(0) => Expr::ApplyZero(op),
+                    Some(1) => Expr::ApplyOne(op, args.into_iter().next().unwrap().into()),
+                    Some(2) => {
+                        let mut args = args.into_iter();
+                        let left = args.next().unwrap();
+                        let right = args.next().unwrap();
+                        Expr::ApplyTwo(op, (left, right).into())
                     }
-                }
+                    _ => Expr::Apply(op, args.into_iter().map(|v| v.optimize_ops()).collect()),
+                },
             },
             Expr::ApplyAgg(op, a_args, args) => Expr::ApplyAgg(
                 op,
@@ -313,8 +317,20 @@ impl<'a> Expr<'a> {
             Expr::IdxAcc(i, arg) => Expr::IdxAcc(i, arg.optimize_ops().into()),
             Expr::IfExpr(args) => {
                 let (cond, if_part, else_part) = *args;
-                Expr::IfExpr((cond.optimize_ops(), if_part.optimize_ops(), else_part.optimize_ops()).into())
-            },
+                Expr::IfExpr(
+                    (
+                        cond.optimize_ops(),
+                        if_part.optimize_ops(),
+                        else_part.optimize_ops(),
+                    )
+                        .into(),
+                )
+            }
+            Expr::SwitchExpr(args) => Expr::SwitchExpr(
+                args.into_iter()
+                    .map(|(e1, e2)| (e1.optimize_ops(), e2.optimize_ops()))
+                    .collect(),
+            ),
             v @ (Expr::Const(_)
             | Expr::Variable(_)
             | Expr::TableCol(_, _)
@@ -434,6 +450,7 @@ impl<'a> Expr<'a> {
                 let (cond, if_part, else_part) = args.as_ref();
                 row_eval_if_expr(ctx, cond, if_part, else_part)?
             }
+            Expr::SwitchExpr(args) => row_eval_switch_expr(ctx, args)?,
             // optimized implementations, not really necessary
             Expr::Add(args) => OpAdd.eval_two_non_null(
                 match args.as_ref().0.row_eval(ctx)? {
@@ -565,12 +582,10 @@ impl<'a> Expr<'a> {
                     v => v,
                 },
             )?,
-            Expr::Not(arg) => {
-                OpNot.eval_one_non_null(match arg.as_ref().row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                })?
-            }
+            Expr::Not(arg) => OpNot.eval_one_non_null(match arg.as_ref().row_eval(ctx)? {
+                v @ Value::Null => return Ok(v),
+                v => v,
+            })?,
             Expr::Minus(arg) => OpMinus.eval_one_non_null(match arg.as_ref().row_eval(ctx)? {
                 v @ Value::Null => return Ok(v),
                 v => v,
@@ -578,21 +593,9 @@ impl<'a> Expr<'a> {
             Expr::IsNull(arg) => OpIsNull.eval_one(arg.as_ref().row_eval(ctx)?)?,
             Expr::NotNull(arg) => OpNotNull.eval_one(arg.as_ref().row_eval(ctx)?)?,
             // These implementations are special in that they short-circuit
-            Expr::Coalesce(args) => row_eval_coalesce(
-                ctx,
-                &args.as_ref().0,
-                &args.as_ref().1,
-            )?,
-            Expr::Or(args) => row_eval_or(
-                ctx,
-                &args.as_ref().0,
-                &args.as_ref().1,
-            )?,
-            Expr::And(args) => row_eval_and(
-                ctx,
-                &args.as_ref().0,
-                &args.as_ref().1,
-            )?,
+            Expr::Coalesce(args) => row_eval_coalesce(ctx, &args.as_ref().0, &args.as_ref().1)?,
+            Expr::Or(args) => row_eval_or(ctx, &args.as_ref().0, &args.as_ref().1)?,
+            Expr::And(args) => row_eval_and(ctx, &args.as_ref().0, &args.as_ref().1)?,
         };
         Ok(res)
     }

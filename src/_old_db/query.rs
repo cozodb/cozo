@@ -43,7 +43,7 @@ pub struct EdgeOrNodeEl {
 }
 
 impl<'a> Session<'a> {
-    pub fn parse_from_pattern(&self, pair: Pair<Rule>) -> Result<Vec<FromEl>> {
+    pub fn parse_from_pattern(&self, pair: Pair) -> Result<Vec<FromEl>> {
         let res: Result<Vec<_>> = pair
             .into_inner()
             .map(|p| match p.as_rule() {
@@ -55,7 +55,7 @@ impl<'a> Session<'a> {
         res
     }
 
-    fn parse_simple_from_pattern(&self, pair: Pair<Rule>) -> Result<FromEl> {
+    fn parse_simple_from_pattern(&self, pair: Pair) -> Result<FromEl> {
         let mut pairs = pair.into_inner();
         let name = pairs.next().unwrap().as_str();
         if name.starts_with('_') {
@@ -81,7 +81,7 @@ impl<'a> Session<'a> {
         Ok(ret)
     }
 
-    fn parse_node_edge_pattern(&self, pair: Pair<Rule>) -> Result<FromEl> {
+    fn parse_node_edge_pattern(&self, pair: Pair) -> Result<FromEl> {
         let res: Result<Vec<_>> = pair
             .into_inner()
             .map(|p| match p.as_rule() {
@@ -140,7 +140,7 @@ impl<'a> Session<'a> {
         Ok(FromEl::Chain(res))
     }
 
-    fn parse_node_pattern(&self, pair: Pair<Rule>) -> Result<EdgeOrNodeEl> {
+    fn parse_node_pattern(&self, pair: Pair) -> Result<EdgeOrNodeEl> {
         let (table, binding, info, associates) = self.parse_node_or_edge(pair)?;
         if info.kind != DataKind::Node {
             return Err(CozoError::LogicError(format!("{} is not a node", table)));
@@ -156,7 +156,7 @@ impl<'a> Session<'a> {
         })
     }
 
-    fn parse_edge_pattern(&self, pair: Pair<Rule>, is_fwd: bool) -> Result<EdgeOrNodeEl> {
+    fn parse_edge_pattern(&self, pair: Pair, is_fwd: bool) -> Result<EdgeOrNodeEl> {
         let (table, binding, info, associates) = self.parse_node_or_edge(pair)?;
         if info.kind != DataKind::Edge {
             return Err(CozoError::LogicError(format!("{} is not an edge", table)));
@@ -178,7 +178,7 @@ impl<'a> Session<'a> {
 
     fn parse_node_or_edge(
         &self,
-        pair: Pair<Rule>,
+        pair: Pair,
     ) -> Result<(String, Option<String>, TableInfo, Vec<(String, TableInfo)>)> {
         let name;
 
@@ -209,7 +209,7 @@ impl<'a> Session<'a> {
         ))
     }
 
-    pub fn parse_where_pattern(&self, pair: Pair<Rule>) -> Result<Value> {
+    pub fn parse_where_pattern(&self, pair: Pair) -> Result<Value> {
         let conditions = pair
             .into_inner()
             .map(Value::from_pair)
@@ -217,7 +217,7 @@ impl<'a> Session<'a> {
         Ok(Value::Apply(value::OP_AND.into(), conditions).to_static())
     }
 
-    pub fn parse_select_pattern(&self, pair: Pair<Rule>) -> Result<Selection> {
+    pub fn parse_select_pattern(&self, pair: Pair) -> Result<Selection> {
         let mut pairs = pair.into_inner();
         let mut nxt = pairs.next().unwrap();
         let scoped = match nxt.as_rule() {

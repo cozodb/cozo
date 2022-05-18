@@ -1,7 +1,6 @@
 use crate::data::value::{StaticValue, Value};
 use crate::parser::text_identifier::build_name_in_def;
-use crate::parser::{CozoParser, Rule};
-use pest::iterators::Pair;
+use crate::parser::{CozoParser, Pair, Rule};
 use pest::Parser;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -212,10 +211,10 @@ impl TryFrom<&str> for Typing {
     }
 }
 
-impl TryFrom<Pair<'_, Rule>> for Typing {
+impl TryFrom<Pair<'_>> for Typing {
     type Error = TypingError;
 
-    fn try_from(pair: Pair<Rule>) -> Result<Self> {
+    fn try_from(pair: Pair) -> Result<Self> {
         Ok(match pair.as_rule() {
             Rule::simple_type => match pair.as_str() {
                 "Any" => Typing::Any,

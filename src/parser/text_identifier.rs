@@ -1,6 +1,5 @@
 use crate::parser::number::parse_int;
-use crate::parser::Rule;
-use pest::iterators::Pair;
+use crate::parser::{Pair, Rule};
 use std::result;
 
 #[derive(thiserror::Error, Debug)]
@@ -18,7 +17,7 @@ pub(crate) enum TextParseError {
 type Result<T> = result::Result<T, TextParseError>;
 
 #[inline]
-fn parse_raw_string(pair: Pair<Rule>) -> Result<String> {
+fn parse_raw_string(pair: Pair) -> Result<String> {
     Ok(pair
         .into_inner()
         .into_iter()
@@ -29,7 +28,7 @@ fn parse_raw_string(pair: Pair<Rule>) -> Result<String> {
 }
 
 #[inline]
-fn parse_quoted_string(pair: Pair<Rule>) -> Result<String> {
+fn parse_quoted_string(pair: Pair) -> Result<String> {
     let pairs = pair.into_inner().next().unwrap().into_inner();
     let mut ret = String::with_capacity(pairs.as_str().len());
     for pair in pairs {
@@ -50,7 +49,7 @@ fn parse_quoted_string(pair: Pair<Rule>) -> Result<String> {
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {
-                return Err(TextParseError::InvalidEscapeSequence(s.to_string()))
+                return Err(TextParseError::InvalidEscapeSequence(s.to_string()));
             }
             s => ret.push_str(s),
         }
@@ -59,7 +58,7 @@ fn parse_quoted_string(pair: Pair<Rule>) -> Result<String> {
 }
 
 #[inline]
-fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
+fn parse_s_quoted_string(pair: Pair) -> Result<String> {
     let pairs = pair.into_inner().next().unwrap().into_inner();
     let mut ret = String::with_capacity(pairs.as_str().len());
     for pair in pairs {
@@ -80,7 +79,7 @@ fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {
-                return Err(TextParseError::InvalidEscapeSequence(s.to_string()))
+                return Err(TextParseError::InvalidEscapeSequence(s.to_string()));
             }
             s => ret.push_str(s),
         }
@@ -89,7 +88,7 @@ fn parse_s_quoted_string(pair: Pair<Rule>) -> Result<String> {
 }
 
 #[inline]
-pub(crate) fn parse_string(pair: Pair<Rule>) -> Result<String> {
+pub(crate) fn parse_string(pair: Pair) -> Result<String> {
     match pair.as_rule() {
         Rule::quoted_string => Ok(parse_quoted_string(pair)?),
         Rule::s_quoted_string => Ok(parse_s_quoted_string(pair)?),
@@ -99,11 +98,11 @@ pub(crate) fn parse_string(pair: Pair<Rule>) -> Result<String> {
     }
 }
 
-pub(crate) fn parse_ident(pair: Pair<Rule>) -> String {
+pub(crate) fn parse_ident(pair: Pair) -> String {
     pair.as_str().to_string()
 }
 
-pub(crate) fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Result<String> {
+pub(crate) fn build_name_in_def(pair: Pair, forbid_underscore: bool) -> Result<String> {
     let inner = pair.into_inner().next().unwrap();
     let name = match inner.as_rule() {
         Rule::ident => parse_ident(inner),
@@ -117,7 +116,7 @@ pub(crate) fn build_name_in_def(pair: Pair<Rule>, forbid_underscore: bool) -> Re
     }
 }
 
-pub(crate) fn parse_col_name(pair: Pair<Rule>) -> Result<(String, bool)> {
+pub(crate) fn parse_col_name(pair: Pair) -> Result<(String, bool)> {
     let mut pairs = pair.into_inner();
     let mut is_key = false;
     let mut nxt_pair = pairs.next().unwrap();
