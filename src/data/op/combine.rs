@@ -1,4 +1,4 @@
-use crate::data::eval::EvalError;
+use crate::data::eval::{EvalError, ExprEvalContext};
 use crate::data::expr::Expr;
 use crate::data::op::Op;
 use crate::data::typing::Typing;
@@ -36,9 +36,6 @@ impl Op for OpConcat {
         }
         Ok(coll.into())
     }
-    fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {
-        todo!()
-    }
 }
 
 pub(crate) struct OpMerge;
@@ -53,7 +50,7 @@ impl Op for OpMerge {
     fn non_null_args(&self) -> bool {
         false
     }
-    fn eval<'a>(&self, has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+    fn eval<'a>(&self, _has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
         let mut coll = BTreeMap::new();
         for v in args.into_iter() {
             match v {
@@ -68,8 +65,5 @@ impl Op for OpMerge {
             }
         }
         Ok(coll.into())
-    }
-    fn partial_eval<'a>(&self, args: Vec<Expr<'a>>) -> crate::data::op::Result<Option<Expr<'a>>> {
-        todo!()
     }
 }

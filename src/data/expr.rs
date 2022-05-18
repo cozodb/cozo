@@ -1,6 +1,6 @@
 use crate::data::op::{
     AggOp, Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMinus,
-    OpMod, OpMul, OpNe, OpNegate, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
+    OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
 };
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
@@ -35,6 +35,7 @@ pub(crate) enum Expr<'a> {
     ApplyAgg(Arc<dyn AggOp + Send + Sync>, Vec<Expr<'a>>, Vec<Expr<'a>>),
     FieldAcc(String, Box<Expr<'a>>),
     IdxAcc(usize, Box<Expr<'a>>),
+    IfExpr(Box<(Expr<'a>, Expr<'a>, Expr<'a>)>),
     // optimized
     ApplyZero(Arc<dyn Op + Send + Sync>),
     ApplyOne(Arc<dyn Op + Send + Sync>, Box<Expr<'a>>),
@@ -52,7 +53,7 @@ pub(crate) enum Expr<'a> {
     Ge(Box<(Expr<'a>, Expr<'a>)>),
     Lt(Box<(Expr<'a>, Expr<'a>)>),
     Le(Box<(Expr<'a>, Expr<'a>)>),
-    Negate(Box<Expr<'a>>),
+    Not(Box<Expr<'a>>),
     Minus(Box<Expr<'a>>),
     IsNull(Box<Expr<'a>>),
     NotNull(Box<Expr<'a>>),
@@ -117,7 +118,7 @@ impl<'a> Debug for Expr<'a> {
             Expr::Ge(args) => write!(f, "(`>= {:?} {:?})", args.as_ref().0, args.as_ref().1),
             Expr::Lt(args) => write!(f, "(`< {:?} {:?})", args.as_ref().0, args.as_ref().1),
             Expr::Le(args) => write!(f, "(`<= {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Negate(arg) => write!(f, "(`! {:?})", arg.as_ref()),
+            Expr::Not(arg) => write!(f, "(`! {:?})", arg.as_ref()),
             Expr::Minus(arg) => write!(f, "(`-- {:?})", arg.as_ref()),
             Expr::IsNull(arg) => write!(f, "(`is_null {:?})", arg.as_ref()),
             Expr::NotNull(arg) => write!(f, "(`not_null {:?})", arg.as_ref()),
@@ -138,6 +139,10 @@ impl<'a> Debug for Expr<'a> {
                     .collect::<Vec<_>>()
                     .join(" ")
             ),
+            Expr::IfExpr(args) => {
+                let args = args.as_ref();
+                write!(f, "(if {:?} {:?} {:?})", args.0, args.1, args.2)
+            }
             Expr::FieldAcc(field, arg) => write!(f, "(.{} {:?})", field, arg),
             Expr::IdxAcc(i, arg) => write!(f, "(.{} {:?})", i, arg),
         }
@@ -379,7 +384,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
             Expr::Ge(arg) => build_value_from_binop(OpGe.name(), *arg),
             Expr::Lt(arg) => build_value_from_binop(OpLt.name(), *arg),
             Expr::Le(arg) => build_value_from_binop(OpLe.name(), *arg),
-            Expr::Negate(arg) => build_value_from_uop(OpNegate.name(), *arg),
+            Expr::Not(arg) => build_value_from_uop(OpNot.name(), *arg),
             Expr::Minus(arg) => build_value_from_uop(OpMinus.name(), *arg),
             Expr::IsNull(arg) => build_value_from_uop(OpIsNull.name(), *arg),
             Expr::NotNull(arg) => build_value_from_uop(OpNotNull.name(), *arg),
@@ -394,6 +399,9 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                 ]
                     .into(),
             ),
+            Expr::IfExpr(_) => {
+                todo!()
+            },
             Expr::ApplyAgg(op, a_args, args) => build_tagged_value(
                 "ApplyAgg",
                 vec![

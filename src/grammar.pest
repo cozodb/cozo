@@ -103,7 +103,7 @@ op_ge = { ">=" }
 op_le = { "<=" }
 op_pow = { "^" }
 
-unary = { (unary_op ~ unary) | term }
+unary = { cond_expr | switch_expr | if_expr | (unary_op ~ unary) | term }
 unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }
@@ -116,6 +116,16 @@ argument = _{(kw_arg | pos_arg)}
 kw_arg = {ident ~ "=" ~ expr}
 pos_arg = { expr }
 grouping = { "(" ~ expr ~ ")" }
+
+if_expr = { if_clause ~ ("else" ~ if_clause)* ~ else_clause? }
+if_clause = { "if" ~ expr ~ "{" ~ expr ~ "}"}
+else_clause = { "else" ~ "{" ~ expr ~ "}" }
+
+switch_expr = { "switch" ~ expr ~ "{" ~ switch_pattern ~ ("," ~ switch_pattern)* ~ ("," ~ default_pattern)? ~ ","? ~ "}" }
+switch_pattern = { expr ~ "=>" ~ expr }
+default_pattern = { ".." ~ "=>" ~ expr }
+
+cond_expr = { "cond" ~ "{" ~ switch_pattern ~ ("," ~ switch_pattern)* ~ ","? ~ "}" }
 
 list = { "[" ~ (list_el ~ ",")* ~ list_el? ~ "]" }
 list_el = _{spreading | expr}

@@ -1,7 +1,7 @@
 use crate::data::expr::Expr;
 use crate::data::op::{
     Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt, OpLe, OpLt, OpMerge, OpMinus,
-    OpMod, OpMul, OpNe, OpNegate, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
+    OpMod, OpMul, OpNe, OpNot, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
 };
 use crate::data::value::Value;
 use crate::parser::number::parse_int;
@@ -63,6 +63,31 @@ lazy_static! {
     };
 }
 
+fn build_if_expr(pair: Pair<Rule>) -> Result<Expr> {
+    let mut if_parts = vec![];
+    let mut else_part = Expr::Const(Value::Null);
+    for pair in pair.into_inner() {
+        if pair.as_rule() == Rule::else_clause {
+            else_part = Expr::try_from(pair)?;
+        } else {
+            if_parts.push(build_if_clause(pair)?)
+        }
+    }
+    Ok(if_parts.into_iter().rev().fold(else_part, |accum, (cond, expr)| {
+        Expr::IfExpr((cond, expr, accum).into())
+    }))
+
+}
+
+fn build_if_clause(pair: Pair<Rule>) -> Result<(Expr, Expr)> {
+    let mut pairs = pair.into_inner();
+    let cond = pairs.next().unwrap();
+    let cond = Expr::try_from(cond)?;
+    let expr = pairs.next().unwrap();
+    let expr = Expr::try_from(expr)?;
+    Ok((cond, expr))
+}
+
 fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
     match pair.as_rule() {
         Rule::expr => build_expr_primary(pair.into_inner().next().unwrap()),
@@ -101,8 +126,9 @@ fn build_expr_primary(pair: Pair<Rule>) -> Result<Expr> {
             let op = p.as_rule();
             let op: Arc<dyn Op + Send + Sync> = match op {
                 Rule::term => return build_expr_primary(p),
-                Rule::negate => Arc::new(OpNegate),
+                Rule::negate => Arc::new(OpNot),
                 Rule::minus => Arc::new(OpMinus),
+                Rule::if_expr => return build_if_expr(p),
                 _ => unreachable!(),
             };
             let term = build_expr_primary(inner.next().unwrap())?;
@@ -333,6 +359,35 @@ pub(crate) mod tests {
         dbg!(str2expr("{...a,...b,c:1,d:2,...e,f:3}")?);
         dbg!(str2expr("[]")?);
         dbg!(str2expr("[...a,...b,1,2,...e,3]")?);
+        Ok(())
+    }
+
+    #[test]
+    fn conditionals() -> Result<()> {
+        let s = r#"if a { b + c * d } else if (x) { y } else {z}"#;
+        dbg!(str2expr(s));
+        let s = r#"if a { b + c * d }"#;
+        dbg!(str2expr(s));
+
+        let s = r#"(if a { b + c * d } else if (x) { y } else {z})+1"#;
+        dbg!(str2expr(s));
+
+        // let s = r#"cond {
+        //     a > 1 => 1,
+        //     a == 1 => 2,
+        //     true => 3
+        // }"#;
+        // let pair = CozoParser::parse(Rule::expr, s).unwrap();
+        // dbg!(pair);
+        //
+        // let s = r#"switch(a) {
+        //     1 => 1,
+        //     2 => 2,
+        //     .. => 3
+        // }"#;
+        // let pair = CozoParser::parse(Rule::expr, s).unwrap();
+        // dbg!(pair);
+
         Ok(())
     }
 }

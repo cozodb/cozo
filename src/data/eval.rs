@@ -1,9 +1,6 @@
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::expr_parser::ExprParseError;
-use crate::data::op::{
-    Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMinus, OpMod,
-    OpMul, OpNe, OpNegate, OpNotNull, OpOr, OpPow, OpStrCat, OpSub,
-};
+use crate::data::op::{Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMerge, OpMinus, OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, partial_eval_and, partial_eval_coalesce, partial_eval_if_expr, partial_eval_or, row_eval_and, row_eval_coalesce, row_eval_if_expr, row_eval_or};
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::borrow::Cow;
@@ -58,6 +55,15 @@ impl RowEvalContext for () {
 pub(crate) trait ExprEvalContext {
     fn resolve<'a>(&'a self, key: &str) -> Option<Expr<'a>>;
     fn resolve_table_col<'a>(&'a self, binding: &str, col: &str) -> Option<(TableId, ColId)>;
+}
+
+impl ExprEvalContext for () {
+    fn resolve<'a>(&'a self, _key: &str) -> Option<Expr<'a>> {
+        None
+    }
+    fn resolve_table_col<'a>(&'a self, _binding: &str, _col: &str) -> Option<(TableId, ColId)> {
+        None
+    }
 }
 
 fn extract_optimized_bin_args(args: Vec<Expr>) -> (Expr, Expr) {
@@ -150,16 +156,37 @@ impl<'a> Expr<'a> {
                 }
             }
             Expr::Apply(op, args) => {
-                let args = args
-                    .into_iter()
-                    .map(|v| v.partial_eval(ctx))
-                    .collect::<Result<Vec<_>>>()?;
-                if op.has_side_effect() {
-                    Expr::Apply(op, args)
-                } else {
-                    match op.partial_eval(args.clone())? {
-                        Some(v) => v,
-                        None => Expr::Apply(op, args),
+                // special cases
+                match op.name() {
+                    n if n == OpAnd.name() => partial_eval_and(ctx, args)?,
+                    n if n == OpOr.name() => partial_eval_or(ctx, args)?,
+                    n if n == OpCoalesce.name() => partial_eval_coalesce(ctx, args)?,
+                    _ => {
+                        let mut has_unevaluated = false;
+                        let mut has_null = false;
+                        let args = args
+                            .into_iter()
+                            .map(|v| {
+                                let v = v.partial_eval(ctx);
+                                if !matches!(v, Ok(Expr::Const(_))) {
+                                    has_unevaluated = true;
+                                } else if matches!(v, Ok(Expr::Const(Value::Null))) {
+                                    has_null = true;
+                                }
+                                v
+                            }).collect::<Result<Vec<_>>>()?;
+                        if has_unevaluated {
+                            Expr::Apply(op, args)
+                        } else {
+                            let args = args.into_iter().map(|v| {
+                                match v {
+                                    Expr::Const(v) => v,
+                                    _ => unreachable!()
+                                }
+                            }).collect();
+                            op.eval(has_null, args)
+                                .map(Expr::Const)?
+                        }
                     }
                 }
             }
@@ -172,14 +199,11 @@ impl<'a> Expr<'a> {
                     .into_iter()
                     .map(|v| v.partial_eval(ctx))
                     .collect::<Result<Vec<_>>>()?;
-                if op.has_side_effect() {
-                    Expr::ApplyAgg(op, a_args, args)
-                } else {
-                    match op.partial_eval(a_args.clone(), args.clone())? {
-                        Some(v) => v,
-                        None => Expr::ApplyAgg(op, a_args, args),
-                    }
-                }
+                Expr::ApplyAgg(op, a_args, args)
+            }
+            Expr::IfExpr(args) => {
+                let (cond, if_part, else_part) = *args;
+                partial_eval_if_expr(ctx, cond, if_part, else_part)?
             }
             Expr::ApplyZero(_)
             | Expr::ApplyOne(_, _)
@@ -197,7 +221,7 @@ impl<'a> Expr<'a> {
             | Expr::Ge(_)
             | Expr::Lt(_)
             | Expr::Le(_)
-            | Expr::Negate(_)
+            | Expr::Not(_)
             | Expr::Minus(_)
             | Expr::IsNull(_)
             | Expr::NotNull(_)
@@ -208,6 +232,7 @@ impl<'a> Expr<'a> {
         Ok(res)
     }
     pub(crate) fn optimize_ops(self) -> Self {
+        // Note: `and`, `or` and `coalesce` do not short-circuit if not optimized
         match self {
             Expr::List(l) => Expr::List(l.into_iter().map(|v| v.optimize_ops()).collect()),
             Expr::Dict(d) => {
@@ -229,8 +254,8 @@ impl<'a> Expr<'a> {
                 name if name == OpGe.name() => Expr::Ge(extract_optimized_bin_args(args).into()),
                 name if name == OpLt.name() => Expr::Lt(extract_optimized_bin_args(args).into()),
                 name if name == OpLe.name() => Expr::Le(extract_optimized_bin_args(args).into()),
-                name if name == OpNegate.name() => {
-                    Expr::Negate(extract_optimized_u_args(args).into())
+                name if name == OpNot.name() => {
+                    Expr::Not(extract_optimized_u_args(args).into())
                 }
                 name if name == OpMinus.name() => {
                     Expr::Minus(extract_optimized_u_args(args).into())
@@ -286,7 +311,10 @@ impl<'a> Expr<'a> {
             ),
             Expr::FieldAcc(f, arg) => Expr::FieldAcc(f, arg.optimize_ops().into()),
             Expr::IdxAcc(i, arg) => Expr::IdxAcc(i, arg.optimize_ops().into()),
-
+            Expr::IfExpr(args) => {
+                let (cond, if_part, else_part) = *args;
+                Expr::IfExpr((cond.optimize_ops(), if_part.optimize_ops(), else_part.optimize_ops()).into())
+            },
             v @ (Expr::Const(_)
             | Expr::Variable(_)
             | Expr::TableCol(_, _)
@@ -307,7 +335,7 @@ impl<'a> Expr<'a> {
             | Expr::Ge(_)
             | Expr::Lt(_)
             | Expr::Le(_)
-            | Expr::Negate(_)
+            | Expr::Not(_)
             | Expr::Minus(_)
             | Expr::IsNull(_)
             | Expr::NotNull(_)
@@ -402,6 +430,10 @@ impl<'a> Expr<'a> {
                 }
                 v => return Err(EvalError::IndexAccess(*idx, v.to_static())),
             },
+            Expr::IfExpr(args) => {
+                let (cond, if_part, else_part) = args.as_ref();
+                row_eval_if_expr(ctx, cond, if_part, else_part)?
+            }
             // optimized implementations, not really necessary
             Expr::Add(args) => OpAdd.eval_two_non_null(
                 match args.as_ref().0.row_eval(ctx)? {
@@ -533,8 +565,8 @@ impl<'a> Expr<'a> {
                     v => v,
                 },
             )?,
-            Expr::Negate(arg) => {
-                OpNegate.eval_one_non_null(match arg.as_ref().row_eval(ctx)? {
+            Expr::Not(arg) => {
+                OpNot.eval_one_non_null(match arg.as_ref().row_eval(ctx)? {
                     v @ Value::Null => return Ok(v),
                     v => v,
                 })?
@@ -545,17 +577,21 @@ impl<'a> Expr<'a> {
             })?,
             Expr::IsNull(arg) => OpIsNull.eval_one(arg.as_ref().row_eval(ctx)?)?,
             Expr::NotNull(arg) => OpNotNull.eval_one(arg.as_ref().row_eval(ctx)?)?,
-            Expr::Coalesce(args) => OpCoalesce.eval_two(
-                args.as_ref().0.row_eval(ctx)?,
-                args.as_ref().1.row_eval(ctx)?,
+            // These implementations are special in that they short-circuit
+            Expr::Coalesce(args) => row_eval_coalesce(
+                ctx,
+                &args.as_ref().0,
+                &args.as_ref().1,
             )?,
-            Expr::Or(args) => OpOr.eval_two(
-                args.as_ref().0.row_eval(ctx)?,
-                args.as_ref().1.row_eval(ctx)?,
+            Expr::Or(args) => row_eval_or(
+                ctx,
+                &args.as_ref().0,
+                &args.as_ref().1,
             )?,
-            Expr::And(args) => OpAnd.eval_two(
-                args.as_ref().0.row_eval(ctx)?,
-                args.as_ref().1.row_eval(ctx)?,
+            Expr::And(args) => row_eval_and(
+                ctx,
+                &args.as_ref().0,
+                &args.as_ref().1,
             )?,
         };
         Ok(res)
@@ -570,19 +606,39 @@ mod tests {
     #[test]
     fn evaluations() -> Result<()> {
         dbg!(str2expr("123")?.row_eval(&())?);
+        dbg!(str2expr("123")?.partial_eval(&())?);
         dbg!(str2expr("123 + 457")?.row_eval(&())?);
+        dbg!(str2expr("123 + 457")?.partial_eval(&())?);
         dbg!(str2expr("123 + 457.1")?.row_eval(&())?);
+        dbg!(str2expr("123 + 457.1")?.partial_eval(&())?);
         dbg!(str2expr("'123' ++ '457.1'")?.row_eval(&())?);
+        dbg!(str2expr("'123' ++ '457.1'")?.partial_eval(&())?);
         dbg!(str2expr("null ~ null ~ 123 ~ null")?.row_eval(&())?);
+        dbg!(str2expr("null ~ null ~ 123 ~ null")?.partial_eval(&())?);
         dbg!(str2expr("2*3+1/10")?.row_eval(&())?);
+        dbg!(str2expr("2*3+1/10")?.partial_eval(&())?);
         dbg!(str2expr("1>null")?.row_eval(&())?);
+        dbg!(str2expr("1>null")?.partial_eval(&())?);
         dbg!(str2expr("'c'>'d'")?.row_eval(&())?);
+        dbg!(str2expr("'c'>'d'")?.partial_eval(&())?);
         dbg!(str2expr("null && true && null")?.row_eval(&())?);
+        dbg!(str2expr("null && true && null")?.partial_eval(&())?);
         dbg!(str2expr("null && false && null")?.row_eval(&())?);
+        dbg!(str2expr("null && false && null")?.partial_eval(&())?);
         dbg!(str2expr("null || true || null")?.row_eval(&())?);
+        dbg!(str2expr("null || true || null")?.partial_eval(&())?);
         dbg!(str2expr("null || false || null")?.row_eval(&())?);
+        dbg!(str2expr("null || false || null")?.partial_eval(&())?);
         dbg!(str2expr("!true")?.row_eval(&())?);
+        dbg!(str2expr("!true")?.partial_eval(&())?);
         dbg!(str2expr("!null")?.row_eval(&())?);
+        dbg!(str2expr("!null")?.partial_eval(&())?);
+        dbg!(str2expr("if null {1} else {2}")?.row_eval(&())?);
+        dbg!(str2expr("if null {1} else {2}")?.partial_eval(&())?);
+        dbg!(str2expr("if 1 == 2 {'a'}")?.row_eval(&())?);
+        dbg!(str2expr("if 1 == 2 {'a'}")?.partial_eval(&())?);
+        dbg!(str2expr("if 1 == 2 {'a'} else if 3 == 3 {'b'} else {'c'}")?.row_eval(&())?);
+        dbg!(str2expr("if 1 == 2 {'a'} else if 3 == 3 {'b'} else {'c'}")?.partial_eval(&())?);
 
         Ok(())
     }
