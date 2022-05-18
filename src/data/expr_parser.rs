@@ -426,6 +426,12 @@ pub(crate) mod tests {
         }"#;
         dbg!(str2expr(s))?;
 
+        let s = r#"switch(a) {
+            1 => 1,
+            2 => 2,
+        }"#;
+        dbg!(str2expr(s))?;
+
         Ok(())
     }
 }

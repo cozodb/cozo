@@ -642,6 +642,10 @@ mod tests {
         dbg!(str2expr("if 1 == 2 {'a'}")?.partial_eval(&())?);
         dbg!(str2expr("if 1 == 2 {'a'} else if 3 == 3 {'b'} else {'c'}")?.row_eval(&())?);
         dbg!(str2expr("if 1 == 2 {'a'} else if 3 == 3 {'b'} else {'c'}")?.partial_eval(&())?);
+        dbg!(str2expr("switch 1 {2 => '2', 0 => '3', .. => 'x'}")?.row_eval(&())?);
+        dbg!(str2expr("switch 1 {2 => '2', 0 => '3', .. => 'x'}")?.partial_eval(&())?);
+        dbg!(str2expr("switch 3 {2 => '2', 1+2 => '3', .. => 'x'}")?.row_eval(&())?);
+        dbg!(str2expr("switch 3 {2 => '2', 1+2 => '3', .. => 'x'}")?.partial_eval(&())?);
 
         Ok(())
     }
