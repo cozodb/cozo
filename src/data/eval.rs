@@ -1,12 +1,6 @@
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::{Expr};
 use crate::data::expr_parser::ExprParseError;
-use crate::data::op::{
-    partial_eval_and, partial_eval_coalesce, partial_eval_if_expr, partial_eval_or,
-    partial_eval_switch_expr, row_eval_and, row_eval_coalesce, row_eval_if_expr, row_eval_or,
-    row_eval_switch_expr, Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt,
-    OpIsNull, OpLe, OpLt, OpMerge, OpMinus, OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow,
-    OpStrCat, OpSub,
-};
+use crate::data::op::*;
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::borrow::Cow;
@@ -162,8 +156,13 @@ impl<'a> Expr<'a> {
                 }
             }
             Expr::Apply(op, args) => {
-                // special cases
+                if let Some(n) = op.arity() {
+                    if n != args.len() {
+                        return Err(EvalError::ArityMismatch(op.name().to_string(), args.len()));
+                    }
+                }
                 match op.name() {
+                    // special cases
                     n if n == OpAnd.name() => partial_eval_and(ctx, args)?,
                     n if n == OpOr.name() => partial_eval_or(ctx, args)?,
                     n if n == OpCoalesce.name() => partial_eval_coalesce(ctx, args)?,
