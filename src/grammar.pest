@@ -1,4 +1,4 @@
-file = _{SOI ~ (statement | mutation)* ~ EOI}
+file = _{SOI ~ (statement)* ~ EOI}
 
 // whitespace
 
@@ -80,7 +80,7 @@ literal = _{ null | boolean | number | string}
 // date, time, datetime, duration: no literal, do with functions. User passed in stuff can be coerced from string
 // but they do exist at the AST level (and of course at the value level)
 
-// expressions
+// Expressions
 
 comma_sep_expr = { expr ~ ("," ~ expr)* }
 expr = {unary ~ (operation ~ unary) *}
@@ -148,6 +148,7 @@ col_entry = { col_name ~ ":" ~ typing ~ ("=" ~ expr)? }
 col_name = { key_marker? ~ name_in_def }
 key_marker = { "*" }
 
+// Typing
 
 typing = _{ simple_type | nullable_type | homogeneous_list_type | unnamed_tuple_type | named_tuple_type | function_type }
 simple_type = { ident }
@@ -159,6 +160,8 @@ named_type_pair = { (name_in_def | string) ~ ":" ~ typing }
 function_type = { "<" ~ args_type ~ ">" ~ "->" ~ typing }
 args_type = { typing? ~ ("," ~ typing)* }
 
+
+// Data definition
 
 cols_def = { "{" ~ col_entry ~ ("," ~ col_entry)* ~ ","? ~ "}" }
 
@@ -177,35 +180,40 @@ global_def = { "create" ~ definition }
 local_def = { "local" ~ definition }
 statement = _{ global_def | local_def }
 
-mutation = { (upsert|insert) ~ expr ~ ("as" ~ name_in_def)? ~ mutation_filter? ~ ";" }
-mutation_filter = { (exclude|include) ~ name_in_def ~ ("," ~ name_in_def)* }
-exclude = {"exclude"}
-include = {"include"}
-upsert = {"upsert"}
-insert = {"insert"}
+// mutation = { (upsert|insert) ~ expr ~ ("as" ~ name_in_def)? ~ mutation_filter? ~ ";" }
+// mutation_filter = { (exclude|include) ~ name_in_def ~ ("," ~ name_in_def)* }
+// exclude = {"exclude"}
+// include = {"include"}
+// upsert = {"upsert"}
+// insert = {"insert"}
 
-from_pattern = { "from" ~ (from_el ~ ",")* ~ from_el }
-from_el = _{ simple_from_pattern | node_edge_pattern }
+// from_pattern = { "from" ~ (from_el ~ ",")* ~ from_el }
+// from_el = _{ simple_from_pattern | node_edge_pattern }
+//
+// simple_from_pattern = { ident ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* }
+//
+// node_edge_pattern = { node_pattern? ~ (edge_pattern ~ node_pattern)* ~ edge_pattern? }
+// node_pattern = {"(" ~ ident? ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* ~ ")"}
+// edge_pattern = { outer_join_marker? ~ (fwd_edge_pattern | bwd_edge_pattern) ~ outer_join_marker? }
+// fwd_edge_pattern = { "-" ~ edge_pattern_inner ~ "->" }
+// bwd_edge_pattern = { "<-" ~ edge_pattern_inner ~ "-" }
+// edge_pattern_inner = _{"[" ~ ident? ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* ~ "]"}
+// outer_join_marker = { "?" }
+//
+// where_pattern = { "where" ~ (expr ~ ",")* ~ expr  }
+// select_pattern = { "select" ~ (select_dict | scoped_dict) ~ ( (order_pattern ~ offset_pattern?) | (offset_pattern ~ order_pattern?) )? }
+//
+// order_pattern = { "ordered" ~ "[" ~ order_el ~ ("," ~ order_el)* ~ "]" }
+// order_el = _{order_dsc | order_asc}
+// order_dsc = {expr ~ (":" ~ "desc")}
+// order_asc = {expr ~ (":" ~ "asc")?}
+// offset_pattern = { limit_clause? ~ offset_clause? }
+// limit_clause = { "limit" ~ pos_int }
+// offset_clause = { "offset" ~ pos_int }
+//
+// relational_query = { from_pattern ~ where_pattern? ~ select_pattern }
 
-simple_from_pattern = { ident ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* }
 
-node_edge_pattern = { node_pattern? ~ (edge_pattern ~ node_pattern)* ~ edge_pattern? }
-node_pattern = {"(" ~ ident? ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* ~ ")"}
-edge_pattern = { outer_join_marker? ~ (fwd_edge_pattern | bwd_edge_pattern) ~ outer_join_marker? }
-fwd_edge_pattern = { "-" ~ edge_pattern_inner ~ "->" }
-bwd_edge_pattern = { "<-" ~ edge_pattern_inner ~ "-" }
-edge_pattern_inner = _{"[" ~ ident? ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* ~ "]"}
-outer_join_marker = { "?" }
+// Relational algebra
 
-where_pattern = { "where" ~ (expr ~ ",")* ~ expr  }
-select_pattern = { "select" ~ (select_dict | scoped_dict) ~ ( (order_pattern ~ offset_pattern?) | (offset_pattern ~ order_pattern?) )? }
-
-order_pattern = { "ordered" ~ "[" ~ order_el ~ ("," ~ order_el)* ~ "]" }
-order_el = _{order_dsc | order_asc}
-order_dsc = {expr ~ (":" ~ "desc")}
-order_asc = {expr ~ (":" ~ "asc")?}
-offset_pattern = { limit_clause? ~ offset_clause? }
-limit_clause = { "limit" ~ pos_int }
-offset_clause = { "offset" ~ pos_int }
-
-relational_query = { from_pattern ~ where_pattern? ~ select_pattern }
+// ra = { (ra_source | ra_fn_call) ~ ra_method_call* }

@@ -38,9 +38,6 @@ pub(crate) enum Expr<'a> {
     IfExpr(Box<(Expr<'a>, Expr<'a>, Expr<'a>)>),
     SwitchExpr(Vec<(Expr<'a>, Expr<'a>)>),
     // optimized
-    ApplyZero(Arc<dyn Op + Send + Sync>),
-    ApplyOne(Arc<dyn Op + Send + Sync>, Box<Expr<'a>>),
-    ApplyTwo(Arc<dyn Op + Send + Sync>, Box<(Expr<'a>, Expr<'a>)>),
     Add(Box<(Expr<'a>, Expr<'a>)>),
     Sub(Box<(Expr<'a>, Expr<'a>)>),
     Mul(Box<(Expr<'a>, Expr<'a>)>),
@@ -102,15 +99,6 @@ impl<'a> Debug for Expr<'a> {
                     .map(|v| format!("{:?}", v))
                     .collect::<Vec<_>>()
                     .join(" ")
-            ),
-            Expr::ApplyZero(op) => write!(f, "({})", op.name()),
-            Expr::ApplyOne(op, arg) => write!(f, "({} {:?})", op.name(), arg),
-            Expr::ApplyTwo(op, args) => write!(
-                f,
-                "({} {:?} {:?})",
-                op.name(),
-                args.as_ref().0,
-                args.as_ref().1
             ),
             Expr::Add(args) => write!(f, "(`+ {:?} {:?})", args.as_ref().0, args.as_ref().1),
             Expr::Sub(args) => write!(f, "(`- {:?} {:?})", args.as_ref().0, args.as_ref().1),
@@ -379,12 +367,6 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                 ]
                 .into(),
             ),
-            Expr::ApplyZero(op) => build_tagged_value(
-                "Apply",
-                vec![Value::from(op.name().to_string()), Value::List(vec![])].into(),
-            ),
-            Expr::ApplyOne(op, arg) => build_value_from_uop(op.name(), *arg),
-            Expr::ApplyTwo(op, args) => build_value_from_binop(op.name(), *args),
             Expr::Add(arg) => build_value_from_binop(OpAdd.name(), *arg),
             Expr::Sub(arg) => build_value_from_binop(OpSub.name(), *arg),
             Expr::Mul(arg) => build_value_from_binop(OpMul.name(), *arg),

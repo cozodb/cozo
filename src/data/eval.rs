@@ -169,30 +169,29 @@ impl<'a> Expr<'a> {
                     n if n == OpCoalesce.name() => partial_eval_coalesce(ctx, args)?,
                     _ => {
                         let mut has_unevaluated = false;
-                        let mut has_null = false;
-                        let args = args
-                            .into_iter()
-                            .map(|v| {
-                                let v = v.partial_eval(ctx);
-                                if !matches!(v, Ok(Expr::Const(_))) {
-                                    has_unevaluated = true;
-                                } else if matches!(v, Ok(Expr::Const(Value::Null))) {
-                                    has_null = true;
-                                }
-                                v
-                            })
-                            .collect::<Result<Vec<_>>>()?;
+                        let non_null_args_fn = op.non_null_args();
+                        let mut eval_args = Vec::with_capacity(args.len());
+                        for v in args {
+                            let v = v.partial_eval(ctx)?;
+                            if !matches!(v, Expr::Const(_)) {
+                                has_unevaluated = true;
+                            } else if non_null_args_fn && matches!(v, Expr::Const(Value::Null)) {
+                                return Ok(Expr::Const(Value::Null));
+                            } else {
+                                eval_args.push(v);
+                            }
+                        }
                         if has_unevaluated {
-                            Expr::Apply(op, args)
+                            Expr::Apply(op, eval_args)
                         } else {
-                            let args = args
+                            let args = eval_args
                                 .into_iter()
                                 .map(|v| match v {
                                     Expr::Const(v) => v,
                                     _ => unreachable!(),
                                 })
                                 .collect();
-                            op.eval(has_null, args).map(Expr::Const)?
+                            op.eval(args).map(Expr::Const)?
                         }
                     }
                 }
@@ -213,10 +212,7 @@ impl<'a> Expr<'a> {
                 partial_eval_if_expr(ctx, cond, if_part, else_part)?
             }
             Expr::SwitchExpr(args) => partial_eval_switch_expr(ctx, args)?,
-            Expr::ApplyZero(_)
-            | Expr::ApplyOne(_, _)
-            | Expr::ApplyTwo(_, _)
-            | Expr::Add(_)
+            Expr::Add(_)
             | Expr::Sub(_)
             | Expr::Mul(_)
             | Expr::Div(_)
@@ -296,17 +292,10 @@ impl<'a> Expr<'a> {
                     }
                     arg
                 }
-                _ => match op.arity() {
-                    Some(0) => Expr::ApplyZero(op),
-                    Some(1) => Expr::ApplyOne(op, args.into_iter().next().unwrap().into()),
-                    Some(2) => {
-                        let mut args = args.into_iter();
-                        let left = args.next().unwrap();
-                        let right = args.next().unwrap();
-                        Expr::ApplyTwo(op, (left, right).into())
-                    }
-                    _ => Expr::Apply(op, args.into_iter().map(|v| v.optimize_ops()).collect()),
-                },
+                _ => Expr::Apply(
+                    op,
+                    args.into_iter().map(|v| v.optimize_ops()).collect(),
+                ),
             },
             Expr::ApplyAgg(op, a_args, args) => Expr::ApplyAgg(
                 op,
@@ -335,9 +324,6 @@ impl<'a> Expr<'a> {
             | Expr::Variable(_)
             | Expr::TableCol(_, _)
             | Expr::TupleSetIdx(_)
-            | Expr::ApplyZero(_)
-            | Expr::ApplyOne(_, _)
-            | Expr::ApplyTwo(_, _)
             | Expr::Add(_)
             | Expr::Sub(_)
             | Expr::Mul(_)
@@ -379,53 +365,18 @@ impl<'a> Expr<'a> {
             Expr::Variable(v) => return Err(EvalError::UnresolvedVariable(v.clone())),
             Expr::TableCol(tid, cid) => return Err(EvalError::UnresolveTableCol(*tid, *cid)),
             Expr::TupleSetIdx(idx) => ctx.resolve(idx)?.clone(),
-            Expr::Apply(op, vals) => {
-                let (has_null, args) = vals.iter().try_fold(
-                    (false, Vec::with_capacity(vals.len())),
-                    |(has_null, mut acc), v| {
-                        v.row_eval(ctx).map(|v| match v {
-                            Value::Null => {
-                                acc.push(Value::Null);
-                                (true, acc)
-                            }
-                            v => {
-                                acc.push(v);
-                                (has_null, acc)
-                            }
-                        })
-                    },
-                )?;
-                op.eval(has_null, args)?
-            }
-            Expr::ApplyZero(op) => op.eval_zero()?,
-            Expr::ApplyOne(op, arg) => {
-                let arg = arg.row_eval(ctx)?;
-                if op.non_null_args() {
-                    if arg == Value::Null {
-                        Value::Null
+            Expr::Apply(op, args) => {
+                let mut eval_args = Vec::with_capacity(args.len());
+                let op_non_null_args = op.non_null_args();
+                for v in args {
+                    let v = v.row_eval(ctx)?;
+                    if op_non_null_args && v == Value::Null {
+                        return Ok(Value::Null)
                     } else {
-                        op.eval_one_non_null(arg)?
+                        eval_args.push(v);
                     }
-                } else {
-                    op.eval_one(arg)?
                 }
-            }
-            Expr::ApplyTwo(op, args) => {
-                if op.non_null_args() {
-                    let left = args.as_ref().0.row_eval(ctx)?;
-                    if left == Value::Null {
-                        return Ok(Value::Null);
-                    }
-                    let right = args.as_ref().0.row_eval(ctx)?;
-                    if right == Value::Null {
-                        return Ok(Value::Null);
-                    }
-                    op.eval_two_non_null(left, right)?
-                } else {
-                    let left = args.as_ref().0.row_eval(ctx)?;
-                    let right = args.as_ref().0.row_eval(ctx)?;
-                    op.eval_two(left, right)?
-                }
+                op.eval(eval_args)?
             }
             Expr::ApplyAgg(_, _, _) => {
                 todo!()
@@ -646,6 +597,8 @@ mod tests {
         dbg!(str2expr("switch 1 {2 => '2', 0 => '3', .. => 'x'}")?.partial_eval(&())?);
         dbg!(str2expr("switch 3 {2 => '2', 1+2 => '3', .. => 'x'}")?.row_eval(&())?);
         dbg!(str2expr("switch 3 {2 => '2', 1+2 => '3', .. => 'x'}")?.partial_eval(&())?);
+        dbg!(str2expr("null.is_null()")?.row_eval(&())?);
+        dbg!(str2expr("null.is_null()")?.partial_eval(&())?);
 
         Ok(())
     }

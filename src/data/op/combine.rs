@@ -14,13 +14,18 @@ impl Op for OpConcat {
     fn arity(&self) -> Option<usize> {
         None
     }
+
+    fn has_side_effect(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &str {
         "concat"
     }
     fn non_null_args(&self) -> bool {
         false
     }
-    fn eval<'a>(&self, _has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
         let mut coll = vec![];
         for v in args.into_iter() {
             match v {
@@ -44,13 +49,18 @@ impl Op for OpMerge {
     fn arity(&self) -> Option<usize> {
         None
     }
+
+    fn has_side_effect(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &str {
         "merge"
     }
     fn non_null_args(&self) -> bool {
         false
     }
-    fn eval<'a>(&self, _has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
         let mut coll = BTreeMap::new();
         for v in args.into_iter() {
             match v {

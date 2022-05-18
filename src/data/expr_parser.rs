@@ -1,8 +1,5 @@
 use crate::data::expr::Expr;
-use crate::data::op::{
-    Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt, OpLe, OpLt, OpMerge, OpMinus,
-    OpMod, OpMul, OpNe, OpNot, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
-};
+use crate::data::op::{Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMerge, OpMinus, OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp};
 use crate::data::value::Value;
 use crate::parser::number::parse_int;
 use crate::parser::text_identifier::parse_string;
@@ -146,7 +143,11 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                     Rule::call => {
                         let mut pairs = p.into_inner();
                         let method_name = pairs.next().unwrap().as_str();
-                        let op = Arc::new(UnresolvedOp(method_name.to_string()));
+                        let op: Arc<dyn Op + Send + Sync> = match method_name {
+                            n if n == OpIsNull.name() => Arc::new(OpIsNull),
+                            n if n == OpNotNull.name() => Arc::new(OpNotNull),
+                            method_name => Arc::new(UnresolvedOp(method_name.to_string()))
+                        };
                         let mut args = vec![head];
                         args.extend(pairs.map(Expr::try_from).collect::<Result<Vec<_>>>()?);
                         head = Expr::Apply(op, args);
@@ -319,7 +320,7 @@ pub(crate) mod tests {
     use pest::Parser;
 
     pub(crate) fn str2expr(s: &str) -> Result<Expr> {
-        let pair = CozoParser::parse(Rule::expr, s.as_ref())
+        let pair = CozoParser::parse(Rule::expr, s)
             .unwrap()
             .next()
             .unwrap();

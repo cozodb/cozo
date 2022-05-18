@@ -10,36 +10,55 @@ type Result<T> = result::Result<T, EvalError>;
 
 pub(crate) struct OpIsNull;
 
+impl OpIsNull {
+    pub(crate) fn eval_one<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
+        Ok((arg == Value::Null).into())
+    }
+}
+
 impl Op for OpIsNull {
+    fn arity(&self) -> Option<usize> {
+        Some(1)
+    }
+    fn has_side_effect(&self) -> bool {
+        false
+    }
     fn name(&self) -> &str {
         "is_null"
     }
     fn non_null_args(&self) -> bool {
         false
     }
-    fn eval<'a>(&self, has_null: bool, _args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        Ok(has_null.into())
-    }
-    fn eval_one<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
-        Ok((arg == Value::Null).into())
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+        self.eval_one(args.into_iter().next().unwrap())
     }
 }
 
 pub(crate) struct OpNotNull;
 
+impl OpNotNull {
+    pub(crate) fn eval_one<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
+        Ok((arg != Value::Null).into())
+    }
+}
+
 impl Op for OpNotNull {
+    fn arity(&self) -> Option<usize> {
+        Some(1)
+    }
+    fn has_side_effect(&self) -> bool {
+        false
+    }
     fn name(&self) -> &str {
         "not_null"
     }
     fn non_null_args(&self) -> bool {
         false
     }
-    fn eval<'a>(&self, has_null: bool, _args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        Ok((!has_null).into())
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+        self.eval_one(args.into_iter().next().unwrap())
     }
-    fn eval_one<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
-        Ok((arg != Value::Null).into())
-    }
+
 }
 
 pub(crate) struct OpOr;
@@ -48,16 +67,22 @@ impl Op for OpOr {
     fn arity(&self) -> Option<usize> {
         None
     }
+
+    fn has_side_effect(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &str {
         "||"
     }
     fn non_null_args(&self) -> bool {
         false
     }
-    fn eval<'a>(&self, has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+        let mut has_null = false;
         for arg in args {
             match arg {
-                Value::Null => {}
+                Value::Null => has_null = true,
                 Value::Bool(true) => return Ok(Value::Bool(true)),
                 Value::Bool(false) => {}
                 v => {
@@ -144,16 +169,22 @@ impl Op for OpAnd {
     fn arity(&self) -> Option<usize> {
         None
     }
+
+    fn has_side_effect(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &str {
         "&&"
     }
     fn non_null_args(&self) -> bool {
         false
     }
-    fn eval<'a>(&self, has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+        let mut has_null = false;
         for arg in args {
             match arg {
-                Value::Null => {}
+                Value::Null => has_null = true,
                 Value::Bool(false) => return Ok(Value::Bool(false)),
                 Value::Bool(true) => {}
                 v => {
@@ -236,11 +267,8 @@ pub(crate) fn row_eval_and<'a, T: RowEvalContext + 'a>(
 
 pub(crate) struct OpNot;
 
-impl Op for OpNot {
-    fn name(&self) -> &str {
-        "!"
-    }
-    fn eval_one_non_null<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
+impl OpNot {
+    pub(crate) fn eval_one_non_null<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
         match arg {
             Value::Bool(b) => Ok((!b).into()),
             v => Err(EvalError::OpTypeMismatch(
@@ -248,5 +276,23 @@ impl Op for OpNot {
                 vec![v.to_static()],
             )),
         }
+    }
+}
+
+impl Op for OpNot {
+    fn arity(&self) -> Option<usize> {
+        Some(1)
+    }
+    fn has_side_effect(&self) -> bool {
+        false
+    }
+    fn non_null_args(&self) -> bool {
+        true
+    }
+    fn name(&self) -> &str {
+        "!"
+    }
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> crate::data::op::Result<Value<'a>> {
+        self.eval_one_non_null(args.into_iter().next().unwrap())
     }
 }

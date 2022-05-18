@@ -20,104 +20,46 @@ pub(crate) use text::*;
 type Result<T> = result::Result<T, EvalError>;
 
 pub(crate) trait Op: Send + Sync {
-    fn is_resolved(&self) -> bool {
-        true
-    }
-    fn arity(&self) -> Option<usize> {
-        Some(1)
-    }
-    fn has_side_effect(&self) -> bool {
-        false
-    }
+    fn arity(&self) -> Option<usize>;
+    fn has_side_effect(&self) -> bool;
     fn name(&self) -> &str;
-    fn non_null_args(&self) -> bool {
-        true
-    }
-    fn typing_eval(&self, args: &[Typing]) -> Typing {
-        let representatives = args.iter().map(|v| v.representative_value()).collect();
-        match self.eval_non_null(representatives) {
-            Ok(t) => t.deduce_typing(),
-            Err(_) => Typing::Any,
-        }
-    }
-    fn eval<'a>(&self, has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        if self.non_null_args() {
-            if has_null {
-                Ok(Value::Null)
-            } else {
-                match self.arity() {
-                    Some(0) => self.eval_zero(),
-                    Some(1) => self.eval_one_non_null(args.into_iter().next().unwrap()),
-                    Some(2) => {
-                        let mut args = args.into_iter();
-                        self.eval_two_non_null(args.next().unwrap(), args.next().unwrap())
-                    }
-                    _ => self.eval_non_null(args),
-                }
-            }
-        } else {
-            panic!(
-                "Required method `eval` not implemented for `{}`",
-                self.name()
-            )
-        }
-    }
-    fn eval_non_null<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        panic!(
-            "Required method `eval_non_null` not implemented for `{}`",
-            self.name()
-        )
-    }
-    fn eval_zero(&self) -> Result<StaticValue> {
-        panic!(
-            "Required method `eval_zero` not implemented for `{}`",
-            self.name()
-        )
-    }
-    fn eval_one_non_null<'a>(&self, _arg: Value<'a>) -> Result<Value<'a>> {
-        panic!(
-            "Required method `eval_one` not implemented for `{}`",
-            self.name()
-        )
-    }
-    fn eval_two_non_null<'a>(&self, _left: Value<'a>, _right: Value<'a>) -> Result<Value<'a>> {
-        panic!(
-            "Required method `eval_two` not implemented for `{}`",
-            self.name()
-        )
-    }
-    fn eval_one<'a>(&self, _arg: Value<'a>) -> Result<Value<'a>> {
-        panic!(
-            "Required method `eval_one` not implemented for `{}`",
-            self.name()
-        )
-    }
-    fn eval_two<'a>(&self, _left: Value<'a>, _right: Value<'a>) -> Result<Value<'a>> {
-        panic!(
-            "Required method `eval_two` not implemented for `{}`",
-            self.name()
-        )
-    }
+    fn non_null_args(&self) -> bool;
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>>;
 }
 
 pub(crate) trait AggOp: Send + Sync {
-    fn is_resolved(&self) -> bool {
-        true
-    }
-    fn arity(&self) -> Option<usize> {
-        Some(1)
-    }
-    fn has_side_effect(&self) -> bool {
-        false
-    }
+    fn arity(&self) -> Option<usize>;
+    fn has_side_effect(&self) -> bool;
     fn name(&self) -> &str;
 }
 
 pub(crate) struct UnresolvedOp(pub String);
 
 impl Op for UnresolvedOp {
-    fn is_resolved(&self) -> bool {
+    fn non_null_args(&self) -> bool {
         false
+    }
+    fn has_side_effect(&self) -> bool {
+        true
+    }
+    fn arity(&self) -> Option<usize> {
+        None
+    }
+    fn name(&self) -> &str {
+        &self.0
+    }
+    fn eval<'a>(&self, _args: Vec<Value<'a>>) -> Result<Value<'a>> {
+        unimplemented!()
+    }
+}
+
+impl AggOp for UnresolvedOp {
+    fn arity(&self) -> Option<usize> {
+        None
+    }
+
+    fn has_side_effect(&self) -> bool {
+        true
     }
 
     fn name(&self) -> &str {
@@ -125,8 +67,7 @@ impl Op for UnresolvedOp {
     }
 }
 
-impl AggOp for UnresolvedOp {
-    fn name(&self) -> &str {
-        &self.0
-    }
+pub(crate) fn extract_two_args<'a>(args: Vec<Value<'a>>) -> (Value<'a>, Value<'a>) {
+    let mut args = args.into_iter();
+    (args.next().unwrap(), args.next().unwrap())
 }

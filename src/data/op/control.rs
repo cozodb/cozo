@@ -15,13 +15,18 @@ impl Op for OpCoalesce {
     fn arity(&self) -> Option<usize> {
         None
     }
+
+    fn has_side_effect(&self) -> bool {
+        false
+    }
+
     fn name(&self) -> &str {
         "~~"
     }
     fn non_null_args(&self) -> bool {
         false
     }
-    fn eval<'a>(&self, _has_null: bool, args: Vec<Value<'a>>) -> Result<Value<'a>> {
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
         for arg in args {
             if arg != Value::Null {
                 return Ok(arg);
