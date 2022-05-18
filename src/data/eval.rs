@@ -599,6 +599,12 @@ mod tests {
         dbg!(str2expr("switch 3 {2 => '2', 1+2 => '3', .. => 'x'}")?.partial_eval(&())?);
         dbg!(str2expr("null.is_null()")?.row_eval(&())?);
         dbg!(str2expr("null.is_null()")?.partial_eval(&())?);
+        dbg!(str2expr("null.not_null()")?.row_eval(&())?);
+        dbg!(str2expr("null.not_null()")?.partial_eval(&())?);
+        dbg!(str2expr("is_null(null)")?.row_eval(&())?);
+        dbg!(str2expr("is_null(null)")?.partial_eval(&())?);
+        dbg!(str2expr("is_null((null ~ 3)+2).is_null()")?.row_eval(&())?);
+        dbg!(str2expr("is_null((null ~ 3)+2).is_null()")?.partial_eval(&())?);
 
         Ok(())
     }

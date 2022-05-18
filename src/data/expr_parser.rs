@@ -86,6 +86,13 @@ fn build_cond_expr(pair: Pair) -> Result<Expr> {
     Ok(res)
 }
 
+fn build_call_expr(pair: Pair) -> Result<Expr> {
+    let mut pairs = pair.into_inner();
+    let method = get_method(pairs.next().unwrap().as_str());
+    let args = pairs.map(Expr::try_from).collect::<Result<Vec<_>>>()?;
+    Ok(Expr::Apply(method, args))
+}
+
 fn build_switch_expr(pair: Pair) -> Result<Expr> {
     let mut pairs = pair.into_inner();
     let expr = pairs.next().unwrap();
@@ -142,12 +149,7 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                     }
                     Rule::call => {
                         let mut pairs = p.into_inner();
-                        let method_name = pairs.next().unwrap().as_str();
-                        let op: Arc<dyn Op + Send + Sync> = match method_name {
-                            n if n == OpIsNull.name() => Arc::new(OpIsNull),
-                            n if n == OpNotNull.name() => Arc::new(OpNotNull),
-                            method_name => Arc::new(UnresolvedOp(method_name.to_string()))
-                        };
+                        let op: Arc<dyn Op + Send + Sync> = get_method(pairs.next().unwrap().as_str());
                         let mut args = vec![head];
                         args.extend(pairs.map(Expr::try_from).collect::<Result<Vec<_>>>()?);
                         head = Expr::Apply(op, args);
@@ -170,7 +172,8 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                 Rule::if_expr => return build_if_expr(p),
                 Rule::cond_expr => return build_cond_expr(p),
                 Rule::switch_expr => return build_switch_expr(p),
-                _ => unreachable!(),
+                Rule::call_expr => return build_call_expr(p),
+                r => unreachable!("Encountered unknown op {:?}", r),
             };
             let term = build_expr_primary(inner.next().unwrap())?;
             Ok(Expr::Apply(op, vec![term]))
@@ -281,6 +284,14 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
             println!("Unhandled rule {:?}", pair.as_rule());
             unimplemented!()
         }
+    }
+}
+
+fn get_method(name: &str) -> Arc<dyn Op + Send + Sync> {
+    match name {
+        n if n == OpIsNull.name() => Arc::new(OpIsNull),
+        n if n == OpNotNull.name() => Arc::new(OpNotNull),
+        method_name => Arc::new(UnresolvedOp(method_name.to_string()))
     }
 }
 

@@ -103,18 +103,16 @@ op_ge = { ">=" }
 op_le = { "<=" }
 op_pow = { "^" }
 
-unary = { cond_expr | switch_expr | if_expr | (unary_op ~ unary) | term }
+unary = { cond_expr | switch_expr | if_expr | call_expr | (unary_op ~ unary) | term }
 unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }
 
+call_expr = { ident ~ "(" ~ (expr ~ ",")* ~ expr? ~ ")" }
 term = { (grouping | literal | ident | param | list | dict) ~ (call | accessor | index_accessor)* }
-call = {"." ~ ident ~ "(" ~ argument* ~ ")"}
+call = {"." ~ ident ~ "(" ~ (expr ~ ",")* ~ expr? ~ ")"}
 accessor = {"." ~ ident}
 index_accessor = {"[" ~ int ~ "]"}
-argument = _{(kw_arg | pos_arg)}
-kw_arg = {ident ~ "=" ~ expr}
-pos_arg = { expr }
 grouping = { "(" ~ expr ~ ")" }
 
 if_expr = { if_clause ~ ("else" ~ if_clause)* ~ else_clause? }
