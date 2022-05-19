@@ -54,16 +54,16 @@ impl RowEvalContext for () {
 
 pub(crate) trait PartialEvalContext {
     fn resolve(&self, key: &str) -> Option<Expr>;
-    fn resolve_table_col(&self, binding: &str, col: &str) -> Option<(TableId, ColId)>;
+    // fn resolve_table_col(&self, binding: &str, col: &str) -> Option<(TableId, ColId)>;
 }
 
 impl PartialEvalContext for () {
     fn resolve(&self, _key: &str) -> Option<Expr> {
         None
     }
-    fn resolve_table_col(&self, _binding: &str, _col: &str) -> Option<(TableId, ColId)> {
-        None
-    }
+    // fn resolve_table_col(&self, _binding: &str, _col: &str) -> Option<(TableId, ColId)> {
+    //     None
+    // }
 }
 
 fn extract_optimized_bin_args(args: Vec<Expr>) -> (Expr, Expr) {
@@ -103,19 +103,20 @@ impl<'a> Expr<'a> {
                 .resolve(&var)
                 .ok_or(EvalError::UnresolvedVariable(var))?,
             Expr::FieldAcc(f, arg) => {
-                let expr = match *arg {
-                    Expr::Variable(var) => {
-                        if let Some((tid, cid)) = ctx.resolve_table_col(&var, &f) {
-                            return Ok(Expr::TableCol(tid, cid));
-                        } else {
-                            ctx.resolve(&var)
-                                .ok_or(EvalError::UnresolvedVariable(var))?
-                                .partial_eval(ctx)?
-                        }
-                    }
-                    expr => expr.partial_eval(ctx)?,
-                };
-                match expr {
+                // let expr = match *arg {
+                //     Expr::Variable(var) => {
+                //         if let Some((tid, cid)) = ctx.resolve_table_col(&var, &f) {
+                //             return Ok(Expr::TableCol(tid, cid));
+                //         } else {
+                //             ctx.resolve(&var)
+                //                 .ok_or(EvalError::UnresolvedVariable(var))?
+                //                 .partial_eval(ctx)?
+                //         }
+                //     }
+                //     expr => expr.partial_eval(ctx)?,
+                // };
+                // match expr {expr
+                match arg.partial_eval(ctx)? {
                     Expr::Const(Value::Null) => Expr::Const(Value::Null),
                     Expr::Const(Value::Dict(mut d)) => {
                         Expr::Const(d.remove(&f as &str).unwrap_or(Value::Null))

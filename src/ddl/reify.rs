@@ -270,9 +270,9 @@ impl<'a> PartialEvalContext for NodeDefEvalCtx<'a> {
         self.resolve_name(key).map(Expr::TupleSetIdx)
     }
 
-    fn resolve_table_col(&self, _binding: &str, _col: &str) -> Option<(TableId, ColId)> {
-        None
-    }
+    // fn resolve_table_col(&self, _binding: &str, _col: &str) -> Option<(TableId, ColId)> {
+    //     None
+    // }
 }
 
 
@@ -342,7 +342,7 @@ impl<'a> PartialEvalContext for EdgeDefEvalCtx<'a> {
         self.resolve_name(key).map(Expr::TupleSetIdx)
     }
 
-    fn resolve_table_col(&self, _binding: &str, _col: &str) -> Option<(TableId, ColId)> {
-        None
-    }
+    // fn resolve_table_col(&self, _binding: &str, _col: &str) -> Option<(TableId, ColId)> {
+    //     None
+    // }
 }
