@@ -18,51 +18,52 @@ pub(crate) enum DdlParseError {
     ExprParse(#[from] ExprParseError),
 
     #[error("definition error: {0}")]
-    Definition(&'static str)
+    Definition(&'static str),
 }
 
 type Result<T> = result::Result<T, DdlParseError>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ColSchema {
-    name: String,
-    typing: Typing,
-    default: StaticExpr,
+    pub(crate) name: String,
+    pub(crate) typing: Typing,
+    pub(crate) default: StaticExpr,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct NodeSchema {
-    name: String,
-    keys: Vec<ColSchema>,
-    vals: Vec<ColSchema>,
+    pub(crate) name: String,
+    pub(crate) keys: Vec<ColSchema>,
+    pub(crate) vals: Vec<ColSchema>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct EdgeSchema {
-    name: String,
-    src_name: String,
-    dst_name: String,
-    keys: Vec<ColSchema>,
-    vals: Vec<ColSchema>,
+    pub(crate) name: String,
+    pub(crate) src_name: String,
+    pub(crate) dst_name: String,
+    pub(crate) keys: Vec<ColSchema>,
+    pub(crate) vals: Vec<ColSchema>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct AssocSchema {
-    name: String,
-    src_name: String,
-    vals: Vec<ColSchema>,
+    pub(crate) name: String,
+    pub(crate) src_name: String,
+    pub(crate) vals: Vec<ColSchema>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct IndexSchema {
-    name: String,
-    src_name: String,
-    index: Vec<StaticExpr>,
+    pub(crate) name: String,
+    pub(crate) src_name: String,
+    pub(crate) assoc_names: Vec<String>,
+    pub(crate) index: Vec<StaticExpr>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct SequenceSchema {
-    name: String,
+    pub(crate) name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +72,7 @@ pub(crate) enum DdlSchema {
     Edge(EdgeSchema),
     Assoc(AssocSchema),
     Index(IndexSchema),
-    Sequence(SequenceSchema)
+    Sequence(SequenceSchema),
 }
 
 impl<'a> TryFrom<Pair<'a>> for DdlSchema {
@@ -83,6 +84,7 @@ impl<'a> TryFrom<Pair<'a>> for DdlSchema {
             Rule::edge_def => DdlSchema::Edge(pair.try_into()?),
             Rule::assoc_def => DdlSchema::Assoc(pair.try_into()?),
             Rule::seq_def => DdlSchema::Sequence(pair.try_into()?),
+            Rule::index_def => DdlSchema::Index(pair.try_into()?),
             _ => todo!()
         })
     }
@@ -120,7 +122,7 @@ impl<'a> TryFrom<Pair<'a>> for EdgeSchema {
             src_name,
             dst_name,
             keys,
-            vals
+            vals,
         })
     }
 }
@@ -132,29 +134,48 @@ impl<'a> TryFrom<Pair<'a>> for AssocSchema {
         let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
 
-        let (keys, vals) =  parse_cols(pairs.next().unwrap())?;
+        let (keys, vals) = parse_cols(pairs.next().unwrap())?;
         if !keys.is_empty() {
-            return Err(DdlParseError::Definition("assoc cannot have keys"))
+            return Err(DdlParseError::Definition("assoc cannot have keys"));
         }
         if vals.is_empty() {
-            return Err(DdlParseError::Definition("assoc has no values"))
+            return Err(DdlParseError::Definition("assoc has no values"));
         }
         Ok(AssocSchema {
             name,
             src_name,
-            vals
+            vals,
         })
     }
 }
 
 impl<'a> TryFrom<Pair<'a>> for IndexSchema {
     type Error = DdlParseError;
-    fn try_from(value: Pair) -> Result<Self> {
-        todo!()
+    fn try_from(pair: Pair) -> Result<Self> {
+        let mut pairs = pair.into_inner();
+        let index_name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let main_name = build_name_in_def(pairs.next().unwrap(), false)?;
+        let mut associate_names = vec![];
+        let mut indices = vec![];
+        for pair in pairs {
+            match pair.as_rule() {
+                Rule::name_in_def => associate_names.push(build_name_in_def(pair, false)?),
+                _ => indices.push(Expr::try_from(pair)?.to_static())
+            }
+        }
+        if indices.is_empty() {
+            return Err(DdlParseError::Definition("Empty indexed columns"));
+        }
+        Ok(IndexSchema {
+            name: index_name,
+            src_name: main_name,
+            assoc_names: associate_names,
+            index: indices
+        })
     }
 }
 
-impl <'a> TryFrom<Pair<'a>> for SequenceSchema {
+impl<'a> TryFrom<Pair<'a>> for SequenceSchema {
     type Error = DdlParseError;
     fn try_from(pair: Pair) -> Result<Self> {
         let name = build_name_in_def(pair.into_inner().next().unwrap(), true)?;
@@ -187,7 +208,7 @@ fn parse_col_entry(pair: Pair) -> Result<(bool, ColSchema)> {
     Ok((is_key, ColSchema {
         name,
         typing,
-        default
+        default,
     }))
 }
 
@@ -198,7 +219,7 @@ fn parse_col_name(pair: Pair) -> Result<(bool, String)> {
         Rule::key_marker => {
             nxt = pairs.next().unwrap();
             true
-        },
+        }
         _ => false
     };
     let name = build_name_in_def(nxt, true)?;
@@ -248,6 +269,12 @@ mod tests {
 
         let s = r#"
         sequence PersonId;
+        "#;
+        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        dbg!(DdlSchema::try_from(p)?);
+
+        let s = r#"
+        index bankaccountidx: Person + BankAccount [id, x, y, z]
         "#;
         let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
         dbg!(DdlSchema::try_from(p)?);

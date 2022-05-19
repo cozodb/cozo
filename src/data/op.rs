@@ -17,6 +17,7 @@ pub(crate) use combine::*;
 pub(crate) use comparison::*;
 pub(crate) use control::*;
 pub(crate) use text::*;
+use crate::data::expr::Expr;
 
 type Result<T> = result::Result<T, EvalError>;
 
@@ -32,6 +33,8 @@ pub(crate) trait AggOp: Send + Sync {
     fn arity(&self) -> Option<usize>;
     fn has_side_effect(&self) -> bool;
     fn name(&self) -> &str;
+    fn prep(&self, args: &[Expr]) -> Result<()>;
+    fn get(&self, args: &[Expr]) -> Result<Value>;
 }
 
 pub(crate) struct UnresolvedOp(pub String);
@@ -65,6 +68,14 @@ impl AggOp for UnresolvedOp {
 
     fn name(&self) -> &str {
         &self.0
+    }
+
+    fn prep(&self, args: &[Expr]) -> Result<()> {
+        todo!()
+    }
+
+    fn get(&self, args: &[Expr]) -> Result<Value> {
+        todo!()
     }
 }
 

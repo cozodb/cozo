@@ -106,7 +106,7 @@ impl Op for OpOr {
     }
 }
 
-pub(crate) fn partial_eval_or<'a, T: PartialEvalContext + 'a>(
+pub(crate) fn partial_eval_or<'a, T: PartialEvalContext>(
     ctx: &'a T,
     args: Vec<Expr<'a>>,
 ) -> Result<Expr<'a>> {
@@ -210,7 +210,7 @@ impl Op for OpAnd {
     }
 }
 
-pub(crate) fn partial_eval_and<'a, T: PartialEvalContext + 'a>(
+pub(crate) fn partial_eval_and<'a, T: PartialEvalContext>(
     ctx: &'a T,
     args: Vec<Expr<'a>>,
 ) -> Result<Expr<'a>> {

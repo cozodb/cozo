@@ -175,7 +175,7 @@ assoc_def = { "assoc" ~ name_in_def ~ ":" ~ name_in_def ~ cols_def ~ ";"? }
 edge_def = { "edge" ~
              "(" ~ name_in_def ~ ")" ~ "-" ~ "[" ~ name_in_def ~ "]" ~ "->" ~ "(" ~ name_in_def ~ ")"
              ~ cols_def? ~ ";"? }
-index_def = { "index" ~ (name_in_def ~ ":")? ~ name_in_def ~ ("+" ~ name_in_def)* ~ "[" ~ (expr ~ ",")* ~ expr? ~ "]" ~ ";"? }
+index_def = { "index" ~ name_in_def ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* ~ "[" ~ (expr ~ ",")* ~ expr? ~ "]" ~ ";"? }
 seq_def = { "sequence" ~ name_in_def ~ ";" }
 type_def = { "type" ~ name_in_def ~ "=" ~ typing ~ ";" }
 
