@@ -1,4 +1,4 @@
-use crate::data::eval::{EvalError, ExprEvalContext, RowEvalContext};
+use crate::data::eval::{EvalError, PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
 use crate::data::op::Op;
 use crate::data::value::{Value};
@@ -106,7 +106,7 @@ impl Op for OpOr {
     }
 }
 
-pub(crate) fn partial_eval_or<'a, T: ExprEvalContext + 'a>(
+pub(crate) fn partial_eval_or<'a, T: PartialEvalContext + 'a>(
     ctx: &'a T,
     args: Vec<Expr<'a>>,
 ) -> Result<Expr<'a>> {
@@ -210,7 +210,7 @@ impl Op for OpAnd {
     }
 }
 
-pub(crate) fn partial_eval_and<'a, T: ExprEvalContext + 'a>(
+pub(crate) fn partial_eval_and<'a, T: PartialEvalContext + 'a>(
     ctx: &'a T,
     args: Vec<Expr<'a>>,
 ) -> Result<Expr<'a>> {

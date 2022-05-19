@@ -52,12 +52,12 @@ impl RowEvalContext for () {
     }
 }
 
-pub(crate) trait ExprEvalContext {
+pub(crate) trait PartialEvalContext {
     fn resolve<'a>(&'a self, key: &str) -> Option<Expr<'a>>;
     fn resolve_table_col<'a>(&'a self, binding: &str, col: &str) -> Option<(TableId, ColId)>;
 }
 
-impl ExprEvalContext for () {
+impl PartialEvalContext for () {
     fn resolve<'a>(&'a self, _key: &str) -> Option<Expr<'a>> {
         None
     }
@@ -79,14 +79,14 @@ fn extract_optimized_u_args(args: Vec<Expr>) -> Expr {
 }
 
 impl<'a> Expr<'a> {
-    pub(crate) fn interpret_eval<C: ExprEvalContext + 'a>(self, ctx: &'a C) -> Result<Value> {
+    pub(crate) fn interpret_eval<C: PartialEvalContext + 'a>(self, ctx: &'a C) -> Result<Value> {
         match self.partial_eval(ctx)? {
             Expr::Const(v) => Ok(v),
             v => Err(EvalError::IncompleteEvaluation(format!("{:?}", v))),
         }
     }
 
-    pub(crate) fn partial_eval<C: ExprEvalContext + 'a>(self, ctx: &'a C) -> Result<Self> {
+    pub(crate) fn partial_eval<C: PartialEvalContext + 'a>(self, ctx: &'a C) -> Result<Self> {
         let res = match self {
             v @ (Expr::Const(_) | Expr::TableCol(_, _) | Expr::TupleSetIdx(_)) => v,
             Expr::List(l) => Expr::List(

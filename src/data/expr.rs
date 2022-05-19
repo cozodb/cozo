@@ -60,6 +60,102 @@ pub(crate) enum Expr<'a> {
     And(Box<(Expr<'a>, Expr<'a>)>),
 }
 
+impl<'a> Expr<'a> {
+    pub(crate) fn to_static(self) -> StaticExpr {
+        match self {
+            Expr::Const(v) => Expr::Const(v.to_static()),
+            Expr::List(l) => Expr::List(l.into_iter().map(|v| v.to_static()).collect()),
+            Expr::Dict(d) => Expr::Dict(d.into_iter().map(|(k, v)| (k, v.to_static())).collect()),
+            Expr::Variable(v) => Expr::Variable(v),
+            Expr::TableCol(tid, cid) => Expr::TableCol(tid, cid),
+            Expr::TupleSetIdx(idx) => Expr::TupleSetIdx(idx),
+            Expr::Apply(op, args) => Expr::Apply(op,
+                                                 args.into_iter().map(|v| v.to_static()).collect()),
+            Expr::ApplyAgg(op, a_args, args) => Expr::ApplyAgg(
+                op,
+                a_args.into_iter().map(|v| v.to_static()).collect(),
+                args.into_iter().map(|v| v.to_static()).collect(),
+            ),
+            Expr::FieldAcc(f, arg) => Expr::FieldAcc(f, arg.to_static().into()),
+            Expr::IdxAcc(i, arg) => Expr::IdxAcc(i, arg.to_static().into()),
+            Expr::IfExpr(args) => {
+                let (a, b, c) = *args;
+                Expr::IfExpr((a.to_static(), b.to_static(), c.to_static()).into())
+            }
+            Expr::SwitchExpr(args) => Expr::SwitchExpr(args.into_iter().map(|(a, b)|
+                (a.to_static(), b.to_static())).collect()),
+            Expr::Add(args) => {
+                let (a, b) = *args;
+                Expr::Add((a.to_static(), b.to_static()).into())
+            }
+            Expr::Sub(args) => {
+                let (a, b) = *args;
+                Expr::Sub((a.to_static(), b.to_static()).into())
+            }
+            Expr::Mul(args) => {
+                let (a, b) = *args;
+                Expr::Mul((a.to_static(), b.to_static()).into())
+            }
+            Expr::Div(args) => {
+                let (a, b) = *args;
+                Expr::Div((a.to_static(), b.to_static()).into())
+            }
+            Expr::Pow(args) => {
+                let (a, b) = *args;
+                Expr::Pow((a.to_static(), b.to_static()).into())
+            }
+            Expr::Mod(args) => {
+                let (a, b) = *args;
+                Expr::Mod((a.to_static(), b.to_static()).into())
+            }
+            Expr::StrCat(args) => {
+                let (a, b) = *args;
+                Expr::StrCat((a.to_static(), b.to_static()).into())
+            }
+            Expr::Eq(args) => {
+                let (a, b) = *args;
+                Expr::Eq((a.to_static(), b.to_static()).into())
+            }
+            Expr::Ne(args) => {
+                let (a, b) = *args;
+                Expr::Ne((a.to_static(), b.to_static()).into())
+            }
+            Expr::Gt(args) => {
+                let (a, b) = *args;
+                Expr::Gt((a.to_static(), b.to_static()).into())
+            }
+            Expr::Ge(args) => {
+                let (a, b) = *args;
+                Expr::Ge((a.to_static(), b.to_static()).into())
+            }
+            Expr::Lt(args) => {
+                let (a, b) = *args;
+                Expr::Lt((a.to_static(), b.to_static()).into())
+            }
+            Expr::Le(args) => {
+                let (a, b) = *args;
+                Expr::Le((a.to_static(), b.to_static()).into())
+            }
+            Expr::Not(arg) => Expr::Not(arg.to_static().into()),
+            Expr::Minus(arg) => Expr::Minus(arg.to_static().into()),
+            Expr::IsNull(arg) => Expr::IsNull(arg.to_static().into()),
+            Expr::NotNull(arg) => Expr::NotNull(arg.to_static().into()),
+            Expr::Coalesce(args) => {
+                let (a, b) = *args;
+                Expr::Coalesce((a.to_static(), b.to_static()).into())
+            }
+            Expr::Or(args) => {
+                let (a, b) = *args;
+                Expr::Or((a.to_static(), b.to_static()).into())
+            }
+            Expr::And(args) => {
+                let (a, b) = *args;
+                Expr::And((a.to_static(), b.to_static()).into())
+            }
+        }
+    }
+}
+
 impl<'a> PartialEq for Expr<'a> {
     fn eq(&self, other: &Self) -> bool {
         use Expr::*;
@@ -317,7 +413,7 @@ fn build_value_from_binop<'a>(name: &str, (left, right): (Expr<'a>, Expr<'a>)) -
             Value::from(name.to_string()),
             Value::from(vec![Value::from(left), Value::from(right)]),
         ]
-        .into(),
+            .into(),
     )
 }
 
@@ -328,7 +424,7 @@ fn build_value_from_uop<'a>(name: &str, arg: Expr<'a>) -> Value<'a> {
             Value::from(name.to_string()),
             Value::from(vec![Value::from(arg)]),
         ]
-        .into(),
+            .into(),
     )
 }
 
@@ -356,7 +452,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     cid.is_key.into(),
                     Value::from(cid.id as i64),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::TupleSetIdx(sid) => build_tagged_value(
                 "TupleSetIdx",
@@ -365,7 +461,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(sid.t_set as i64),
                     Value::from(sid.col_idx as i64),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::Add(arg) => build_value_from_binop(OpAdd.name(), *arg),
             Expr::Sub(arg) => build_value_from_binop(OpSub.name(), *arg),
@@ -393,7 +489,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(op.name().to_string()),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::IfExpr(_) => {
                 todo!()
@@ -412,7 +508,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                         .into(),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                .into(),
+                    .into(),
             ),
             Expr::FieldAcc(f, v) => {
                 build_tagged_value("FieldAcc", vec![f.into(), Value::from(*v)].into())

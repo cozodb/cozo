@@ -4,6 +4,8 @@ mod combine;
 mod comparison;
 mod control;
 mod text;
+mod uuid;
+mod sequence;
 
 use crate::data::eval::EvalError;
 use crate::data::value::{Value};
