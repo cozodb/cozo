@@ -1,6 +1,6 @@
 use crate::data::eval::EvalError;
 use crate::data::op::{extract_two_args, Op};
-use crate::data::value::{StaticValue, Value};
+use crate::data::value::{Value};
 use std::result;
 
 type Result<T> = result::Result<T, EvalError>;
@@ -25,6 +25,8 @@ impl OpAdd {
     }
 }
 
+pub(crate) const NAME_OP_ADD: &str = "+";
+
 impl Op for OpAdd {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -35,7 +37,7 @@ impl Op for OpAdd {
     }
 
     fn name(&self) -> &str {
-        "+"
+        NAME_OP_ADD
     }
 
     fn non_null_args(&self) -> bool {
@@ -67,6 +69,8 @@ impl OpSub {
     }
 }
 
+pub(crate) const NAME_OP_SUB: &str = "-";
+
 impl Op for OpSub {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -77,7 +81,7 @@ impl Op for OpSub {
     }
 
     fn name(&self) -> &str {
-        "-"
+        NAME_OP_SUB
     }
 
     fn non_null_args(&self) -> bool {
@@ -109,6 +113,8 @@ impl OpMul {
     }
 }
 
+pub(crate) const NAME_OP_MUL: &str = "*";
+
 impl Op for OpMul {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -119,7 +125,7 @@ impl Op for OpMul {
     }
 
     fn name(&self) -> &str {
-        "*"
+        NAME_OP_MUL
     }
 
     fn non_null_args(&self) -> bool {
@@ -152,6 +158,8 @@ impl OpDiv {
     }
 }
 
+pub(crate) const NAME_OP_DIV: &str = "/";
+
 impl Op for OpDiv {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -162,7 +170,7 @@ impl Op for OpDiv {
     }
 
     fn name(&self) -> &str {
-        "/"
+        NAME_OP_DIV
     }
 
     fn non_null_args(&self) -> bool {
@@ -192,6 +200,8 @@ impl OpMod {
     }
 }
 
+pub(crate) const NAME_OP_MOD: &str = "%";
+
 impl Op for OpMod {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -202,7 +212,7 @@ impl Op for OpMod {
     }
 
     fn name(&self) -> &str {
-        "%"
+        NAME_OP_MOD
     }
 
     fn non_null_args(&self) -> bool {
@@ -235,6 +245,8 @@ impl OpPow {
     }
 }
 
+pub(crate) const NAME_OP_POW: &str = "**";
+
 impl Op for OpPow {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -245,7 +257,7 @@ impl Op for OpPow {
     }
 
     fn name(&self) -> &str {
-        "**"
+        NAME_OP_POW
     }
 
     fn non_null_args(&self) -> bool {
@@ -272,6 +284,8 @@ impl OpMinus {
     }
 }
 
+pub(crate) const NAME_OP_MINUS: &str = "--";
+
 impl Op for OpMinus {
     fn arity(&self) -> Option<usize> {
         Some(1)
@@ -279,11 +293,11 @@ impl Op for OpMinus {
     fn has_side_effect(&self) -> bool {
         false
     }
-    fn non_null_args(&self) -> bool {
-        true
-    }
     fn name(&self) -> &str {
         "--"
+    }
+    fn non_null_args(&self) -> bool {
+        true
     }
     fn eval<'a>(&self, args: Vec<Value<'a>>) -> crate::data::op::Result<Value<'a>> {
         self.eval_one_non_null(args.into_iter().next().unwrap())

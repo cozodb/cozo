@@ -11,6 +11,8 @@ pub(crate) struct OpCond;
 
 pub(crate) struct OpCoalesce;
 
+pub(crate) const NAME_OP_COALESCE: &str = "~~";
+
 impl Op for OpCoalesce {
     fn arity(&self) -> Option<usize> {
         None
@@ -21,7 +23,7 @@ impl Op for OpCoalesce {
     }
 
     fn name(&self) -> &str {
-        "~~"
+        NAME_OP_COALESCE
     }
     fn non_null_args(&self) -> bool {
         false
@@ -48,7 +50,7 @@ pub(crate) fn row_eval_coalesce<'a, T: RowEvalContext + 'a>(
     right.row_eval(ctx)
 }
 
-const IF_NAME: &str = "if";
+pub(crate) const IF_NAME: &str = "if";
 
 pub(crate) fn partial_eval_coalesce<'a, T: ExprEvalContext + 'a>(
     ctx: &'a T,

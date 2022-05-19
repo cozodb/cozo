@@ -1,6 +1,6 @@
 pub(crate) mod eval;
 pub(crate) mod expr;
-pub(crate) mod expr_parser;
+pub(crate) mod parser;
 pub(crate) mod key_order;
 pub(crate) mod op;
 pub(crate) mod tuple;

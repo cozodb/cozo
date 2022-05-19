@@ -1,5 +1,5 @@
 use crate::data::expr::{Expr};
-use crate::data::expr_parser::ExprParseError;
+use crate::data::parser::ExprParseError;
 use crate::data::op::*;
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
@@ -163,9 +163,9 @@ impl<'a> Expr<'a> {
                 }
                 match op.name() {
                     // special cases
-                    n if n == OpAnd.name() => partial_eval_and(ctx, args)?,
-                    n if n == OpOr.name() => partial_eval_or(ctx, args)?,
-                    n if n == OpCoalesce.name() => partial_eval_coalesce(ctx, args)?,
+                    NAME_OP_AND => partial_eval_and(ctx, args)?,
+                    NAME_OP_OR => partial_eval_or(ctx, args)?,
+                    NAME_OP_COALESCE => partial_eval_coalesce(ctx, args)?,
                     _ => {
                         let mut has_unevaluated = false;
                         let non_null_args_fn = op.non_null_args();
@@ -242,32 +242,24 @@ impl<'a> Expr<'a> {
                 Expr::Dict(d.into_iter().map(|(k, v)| (k, v.optimize_ops())).collect())
             }
             Expr::Apply(op, args) => match op.name() {
-                name if name == OpAdd.name() => Expr::Add(extract_optimized_bin_args(args).into()),
-                name if name == OpSub.name() => Expr::Sub(extract_optimized_bin_args(args).into()),
-                name if name == OpMul.name() => Expr::Mul(extract_optimized_bin_args(args).into()),
-                name if name == OpDiv.name() => Expr::Div(extract_optimized_bin_args(args).into()),
-                name if name == OpPow.name() => Expr::Pow(extract_optimized_bin_args(args).into()),
-                name if name == OpMod.name() => Expr::Mod(extract_optimized_bin_args(args).into()),
-                name if name == OpStrCat.name() => {
-                    Expr::StrCat(extract_optimized_bin_args(args).into())
-                }
-                name if name == OpEq.name() => Expr::Eq(extract_optimized_bin_args(args).into()),
-                name if name == OpNe.name() => Expr::Ne(extract_optimized_bin_args(args).into()),
-                name if name == OpGt.name() => Expr::Gt(extract_optimized_bin_args(args).into()),
-                name if name == OpGe.name() => Expr::Ge(extract_optimized_bin_args(args).into()),
-                name if name == OpLt.name() => Expr::Lt(extract_optimized_bin_args(args).into()),
-                name if name == OpLe.name() => Expr::Le(extract_optimized_bin_args(args).into()),
-                name if name == OpNot.name() => Expr::Not(extract_optimized_u_args(args).into()),
-                name if name == OpMinus.name() => {
-                    Expr::Minus(extract_optimized_u_args(args).into())
-                }
-                name if name == OpIsNull.name() => {
-                    Expr::IsNull(extract_optimized_u_args(args).into())
-                }
-                name if name == OpNotNull.name() => {
-                    Expr::NotNull(extract_optimized_u_args(args).into())
-                }
-                name if name == OpCoalesce.name() => {
+                NAME_OP_ADD => Expr::Add(extract_optimized_bin_args(args).into()),
+                NAME_OP_SUB => Expr::Sub(extract_optimized_bin_args(args).into()),
+                NAME_OP_MUL => Expr::Mul(extract_optimized_bin_args(args).into()),
+                NAME_OP_DIV => Expr::Div(extract_optimized_bin_args(args).into()),
+                NAME_OP_POW => Expr::Pow(extract_optimized_bin_args(args).into()),
+                NAME_OP_MOD => Expr::Mod(extract_optimized_bin_args(args).into()),
+                NAME_OP_STR_CAT => Expr::StrCat(extract_optimized_bin_args(args).into()),
+                NAME_OP_EQ => Expr::Eq(extract_optimized_bin_args(args).into()),
+                NAME_OP_NE => Expr::Ne(extract_optimized_bin_args(args).into()),
+                NAME_OP_GT => Expr::Gt(extract_optimized_bin_args(args).into()),
+                NAME_OP_GE => Expr::Ge(extract_optimized_bin_args(args).into()),
+                NAME_OP_LT => Expr::Lt(extract_optimized_bin_args(args).into()),
+                NAME_OP_LE => Expr::Le(extract_optimized_bin_args(args).into()),
+                NAME_OP_NOT => Expr::Not(extract_optimized_u_args(args).into()),
+                NAME_OP_MINUS => Expr::Minus(extract_optimized_u_args(args).into()),
+                NAME_OP_IS_NULL => Expr::IsNull(extract_optimized_u_args(args).into()),
+                NAME_OP_NOT_NULL => Expr::NotNull(extract_optimized_u_args(args).into()),
+                NAME_OP_COALESCE => {
                     let mut args = args.into_iter();
                     let mut arg = args.next().unwrap().optimize_ops();
                     for nxt in args {
@@ -275,7 +267,7 @@ impl<'a> Expr<'a> {
                     }
                     arg
                 }
-                name if name == OpOr.name() => {
+                NAME_OP_OR => {
                     let mut args = args.into_iter();
                     let mut arg = args.next().unwrap().optimize_ops();
                     for nxt in args {
@@ -283,7 +275,7 @@ impl<'a> Expr<'a> {
                     }
                     arg
                 }
-                name if name == OpAnd.name() => {
+                NAME_OP_AND => {
                     let mut args = args.into_iter();
                     let mut arg = args.next().unwrap().optimize_ops();
                     for nxt in args {
@@ -370,7 +362,7 @@ impl<'a> Expr<'a> {
                 for v in args {
                     let v = v.row_eval(ctx)?;
                     if op_non_null_args && v == Value::Null {
-                        return Ok(Value::Null)
+                        return Ok(Value::Null);
                     } else {
                         eval_args.push(v);
                     }
@@ -554,7 +546,7 @@ impl<'a> Expr<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::expr_parser::tests::str2expr;
+    use crate::data::parser::tests::str2expr;
 
     #[test]
     fn evaluations() -> Result<()> {

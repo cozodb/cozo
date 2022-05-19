@@ -23,6 +23,8 @@ impl OpStrCat {
     }
 }
 
+pub(crate) const NAME_OP_STR_CAT: &str = "++";
+
 impl Op for OpStrCat {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -33,7 +35,7 @@ impl Op for OpStrCat {
     }
 
     fn name(&self) -> &str {
-        "++"
+        NAME_OP_STR_CAT
     }
 
     fn non_null_args(&self) -> bool {

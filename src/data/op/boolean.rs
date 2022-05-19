@@ -1,8 +1,7 @@
 use crate::data::eval::{EvalError, ExprEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
 use crate::data::op::Op;
-use crate::data::typing::Typing;
-use crate::data::value::{StaticValue, Value};
+use crate::data::value::{Value};
 use std::result;
 use std::sync::Arc;
 
@@ -16,6 +15,8 @@ impl OpIsNull {
     }
 }
 
+pub(crate) const NAME_OP_IS_NULL: &str = "is_null";
+
 impl Op for OpIsNull {
     fn arity(&self) -> Option<usize> {
         Some(1)
@@ -24,7 +25,7 @@ impl Op for OpIsNull {
         false
     }
     fn name(&self) -> &str {
-        "is_null"
+        NAME_OP_IS_NULL
     }
     fn non_null_args(&self) -> bool {
         false
@@ -42,6 +43,8 @@ impl OpNotNull {
     }
 }
 
+pub(crate) const NAME_OP_NOT_NULL: &str = "not_null";
+
 impl Op for OpNotNull {
     fn arity(&self) -> Option<usize> {
         Some(1)
@@ -50,7 +53,7 @@ impl Op for OpNotNull {
         false
     }
     fn name(&self) -> &str {
-        "not_null"
+        NAME_OP_NOT_NULL
     }
     fn non_null_args(&self) -> bool {
         false
@@ -63,6 +66,8 @@ impl Op for OpNotNull {
 
 pub(crate) struct OpOr;
 
+pub(crate) const NAME_OP_OR: &str = "||";
+
 impl Op for OpOr {
     fn arity(&self) -> Option<usize> {
         None
@@ -73,7 +78,7 @@ impl Op for OpOr {
     }
 
     fn name(&self) -> &str {
-        "||"
+        NAME_OP_OR
     }
     fn non_null_args(&self) -> bool {
         false
@@ -165,6 +170,8 @@ pub(crate) fn row_eval_or<'a, T: RowEvalContext + 'a>(
 
 pub(crate) struct OpAnd;
 
+pub(crate) const NAME_OP_AND: &str = "&&";
+
 impl Op for OpAnd {
     fn arity(&self) -> Option<usize> {
         None
@@ -175,7 +182,7 @@ impl Op for OpAnd {
     }
 
     fn name(&self) -> &str {
-        "&&"
+        NAME_OP_AND
     }
     fn non_null_args(&self) -> bool {
         false
@@ -279,6 +286,8 @@ impl OpNot {
     }
 }
 
+pub(crate) const NAME_OP_NOT: &str = "!";
+
 impl Op for OpNot {
     fn arity(&self) -> Option<usize> {
         Some(1)
@@ -290,7 +299,7 @@ impl Op for OpNot {
         true
     }
     fn name(&self) -> &str {
-        "!"
+        NAME_OP_NOT
     }
     fn eval<'a>(&self, args: Vec<Value<'a>>) -> crate::data::op::Result<Value<'a>> {
         self.eval_one_non_null(args.into_iter().next().unwrap())

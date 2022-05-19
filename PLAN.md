@@ -104,3 +104,9 @@ Helpers
 Aggregation
 
 * Aggregation functions should implement `.step()` and `.result()`
+
+Differentiation
+
+* function calls use parentheses, names start with lowercase letters or "_"
+* aggregation calls are the same as function calls except that square brackets are used instead
+* query calls are the same as function calls except that query names start with upper case or "#"

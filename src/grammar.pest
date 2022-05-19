@@ -11,6 +11,8 @@ COMMENT = _{(BLOCK_COMMENT | LINE_COMMENT)}
 // identifiers
 
 ident = @{("_" | XID_START) ~ ("_" | XID_CONTINUE)*}
+fn_ident = @{("_" | LOWERCASE_LETTER) ~ ("_" | XID_CONTINUE)*}
+query_ident = @{("#" | UPPERCASE_LETTER) ~ ("_" | XID_CONTINUE)*}
 param = @{"$" ~ ("_" | XID_CONTINUE)+}
 
 
@@ -83,6 +85,7 @@ literal = _{ null | boolean | number | string}
 // Expressions
 
 comma_sep_expr = { expr ~ ("," ~ expr)* }
+expr_all = _{SOI ~ expr ~ EOI}
 expr = {unary ~ (operation ~ unary) *}
 operation = _{ (op_and | op_or | op_pow | op_str_cat | op_add | op_sub | op_mul | op_div | op_mod | op_coalesce |
                 op_ge | op_le | op_gt | op_lt | op_eq | op_ne)}
@@ -103,14 +106,16 @@ op_ge = { ">=" }
 op_le = { "<=" }
 op_pow = { "^" }
 
-unary = { cond_expr | switch_expr | if_expr | call_expr | (unary_op ~ unary) | term }
+unary = { cond_expr | switch_expr | if_expr | (unary_op ~ unary) | term }
 unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }
 
-call_expr = { ident ~ "(" ~ (expr ~ ",")* ~ expr? ~ ")" }
-term = { (grouping | literal | ident | param | list | dict) ~ (call | accessor | index_accessor)* }
-call = {"." ~ ident ~ "(" ~ (expr ~ ",")* ~ expr? ~ ")"}
+call_expr = { fn_ident ~ "(" ~ (expr ~ ",")* ~ expr? ~ ")" }
+aggr_expr = { fn_ident ~ "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
+term = { (grouping | call_expr | aggr_expr | literal | ident | param | list | dict) ~ (call | aggr | accessor | index_accessor)* }
+call = {"." ~ fn_ident ~ "(" ~ (expr ~ ",")* ~ expr? ~ ")"}
+aggr = {"." ~ fn_ident ~ "[" ~ (expr ~ ",")* ~ expr? ~ "]"}
 accessor = {"." ~ ident}
 index_accessor = {"[" ~ int ~ "]"}
 grouping = { "(" ~ expr ~ ")" }
@@ -134,11 +139,11 @@ dict_entry = _{ spreading | dict_pair | scoped_accessor }
 scoped_accessor = { ident }
 dict_pair = {(ident | string) ~ ":" ~ expr}
 
-select_dict = { "{" ~ (select_dict_entry ~ ",")* ~ select_dict_entry? ~ "}"}
-select_dict_entry = _{ grouped_pair | spreading | dict_pair | scoped_accessor }
-grouped_pair = { "*" ~ (ident | string) ~ ":" ~ expr}
+keyed_dict = { "{" ~ (keyed_dict_entry ~ ",")* ~ keyed_dict_entry? ~ "}"}
+keyed_dict_entry = _{ keyed_pair | spreading | dict_pair | scoped_accessor }
+keyed_pair = { "*" ~ (ident | string) ~ ":" ~ expr}
 
-scoped_dict = { ident ~ select_dict }
+scoped_dict = { ident ~ ":" ~ keyed_dict }
 
 name_in_def = {(ident | string)}
 col_entry = { col_name ~ ":" ~ typing ~ ("=" ~ expr)? }
@@ -215,3 +220,21 @@ statement = _{ global_def | local_def }
 // Relational algebra
 
 // ra = { (ra_source | ra_fn_call) ~ ra_method_call* }
+chain = { (node_part ~ (edge_part ~ node_part)* ~ edge_part?) | (edge_part ~ (node_part ~ edge_part)* ~ node_part?) }
+node_part = {ident? ~ ":" ~ name_in_def}
+edge_part = {edge_src_marker ~ node_part ~ edge_dst_marker}
+edge_src_marker = {outer_marker? ~ bwd_marker? ~ "-["}
+edge_dst_marker = {"]-" ~ fwd_marker? ~ outer_marker?}
+outer_marker = {"?"}
+bwd_marker = {"<"}
+fwd_marker = {">"}
+
+sort_arg = {expr ~ "=>" ~ sort_dir}
+sort_dir = _{asc_dir | desc_dir}
+asc_dir = {"asc"}
+desc_dir = {"desc"}
+ra_arg = { ra_expr | chain | scoped_dict | keyed_dict | sort_arg | expr }
+ra_call_expr = { query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")" }
+ra_call = {"." ~ query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")"}
+ra_expr = { ra_call_expr ~ ra_call* }
+ra_expr_all = _{SOI ~ ra_expr ~ EOI}

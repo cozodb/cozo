@@ -13,6 +13,8 @@ impl OpEq {
     }
 }
 
+pub(crate) const NAME_OP_EQ: &str = "==";
+
 impl Op for OpEq {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -23,7 +25,7 @@ impl Op for OpEq {
     }
 
     fn name(&self) -> &str {
-        "=="
+        NAME_OP_EQ
     }
 
     fn non_null_args(&self) -> bool {
@@ -44,6 +46,8 @@ impl OpNe {
     }
 }
 
+pub(crate) const NAME_OP_NE: &str = "!=";
+
 impl Op for OpNe {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -54,7 +58,7 @@ impl Op for OpNe {
     }
 
     fn name(&self) -> &str {
-        "!="
+        NAME_OP_NE
     }
 
     fn non_null_args(&self) -> bool {
@@ -88,6 +92,8 @@ impl OpGt {
     }
 }
 
+pub(crate) const NAME_OP_GT: &str = ">";
+
 impl Op for OpGt {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -98,7 +104,7 @@ impl Op for OpGt {
     }
 
     fn name(&self) -> &str {
-        ">"
+        NAME_OP_GT
     }
 
     fn non_null_args(&self) -> bool {
@@ -131,6 +137,8 @@ impl OpGe {
     }
 }
 
+pub(crate) const NAME_OP_GE: &str = ">=";
+
 impl Op for OpGe {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -141,7 +149,7 @@ impl Op for OpGe {
     }
 
     fn name(&self) -> &str {
-        ">="
+        NAME_OP_GE
     }
 
     fn non_null_args(&self) -> bool {
@@ -174,6 +182,8 @@ impl OpLt {
     }
 }
 
+pub(crate) const NAME_OP_LT: &str = "<";
+
 impl Op for OpLt {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -184,7 +194,7 @@ impl Op for OpLt {
     }
 
     fn name(&self) -> &str {
-        "<"
+        NAME_OP_LT
     }
 
     fn non_null_args(&self) -> bool {
@@ -217,6 +227,8 @@ impl OpLe {
     }
 }
 
+pub(crate) const NAME_OP_LE: &str = "<=";
+
 impl Op for OpLe {
     fn arity(&self) -> Option<usize> {
         Some(2)
@@ -227,7 +239,7 @@ impl Op for OpLe {
     }
 
     fn name(&self) -> &str {
-        "<="
+        NAME_OP_LE
     }
 
     fn non_null_args(&self) -> bool {

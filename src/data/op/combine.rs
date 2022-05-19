@@ -1,14 +1,14 @@
-use crate::data::eval::{EvalError, ExprEvalContext};
-use crate::data::expr::Expr;
+use crate::data::eval::{EvalError};
 use crate::data::op::Op;
-use crate::data::typing::Typing;
-use crate::data::value::{StaticValue, Value};
+use crate::data::value::{Value};
 use std::collections::BTreeMap;
 use std::result;
 
 type Result<T> = result::Result<T, EvalError>;
 
 pub(crate) struct OpConcat;
+
+pub(crate) const NAME_OP_CONCAT: &str = "concat";
 
 impl Op for OpConcat {
     fn arity(&self) -> Option<usize> {
@@ -20,7 +20,7 @@ impl Op for OpConcat {
     }
 
     fn name(&self) -> &str {
-        "concat"
+        NAME_OP_CONCAT
     }
     fn non_null_args(&self) -> bool {
         false
@@ -45,6 +45,8 @@ impl Op for OpConcat {
 
 pub(crate) struct OpMerge;
 
+pub(crate) const NAME_OP_MERGE: &str = "merge";
+
 impl Op for OpMerge {
     fn arity(&self) -> Option<usize> {
         None
@@ -55,7 +57,7 @@ impl Op for OpMerge {
     }
 
     fn name(&self) -> &str {
-        "merge"
+        NAME_OP_MERGE
     }
     fn non_null_args(&self) -> bool {
         false

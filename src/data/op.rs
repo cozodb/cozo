@@ -6,8 +6,7 @@ mod control;
 mod text;
 
 use crate::data::eval::EvalError;
-use crate::data::typing::Typing;
-use crate::data::value::{StaticValue, Value};
+use crate::data::value::{Value};
 use std::result;
 
 pub(crate) use arithmetic::*;

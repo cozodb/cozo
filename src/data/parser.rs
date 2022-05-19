@@ -1,5 +1,5 @@
 use crate::data::expr::Expr;
-use crate::data::op::{Op, OpAdd, OpAnd, OpCoalesce, OpConcat, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMerge, OpMinus, OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp};
+use crate::data::op::*;
 use crate::data::value::Value;
 use crate::parser::number::parse_int;
 use crate::parser::text_identifier::parse_string;
@@ -172,7 +172,6 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                 Rule::if_expr => return build_if_expr(p),
                 Rule::cond_expr => return build_cond_expr(p),
                 Rule::switch_expr => return build_switch_expr(p),
-                Rule::call_expr => return build_call_expr(p),
                 r => unreachable!("Encountered unknown op {:?}", r),
             };
             let term = build_expr_primary(inner.next().unwrap())?;
@@ -280,6 +279,7 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
         }
         Rule::param => Ok(Expr::Variable(pair.as_str().into())),
         Rule::ident => Ok(Expr::Variable(pair.as_str().into())),
+        Rule::call_expr => build_call_expr(pair),
         _ => {
             println!("Unhandled rule {:?}", pair.as_rule());
             unimplemented!()
@@ -289,8 +289,10 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
 
 fn get_method(name: &str) -> Arc<dyn Op + Send + Sync> {
     match name {
-        n if n == OpIsNull.name() => Arc::new(OpIsNull),
-        n if n == OpNotNull.name() => Arc::new(OpNotNull),
+        NAME_OP_IS_NULL => Arc::new(OpIsNull),
+        NAME_OP_NOT_NULL => Arc::new(OpNotNull),
+        NAME_OP_CONCAT => Arc::new(OpConcat),
+        NAME_OP_MERGE => Arc::new(OpMerge),
         method_name => Arc::new(UnresolvedOp(method_name.to_string()))
     }
 }
@@ -331,7 +333,7 @@ pub(crate) mod tests {
     use pest::Parser;
 
     pub(crate) fn str2expr(s: &str) -> Result<Expr> {
-        let pair = CozoParser::parse(Rule::expr, s)
+        let pair = CozoParser::parse(Rule::expr_all, s)
             .unwrap()
             .next()
             .unwrap();
