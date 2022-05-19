@@ -295,22 +295,26 @@ impl<'a> EdgeDefEvalCtx<'a> {
                 });
             }
         }
-        for (i, col) in self.keys.iter().enumerate() {
-            if name == col.name {
-                return Some(TupleSetIdx {
-                    is_key: true,
-                    t_set: 0,
-                    col_idx: i + 1 + self.src_keys.len(),
-                });
+        if name.starts_with("_src_") {
+            for (i, col) in self.keys.iter().enumerate() {
+                if name.strip_prefix("_src_").unwrap() == col.name {
+                    return Some(TupleSetIdx {
+                        is_key: true,
+                        t_set: 0,
+                        col_idx: i + 1 + self.src_keys.len(),
+                    });
+                }
             }
         }
-        for (i, col) in self.dst_keys.iter().enumerate() {
-            if name == col.name {
-                return Some(TupleSetIdx {
-                    is_key: true,
-                    t_set: 0,
-                    col_idx: i + 2 + self.src_keys.len() + self.dst_keys.len(),
-                });
+        if name.starts_with("_dst_") {
+            for (i, col) in self.dst_keys.iter().enumerate() {
+                if name.strip_prefix("_dst_").unwrap() == col.name {
+                    return Some(TupleSetIdx {
+                        is_key: true,
+                        t_set: 0,
+                        col_idx: i + 2 + self.src_keys.len() + self.dst_keys.len(),
+                    });
+                }
             }
         }
         for (i, col) in self.vals.iter().enumerate() {
@@ -341,8 +345,4 @@ impl<'a> PartialEvalContext for EdgeDefEvalCtx<'a> {
     fn resolve(&self, key: &str) -> Option<Expr> {
         self.resolve_name(key).map(Expr::TupleSetIdx)
     }
-
-    // fn resolve_table_col(&self, _binding: &str, _col: &str) -> Option<(TableId, ColId)> {
-    //     None
-    // }
 }
