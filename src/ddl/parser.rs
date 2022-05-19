@@ -15,7 +15,10 @@ pub(crate) enum DdlParseError {
     Typing(#[from] TypingError),
 
     #[error(transparent)]
-    ExprParse(#[from] ExprParseError)
+    ExprParse(#[from] ExprParseError),
+
+    #[error("definition error: {0}")]
+    Definition(&'static str)
 }
 
 type Result<T> = result::Result<T, DdlParseError>;
@@ -51,16 +54,10 @@ pub(crate) struct AssocSchema {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum IndexCol {
-    Simple(String),
-    Computed(StaticExpr),
-}
-
-#[derive(Debug, Clone)]
 pub(crate) struct IndexSchema {
     name: String,
     src_name: String,
-    index: Vec<IndexCol>,
+    index: Vec<StaticExpr>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +80,9 @@ impl<'a> TryFrom<Pair<'a>> for DdlSchema {
     fn try_from(pair: Pair<'a>) -> result::Result<Self, Self::Error> {
         Ok(match pair.as_rule() {
             Rule::node_def => DdlSchema::Node(pair.try_into()?),
+            Rule::edge_def => DdlSchema::Edge(pair.try_into()?),
+            Rule::assoc_def => DdlSchema::Assoc(pair.try_into()?),
+            Rule::seq_def => DdlSchema::Sequence(pair.try_into()?),
             _ => todo!()
         })
     }
@@ -94,8 +94,8 @@ impl<'a> TryFrom<Pair<'a>> for NodeSchema {
     fn try_from(pair: Pair) -> Result<Self> {
         let mut pairs = pair.into_inner();
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
-        let col_pair = pairs.next().unwrap();
-        let (keys, vals) = parse_cols(col_pair)?;
+        let cols_pair = pairs.next().unwrap();
+        let (keys, vals) = parse_cols(cols_pair)?;
         Ok(Self {
             name,
             keys,
@@ -106,15 +106,44 @@ impl<'a> TryFrom<Pair<'a>> for NodeSchema {
 
 impl<'a> TryFrom<Pair<'a>> for EdgeSchema {
     type Error = DdlParseError;
-    fn try_from(value: Pair) -> Result<Self> {
-        todo!()
+    fn try_from(pair: Pair) -> Result<Self> {
+        let mut pairs = pair.into_inner();
+        let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let dst_name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let (keys, vals) = match pairs.next() {
+            Some(pair) => parse_cols(pair)?,
+            None => (vec![], vec![])
+        };
+        Ok(EdgeSchema {
+            name,
+            src_name,
+            dst_name,
+            keys,
+            vals
+        })
     }
 }
 
 impl<'a> TryFrom<Pair<'a>> for AssocSchema {
     type Error = DdlParseError;
-    fn try_from(value: Pair) -> Result<Self> {
-        todo!()
+    fn try_from(pair: Pair) -> Result<Self> {
+        let mut pairs = pair.into_inner();
+        let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
+        let name = build_name_in_def(pairs.next().unwrap(), true)?;
+
+        let (keys, vals) =  parse_cols(pairs.next().unwrap())?;
+        if !keys.is_empty() {
+            return Err(DdlParseError::Definition("assoc cannot have keys"))
+        }
+        if vals.is_empty() {
+            return Err(DdlParseError::Definition("assoc has no values"))
+        }
+        Ok(AssocSchema {
+            name,
+            src_name,
+            vals
+        })
     }
 }
 
@@ -122,6 +151,16 @@ impl<'a> TryFrom<Pair<'a>> for IndexSchema {
     type Error = DdlParseError;
     fn try_from(value: Pair) -> Result<Self> {
         todo!()
+    }
+}
+
+impl <'a> TryFrom<Pair<'a>> for SequenceSchema {
+    type Error = DdlParseError;
+    fn try_from(pair: Pair) -> Result<Self> {
+        let name = build_name_in_def(pair.into_inner().next().unwrap(), true)?;
+        Ok(SequenceSchema {
+            name
+        })
     }
 }
 
@@ -184,6 +223,35 @@ mod tests {
         "#;
         let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
         dbg!(DdlSchema::try_from(p)?);
+
+        let s = r#"
+        edge (Department)-[InLocation]->(Location)
+        "#;
+        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        dbg!(DdlSchema::try_from(p)?);
+
+        let s = r#"
+        edge (Employee)-[HasDependent]->(Dependent) {
+            relationship: Text
+        }
+        "#;
+        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        dbg!(DdlSchema::try_from(p)?);
+
+        let s = r#"
+        assoc BankAccount: Person {
+            balance: Float = 0
+        }
+        "#;
+        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        dbg!(DdlSchema::try_from(p)?);
+
+        let s = r#"
+        sequence PersonId;
+        "#;
+        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        dbg!(DdlSchema::try_from(p)?);
+
         Ok(())
     }
 }
