@@ -35,6 +35,9 @@ pub(crate) enum DdlReifyError {
     #[error("Data corruption {0:?}")]
     Corruption(OwnTuple),
 
+    #[error("Wrong table kind for {0:?}")]
+    WrongTableKind(TableId),
+
     #[error(transparent)]
     Tuple(#[from] TupleError),
 
@@ -329,14 +332,35 @@ pub(crate) trait DdlContext {
         self.table_by_id(id)
     }
     fn table_by_id(&self, tid: TableId) -> Result<TableInfo>;
-    fn assocs_by_main_id(&self, id: TableId) -> Vec<AssocInfo> {
-        todo!()
+    fn assoc_ids_by_main_id(&self, id: TableId) -> Result<Vec<TableId>>;
+    fn assocs_by_main_id(&self, id: TableId) -> Result<Vec<AssocInfo>> {
+        self.assoc_ids_by_main_id(id)?.into_iter().map(|id| {
+            match self.table_by_id(id) {
+                Err(e) => Err(e),
+                Ok(TableInfo::Assoc(a)) => Ok(a),
+                Ok(t) => Err(DdlReifyError::WrongTableKind(id))
+            }
+        }).collect::<Result<_>>()
     }
-    fn edges_by_main_id(&self, id: TableId) -> Vec<EdgeInfo> {
-        todo!()
+    fn edge_ids_by_main_id(&self, id: TableId) -> Result<Vec<TableId>>;
+    fn edges_by_main_id(&self, id: TableId) -> Result<Vec<EdgeInfo>> {
+        self.edge_ids_by_main_id(id)?.into_iter().map(|id| {
+            match self.table_by_id(id) {
+                Err(e) => Err(e),
+                Ok(TableInfo::Edge(a)) => Ok(a),
+                Ok(t) => Err(DdlReifyError::WrongTableKind(id))
+            }
+        }).collect::<Result<_>>()
     }
-    fn indices_by_main_id(&self, id: TableId) -> Vec<IndexInfo> {
-        todo!()
+    fn index_ids_by_main_id(&self, id: TableId) -> Result<Vec<TableId>>;
+    fn indices_by_main_id(&self, id: TableId) -> Result<Vec<IndexInfo>> {
+        self.index_ids_by_main_id(id)?.into_iter().map(|id| {
+            match self.table_by_id(id) {
+                Err(e) => Err(e),
+                Ok(TableInfo::Index(a)) => Ok(a),
+                Ok(t) => Err(DdlReifyError::WrongTableKind(id))
+            }
+        }).collect::<Result<_>>()
     }
     fn build_table(&mut self, schema: DdlSchema) -> Result<()> {
         match schema {
@@ -373,7 +397,7 @@ pub(crate) trait DdlContext {
     fn build_assoc(&mut self, schema: AssocSchema) -> Result<()> {
         let src_info = self.table_by_name(&schema.src_name, [TableKind::Node, TableKind::Edge], true)?;
         let src_id = src_info.table_id();
-        let associates = self.assocs_by_main_id(src_id);
+        let associates = self.assocs_by_main_id(src_id)?;
         let mut names_to_check: Vec<_> = associates.iter().map(|ai| &ai.vals).collect();
         names_to_check.push(&schema.vals);
         check_name_clash(names_to_check)?;
@@ -387,7 +411,7 @@ pub(crate) trait DdlContext {
     }
     fn build_index(&mut self, schema: IndexSchema) -> Result<()> {
         let src_schema = self.table_by_name(&schema.src_name, [TableKind::Node, TableKind::Edge], true)?;
-        let associates = self.assocs_by_main_id(src_schema.table_id());
+        let associates = self.assocs_by_main_id(src_schema.table_id())?;
         let assoc_vals = associates.iter().map(|v| v.vals.as_slice()).collect::<Vec<_>>();
         let index_exprs = match &src_schema {
             TableInfo::Node(node_info) => {
@@ -629,6 +653,18 @@ impl<'a> DdlContext for MainDbContext<'a> {
         Ok(info)
     }
 
+    fn assoc_ids_by_main_id(&self, id: TableId) -> Result<Vec<TableId>> {
+        todo!()
+    }
+
+    fn edge_ids_by_main_id(&self, id: TableId) -> Result<Vec<TableId>> {
+        todo!()
+    }
+
+    fn index_ids_by_main_id(&self, id: TableId) -> Result<Vec<TableId>> {
+        todo!()
+    }
+
     fn store_table(&mut self, info: TableInfo) -> Result<()> {
         let tid = info.table_id().id;
         let tname = info.table_name();
@@ -717,6 +753,18 @@ impl<'a> DdlContext for TempDbContext<'a> {
     }
 
     fn table_by_id(&self, tid: TableId) -> Result<TableInfo> {
+        todo!()
+    }
+
+    fn assoc_ids_by_main_id(&self, id: TableId) -> Result<Vec<TableId>> {
+        todo!()
+    }
+
+    fn edge_ids_by_main_id(&self, id: TableId) -> Result<Vec<TableId>> {
+        todo!()
+    }
+
+    fn index_ids_by_main_id(&self, id: TableId) -> Result<Vec<TableId>> {
         todo!()
     }
 
