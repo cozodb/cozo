@@ -5,12 +5,13 @@ use chrono::format::Item;
 use cozorocks::TransactionPtr;
 use crate::data::eval::{EvalError, PartialEvalContext};
 use crate::data::expr::{Expr, StaticExpr};
-use crate::data::tuple::{DataKind, OwnTuple};
+use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
-use crate::ddl::parser::{AssocSchema, ColSchema, DdlSchema, EdgeSchema, IndexSchema, NodeSchema, SequenceSchema};
+use crate::ddl::parser::{AssocSchema, ColSchema, DdlParseError, DdlSchema, EdgeSchema, IndexSchema, NodeSchema, SequenceSchema};
 use crate::runtime::instance::DbInstanceError;
 use crate::runtime::instance::DbInstanceError::NameConflict;
+use crate::runtime::options::default_read_options;
 use crate::runtime::session::{Session, SessionDefinable};
 
 #[derive(thiserror::Error, Debug)]
@@ -26,6 +27,9 @@ pub(crate) enum DdlReifyError {
 
     #[error(transparent)]
     Bridge(#[from] cozorocks::BridgeError),
+
+    #[error(transparent)]
+    Ddl(#[from] DdlParseError)
 }
 
 type Result<T> = result::Result<T, DdlReifyError>;
@@ -457,14 +461,73 @@ impl<'a> DdlContext for MainDbContext<'a> {
     fn store_table(&mut self, info: TableInfo) -> Result<()> {
         let tid = info.table_id().id;
         let tname = info.table_name();
+
+        let mut name_key = OwnTuple::with_prefix(0);
+        name_key.push_str(tname);
+
+        if !matches!(self.txn.get_for_update_owned(&default_read_options(), &name_key)?, None) {
+            return Err(NameConflict(tname.to_string()).into());
+        }
+
+        let mut idx_key = OwnTuple::with_prefix(0);
+        idx_key.push_int(tid as i64);
+
+        let read_opts = default_read_options();
+
         match &info {
-            TableInfo::Index(_) => {}
-            TableInfo::Edge(_) => {}
-            TableInfo::Assoc(_) => {}
+            TableInfo::Edge(info) => {
+                let mut key = OwnTuple::with_prefix(0);
+                key.push_int(info.src_id.id as i64);
+                key.push_int(DataKind::Edge as i64);
+                let mut current = match self.txn.get_for_update_owned(&read_opts, &key)? {
+                    Some(v) => OwnTuple::new(v.as_ref().to_vec()),
+                    None => OwnTuple::with_prefix(0)
+                };
+                current.push_int(tid as i64);
+                self.txn.put(&key, &current)?;
+
+                key.truncate_all();
+                key.push_int(info.dst_id.id as i64);
+                key.push_int(DataKind::EdgeBwd as i64);
+                let mut current = match self.txn.get_for_update_owned(&read_opts, &key)? {
+                    Some(v) => OwnTuple::new(v.as_ref().to_vec()),
+                    None => OwnTuple::with_prefix(0)
+                };
+                current.push_int(tid as i64);
+                self.txn.put(&key, &current)?;
+            }
+            TableInfo::Assoc(info) => {
+                let mut key = OwnTuple::with_prefix(0);
+                key.push_int(info.src_id.id as i64);
+                key.push_int(DataKind::Assoc as i64);
+                let mut current = match self.txn.get_for_update_owned(&read_opts, &key)? {
+                    Some(v) => OwnTuple::new(v.as_ref().to_vec()),
+                    None => OwnTuple::with_prefix(0)
+                };
+                current.push_int(tid as i64);
+                self.txn.put(&key, &current)?;
+            }
+            TableInfo::Index(info) => {
+                let mut key = OwnTuple::with_prefix(0);
+                key.push_int(info.src_id.id as i64);
+                key.push_int(DataKind::Index as i64);
+                let mut current = match self.txn.get_for_update_owned(&read_opts, &key)? {
+                    Some(v) => OwnTuple::new(v.as_ref().to_vec()),
+                    None => OwnTuple::with_prefix(0)
+                };
+                current.push_int(tid as i64);
+                self.txn.put(&key, &current)?;
+            }
             TableInfo::Node(_) => {}
             TableInfo::Sequence(_) => {}
         }
-        todo!()
+
+        // store name to idx
+        self.txn.put(&name_key, &idx_key)?;
+        // store info
+        let info_tuple = Tuple::from(&info);
+        self.txn.put(&idx_key, info_tuple)?;
+        Ok(())
     }
     fn commit(&mut self) -> Result<()> {
         Ok(self.txn.commit()?)

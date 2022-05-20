@@ -2,7 +2,7 @@ use crate::data::tuple_set::MIN_TABLE_ID_BOUND;
 use crate::runtime::options::*;
 use cozorocks::*;
 use log::error;
-use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, RwLock};
 use std::{mem, result};
 use crate::data::tuple::TupleError;
 use crate::runtime::session::Session;
@@ -26,7 +26,7 @@ pub enum DbInstanceError {
 
     #[error("Table does not exist: {0}")]
     TableDoesNotExist(u32),
-    
+
     #[error("Name conflict {0}")]
     NameConflict(String)
 }
@@ -132,7 +132,8 @@ impl DbInstance {
             cur_table_id: 0.into(),
             params: Default::default(),
             table_locks: self.table_locks.clone(),
-            tables: Default::default()
+            tables: Default::default(),
+            table_assocs: Default::default()
         })
     }
 

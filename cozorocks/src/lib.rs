@@ -304,6 +304,19 @@ impl TransactionPtr {
         }
     }
     #[inline]
+    pub fn get_for_update_owned(
+        &self,
+        options: &ReadOptions,
+        key: impl AsRef<[u8]>
+    ) -> Result<Option<PinnableSlicePtr>> {
+        let mut slice = PinnableSlicePtr::default();
+        if self.get_for_update(options, key, &mut slice)? {
+            Ok(Some(slice))
+        } else {
+            Ok(None)
+        }
+    }
+    #[inline]
     pub fn del(&self, key: impl AsRef<[u8]>) -> Result<()> {
         let mut status = BridgeStatus::default();
         let ret = self.del_txn(key.as_ref(), &mut status);
