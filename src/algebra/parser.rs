@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::data::eval::EvalError;
 use crate::data::expr::Expr;
 use crate::data::parser::ExprParseError;
-use crate::data::value::{StaticValue, Value};
+use crate::data::value::{StaticValue};
 use crate::parser::{Pair, Pairs, Rule};
 
 #[derive(thiserror::Error, Debug)]

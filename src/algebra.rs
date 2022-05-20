@@ -2,7 +2,7 @@ mod parser;
 
 use crate::data::expr::StaticExpr;
 use crate::data::tuple_set::TupleSet;
-use crate::data::value::{Value};
+
 
 pub(crate) trait Algebra {
     fn get_iterator(&self) -> TupleSource;

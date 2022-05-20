@@ -87,16 +87,16 @@ impl TryFrom<u8> for StorageTag {
     }
 }
 
-const DATAKIND_DATA: u32 = 0;
-const DATAKIND_NODE: u32 = 1;
-const DATAKIND_EDGE: u32 = 2;
-const DATAKIND_EDGE_BWD: u32 = 3;
-const DATAKIND_ASSOC: u32 = 4;
-const DATAKIND_INDEX: u32 = 5;
-const DATAKIND_SEQUENCE: u32 = 6;
-const DATAKIND_VAL: u32 = 11;
-const DATAKIND_TYPE: u32 = 12;
-const DATAKIND_EMPTY: u32 = u32::MAX;
+pub(crate) const DATAKIND_DATA: u32 = 0;
+pub(crate) const DATAKIND_NODE: u32 = 1;
+pub(crate) const DATAKIND_EDGE: u32 = 2;
+pub(crate) const DATAKIND_EDGE_BWD: u32 = 3;
+pub(crate) const DATAKIND_ASSOC: u32 = 4;
+pub(crate) const DATAKIND_INDEX: u32 = 5;
+pub(crate) const DATAKIND_SEQUENCE: u32 = 6;
+pub(crate) const DATAKIND_VAL: u32 = 11;
+pub(crate) const DATAKIND_TYPE: u32 = 12;
+pub(crate) const DATAKIND_EMPTY: u32 = u32::MAX;
 
 #[repr(u32)]
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Clone)]
