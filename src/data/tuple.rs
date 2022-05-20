@@ -90,9 +90,10 @@ impl TryFrom<u8> for StorageTag {
 const DATAKIND_DATA: u32 = 0;
 const DATAKIND_NODE: u32 = 1;
 const DATAKIND_EDGE: u32 = 2;
-const DATAKIND_ASSOC: u32 = 3;
-const DATAKIND_INDEX: u32 = 4;
-const DATAKIND_SEQUENCE: u32 = 5;
+const DATAKIND_EDGE_BWD: u32 = 3;
+const DATAKIND_ASSOC: u32 = 4;
+const DATAKIND_INDEX: u32 = 5;
+const DATAKIND_SEQUENCE: u32 = 6;
 const DATAKIND_VAL: u32 = 11;
 const DATAKIND_TYPE: u32 = 12;
 const DATAKIND_EMPTY: u32 = u32::MAX;
@@ -103,6 +104,7 @@ pub enum DataKind {
     Data = DATAKIND_DATA,
     Node = DATAKIND_NODE,
     Edge = DATAKIND_EDGE,
+    EdgeBwd = DATAKIND_EDGE_BWD,
     Assoc = DATAKIND_ASSOC,
     Index = DATAKIND_INDEX,
     Sequence = DATAKIND_SEQUENCE,
@@ -122,6 +124,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             DATAKIND_DATA => Data,
             DATAKIND_NODE => Node,
             DATAKIND_EDGE => Edge,
+            DATAKIND_EDGE_BWD => EdgeBwd,
             DATAKIND_ASSOC => Assoc,
             DATAKIND_INDEX => Index,
             DATAKIND_VAL => Val,

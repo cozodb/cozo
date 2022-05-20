@@ -26,6 +26,9 @@ pub enum DbInstanceError {
 
     #[error("Table does not exist: {0}")]
     TableDoesNotExist(u32),
+    
+    #[error("Name conflict {0}")]
+    NameConflict(String)
 }
 
 type Result<T> = result::Result<T, DbInstanceError>;
@@ -129,6 +132,7 @@ impl DbInstance {
             cur_table_id: 0.into(),
             params: Default::default(),
             table_locks: self.table_locks.clone(),
+            tables: Default::default()
         })
     }
 

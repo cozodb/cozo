@@ -7,9 +7,10 @@ use log::error;
 use cozorocks::{DbPtr, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use crate::data::expr::StaticExpr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
-use crate::data::tuple_set::MIN_TABLE_ID_BOUND;
+use crate::data::tuple_set::{MIN_TABLE_ID_BOUND, TableId};
 use crate::data::typing::Typing;
 use crate::data::value::{Value, StaticValue};
+use crate::ddl::reify::TableInfo;
 use crate::runtime::instance::{DbInstanceError, SessionHandle, SessionStatus, TableLock};
 use crate::runtime::options::{default_txn_options, default_write_options};
 
@@ -19,6 +20,7 @@ pub(crate) enum SessionDefinable {
     Value(StaticValue),
     Expr(StaticExpr),
     Typing(Typing),
+    Table(u32)
     // TODO
 }
 
@@ -37,6 +39,8 @@ pub struct Session {
     pub(crate) params: BTreeMap<String, StaticValue>,
     pub(crate) session_handle: Arc<Mutex<SessionHandle>>,
     pub(crate) table_locks: TableLock,
+    pub(crate) tables: BTreeMap<u32, TableInfo>,
+    pub(crate) table_assocs: BTreeMap<DataKind, BTreeMap<TableId, BTreeSet<u32>>>
 }
 
 pub(crate) struct InterpretContext<'a> {
