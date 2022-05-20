@@ -3,9 +3,12 @@ use std::result;
 use chrono::format::Item;
 use crate::data::eval::{EvalError, PartialEvalContext};
 use crate::data::expr::{Expr, StaticExpr};
+use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
-use crate::data::value::Value;
+use crate::data::value::{StaticValue, Value};
 use crate::ddl::parser::{AssocSchema, ColSchema, DdlSchema, EdgeSchema, IndexSchema, NodeSchema, SequenceSchema};
+use crate::runtime::instance::DbInstanceError;
+use crate::runtime::session::Session;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum DdlReifyError {
@@ -14,6 +17,9 @@ pub(crate) enum DdlReifyError {
 
     #[error(transparent)]
     Eval(#[from] EvalError),
+
+    #[error(transparent)]
+    Instance(#[from] DbInstanceError),
 }
 
 type Result<T> = result::Result<T, DdlReifyError>;
@@ -31,13 +37,74 @@ pub(crate) enum TableKind {
 pub(crate) enum TableInfo {
     Node(NodeInfo),
     Edge(EdgeInfo),
+    Assoc(AssocInfo),
+    Index(IndexInfo),
+    Sequence(SequenceInfo),
 }
 
 impl TableInfo {
     pub(crate) fn table_id(&self) -> TableId {
         match self {
             TableInfo::Node(n) => n.tid,
-            TableInfo::Edge(e) => e.tid
+            TableInfo::Edge(e) => e.tid,
+            TableInfo::Assoc(a) => a.tid,
+            TableInfo::Index(i) => i.tid,
+            TableInfo::Sequence(s) => s.tid
+        }
+    }
+}
+
+impl From<&TableInfo> for OwnTuple {
+    fn from(ti: &TableInfo) -> Self {
+        match ti {
+            TableInfo::Node(NodeInfo{name, tid, keys, vals}) => {
+                let mut target = OwnTuple::with_data_prefix(DataKind::Node);
+                target.push_str(name);
+                target.push_value(&Value::from(*tid));
+                let keys = keys.iter().map(|k| Value::from(k.clone()));
+                target.push_values_as_list(keys);
+                let vals = vals.iter().map(|k| Value::from(k.clone()));
+                target.push_values_as_list(vals);
+                target
+            }
+            TableInfo::Edge(EdgeInfo{name, tid, src_id, dst_id, keys, vals,}) => {
+                let mut target = OwnTuple::with_data_prefix(DataKind::Edge);
+                target.push_str(name);
+                target.push_value(&Value::from(*tid));
+                let keys = keys.iter().map(|k| Value::from(k.clone()));
+                target.push_values_as_list(keys);
+                let vals = vals.iter().map(|k| Value::from(k.clone()));
+                target.push_values_as_list(vals);
+                target.push_value(&Value::from(*src_id));
+                target.push_value(&Value::from(*dst_id));
+                target
+            }
+            TableInfo::Assoc(AssocInfo{ name, tid, src_id, vals }) => {
+                let mut target = OwnTuple::with_data_prefix(DataKind::Assoc);
+                target.push_str(name);
+                target.push_value(&Value::from(*tid));
+                let vals = vals.iter().map(|k| Value::from(k.clone()));
+                target.push_values_as_list(vals);
+                target.push_value(&Value::from(*src_id));
+                target
+            },
+            TableInfo::Index(IndexInfo{ name, tid, src_id, assoc_ids, index }) => {
+                let mut target = OwnTuple::with_data_prefix(DataKind::Index);
+                target.push_str(name);
+                target.push_value(&Value::from(*tid));
+                let indices = index.iter().map(|i| Value::from(i.clone()));
+                target.push_values_as_list(indices);
+                target.push_value(&Value::from(*src_id));
+                let assoc_ids = assoc_ids.iter().map(|v| Value::from(*v));
+                target.push_values_as_list(assoc_ids);
+                target
+            },
+            TableInfo::Sequence(SequenceInfo{ name, tid }) => {
+                let mut target = OwnTuple::with_data_prefix(DataKind::Sequence);
+                target.push_str(name);
+                target.push_value(&Value::from(*tid));
+                target
+            }
         }
     }
 }
@@ -78,13 +145,14 @@ pub(crate) struct IndexInfo {
     pub(crate) index: Vec<StaticExpr>,
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct SequenceInfo {
     pub(crate) name: String,
     pub(crate) tid: TableId,
 }
 
 pub(crate) trait DdlContext {
-    fn gen_table_id(&mut self) -> TableId;
+    fn gen_table_id(&mut self) -> Result<TableId>;
     fn resolve_table_id_for_derivation<I: IntoIterator<Item=TableKind>>(&self, name: &str, kind: I) -> Result<TableId>;
     fn resolve_table<I: IntoIterator<Item=TableKind>>(&self, name: &str, kind: I, for_derivation: bool) -> Result<TableInfo>;
     fn resolve_table_by_id(&self, tid: TableId) -> Result<TableInfo>;
@@ -103,26 +171,24 @@ pub(crate) trait DdlContext {
         check_name_clash([&schema.keys, &schema.vals])?;
         let info = NodeInfo {
             name: schema.name,
-            tid: self.gen_table_id(),
+            tid: self.gen_table_id()?,
             keys: eval_defaults(schema.keys)?,
             vals: eval_defaults(schema.vals)?,
         };
-        self.store_node(info)
+        self.store_table(TableInfo::Node(info))
     }
-    fn store_node(&mut self, info: NodeInfo) -> Result<()>;
     fn build_edge(&mut self, schema: EdgeSchema) -> Result<()> {
         check_name_clash([&schema.keys, &schema.vals])?;
         let info = EdgeInfo {
             name: schema.name,
-            tid: self.gen_table_id(),
+            tid: self.gen_table_id()?,
             src_id: self.resolve_table_id_for_derivation(&schema.src_name, [TableKind::Node])?,
             dst_id: self.resolve_table_id_for_derivation(&schema.dst_name, [TableKind::Node])?,
             keys: eval_defaults(schema.keys)?,
             vals: eval_defaults(schema.vals)?,
         };
-        self.store_edge(info)
+        self.store_table(TableInfo::Edge(info))
     }
-    fn store_edge(&mut self, info: EdgeInfo) -> Result<()>;
     fn build_assoc(&mut self, schema: AssocSchema) -> Result<()> {
         let src_info = self.resolve_table(&schema.src_name, [TableKind::Node, TableKind::Edge], true)?;
         let src_id = src_info.table_id();
@@ -132,13 +198,12 @@ pub(crate) trait DdlContext {
         check_name_clash(names_to_check)?;
         let info = AssocInfo {
             name: schema.name,
-            tid: self.gen_table_id(),
+            tid: self.gen_table_id()?,
             src_id,
             vals: eval_defaults(schema.vals)?,
         };
-        self.store_assoc(info)
+        self.store_table(TableInfo::Assoc(info))
     }
-    fn store_assoc(&mut self, info: AssocInfo) -> Result<()>;
     fn build_index(&mut self, schema: IndexSchema) -> Result<()> {
         let src_schema = self.resolve_table(&schema.src_name, [TableKind::Node, TableKind::Edge], true)?;
         let associates = self.resolve_associates_for(src_schema.table_id());
@@ -176,28 +241,28 @@ pub(crate) trait DdlContext {
                     ex.partial_eval(&ctx).map(|ex| ex.to_static()))
                     .collect::<result::Result<Vec<_>, _>>()?
             }
+            _ => unreachable!()
         };
 
         let info = IndexInfo {
             name: schema.name,
-            tid: self.gen_table_id(),
+            tid: self.gen_table_id()?,
             src_id: src_schema.table_id(),
             assoc_ids: schema.assoc_names.iter().map(|n|
                 self.resolve_table_id_for_derivation(n, [TableKind::Assoc]))
                 .collect::<Result<Vec<_>>>()?,
             index: index_exprs,
         };
-        self.store_index(info)
+        self.store_table(TableInfo::Index(info))
     }
-    fn store_index(&mut self, info: IndexInfo) -> Result<()>;
     fn build_sequence(&mut self, schema: SequenceSchema) -> Result<()> {
-        let tid = self.gen_table_id();
-        self.store_sequence(SequenceInfo {
+        let tid = self.gen_table_id()?;
+        self.store_table(TableInfo::Sequence(SequenceInfo {
             name: schema.name,
             tid,
-        })
+        }))
     }
-    fn store_sequence(&mut self, info: SequenceInfo) -> Result<()>;
+    fn store_table(&mut self, info: TableInfo) -> Result<()>;
 }
 
 fn check_name_clash<'a, I: IntoIterator<Item=II>, II: IntoIterator<Item=&'a ColSchema>>(kvs: I) -> Result<()> {
@@ -344,5 +409,44 @@ impl<'a> EdgeDefEvalCtx<'a> {
 impl<'a> PartialEvalContext for EdgeDefEvalCtx<'a> {
     fn resolve(&self, key: &str) -> Option<Expr> {
         self.resolve_name(key).map(Expr::TupleSetIdx)
+    }
+}
+
+
+struct MainDbContext<'a> {
+    sess: &'a Session,
+}
+
+// impl<'a> DdlContext for MainDbContext<'a> {
+//     fn gen_table_id(&mut self) -> Result<TableId> {
+//         let id = self.sess.get_next_main_table_id()?;
+//         Ok(TableId { in_root: true, id })
+//     }
+// }
+//
+// impl<'a> DdlContext for TempDbContext<'a> {
+//     fn gen_table_id(&mut self) -> Result<TableId> {
+//         let id = self.sess.get_next_temp_table_id();
+//         Ok(TableId { in_root: false, id })
+//     }
+//     fn resolve_table<I: IntoIterator<Item=TableKind>>(&self, name: &str, kind: I, for_derivation: bool) -> Result<TableInfo> {
+//         todo!()
+//     }
+// }
+
+struct TempDbContext<'a> {
+    sess: &'a Session,
+}
+
+impl Session {
+    fn main_ctx(&self) -> MainDbContext {
+        MainDbContext {
+            sess: self
+        }
+    }
+    fn temp_ctx(&self) -> TempDbContext {
+        TempDbContext {
+            sess: self
+        }
     }
 }

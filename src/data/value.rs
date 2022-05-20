@@ -23,6 +23,48 @@ pub enum Value<'a> {
     Bottom, // Acts as "any" in type inference, end value in sorting
 }
 
+impl<'a> Value<'a> {
+    pub(crate) fn is_null(&self) -> bool {
+        *self == Value::Null
+    }
+    pub(crate) fn get_bool(&self) -> Option<bool> {
+        match self {
+            Value::Bool(b) => Some(*b),
+            _ => None
+        }
+    }
+    pub(crate) fn get_int(&self) -> Option<i64> {
+        match self {
+            Value::Int(b) => Some(*b),
+            _ => None
+        }
+    }
+    pub(crate) fn get_float(&self) -> Option<f64> {
+        match self {
+            Value::Float(b) => Some(b.into_inner()),
+            _ => None
+        }
+    }
+    pub(crate) fn get_str(&self) -> Option<&str> {
+        match self {
+            Value::Text(b) => Some(b.as_ref()),
+            _ => None
+        }
+    }
+    pub(crate) fn get_slice(&self) -> Option<&[Value<'a>]> {
+        match self {
+            Value::List(l) => Some(l),
+            _ => None
+        }
+    }
+    pub(crate) fn get_map(&self) -> Option<&BTreeMap<Cow<str>, Value>> {
+        match self {
+            Value::Dict(m) => Some(m),
+            _ => None
+        }
+    }
+}
+
 pub(crate) type StaticValue = Value<'static>;
 
 impl<'a> Debug for Value<'a> {

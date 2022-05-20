@@ -1,6 +1,6 @@
 use crate::data::value::Value;
 use cozorocks::{PinnableSlicePtr, PinnableSlicePtrShared, SlicePtr, SlicePtrShared};
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::cell::RefCell;
 use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
@@ -26,25 +26,38 @@ pub enum TupleError {
 
 type Result<T> = result::Result<T, TupleError>;
 
+const STORAGE_BOOL_FALSE: u8 = 1;
+const STORAGE_NULL: u8 = 2;
+const STORAGE_BOOL_TRUE: u8 = 3;
+const STORAGE_INT: u8 = 4;
+const STORAGE_FLOAT: u8 = 5;
+const STORAGE_TEXT: u8 = 6;
+const STORAGE_UUID: u8 = 7;
+const STORAGE_BYTES: u8 = 64;
+const STORAGE_LIST: u8 = 128;
+const STORAGE_DICT: u8 = 129;
+const STORAGE_DESC_VAL: u8 = 192;
+const STORAGE_MAX: u8 = 255;
+
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) enum StorageTag {
-    BoolFalse = 1,
-    Null = 2,
-    BoolTrue = 3,
-    Int = 4,
-    Float = 5,
-    Text = 6,
-    Uuid = 7,
+    BoolFalse = STORAGE_BOOL_FALSE,
+    Null = STORAGE_NULL,
+    BoolTrue = STORAGE_BOOL_TRUE,
+    Int = STORAGE_INT,
+    Float = STORAGE_FLOAT,
+    Text = STORAGE_TEXT,
+    Uuid = STORAGE_UUID,
 
-    Bytes = 64,
+    Bytes = STORAGE_BYTES,
 
-    List = 128,
-    Dict = 129,
+    List = STORAGE_LIST,
+    Dict = STORAGE_DICT,
 
-    DescVal = 192,
+    DescVal = STORAGE_DESC_VAL,
 
-    Max = 255,
+    Max = STORAGE_MAX,
 }
 
 impl TryFrom<u8> for StorageTag {
@@ -53,38 +66,49 @@ impl TryFrom<u8> for StorageTag {
     fn try_from(u: u8) -> std::result::Result<StorageTag, u8> {
         use self::StorageTag::*;
         Ok(match u {
-            1 => BoolFalse,
-            2 => Null,
-            3 => BoolTrue,
-            4 => Int,
-            5 => Float,
-            6 => Text,
-            7 => Uuid,
+            STORAGE_BOOL_FALSE => BoolFalse,
+            STORAGE_NULL => Null,
+            STORAGE_BOOL_TRUE => BoolTrue,
+            STORAGE_INT => Int,
+            STORAGE_FLOAT => Float,
+            STORAGE_TEXT => Text,
+            STORAGE_UUID => Uuid,
 
-            64 => Bytes,
+            STORAGE_BYTES => Bytes,
 
-            128 => List,
-            129 => Dict,
+            STORAGE_LIST => List,
+            STORAGE_DICT => Dict,
 
-            192 => DescVal,
+            STORAGE_DESC_VAL => DescVal,
 
-            255 => Max,
+            STORAGE_MAX => Max,
             v => return Err(v),
         })
     }
 }
 
+const DATAKIND_DATA: u32 = 0;
+const DATAKIND_NODE: u32 = 1;
+const DATAKIND_EDGE: u32 = 2;
+const DATAKIND_ASSOC: u32 = 3;
+const DATAKIND_INDEX: u32 = 4;
+const DATAKIND_SEQUENCE: u32 = 5;
+const DATAKIND_VAL: u32 = 11;
+const DATAKIND_TYPE: u32 = 12;
+const DATAKIND_EMPTY: u32 = u32::MAX;
+
 #[repr(u32)]
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Clone)]
 pub enum DataKind {
-    Data = 0,
-    Node = 1,
-    Edge = 2,
-    Assoc = 3,
-    Index = 4,
-    Val = 5,
-    Type = 6,
-    Empty = u32::MAX,
+    Data = DATAKIND_DATA,
+    Node = DATAKIND_NODE,
+    Edge = DATAKIND_EDGE,
+    Assoc = DATAKIND_ASSOC,
+    Index = DATAKIND_INDEX,
+    Sequence = DATAKIND_SEQUENCE,
+    Val = DATAKIND_VAL,
+    Type = DATAKIND_TYPE,
+    Empty = DATAKIND_EMPTY,
 }
 // In storage, key layout is `[0, name, stack_depth]` where stack_depth is a non-positive number as zigzag
 // Also has inverted index `[0, stack_depth, name]` for easy popping of stacks
@@ -95,14 +119,14 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn data_kind(&self) -> Result<DataKind> {
         use DataKind::*;
         Ok(match self.get_prefix() {
-            0 => Data,
-            1 => Node,
-            2 => Edge,
-            3 => Assoc,
-            4 => Index,
-            5 => Val,
-            6 => Type,
-            u32::MAX => Empty,
+            DATAKIND_DATA => Data,
+            DATAKIND_NODE => Node,
+            DATAKIND_EDGE => Edge,
+            DATAKIND_ASSOC => Assoc,
+            DATAKIND_INDEX => Index,
+            DATAKIND_VAL => Val,
+            DATAKIND_TYPE => Type,
+            DATAKIND_EMPTY => Empty,
             v => return Err(TupleError::UndefinedDataKind(v)),
         })
     }
@@ -116,8 +140,8 @@ impl From<DataKind> for u32 {
 
 #[derive(Clone)]
 pub struct Tuple<T>
-where
-    T: AsRef<[u8]>,
+    where
+        T: AsRef<[u8]>,
 {
     pub(crate) data: T,
     idx_cache: RefCell<Vec<usize>>,
@@ -128,8 +152,8 @@ unsafe impl<T: AsRef<[u8]>> Send for Tuple<T> {}
 unsafe impl<T: AsRef<[u8]>> Sync for Tuple<T> {}
 
 impl<T> From<T> for Tuple<T>
-where
-    T: AsRef<[u8]>,
+    where
+        T: AsRef<[u8]>,
 {
     fn from(data: T) -> Self {
         Tuple::new(data)
@@ -137,8 +161,8 @@ where
 }
 
 impl<T> Tuple<T>
-where
-    T: AsRef<[u8]>,
+    where
+        T: AsRef<[u8]>,
 {
     pub(crate) fn clear_cache(&self) {
         self.idx_cache.borrow_mut().clear()
@@ -146,8 +170,8 @@ where
 }
 
 impl<T> AsRef<[u8]> for Tuple<T>
-where
-    T: AsRef<[u8]>,
+    where
+        T: AsRef<[u8]>,
 {
     fn as_ref(&self) -> &[u8] {
         self.data.as_ref()
@@ -600,6 +624,43 @@ impl OwnTuple {
         cache.push(self.data.len());
     }
     #[inline]
+    pub(crate) fn push_values_as_list<'a, It: IntoIterator<Item=I>, I: Borrow<Value<'a>> + 'a>
+    (&mut self, l: It) {
+        self.push_tag(StorageTag::List);
+        let start_pos = self.data.len();
+        let start_len = self.idx_cache.borrow().len();
+        self.data.extend(0u32.to_be_bytes());
+        for val in l {
+            self.push_value(val.borrow());
+        }
+        let length = (self.data.len() - start_pos) as u32;
+        let length_bytes = length.to_be_bytes();
+        self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
+        let mut cache = self.idx_cache.borrow_mut();
+        cache.truncate(start_len);
+        cache.push(self.data.len());
+    }
+    #[inline]
+    pub(crate) fn push_values_as_dict<'a, I: IntoIterator<Item=(T, &'a Value<'a>)>,
+        T: AsRef<str> + 'a>
+    (&mut self, d: I) {
+        self.push_tag(StorageTag::Dict);
+        let start_pos = self.data.len();
+        let start_len = self.idx_cache.borrow().len();
+        self.data.extend(0u32.to_be_bytes());
+        for (k, v) in d {
+            self.push_varint(k.as_ref().len() as u64);
+            self.data.extend_from_slice(k.as_ref().as_bytes());
+            self.push_value(v);
+        }
+        let length = (self.data.len() - start_pos) as u32;
+        let length_bytes = length.to_be_bytes();
+        self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
+        let mut cache = self.idx_cache.borrow_mut();
+        cache.truncate(start_len);
+        cache.push(self.data.len());
+    }
+    #[inline]
     pub(crate) fn push_value(&mut self, v: &Value) {
         match v {
             Value::Null => self.push_null(),
@@ -609,38 +670,8 @@ impl OwnTuple {
             Value::Uuid(u) => self.push_uuid(*u),
             Value::Text(t) => self.push_str(t),
             Value::Bytes(b) => self.push_bytes(b),
-            Value::List(l) => {
-                self.push_tag(StorageTag::List);
-                let start_pos = self.data.len();
-                let start_len = self.idx_cache.borrow().len();
-                self.data.extend(0u32.to_be_bytes());
-                for val in l {
-                    self.push_value(val);
-                }
-                let length = (self.data.len() - start_pos) as u32;
-                let length_bytes = length.to_be_bytes();
-                self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
-                let mut cache = self.idx_cache.borrow_mut();
-                cache.truncate(start_len);
-                cache.push(self.data.len());
-            }
-            Value::Dict(d) => {
-                self.push_tag(StorageTag::Dict);
-                let start_pos = self.data.len();
-                let start_len = self.idx_cache.borrow().len();
-                self.data.extend(0u32.to_be_bytes());
-                for (k, v) in d {
-                    self.push_varint(k.len() as u64);
-                    self.data.extend_from_slice(k.as_bytes());
-                    self.push_value(v);
-                }
-                let length = (self.data.len() - start_pos) as u32;
-                let length_bytes = length.to_be_bytes();
-                self.data[start_pos..(4 + start_pos)].clone_from_slice(&length_bytes[..4]);
-                let mut cache = self.idx_cache.borrow_mut();
-                cache.truncate(start_len);
-                cache.push(self.data.len());
-            }
+            Value::List(l) => self.push_values_as_list(l),
+            Value::Dict(d) => self.push_values_as_dict(d),
             Value::Bottom => self.seal_with_sentinel(),
             Value::DescVal(Reverse(v)) => {
                 self.push_reverse_value(v);
@@ -697,7 +728,7 @@ impl OwnTuple {
 
 impl<'a> Extend<Value<'a>> for OwnTuple {
     #[inline]
-    fn extend<T: IntoIterator<Item = Value<'a>>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item=Value<'a>>>(&mut self, iter: T) {
         for v in iter {
             self.push_value(&v)
         }
@@ -720,9 +751,9 @@ impl<T: AsRef<[u8]>> Hash for Tuple<T> {
 impl<T: AsRef<[u8]>> Eq for Tuple<T> {}
 
 impl<'a, P, T> From<(P, T)> for OwnTuple
-where
-    T: IntoIterator<Item = &'a Value<'a>>,
-    P: Into<u32>,
+    where
+        T: IntoIterator<Item=&'a Value<'a>>,
+        P: Into<u32>,
 {
     fn from((prefix, it): (P, T)) -> Self {
         let mut ret = OwnTuple::with_prefix(prefix.into());

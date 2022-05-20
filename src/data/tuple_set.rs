@@ -1,5 +1,5 @@
 use crate::data::tuple::{OwnTuple, ReifiedTuple, TupleError};
-use crate::data::value::Value;
+use crate::data::value::{StaticValue, Value};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::result;
@@ -12,6 +12,8 @@ pub(crate) enum TupleSetError {
     IndexOutOfBound(usize),
     #[error(transparent)]
     Tuple(#[from] TupleError),
+    #[error("Failed to deserialize {0}")]
+    Deser(StaticValue),
 }
 
 type Result<T> = result::Result<T, TupleSetError>;
@@ -22,6 +24,32 @@ pub(crate) const MIN_TABLE_ID_BOUND: u32 = 10000;
 pub(crate) struct TableId {
     pub(crate) in_root: bool,
     pub(crate) id: u32,
+}
+
+impl From<TableId> for StaticValue {
+    fn from(tid: TableId) -> Self {
+        Value::from(vec![Value::from(tid.in_root), (tid.id as i64).into()])
+    }
+}
+
+impl<'a> TryFrom<&'a Value<'a>> for TableId {
+    type Error = TupleSetError;
+
+    fn try_from(value: &'a Value<'a>) -> result::Result<Self, Self::Error> {
+        let make_err = || TupleSetError::Deser(value.clone().to_static());
+        let fields = value.get_slice().ok_or_else(make_err)?;
+        let in_root = fields
+            .get(0)
+            .ok_or_else(make_err)?
+            .get_bool()
+            .ok_or_else(make_err)?;
+        let id = fields
+            .get(1)
+            .ok_or_else(make_err)?
+            .get_int()
+            .ok_or_else(make_err)? as u32;
+        Ok(TableId { in_root, id })
+    }
 }
 
 impl Debug for TableId {
@@ -104,16 +132,16 @@ impl TupleSet {
         self.vals.extend(o.vals);
     }
     pub(crate) fn extend_keys<I, T>(&mut self, keys: I)
-    where
-        I: IntoIterator<Item = T>,
-        ReifiedTuple: From<T>,
+        where
+            I: IntoIterator<Item=T>,
+            ReifiedTuple: From<T>,
     {
         self.keys.extend(keys.into_iter().map(ReifiedTuple::from));
     }
     pub(crate) fn extend_vals<I, T>(&mut self, keys: I)
-    where
-        I: IntoIterator<Item = T>,
-        ReifiedTuple: From<T>,
+        where
+            I: IntoIterator<Item=T>,
+            ReifiedTuple: From<T>,
     {
         self.vals.extend(keys.into_iter().map(ReifiedTuple::from));
     }
@@ -157,11 +185,11 @@ impl TupleSet {
 }
 
 impl<I1, T1, I2, T2> From<(I1, I2)> for TupleSet
-where
-    I1: IntoIterator<Item = T1>,
-    ReifiedTuple: From<T1>,
-    I2: IntoIterator<Item = T2>,
-    ReifiedTuple: From<T2>,
+    where
+        I1: IntoIterator<Item=T1>,
+        ReifiedTuple: From<T1>,
+        I2: IntoIterator<Item=T2>,
+        ReifiedTuple: From<T2>,
 {
     fn from((keys, vals): (I1, I2)) -> Self {
         TupleSet {

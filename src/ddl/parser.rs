@@ -1,8 +1,8 @@
 use std::result;
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::{Expr, ExprError, StaticExpr};
 use crate::data::parser::ExprParseError;
 use crate::data::typing::{Typing, TypingError};
-use crate::data::value::Value;
+use crate::data::value::{StaticValue, Value};
 use crate::parser::{Pair, Rule};
 use crate::parser::text_identifier::{build_name_in_def, TextParseError};
 
@@ -19,6 +19,12 @@ pub(crate) enum DdlParseError {
 
     #[error("definition error: {0}")]
     Definition(&'static str),
+
+    #[error("failed to deserialize col schema")]
+    ColSchemaDeser(StaticValue),
+
+    #[error(transparent)]
+    Expr(#[from] ExprError),
 }
 
 type Result<T> = result::Result<T, DdlParseError>;
@@ -28,6 +34,35 @@ pub(crate) struct ColSchema {
     pub(crate) name: String,
     pub(crate) typing: Typing,
     pub(crate) default: StaticExpr,
+}
+
+impl From<ColSchema> for StaticValue {
+    fn from(s: ColSchema) -> Self {
+        Value::from(vec![
+            Value::from(s.name),
+            Value::from(s.typing.to_string()),
+            Value::from(s.default),
+        ])
+    }
+}
+
+impl<'a> TryFrom<Value<'a>> for ColSchema {
+    type Error = DdlParseError;
+
+    fn try_from(value: Value<'a>) -> Result<Self> {
+        let mk_err = || DdlParseError::ColSchemaDeser(value.clone().to_static());
+        let fields = value.get_slice().ok_or_else(mk_err)?;
+        let name = fields.get(0).ok_or_else(mk_err)?.get_str().ok_or_else(mk_err)?.to_string();
+        let typing = fields.get(1).ok_or_else(mk_err)?.get_str().ok_or_else(mk_err)?;
+        let typing = Typing::try_from(typing)?;
+        let default = fields.get(1).ok_or_else(mk_err)?.get_str().ok_or_else(mk_err)?;
+        let default = Expr::try_from(default)?.to_static();
+        Ok(Self {
+            name,
+            typing,
+            default
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -170,7 +205,7 @@ impl<'a> TryFrom<Pair<'a>> for IndexSchema {
             name: index_name,
             src_name: main_name,
             assoc_names: associate_names,
-            index: indices
+            index: indices,
         })
     }
 }

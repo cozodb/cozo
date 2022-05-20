@@ -8,6 +8,9 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::result;
 use std::sync::Arc;
+use crate::parser::{CozoParser, Rule};
+use pest::Parser;
+use crate::data::parser::ExprParseError;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ExprError {
@@ -19,6 +22,12 @@ pub(crate) enum ExprError {
 
     #[error("List extraction failed for {0}")]
     ListExtractionFailed(StaticValue),
+
+    #[error("Failed to parse {0} into expr")]
+    Parse(String),
+
+    #[error(transparent)]
+    ParseInner(#[from] ExprParseError)
 }
 
 type Result<T> = result::Result<T, ExprError>;
@@ -522,4 +531,17 @@ impl<'a> From<Expr<'a>> for Value<'a> {
 
 fn build_tagged_value<'a>(tag: &'static str, val: Value<'a>) -> Value<'a> {
     Value::Dict(BTreeMap::from([(tag.into(), val)]))
+}
+
+
+impl <'a> TryFrom<&'a str> for Expr<'a> {
+    type Error = ExprError;
+
+    fn try_from(value: &'a str) -> result::Result<Self, Self::Error> {
+        let pair = CozoParser::parse(Rule::expr_all, value)
+            .map_err(|_| ExprError::Parse(value.to_string()))?
+            .next()
+            .ok_or_else(|| ExprError::Parse(value.to_string()))?;
+        Ok(Expr::try_from(pair)?)
+    }
 }
