@@ -152,6 +152,10 @@ impl Session {
         Ok(cur_id + 1)
     }
 
+    pub fn set_params(&mut self, params: BTreeMap<String, StaticValue>) {
+        self.params = params;
+    }
+
     pub fn run_script(&mut self, script: impl AsRef<str>) -> Result<Value> {
         let script = script.as_ref();
         let pair = CozoParser::parse(Rule::script, script)?
