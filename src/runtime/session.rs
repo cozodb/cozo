@@ -153,7 +153,7 @@ impl Session {
     }
 
     pub fn set_params(&mut self, params: BTreeMap<String, StaticValue>) {
-        self.params = params;
+        self.params.extend(params);
     }
 
     pub fn run_script(&mut self, script: impl AsRef<str>) -> Result<Value> {
