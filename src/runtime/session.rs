@@ -202,8 +202,8 @@ impl Drop for Session {
 #[cfg(test)]
 pub(crate) mod tests {
     use crate::data::tuple::Tuple;
-    use crate::DbInstance;
     use crate::runtime::options::default_read_options;
+    use crate::DbInstance;
 
     const HR_TEST_SCRIPT: &str = include_str!("../../test_data/hr.cozo");
 

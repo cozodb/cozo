@@ -1,3 +1,4 @@
+use crate::context::{MainDbContext, TempDbContext};
 use crate::data::eval::{EvalError, PartialEvalContext};
 use crate::data::expr::{Expr, ExprError, StaticExpr};
 use crate::data::tuple::{
@@ -11,7 +12,7 @@ use crate::ddl::parser::{
     SequenceSchema,
 };
 use crate::runtime::options::default_read_options;
-use crate::runtime::session::{Session, SessionDefinable, TableAssocMap};
+use crate::runtime::session::{SessionDefinable, TableAssocMap};
 use cozorocks::TransactionPtr;
 use std::collections::BTreeSet;
 use std::result;
@@ -633,7 +634,7 @@ pub(crate) struct NodeDefEvalCtx<'a> {
 }
 
 impl<'a> NodeDefEvalCtx<'a> {
-    fn resolve_name(&self, name: &str) -> Option<TupleSetIdx> {
+    pub(crate) fn resolve_name(&self, name: &str) -> Option<TupleSetIdx> {
         for (i, col) in self.keys.iter().enumerate() {
             if name == col.name {
                 return Some(TupleSetIdx {
@@ -667,12 +668,6 @@ impl<'a> NodeDefEvalCtx<'a> {
     }
 }
 
-impl<'a> PartialEvalContext for NodeDefEvalCtx<'a> {
-    fn resolve(&self, key: &str) -> Option<Expr> {
-        self.resolve_name(key).map(Expr::TupleSetIdx)
-    }
-}
-
 pub(crate) struct EdgeDefEvalCtx<'a> {
     keys: &'a [ColSchema],
     vals: &'a [ColSchema],
@@ -681,8 +676,20 @@ pub(crate) struct EdgeDefEvalCtx<'a> {
     assoc_vals: &'a [&'a [ColSchema]],
 }
 
+impl<'a> PartialEvalContext for EdgeDefEvalCtx<'a> {
+    fn resolve(&self, key: &str) -> Option<Expr> {
+        self.resolve_name(key).map(Expr::TupleSetIdx)
+    }
+}
+
+impl<'a> PartialEvalContext for NodeDefEvalCtx<'a> {
+    fn resolve(&self, key: &str) -> Option<Expr> {
+        self.resolve_name(key).map(Expr::TupleSetIdx)
+    }
+}
+
 impl<'a> EdgeDefEvalCtx<'a> {
-    fn resolve_name(&self, name: &str) -> Option<TupleSetIdx> {
+    pub(crate) fn resolve_name(&self, name: &str) -> Option<TupleSetIdx> {
         for (i, col) in self.src_keys.iter().enumerate() {
             if name == col.name {
                 return Some(TupleSetIdx {
@@ -736,17 +743,6 @@ impl<'a> EdgeDefEvalCtx<'a> {
         }
         None
     }
-}
-
-impl<'a> PartialEvalContext for EdgeDefEvalCtx<'a> {
-    fn resolve(&self, key: &str) -> Option<Expr> {
-        self.resolve_name(key).map(Expr::TupleSetIdx)
-    }
-}
-
-pub(crate) struct MainDbContext<'a> {
-    sess: &'a Session,
-    txn: TransactionPtr,
 }
 
 fn get_related_table_ids_in_stack(
@@ -1081,12 +1077,8 @@ impl<'a> DdlContext for TempDbContext<'a> {
                     src_assocs.insert(tid);
                 }
                 TableInfo::Index(info) => {
-                    let idx_assocs = self
-                        .sess
-                        .table_assocs
-                        .entry(DataKind::Index)
-                        .or_insert(Default::default());
-                    let src_assocs = idx_assocs.entry(info.src_id).or_insert(Default::default());
+                    let idx_assocs = self.sess.table_assocs.entry(DataKind::Index).or_default();
+                    let src_assocs = idx_assocs.entry(info.src_id).or_default();
                     src_assocs.insert(tid);
                 }
                 TableInfo::Node(_) => {}
@@ -1101,22 +1093,5 @@ impl<'a> DdlContext for TempDbContext<'a> {
 
     fn commit(&mut self) -> Result<()> {
         Ok(())
-    }
-}
-
-pub(crate) struct TempDbContext<'a> {
-    sess: &'a mut Session,
-    txn: TransactionPtr,
-}
-
-impl Session {
-    pub(crate) fn main_ctx(&self) -> MainDbContext {
-        let txn = self.txn(None);
-        txn.set_snapshot();
-        MainDbContext { sess: self, txn }
-    }
-    pub(crate) fn temp_ctx(&mut self) -> TempDbContext {
-        let txn = self.txn(None);
-        TempDbContext { sess: self, txn }
     }
 }

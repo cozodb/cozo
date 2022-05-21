@@ -1,8 +1,7 @@
 use crate::data::tuple::PREFIX_LEN;
 use cozorocks::{
-    OTxnDbOptionsPtr, OTxnOptionsPtr, OptionsPtr, PTxnDbOptionsPtr,
-    PTxnOptionsPtr, ReadOptionsPtr, RustComparatorPtr, TDbOptions, TransactOptions,
-    WriteOptionsPtr,
+    OTxnDbOptionsPtr, OTxnOptionsPtr, OptionsPtr, PTxnDbOptionsPtr, PTxnOptionsPtr, ReadOptionsPtr,
+    RustComparatorPtr, TDbOptions, TransactOptions, WriteOptionsPtr,
 };
 use lazy_static::lazy_static;
 

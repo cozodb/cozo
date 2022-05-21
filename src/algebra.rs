@@ -1,4 +1,5 @@
 mod parser;
+pub(crate) mod value_set;
 
 use crate::data::expr::StaticExpr;
 use crate::data::tuple_set::TupleSet;

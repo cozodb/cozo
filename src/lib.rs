@@ -1,4 +1,5 @@
 pub(crate) mod algebra;
+pub(crate) mod context;
 pub(crate) mod data;
 pub(crate) mod ddl;
 pub(crate) mod logger;
