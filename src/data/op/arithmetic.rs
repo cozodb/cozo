@@ -318,7 +318,7 @@ impl Op for OpMinus {
         false
     }
     fn name(&self) -> &str {
-        "--"
+        NAME_OP_MINUS
     }
     fn non_null_args(&self) -> bool {
         true

@@ -115,15 +115,3 @@ pub(crate) fn build_name_in_def(pair: Pair, forbid_underscore: bool) -> Result<S
         Ok(name)
     }
 }
-
-pub(crate) fn parse_col_name(pair: Pair) -> Result<(String, bool)> {
-    let mut pairs = pair.into_inner();
-    let mut is_key = false;
-    let mut nxt_pair = pairs.next().unwrap();
-    if nxt_pair.as_rule() == Rule::key_marker {
-        is_key = true;
-        nxt_pair = pairs.next().unwrap();
-    }
-
-    Ok((build_name_in_def(nxt_pair, true)?, is_key))
-}

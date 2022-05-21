@@ -889,11 +889,11 @@ impl<'a> DdlContext for MainDbContext<'a> {
 
         if let Some(existing_key) = self
             .txn
-            .get_for_update_owned(&default_read_options(), &name_key)?
+            .get_for_update_owned(&self.sess.r_opts_main, &name_key)?
         {
             if let Some(existing) = self
                 .txn
-                .get_for_update_owned(&default_read_options(), existing_key)?
+                .get_for_update_owned(&self.sess.r_opts_main, existing_key)?
             {
                 if let Ok(mut existing_info) = TableInfo::try_from(Tuple::new(existing)) {
                     existing_info.set_table_id(info.table_id());
@@ -912,14 +912,14 @@ impl<'a> DdlContext for MainDbContext<'a> {
         info.set_table_id(table_id);
         idx_key.push_int(tid as i64);
 
-        let read_opts = default_read_options();
+        let read_opts = &self.sess.r_opts_main;
 
         match &info {
             TableInfo::Edge(info) => {
                 let mut key = OwnTuple::with_prefix(0);
                 key.push_int(info.src_id.id as i64);
                 key.push_int(DataKind::Edge as i64);
-                let mut current = match self.txn.get_for_update_owned(&read_opts, &key)? {
+                let mut current = match self.txn.get_for_update_owned(read_opts, &key)? {
                     Some(v) => OwnTuple::new(v.as_ref().to_vec()),
                     None => OwnTuple::with_prefix(0),
                 };
@@ -929,7 +929,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
                 key.truncate_all();
                 key.push_int(info.dst_id.id as i64);
                 key.push_int(DataKind::EdgeBwd as i64);
-                let mut current = match self.txn.get_for_update_owned(&read_opts, &key)? {
+                let mut current = match self.txn.get_for_update_owned(read_opts, &key)? {
                     Some(v) => OwnTuple::new(v.as_ref().to_vec()),
                     None => OwnTuple::with_prefix(0),
                 };
@@ -940,7 +940,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
                 let mut key = OwnTuple::with_prefix(0);
                 key.push_int(info.src_id.id as i64);
                 key.push_int(DataKind::Assoc as i64);
-                let mut current = match self.txn.get_for_update_owned(&read_opts, &key)? {
+                let mut current = match self.txn.get_for_update_owned(read_opts, &key)? {
                     Some(v) => OwnTuple::new(v.as_ref().to_vec()),
                     None => OwnTuple::with_prefix(0),
                 };
@@ -951,7 +951,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
                 let mut key = OwnTuple::with_prefix(0);
                 key.push_int(info.src_id.id as i64);
                 key.push_int(DataKind::Index as i64);
-                let mut current = match self.txn.get_for_update_owned(&read_opts, &key)? {
+                let mut current = match self.txn.get_for_update_owned(read_opts, &key)? {
                     Some(v) => OwnTuple::new(v.as_ref().to_vec()),
                     None => OwnTuple::with_prefix(0),
                 };

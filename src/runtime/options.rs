@@ -1,6 +1,6 @@
 use crate::data::tuple::PREFIX_LEN;
 use cozorocks::{
-    FlushOptionsPtr, OTxnDbOptionsPtr, OTxnOptionsPtr, OptionsPtr, PTxnDbOptionsPtr,
+    OTxnDbOptionsPtr, OTxnOptionsPtr, OptionsPtr, PTxnDbOptionsPtr,
     PTxnOptionsPtr, ReadOptionsPtr, RustComparatorPtr, TDbOptions, TransactOptions,
     WriteOptionsPtr,
 };
@@ -32,9 +32,9 @@ pub fn default_write_options() -> WriteOptionsPtr {
     WriteOptionsPtr::default()
 }
 
-pub fn default_flush_options() -> FlushOptionsPtr {
-    FlushOptionsPtr::default()
-}
+// pub fn default_flush_options() -> FlushOptionsPtr {
+//     FlushOptionsPtr::default()
+// }
 
 pub fn default_txn_db_options(optimistic: bool) -> TDbOptions {
     if optimistic {

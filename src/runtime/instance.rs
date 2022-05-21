@@ -7,7 +7,7 @@ use crate::runtime::options::*;
 use crate::runtime::session::Session;
 use cozorocks::*;
 use log::error;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::{mem, result};
 
 #[derive(thiserror::Error, Debug)]
@@ -65,17 +65,14 @@ pub(crate) struct SessionHandle {
     pub(crate) status: SessionStatus,
 }
 
-pub(crate) type TableLock = Arc<RwLock<()>>;
-
 pub struct DbInstance {
     pub(crate) main: DbPtr,
     options: OptionsPtrShared,
-    tdb_options: TDbOptions,
+    _tdb_options: TDbOptions,
     path: String,
     session_handles: Mutex<Vec<Arc<Mutex<SessionHandle>>>>,
     optimistic: bool,
     destroy_on_close: bool,
-    table_locks: TableLock,
 }
 
 impl DbInstance {
@@ -85,13 +82,12 @@ impl DbInstance {
         let main = DbPtr::open(&options, &tdb_options, path)?;
         Ok(Self {
             options,
-            tdb_options,
+            _tdb_options: tdb_options,
             main,
             optimistic,
             path: path.to_string(),
             session_handles: vec![].into(),
             destroy_on_close: false,
-            table_locks: Default::default(),
         })
     }
 }
@@ -149,7 +145,6 @@ impl DbInstance {
             stack: vec![],
             cur_table_id: 0.into(),
             params: Default::default(),
-            table_locks: self.table_locks.clone(),
             tables: Default::default(),
             table_assocs: Default::default(),
         })

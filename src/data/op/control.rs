@@ -7,8 +7,6 @@ use std::sync::Arc;
 
 type Result<T> = result::Result<T, EvalError>;
 
-pub(crate) struct OpCond;
-
 pub(crate) struct OpCoalesce;
 
 pub(crate) const NAME_OP_COALESCE: &str = "~~";

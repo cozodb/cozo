@@ -184,7 +184,8 @@ seq_def = { "sequence" ~ name_in_def ~ ";" }
 
 definition = _{ node_def | assoc_def | edge_def | index_def | seq_def }
 definition_all = _{SOI ~ definition ~ EOI}
-statement = _{ definition | persist_block }
+statement = _{ scope | definition }
+scope = {"{" ~ statement* ~ "}"}
 
 persist_block = {"persist!" ~ "{" ~ definition* ~ "}" }
 

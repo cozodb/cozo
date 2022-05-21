@@ -115,8 +115,6 @@ pub enum DataKind {
 // In storage, key layout is `[0, name, stack_depth]` where stack_depth is a non-positive number as zigzag
 // Also has inverted index `[0, stack_depth, name]` for easy popping of stacks
 
-pub const EMPTY_DATA: [u8; 4] = u32::MAX.to_be_bytes();
-
 impl<T: AsRef<[u8]>> Tuple<T> {
     pub fn data_kind(&self) -> Result<DataKind> {
         use DataKind::*;

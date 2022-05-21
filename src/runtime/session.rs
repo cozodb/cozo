@@ -6,7 +6,7 @@ use crate::data::value::{StaticValue, Value};
 use crate::ddl::parser::DdlSchema;
 use crate::ddl::reify::{DdlContext, DdlReifyError, TableInfo};
 use crate::parser::{CozoParser, Pair, Rule};
-use crate::runtime::instance::{DbInstanceError, SessionHandle, SessionStatus, TableLock};
+use crate::runtime::instance::{DbInstanceError, SessionHandle, SessionStatus};
 use crate::runtime::options::{default_txn_options, default_write_options};
 use cozorocks::{DbPtr, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use lazy_static::lazy_static;
@@ -41,7 +41,6 @@ pub struct Session {
     pub(crate) stack: Vec<SessionStackFrame>,
     pub(crate) params: BTreeMap<String, StaticValue>,
     pub(crate) session_handle: Arc<Mutex<SessionHandle>>,
-    pub(crate) table_locks: TableLock,
     pub(crate) tables: BTreeMap<u32, TableInfo>,
     pub(crate) table_assocs: TableAssocMap,
 }
@@ -198,7 +197,9 @@ impl Drop for Session {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::data::tuple::Tuple;
     use crate::DbInstance;
+    use crate::runtime::options::default_read_options;
 
     const HR_TEST_SCRIPT: &str = include_str!("../../test_data/hr.cozo");
 
@@ -215,5 +216,14 @@ pub(crate) mod tests {
         sess.run_script(persist_hr_test()).unwrap();
         sess.run_script(persist_hr_test()).unwrap();
         dbg!(&sess.tables);
+        let mut opts = default_read_options();
+        opts.set_total_order_seek(true);
+        let it = sess.main.iterator(&opts);
+        it.to_first();
+        while it.is_valid() {
+            let (k, v) = it.pair().unwrap();
+            dbg!((Tuple::new(k), Tuple::new(v)));
+            it.next();
+        }
     }
 }
