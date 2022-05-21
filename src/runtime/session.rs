@@ -74,7 +74,33 @@ impl Session {
     }
     pub(crate) fn pop_env(&mut self) {
         if self.stack.len() > 1 {
-            self.stack.pop();
+            let popped_frame = self.stack.pop().unwrap();
+            for (k, v) in popped_frame.into_iter() {
+                if let SessionDefinable::Table(id) = v {
+                    self.undefine_temp_table(id);
+                }
+            }
+        }
+    }
+    fn undefine_temp_table(&mut self, id: u32) {
+        // remove table
+        self.tables.remove(&id);
+
+        // remove assoc info
+        for assoc_map in self.table_assocs.values_mut() {
+            // remove as key
+            assoc_map.remove(&TableId { in_root: false, id });
+            for set in assoc_map.values_mut() {
+                // remove as val
+                set.remove(&id);
+            }
+        }
+        // range delete associated data
+        let start_key = OwnTuple::with_prefix(id);
+        let mut end_key = OwnTuple::with_prefix(id);
+        end_key.seal_with_sentinel();
+        if let Err(e) = self.temp.del_range(&self.w_opts_temp, start_key, end_key) {
+            error!("Undefine temp table failed: {:?}", e)
         }
     }
     fn clear_data(&self) -> Result<()> {
