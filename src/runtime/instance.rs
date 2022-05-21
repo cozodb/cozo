@@ -6,6 +6,9 @@ use cozorocks::*;
 use log::error;
 use std::sync::{Arc, Mutex, RwLock};
 use std::{mem, result};
+use crate::ddl::parser::DdlParseError;
+use crate::ddl::reify::DdlReifyError;
+use crate::parser::Rule;
 
 #[derive(thiserror::Error, Debug)]
 pub enum DbInstanceError {
@@ -29,6 +32,21 @@ pub enum DbInstanceError {
 
     #[error("Name conflict {0}")]
     NameConflict(String),
+
+    #[error("Parse error {0}")]
+    Parse(String),
+
+    #[error(transparent)]
+    DdlParse(#[from] DdlParseError),
+
+    #[error(transparent)]
+    Reify(#[from] DdlReifyError),
+}
+
+impl From<pest::error::Error<Rule>> for DbInstanceError {
+    fn from(err: pest::error::Error<Rule>) -> Self {
+        DbInstanceError::Parse(format!("{:?}", err))
+    }
 }
 
 type Result<T> = result::Result<T, DbInstanceError>;

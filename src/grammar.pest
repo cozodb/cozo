@@ -1,4 +1,6 @@
-script = _{SOI ~ statement* ~ EOI}
+script = _{SOI ~ (persist_block | query) ~ EOI}
+
+query = {statement*}
 
 // whitespace
 
@@ -163,6 +165,7 @@ named_type_pair = { (name_in_def | string) ~ ":" ~ typing }
 function_type = { "<" ~ args_type ~ ">" ~ "->" ~ typing }
 args_type = { typing? ~ ("," ~ typing)* }
 
+typing_all = _{SOI ~ typing ~ EOI}
 
 // Data definition
 

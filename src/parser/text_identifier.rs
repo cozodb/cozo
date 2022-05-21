@@ -3,7 +3,7 @@ use crate::parser::{Pair, Rule};
 use std::result;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum TextParseError {
+pub enum TextParseError {
     #[error("Invalid UTF code {0}")]
     InvalidUtfCode(u32),
 

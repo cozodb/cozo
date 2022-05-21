@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::result;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum EvalError {
+pub enum EvalError {
     #[error("Unresolved variable `{0}`")]
     UnresolvedVariable(String),
 

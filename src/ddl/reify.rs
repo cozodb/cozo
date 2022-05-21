@@ -10,8 +10,6 @@ use crate::ddl::parser::{
     AssocSchema, ColSchema, DdlParseError, DdlSchema, EdgeSchema, IndexSchema, NodeSchema,
     SequenceSchema,
 };
-use crate::runtime::instance::DbInstanceError;
-use crate::runtime::instance::DbInstanceError::NameConflict;
 use crate::runtime::options::default_read_options;
 use crate::runtime::session::{Session, SessionDefinable, TableAssocMap};
 use cozorocks::TransactionPtr;
@@ -19,15 +17,12 @@ use std::collections::BTreeSet;
 use std::result;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum DdlReifyError {
+pub enum DdlReifyError {
     #[error("Name clash: {0}")]
     NameClash(String),
 
     #[error(transparent)]
     Eval(#[from] EvalError),
-
-    #[error(transparent)]
-    Instance(#[from] DbInstanceError),
 
     #[error(transparent)]
     Bridge(#[from] cozorocks::BridgeError),
@@ -55,11 +50,14 @@ pub(crate) enum DdlReifyError {
 
     #[error(transparent)]
     Expr(#[from] ExprError),
+
+    #[error("Name conflict {0}")]
+    NameConflict(String),
 }
 
 type Result<T> = result::Result<T, DdlReifyError>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum TableInfo {
     Node(NodeInfo),
     Edge(EdgeInfo),
@@ -94,6 +92,15 @@ impl TableInfo {
             TableInfo::Assoc(t) => &t.name,
             TableInfo::Index(t) => &t.name,
             TableInfo::Sequence(t) => &t.name,
+        }
+    }
+    pub(crate) fn set_table_id(&mut self, id: TableId) {
+        match self {
+            TableInfo::Node(t) => { t.tid = id }
+            TableInfo::Edge(t) => { t.tid = id }
+            TableInfo::Assoc(t) => { t.tid = id }
+            TableInfo::Index(t) => { t.tid = id }
+            TableInfo::Sequence(t) => { t.tid = id }
         }
     }
 }
@@ -321,7 +328,7 @@ impl From<&TableInfo> for OwnTuple {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct NodeInfo {
     pub(crate) name: String,
     pub(crate) tid: TableId,
@@ -329,7 +336,7 @@ pub(crate) struct NodeInfo {
     pub(crate) vals: Vec<ColSchema>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct EdgeInfo {
     pub(crate) name: String,
     pub(crate) tid: TableId,
@@ -339,7 +346,7 @@ pub(crate) struct EdgeInfo {
     pub(crate) vals: Vec<ColSchema>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct AssocInfo {
     pub(crate) name: String,
     pub(crate) tid: TableId,
@@ -347,7 +354,7 @@ pub(crate) struct AssocInfo {
     pub(crate) vals: Vec<ColSchema>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum IndexCol {
     Col(TupleSetIdx),
     Expr(StaticExpr),
@@ -373,7 +380,7 @@ impl<'a> TryFrom<Value<'a>> for IndexCol {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct IndexInfo {
     pub(crate) name: String,
     pub(crate) tid: TableId,
@@ -382,13 +389,14 @@ pub(crate) struct IndexInfo {
     pub(crate) index: Vec<IndexCol>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct SequenceInfo {
     pub(crate) name: String,
     pub(crate) tid: TableId,
 }
 
 pub(crate) trait DdlContext {
+    fn gen_temp_table_id(&self) -> TableId;
     fn gen_table_id(&mut self) -> Result<TableId>;
     fn table_id_by_name(&self, name: &str) -> Result<TableId>;
     fn table_by_name<I: IntoIterator<Item=DataKind>>(
@@ -413,7 +421,7 @@ pub(crate) trait DdlContext {
             .map(|id| match self.table_by_id(id) {
                 Err(e) => Err(e),
                 Ok(TableInfo::Assoc(a)) => Ok(a),
-                Ok(t) => Err(DdlReifyError::WrongDataKind(id)),
+                Ok(_t) => Err(DdlReifyError::WrongDataKind(id)),
             })
             .collect::<Result<_>>()
     }
@@ -424,7 +432,7 @@ pub(crate) trait DdlContext {
             .map(|id| match self.table_by_id(id) {
                 Err(e) => Err(e),
                 Ok(TableInfo::Edge(a)) => Ok(a),
-                Ok(t) => Err(DdlReifyError::WrongDataKind(id)),
+                Ok(_t) => Err(DdlReifyError::WrongDataKind(id)),
             })
             .collect::<Result<_>>()
     }
@@ -435,7 +443,7 @@ pub(crate) trait DdlContext {
             .map(|id| match self.table_by_id(id) {
                 Err(e) => Err(e),
                 Ok(TableInfo::Edge(a)) => Ok(a),
-                Ok(t) => Err(DdlReifyError::WrongDataKind(id)),
+                Ok(_t) => Err(DdlReifyError::WrongDataKind(id)),
             })
             .collect::<Result<_>>()
     }
@@ -446,7 +454,7 @@ pub(crate) trait DdlContext {
             .map(|id| match self.table_by_id(id) {
                 Err(e) => Err(e),
                 Ok(TableInfo::Index(a)) => Ok(a),
-                Ok(t) => Err(DdlReifyError::WrongDataKind(id)),
+                Ok(_t) => Err(DdlReifyError::WrongDataKind(id)),
             })
             .collect::<Result<_>>()
     }
@@ -464,7 +472,7 @@ pub(crate) trait DdlContext {
         check_name_clash([&schema.keys, &schema.vals])?;
         let info = NodeInfo {
             name: schema.name,
-            tid: self.gen_table_id()?,
+            tid: self.gen_temp_table_id(),
             keys: eval_defaults(schema.keys)?,
             vals: eval_defaults(schema.vals)?,
         };
@@ -474,7 +482,7 @@ pub(crate) trait DdlContext {
         check_name_clash([&schema.keys, &schema.vals])?;
         let info = EdgeInfo {
             name: schema.name,
-            tid: self.gen_table_id()?,
+            tid: self.gen_temp_table_id(),
             src_id: self
                 .table_by_name(&schema.src_name, [DataKind::Node])?
                 .table_id(),
@@ -495,7 +503,7 @@ pub(crate) trait DdlContext {
         check_name_clash(names_to_check)?;
         let info = AssocInfo {
             name: schema.name,
-            tid: self.gen_table_id()?,
+            tid: self.gen_temp_table_id(),
             src_id,
             vals: eval_defaults(schema.vals)?,
         };
@@ -560,7 +568,7 @@ pub(crate) trait DdlContext {
 
         let info = IndexInfo {
             name: schema.name,
-            tid: self.gen_table_id()?,
+            tid: self.gen_temp_table_id(),
             src_id: src_schema.table_id(),
             assoc_ids: schema
                 .assoc_names
@@ -575,7 +583,7 @@ pub(crate) trait DdlContext {
         self.store_table(TableInfo::Index(info))
     }
     fn build_sequence(&mut self, schema: SequenceSchema) -> Result<()> {
-        let tid = self.gen_table_id()?;
+        let tid = self.gen_temp_table_id();
         self.store_table(TableInfo::Sequence(SequenceInfo {
             name: schema.name,
             tid,
@@ -736,7 +744,7 @@ impl<'a> PartialEvalContext for EdgeDefEvalCtx<'a> {
     }
 }
 
-struct MainDbContext<'a> {
+pub(crate) struct MainDbContext<'a> {
     sess: &'a Session,
     txn: TransactionPtr,
 }
@@ -817,6 +825,10 @@ fn find_table_by_id_in_main(txn: &TransactionPtr, id: u32) -> Result<TableInfo> 
 }
 
 impl<'a> DdlContext for MainDbContext<'a> {
+    fn gen_temp_table_id(&self) -> TableId {
+        TableId { in_root: true, id: 0 }
+    }
+
     fn gen_table_id(&mut self) -> Result<TableId> {
         let id = self.sess.get_next_main_table_id()?;
         Ok(TableId { in_root: true, id })
@@ -828,7 +840,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
 
     fn table_by_id(&self, TableId { id, in_root }: TableId) -> Result<TableInfo> {
         if !in_root {
-            return Err(DdlReifyError::TableNotFound(TableId { id, in_root }));
+            Err(DdlReifyError::TableNotFound(TableId { id, in_root }))
         } else {
             find_table_by_id_in_main(&self.txn, id)
         }
@@ -866,26 +878,32 @@ impl<'a> DdlContext for MainDbContext<'a> {
         }
     }
 
-    fn store_table(&mut self, info: TableInfo) -> Result<()> {
-        let tid = info.table_id().id;
+    fn store_table(&mut self, mut info: TableInfo) -> Result<()> {
         let tname = info.table_name();
 
         let mut name_key = OwnTuple::with_prefix(0);
         name_key.push_str(tname);
 
-        if let Some(existing) = self
+        if let Some(existing_key) = self
             .txn
             .get_for_update_owned(&default_read_options(), &name_key)?
         {
-            return if Tuple::new(existing) == Tuple::from(&info) {
-                // exactly the same thing already exists, nothing to do!
-                Ok(())
-            } else {
-                Err(NameConflict(tname.to_string()).into())
-            };
+            if let Some(existing) = self.txn.get_for_update_owned(&default_read_options(), existing_key)? {
+                if let Ok(mut existing_info) = TableInfo::try_from(Tuple::new(existing)) {
+                    existing_info.set_table_id(info.table_id());
+                    if existing_info == info {
+                        // exactly the same thing already exists, nothing to do!
+                        return Ok(());
+                    }
+                }
+            }
+            return Err(DdlReifyError::NameConflict(tname.to_string()));
         }
 
         let mut idx_key = OwnTuple::with_prefix(0);
+        let table_id = self.gen_table_id()?;
+        let tid = table_id.id;
+        info.set_table_id(table_id);
         idx_key.push_int(tid as i64);
 
         let read_opts = default_read_options();
@@ -951,6 +969,10 @@ impl<'a> DdlContext for MainDbContext<'a> {
 }
 
 impl<'a> DdlContext for TempDbContext<'a> {
+    fn gen_temp_table_id(&self) -> TableId {
+        TableId { in_root: false, id: 0 }
+    }
+
     fn gen_table_id(&mut self) -> Result<TableId> {
         let id = self.sess.get_next_temp_table_id();
         Ok(TableId { in_root: false, id })
@@ -1012,14 +1034,14 @@ impl<'a> DdlContext for TempDbContext<'a> {
         Ok(found)
     }
 
-    fn store_table(&mut self, info: TableInfo) -> Result<()> {
-        let table_id = info.table_id();
+    fn store_table(&mut self, mut info: TableInfo) -> Result<()> {
+        let table_id = self.gen_table_id()?;
         let tid = table_id.id;
-        let tname = info.table_name();
         let stack_frame = self.sess.stack.last_mut().unwrap();
-        if stack_frame.contains_key(tname) {
-            return Err(NameConflict(tname.to_string()).into());
+        if stack_frame.contains_key(info.table_name()) {
+            return Err(DdlReifyError::NameConflict(info.table_name().to_string()));
         } else {
+            info.set_table_id(table_id);
             match &info {
                 TableInfo::Edge(info) => {
                     let edge_assocs = self
@@ -1062,7 +1084,7 @@ impl<'a> DdlContext for TempDbContext<'a> {
                 TableInfo::Sequence(_) => {}
             }
 
-            stack_frame.insert(tname.to_string(), SessionDefinable::Table(tid));
+            stack_frame.insert(info.table_name().to_string(), SessionDefinable::Table(tid));
             self.sess.tables.insert(tid, info);
         }
         Ok(())
@@ -1073,18 +1095,18 @@ impl<'a> DdlContext for TempDbContext<'a> {
     }
 }
 
-struct TempDbContext<'a> {
+pub(crate) struct TempDbContext<'a> {
     sess: &'a mut Session,
     txn: TransactionPtr,
 }
 
 impl Session {
-    fn main_ctx(&self) -> MainDbContext {
+    pub(crate) fn main_ctx(&self) -> MainDbContext {
         let txn = self.txn(None);
         txn.set_snapshot();
         MainDbContext { sess: self, txn }
     }
-    fn temp_ctx(&mut self) -> TempDbContext {
+    pub(crate) fn temp_ctx(&mut self) -> TempDbContext {
         let txn = self.txn(None);
         TempDbContext { sess: self, txn }
     }

@@ -12,7 +12,7 @@ use std::result;
 use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum ExprParseError {
+pub enum ExprParseError {
     #[error(transparent)]
     TextParser(#[from] crate::parser::text_identifier::TextParseError),
 

@@ -13,7 +13,7 @@ use std::result;
 use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum ExprError {
+pub enum ExprError {
     #[error("Cannot convert from {0}")]
     ConversionFailure(StaticValue),
 

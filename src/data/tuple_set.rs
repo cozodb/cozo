@@ -5,7 +5,7 @@ use std::fmt::{Debug, Formatter};
 use std::result;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum TupleSetError {
+pub enum TupleSetError {
     #[error("table id not allowed: {0}")]
     InvalidTableId(u32),
     #[error("Index out of bound: {0}")]
@@ -21,7 +21,7 @@ type Result<T> = result::Result<T, TupleSetError>;
 pub(crate) const MIN_TABLE_ID_BOUND: u32 = 10000;
 
 #[derive(Eq, PartialEq, Clone, Copy, Ord, PartialOrd, Hash)]
-pub(crate) struct TableId {
+pub struct TableId {
     pub(crate) in_root: bool,
     pub(crate) id: u32,
 }
@@ -78,7 +78,7 @@ impl From<(bool, u32)> for TableId {
 }
 
 #[derive(Eq, PartialEq, Clone, Copy, Ord, PartialOrd)]
-pub(crate) struct ColId {
+pub struct ColId {
     pub(crate) is_key: bool,
     pub(crate) id: usize,
 }
@@ -96,7 +96,7 @@ impl From<(bool, usize)> for ColId {
 }
 
 #[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq)]
-pub(crate) struct TupleSetIdx {
+pub struct TupleSetIdx {
     pub(crate) is_key: bool,
     pub(crate) t_set: usize,
     pub(crate) col_idx: usize,
@@ -203,6 +203,7 @@ where
 mod tests {
     use super::*;
     use std::mem;
+    use crate::data::tuple::OwnTuple;
 
     #[test]
     fn sizes() {

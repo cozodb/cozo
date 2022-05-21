@@ -3,16 +3,19 @@ use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{TableId, MIN_TABLE_ID_BOUND};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
-use crate::ddl::reify::TableInfo;
+use crate::ddl::reify::{DdlContext, DdlReifyError, TableInfo};
 use crate::runtime::instance::{DbInstanceError, SessionHandle, SessionStatus, TableLock};
 use crate::runtime::options::{default_txn_options, default_write_options};
-use cozorocks::{DbPtr, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
+use cozorocks::{BridgeError, DbPtr, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use lazy_static::lazy_static;
 use log::error;
 use std::collections::{BTreeMap, BTreeSet};
 use std::result;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex};
+use crate::parser::{CozoParser, Pair, Rule};
+use pest::Parser;
+use crate::ddl::parser::DdlSchema;
 
 type Result<T> = result::Result<T, DbInstanceError>;
 
@@ -41,19 +44,6 @@ pub struct Session {
     pub(crate) table_locks: TableLock,
     pub(crate) tables: BTreeMap<u32, TableInfo>,
     pub(crate) table_assocs: TableAssocMap,
-}
-
-pub(crate) struct InterpretContext<'a> {
-    session: &'a Session,
-}
-
-impl<'a> InterpretContext<'a> {
-    pub(crate) fn resolve(&self, key: impl AsRef<str>) {}
-    pub(crate) fn resolve_value(&self, key: impl AsRef<str>) {}
-    pub(crate) fn resolve_typing(&self, key: impl AsRef<str>) {
-        todo!()
-    }
-    // also for expr, table, etc..
 }
 
 impl Session {
@@ -142,7 +132,7 @@ impl Session {
         )
     }
 
-    pub(crate) fn get_next_main_table_id(&self) -> Result<u32> {
+    pub(crate) fn get_next_main_table_id(&self) -> result::Result<u32, DdlReifyError> {
         let txn = self.txn(None);
         let key = MAIN_DB_TABLE_ID_SEQ_KEY.as_ref();
         let cur_id = match txn.get_owned(&self.r_opts_main, key)? {
@@ -162,19 +152,35 @@ impl Session {
         txn.commit()?;
         Ok(cur_id + 1)
     }
-    pub(crate) fn table_access_guard(&self, ids: BTreeSet<u32>) -> Result<RwLockReadGuard<()>> {
-        self.table_locks
-            .try_read()
-            .map_err(|_| DbInstanceError::TableAccessLock)
-    }
-    pub(crate) fn table_mutation_guard(&self, ids: BTreeSet<u32>) -> Result<RwLockWriteGuard<()>> {
-        self.table_locks
-            .write()
-            .map_err(|_| DbInstanceError::TableAccessLock)
-    }
 
     pub fn run_script(&mut self, script: impl AsRef<str>) -> Result<Value> {
-        todo!()
+        let script = script.as_ref();
+        let pair = CozoParser::parse(Rule::script, script)?
+            .next()
+            .ok_or_else(|| DbInstanceError::Parse(script.to_string()))?;
+        match pair.as_rule() {
+            Rule::query => self.execute_query(pair),
+            Rule::persist_block => self.execute_persist_block(pair),
+            _ => Err(DbInstanceError::Parse(script.to_string()))
+        }
+    }
+    fn execute_query(&mut self, pair: Pair) -> Result<Value> {
+        let mut ctx = self.temp_ctx();
+        for pair in pair.into_inner() {
+            let schema = DdlSchema::try_from(pair)?;
+            ctx.build_table(schema)?;
+        }
+        ctx.commit()?;
+        Ok(Value::Null)
+    }
+    fn execute_persist_block(&mut self, pair: Pair) -> Result<Value> {
+        let mut ctx = self.main_ctx();
+        for pair in pair.into_inner() {
+            let schema = DdlSchema::try_from(pair)?;
+            ctx.build_table(schema)?;
+        }
+        ctx.commit()?;
+        Ok(Value::Null)
     }
 }
 
@@ -193,4 +199,22 @@ impl Drop for Session {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::DbInstance;
+
+    const HR_TEST_SCRIPT: &str = include_str!("../../test_data/hr.cozo");
+
+    pub(crate) fn persist_hr_test() -> String {
+        format!("persist! {{\n{}\n}}", HR_TEST_SCRIPT)
+    }
+
+    #[test]
+    fn test_script() {
+        let mut db = DbInstance::new("_test_session", false).unwrap();
+        db.set_destroy_on_close(true);
+        let mut sess = db.session().unwrap().start().unwrap();
+        sess.run_script(HR_TEST_SCRIPT).unwrap();
+        sess.run_script(persist_hr_test()).unwrap();
+        sess.run_script(persist_hr_test()).unwrap();
+        dbg!(&sess.tables);
+    }
 }

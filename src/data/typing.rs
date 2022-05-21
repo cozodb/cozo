@@ -8,7 +8,7 @@ use std::result;
 use uuid::Uuid;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum TypingError {
+pub enum TypingError {
     #[error("Not null constraint violated for {0}")]
     NotNullViolated(Typing),
 
@@ -28,7 +28,7 @@ pub(crate) enum TypingError {
 type Result<T> = result::Result<T, TypingError>;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
-pub(crate) enum Typing {
+pub enum Typing {
     Any,
     Bool,
     Int,
@@ -206,7 +206,7 @@ impl TryFrom<&str> for Typing {
     type Error = TypingError;
 
     fn try_from(value: &str) -> Result<Self> {
-        let pair = CozoParser::parse(Rule::typing, value)?.next().unwrap();
+        let pair = CozoParser::parse(Rule::typing_all, value)?.next().unwrap();
         Typing::try_from(pair)
     }
 }
@@ -225,9 +225,12 @@ impl TryFrom<Pair<'_>> for Typing {
                 "Uuid" => Typing::Uuid,
                 t => return Err(TypingError::UndefinedType(t.to_string())),
             },
-            Rule::nullable_type => Typing::Nullable(Box::new(Typing::try_from(
-                pair.into_inner().next().unwrap(),
-            )?)),
+            Rule::nullable_type => {
+                let inner_type = Typing::try_from(
+                    pair.into_inner().next().unwrap(),
+                )?;
+                Typing::Nullable(Box::new(inner_type))
+            },
             Rule::homogeneous_list_type => Typing::Homogeneous(Box::new(Typing::try_from(
                 pair.into_inner().next().unwrap(),
             )?)),

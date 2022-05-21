@@ -70,11 +70,11 @@ impl AggOp for UnresolvedOp {
         &self.0
     }
 
-    fn prep(&self, args: &[Expr]) -> Result<()> {
+    fn prep(&self, _args: &[Expr]) -> Result<()> {
         todo!()
     }
 
-    fn get(&self, args: &[Expr]) -> Result<Value> {
+    fn get(&self, _args: &[Expr]) -> Result<Value> {
         todo!()
     }
 }

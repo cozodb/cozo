@@ -7,7 +7,7 @@ use crate::parser::{Pair, Rule};
 use std::result;
 
 #[derive(thiserror::Error, Debug)]
-pub(crate) enum DdlParseError {
+pub enum DdlParseError {
     #[error(transparent)]
     TextParse(#[from] TextParseError),
 
@@ -29,7 +29,7 @@ pub(crate) enum DdlParseError {
 
 type Result<T> = result::Result<T, DdlParseError>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ColSchema {
     pub(crate) name: String,
     pub(crate) typing: Typing,
@@ -65,11 +65,9 @@ impl<'a> TryFrom<Value<'a>> for ColSchema {
             .ok_or_else(mk_err)?;
         let typing = Typing::try_from(typing)?;
         let default = fields
-            .get(1)
-            .ok_or_else(mk_err)?
-            .get_str()
+            .get(2)
             .ok_or_else(mk_err)?;
-        let default = Expr::try_from(default)?.to_static();
+        let default = Expr::try_from(default.clone().to_static())?;
         Ok(Self {
             name,
             typing,
