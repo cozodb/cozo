@@ -1,4 +1,4 @@
-use crate::data::tuple::{OwnTuple, ReifiedTuple, TupleError};
+use crate::data::tuple::{ReifiedTuple, TupleError};
 use crate::data::value::{StaticValue, Value};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};

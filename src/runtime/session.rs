@@ -73,13 +73,16 @@ impl Session {
         self.stack.push(BTreeMap::new());
     }
     pub(crate) fn pop_env(&mut self) {
-        if self.stack.len() > 1 {
+        if !self.stack.is_empty() {
             let popped_frame = self.stack.pop().unwrap();
-            for (k, v) in popped_frame.into_iter() {
+            for (_k, v) in popped_frame.into_iter() {
                 if let SessionDefinable::Table(id) = v {
                     self.undefine_temp_table(id);
                 }
             }
+        }
+        if self.stack.is_empty() {
+            self.push_env()
         }
     }
     fn undefine_temp_table(&mut self, id: u32) {
@@ -169,6 +172,10 @@ impl Session {
             .write()
             .map_err(|_| DbInstanceError::TableAccessLock)
     }
+
+    pub fn run_script(&mut self, script: impl AsRef<str>) -> Result<Value> {
+        todo!()
+    }
 }
 
 lazy_static! {
@@ -181,4 +188,9 @@ impl Drop for Session {
             error!("failed to drop session {:?}", e);
         }
     }
+}
+
+
+#[cfg(test)]
+pub(crate) mod tests {
 }

@@ -1,11 +1,11 @@
-create node Job {
+node Job {
     *id: Int,
     title: Text,
     min_salary: Float,
     max_salary: Float
 }
 
-create node Employee {
+node Employee {
     *id: Int,
     first_name: Text,
     last_name: Text,
@@ -13,18 +13,18 @@ create node Employee {
     phone_number: ?Text
 }
 
-create node Dependent {
+node Dependent {
     *id: Int,
     first_name: Text,
     last_name: Text
 }
 
-create node Department {
+node Department {
     *id: Int,
     name: Text
 }
 
-create node Location {
+node Location {
     *id: Int,
     street_address: Text,
     postal_code: ?Text,
@@ -32,31 +32,31 @@ create node Location {
     state_province: ?Text
 }
 
-create node Country {
+node Country {
     *id: Text,
     name: Text
 }
 
-create node Region {
+node Region {
     *id: Int,
     name: Text
 }
 
-create edge (Employee)-[HasJob]->(Job) {
+edge (Employee)-[HasJob]->(Job) {
     salary: Float,
     hire_date: Text
 }
 
-create edge (Employee)-[InDepartment]->(Department)
+edge (Employee)-[InDepartment]->(Department);
 
-create edge (Employee)-[Manages]->(Employee)
+edge (Employee)-[Manages]->(Employee);
 
-create edge (Employee)-[HasDependent]->(Dependent) {
+edge (Employee)-[HasDependent]->(Dependent) {
     relationship: Text
 }
 
-create edge (Department)-[InLocation]->(Location)
+edge (Department)-[InLocation]->(Location);
 
-create edge (Location)-[InCountry]->(Country)
+edge (Location)-[InCountry]->(Country);
 
-create edge (Country)-[InRegion]->(Region)
+edge (Country)-[InRegion]->(Region);

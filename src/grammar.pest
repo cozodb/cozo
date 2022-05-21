@@ -1,4 +1,4 @@
-file = _{SOI ~ (statement)* ~ EOI}
+script = _{SOI ~ statement* ~ EOI}
 
 // whitespace
 
@@ -174,16 +174,16 @@ node_def = { "node" ~ name_in_def ~ cols_def ~ ";"?}
 assoc_def = { "assoc" ~ name_in_def ~ ":" ~ name_in_def ~ cols_def ~ ";"? }
 edge_def = { "edge" ~
              "(" ~ name_in_def ~ ")" ~ "-" ~ "[" ~ name_in_def ~ "]" ~ "->" ~ "(" ~ name_in_def ~ ")"
-             ~ cols_def? ~ ";"? }
+             ~ (cols_def ~ ";"? | ";" ) }
 index_def = { "index" ~ name_in_def ~ ":" ~ name_in_def ~ ("+" ~ name_in_def)* ~ "[" ~ (expr ~ ",")* ~ expr? ~ "]" ~ ";"? }
 seq_def = { "sequence" ~ name_in_def ~ ";" }
-type_def = { "type" ~ name_in_def ~ "=" ~ typing ~ ";" }
+// type_def = { "type" ~ name_in_def ~ "=" ~ typing ~ ";" }
 
 definition = _{ node_def | assoc_def | edge_def | index_def | seq_def }
 definition_all = _{SOI ~ definition ~ EOI}
-global_def = { "create" ~ definition }
-local_def = { "local" ~ definition }
-statement = _{ global_def | local_def }
+statement = _{ definition | persist_block }
+
+persist_block = {"persist!" ~ "{" ~ definition* ~ "}" }
 
 // mutation = { (upsert|insert) ~ expr ~ ("as" ~ name_in_def)? ~ mutation_filter? ~ ";" }
 // mutation_filter = { (exclude|include) ~ name_in_def ~ ("," ~ name_in_def)* }

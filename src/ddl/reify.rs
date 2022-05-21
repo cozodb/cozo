@@ -13,7 +13,7 @@ use crate::ddl::parser::{
 use crate::runtime::instance::DbInstanceError;
 use crate::runtime::instance::DbInstanceError::NameConflict;
 use crate::runtime::options::default_read_options;
-use crate::runtime::session::{Session, SessionDefinable, SessionStackFrame, TableAssocMap};
+use crate::runtime::session::{Session, SessionDefinable, TableAssocMap};
 use cozorocks::TransactionPtr;
 use std::collections::BTreeSet;
 use std::result;
@@ -247,11 +247,11 @@ impl From<&TableInfo> for OwnTuple {
     fn from(ti: &TableInfo) -> Self {
         match ti {
             TableInfo::Node(NodeInfo {
-                name,
-                tid,
-                keys,
-                vals,
-            }) => {
+                                name,
+                                tid,
+                                keys,
+                                vals,
+                            }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Node);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -262,13 +262,13 @@ impl From<&TableInfo> for OwnTuple {
                 target
             }
             TableInfo::Edge(EdgeInfo {
-                name,
-                tid,
-                src_id,
-                dst_id,
-                keys,
-                vals,
-            }) => {
+                                name,
+                                tid,
+                                src_id,
+                                dst_id,
+                                keys,
+                                vals,
+                            }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Edge);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -281,11 +281,11 @@ impl From<&TableInfo> for OwnTuple {
                 target
             }
             TableInfo::Assoc(AssocInfo {
-                name,
-                tid,
-                src_id,
-                vals,
-            }) => {
+                                 name,
+                                 tid,
+                                 src_id,
+                                 vals,
+                             }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Assoc);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -295,12 +295,12 @@ impl From<&TableInfo> for OwnTuple {
                 target
             }
             TableInfo::Index(IndexInfo {
-                name,
-                tid,
-                src_id,
-                assoc_ids,
-                index,
-            }) => {
+                                 name,
+                                 tid,
+                                 src_id,
+                                 assoc_ids,
+                                 index,
+                             }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Index);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -391,7 +391,7 @@ pub(crate) struct SequenceInfo {
 pub(crate) trait DdlContext {
     fn gen_table_id(&mut self) -> Result<TableId>;
     fn table_id_by_name(&self, name: &str) -> Result<TableId>;
-    fn table_by_name<I: IntoIterator<Item = DataKind>>(
+    fn table_by_name<I: IntoIterator<Item=DataKind>>(
         &self,
         name: &str,
         kind: I,
@@ -585,7 +585,7 @@ pub(crate) trait DdlContext {
     fn commit(&mut self) -> Result<()>;
 }
 
-fn check_name_clash<'a, I: IntoIterator<Item = II>, II: IntoIterator<Item = &'a ColSchema>>(
+fn check_name_clash<'a, I: IntoIterator<Item=II>, II: IntoIterator<Item=&'a ColSchema>>(
     kvs: I,
 ) -> Result<()> {
     let mut seen: BTreeSet<&str> = BTreeSet::new();
