@@ -152,7 +152,7 @@ impl Session {
         Ok(cur_id + 1)
     }
 
-    pub fn set_params(&mut self, params: BTreeMap<String, StaticValue>) {
+    pub fn set_params<T: IntoIterator<Item=(String, StaticValue)>>(&mut self, params: T) {
         self.params.extend(params);
     }
 
