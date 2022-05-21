@@ -1,14 +1,14 @@
 use crate::data::tuple::TupleError;
 use crate::data::tuple_set::MIN_TABLE_ID_BOUND;
+use crate::ddl::parser::DdlParseError;
+use crate::ddl::reify::DdlReifyError;
+use crate::parser::Rule;
 use crate::runtime::options::*;
 use crate::runtime::session::Session;
 use cozorocks::*;
 use log::error;
 use std::sync::{Arc, Mutex, RwLock};
 use std::{mem, result};
-use crate::ddl::parser::DdlParseError;
-use crate::ddl::reify::DdlReifyError;
-use crate::parser::Rule;
 
 #[derive(thiserror::Error, Debug)]
 pub enum DbInstanceError {

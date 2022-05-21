@@ -64,9 +64,7 @@ impl<'a> TryFrom<Value<'a>> for ColSchema {
             .get_str()
             .ok_or_else(mk_err)?;
         let typing = Typing::try_from(typing)?;
-        let default = fields
-            .get(2)
-            .ok_or_else(mk_err)?;
+        let default = fields.get(2).ok_or_else(mk_err)?;
         let default = Expr::try_from(default.clone().to_static())?;
         Ok(Self {
             name,

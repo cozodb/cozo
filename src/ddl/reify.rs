@@ -96,11 +96,11 @@ impl TableInfo {
     }
     pub(crate) fn set_table_id(&mut self, id: TableId) {
         match self {
-            TableInfo::Node(t) => { t.tid = id }
-            TableInfo::Edge(t) => { t.tid = id }
-            TableInfo::Assoc(t) => { t.tid = id }
-            TableInfo::Index(t) => { t.tid = id }
-            TableInfo::Sequence(t) => { t.tid = id }
+            TableInfo::Node(t) => t.tid = id,
+            TableInfo::Edge(t) => t.tid = id,
+            TableInfo::Assoc(t) => t.tid = id,
+            TableInfo::Index(t) => t.tid = id,
+            TableInfo::Sequence(t) => t.tid = id,
         }
     }
 }
@@ -254,11 +254,11 @@ impl From<&TableInfo> for OwnTuple {
     fn from(ti: &TableInfo) -> Self {
         match ti {
             TableInfo::Node(NodeInfo {
-                                name,
-                                tid,
-                                keys,
-                                vals,
-                            }) => {
+                name,
+                tid,
+                keys,
+                vals,
+            }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Node);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -269,13 +269,13 @@ impl From<&TableInfo> for OwnTuple {
                 target
             }
             TableInfo::Edge(EdgeInfo {
-                                name,
-                                tid,
-                                src_id,
-                                dst_id,
-                                keys,
-                                vals,
-                            }) => {
+                name,
+                tid,
+                src_id,
+                dst_id,
+                keys,
+                vals,
+            }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Edge);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -288,11 +288,11 @@ impl From<&TableInfo> for OwnTuple {
                 target
             }
             TableInfo::Assoc(AssocInfo {
-                                 name,
-                                 tid,
-                                 src_id,
-                                 vals,
-                             }) => {
+                name,
+                tid,
+                src_id,
+                vals,
+            }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Assoc);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -302,12 +302,12 @@ impl From<&TableInfo> for OwnTuple {
                 target
             }
             TableInfo::Index(IndexInfo {
-                                 name,
-                                 tid,
-                                 src_id,
-                                 assoc_ids,
-                                 index,
-                             }) => {
+                name,
+                tid,
+                src_id,
+                assoc_ids,
+                index,
+            }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Index);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -399,7 +399,7 @@ pub(crate) trait DdlContext {
     fn gen_temp_table_id(&self) -> TableId;
     fn gen_table_id(&mut self) -> Result<TableId>;
     fn table_id_by_name(&self, name: &str) -> Result<TableId>;
-    fn table_by_name<I: IntoIterator<Item=DataKind>>(
+    fn table_by_name<I: IntoIterator<Item = DataKind>>(
         &self,
         name: &str,
         kind: I,
@@ -593,7 +593,7 @@ pub(crate) trait DdlContext {
     fn commit(&mut self) -> Result<()>;
 }
 
-fn check_name_clash<'a, I: IntoIterator<Item=II>, II: IntoIterator<Item=&'a ColSchema>>(
+fn check_name_clash<'a, I: IntoIterator<Item = II>, II: IntoIterator<Item = &'a ColSchema>>(
     kvs: I,
 ) -> Result<()> {
     let mut seen: BTreeSet<&str> = BTreeSet::new();
@@ -826,7 +826,10 @@ fn find_table_by_id_in_main(txn: &TransactionPtr, id: u32) -> Result<TableInfo> 
 
 impl<'a> DdlContext for MainDbContext<'a> {
     fn gen_temp_table_id(&self) -> TableId {
-        TableId { in_root: true, id: 0 }
+        TableId {
+            in_root: true,
+            id: 0,
+        }
     }
 
     fn gen_table_id(&mut self) -> Result<TableId> {
@@ -888,7 +891,10 @@ impl<'a> DdlContext for MainDbContext<'a> {
             .txn
             .get_for_update_owned(&default_read_options(), &name_key)?
         {
-            if let Some(existing) = self.txn.get_for_update_owned(&default_read_options(), existing_key)? {
+            if let Some(existing) = self
+                .txn
+                .get_for_update_owned(&default_read_options(), existing_key)?
+            {
                 if let Ok(mut existing_info) = TableInfo::try_from(Tuple::new(existing)) {
                     existing_info.set_table_id(info.table_id());
                     if existing_info == info {
@@ -970,7 +976,10 @@ impl<'a> DdlContext for MainDbContext<'a> {
 
 impl<'a> DdlContext for TempDbContext<'a> {
     fn gen_temp_table_id(&self) -> TableId {
-        TableId { in_root: false, id: 0 }
+        TableId {
+            in_root: false,
+            id: 0,
+        }
     }
 
     fn gen_table_id(&mut self) -> Result<TableId> {

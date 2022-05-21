@@ -22,7 +22,7 @@ impl Op for SeqNext {
         true
     }
 
-    fn eval<'a>(&self, args: Vec<Value<'a>>) -> crate::data::op::Result<Value<'a>> {
+    fn eval<'a>(&self, _args: Vec<Value<'a>>) -> crate::data::op::Result<Value<'a>> {
         todo!()
     }
 }

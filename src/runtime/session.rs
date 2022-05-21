@@ -3,19 +3,19 @@ use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{TableId, MIN_TABLE_ID_BOUND};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
+use crate::ddl::parser::DdlSchema;
 use crate::ddl::reify::{DdlContext, DdlReifyError, TableInfo};
+use crate::parser::{CozoParser, Pair, Rule};
 use crate::runtime::instance::{DbInstanceError, SessionHandle, SessionStatus, TableLock};
 use crate::runtime::options::{default_txn_options, default_write_options};
-use cozorocks::{BridgeError, DbPtr, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
+use cozorocks::{DbPtr, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use lazy_static::lazy_static;
 use log::error;
+use pest::Parser;
 use std::collections::{BTreeMap, BTreeSet};
 use std::result;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use crate::parser::{CozoParser, Pair, Rule};
-use pest::Parser;
-use crate::ddl::parser::DdlSchema;
 
 type Result<T> = result::Result<T, DbInstanceError>;
 
@@ -161,7 +161,7 @@ impl Session {
         match pair.as_rule() {
             Rule::query => self.execute_query(pair),
             Rule::persist_block => self.execute_persist_block(pair),
-            _ => Err(DbInstanceError::Parse(script.to_string()))
+            _ => Err(DbInstanceError::Parse(script.to_string())),
         }
     }
     fn execute_query(&mut self, pair: Pair) -> Result<Value> {
@@ -195,7 +195,6 @@ impl Drop for Session {
         }
     }
 }
-
 
 #[cfg(test)]
 pub(crate) mod tests {

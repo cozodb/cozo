@@ -226,11 +226,9 @@ impl TryFrom<Pair<'_>> for Typing {
                 t => return Err(TypingError::UndefinedType(t.to_string())),
             },
             Rule::nullable_type => {
-                let inner_type = Typing::try_from(
-                    pair.into_inner().next().unwrap(),
-                )?;
+                let inner_type = Typing::try_from(pair.into_inner().next().unwrap())?;
                 Typing::Nullable(Box::new(inner_type))
-            },
+            }
             Rule::homogeneous_list_type => Typing::Homogeneous(Box::new(Typing::try_from(
                 pair.into_inner().next().unwrap(),
             )?)),

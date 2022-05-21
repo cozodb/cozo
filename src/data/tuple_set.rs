@@ -202,8 +202,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::mem;
     use crate::data::tuple::OwnTuple;
+    use std::mem;
 
     #[test]
     fn sizes() {
