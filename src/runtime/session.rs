@@ -156,6 +156,10 @@ impl Session {
         self.params.extend(params);
     }
 
+    pub fn unset_param(&mut self, name: &str) {
+        self.params.remove(name);
+    }
+
     pub fn run_script(&mut self, script: impl AsRef<str>) -> Result<Value> {
         let script = script.as_ref();
         let pair = CozoParser::parse(Rule::script, script)?
