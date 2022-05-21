@@ -1,6 +1,6 @@
-use crate::data::expr::{Expr};
-use crate::data::parser::ExprParseError;
+use crate::data::expr::Expr;
 use crate::data::op::*;
+use crate::data::parser::ExprParseError;
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::borrow::Cow;
@@ -123,21 +123,21 @@ impl<'a> Expr<'a> {
                             .unwrap_or(Expr::Const(Value::Null))
                             .partial_eval(ctx)?
                     }
-                    arg => {
-                        match arg.partial_eval(ctx)? {
-                            Expr::Const(Value::Null) => Expr::Const(Value::Null),
-                            Expr::Const(Value::Dict(mut d)) => {
-                                Expr::Const(d.remove(&f as &str).unwrap_or(Value::Null))
-                            }
-                            v @ (Expr::IdxAcc(_, _)
-                            | Expr::FieldAcc(_, _)
-                            | Expr::TableCol(_, _)
-                            | Expr::Apply(_, _)
-                            | Expr::ApplyAgg(_, _, _)) => Expr::FieldAcc(f, v.into()),
-                            Expr::Dict(mut d) => d.remove(&f as &str).unwrap_or(Expr::Const(Value::Null)),
-                            v => return Err(EvalError::FieldAccess(f, Value::from(v).to_static())),
+                    arg => match arg.partial_eval(ctx)? {
+                        Expr::Const(Value::Null) => Expr::Const(Value::Null),
+                        Expr::Const(Value::Dict(mut d)) => {
+                            Expr::Const(d.remove(&f as &str).unwrap_or(Value::Null))
                         }
-                    }
+                        v @ (Expr::IdxAcc(_, _)
+                        | Expr::FieldAcc(_, _)
+                        | Expr::TableCol(_, _)
+                        | Expr::Apply(_, _)
+                        | Expr::ApplyAgg(_, _, _)) => Expr::FieldAcc(f, v.into()),
+                        Expr::Dict(mut d) => {
+                            d.remove(&f as &str).unwrap_or(Expr::Const(Value::Null))
+                        }
+                        v => return Err(EvalError::FieldAccess(f, Value::from(v).to_static())),
+                    },
                 }
             }
             Expr::IdxAcc(i, arg) => {
@@ -150,31 +150,29 @@ impl<'a> Expr<'a> {
                             l.swap_remove(i).partial_eval(ctx)?
                         }
                     }
-                    arg => {
-                        match arg.partial_eval(ctx)? {
-                            Expr::Const(Value::Null) => Expr::Const(Value::Null),
-                            Expr::Const(Value::List(mut l)) => {
-                                if i >= l.len() {
-                                    Expr::Const(Value::Null)
-                                } else {
-                                    Expr::Const(l.swap_remove(i))
-                                }
+                    arg => match arg.partial_eval(ctx)? {
+                        Expr::Const(Value::Null) => Expr::Const(Value::Null),
+                        Expr::Const(Value::List(mut l)) => {
+                            if i >= l.len() {
+                                Expr::Const(Value::Null)
+                            } else {
+                                Expr::Const(l.swap_remove(i))
                             }
-                            Expr::List(mut l) => {
-                                if i >= l.len() {
-                                    Expr::Const(Value::Null)
-                                } else {
-                                    l.swap_remove(i)
-                                }
-                            }
-                            v @ (Expr::IdxAcc(_, _)
-                            | Expr::FieldAcc(_, _)
-                            | Expr::TableCol(_, _)
-                            | Expr::Apply(_, _)
-                            | Expr::ApplyAgg(_, _, _)) => Expr::IdxAcc(i, v.into()),
-                            v => return Err(EvalError::IndexAccess(i, Value::from(v).to_static())),
                         }
-                    }
+                        Expr::List(mut l) => {
+                            if i >= l.len() {
+                                Expr::Const(Value::Null)
+                            } else {
+                                l.swap_remove(i)
+                            }
+                        }
+                        v @ (Expr::IdxAcc(_, _)
+                        | Expr::FieldAcc(_, _)
+                        | Expr::TableCol(_, _)
+                        | Expr::Apply(_, _)
+                        | Expr::ApplyAgg(_, _, _)) => Expr::IdxAcc(i, v.into()),
+                        v => return Err(EvalError::IndexAccess(i, Value::from(v).to_static())),
+                    },
                 }
             }
             Expr::Apply(op, args) => {
@@ -305,10 +303,7 @@ impl<'a> Expr<'a> {
                     }
                     arg
                 }
-                _ => Expr::Apply(
-                    op,
-                    args.into_iter().map(|v| v.optimize_ops()).collect(),
-                ),
+                _ => Expr::Apply(op, args.into_iter().map(|v| v.optimize_ops()).collect()),
             },
             Expr::ApplyAgg(op, a_args, args) => Expr::ApplyAgg(
                 op,

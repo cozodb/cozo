@@ -8,7 +8,11 @@ type Result<T> = result::Result<T, EvalError>;
 pub(crate) struct OpStrCat;
 
 impl OpStrCat {
-    pub(crate) fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+    pub(crate) fn eval_two_non_null<'a>(
+        &self,
+        left: Value<'a>,
+        right: Value<'a>,
+    ) -> Result<Value<'a>> {
         match (left, right) {
             (Value::Text(l), Value::Text(r)) => {
                 let mut l = l.into_owned();

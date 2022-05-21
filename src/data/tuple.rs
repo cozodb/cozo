@@ -99,7 +99,7 @@ pub(crate) const DATAKIND_TYPE: u32 = 12;
 pub(crate) const DATAKIND_EMPTY: u32 = u32::MAX;
 
 #[repr(u32)]
-#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Clone)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Clone, Copy)]
 pub enum DataKind {
     Data = DATAKIND_DATA,
     Node = DATAKIND_NODE,
@@ -143,8 +143,8 @@ impl From<DataKind> for u32 {
 
 #[derive(Clone)]
 pub struct Tuple<T>
-    where
-        T: AsRef<[u8]>,
+where
+    T: AsRef<[u8]>,
 {
     pub(crate) data: T,
     idx_cache: RefCell<Vec<usize>>,
@@ -155,8 +155,8 @@ unsafe impl<T: AsRef<[u8]>> Send for Tuple<T> {}
 unsafe impl<T: AsRef<[u8]>> Sync for Tuple<T> {}
 
 impl<T> From<T> for Tuple<T>
-    where
-        T: AsRef<[u8]>,
+where
+    T: AsRef<[u8]>,
 {
     fn from(data: T) -> Self {
         Tuple::new(data)
@@ -164,8 +164,8 @@ impl<T> From<T> for Tuple<T>
 }
 
 impl<T> Tuple<T>
-    where
-        T: AsRef<[u8]>,
+where
+    T: AsRef<[u8]>,
 {
     pub(crate) fn clear_cache(&self) {
         self.idx_cache.borrow_mut().clear()
@@ -173,8 +173,8 @@ impl<T> Tuple<T>
 }
 
 impl<T> AsRef<[u8]> for Tuple<T>
-    where
-        T: AsRef<[u8]>,
+where
+    T: AsRef<[u8]>,
 {
     fn as_ref(&self) -> &[u8] {
         self.data.as_ref()
@@ -627,8 +627,10 @@ impl OwnTuple {
         cache.push(self.data.len());
     }
     #[inline]
-    pub(crate) fn push_values_as_list<'a, It: IntoIterator<Item=I>, I: Borrow<Value<'a>> + 'a>
-    (&mut self, l: It) {
+    pub(crate) fn push_values_as_list<'a, It: IntoIterator<Item = I>, I: Borrow<Value<'a>> + 'a>(
+        &mut self,
+        l: It,
+    ) {
         self.push_tag(StorageTag::List);
         let start_pos = self.data.len();
         let start_len = self.idx_cache.borrow().len();
@@ -644,9 +646,14 @@ impl OwnTuple {
         cache.push(self.data.len());
     }
     #[inline]
-    pub(crate) fn push_values_as_dict<'a, I: IntoIterator<Item=(T, &'a Value<'a>)>,
-        T: AsRef<str> + 'a>
-    (&mut self, d: I) {
+    pub(crate) fn push_values_as_dict<
+        'a,
+        I: IntoIterator<Item = (T, &'a Value<'a>)>,
+        T: AsRef<str> + 'a,
+    >(
+        &mut self,
+        d: I,
+    ) {
         self.push_tag(StorageTag::Dict);
         let start_pos = self.data.len();
         let start_len = self.idx_cache.borrow().len();
@@ -731,7 +738,7 @@ impl OwnTuple {
 
 impl<'a> Extend<Value<'a>> for OwnTuple {
     #[inline]
-    fn extend<T: IntoIterator<Item=Value<'a>>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = Value<'a>>>(&mut self, iter: T) {
         for v in iter {
             self.push_value(&v)
         }
@@ -754,9 +761,9 @@ impl<T: AsRef<[u8]>> Hash for Tuple<T> {
 impl<T: AsRef<[u8]>> Eq for Tuple<T> {}
 
 impl<'a, P, T> From<(P, T)> for OwnTuple
-    where
-        T: IntoIterator<Item=&'a Value<'a>>,
-        P: Into<u32>,
+where
+    T: IntoIterator<Item = &'a Value<'a>>,
+    P: Into<u32>,
 {
     fn from((prefix, it): (P, T)) -> Self {
         let mut ret = OwnTuple::with_prefix(prefix.into());

@@ -3,7 +3,7 @@ use crate::data::value::Value;
 
 pub(crate) struct OpGenUuidV1;
 
-const NAME_OP_GEN_UUID_V1:&str = "gen_uuid_v1";
+const NAME_OP_GEN_UUID_V1: &str = "gen_uuid_v1";
 
 impl Op for OpGenUuidV1 {
     fn arity(&self) -> Option<usize> {

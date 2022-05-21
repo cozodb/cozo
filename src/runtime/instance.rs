@@ -1,11 +1,11 @@
+use crate::data::tuple::TupleError;
 use crate::data::tuple_set::MIN_TABLE_ID_BOUND;
 use crate::runtime::options::*;
+use crate::runtime::session::Session;
 use cozorocks::*;
 use log::error;
 use std::sync::{Arc, Mutex, RwLock};
 use std::{mem, result};
-use crate::data::tuple::TupleError;
-use crate::runtime::session::Session;
 
 #[derive(thiserror::Error, Debug)]
 pub enum DbInstanceError {
@@ -28,7 +28,7 @@ pub enum DbInstanceError {
     TableDoesNotExist(u32),
 
     #[error("Name conflict {0}")]
-    NameConflict(String)
+    NameConflict(String),
 }
 
 type Result<T> = result::Result<T, DbInstanceError>;
@@ -133,7 +133,7 @@ impl DbInstance {
             params: Default::default(),
             table_locks: self.table_locks.clone(),
             tables: Default::default(),
-            table_assocs: Default::default()
+            table_assocs: Default::default(),
         })
     }
 
@@ -188,7 +188,6 @@ impl Drop for DbInstance {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -1,6 +1,6 @@
-use crate::data::eval::{EvalError};
+use crate::data::eval::EvalError;
 use crate::data::op::Op;
-use crate::data::value::{Value};
+use crate::data::value::Value;
 use std::collections::BTreeMap;
 use std::result;
 

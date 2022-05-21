@@ -3,21 +3,21 @@ mod boolean;
 mod combine;
 mod comparison;
 mod control;
+mod sequence;
 mod text;
 mod uuid;
-mod sequence;
 
 use crate::data::eval::EvalError;
-use crate::data::value::{Value};
+use crate::data::value::Value;
 use std::result;
 
+use crate::data::expr::Expr;
 pub(crate) use arithmetic::*;
 pub(crate) use boolean::*;
 pub(crate) use combine::*;
 pub(crate) use comparison::*;
 pub(crate) use control::*;
 pub(crate) use text::*;
-use crate::data::expr::Expr;
 
 type Result<T> = result::Result<T, EvalError>;
 

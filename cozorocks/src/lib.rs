@@ -307,7 +307,7 @@ impl TransactionPtr {
     pub fn get_for_update_owned(
         &self,
         options: &ReadOptions,
-        key: impl AsRef<[u8]>
+        key: impl AsRef<[u8]>,
     ) -> Result<Option<PinnableSlicePtr>> {
         let mut slice = PinnableSlicePtr::default();
         if self.get_for_update(options, key, &mut slice)? {

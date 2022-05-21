@@ -149,7 +149,8 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                     }
                     Rule::call => {
                         let mut pairs = p.into_inner();
-                        let op: Arc<dyn Op + Send + Sync> = get_method(pairs.next().unwrap().as_str());
+                        let op: Arc<dyn Op + Send + Sync> =
+                            get_method(pairs.next().unwrap().as_str());
                         let mut args = vec![head];
                         args.extend(pairs.map(Expr::try_from).collect::<Result<Vec<_>>>()?);
                         head = Expr::Apply(op, args);
@@ -293,7 +294,7 @@ fn get_method(name: &str) -> Arc<dyn Op + Send + Sync> {
         NAME_OP_NOT_NULL => Arc::new(OpNotNull),
         NAME_OP_CONCAT => Arc::new(OpConcat),
         NAME_OP_MERGE => Arc::new(OpMerge),
-        method_name => Arc::new(UnresolvedOp(method_name.to_string()))
+        method_name => Arc::new(UnresolvedOp(method_name.to_string())),
     }
 }
 

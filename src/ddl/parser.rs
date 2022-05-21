@@ -1,10 +1,10 @@
-use std::result;
 use crate::data::expr::{Expr, ExprError, StaticExpr};
 use crate::data::parser::ExprParseError;
 use crate::data::typing::{Typing, TypingError};
 use crate::data::value::{StaticValue, Value};
-use crate::parser::{Pair, Rule};
 use crate::parser::text_identifier::{build_name_in_def, TextParseError};
+use crate::parser::{Pair, Rule};
+use std::result;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum DdlParseError {
@@ -52,15 +52,28 @@ impl<'a> TryFrom<Value<'a>> for ColSchema {
     fn try_from(value: Value<'a>) -> Result<Self> {
         let mk_err = || DdlParseError::ColSchemaDeser(value.clone().to_static());
         let fields = value.get_slice().ok_or_else(mk_err)?;
-        let name = fields.get(0).ok_or_else(mk_err)?.get_str().ok_or_else(mk_err)?.to_string();
-        let typing = fields.get(1).ok_or_else(mk_err)?.get_str().ok_or_else(mk_err)?;
+        let name = fields
+            .get(0)
+            .ok_or_else(mk_err)?
+            .get_str()
+            .ok_or_else(mk_err)?
+            .to_string();
+        let typing = fields
+            .get(1)
+            .ok_or_else(mk_err)?
+            .get_str()
+            .ok_or_else(mk_err)?;
         let typing = Typing::try_from(typing)?;
-        let default = fields.get(1).ok_or_else(mk_err)?.get_str().ok_or_else(mk_err)?;
+        let default = fields
+            .get(1)
+            .ok_or_else(mk_err)?
+            .get_str()
+            .ok_or_else(mk_err)?;
         let default = Expr::try_from(default)?.to_static();
         Ok(Self {
             name,
             typing,
-            default
+            default,
         })
     }
 }
@@ -120,7 +133,7 @@ impl<'a> TryFrom<Pair<'a>> for DdlSchema {
             Rule::assoc_def => DdlSchema::Assoc(pair.try_into()?),
             Rule::seq_def => DdlSchema::Sequence(pair.try_into()?),
             Rule::index_def => DdlSchema::Index(pair.try_into()?),
-            _ => todo!()
+            _ => todo!(),
         })
     }
 }
@@ -133,11 +146,7 @@ impl<'a> TryFrom<Pair<'a>> for NodeSchema {
         let name = build_name_in_def(pairs.next().unwrap(), true)?;
         let cols_pair = pairs.next().unwrap();
         let (keys, vals) = parse_cols(cols_pair)?;
-        Ok(Self {
-            name,
-            keys,
-            vals,
-        })
+        Ok(Self { name, keys, vals })
     }
 }
 
@@ -150,7 +159,7 @@ impl<'a> TryFrom<Pair<'a>> for EdgeSchema {
         let dst_name = build_name_in_def(pairs.next().unwrap(), true)?;
         let (keys, vals) = match pairs.next() {
             Some(pair) => parse_cols(pair)?,
-            None => (vec![], vec![])
+            None => (vec![], vec![]),
         };
         Ok(EdgeSchema {
             name,
@@ -195,7 +204,7 @@ impl<'a> TryFrom<Pair<'a>> for IndexSchema {
         for pair in pairs {
             match pair.as_rule() {
                 Rule::name_in_def => associate_names.push(build_name_in_def(pair, false)?),
-                _ => indices.push(Expr::try_from(pair)?.to_static())
+                _ => indices.push(Expr::try_from(pair)?.to_static()),
             }
         }
         if indices.is_empty() {
@@ -214,9 +223,7 @@ impl<'a> TryFrom<Pair<'a>> for SequenceSchema {
     type Error = DdlParseError;
     fn try_from(pair: Pair) -> Result<Self> {
         let name = build_name_in_def(pair.into_inner().next().unwrap(), true)?;
-        Ok(SequenceSchema {
-            name
-        })
+        Ok(SequenceSchema { name })
     }
 }
 
@@ -226,7 +233,7 @@ fn parse_cols(pair: Pair) -> Result<(Vec<ColSchema>, Vec<ColSchema>)> {
     for pair in pair.into_inner() {
         match parse_col_entry(pair)? {
             (true, res) => keys.push(res),
-            (false, res) => vals.push(res)
+            (false, res) => vals.push(res),
         }
     }
     Ok((keys, vals))
@@ -240,11 +247,14 @@ fn parse_col_entry(pair: Pair) -> Result<(bool, ColSchema)> {
         None => Expr::Const(Value::Null),
         Some(pair) => Expr::try_from(pair)?.to_static(),
     };
-    Ok((is_key, ColSchema {
-        name,
-        typing,
-        default,
-    }))
+    Ok((
+        is_key,
+        ColSchema {
+            name,
+            typing,
+            default,
+        },
+    ))
 }
 
 fn parse_col_name(pair: Pair) -> Result<(bool, String)> {
@@ -255,7 +265,7 @@ fn parse_col_name(pair: Pair) -> Result<(bool, String)> {
             nxt = pairs.next().unwrap();
             true
         }
-        _ => false
+        _ => false,
     };
     let name = build_name_in_def(nxt, true)?;
     Ok((is_key, name))
@@ -263,9 +273,9 @@ fn parse_col_name(pair: Pair) -> Result<(bool, String)> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::parser::CozoParser;
     use pest::Parser;
-    use super::*;
 
     #[test]
     fn parse_ddl() -> Result<()> {
@@ -277,13 +287,19 @@ mod tests {
             max_salary: Float
         }
         "#;
-        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        let p = CozoParser::parse(Rule::definition_all, s)
+            .unwrap()
+            .next()
+            .unwrap();
         dbg!(DdlSchema::try_from(p)?);
 
         let s = r#"
         edge (Department)-[InLocation]->(Location)
         "#;
-        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        let p = CozoParser::parse(Rule::definition_all, s)
+            .unwrap()
+            .next()
+            .unwrap();
         dbg!(DdlSchema::try_from(p)?);
 
         let s = r#"
@@ -291,7 +307,10 @@ mod tests {
             relationship: Text
         }
         "#;
-        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        let p = CozoParser::parse(Rule::definition_all, s)
+            .unwrap()
+            .next()
+            .unwrap();
         dbg!(DdlSchema::try_from(p)?);
 
         let s = r#"
@@ -299,19 +318,28 @@ mod tests {
             balance: Float = 0
         }
         "#;
-        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        let p = CozoParser::parse(Rule::definition_all, s)
+            .unwrap()
+            .next()
+            .unwrap();
         dbg!(DdlSchema::try_from(p)?);
 
         let s = r#"
         sequence PersonId;
         "#;
-        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        let p = CozoParser::parse(Rule::definition_all, s)
+            .unwrap()
+            .next()
+            .unwrap();
         dbg!(DdlSchema::try_from(p)?);
 
         let s = r#"
         index bankaccountidx: Person + BankAccount [id, x, y, z]
         "#;
-        let p = CozoParser::parse(Rule::definition_all, s).unwrap().next().unwrap();
+        let p = CozoParser::parse(Rule::definition_all, s)
+            .unwrap()
+            .next()
+            .unwrap();
         dbg!(DdlSchema::try_from(p)?);
 
         Ok(())

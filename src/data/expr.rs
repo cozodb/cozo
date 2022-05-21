@@ -2,15 +2,15 @@ use crate::data::op::{
     AggOp, Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMinus,
     OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
 };
+use crate::data::parser::ExprParseError;
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
+use crate::parser::{CozoParser, Rule};
+use pest::Parser;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::result;
 use std::sync::Arc;
-use crate::parser::{CozoParser, Rule};
-use pest::Parser;
-use crate::data::parser::ExprParseError;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ExprError {
@@ -27,7 +27,7 @@ pub(crate) enum ExprError {
     Parse(String),
 
     #[error(transparent)]
-    ParseInner(#[from] ExprParseError)
+    ParseInner(#[from] ExprParseError),
 }
 
 type Result<T> = result::Result<T, ExprError>;
@@ -78,8 +78,9 @@ impl<'a> Expr<'a> {
             Expr::Variable(v) => Expr::Variable(v),
             Expr::TableCol(tid, cid) => Expr::TableCol(tid, cid),
             Expr::TupleSetIdx(idx) => Expr::TupleSetIdx(idx),
-            Expr::Apply(op, args) => Expr::Apply(op,
-                                                 args.into_iter().map(|v| v.to_static()).collect()),
+            Expr::Apply(op, args) => {
+                Expr::Apply(op, args.into_iter().map(|v| v.to_static()).collect())
+            }
             Expr::ApplyAgg(op, a_args, args) => Expr::ApplyAgg(
                 op,
                 a_args.into_iter().map(|v| v.to_static()).collect(),
@@ -91,8 +92,11 @@ impl<'a> Expr<'a> {
                 let (a, b, c) = *args;
                 Expr::IfExpr((a.to_static(), b.to_static(), c.to_static()).into())
             }
-            Expr::SwitchExpr(args) => Expr::SwitchExpr(args.into_iter().map(|(a, b)|
-                (a.to_static(), b.to_static())).collect()),
+            Expr::SwitchExpr(args) => Expr::SwitchExpr(
+                args.into_iter()
+                    .map(|(a, b)| (a.to_static(), b.to_static()))
+                    .collect(),
+            ),
             Expr::Add(args) => {
                 let (a, b) = *args;
                 Expr::Add((a.to_static(), b.to_static()).into())
@@ -422,7 +426,7 @@ fn build_value_from_binop<'a>(name: &str, (left, right): (Expr<'a>, Expr<'a>)) -
             Value::from(name.to_string()),
             Value::from(vec![Value::from(left), Value::from(right)]),
         ]
-            .into(),
+        .into(),
     )
 }
 
@@ -433,7 +437,7 @@ fn build_value_from_uop<'a>(name: &str, arg: Expr<'a>) -> Value<'a> {
             Value::from(name.to_string()),
             Value::from(vec![Value::from(arg)]),
         ]
-            .into(),
+        .into(),
     )
 }
 
@@ -461,7 +465,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     cid.is_key.into(),
                     Value::from(cid.id as i64),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::TupleSetIdx(sid) => build_tagged_value(
                 "TupleSetIdx",
@@ -470,7 +474,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(sid.t_set as i64),
                     Value::from(sid.col_idx as i64),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::Add(arg) => build_value_from_binop(OpAdd.name(), *arg),
             Expr::Sub(arg) => build_value_from_binop(OpSub.name(), *arg),
@@ -498,7 +502,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     Value::from(op.name().to_string()),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::IfExpr(_) => {
                 todo!()
@@ -517,7 +521,7 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                         .into(),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
-                    .into(),
+                .into(),
             ),
             Expr::FieldAcc(f, v) => {
                 build_tagged_value("FieldAcc", vec![f.into(), Value::from(*v)].into())
@@ -533,8 +537,7 @@ fn build_tagged_value<'a>(tag: &'static str, val: Value<'a>) -> Value<'a> {
     Value::Dict(BTreeMap::from([(tag.into(), val)]))
 }
 
-
-impl <'a> TryFrom<&'a str> for Expr<'a> {
+impl<'a> TryFrom<&'a str> for Expr<'a> {
     type Error = ExprError;
 
     fn try_from(value: &'a str) -> result::Result<Self, Self::Error> {

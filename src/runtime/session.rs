@@ -1,18 +1,18 @@
-use std::collections::{BTreeMap, BTreeSet};
-use std::result;
-use std::sync::{Arc, Mutex, RwLockReadGuard, RwLockWriteGuard};
-use std::sync::atomic::{AtomicU32, Ordering};
-use lazy_static::lazy_static;
-use log::error;
-use cozorocks::{DbPtr, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use crate::data::expr::StaticExpr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
-use crate::data::tuple_set::{MIN_TABLE_ID_BOUND, TableId};
+use crate::data::tuple_set::{TableId, MIN_TABLE_ID_BOUND};
 use crate::data::typing::Typing;
-use crate::data::value::{Value, StaticValue};
+use crate::data::value::{StaticValue, Value};
 use crate::ddl::reify::TableInfo;
 use crate::runtime::instance::{DbInstanceError, SessionHandle, SessionStatus, TableLock};
 use crate::runtime::options::{default_txn_options, default_write_options};
+use cozorocks::{DbPtr, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
+use lazy_static::lazy_static;
+use log::error;
+use std::collections::{BTreeMap, BTreeSet};
+use std::result;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex, RwLockReadGuard, RwLockWriteGuard};
 
 type Result<T> = result::Result<T, DbInstanceError>;
 
@@ -20,11 +20,11 @@ pub(crate) enum SessionDefinable {
     Value(StaticValue),
     Expr(StaticExpr),
     Typing(Typing),
-    Table(u32)
-    // TODO
+    Table(u32), // TODO
 }
 
 pub(crate) type SessionStackFrame = BTreeMap<String, SessionDefinable>;
+pub(crate) type TableAssocMap = BTreeMap<DataKind, BTreeMap<TableId, BTreeSet<u32>>>;
 
 pub struct Session {
     pub(crate) main: DbPtr,
@@ -40,7 +40,7 @@ pub struct Session {
     pub(crate) session_handle: Arc<Mutex<SessionHandle>>,
     pub(crate) table_locks: TableLock,
     pub(crate) tables: BTreeMap<u32, TableInfo>,
-    pub(crate) table_assocs: BTreeMap<DataKind, BTreeMap<TableId, BTreeSet<u32>>>
+    pub(crate) table_assocs: TableAssocMap,
 }
 
 pub(crate) struct InterpretContext<'a> {
@@ -156,4 +156,3 @@ impl Drop for Session {
         }
     }
 }
-

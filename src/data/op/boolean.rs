@@ -1,7 +1,7 @@
 use crate::data::eval::{EvalError, PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
 use crate::data::op::Op;
-use crate::data::value::{Value};
+use crate::data::value::Value;
 use std::result;
 use std::sync::Arc;
 
@@ -61,7 +61,6 @@ impl Op for OpNotNull {
     fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
         self.eval_one(args.into_iter().next().unwrap())
     }
-
 }
 
 pub(crate) struct OpOr;

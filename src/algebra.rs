@@ -3,12 +3,10 @@ mod parser;
 use crate::data::expr::StaticExpr;
 use crate::data::tuple_set::TupleSet;
 
-
 pub(crate) trait Algebra {
     fn get_iterator(&self) -> TupleSource;
     fn get_filter(&self) -> Filter;
 }
-
 
 type AlgebraItem = Box<dyn Algebra>;
 type AlgebraPair = (Box<dyn Algebra>, Box<dyn Algebra>);
@@ -30,8 +28,7 @@ impl Default for Filter {
     }
 }
 
-type TupleSource = Box<dyn Iterator<Item=TupleSet>>;
-
+type TupleSource = Box<dyn Iterator<Item = TupleSet>>;
 
 // pub(crate) struct Source(TupleSource);
 

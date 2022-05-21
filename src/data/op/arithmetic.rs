@@ -1,6 +1,6 @@
 use crate::data::eval::EvalError;
 use crate::data::op::{extract_two_args, Op};
-use crate::data::value::{Value};
+use crate::data::value::Value;
 use std::result;
 
 type Result<T> = result::Result<T, EvalError>;
@@ -8,7 +8,11 @@ type Result<T> = result::Result<T, EvalError>;
 pub(crate) struct OpAdd;
 
 impl OpAdd {
-    pub(crate) fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+    pub(crate) fn eval_two_non_null<'a>(
+        &self,
+        left: Value<'a>,
+        right: Value<'a>,
+    ) -> Result<Value<'a>> {
         let res: Value = match (left, right) {
             (Value::Int(l), Value::Int(r)) => (l + r).into(),
             (Value::Float(l), Value::Int(r)) => (l + (r as f64)).into(),
@@ -52,7 +56,11 @@ impl Op for OpAdd {
 pub(crate) struct OpSub;
 
 impl OpSub {
-    pub(crate) fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+    pub(crate) fn eval_two_non_null<'a>(
+        &self,
+        left: Value<'a>,
+        right: Value<'a>,
+    ) -> Result<Value<'a>> {
         let res: Value = match (left, right) {
             (Value::Int(l), Value::Int(r)) => (l - r).into(),
             (Value::Float(l), Value::Int(r)) => (l - (r as f64)).into(),
@@ -96,7 +104,11 @@ impl Op for OpSub {
 pub(crate) struct OpMul;
 
 impl OpMul {
-    pub(crate) fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+    pub(crate) fn eval_two_non_null<'a>(
+        &self,
+        left: Value<'a>,
+        right: Value<'a>,
+    ) -> Result<Value<'a>> {
         let res: Value = match (left, right) {
             (Value::Int(l), Value::Int(r)) => (l * r).into(),
             (Value::Float(l), Value::Int(r)) => (l * (r as f64)).into(),
@@ -141,7 +153,11 @@ impl Op for OpMul {
 pub(crate) struct OpDiv;
 
 impl OpDiv {
-    pub(crate) fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+    pub(crate) fn eval_two_non_null<'a>(
+        &self,
+        left: Value<'a>,
+        right: Value<'a>,
+    ) -> Result<Value<'a>> {
         let res: Value = match (left, right) {
             (Value::Int(l), Value::Int(r)) => (l as f64 / r as f64).into(),
             (Value::Float(l), Value::Int(r)) => (l / (r as f64)).into(),
@@ -186,7 +202,11 @@ impl Op for OpDiv {
 pub(crate) struct OpMod;
 
 impl OpMod {
-    pub(crate) fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+    pub(crate) fn eval_two_non_null<'a>(
+        &self,
+        left: Value<'a>,
+        right: Value<'a>,
+    ) -> Result<Value<'a>> {
         let res: Value = match (left, right) {
             (Value::Int(l), Value::Int(r)) => (l % r).into(),
             (l, r) => {
@@ -228,7 +248,11 @@ impl Op for OpMod {
 pub(crate) struct OpPow;
 
 impl OpPow {
-    pub(crate) fn eval_two_non_null<'a>(&self, left: Value<'a>, right: Value<'a>) -> Result<Value<'a>> {
+    pub(crate) fn eval_two_non_null<'a>(
+        &self,
+        left: Value<'a>,
+        right: Value<'a>,
+    ) -> Result<Value<'a>> {
         let res: Value = match (left, right) {
             (Value::Int(l), Value::Int(r)) => ((l as f64).powf(r as f64)).into(),
             (Value::Float(l), Value::Int(r)) => ((l.into_inner()).powf(r as f64)).into(),
