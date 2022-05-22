@@ -215,8 +215,8 @@ impl RowEvalContext for TupleSet {
 pub(crate) type BindingMap = BTreeMap<String, BTreeMap<String, TupleSetIdx>>;
 
 pub(crate) struct BindingMapEvalContext<'a, T: PartialEvalContext + 'a> {
-    map: &'a BindingMap,
-    parent: &'a T,
+    pub(crate) map: &'a BindingMap,
+    pub(crate) parent: &'a T,
 }
 
 impl<'a, T: PartialEvalContext + 'a> PartialEvalContext for BindingMapEvalContext<'a, T> {

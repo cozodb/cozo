@@ -220,6 +220,8 @@ impl<'a> Expr<'a> {
                     NAME_OP_AND => partial_eval_and(ctx, args)?,
                     NAME_OP_OR => partial_eval_or(ctx, args)?,
                     NAME_OP_COALESCE => partial_eval_coalesce(ctx, args)?,
+                    NAME_OP_MERGE => partial_eval_merge_expr(ctx, args)?,
+                    NAME_OP_CONCAT => partial_eval_concat_expr(ctx, args)?,
                     _ => {
                         let mut has_unevaluated = false;
                         let non_null_args_fn = op.non_null_args();
@@ -228,6 +230,7 @@ impl<'a> Expr<'a> {
                             let v = v.partial_eval(ctx)?;
                             if !matches!(v, Expr::Const(_)) {
                                 has_unevaluated = true;
+                                eval_args.push(v);
                             } else if non_null_args_fn && matches!(v, Expr::Const(Value::Null)) {
                                 return Ok(Expr::Const(Value::Null));
                             } else {

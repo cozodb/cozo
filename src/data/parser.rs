@@ -327,6 +327,69 @@ fn build_expr_infix<'a>(
     Ok(Expr::Apply(op, vec![lhs, rhs]))
 }
 
+
+pub(crate) fn parse_scoped_dict(pair: Pair) -> Result<(String, BTreeMap<String, Expr>, Expr)> {
+    let mut pairs = pair.into_inner();
+    let binding = pairs.next().unwrap().as_str().to_string();
+    let keyed_dict = pairs.next().unwrap();
+    let mut keys = BTreeMap::new();
+    let mut spread_collected = vec![];
+    let mut collected = BTreeMap::new();
+    for p in keyed_dict.into_inner() {
+        match p.as_rule() {
+            Rule::keyed_pair => {
+                let mut inner = p.into_inner();
+                let name = parse_string(inner.next().unwrap())?;
+                let val = Expr::try_from(inner.next().unwrap())?;
+                keys.insert(name.into(), val);
+            }
+            Rule::dict_pair => {
+                let mut inner = p.into_inner();
+                let name = parse_string(inner.next().unwrap())?;
+                let val = Expr::try_from(inner.next().unwrap())?;
+                collected.insert(name.into(), val);
+            }
+            Rule::scoped_accessor => {
+                let name = parse_string(p.into_inner().next().unwrap())?;
+                let val =
+                    Expr::FieldAcc(name.clone().into(), Expr::Variable("_".into()).into());
+                collected.insert(name.into(), val);
+            }
+            Rule::spreading => {
+                let el = p.into_inner().next().unwrap();
+                let to_concat = build_expr_primary(el)?;
+                if !matches!(
+                            to_concat,
+                            Expr::Dict(_)
+                                | Expr::Variable(_)
+                                | Expr::IdxAcc(_, _)
+                                | Expr::FieldAcc(_, _)
+                                | Expr::Apply(_, _)
+                        ) {
+                    return Err(ExprParseError::SpreadingError(format!("{:?}", to_concat)));
+                }
+                if !collected.is_empty() {
+                    spread_collected.push(Expr::Dict(collected));
+                    collected = BTreeMap::new();
+                }
+                spread_collected.push(to_concat);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    let vals = if spread_collected.is_empty() {
+        Expr::Dict(collected)
+    } else {
+        if !collected.is_empty() {
+            spread_collected.push(Expr::Dict(collected));
+        }
+        Expr::Apply(Arc::new(OpMerge), spread_collected)
+    };
+    Ok((binding, keys, vals))
+}
+
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

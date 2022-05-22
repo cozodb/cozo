@@ -1,16 +1,17 @@
-use crate::context::TempDbContext;
 use crate::data::eval::{EvalError, PartialEvalContext};
-use crate::data::expr::Expr;
-use crate::data::parser::ExprParseError;
+use crate::data::expr::{Expr, StaticExpr};
+use crate::data::parser::{ExprParseError, parse_scoped_dict};
 use crate::data::tuple::{DataKind, OwnTuple};
-use crate::data::tuple_set::{BindingMap, TableId, TupleSet, TupleSetIdx};
+use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TableId, TupleSet, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use crate::ddl::reify::{AssocInfo, EdgeInfo, IndexInfo, TableInfo};
-use crate::parser::{Pair, Pairs, Rule};
+use crate::parser::{CozoParser, Pair, Pairs, Rule};
 use crate::runtime::session::Definable;
 use std::collections::BTreeMap;
 use std::result;
 use std::sync::Arc;
+use pest::error::Error;
+use pest::Parser;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum AlgebraParseError {
@@ -40,6 +41,15 @@ pub(crate) enum AlgebraParseError {
 
     #[error("Value error {0:?}")]
     ValueError(StaticValue),
+
+    #[error("Parse error {0}")]
+    Parse(String)
+}
+
+impl From<pest::error::Error<Rule>> for AlgebraParseError {
+    fn from(err: Error<Rule>) -> Self {
+        AlgebraParseError::Parse(format!("{:?}", err))
+    }
 }
 
 type Result<T> = result::Result<T, AlgebraParseError>;
@@ -81,6 +91,8 @@ impl InterpretContext for () {
 
 pub(crate) trait RelationalAlgebra {
     fn name(&self) -> &str;
+    fn binding_map(&self) -> &BindingMap;
+    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item=TupleSet> + 'a>;
 }
 
 const NAME_RA_FROM_VALUES: &str = "Values";
@@ -88,7 +100,7 @@ const NAME_RA_FROM_VALUES: &str = "Values";
 #[derive(Clone, Debug)]
 struct RaFromValues {
     binding: BindingMap,
-    values: Vec<TupleSet>,
+    values: Vec<Vec<StaticValue>>,
 }
 
 fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Result<()> {
@@ -154,11 +166,7 @@ impl RaFromValues {
             .map(|v| match v.into_vec() {
                 Ok(v) => {
                     if v.len() == n_fields {
-                        let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
-                        tuple.extend(v);
-                        let mut tset = TupleSet::default();
-                        tset.push_val(tuple.into());
-                        Ok(tset)
+                        Ok(v)
                     } else {
                         Err(AlgebraParseError::ValueError(Value::List(v)))
                     }
@@ -179,9 +187,77 @@ impl RelationalAlgebra for RaFromValues {
     fn name(&self) -> &str {
         NAME_RA_FROM_VALUES
     }
+
+    fn binding_map(&self) -> &BindingMap {
+        &self.binding
+    }
+
+    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item=TupleSet> + 'a> {
+        let it = self.values.iter().map(|vs| {
+            let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
+            for v in vs {
+                tuple.push_value(v);
+            }
+            let mut tset = TupleSet::default();
+            tset.push_val(tuple.into());
+            tset
+        });
+        Box::new(it)
+    }
 }
 
-const NAME_INSERT: &str = "Insert";
+const NAME_RA_INSERT: &str = "Insert";
+
+struct RaInsert {
+    source: Box<dyn RelationalAlgebra>,
+    target: TableInfo,
+    binding_map: BindingMap,
+    conversion_map: BTreeMap<String, StaticExpr>
+}
+
+impl RaInsert {
+    fn build(
+        ctx: &impl InterpretContext,
+        prev: Option<Arc<dyn RelationalAlgebra>>,
+        mut args: Pairs,
+    ) -> Result<Self> {
+        let not_enough_args =
+            || AlgebraParseError::NotEnoughArguments(NAME_RA_INSERT.to_string());
+        let source = match prev {
+            Some(v) => v,
+            None => build_ra_expr(ctx, args.next().ok_or_else(not_enough_args)?)?
+        };
+        let table_name = args.next().ok_or_else(not_enough_args)?;
+        let table_name = CozoParser::parse(Rule::ident_all, table_name.as_str())?.next().unwrap().as_str();
+        let pair = args.next().ok_or_else(not_enough_args)?.into_inner().next().unwrap();
+        assert_rule(&pair, Rule::scoped_dict, NAME_RA_INSERT, 2)?;
+        let (binding, keys, vals) = parse_scoped_dict(pair)?;
+        let source_map = source.binding_map();
+        let binding_ctx = BindingMapEvalContext { map: source_map, parent: ctx };
+        let keys = keys.into_iter().map(|(k, v)| -> Result<(String, Expr)> {
+            let v = v.partial_eval(&binding_ctx)?;
+            Ok((k, v))
+        }).collect::<Result<BTreeMap<_, _>>>()?;
+        dbg!(&vals);
+        let vals = vals.partial_eval(&binding_ctx)?;
+        dbg!(&vals, &binding, &keys, &table_name);
+        todo!()
+    }
+}
+
+impl RelationalAlgebra for RaInsert {
+    fn name(&self) -> &str {
+        NAME_RA_INSERT
+    }
+
+    fn binding_map(&self) -> &BindingMap {
+        &self.binding_map
+    }
+
+    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item=TupleSet> + 'a> {
+        self.source.iter()
+    }
+}
 
 pub(crate) fn build_ra_expr(
     ctx: &impl InterpretContext,
@@ -191,7 +267,9 @@ pub(crate) fn build_ra_expr(
     for pair in pair.into_inner() {
         let mut pairs = pair.into_inner();
         match pairs.next().unwrap().as_str() {
-            NAME_INSERT => todo!(),
+            NAME_RA_INSERT => {
+                built = Some(Arc::new(RaInsert::build(ctx, built, pairs)?))
+            },
             NAME_RA_FROM_VALUES => {
                 built = Some(Arc::new(RaFromValues::build(ctx, built, pairs)?));
             }
@@ -211,7 +289,7 @@ mod tests {
     fn parse_ra() -> Result<()> {
         let s = r#"
          Values(v: [id, vals], [[100, 'confidential'], [101, 'top secret']])
-        // .Insert(f:Friend)
+        .Insert(Department, d: {...v})
         "#;
         build_ra_expr(
             &(),

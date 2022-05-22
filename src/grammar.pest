@@ -16,7 +16,7 @@ ident = @{("_" | XID_START) ~ ("_" | XID_CONTINUE)*}
 fn_ident = @{("_" | LOWERCASE_LETTER) ~ ("_" | XID_CONTINUE)*}
 query_ident = @{("#" | UPPERCASE_LETTER) ~ ("_" | XID_CONTINUE)*}
 param = @{"$" ~ ("_" | XID_CONTINUE)+}
-
+ident_all = _{SOI ~ ident ~ EOI}
 
 // literals
 

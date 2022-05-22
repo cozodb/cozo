@@ -1,8 +1,11 @@
-use crate::data::eval::EvalError;
+use crate::data::eval::{EvalError, PartialEvalContext};
 use crate::data::op::Op;
 use crate::data::value::Value;
 use std::collections::BTreeMap;
 use std::result;
+use std::sync::Arc;
+use crate::data::eval::EvalError::OpTypeMismatch;
+use crate::data::expr::Expr;
 
 type Result<T> = result::Result<T, EvalError>;
 
@@ -35,12 +38,20 @@ impl Op for OpConcat {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
                         vec![v.to_static()],
-                    ))
+                    ));
                 }
             }
         }
         Ok(coll.into())
     }
+}
+
+
+pub(crate) fn partial_eval_concat_expr<'a, T: PartialEvalContext>(
+    ctx: &'a T,
+    args: Vec<Expr<'a>>,
+) -> Result<Expr<'a>> {
+    todo!()
 }
 
 pub(crate) struct OpMerge;
@@ -72,10 +83,56 @@ impl Op for OpMerge {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
                         vec![v.to_static()],
-                    ))
+                    ));
                 }
             }
         }
         Ok(coll.into())
+    }
+}
+
+
+pub(crate) fn partial_eval_merge_expr<'a, T: PartialEvalContext>(
+    ctx: &'a T,
+    args: Vec<Expr<'a>>,
+) -> Result<Expr<'a>> {
+    let mut can_merge = true;
+    let mut all_const = true;
+    let args = args.into_iter().map(|ex| -> Result<Expr> {
+        let ex = ex.partial_eval(ctx)?;
+        all_const = all_const && ex.is_const();
+        can_merge = can_merge && ex.is_const() || matches!(ex, Expr::Dict(_));
+        Ok(ex)
+    }).collect::<Result<Vec<_>>>()?;
+    if all_const {
+        let mut result = BTreeMap::new();
+        for arg in args.into_iter() {
+            match arg.extract_const().unwrap() {
+                Value::Null => {}
+                Value::Dict(d) => result.extend(d),
+                v => return Err(OpTypeMismatch(NAME_OP_MERGE.to_string(), vec![v.to_static()]))
+            }
+        }
+        Ok(Expr::Const(Value::Dict(result)))
+    } else if can_merge {
+        let mut result = BTreeMap::new();
+        for arg in args.into_iter() {
+            match arg {
+                Expr::Const(Value::Null) => {}
+                Expr::Const(Value::Dict(d)) => {
+                    for (k, v) in d {
+                        result.insert(k.to_string(), Expr::Const(v));
+                    }
+                }
+                Expr::Dict(d) => {
+                    result.extend(d)
+                }
+                v => return Err(OpTypeMismatch(NAME_OP_MERGE.to_string(),
+                                               vec![Value::from(v).to_static()]))
+            }
+        }
+        Ok(Expr::Dict(result))
+    } else {
+        Ok(Expr::Apply(Arc::new(OpMerge), args))
     }
 }
