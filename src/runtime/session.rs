@@ -216,12 +216,21 @@ impl Drop for Session {
 pub(crate) mod tests {
     use crate::data::tuple::Tuple;
     use crate::runtime::options::default_read_options;
+    use crate::runtime::session::Session;
     use crate::DbInstance;
 
     const HR_TEST_SCRIPT: &str = include_str!("../../test_data/hr.cozo");
 
     pub(crate) fn persist_hr_test() -> String {
         format!("persist! {{\n{}\n}}", HR_TEST_SCRIPT)
+    }
+
+    pub(crate) fn create_test_db(name: &str) -> (DbInstance, Session) {
+        let mut db = DbInstance::new("_test_session", false).unwrap();
+        db.set_destroy_on_close(true);
+        let mut sess = db.session().unwrap().start().unwrap();
+        sess.run_script(persist_hr_test(), true).unwrap();
+        (db, sess)
     }
 
     #[test]

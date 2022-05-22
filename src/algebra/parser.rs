@@ -1,10 +1,13 @@
+use crate::context::TempDbContext;
 use crate::data::eval::{EvalError, PartialEvalContext};
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::parser::{parse_scoped_dict, ExprParseError};
 use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TableId, TupleSet, TupleSetIdx};
+use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
-use crate::ddl::reify::{AssocInfo, EdgeInfo, IndexInfo, TableInfo};
+use crate::ddl::reify::{AssocInfo, DdlContext, EdgeInfo, IndexInfo, TableInfo};
+use crate::parser::text_identifier::{build_name_in_def, TextParseError};
 use crate::parser::{CozoParser, Pair, Pairs, Rule};
 use crate::runtime::session::Definable;
 use pest::error::Error;
@@ -33,6 +36,9 @@ pub(crate) enum AlgebraParseError {
     #[error("Table not found {0}")]
     TableNotFound(String),
 
+    #[error("Wrong table kind {0}")]
+    WrongTableKind(String),
+
     #[error("Table id not found {0:?}")]
     TableIdNotFound(TableId),
 
@@ -44,6 +50,9 @@ pub(crate) enum AlgebraParseError {
 
     #[error("Parse error {0}")]
     Parse(String),
+
+    #[error(transparent)]
+    TextParse(#[from] TextParseError),
 }
 
 impl From<pest::error::Error<Rule>> for AlgebraParseError {
@@ -63,29 +72,30 @@ pub(crate) trait InterpretContext: PartialEvalContext {
     fn get_table_indices(&self, table_id: TableId) -> Result<Vec<IndexInfo>>;
 }
 
-impl InterpretContext for () {
+impl<'a> InterpretContext for TempDbContext<'a> {
     fn resolve_definable(&self, _name: &str) -> Option<Definable> {
-        None
+        todo!()
     }
 
-    fn resolve_table(&self, _name: &str) -> Option<TableId> {
-        None
+    fn resolve_table(&self, name: &str) -> Option<TableId> {
+        self.table_id_by_name(name).ok()
     }
 
     fn get_table_info(&self, table_id: TableId) -> Result<TableInfo> {
-        Err(AlgebraParseError::TableIdNotFound(table_id))
+        self.table_by_id(table_id)
+            .map_err(|_| AlgebraParseError::TableIdNotFound(table_id))
     }
 
     fn get_table_assocs(&self, table_id: TableId) -> Result<Vec<AssocInfo>> {
-        Err(AlgebraParseError::TableIdNotFound(table_id))
+        todo!()
     }
 
     fn get_node_edges(&self, table_id: TableId) -> Result<(Vec<EdgeInfo>, Vec<EdgeInfo>)> {
-        Err(AlgebraParseError::TableIdNotFound(table_id))
+        todo!()
     }
 
     fn get_table_indices(&self, table_id: TableId) -> Result<Vec<IndexInfo>> {
-        Err(AlgebraParseError::TableIdNotFound(table_id))
+        todo!()
     }
 }
 
@@ -209,10 +219,13 @@ impl RelationalAlgebra for RaFromValues {
 const NAME_RA_INSERT: &str = "Insert";
 
 struct RaInsert {
-    source: Box<dyn RelationalAlgebra>,
-    target: TableInfo,
+    source: Arc<dyn RelationalAlgebra>,
+    target: TableId,
+    key_builder: Vec<(StaticExpr, Typing)>,
+    inv_key_builder: Option<Vec<(StaticExpr, Typing)>>,
+    val_builder: Vec<(StaticExpr, Typing)>,
+    assoc_val_builders: BTreeMap<TableId, Vec<(StaticExpr, Typing)>>,
     binding_map: BindingMap,
-    conversion_map: BTreeMap<String, StaticExpr>,
 }
 
 impl RaInsert {
@@ -226,11 +239,9 @@ impl RaInsert {
             Some(v) => v,
             None => build_ra_expr(ctx, args.next().ok_or_else(not_enough_args)?)?,
         };
+        // TODO support assocs insertion
         let table_name = args.next().ok_or_else(not_enough_args)?;
-        let table_name = CozoParser::parse(Rule::ident_all, table_name.as_str())?
-            .next()
-            .unwrap()
-            .as_str();
+        let (table_name, assoc_names) = parse_table_with_assocs(table_name)?;
         let pair = args
             .next()
             .ok_or_else(not_enough_args)?
@@ -244,6 +255,13 @@ impl RaInsert {
             map: source_map,
             parent: ctx,
         };
+        dbg!(&vals);
+        let extract_map = match vals.partial_eval(&binding_ctx)? {
+            Expr::Dict(d) => d,
+            v => return Err(AlgebraParseError::Parse(format!("{:?}", v))),
+        };
+        dbg!(&extract_map, &binding, &keys, &table_name, &assoc_names);
+
         let keys = keys
             .into_iter()
             .map(|(k, v)| -> Result<(String, Expr)> {
@@ -251,10 +269,68 @@ impl RaInsert {
                 Ok((k, v))
             })
             .collect::<Result<BTreeMap<_, _>>>()?;
-        dbg!(&vals);
-        let vals = vals.partial_eval(&binding_ctx)?;
-        dbg!(&vals, &binding, &keys, &table_name);
-        todo!()
+        if !keys.is_empty() {
+            return Err(AlgebraParseError::Parse(
+                "Cannot have keyed map in Insert".to_string(),
+            ));
+        }
+        let target_id = ctx
+            .resolve_table(&table_name)
+            .ok_or_else(|| AlgebraParseError::TableNotFound(table_name.to_string()))?;
+        let table_info = ctx.get_table_info(target_id)?;
+        let (key_builder, val_builder, inv_key_builder) = match table_info {
+            TableInfo::Node(n) => {
+                let key_builder = n
+                    .keys
+                    .iter()
+                    .map(|col| {
+                        let extractor = extract_map
+                            .get(&col.name)
+                            .cloned()
+                            .unwrap_or(Expr::Const(Value::Null))
+                            .to_static();
+                        let typing = col.typing.clone();
+                        (extractor, typing)
+                    })
+                    .collect::<Vec<_>>();
+                let val_builder = n
+                    .vals
+                    .iter()
+                    .map(|col| {
+                        let extractor = extract_map
+                            .get(&col.name)
+                            .cloned()
+                            .unwrap_or(Expr::Const(Value::Null))
+                            .to_static();
+                        let typing = col.typing.clone();
+                        (extractor, typing)
+                    })
+                    .collect::<Vec<_>>();
+                (key_builder, val_builder, None)
+            }
+            TableInfo::Edge(e) => {
+                todo!()
+            }
+            _ => return Err(AlgebraParseError::WrongTableKind(table_name.to_string())),
+        };
+        let assoc_infos = assoc_names
+            .iter()
+            .map(|name| -> Result<TableInfo> {
+                let table_id = ctx
+                    .resolve_table(&table_name)
+                    .ok_or_else(|| AlgebraParseError::TableNotFound(table_name.to_string()))?;
+                ctx.get_table_info(table_id)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Self {
+            source,
+            target: dbg!(target_id),
+            key_builder: dbg!(key_builder),
+            inv_key_builder: dbg!(inv_key_builder),
+            val_builder: dbg!(val_builder),
+            assoc_val_builders: Default::default(),
+            binding_map: Default::default(),
+        })
     }
 }
 
@@ -290,20 +366,35 @@ pub(crate) fn build_ra_expr(
     Ok(built.unwrap())
 }
 
+fn parse_table_with_assocs(pair: Pair) -> Result<(String, Vec<String>)> {
+    let pair = CozoParser::parse(Rule::table_with_assocs_all, pair.as_str())?
+        .next()
+        .unwrap();
+    let mut pairs = pair.into_inner();
+    let name = build_name_in_def(pairs.next().unwrap(), true)?;
+    let assoc_names = pairs
+        .map(|v| build_name_in_def(v, true))
+        .collect::<result::Result<Vec<_>, TextParseError>>()?;
+    Ok((name, assoc_names))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::parser::{CozoParser, Rule};
+    use crate::runtime::session::tests::create_test_db;
     use pest::Parser;
 
     #[test]
     fn parse_ra() -> Result<()> {
+        let (db, mut sess) = create_test_db("_test_parser.db");
+        let ctx = sess.temp_ctx(true);
         let s = r#"
          Values(v: [id, vals], [[100, 'confidential'], [101, 'top secret']])
         .Insert(Department, d: {...v})
         "#;
         build_ra_expr(
-            &(),
+            &ctx,
             CozoParser::parse(Rule::ra_expr_all, s)
                 .unwrap()
                 .into_iter()
