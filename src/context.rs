@@ -1,6 +1,6 @@
 use crate::data::eval::PartialEvalContext;
 use crate::data::expr::Expr;
-use crate::runtime::session::{Session, SessionDefinable};
+use crate::runtime::session::{Definable, Session};
 use cozorocks::TransactionPtr;
 
 pub(crate) struct MainDbContext<'a> {
@@ -11,6 +11,7 @@ pub(crate) struct MainDbContext<'a> {
 pub(crate) struct TempDbContext<'a> {
     pub(crate) sess: &'a mut Session,
     pub(crate) txn: TransactionPtr,
+    pub(crate) writable_main: bool,
 }
 
 impl<'a> PartialEvalContext for TempDbContext<'a> {
@@ -23,10 +24,9 @@ impl<'a> PartialEvalContext for TempDbContext<'a> {
                     None => {}
                     Some(definable) => {
                         return match definable {
-                            SessionDefinable::Value(v) => Some(Expr::Const(v.clone())),
-                            SessionDefinable::Expr(expr) => Some(expr.clone()),
-                            SessionDefinable::Typing(_) => None,
-                            SessionDefinable::Table(_) => None,
+                            Definable::Value(v) => Some(Expr::Const(v.clone())),
+                            Definable::Expr(expr) => Some(expr.clone()),
+                            Definable::Table(_) => None,
                         };
                     }
                 }
@@ -42,8 +42,12 @@ impl Session {
         txn.set_snapshot();
         MainDbContext { sess: self, txn }
     }
-    pub(crate) fn temp_ctx(&mut self) -> TempDbContext {
+    pub(crate) fn temp_ctx(&mut self, writable_main: bool) -> TempDbContext {
         let txn = self.txn(None);
-        TempDbContext { sess: self, txn }
+        TempDbContext {
+            sess: self,
+            txn,
+            writable_main,
+        }
     }
 }

@@ -12,7 +12,7 @@ use crate::ddl::parser::{
     SequenceSchema,
 };
 use crate::runtime::options::default_read_options;
-use crate::runtime::session::{SessionDefinable, TableAssocMap};
+use crate::runtime::session::{Definable, TableAssocMap};
 use cozorocks::TransactionPtr;
 use std::collections::BTreeSet;
 use std::result;
@@ -986,7 +986,7 @@ impl<'a> DdlContext for TempDbContext<'a> {
     fn table_id_by_name(&self, name: &str) -> Result<TableId> {
         for frame in self.sess.stack.iter().rev() {
             if let Some(found) = frame.get(name) {
-                return if let SessionDefinable::Table(id) = found {
+                return if let Definable::Table(id) = found {
                     Ok(TableId {
                         in_root: false,
                         id: *id,
@@ -1085,7 +1085,7 @@ impl<'a> DdlContext for TempDbContext<'a> {
                 TableInfo::Sequence(_) => {}
             }
 
-            stack_frame.insert(info.table_name().to_string(), SessionDefinable::Table(tid));
+            stack_frame.insert(info.table_name().to_string(), Definable::Table(tid));
             self.sess.tables.insert(tid, info);
         }
         Ok(())

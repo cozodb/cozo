@@ -57,10 +57,22 @@ impl<'a> Value<'a> {
             _ => None,
         }
     }
+    pub(crate) fn into_vec(self) -> Result<Vec<Value<'a>>, Value<'a>> {
+        match self {
+            Value::List(l) => Ok(l),
+            v => Err(v),
+        }
+    }
     pub(crate) fn get_map(&self) -> Option<&BTreeMap<Cow<str>, Value>> {
         match self {
             Value::Dict(m) => Some(m),
             _ => None,
+        }
+    }
+    pub(crate) fn into_map(self) -> Result<BTreeMap<Cow<'a, str>, Value<'a>>, Value<'a>> {
+        match self {
+            Value::Dict(m) => Ok(m),
+            v => Err(v),
         }
     }
 }

@@ -38,7 +38,6 @@ pub(crate) enum Expr<'a> {
     List(Vec<Expr<'a>>),
     Dict(BTreeMap<String, Expr<'a>>),
     Variable(String),
-    TableCol(TableId, ColId),
     TupleSetIdx(TupleSetIdx),
     Apply(Arc<dyn Op + Send + Sync>, Vec<Expr<'a>>),
     ApplyAgg(Arc<dyn AggOp + Send + Sync>, Vec<Expr<'a>>, Vec<Expr<'a>>),
@@ -70,13 +69,21 @@ pub(crate) enum Expr<'a> {
 }
 
 impl<'a> Expr<'a> {
+    pub(crate) fn is_const(&self) -> bool {
+        matches!(self, Expr::Const(_))
+    }
+    pub(crate) fn extract_const(self) -> Option<Value<'a>> {
+        match self {
+            Expr::Const(v) => Some(v),
+            _ => None,
+        }
+    }
     pub(crate) fn to_static(self) -> StaticExpr {
         match self {
             Expr::Const(v) => Expr::Const(v.to_static()),
             Expr::List(l) => Expr::List(l.into_iter().map(|v| v.to_static()).collect()),
             Expr::Dict(d) => Expr::Dict(d.into_iter().map(|(k, v)| (k, v.to_static())).collect()),
             Expr::Variable(v) => Expr::Variable(v),
-            Expr::TableCol(tid, cid) => Expr::TableCol(tid, cid),
             Expr::TupleSetIdx(idx) => Expr::TupleSetIdx(idx),
             Expr::Apply(op, args) => {
                 Expr::Apply(op, args.into_iter().map(|v| v.to_static()).collect())
@@ -178,7 +185,6 @@ impl<'a> PartialEq for Expr<'a> {
             (List(l), List(r)) => l == r,
             (Dict(l), Dict(r)) => l == r,
             (Variable(l), Variable(r)) => l == r,
-            (TableCol(lt, lc), TableCol(rt, rc)) => (lt == rt) && (lc == rc),
             (TupleSetIdx(l), TupleSetIdx(r)) => l == r,
             (Apply(lo, la), Apply(ro, ra)) => (lo.name() == ro.name()) && (la == ra),
             (ApplyAgg(lo, laa, la), ApplyAgg(ro, raa, ra)) => {
@@ -198,7 +204,6 @@ impl<'a> Debug for Expr<'a> {
             Expr::List(l) => write!(f, "{:?}", l),
             Expr::Dict(d) => write!(f, "{:?}", d),
             Expr::Variable(v) => write!(f, "`{}`", v),
-            Expr::TableCol(tid, cid) => write!(f, "{:?}{:?}", tid, cid),
             Expr::TupleSetIdx(sid) => write!(f, "{:?}", sid),
             Expr::Apply(op, args) => write!(
                 f,
@@ -317,29 +322,6 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                         ));
                     }
                 }
-                "TableCol" => {
-                    let mut l = extract_list_from_value(v, 4)?.into_iter();
-                    let in_root = match l.next().unwrap() {
-                        Value::Bool(b) => b,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
-                    };
-                    let tid = match l.next().unwrap() {
-                        Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
-                    };
-                    let is_key = match l.next().unwrap() {
-                        Value::Bool(b) => b,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
-                    };
-                    let cid = match l.next().unwrap() {
-                        Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
-                    };
-                    Ok(Expr::TableCol(
-                        (in_root, tid as u32).into(),
-                        (is_key, cid as usize).into(),
-                    ))
-                }
                 "TupleSetIdx" => {
                     let mut l = extract_list_from_value(v, 3)?.into_iter();
                     let is_key = match l.next().unwrap() {
@@ -457,16 +439,6 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                     .into(),
             ),
             Expr::Variable(v) => build_tagged_value("Variable", v.into()),
-            Expr::TableCol(tid, cid) => build_tagged_value(
-                "TableCol",
-                vec![
-                    tid.in_root.into(),
-                    Value::from(tid.id as i64),
-                    cid.is_key.into(),
-                    Value::from(cid.id as i64),
-                ]
-                .into(),
-            ),
             Expr::TupleSetIdx(sid) => build_tagged_value(
                 "TupleSetIdx",
                 vec![

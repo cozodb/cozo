@@ -19,14 +19,13 @@ use std::sync::{Arc, Mutex};
 
 type Result<T> = result::Result<T, DbInstanceError>;
 
-pub(crate) enum SessionDefinable {
+pub(crate) enum Definable {
     Value(StaticValue),
     Expr(StaticExpr),
-    Typing(Typing),
     Table(u32), // TODO
 }
 
-pub(crate) type SessionStackFrame = BTreeMap<String, SessionDefinable>;
+pub(crate) type SessionStackFrame = BTreeMap<String, Definable>;
 pub(crate) type TableAssocMap = BTreeMap<DataKind, BTreeMap<TableId, BTreeSet<u32>>>;
 
 pub struct Session {
@@ -65,7 +64,7 @@ impl Session {
         if !self.stack.is_empty() {
             let popped_frame = self.stack.pop().unwrap();
             for (_k, v) in popped_frame.into_iter() {
-                if let SessionDefinable::Table(id) = v {
+                if let Definable::Table(id) = v {
                     self.undefine_temp_table(id);
                 }
             }
@@ -152,7 +151,7 @@ impl Session {
         Ok(cur_id + 1)
     }
 
-    pub fn set_params<T: IntoIterator<Item=(String, StaticValue)>>(&mut self, params: T) {
+    pub fn set_params<T: IntoIterator<Item = (String, StaticValue)>>(&mut self, params: T) {
         self.params.extend(params);
     }
 
@@ -164,19 +163,25 @@ impl Session {
         self.params.clear();
     }
 
-    pub fn run_script(&mut self, script: impl AsRef<str>) -> Result<Value> {
+    pub fn run_script(&mut self, script: impl AsRef<str>, writable_main: bool) -> Result<Value> {
         let script = script.as_ref();
         let pair = CozoParser::parse(Rule::script, script)?
             .next()
             .ok_or_else(|| DbInstanceError::Parse(script.to_string()))?;
         match pair.as_rule() {
-            Rule::query => self.execute_query(pair),
-            Rule::persist_block => self.execute_persist_block(pair),
+            Rule::query => self.execute_query(pair, writable_main),
+            Rule::persist_block => {
+                if writable_main {
+                    self.execute_persist_block(pair)
+                } else {
+                    Err(DbInstanceError::WriteReadOnlyConflict)
+                }
+            }
             _ => Err(DbInstanceError::Parse(script.to_string())),
         }
     }
-    fn execute_query(&mut self, pair: Pair) -> Result<Value> {
-        let mut ctx = self.temp_ctx();
+    fn execute_query(&mut self, pair: Pair, writable_main: bool) -> Result<Value> {
+        let mut ctx = self.temp_ctx(writable_main);
         for pair in pair.into_inner() {
             let schema = DdlSchema::try_from(pair)?;
             ctx.build_table(schema)?;
@@ -224,9 +229,9 @@ pub(crate) mod tests {
         let mut db = DbInstance::new("_test_session", false).unwrap();
         db.set_destroy_on_close(true);
         let mut sess = db.session().unwrap().start().unwrap();
-        sess.run_script(HR_TEST_SCRIPT).unwrap();
-        sess.run_script(persist_hr_test()).unwrap();
-        sess.run_script(persist_hr_test()).unwrap();
+        sess.run_script(HR_TEST_SCRIPT, false).unwrap();
+        sess.run_script(persist_hr_test(), true).unwrap();
+        sess.run_script(persist_hr_test(), true).unwrap();
         dbg!(&sess.tables);
         let mut opts = default_read_options();
         opts.set_total_order_seek(true);

@@ -41,6 +41,9 @@ pub enum DbInstanceError {
 
     #[error(transparent)]
     Reify(#[from] DdlReifyError),
+
+    #[error("Attempt to write when read-only")]
+    WriteReadOnlyConflict,
 }
 
 impl From<pest::error::Error<Rule>> for DbInstanceError {

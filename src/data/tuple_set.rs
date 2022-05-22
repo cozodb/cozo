@@ -1,6 +1,9 @@
+use crate::data::eval::{EvalError, PartialEvalContext, RowEvalContext};
+use crate::data::expr::Expr;
 use crate::data::tuple::{ReifiedTuple, TupleError};
 use crate::data::value::{StaticValue, Value};
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::result;
 
@@ -114,7 +117,7 @@ impl Debug for TupleSetIdx {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 pub(crate) struct TupleSet {
     keys: Vec<ReifiedTuple>,
     vals: Vec<ReifiedTuple>,
@@ -173,14 +176,17 @@ impl TupleSet {
             is_key,
             t_set,
             col_idx,
-        }: TupleSetIdx,
-    ) -> Result<Value> {
-        let tuples = if is_key { &self.keys } else { &self.vals };
-        let tuple = tuples
-            .get(t_set)
-            .ok_or(TupleSetError::IndexOutOfBound(t_set))?;
-        let res = tuple.get(col_idx)?;
-        Ok(res)
+        }: &TupleSetIdx,
+    ) -> result::Result<Value, EvalError> {
+        let tuples = if *is_key { &self.keys } else { &self.vals };
+        let tuple = tuples.get(*t_set);
+        match tuple {
+            None => Ok(Value::Null),
+            Some(tuple) => {
+                let res = tuple.get(*col_idx)?;
+                Ok(res)
+            }
+        }
     }
 }
 
@@ -195,6 +201,35 @@ where
         TupleSet {
             keys: keys.into_iter().map(ReifiedTuple::from).collect(),
             vals: vals.into_iter().map(ReifiedTuple::from).collect(),
+        }
+    }
+}
+
+impl RowEvalContext for TupleSet {
+    fn resolve(&self, idx: &TupleSetIdx) -> result::Result<Value, EvalError> {
+        let val = self.get_value(idx)?;
+        Ok(val)
+    }
+}
+
+pub(crate) type BindingMap = BTreeMap<String, BTreeMap<String, TupleSetIdx>>;
+
+pub(crate) struct BindingMapEvalContext<'a, T: PartialEvalContext + 'a> {
+    map: &'a BindingMap,
+    parent: &'a T,
+}
+
+impl<'a, T: PartialEvalContext + 'a> PartialEvalContext for BindingMapEvalContext<'a, T> {
+    fn resolve(&self, key: &str) -> Option<Expr> {
+        match self.map.get(key) {
+            None => self.parent.resolve(key),
+            Some(d) => {
+                let d = d
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Expr::TupleSetIdx(*v)))
+                    .collect();
+                Some(Expr::Dict(d))
+            }
         }
     }
 }

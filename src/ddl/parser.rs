@@ -290,7 +290,7 @@ mod tests {
         dbg!(DdlSchema::try_from(p)?);
 
         let s = r#"
-        edge (Department)-[InLocation]->(Location)
+        edge (Department)-[InLocation]->(Location);
         "#;
         let p = CozoParser::parse(Rule::definition_all, s)
             .unwrap()

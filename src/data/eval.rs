@@ -1,6 +1,7 @@
 use crate::data::expr::Expr;
 use crate::data::op::*;
 use crate::data::parser::ExprParseError;
+use crate::data::tuple::TupleError;
 use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use std::borrow::Cow;
@@ -38,16 +39,19 @@ pub enum EvalError {
 
     #[error("Incomplete evaluation {0}")]
     IncompleteEvaluation(String),
+
+    #[error(transparent)]
+    Tuple(#[from] TupleError),
 }
 
 type Result<T> = result::Result<T, EvalError>;
 
 pub(crate) trait RowEvalContext {
-    fn resolve<'a>(&'a self, idx: &TupleSetIdx) -> Result<&'a Value>;
+    fn resolve<'a>(&'a self, idx: &TupleSetIdx) -> Result<Value>;
 }
 
 impl RowEvalContext for () {
-    fn resolve<'a>(&'a self, idx: &TupleSetIdx) -> Result<&'a Value> {
+    fn resolve<'a>(&'a self, idx: &TupleSetIdx) -> Result<Value> {
         Err(EvalError::UnresolveTupleIdx(*idx))
     }
 }
@@ -88,17 +92,49 @@ impl<'a> Expr<'a> {
 
     pub(crate) fn partial_eval<C: PartialEvalContext>(self, ctx: &'a C) -> Result<Self> {
         let res = match self {
-            v @ (Expr::Const(_) | Expr::TableCol(_, _) | Expr::TupleSetIdx(_)) => v,
-            Expr::List(l) => Expr::List(
-                l.into_iter()
-                    .map(|v| v.partial_eval(ctx))
-                    .collect::<Result<Vec<_>>>()?,
-            ),
-            Expr::Dict(d) => Expr::Dict(
-                d.into_iter()
-                    .map(|(k, v)| -> Result<(String, Expr)> { Ok((k, v.partial_eval(ctx)?)) })
-                    .collect::<Result<BTreeMap<_, _>>>()?,
-            ),
+            v @ (Expr::Const(_) | Expr::TupleSetIdx(_)) => v,
+            Expr::List(l) => {
+                let mut has_unevaluated = false;
+                let l = l
+                    .into_iter()
+                    .map(|v| -> Result<Expr> {
+                        let v = v.partial_eval(ctx)?;
+                        if !v.is_const() {
+                            has_unevaluated = true;
+                        }
+                        Ok(v)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                if has_unevaluated {
+                    Expr::List(l)
+                } else {
+                    Expr::Const(Value::List(
+                        l.into_iter().map(|v| v.extract_const().unwrap()).collect(),
+                    ))
+                }
+            }
+            Expr::Dict(d) => {
+                let mut has_unevaluated = false;
+                let d = d
+                    .into_iter()
+                    .map(|(k, v)| -> Result<(String, Expr)> {
+                        let v = v.partial_eval(ctx)?;
+                        if !v.is_const() {
+                            has_unevaluated = true;
+                        }
+                        Ok((k, v))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()?;
+                if has_unevaluated {
+                    Expr::Dict(d)
+                } else {
+                    let c_vals = d
+                        .into_iter()
+                        .map(|(k, ex)| (k.into(), ex.extract_const().unwrap()))
+                        .collect();
+                    Expr::Const(Value::Dict(c_vals))
+                }
+            }
             Expr::Variable(var) => ctx
                 .resolve(&var)
                 .ok_or(EvalError::UnresolvedVariable(var))?,
@@ -130,7 +166,6 @@ impl<'a> Expr<'a> {
                         }
                         v @ (Expr::IdxAcc(_, _)
                         | Expr::FieldAcc(_, _)
-                        | Expr::TableCol(_, _)
                         | Expr::Apply(_, _)
                         | Expr::ApplyAgg(_, _, _)) => Expr::FieldAcc(f, v.into()),
                         Expr::Dict(mut d) => {
@@ -168,7 +203,6 @@ impl<'a> Expr<'a> {
                         }
                         v @ (Expr::IdxAcc(_, _)
                         | Expr::FieldAcc(_, _)
-                        | Expr::TableCol(_, _)
                         | Expr::Apply(_, _)
                         | Expr::ApplyAgg(_, _, _)) => Expr::IdxAcc(i, v.into()),
                         v => return Err(EvalError::IndexAccess(i, Value::from(v).to_static())),
@@ -330,7 +364,6 @@ impl<'a> Expr<'a> {
             ),
             v @ (Expr::Const(_)
             | Expr::Variable(_)
-            | Expr::TableCol(_, _)
             | Expr::TupleSetIdx(_)
             | Expr::Add(_)
             | Expr::Sub(_)
@@ -371,7 +404,6 @@ impl<'a> Expr<'a> {
                 .collect::<Result<BTreeMap<_, _>>>()?
                 .into(),
             Expr::Variable(v) => return Err(EvalError::UnresolvedVariable(v.clone())),
-            Expr::TableCol(tid, cid) => return Err(EvalError::UnresolveTableCol(*tid, *cid)),
             Expr::TupleSetIdx(idx) => ctx.resolve(idx)?.clone(),
             Expr::Apply(op, args) => {
                 let mut eval_args = Vec::with_capacity(args.len());
