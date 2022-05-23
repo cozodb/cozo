@@ -391,7 +391,7 @@ struct TDBBridge {
         is_odb = (tdb_ == nullptr);
     }
 
-    inline unique_ptr<TransactionBridge> begin_t_transaction(
+    inline shared_ptr<TransactionBridge> begin_t_transaction(
             unique_ptr<WriteOptions> w_ops,
 //            unique_ptr<WriteOptions> raw_w_ops,
 //            unique_ptr<ReadOptions> r_ops,
@@ -400,7 +400,7 @@ struct TDBBridge {
         if (tdb == nullptr) {
             return unique_ptr<TransactionBridge>(nullptr);
         }
-        auto ret = make_unique<TransactionBridge>();
+        auto ret = make_shared<TransactionBridge>();
         ret->raw_db = tdb;
 //        ret->r_ops = std::move(r_ops);
         ret->w_ops = std::move(w_ops);
@@ -412,7 +412,7 @@ struct TDBBridge {
         return ret;
     }
 
-    inline unique_ptr<TransactionBridge> begin_o_transaction(
+    inline shared_ptr<TransactionBridge> begin_o_transaction(
             unique_ptr<WriteOptions> w_ops,
 //            unique_ptr<WriteOptions> raw_w_ops,
 //            unique_ptr<ReadOptions> r_ops,
@@ -421,7 +421,7 @@ struct TDBBridge {
         if (odb == nullptr) {
             return unique_ptr<TransactionBridge>(nullptr);
         }
-        auto ret = make_unique<TransactionBridge>();
+        auto ret = make_shared<TransactionBridge>();
         ret->raw_db = odb;
 //        ret->r_ops = std::move(r_ops);
         ret->w_ops = std::move(w_ops);

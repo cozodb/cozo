@@ -182,12 +182,12 @@ mod ffi {
             self: &TDBBridge,
             w_ops: UniquePtr<WriteOptions>,
             txn_options: UniquePtr<TransactionOptions>,
-        ) -> UniquePtr<TransactionBridge>;
+        ) -> SharedPtr<TransactionBridge>;
         fn begin_o_transaction(
             self: &TDBBridge,
             w_ops: UniquePtr<WriteOptions>,
             txn_options: UniquePtr<OptimisticTransactionOptions>,
-        ) -> UniquePtr<TransactionBridge>;
+        ) -> SharedPtr<TransactionBridge>;
         fn open_tdb_raw(
             options: &Options,
             txn_options: &TransactionDBOptions,

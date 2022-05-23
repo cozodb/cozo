@@ -207,10 +207,11 @@ impl IteratorPtr {
     }
 }
 
-pub struct TransactionPtr(UniquePtr<TransactionBridge>);
+#[derive(Clone)]
+pub struct TransactionPtr(SharedPtr<TransactionBridge>);
 
 impl Deref for TransactionPtr {
-    type Target = UniquePtr<TransactionBridge>;
+    type Target = TransactionBridge;
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -223,7 +224,7 @@ impl TransactionPtr {
     /// Only for testing use, as a placeholder
     #[inline]
     pub unsafe fn null() -> Self {
-        TransactionPtr(UniquePtr::null())
+        TransactionPtr(SharedPtr::null())
     }
     #[inline]
     pub fn set_snapshot(&self) {

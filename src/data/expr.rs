@@ -3,7 +3,7 @@ use crate::data::op::{
     OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
 };
 use crate::data::parser::ExprParseError;
-use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
+use crate::data::tuple_set::{TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use crate::parser::{CozoParser, Rule};
 use pest::Parser;

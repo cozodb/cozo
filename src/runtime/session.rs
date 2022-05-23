@@ -1,7 +1,6 @@
 use crate::data::expr::StaticExpr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{TableId, MIN_TABLE_ID_BOUND};
-use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use crate::ddl::parser::DdlSchema;
 use crate::ddl::reify::{DdlContext, DdlReifyError, TableInfo};
@@ -226,7 +225,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn create_test_db(name: &str) -> (DbInstance, Session) {
-        let mut db = DbInstance::new("_test_session", false).unwrap();
+        let mut db = DbInstance::new(name, false).unwrap();
         db.set_destroy_on_close(true);
         let mut sess = db.session().unwrap().start().unwrap();
         sess.run_script(persist_hr_test(), true).unwrap();
