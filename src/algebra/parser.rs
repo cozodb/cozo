@@ -6,6 +6,7 @@ use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TableId, TupleSet, TupleSetIdx};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
+use crate::ddl::parser::ColExtractor;
 use crate::ddl::reify::{AssocInfo, DdlContext, EdgeInfo, IndexInfo, NodeInfo, TableInfo};
 use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{CozoParser, Pair, Pairs, Rule};
@@ -452,15 +453,14 @@ impl<'a> RelationalAlgebra for RaInsert<'a> {
     }
 }
 
+type KeyBuilderSet = (
+    Vec<ColExtractor>,
+    Vec<ColExtractor>,
+    Option<Vec<ColExtractor>>,
+);
+
 impl<'a> RaInsert<'a> {
-    fn make_key_builders(
-        &self,
-        extract_map: &BTreeMap<String, Expr>,
-    ) -> Result<(
-        Vec<(StaticExpr, Typing)>,
-        Vec<(StaticExpr, Typing)>,
-        Option<Vec<(StaticExpr, Typing)>>,
-    )> {
+    fn make_key_builders(&self, extract_map: &BTreeMap<String, Expr>) -> Result<KeyBuilderSet> {
         let ret = match &self.target_info {
             TableInfo::Node(n) => {
                 let key_builder = n

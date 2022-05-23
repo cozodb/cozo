@@ -23,11 +23,10 @@ pub(crate) struct ColSchema {
     pub(crate) default: StaticExpr,
 }
 
+pub(crate) type ColExtractor = (StaticExpr, Typing);
+
 impl ColSchema {
-    pub(crate) fn make_extractor(
-        &self,
-        extractor_map: &BTreeMap<String, Expr>,
-    ) -> (StaticExpr, Typing) {
+    pub(crate) fn make_extractor(&self, extractor_map: &BTreeMap<String, Expr>) -> ColExtractor {
         let extractor = extractor_map
             .get(&self.name)
             .cloned()
