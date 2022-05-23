@@ -4,6 +4,7 @@ use crate::data::typing::{Typing, TypingError};
 use crate::data::value::{StaticValue, Value};
 use crate::parser::text_identifier::{build_name_in_def, TextParseError};
 use crate::parser::{Pair, Rule};
+use std::collections::BTreeMap;
 use std::result;
 
 #[derive(thiserror::Error, Debug)]
@@ -34,6 +35,21 @@ pub(crate) struct ColSchema {
     pub(crate) name: String,
     pub(crate) typing: Typing,
     pub(crate) default: StaticExpr,
+}
+
+impl ColSchema {
+    pub(crate) fn make_extractor(
+        &self,
+        extractor_map: &BTreeMap<String, Expr>,
+    ) -> (StaticExpr, Typing) {
+        let extractor = extractor_map
+            .get(&self.name)
+            .cloned()
+            .unwrap_or(Expr::Const(Value::Null))
+            .to_static();
+        let typing = self.typing.clone();
+        (extractor, typing)
+    }
 }
 
 impl From<ColSchema> for StaticValue {
