@@ -4,32 +4,21 @@ use crate::data::value::Value;
 use crate::parser::number::parse_int;
 use crate::parser::text_identifier::parse_string;
 use crate::parser::{Pair, Rule};
+use anyhow::Result;
 use lazy_static::lazy_static;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::result;
 use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ExprParseError {
-    #[error(transparent)]
-    TextParser(#[from] crate::parser::text_identifier::TextParseError),
-
-    #[error(transparent)]
-    ParseInt(#[from] std::num::ParseIntError),
-
-    #[error(transparent)]
-    ParseFloat(#[from] std::num::ParseFloatError),
-
     #[error("Cannot spread {0}")]
     SpreadingError(String),
 }
 
-type Result<T> = result::Result<T, ExprParseError>;
-
 impl<'a> TryFrom<Pair<'a>> for Expr<'a> {
-    type Error = ExprParseError;
+    type Error = anyhow::Error;
 
     fn try_from(pair: Pair<'a>) -> Result<Self> {
         PREC_CLIMBER.climb(pair.into_inner(), build_expr_primary, build_expr_infix)
@@ -210,7 +199,9 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                                 | Expr::FieldAcc(_, _)
                                 | Expr::Apply(_, _)
                         ) {
-                            return Err(ExprParseError::SpreadingError(format!("{:?}", to_concat)));
+                            return Err(
+                                ExprParseError::SpreadingError(format!("{:?}", to_concat)).into()
+                            );
                         }
                         if !collected.is_empty() {
                             spread_collected.push(Expr::List(collected));
@@ -257,7 +248,9 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                                 | Expr::FieldAcc(_, _)
                                 | Expr::Apply(_, _)
                         ) {
-                            return Err(ExprParseError::SpreadingError(format!("{:?}", to_concat)));
+                            return Err(
+                                ExprParseError::SpreadingError(format!("{:?}", to_concat)).into()
+                            );
                         }
                         if !collected.is_empty() {
                             spread_collected.push(Expr::Dict(collected));
@@ -364,7 +357,7 @@ pub(crate) fn parse_scoped_dict(pair: Pair) -> Result<(String, BTreeMap<String, 
                         | Expr::FieldAcc(_, _)
                         | Expr::Apply(_, _)
                 ) {
-                    return Err(ExprParseError::SpreadingError(format!("{:?}", to_concat)));
+                    return Err(ExprParseError::SpreadingError(format!("{:?}", to_concat)).into());
                 }
                 if !collected.is_empty() {
                     spread_collected.push(Expr::Dict(collected));

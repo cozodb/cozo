@@ -1,18 +1,18 @@
 use crate::context::{MainDbContext, TempDbContext};
-use crate::data::eval::{EvalError, PartialEvalContext};
-use crate::data::expr::{Expr, ExprError, StaticExpr};
+use crate::data::eval::PartialEvalContext;
+use crate::data::expr::{Expr, StaticExpr};
 use crate::data::tuple::{
-    DataKind, OwnTuple, Tuple, TupleError, DATAKIND_ASSOC, DATAKIND_EDGE, DATAKIND_INDEX,
-    DATAKIND_NODE, DATAKIND_SEQUENCE,
+    DataKind, OwnTuple, Tuple, DATAKIND_ASSOC, DATAKIND_EDGE, DATAKIND_INDEX, DATAKIND_NODE,
+    DATAKIND_SEQUENCE,
 };
-use crate::data::tuple_set::{BindingMap, TableId, TupleSetError, TupleSetIdx};
+use crate::data::tuple_set::{BindingMap, TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use crate::ddl::parser::{
-    AssocSchema, ColSchema, DdlParseError, DdlSchema, EdgeSchema, IndexSchema, NodeSchema,
-    SequenceSchema,
+    AssocSchema, ColSchema, DdlSchema, EdgeSchema, IndexSchema, NodeSchema, SequenceSchema,
 };
 use crate::runtime::options::default_read_options;
 use crate::runtime::session::{Definable, TableAssocMap};
+use anyhow::Result;
 use cozorocks::TransactionPtr;
 use std::collections::BTreeSet;
 use std::result;
@@ -21,15 +21,6 @@ use std::result;
 pub enum DdlReifyError {
     #[error("Name clash: {0}")]
     NameClash(String),
-
-    #[error(transparent)]
-    Eval(#[from] EvalError),
-
-    #[error(transparent)]
-    Bridge(#[from] cozorocks::BridgeError),
-
-    #[error(transparent)]
-    Ddl(#[from] DdlParseError),
 
     #[error("Cannot find table {0:?}")]
     TableNotFound(TableId),
@@ -43,20 +34,9 @@ pub enum DdlReifyError {
     #[error("Wrong table kind for {0:?}")]
     WrongDataKind(TableId),
 
-    #[error(transparent)]
-    Tuple(#[from] TupleError),
-
-    #[error(transparent)]
-    TupleSet(#[from] TupleSetError),
-
-    #[error(transparent)]
-    Expr(#[from] ExprError),
-
     #[error("Name conflict {0}")]
     NameConflict(String),
 }
-
-type Result<T> = result::Result<T, DdlReifyError>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum TableInfo {
@@ -110,9 +90,9 @@ impl TableInfo {
 }
 
 impl<T: AsRef<[u8]>> TryFrom<Tuple<T>> for TableInfo {
-    type Error = DdlReifyError;
+    type Error = anyhow::Error;
     fn try_from(tuple: Tuple<T>) -> result::Result<Self, Self::Error> {
-        let gen_err = || DdlReifyError::Corruption(tuple.to_owned());
+        let gen_err = || DdlReifyError::Corruption(tuple.to_owned()).into();
         match tuple.get_prefix() {
             DATAKIND_NODE => {
                 let mut it = tuple.iter();
@@ -128,13 +108,13 @@ impl<T: AsRef<[u8]>> TryFrom<Tuple<T>> for TableInfo {
                 let keys = keys.get_slice().ok_or_else(gen_err)?;
                 let keys = keys
                     .iter()
-                    .map(|v| ColSchema::try_from(v.clone()).map_err(DdlReifyError::from))
+                    .map(|v| ColSchema::try_from(v.clone()))
                     .collect::<Result<Vec<_>>>()?;
                 let vals = it.next().ok_or_else(gen_err)??;
                 let vals = vals.get_slice().ok_or_else(gen_err)?;
                 let vals = vals
                     .iter()
-                    .map(|v| ColSchema::try_from(v.clone()).map_err(DdlReifyError::from))
+                    .map(|v| ColSchema::try_from(v.clone()))
                     .collect::<Result<Vec<_>>>()?;
                 Ok(TableInfo::Node(NodeInfo {
                     name,
@@ -157,13 +137,13 @@ impl<T: AsRef<[u8]>> TryFrom<Tuple<T>> for TableInfo {
                 let keys = keys.get_slice().ok_or_else(gen_err)?;
                 let keys = keys
                     .iter()
-                    .map(|v| ColSchema::try_from(v.clone()).map_err(DdlReifyError::from))
+                    .map(|v| ColSchema::try_from(v.clone()))
                     .collect::<Result<Vec<_>>>()?;
                 let vals = it.next().ok_or_else(gen_err)??;
                 let vals = vals.get_slice().ok_or_else(gen_err)?;
                 let vals = vals
                     .iter()
-                    .map(|v| ColSchema::try_from(v.clone()).map_err(DdlReifyError::from))
+                    .map(|v| ColSchema::try_from(v.clone()))
                     .collect::<Result<Vec<_>>>()?;
                 let src_id = it.next().ok_or_else(gen_err)??;
                 let src_id = TableId::try_from(&src_id)?;
@@ -225,7 +205,7 @@ impl<T: AsRef<[u8]>> TryFrom<Tuple<T>> for TableInfo {
                 let vals = vals.get_slice().ok_or_else(gen_err)?;
                 let vals = vals
                     .iter()
-                    .map(|v| ColSchema::try_from(v.clone()).map_err(DdlReifyError::from))
+                    .map(|v| ColSchema::try_from(v.clone()))
                     .collect::<Result<Vec<_>>>()?;
                 let src_id = it.next().ok_or_else(gen_err)??;
                 let src_id = TableId::try_from(&src_id)?;
@@ -374,9 +354,9 @@ impl From<IndexCol> for StaticValue {
 }
 
 impl<'a> TryFrom<Value<'a>> for IndexCol {
-    type Error = DdlReifyError;
+    type Error = anyhow::Error;
 
-    fn try_from(value: Value<'a>) -> result::Result<Self, Self::Error> {
+    fn try_from(value: Value<'a>) -> Result<Self> {
         Ok(match Expr::try_from(value)? {
             Expr::TupleSetIdx(tidx) => IndexCol::Col(tidx),
             expr => IndexCol::Expr(expr.to_static()),
@@ -414,7 +394,7 @@ pub(crate) trait DdlContext {
         if set.contains(&table.data_kind()) {
             Ok(table)
         } else {
-            Err(DdlReifyError::WrongDataKind(id))
+            Err(DdlReifyError::WrongDataKind(id).into())
         }
     }
     fn table_by_id(&self, tid: TableId) -> Result<TableInfo>;
@@ -425,7 +405,7 @@ pub(crate) trait DdlContext {
             .map(|id| match self.table_by_id(id) {
                 Err(e) => Err(e),
                 Ok(TableInfo::Assoc(a)) => Ok(a),
-                Ok(_t) => Err(DdlReifyError::WrongDataKind(id)),
+                Ok(_t) => Err(DdlReifyError::WrongDataKind(id).into()),
             })
             .collect::<Result<_>>()
     }
@@ -436,7 +416,7 @@ pub(crate) trait DdlContext {
             .map(|id| match self.table_by_id(id) {
                 Err(e) => Err(e),
                 Ok(TableInfo::Edge(a)) => Ok(a),
-                Ok(_t) => Err(DdlReifyError::WrongDataKind(id)),
+                Ok(_t) => Err(DdlReifyError::WrongDataKind(id).into()),
             })
             .collect::<Result<_>>()
     }
@@ -447,7 +427,7 @@ pub(crate) trait DdlContext {
             .map(|id| match self.table_by_id(id) {
                 Err(e) => Err(e),
                 Ok(TableInfo::Edge(a)) => Ok(a),
-                Ok(_t) => Err(DdlReifyError::WrongDataKind(id)),
+                Ok(_t) => Err(DdlReifyError::WrongDataKind(id).into()),
             })
             .collect::<Result<_>>()
     }
@@ -458,7 +438,7 @@ pub(crate) trait DdlContext {
             .map(|id| match self.table_by_id(id) {
                 Err(e) => Err(e),
                 Ok(TableInfo::Index(a)) => Ok(a),
-                Ok(_t) => Err(DdlReifyError::WrongDataKind(id)),
+                Ok(_t) => Err(DdlReifyError::WrongDataKind(id).into()),
             })
             .collect::<Result<_>>()
     }
@@ -604,7 +584,7 @@ fn check_name_clash<'a, I: IntoIterator<Item = II>, II: IntoIterator<Item = &'a 
     for it in kvs.into_iter() {
         for el in it.into_iter() {
             if !seen.insert(&el.name as &str) {
-                return Err(DdlReifyError::NameClash(el.name.clone()));
+                return Err(DdlReifyError::NameClash(el.name.clone()).into());
             }
         }
     }
@@ -801,7 +781,7 @@ fn find_table_in_main(txn: &TransactionPtr, name: &str) -> Result<TableId> {
     name_key.push_str(name);
 
     match txn.get_for_update_owned(&default_read_options(), &name_key)? {
-        None => Err(DdlReifyError::TableNameNotFound(name.to_string())),
+        None => Err(DdlReifyError::TableNameNotFound(name.to_string()).into()),
         Some(slice) => {
             let tuple = Tuple::new(slice);
             let id = tuple.get_int(0)?;
@@ -842,7 +822,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
 
     fn table_by_id(&self, TableId { id, in_root }: TableId) -> Result<TableInfo> {
         if !in_root {
-            Err(DdlReifyError::TableNotFound(TableId { id, in_root }))
+            Err(DdlReifyError::TableNotFound(TableId { id, in_root }).into())
         } else {
             find_table_by_id_in_main(&self.txn, id)
         }
@@ -902,7 +882,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
                     }
                 }
             }
-            return Err(DdlReifyError::NameConflict(tname.to_string()));
+            return Err(DdlReifyError::NameConflict(tname.to_string()).into());
         }
 
         let mut idx_key = OwnTuple::with_prefix(0);
@@ -995,7 +975,7 @@ impl<'a> DdlContext for TempDbContext<'a> {
                         id: *id,
                     })
                 } else {
-                    Err(DdlReifyError::NameClash(name.to_string()))
+                    Err(DdlReifyError::NameClash(name.to_string()).into())
                 };
             }
         }
@@ -1008,7 +988,7 @@ impl<'a> DdlContext for TempDbContext<'a> {
                 .tables
                 .get(&id)
                 .cloned()
-                .ok_or(DdlReifyError::TableNotFound(TableId { id, in_root }))
+                .ok_or(DdlReifyError::TableNotFound(TableId { id, in_root }).into())
         } else {
             find_table_by_id_in_main(&self.txn, id)
         }
@@ -1047,7 +1027,7 @@ impl<'a> DdlContext for TempDbContext<'a> {
         let tid = table_id.id;
         let stack_frame = self.sess.stack.last_mut().unwrap();
         if stack_frame.contains_key(info.table_name()) {
-            return Err(DdlReifyError::NameConflict(info.table_name().to_string()));
+            return Err(DdlReifyError::NameConflict(info.table_name().to_string()).into());
         } else {
             info.set_table_id(table_id);
             match &info {

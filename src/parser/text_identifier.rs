@@ -1,6 +1,6 @@
 use crate::parser::number::parse_int;
 use crate::parser::{Pair, Rule};
-use std::result;
+use anyhow::Result;
 
 #[derive(thiserror::Error, Debug)]
 pub enum TextParseError {
@@ -13,8 +13,6 @@ pub enum TextParseError {
     #[error("Reserved identifier: {0}")]
     ReservedIdent(String),
 }
-
-type Result<T> = result::Result<T, TextParseError>;
 
 #[inline]
 fn parse_raw_string(pair: Pair) -> Result<String> {
@@ -49,7 +47,7 @@ fn parse_quoted_string(pair: Pair) -> Result<String> {
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {
-                return Err(TextParseError::InvalidEscapeSequence(s.to_string()));
+                return Err(TextParseError::InvalidEscapeSequence(s.to_string()).into());
             }
             s => ret.push_str(s),
         }
@@ -79,7 +77,7 @@ fn parse_s_quoted_string(pair: Pair) -> Result<String> {
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {
-                return Err(TextParseError::InvalidEscapeSequence(s.to_string()));
+                return Err(TextParseError::InvalidEscapeSequence(s.to_string()).into());
             }
             s => ret.push_str(s),
         }
@@ -110,7 +108,7 @@ pub(crate) fn build_name_in_def(pair: Pair, forbid_underscore: bool) -> Result<S
         _ => unreachable!(),
     };
     if forbid_underscore && name.starts_with('_') {
-        Err(TextParseError::ReservedIdent(name))
+        Err(TextParseError::ReservedIdent(name).into())
     } else {
         Ok(name)
     }

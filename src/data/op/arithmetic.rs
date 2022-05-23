@@ -1,9 +1,7 @@
 use crate::data::eval::EvalError;
 use crate::data::op::{extract_two_args, Op};
 use crate::data::value::Value;
-use std::result;
-
-type Result<T> = result::Result<T, EvalError>;
+use anyhow::Result;
 
 pub(crate) struct OpAdd;
 
@@ -22,7 +20,8 @@ impl OpAdd {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -70,7 +69,8 @@ impl OpSub {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -118,7 +118,8 @@ impl OpMul {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -167,7 +168,8 @@ impl OpDiv {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -213,7 +215,8 @@ impl OpMod {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -262,7 +265,8 @@ impl OpPow {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -300,10 +304,9 @@ impl OpMinus {
         match arg {
             Value::Int(i) => Ok((-i).into()),
             Value::Float(i) => Ok((-i).into()),
-            v => Err(EvalError::OpTypeMismatch(
-                self.name().to_string(),
-                vec![v.to_static()],
-            )),
+            v => {
+                Err(EvalError::OpTypeMismatch(self.name().to_string(), vec![v.to_static()]).into())
+            }
         }
     }
 }

@@ -1,9 +1,7 @@
 use crate::data::eval::EvalError;
 use crate::data::op::{extract_two_args, Op};
 use crate::data::value::Value;
-use std::result;
-
-type Result<T> = result::Result<T, EvalError>;
+use anyhow::Result;
 
 pub(crate) struct OpEq;
 
@@ -97,7 +95,8 @@ impl OpGt {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -146,7 +145,8 @@ impl OpGe {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -195,7 +195,8 @@ impl OpLt {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -244,7 +245,8 @@ impl OpLe {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![l.to_static(), r.to_static()],
-                ));
+                )
+                .into());
             }
         };
         Ok(res)
@@ -269,7 +271,7 @@ impl Op for OpLe {
     fn non_null_args(&self) -> bool {
         true
     }
-    fn eval<'a>(&self, args: Vec<Value<'a>>) -> crate::data::op::Result<Value<'a>> {
+    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
         let (left, right) = extract_two_args(args);
         self.eval_two_non_null(left, right)
     }

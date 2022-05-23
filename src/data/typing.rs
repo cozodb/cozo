@@ -1,10 +1,10 @@
 use crate::data::value::{StaticValue, Value};
 use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{CozoParser, Pair, Rule};
+use anyhow::Result;
 use pest::Parser;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
-use std::result;
 use uuid::Uuid;
 
 #[derive(thiserror::Error, Debug)]
@@ -17,15 +17,7 @@ pub enum TypingError {
 
     #[error("Undefined type '{0}'")]
     UndefinedType(String),
-
-    #[error(transparent)]
-    Parse(#[from] pest::error::Error<Rule>),
-
-    #[error(transparent)]
-    TextParse(#[from] crate::parser::text_identifier::TextParseError),
 }
-
-type Result<T> = result::Result<T, TypingError>;
 
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub enum Typing {
@@ -113,7 +105,7 @@ impl Typing {
             return if matches!(self, Typing::Nullable(_)) {
                 Ok(Value::Null)
             } else {
-                Err(TypingError::NotNullViolated(self.clone()))
+                Err(TypingError::NotNullViolated(self.clone()).into())
             };
         }
 
@@ -134,7 +126,7 @@ impl Typing {
                         .map(|v| t.coerce(v))
                         .collect::<Result<Vec<_>>>()?,
                 )),
-                _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static())),
+                _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
             },
             Typing::UnnamedTuple(_ut) => {
                 todo!()
@@ -149,37 +141,37 @@ impl Typing {
     fn coerce_bool<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Bool(_) => Ok(v),
-            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static())),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
     fn coerce_int<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Int(_) => Ok(v),
-            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static())),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
     fn coerce_float<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Float(_) => Ok(v),
-            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static())),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
     fn coerce_text<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Text(_) => Ok(v),
-            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static())),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
     fn coerce_uuid<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Uuid(_) => Ok(v),
-            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static())),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
     fn coerce_bytes<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Bytes(_) => Ok(v),
-            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static())),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
 }
@@ -203,7 +195,7 @@ impl<'a> Value<'a> {
 }
 
 impl TryFrom<&str> for Typing {
-    type Error = TypingError;
+    type Error = anyhow::Error;
 
     fn try_from(value: &str) -> Result<Self> {
         let pair = CozoParser::parse(Rule::typing_all, value)?.next().unwrap();
@@ -212,7 +204,7 @@ impl TryFrom<&str> for Typing {
 }
 
 impl TryFrom<Pair<'_>> for Typing {
-    type Error = TypingError;
+    type Error = anyhow::Error;
 
     fn try_from(pair: Pair) -> Result<Self> {
         Ok(match pair.as_rule() {
@@ -223,7 +215,7 @@ impl TryFrom<Pair<'_>> for Typing {
                 "Float" => Typing::Float,
                 "Text" => Typing::Text,
                 "Uuid" => Typing::Uuid,
-                t => return Err(TypingError::UndefinedType(t.to_string())),
+                t => return Err(TypingError::UndefinedType(t.to_string()).into()),
             },
             Rule::nullable_type => {
                 let inner_type = Typing::try_from(pair.into_inner().next().unwrap())?;

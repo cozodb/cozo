@@ -3,20 +3,18 @@ use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{TableId, MIN_TABLE_ID_BOUND};
 use crate::data::value::{StaticValue, Value};
 use crate::ddl::parser::DdlSchema;
-use crate::ddl::reify::{DdlContext, DdlReifyError, TableInfo};
+use crate::ddl::reify::{DdlContext, TableInfo};
 use crate::parser::{CozoParser, Pair, Rule};
 use crate::runtime::instance::{DbInstanceError, SessionHandle, SessionStatus};
 use crate::runtime::options::{default_txn_options, default_write_options};
+use anyhow::Result;
 use cozorocks::{DbPtr, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use lazy_static::lazy_static;
 use log::error;
 use pest::Parser;
 use std::collections::{BTreeMap, BTreeSet};
-use std::result;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-
-type Result<T> = result::Result<T, DbInstanceError>;
 
 pub(crate) enum Definable {
     Value(StaticValue),
@@ -129,7 +127,7 @@ impl Session {
         )
     }
 
-    pub(crate) fn get_next_main_table_id(&self) -> result::Result<u32, DdlReifyError> {
+    pub(crate) fn get_next_main_table_id(&self) -> Result<u32> {
         let txn = self.txn(None);
         let key = MAIN_DB_TABLE_ID_SEQ_KEY.as_ref();
         let cur_id = match txn.get_owned(&self.r_opts_main, key)? {
@@ -173,10 +171,10 @@ impl Session {
                 if writable_main {
                     self.execute_persist_block(pair)
                 } else {
-                    Err(DbInstanceError::WriteReadOnlyConflict)
+                    Err(DbInstanceError::WriteReadOnlyConflict.into())
                 }
             }
-            _ => Err(DbInstanceError::Parse(script.to_string())),
+            _ => Err(DbInstanceError::Parse(script.to_string()).into()),
         }
     }
     fn execute_query(&mut self, pair: Pair, writable_main: bool) -> Result<Value> {

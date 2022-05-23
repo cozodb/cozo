@@ -1,34 +1,20 @@
-use crate::data::expr::{Expr, ExprError, StaticExpr};
-use crate::data::parser::ExprParseError;
-use crate::data::typing::{Typing, TypingError};
+use crate::data::expr::{Expr, StaticExpr};
+use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
-use crate::parser::text_identifier::{build_name_in_def, TextParseError};
+use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{Pair, Rule};
+use anyhow::Result;
 use std::collections::BTreeMap;
 use std::result;
 
 #[derive(thiserror::Error, Debug)]
 pub enum DdlParseError {
-    #[error(transparent)]
-    TextParse(#[from] TextParseError),
-
-    #[error(transparent)]
-    Typing(#[from] TypingError),
-
-    #[error(transparent)]
-    ExprParse(#[from] ExprParseError),
-
     #[error("definition error: {0}")]
     Definition(&'static str),
 
     #[error("failed to deserialize col schema")]
     ColSchemaDeser(StaticValue),
-
-    #[error(transparent)]
-    Expr(#[from] ExprError),
 }
-
-type Result<T> = result::Result<T, DdlParseError>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ColSchema {
@@ -63,7 +49,7 @@ impl From<ColSchema> for StaticValue {
 }
 
 impl<'a> TryFrom<Value<'a>> for ColSchema {
-    type Error = DdlParseError;
+    type Error = anyhow::Error;
 
     fn try_from(value: Value<'a>) -> Result<Self> {
         let mk_err = || DdlParseError::ColSchemaDeser(value.clone().to_static());
@@ -136,7 +122,7 @@ pub(crate) enum DdlSchema {
 }
 
 impl<'a> TryFrom<Pair<'a>> for DdlSchema {
-    type Error = DdlParseError;
+    type Error = anyhow::Error;
 
     fn try_from(pair: Pair<'a>) -> result::Result<Self, Self::Error> {
         Ok(match pair.as_rule() {
@@ -151,7 +137,7 @@ impl<'a> TryFrom<Pair<'a>> for DdlSchema {
 }
 
 impl<'a> TryFrom<Pair<'a>> for NodeSchema {
-    type Error = DdlParseError;
+    type Error = anyhow::Error;
 
     fn try_from(pair: Pair) -> Result<Self> {
         let mut pairs = pair.into_inner();
@@ -163,7 +149,7 @@ impl<'a> TryFrom<Pair<'a>> for NodeSchema {
 }
 
 impl<'a> TryFrom<Pair<'a>> for EdgeSchema {
-    type Error = DdlParseError;
+    type Error = anyhow::Error;
     fn try_from(pair: Pair) -> Result<Self> {
         let mut pairs = pair.into_inner();
         let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
@@ -184,7 +170,7 @@ impl<'a> TryFrom<Pair<'a>> for EdgeSchema {
 }
 
 impl<'a> TryFrom<Pair<'a>> for AssocSchema {
-    type Error = DdlParseError;
+    type Error = anyhow::Error;
     fn try_from(pair: Pair) -> Result<Self> {
         let mut pairs = pair.into_inner();
         let src_name = build_name_in_def(pairs.next().unwrap(), true)?;
@@ -192,10 +178,10 @@ impl<'a> TryFrom<Pair<'a>> for AssocSchema {
 
         let (keys, vals) = parse_cols(pairs.next().unwrap())?;
         if !keys.is_empty() {
-            return Err(DdlParseError::Definition("assoc cannot have keys"));
+            return Err(DdlParseError::Definition("assoc cannot have keys").into());
         }
         if vals.is_empty() {
-            return Err(DdlParseError::Definition("assoc has no values"));
+            return Err(DdlParseError::Definition("assoc has no values").into());
         }
         Ok(AssocSchema {
             name,
@@ -206,7 +192,7 @@ impl<'a> TryFrom<Pair<'a>> for AssocSchema {
 }
 
 impl<'a> TryFrom<Pair<'a>> for IndexSchema {
-    type Error = DdlParseError;
+    type Error = anyhow::Error;
     fn try_from(pair: Pair) -> Result<Self> {
         let mut pairs = pair.into_inner();
         let index_name = build_name_in_def(pairs.next().unwrap(), true)?;
@@ -220,7 +206,7 @@ impl<'a> TryFrom<Pair<'a>> for IndexSchema {
             }
         }
         if indices.is_empty() {
-            return Err(DdlParseError::Definition("Empty indexed columns"));
+            return Err(DdlParseError::Definition("Empty indexed columns").into());
         }
         Ok(IndexSchema {
             name: index_name,
@@ -232,7 +218,7 @@ impl<'a> TryFrom<Pair<'a>> for IndexSchema {
 }
 
 impl<'a> TryFrom<Pair<'a>> for SequenceSchema {
-    type Error = DdlParseError;
+    type Error = anyhow::Error;
     fn try_from(pair: Pair) -> Result<Self> {
         let name = build_name_in_def(pair.into_inner().next().unwrap(), true)?;
         Ok(SequenceSchema { name })

@@ -2,10 +2,10 @@ use crate::data::op::{
     AggOp, Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMinus,
     OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
 };
-use crate::data::parser::ExprParseError;
 use crate::data::tuple_set::TupleSetIdx;
 use crate::data::value::{StaticValue, Value};
 use crate::parser::{CozoParser, Rule};
+use anyhow::Result;
 use pest::Parser;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
@@ -25,15 +25,10 @@ pub enum ExprError {
 
     #[error("Failed to parse {0} into expr")]
     Parse(String),
-
-    #[error(transparent)]
-    ParseInner(#[from] ExprParseError),
 }
 
-type Result<T> = result::Result<T, ExprError>;
-
 #[derive(Clone)]
-pub(crate) enum Expr<'a> {
+pub enum Expr<'a> {
     Const(Value<'a>),
     List(Vec<Expr<'a>>),
     Dict(BTreeMap<String, Expr<'a>>),
@@ -267,26 +262,26 @@ impl<'a> Debug for Expr<'a> {
     }
 }
 
-pub(crate) type StaticExpr = Expr<'static>;
+pub type StaticExpr = Expr<'static>;
 
 fn extract_list_from_value(value: Value, n: usize) -> Result<Vec<Value>> {
     if let Value::List(l) = value {
         if n > 0 && l.len() != n {
-            return Err(ExprError::ListExtractionFailed(Value::List(l).to_static()));
+            return Err(ExprError::ListExtractionFailed(Value::List(l).to_static()).into());
         }
         Ok(l)
     } else {
-        return Err(ExprError::ListExtractionFailed(value.to_static()));
+        return Err(ExprError::ListExtractionFailed(value.to_static()).into());
     }
 }
 
 impl<'a> TryFrom<Value<'a>> for Expr<'a> {
-    type Error = ExprError;
+    type Error = anyhow::Error;
 
     fn try_from(value: Value<'a>) -> Result<Self> {
         if let Value::Dict(d) = value {
             if d.len() != 1 {
-                return Err(ExprError::ConversionFailure(Value::Dict(d).to_static()));
+                return Err(ExprError::ConversionFailure(Value::Dict(d).to_static()).into());
             }
             let (k, v) = d.into_iter().next().unwrap();
             match k.as_ref() {
@@ -310,7 +305,8 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     v => {
                         return Err(ExprError::ConversionFailure(
                             Value::Dict(BTreeMap::from([(k, v)])).to_static(),
-                        ));
+                        )
+                        .into());
                     }
                 },
                 "Variable" => {
@@ -319,22 +315,23 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     } else {
                         return Err(ExprError::ConversionFailure(
                             Value::Dict(BTreeMap::from([(k, v)])).to_static(),
-                        ));
+                        )
+                        .into());
                     }
                 }
                 "TupleSetIdx" => {
                     let mut l = extract_list_from_value(v, 3)?.into_iter();
                     let is_key = match l.next().unwrap() {
                         Value::Bool(b) => b,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
+                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
                     };
                     let tid = match l.next().unwrap() {
                         Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
+                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
                     };
                     let cid = match l.next().unwrap() {
                         Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
+                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
                     };
                     Ok(Expr::TupleSetIdx(TupleSetIdx {
                         is_key,
@@ -346,7 +343,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let name = match ll.next().unwrap() {
                         Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
+                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
                     };
                     let op = Arc::new(UnresolvedOp(name.to_string()));
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
@@ -360,7 +357,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 3)?.into_iter();
                     let name = match ll.next().unwrap() {
                         Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
+                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
                     };
                     let op = Arc::new(UnresolvedOp(name.to_string()));
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
@@ -379,7 +376,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let field = match ll.next().unwrap() {
                         Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
+                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
                     };
                     let arg = Expr::try_from(ll.next().unwrap())?;
                     Ok(Expr::FieldAcc(field.to_string(), arg.into()))
@@ -388,15 +385,15 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let idx = match ll.next().unwrap() {
                         Value::Int(i) => i as usize,
-                        v => return Err(ExprError::ConversionFailure(v.to_static())),
+                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
                     };
                     let arg = Expr::try_from(ll.next().unwrap())?;
                     Ok(Expr::IdxAcc(idx, arg.into()))
                 }
-                k => Err(ExprError::UnknownExprTag(k.to_string())),
+                k => Err(ExprError::UnknownExprTag(k.to_string()).into()),
             }
         } else {
-            Err(ExprError::ConversionFailure(value.to_static()))
+            Err(ExprError::ConversionFailure(value.to_static()).into())
         }
     }
 }
@@ -510,7 +507,7 @@ fn build_tagged_value<'a>(tag: &'static str, val: Value<'a>) -> Value<'a> {
 }
 
 impl<'a> TryFrom<&'a str> for Expr<'a> {
-    type Error = ExprError;
+    type Error = anyhow::Error;
 
     fn try_from(value: &'a str) -> result::Result<Self, Self::Error> {
         let pair = CozoParser::parse(Rule::expr_all, value)

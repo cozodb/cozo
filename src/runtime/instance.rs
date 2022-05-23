@@ -1,25 +1,17 @@
-use crate::data::tuple::TupleError;
 use crate::data::tuple_set::MIN_TABLE_ID_BOUND;
-use crate::ddl::parser::DdlParseError;
-use crate::ddl::reify::DdlReifyError;
 use crate::parser::Rule;
 use crate::runtime::options::*;
 use crate::runtime::session::Session;
+use anyhow::Result;
 use cozorocks::*;
 use log::error;
+use std::mem;
 use std::sync::{Arc, Mutex};
-use std::{mem, result};
 
 #[derive(thiserror::Error, Debug)]
 pub enum DbInstanceError {
-    #[error(transparent)]
-    DbBridge(#[from] BridgeError),
-
     #[error("Cannot obtain session lock")]
     SessionLock,
-
-    #[error(transparent)]
-    Tuple(#[from] TupleError),
 
     #[error("Cannot obtain table access lock")]
     TableAccessLock,
@@ -36,12 +28,6 @@ pub enum DbInstanceError {
     #[error("Parse error {0}")]
     Parse(String),
 
-    #[error(transparent)]
-    DdlParse(#[from] DdlParseError),
-
-    #[error(transparent)]
-    Reify(#[from] DdlReifyError),
-
     #[error("Attempt to write when read-only")]
     WriteReadOnlyConflict,
 }
@@ -51,8 +37,6 @@ impl From<pest::error::Error<Rule>> for DbInstanceError {
         DbInstanceError::Parse(format!("{:?}", err))
     }
 }
-
-type Result<T> = result::Result<T, DbInstanceError>;
 
 #[derive(Eq, PartialEq, Debug, Clone, Copy)]
 pub enum SessionStatus {

@@ -1,32 +1,21 @@
-use crate::data::expr::Expr;
+use crate::data::expr::{Expr, StaticExpr};
 use crate::data::op::*;
-use crate::data::parser::ExprParseError;
-use crate::data::tuple::TupleError;
-use crate::data::tuple_set::{ColId, TableId, TupleSetIdx};
+use crate::data::tuple_set::TupleSetIdx;
 use crate::data::value::{StaticValue, Value};
+use anyhow::Result;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::result;
 
 #[derive(thiserror::Error, Debug)]
 pub enum EvalError {
     #[error("Unresolved variable `{0}`")]
     UnresolvedVariable(String),
 
-    #[error("Unresolved table col {0:?}{1:?}")]
-    UnresolveTableCol(TableId, ColId),
+    #[error("Cannot access field {0} for {1:?}")]
+    FieldAccess(String, StaticExpr),
 
-    #[error("Unresolved tuple index {0:?}")]
-    UnresolveTupleIdx(TupleSetIdx),
-
-    #[error("Cannot access field {0} for {1}")]
-    FieldAccess(String, StaticValue),
-
-    #[error("Cannot access index {0} for {1}")]
-    IndexAccess(usize, StaticValue),
-
-    #[error(transparent)]
-    Parse(#[from] ExprParseError),
+    #[error("Cannot access index {0} for {1:?}")]
+    IndexAccess(usize, StaticExpr),
 
     #[error("Cannot apply `{0}` to `{1:?}`")]
     OpTypeMismatch(String, Vec<StaticValue>),
@@ -40,34 +29,36 @@ pub enum EvalError {
     #[error("Incomplete evaluation {0}")]
     IncompleteEvaluation(String),
 
-    #[error(transparent)]
-    Tuple(#[from] TupleError),
+    #[error("Called resolve on null context")]
+    NullContext,
 }
 
-type Result<T> = result::Result<T, EvalError>;
+// type Result<T> = result::Result<T, EvalError>;
+
+#[derive(thiserror::Error, Debug)]
+pub enum EvalContextError {
+    #[error("called resolve on null context")]
+    NullContext,
+}
 
 pub(crate) trait RowEvalContext {
-    fn resolve<'a>(&'a self, idx: &TupleSetIdx) -> Result<Value>;
+    fn resolve(&self, idx: &TupleSetIdx) -> Result<Value>;
 }
 
 impl RowEvalContext for () {
-    fn resolve<'a>(&'a self, idx: &TupleSetIdx) -> Result<Value> {
-        Err(EvalError::UnresolveTupleIdx(*idx))
+    fn resolve(&self, _idx: &TupleSetIdx) -> Result<Value> {
+        Err(EvalContextError::NullContext.into())
     }
 }
 
 pub(crate) trait PartialEvalContext {
     fn resolve(&self, key: &str) -> Option<Expr>;
-    // fn resolve_table_col(&self, binding: &str, col: &str) -> Option<(TableId, ColId)>;
 }
 
 impl PartialEvalContext for () {
     fn resolve(&self, _key: &str) -> Option<Expr> {
         None
     }
-    // fn resolve_table_col(&self, _binding: &str, _col: &str) -> Option<(TableId, ColId)> {
-    //     None
-    // }
 }
 
 fn extract_optimized_bin_args(args: Vec<Expr>) -> (Expr, Expr) {
@@ -86,7 +77,7 @@ impl<'a> Expr<'a> {
     pub(crate) fn interpret_eval<C: PartialEvalContext>(self, ctx: &'a C) -> Result<Value> {
         match self.partial_eval(ctx)? {
             Expr::Const(v) => Ok(v),
-            v => Err(EvalError::IncompleteEvaluation(format!("{:?}", v))),
+            v => Err(EvalError::IncompleteEvaluation(format!("{:?}", v)).into()),
         }
     }
 
@@ -139,19 +130,6 @@ impl<'a> Expr<'a> {
                 .resolve(&var)
                 .ok_or(EvalError::UnresolvedVariable(var))?,
             Expr::FieldAcc(f, arg) => {
-                // let expr = match *arg {
-                //     Expr::Variable(var) => {
-                //         if let Some((tid, cid)) = ctx.resolve_table_col(&var, &f) {
-                //             return Ok(Expr::TableCol(tid, cid));
-                //         } else {
-                //             ctx.resolve(&var)
-                //                 .ok_or(EvalError::UnresolvedVariable(var))?
-                //                 .partial_eval(ctx)?
-                //         }
-                //     }
-                //     expr => expr.partial_eval(ctx)?,
-                // };
-                // match expr {expr
                 match *arg {
                     Expr::Dict(mut d) => {
                         // This skips evaluation of other keys
@@ -171,7 +149,7 @@ impl<'a> Expr<'a> {
                         Expr::Dict(mut d) => {
                             d.remove(&f as &str).unwrap_or(Expr::Const(Value::Null))
                         }
-                        v => return Err(EvalError::FieldAccess(f, Value::from(v).to_static())),
+                        v => return Err(EvalError::FieldAccess(f, v.to_static()).into()),
                     },
                 }
             }
@@ -205,14 +183,16 @@ impl<'a> Expr<'a> {
                         | Expr::FieldAcc(_, _)
                         | Expr::Apply(_, _)
                         | Expr::ApplyAgg(_, _, _)) => Expr::IdxAcc(i, v.into()),
-                        v => return Err(EvalError::IndexAccess(i, Value::from(v).to_static())),
+                        v => return Err(EvalError::IndexAccess(i, v.to_static()).into()),
                     },
                 }
             }
             Expr::Apply(op, args) => {
                 if let Some(n) = op.arity() {
                     if n != args.len() {
-                        return Err(EvalError::ArityMismatch(op.name().to_string(), args.len()));
+                        return Err(
+                            EvalError::ArityMismatch(op.name().to_string(), args.len()).into()
+                        );
                     }
                 }
                 match op.name() {
@@ -287,7 +267,7 @@ impl<'a> Expr<'a> {
             | Expr::NotNull(_)
             | Expr::Coalesce(_)
             | Expr::Or(_)
-            | Expr::And(_) => return Err(EvalError::OptimizedBeforePartialEval),
+            | Expr::And(_) => return Err(EvalError::OptimizedBeforePartialEval.into()),
         };
         Ok(res)
     }
@@ -406,7 +386,7 @@ impl<'a> Expr<'a> {
                 })
                 .collect::<Result<BTreeMap<_, _>>>()?
                 .into(),
-            Expr::Variable(v) => return Err(EvalError::UnresolvedVariable(v.clone())),
+            Expr::Variable(v) => return Err(EvalError::UnresolvedVariable(v.clone()).into()),
             Expr::TupleSetIdx(idx) => ctx.resolve(idx)?.clone(),
             Expr::Apply(op, args) => {
                 let mut eval_args = Vec::with_capacity(args.len());
@@ -427,7 +407,11 @@ impl<'a> Expr<'a> {
             Expr::FieldAcc(f, arg) => match arg.row_eval(ctx)? {
                 Value::Null => Value::Null,
                 Value::Dict(mut d) => d.remove(f as &str).unwrap_or(Value::Null),
-                v => return Err(EvalError::FieldAccess(f.clone(), v.to_static())),
+                v => {
+                    return Err(
+                        EvalError::FieldAccess(f.clone(), Expr::Const(v.to_static())).into(),
+                    );
+                }
             },
             Expr::IdxAcc(idx, arg) => match arg.row_eval(ctx)? {
                 Value::Null => Value::Null,
@@ -438,7 +422,7 @@ impl<'a> Expr<'a> {
                         d.swap_remove(*idx)
                     }
                 }
-                v => return Err(EvalError::IndexAccess(*idx, v.to_static())),
+                v => return Err(EvalError::IndexAccess(*idx, Expr::Const(v.to_static())).into()),
             },
             Expr::IfExpr(args) => {
                 let (cond, if_part, else_part) = args.as_ref();

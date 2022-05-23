@@ -1,13 +1,10 @@
-use crate::data::eval::EvalError::OpTypeMismatch;
 use crate::data::eval::{EvalError, PartialEvalContext};
 use crate::data::expr::Expr;
 use crate::data::op::Op;
 use crate::data::value::Value;
+use anyhow::Result;
 use std::collections::BTreeMap;
-use std::result;
 use std::sync::Arc;
-
-type Result<T> = result::Result<T, EvalError>;
 
 pub(crate) struct OpConcat;
 
@@ -38,7 +35,8 @@ impl Op for OpConcat {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
                         vec![v.to_static()],
-                    ));
+                    )
+                    .into());
                 }
             }
         }
@@ -67,10 +65,11 @@ pub(crate) fn partial_eval_concat_expr<'a, T: PartialEvalContext>(
             match arg.extract_const().unwrap() {
                 Value::List(l) => result.extend(l),
                 v => {
-                    return Err(OpTypeMismatch(
+                    return Err(EvalError::OpTypeMismatch(
                         NAME_OP_CONCAT.to_string(),
                         vec![v.to_static()],
-                    ))
+                    )
+                    .into());
                 }
             }
         }
@@ -87,10 +86,11 @@ pub(crate) fn partial_eval_concat_expr<'a, T: PartialEvalContext>(
                 }
                 Expr::List(l) => result.extend(l),
                 v => {
-                    return Err(OpTypeMismatch(
+                    return Err(EvalError::OpTypeMismatch(
                         NAME_OP_CONCAT.to_string(),
                         vec![Value::from(v).to_static()],
-                    ))
+                    )
+                    .into());
                 }
             }
         }
@@ -129,7 +129,8 @@ impl Op for OpMerge {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
                         vec![v.to_static()],
-                    ));
+                    )
+                    .into());
                 }
             }
         }
@@ -159,10 +160,11 @@ pub(crate) fn partial_eval_merge_expr<'a, T: PartialEvalContext>(
                 Value::Null => {}
                 Value::Dict(d) => result.extend(d),
                 v => {
-                    return Err(OpTypeMismatch(
+                    return Err(EvalError::OpTypeMismatch(
                         NAME_OP_MERGE.to_string(),
                         vec![v.to_static()],
-                    ))
+                    )
+                    .into());
                 }
             }
         }
@@ -179,10 +181,11 @@ pub(crate) fn partial_eval_merge_expr<'a, T: PartialEvalContext>(
                 }
                 Expr::Dict(d) => result.extend(d),
                 v => {
-                    return Err(OpTypeMismatch(
+                    return Err(EvalError::OpTypeMismatch(
                         NAME_OP_MERGE.to_string(),
                         vec![Value::from(v).to_static()],
-                    ))
+                    )
+                    .into());
                 }
             }
         }

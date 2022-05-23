@@ -2,10 +2,8 @@ use crate::data::eval::{EvalError, PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
 use crate::data::op::Op;
 use crate::data::value::Value;
-use std::result;
+use anyhow::Result;
 use std::sync::Arc;
-
-type Result<T> = result::Result<T, EvalError>;
 
 pub(crate) struct OpCoalesce;
 
@@ -85,10 +83,7 @@ pub(crate) fn row_eval_if_expr<'a, T: RowEvalContext + 'a>(
             else_part.row_eval(ctx)?
         }),
         Value::Null => Ok(Value::Null),
-        v => Err(EvalError::OpTypeMismatch(
-            IF_NAME.to_string(),
-            vec![v.to_static()],
-        )),
+        v => Err(EvalError::OpTypeMismatch(IF_NAME.to_string(), vec![v.to_static()]).into()),
     }
 }
 

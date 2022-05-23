@@ -1,8 +1,9 @@
-use crate::data::eval::{EvalError, PartialEvalContext, RowEvalContext};
+use crate::data::eval::{PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
-use crate::data::tuple::{OwnTuple, ReifiedTuple, TupleError};
-use crate::data::typing::{Typing, TypingError};
+use crate::data::tuple::{OwnTuple, ReifiedTuple};
+use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
+use anyhow::Result;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
@@ -12,19 +13,9 @@ use std::result;
 pub enum TupleSetError {
     #[error("table id not allowed: {0}")]
     InvalidTableId(u32),
-    #[error("Index out of bound: {0}")]
-    IndexOutOfBound(usize),
-    #[error(transparent)]
-    Tuple(#[from] TupleError),
     #[error("Failed to deserialize {0}")]
     Deser(StaticValue),
-    #[error(transparent)]
-    Eval(#[from] EvalError),
-    #[error(transparent)]
-    Typing(#[from] TypingError),
 }
-
-type Result<T> = result::Result<T, TupleSetError>;
 
 pub(crate) const MIN_TABLE_ID_BOUND: u32 = 10000;
 
@@ -69,7 +60,7 @@ impl Debug for TableId {
 impl TableId {
     pub(crate) fn new(in_root: bool, id: u32) -> Result<Self> {
         if id <= MIN_TABLE_ID_BOUND {
-            Err(TupleSetError::InvalidTableId(id))
+            Err(TupleSetError::InvalidTableId(id).into())
         } else {
             Ok(TableId { in_root, id })
         }
@@ -182,7 +173,7 @@ impl TupleSet {
             t_set,
             col_idx,
         }: &TupleSetIdx,
-    ) -> result::Result<Value, EvalError> {
+    ) -> Result<Value> {
         let tuples = if *is_key { &self.keys } else { &self.vals };
         let tuple = tuples.get(*t_set);
         match tuple {
@@ -211,7 +202,7 @@ where
 }
 
 impl RowEvalContext for TupleSet {
-    fn resolve(&self, idx: &TupleSetIdx) -> result::Result<Value, EvalError> {
+    fn resolve(&self, idx: &TupleSetIdx) -> Result<Value> {
         let val = self.get_value(idx)?;
         Ok(val)
     }

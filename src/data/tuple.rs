@@ -1,4 +1,5 @@
 use crate::data::value::Value;
+use anyhow::Result;
 use cozorocks::{PinnableSlicePtr, PinnableSlicePtrShared, SlicePtr, SlicePtrShared};
 use std::borrow::{Borrow, Cow};
 use std::cell::RefCell;
@@ -6,7 +7,6 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
-use std::result;
 use uuid::Uuid;
 
 #[derive(thiserror::Error, Debug)]
@@ -23,8 +23,6 @@ pub enum TupleError {
     #[error("Type mismatch: {1:?} is not {0}")]
     TypeMismatch(&'static str, OwnTuple),
 }
-
-type Result<T> = result::Result<T, TupleError>;
 
 const STORAGE_BOOL_FALSE: u8 = 1;
 const STORAGE_NULL: u8 = 2;
@@ -128,7 +126,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
             DATAKIND_VAL => Val,
             DATAKIND_TYPE => Type,
             DATAKIND_EMPTY => Empty,
-            v => return Err(TupleError::UndefinedDataKind(v)),
+            v => return Err(TupleError::UndefinedDataKind(v).into()),
         })
     }
 }
@@ -302,7 +300,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         match self.get_pos(idx) {
             Some(v) => {
                 if v == self.data.as_ref().len() {
-                    return Err(TupleError::IndexOutOfBound(idx, self.to_owned()));
+                    return Err(TupleError::IndexOutOfBound(idx, self.to_owned()).into());
                 }
                 let (val, nxt) = self.parse_value_at(v)?;
                 if idx == self.idx_cache.borrow().len() {
@@ -310,7 +308,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
                 }
                 Ok(val)
             }
-            None => Err(TupleError::IndexOutOfBound(idx, self.to_owned())),
+            None => Err(TupleError::IndexOutOfBound(idx, self.to_owned()).into()),
         }
     }
 
@@ -318,7 +316,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub(crate) fn get_null(&self, idx: usize) -> Result<()> {
         match self.get(idx)? {
             Value::Null => Ok(()),
-            _ => Err(TupleError::TypeMismatch("Null", self.to_owned())),
+            _ => Err(TupleError::TypeMismatch("Null", self.to_owned()).into()),
         }
     }
 
@@ -326,7 +324,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub(crate) fn get_int(&self, idx: usize) -> Result<i64> {
         match self.get(idx)? {
             Value::Int(i) => Ok(i),
-            _ => Err(TupleError::TypeMismatch("Int", self.to_owned())),
+            _ => Err(TupleError::TypeMismatch("Int", self.to_owned()).into()),
         }
     }
 
@@ -334,7 +332,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub(crate) fn get_text(&self, idx: usize) -> Result<Cow<str>> {
         match self.get(idx)? {
             Value::Text(d) => Ok(d),
-            _ => Err(TupleError::TypeMismatch("Text", self.to_owned())),
+            _ => Err(TupleError::TypeMismatch("Text", self.to_owned()).into()),
         }
     }
 
@@ -342,7 +340,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub(crate) fn get_bool(&self, idx: usize) -> Result<bool> {
         match self.get(idx)? {
             Value::Bool(b) => Ok(b),
-            _ => Err(TupleError::TypeMismatch("Bool", self.to_owned())),
+            _ => Err(TupleError::TypeMismatch("Bool", self.to_owned()).into()),
         }
     }
 
@@ -350,7 +348,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub(crate) fn get_float(&self, idx: usize) -> Result<f64> {
         match self.get(idx)? {
             Value::Float(f) => Ok(f.into_inner()),
-            _ => Err(TupleError::TypeMismatch("Float", self.to_owned())),
+            _ => Err(TupleError::TypeMismatch("Float", self.to_owned()).into()),
         }
     }
 
@@ -358,7 +356,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub(crate) fn get_uuid(&self, idx: usize) -> Result<Uuid> {
         match self.get(idx)? {
             Value::Uuid(u) => Ok(u),
-            _ => Err(TupleError::TypeMismatch("Uuid", self.to_owned())),
+            _ => Err(TupleError::TypeMismatch("Uuid", self.to_owned()).into()),
         }
     }
 
@@ -366,7 +364,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub(crate) fn get_list(&self, idx: usize) -> Result<Vec<Value>> {
         match self.get(idx)? {
             Value::List(u) => Ok(u),
-            _ => Err(TupleError::TypeMismatch("List", self.to_owned())),
+            _ => Err(TupleError::TypeMismatch("List", self.to_owned()).into()),
         }
     }
 
@@ -374,7 +372,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     pub(crate) fn get_dict(&self, idx: usize) -> Result<BTreeMap<Cow<str>, Value>> {
         match self.get(idx)? {
             Value::Dict(u) => Ok(u),
-            _ => Err(TupleError::TypeMismatch("Dict", self.to_owned())),
+            _ => Err(TupleError::TypeMismatch("Dict", self.to_owned()).into()),
         }
     }
 
@@ -384,7 +382,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         let start = pos + 1;
         let tag = match StorageTag::try_from(data[pos]) {
             Ok(t) => t,
-            Err(e) => return Err(TupleError::UndefinedDataTag(e)),
+            Err(e) => return Err(TupleError::UndefinedDataTag(e).into()),
         };
         let (nxt, val): (usize, Value) = match tag {
             StorageTag::Null => (start, ().into()),

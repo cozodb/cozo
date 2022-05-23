@@ -1,9 +1,7 @@
 use crate::data::eval::EvalError;
 use crate::data::op::{extract_two_args, Op};
 use crate::data::value::Value;
-use std::result;
-
-type Result<T> = result::Result<T, EvalError>;
+use anyhow::Result;
 
 pub(crate) struct OpStrCat;
 
@@ -22,7 +20,8 @@ impl OpStrCat {
             (l, r) => Err(EvalError::OpTypeMismatch(
                 self.name().to_string(),
                 vec![l.to_static(), r.to_static()],
-            )),
+            )
+            .into()),
         }
     }
 }

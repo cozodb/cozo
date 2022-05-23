@@ -2,10 +2,8 @@ use crate::data::eval::{EvalError, PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
 use crate::data::op::Op;
 use crate::data::value::Value;
-use std::result;
+use anyhow::Result;
 use std::sync::Arc;
-
-type Result<T> = result::Result<T, EvalError>;
 
 pub(crate) struct OpIsNull;
 
@@ -93,7 +91,8 @@ impl Op for OpOr {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
                         vec![v.to_static()],
-                    ));
+                    )
+                    .into());
                 }
             }
         }
@@ -123,7 +122,8 @@ pub(crate) fn partial_eval_or<'a, T: PartialEvalContext>(
                 return Err(EvalError::OpTypeMismatch(
                     OpOr.name().to_string(),
                     vec![v.to_static()],
-                ));
+                )
+                .into());
             }
             Expr::Apply(op, mut args) if op.name() == OpOr.name() => {
                 if args.last() == Some(&Expr::Const(Value::Null)) {
@@ -163,7 +163,8 @@ pub(crate) fn row_eval_or<'a, T: RowEvalContext + 'a>(
         (l, r) => Err(EvalError::OpTypeMismatch(
             OpOr.name().to_string(),
             vec![l.to_static(), r.to_static()],
-        )),
+        )
+        .into()),
     }
 }
 
@@ -197,7 +198,8 @@ impl Op for OpAnd {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
                         vec![v.to_static()],
-                    ));
+                    )
+                    .into());
                 }
             }
         }
@@ -227,7 +229,8 @@ pub(crate) fn partial_eval_and<'a, T: PartialEvalContext>(
                 return Err(EvalError::OpTypeMismatch(
                     OpAnd.name().to_string(),
                     vec![v.to_static()],
-                ));
+                )
+                .into());
             }
             Expr::Apply(op, mut args) if op.name() == OpAnd.name() => {
                 if args.last() == Some(&Expr::Const(Value::Null)) {
@@ -267,7 +270,8 @@ pub(crate) fn row_eval_and<'a, T: RowEvalContext + 'a>(
         (l, r) => Err(EvalError::OpTypeMismatch(
             OpAnd.name().to_string(),
             vec![l.to_static(), r.to_static()],
-        )),
+        )
+        .into()),
     }
 }
 
@@ -277,10 +281,9 @@ impl OpNot {
     pub(crate) fn eval_one_non_null<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
         match arg {
             Value::Bool(b) => Ok((!b).into()),
-            v => Err(EvalError::OpTypeMismatch(
-                self.name().to_string(),
-                vec![v.to_static()],
-            )),
+            v => {
+                Err(EvalError::OpTypeMismatch(self.name().to_string(), vec![v.to_static()]).into())
+            }
         }
     }
 }

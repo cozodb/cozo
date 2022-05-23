@@ -7,9 +7,8 @@ mod sequence;
 mod text;
 mod uuid;
 
-use crate::data::eval::EvalError;
 use crate::data::value::Value;
-use std::result;
+use anyhow::Result;
 
 use crate::data::expr::Expr;
 pub(crate) use arithmetic::*;
@@ -19,9 +18,7 @@ pub(crate) use comparison::*;
 pub(crate) use control::*;
 pub(crate) use text::*;
 
-type Result<T> = result::Result<T, EvalError>;
-
-pub(crate) trait Op: Send + Sync {
+pub trait Op: Send + Sync {
     fn arity(&self) -> Option<usize>;
     fn has_side_effect(&self) -> bool;
     fn name(&self) -> &str;
@@ -29,7 +26,7 @@ pub(crate) trait Op: Send + Sync {
     fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>>;
 }
 
-pub(crate) trait AggOp: Send + Sync {
+pub trait AggOp: Send + Sync {
     fn arity(&self) -> Option<usize>;
     fn has_side_effect(&self) -> bool;
     fn name(&self) -> &str;
