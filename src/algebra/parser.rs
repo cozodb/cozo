@@ -134,7 +134,7 @@ impl<'a> InterpretContext for TempDbContext<'a> {
 pub(crate) trait RelationalAlgebra {
     fn name(&self) -> &str;
     fn binding_map(&self) -> Result<BindingMap>;
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>;
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>>;
 }
 
 const NAME_RA_FROM_VALUES: &str = "Values";
@@ -232,7 +232,7 @@ impl RelationalAlgebra for RaFromValues {
         Ok(self.binding_map.clone())
     }
 
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>> {
         let it = self.values.iter().map(|vs| {
             let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
             for v in vs {
@@ -402,7 +402,7 @@ impl<'a> RelationalAlgebra for RaInsert<'a> {
         Ok(BTreeMap::from([(self.binding.clone(), inner)]))
     }
 
-    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'b>> {
+    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'b>> {
         let source_map = self.source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,
@@ -413,60 +413,7 @@ impl<'a> RelationalAlgebra for RaInsert<'a> {
             v => return Err(AlgebraParseError::Parse(format!("{:?}", v))),
         };
 
-        // let build_extractor = |col: &ColSchema| {
-        //     let extractor = extract_map
-        //         .get(&col.name)
-        //         .cloned()
-        //         .unwrap_or(Expr::Const(Value::Null))
-        //         .to_static();
-        //     let typing = col.typing.clone();
-        //     (extractor, typing)
-        // };
-
-        let (key_builder, val_builder, inv_key_builder) = match &self.target_info {
-            TableInfo::Node(n) => {
-                let key_builder = n
-                    .keys
-                    .iter()
-                    .map(|v| v.make_extractor(&extract_map))
-                    .collect::<Vec<_>>();
-                let val_builder = n
-                    .vals
-                    .iter()
-                    .map(|v| v.make_extractor(&extract_map))
-                    .collect::<Vec<_>>();
-                (key_builder, val_builder, None)
-            }
-            TableInfo::Edge(e) => {
-                let src = self.ctx.get_node_info(e.src_id)?;
-                let dst = self.ctx.get_node_info(e.dst_id)?;
-                let src_key_part = [(Expr::Const(Value::Int(e.src_id.id as i64)), Typing::Any)];
-                let dst_key_part = [(Expr::Const(Value::Int(e.dst_id.id as i64)), Typing::Any)];
-                let fwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
-                let bwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
-                let key_builder = src_key_part
-                    .into_iter()
-                    .chain(src.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(fwd_edge_part.into_iter())
-                    .chain(dst.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(e.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .collect::<Vec<_>>();
-                let inv_key_builder = dst_key_part
-                    .into_iter()
-                    .chain(dst.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(bwd_edge_part.into_iter())
-                    .chain(src.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(e.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .collect::<Vec<_>>();
-                let val_builder = e
-                    .vals
-                    .iter()
-                    .map(|v| v.make_extractor(&extract_map))
-                    .collect::<Vec<_>>();
-                (key_builder, val_builder, Some(inv_key_builder))
-            }
-            _ => unreachable!(),
-        };
+        let (key_builder, val_builder, inv_key_builder) = self.make_key_builders(&extract_map)?;
         let assoc_val_builders = self
             .assoc_infos
             .iter()
@@ -529,6 +476,63 @@ impl<'a> RelationalAlgebra for RaInsert<'a> {
                 Ok(ret)
             },
         )))
+    }
+}
+
+impl<'a> RaInsert<'a> {
+    fn make_key_builders(
+        &self,
+        extract_map: &BTreeMap<String, Expr>,
+    ) -> Result<(
+        Vec<(StaticExpr, Typing)>,
+        Vec<(StaticExpr, Typing)>,
+        Option<Vec<(StaticExpr, Typing)>>,
+    )> {
+        let ret = match &self.target_info {
+            TableInfo::Node(n) => {
+                let key_builder = n
+                    .keys
+                    .iter()
+                    .map(|v| v.make_extractor(&extract_map))
+                    .collect::<Vec<_>>();
+                let val_builder = n
+                    .vals
+                    .iter()
+                    .map(|v| v.make_extractor(&extract_map))
+                    .collect::<Vec<_>>();
+                (key_builder, val_builder, None)
+            }
+            TableInfo::Edge(e) => {
+                let src = self.ctx.get_node_info(e.src_id)?;
+                let dst = self.ctx.get_node_info(e.dst_id)?;
+                let src_key_part = [(Expr::Const(Value::Int(e.src_id.id as i64)), Typing::Any)];
+                let dst_key_part = [(Expr::Const(Value::Int(e.dst_id.id as i64)), Typing::Any)];
+                let fwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
+                let bwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
+                let key_builder = src_key_part
+                    .into_iter()
+                    .chain(src.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .chain(fwd_edge_part.into_iter())
+                    .chain(dst.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .chain(e.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .collect::<Vec<_>>();
+                let inv_key_builder = dst_key_part
+                    .into_iter()
+                    .chain(dst.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .chain(bwd_edge_part.into_iter())
+                    .chain(src.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .chain(e.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .collect::<Vec<_>>();
+                let val_builder = e
+                    .vals
+                    .iter()
+                    .map(|v| v.make_extractor(&extract_map))
+                    .collect::<Vec<_>>();
+                (key_builder, val_builder, Some(inv_key_builder))
+            }
+            _ => unreachable!(),
+        };
+        Ok(ret)
     }
 }
 
