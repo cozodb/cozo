@@ -107,13 +107,13 @@ impl<'a> InterpretContext for TempDbContext<'a> {
 pub(crate) trait RelationalAlgebra {
     fn name(&self) -> &str;
     fn binding_map(&self) -> Result<BindingMap>;
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>;
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>>;
 }
 
-const NAME_RA_FROM_VALUES: &str = "Values";
+const NAME_RELATION_FROM_VALUES: &str = "Values";
 
 #[derive(Clone, Debug)]
-struct RaFromValues {
+struct RelationFromValues {
     binding_map: BindingMap,
     values: Vec<Vec<StaticValue>>,
 }
@@ -127,28 +127,28 @@ fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Result<()> {
             u,
             format!("{:?}", pair.as_rule()),
         )
-        .into())
+            .into())
     }
 }
 
-impl RaFromValues {
+impl RelationFromValues {
     fn build<'a>(
         ctx: &'a TempDbContext<'a>,
         prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
         mut args: Pairs,
     ) -> Result<Self> {
         if !matches!(prev, None) {
-            return Err(AlgebraParseError::Unchainable(NAME_RA_FROM_VALUES.to_string()).into());
+            return Err(AlgebraParseError::Unchainable(NAME_RELATION_FROM_VALUES.to_string()).into());
         }
         let not_enough_args =
-            || AlgebraParseError::NotEnoughArguments(NAME_RA_FROM_VALUES.to_string());
+            || AlgebraParseError::NotEnoughArguments(NAME_RELATION_FROM_VALUES.to_string());
         let schema = args
             .next()
             .ok_or_else(not_enough_args)?
             .into_inner()
             .next()
             .ok_or_else(not_enough_args)?;
-        assert_rule(&schema, Rule::scoped_list, NAME_RA_FROM_VALUES, 0)?;
+        assert_rule(&schema, Rule::scoped_list, NAME_RELATION_FROM_VALUES, 0)?;
         let mut schema_pairs = schema.into_inner();
         let binding = schema_pairs.next().ok_or_else(not_enough_args)?.as_str();
         let binding_map = schema_pairs
@@ -172,7 +172,7 @@ impl RaFromValues {
             .into_inner()
             .next()
             .ok_or_else(not_enough_args)?;
-        assert_rule(&data, Rule::expr, NAME_RA_FROM_VALUES, 1)?;
+        assert_rule(&data, Rule::expr, NAME_RELATION_FROM_VALUES, 1)?;
         let data = Expr::try_from(data)?.interpret_eval(ctx)?.to_static();
         let data = data.into_vec().map_err(AlgebraParseError::ValueError)?;
         let values = data
@@ -197,16 +197,16 @@ impl RaFromValues {
     }
 }
 
-impl RelationalAlgebra for RaFromValues {
+impl RelationalAlgebra for RelationFromValues {
     fn name(&self) -> &str {
-        NAME_RA_FROM_VALUES
+        NAME_RELATION_FROM_VALUES
     }
 
     fn binding_map(&self) -> Result<BindingMap> {
         Ok(self.binding_map.clone())
     }
 
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>> {
         let it = self.values.iter().map(|vs| {
             let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
             for v in vs {
@@ -220,9 +220,9 @@ impl RelationalAlgebra for RaFromValues {
     }
 }
 
-const NAME_RA_INSERT: &str = "Insert";
+const NAME_INSERTION: &str = "Insert";
 
-struct RaInsert<'a> {
+struct Insertion<'a> {
     ctx: &'a TempDbContext<'a>,
     source: Arc<dyn RelationalAlgebra + 'a>,
     binding: String,
@@ -232,16 +232,16 @@ struct RaInsert<'a> {
 }
 
 // problem: binding map must survive optimization. now it doesn't
-impl<'a> RaInsert<'a> {
+impl<'a> Insertion<'a> {
     fn build(
         ctx: &'a TempDbContext<'a>,
         prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
         mut args: Pairs,
     ) -> Result<Self> {
-        let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_RA_INSERT.to_string());
+        let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_INSERTION.to_string());
         let source = match prev {
             Some(v) => v,
-            None => build_ra_expr(ctx, args.next().ok_or_else(not_enough_args)?)?,
+            None => build_relational_expr(ctx, args.next().ok_or_else(not_enough_args)?)?,
         };
         let table_name = args.next().ok_or_else(not_enough_args)?;
         let (table_name, assoc_names) = parse_table_with_assocs(table_name)?;
@@ -251,7 +251,7 @@ impl<'a> RaInsert<'a> {
             .into_inner()
             .next()
             .unwrap();
-        assert_rule(&pair, Rule::scoped_dict, NAME_RA_INSERT, 2)?;
+        assert_rule(&pair, Rule::scoped_dict, NAME_INSERTION, 2)?;
         let (binding, keys, extract_map) = parse_scoped_dict(pair)?;
         if !keys.is_empty() {
             return Err(
@@ -366,9 +366,9 @@ impl<'a> RaInsert<'a> {
     }
 }
 
-impl<'a> RelationalAlgebra for RaInsert<'a> {
+impl<'a> RelationalAlgebra for Insertion<'a> {
     fn name(&self) -> &str {
-        NAME_RA_INSERT
+        NAME_INSERTION
     }
 
     fn binding_map(&self) -> Result<BindingMap> {
@@ -376,7 +376,7 @@ impl<'a> RelationalAlgebra for RaInsert<'a> {
         Ok(BTreeMap::from([(self.binding.clone(), inner)]))
     }
 
-    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'b>> {
+    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'b>> {
         let source_map = self.source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,
@@ -459,7 +459,7 @@ type KeyBuilderSet = (
     Option<Vec<ColExtractor>>,
 );
 
-impl<'a> RaInsert<'a> {
+impl<'a> Insertion<'a> {
     fn make_key_builders(&self, extract_map: &BTreeMap<String, Expr>) -> Result<KeyBuilderSet> {
         let ret = match &self.target_info {
             TableInfo::Node(n) => {
@@ -509,7 +509,7 @@ impl<'a> RaInsert<'a> {
     }
 }
 
-pub(crate) fn build_ra_expr<'a>(
+pub(crate) fn build_relational_expr<'a>(
     ctx: &'a TempDbContext,
     pair: Pair,
 ) -> Result<Arc<dyn RelationalAlgebra + 'a>> {
@@ -517,9 +517,9 @@ pub(crate) fn build_ra_expr<'a>(
     for pair in pair.into_inner() {
         let mut pairs = pair.into_inner();
         match pairs.next().unwrap().as_str() {
-            NAME_RA_INSERT => built = Some(Arc::new(RaInsert::build(ctx, built, pairs)?)),
-            NAME_RA_FROM_VALUES => {
-                built = Some(Arc::new(RaFromValues::build(ctx, built, pairs)?));
+            NAME_INSERTION => built = Some(Arc::new(Insertion::build(ctx, built, pairs)?)),
+            NAME_RELATION_FROM_VALUES => {
+                built = Some(Arc::new(RelationFromValues::build(ctx, built, pairs)?));
             }
             _ => unimplemented!(),
         }
@@ -557,7 +557,7 @@ mod tests {
                            Values(v: [id, name], [[100, 'confidential'], [101, 'top secret']])
                           .Insert(Department, d: {...v})
                           "#;
-            let ra = build_ra_expr(
+            let ra = build_relational_expr(
                 &ctx,
                 CozoParser::parse(Rule::ra_expr_all, s)
                     .unwrap()
