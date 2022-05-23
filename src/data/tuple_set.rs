@@ -4,6 +4,7 @@ use crate::data::tuple::{OwnTuple, ReifiedTuple};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
+use cozorocks::{DbPtr, TransactionPtr, WriteOptionsPtr};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
@@ -201,16 +202,38 @@ where
     }
 }
 
-impl RowEvalContext for TupleSet {
+pub(crate) struct TupleSetEvalContext {
+    pub(crate) tuple_set: TupleSet,
+    pub(crate) txn: TransactionPtr,
+    pub(crate) temp_db: DbPtr,
+    pub(crate) write_options: WriteOptionsPtr,
+}
+
+impl RowEvalContext for TupleSetEvalContext {
     fn resolve(&self, idx: &TupleSetIdx) -> Result<Value> {
-        let val = self.get_value(idx)?;
+        let val = self.tuple_set.get_value(idx)?;
         Ok(val)
+    }
+
+    fn get_temp_db(&self) -> Result<&DbPtr> {
+        Ok(&self.temp_db)
+    }
+
+    fn get_txn(&self) -> Result<&TransactionPtr> {
+        Ok(&self.txn)
+    }
+
+    fn get_write_options(&self) -> Result<&WriteOptionsPtr> {
+        Ok(&self.write_options)
     }
 }
 
 pub(crate) type TupleBuilder<'a> = Vec<(Expr<'a>, Typing)>;
 
-impl TupleSet {
+impl TupleSetEvalContext {
+    pub(crate) fn set_tuple_set(&mut self, tuple_set: TupleSet) {
+        self.tuple_set = tuple_set;
+    }
     pub(crate) fn eval_to_tuple(&self, prefix: u32, builder: &TupleBuilder) -> Result<OwnTuple> {
         let mut target = OwnTuple::with_prefix(prefix);
         for (expr, typing) in builder {

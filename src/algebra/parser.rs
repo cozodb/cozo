@@ -3,7 +3,9 @@ use crate::data::eval::PartialEvalContext;
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::parser::parse_scoped_dict;
 use crate::data::tuple::{DataKind, OwnTuple};
-use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TableId, TupleSet, TupleSetIdx};
+use crate::data::tuple_set::{
+    BindingMap, BindingMapEvalContext, TableId, TupleSet, TupleSetEvalContext, TupleSetIdx,
+};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use crate::ddl::parser::ColExtractor;
@@ -107,7 +109,7 @@ impl<'a> InterpretContext for TempDbContext<'a> {
 pub(crate) trait RelationalAlgebra {
     fn name(&self) -> &str;
     fn binding_map(&self) -> Result<BindingMap>;
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>>;
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>;
 }
 
 const NAME_RELATION_FROM_VALUES: &str = "Values";
@@ -127,7 +129,7 @@ fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Result<()> {
             u,
             format!("{:?}", pair.as_rule()),
         )
-            .into())
+        .into())
     }
 }
 
@@ -138,7 +140,9 @@ impl RelationFromValues {
         mut args: Pairs,
     ) -> Result<Self> {
         if !matches!(prev, None) {
-            return Err(AlgebraParseError::Unchainable(NAME_RELATION_FROM_VALUES.to_string()).into());
+            return Err(
+                AlgebraParseError::Unchainable(NAME_RELATION_FROM_VALUES.to_string()).into(),
+            );
         }
         let not_enough_args =
             || AlgebraParseError::NotEnoughArguments(NAME_RELATION_FROM_VALUES.to_string());
@@ -206,7 +210,7 @@ impl RelationalAlgebra for RelationFromValues {
         Ok(self.binding_map.clone())
     }
 
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>> {
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
         let it = self.values.iter().map(|vs| {
             let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
             for v in vs {
@@ -376,7 +380,7 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
         Ok(BTreeMap::from([(self.binding.clone(), inner)]))
     }
 
-    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'b>> {
+    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'b>> {
         let source_map = self.source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,
@@ -403,37 +407,42 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
             .collect::<Vec<_>>();
         let target_key = self.target_info.table_id();
 
-        let txn = self.ctx.txn.clone();
-        let temp_db = self.ctx.sess.temp.clone();
-        let write_opts = default_write_options();
+        let mut eval_ctx = TupleSetEvalContext {
+            tuple_set: Default::default(),
+            txn: self.ctx.txn.clone(),
+            temp_db: self.ctx.sess.temp.clone(),
+            write_options: default_write_options(),
+        };
 
         Ok(Box::new(self.source.iter()?.map(
             move |tset| -> Result<TupleSet> {
-                let tset = tset?;
-                let mut key = tset.eval_to_tuple(target_key.id, &key_builder)?;
-                let val = tset.eval_to_tuple(DataKind::Data as u32, &val_builder)?;
+                eval_ctx.set_tuple_set(tset?);
+                let mut key = eval_ctx.eval_to_tuple(target_key.id, &key_builder)?;
+                let val = eval_ctx.eval_to_tuple(DataKind::Data as u32, &val_builder)?;
                 if target_key.in_root {
-                    txn.put(&key, &val)?;
+                    eval_ctx.txn.put(&key, &val)?;
                 } else {
-                    temp_db.put(&write_opts, &key, &val)?;
+                    eval_ctx.temp_db.put(&eval_ctx.write_options, &key, &val)?;
                 }
                 if let Some(builder) = &inv_key_builder {
-                    let inv_key = tset.eval_to_tuple(target_key.id, builder)?;
+                    let inv_key = eval_ctx.eval_to_tuple(target_key.id, builder)?;
                     if target_key.in_root {
-                        txn.put(&inv_key, &key)?;
+                        eval_ctx.txn.put(&inv_key, &key)?;
                     } else {
-                        temp_db.put(&write_opts, &inv_key, &key)?;
+                        eval_ctx
+                            .temp_db
+                            .put(&eval_ctx.write_options, &inv_key, &key)?;
                     }
                 }
                 let assoc_vals = assoc_val_builders
                     .iter()
                     .map(|(tid, builder)| -> Result<OwnTuple> {
-                        let ret = tset.eval_to_tuple(DataKind::Data as u32, builder)?;
+                        let ret = eval_ctx.eval_to_tuple(DataKind::Data as u32, builder)?;
                         key.overwrite_prefix(tid.id);
                         if tid.in_root {
-                            txn.put(&key, &ret)?;
+                            eval_ctx.txn.put(&key, &ret)?;
                         } else {
-                            temp_db.put(&write_opts, &key, &ret)?;
+                            eval_ctx.temp_db.put(&eval_ctx.write_options, &key, &ret)?;
                         }
                         Ok(ret)
                     })

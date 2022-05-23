@@ -3,6 +3,7 @@ use crate::data::op::*;
 use crate::data::tuple_set::TupleSetIdx;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
+use cozorocks::{DbPtr, TransactionPtr, WriteOptionsPtr};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
@@ -43,10 +44,25 @@ pub enum EvalContextError {
 
 pub(crate) trait RowEvalContext {
     fn resolve(&self, idx: &TupleSetIdx) -> Result<Value>;
+    fn get_temp_db(&self) -> Result<&DbPtr>;
+    fn get_txn(&self) -> Result<&TransactionPtr>;
+    fn get_write_options(&self) -> Result<&WriteOptionsPtr>;
 }
 
 impl RowEvalContext for () {
     fn resolve(&self, _idx: &TupleSetIdx) -> Result<Value> {
+        Err(EvalContextError::NullContext.into())
+    }
+
+    fn get_temp_db(&self) -> Result<&DbPtr> {
+        Err(EvalContextError::NullContext.into())
+    }
+
+    fn get_txn(&self) -> Result<&TransactionPtr> {
+        Err(EvalContextError::NullContext.into())
+    }
+
+    fn get_write_options(&self) -> Result<&WriteOptionsPtr> {
         Err(EvalContextError::NullContext.into())
     }
 }

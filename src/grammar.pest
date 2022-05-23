@@ -211,6 +211,9 @@ ra_call = {"." ~ query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")"}
 ra_expr = { ra_call_expr ~ ra_call* }
 ra_expr_all = _{SOI ~ ra_expr ~ EOI}
 
+insert_values = { "InsertValues" ~ "(" ~ expr ~ ")" ~ ";" }
+insert_values_all = _{SOI ~ insert_values ~ EOI}
+
 scoped_list = { ident ~ ":" ~ "[" ~ (ident ~ ",")* ~ ident? ~ "]"}
 table_with_assocs = { name_in_def ~ ("+" ~ name_in_def)*}
 table_with_assocs_all = _{SOI ~ table_with_assocs ~ EOI}
