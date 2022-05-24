@@ -84,6 +84,7 @@ impl<'a> TaggedInsertion<'a> {
         })
     }
 
+    #[allow(clippy::type_complexity)]
     fn make_values(
         source: Vec<Value>,
         ctx: &'a TempDbContext<'a>,

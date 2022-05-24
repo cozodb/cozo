@@ -52,7 +52,7 @@ pub(crate) fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Resu
             u,
             format!("{:?}", pair.as_rule()),
         )
-        .into())
+            .into())
     }
 }
 
@@ -83,6 +83,7 @@ pub(crate) fn build_relational_expr<'a>(
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use std::collections::BTreeMap;
     use std::time::Instant;
     use super::*;
     use crate::data::tuple::Tuple;
@@ -91,7 +92,6 @@ pub(crate) mod tests {
     use crate::runtime::session::tests::create_test_db;
     use pest::Parser;
     use anyhow::Result;
-    use crate::data::expr::Expr;
 
     const HR_DATA: &str = include_str!("../../test_data/hr.json");
 
@@ -128,9 +128,10 @@ pub(crate) mod tests {
                     .next()
                     .unwrap(),
             )?;
-            for t in ra.iter().unwrap() {
-                t.unwrap();
-            }
+            // for t in ra.iter().unwrap() {
+            //     dbg!(t.unwrap());
+            // }
+            dbg!(ra.get_values()?);
 
             ctx.txn.commit().unwrap();
         }
@@ -140,14 +141,13 @@ pub(crate) mod tests {
         r_opts.set_total_order_seek(true);
         let it = sess.main.iterator(&r_opts);
         it.to_first();
-        let mut n = 0;
+        let mut n: BTreeMap<u32, usize> = BTreeMap::new();
         while it.is_valid() {
             let (k, v) = it.pair().unwrap();
             let k = Tuple::new(k);
             let v = Tuple::new(v);
-            if k.get_prefix() != 0 {
-                // dbg!((k, v));
-                n += 1;
+            if v.get_prefix() == 0 {
+                *n.entry(k.get_prefix()).or_default() += 1;
             }
             it.next();
         }

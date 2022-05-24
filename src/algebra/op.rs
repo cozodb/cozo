@@ -17,6 +17,8 @@ mod insert_tagged;
 pub(crate) use from_values::*;
 pub(crate) use insert::*;
 pub(crate) use insert_tagged::*;
+use crate::data::expr::Expr;
+use crate::data::value::{StaticValue};
 
 pub(crate) trait InterpretContext: PartialEvalContext {
     fn resolve_definable(&self, name: &str) -> Option<Definable>;
@@ -74,8 +76,25 @@ impl<'a> InterpretContext for TempDbContext<'a> {
 pub(crate) trait RelationalAlgebra {
     fn name(&self) -> &str;
     fn binding_map(&self) -> Result<BindingMap>;
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>;
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>>;
     fn identity(&self) -> Option<TableInfo>;
+    fn get_values(&self) -> Result<Vec<StaticValue>> {
+        let bmap = self.binding_map()?;
+        let bmap = bmap.into_iter().map(|(k, v)| {
+            let v = v.into_iter().map(|(k, v)| {
+                (k, Expr::TupleSetIdx(v))
+            }).collect::<BTreeMap<_, _>>();
+            (k, Expr::Dict(v))
+        }).collect::<BTreeMap<_, _>>();
+        let bmap = Expr::Dict(bmap);
+        let mut collected = vec![];
+        for tuple in self.iter()? {
+            let tuple = tuple?;
+            let val = bmap.row_eval(&tuple)?.to_static();
+            collected.push(val);
+        }
+        Ok(collected)
+    }
 }
 
 type KeyBuilderSet = (

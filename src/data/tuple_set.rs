@@ -16,6 +16,8 @@ pub enum TupleSetError {
     InvalidTableId(u32),
     #[error("Failed to deserialize {0}")]
     Deser(StaticValue),
+    #[error("resolve db on raw tuple set")]
+    RawTupleSetDbResolve,
 }
 
 pub(crate) const MIN_TABLE_ID_BOUND: u32 = 10000;
@@ -225,6 +227,25 @@ impl RowEvalContext for TupleSetEvalContext {
 
     fn get_write_options(&self) -> Result<&WriteOptionsPtr> {
         Ok(&self.write_options)
+    }
+}
+
+impl RowEvalContext for TupleSet {
+    fn resolve(&self, idx: &TupleSetIdx) -> Result<Value> {
+        let val = self.get_value(idx)?;
+        Ok(val)
+    }
+
+    fn get_temp_db(&self) -> Result<&DbPtr> {
+        Err(TupleSetError::RawTupleSetDbResolve.into())
+    }
+
+    fn get_txn(&self) -> Result<&TransactionPtr> {
+        Err(TupleSetError::RawTupleSetDbResolve.into())
+    }
+
+    fn get_write_options(&self) -> Result<&WriteOptionsPtr> {
+        Err(TupleSetError::RawTupleSetDbResolve.into())
     }
 }
 
