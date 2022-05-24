@@ -9,7 +9,7 @@ use crate::ddl::reify::TableInfo;
 use crate::parser::text_identifier::{build_name_in_def, parse_table_with_assocs};
 use crate::parser::{CozoParser, Pairs, Rule};
 use crate::runtime::options::{default_read_options, default_write_options};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use cozorocks::PinnableSlicePtr;
 use pest::Parser;
 use std::collections::BTreeMap;
@@ -105,15 +105,19 @@ impl<'a> TaggedInsertion<'a> {
         };
 
         for value in source.iter() {
+            dbg!(1);
             let gen_err = || AlgebraParseError::ValueError(value.clone().to_static());
-            let d_map = value.get_map().ok_or_else(gen_err)?;
+            let d_map = value.get_map().ok_or_else(gen_err)
+                .context("Value must be a dict")?;
             let targets = d_map
                 .get("_type")
-                .ok_or_else(gen_err)?
+                .ok_or_else(gen_err).context("`_type` must be present on maps")?
                 .get_str()
-                .ok_or_else(gen_err)?;
-            let (main, assocs) = parse_table_with_assocs(targets)?;
-            let main_info = cache.get_info(&main)?;
+                .ok_or_else(gen_err).context("`_type` must be Text")?;
+            let (main, assocs) = parse_table_with_assocs(targets)
+                .context("Parsing table name failed")?;
+            let main_info = cache.get_info(&main)
+                .context("Getting main info failed")?;
             let (key_tuple, val_tuple, inv_key_tuple) = match main_info.as_ref() {
                 TableInfo::Node(n) => {
                     *tally.entry(n.name.to_string()).or_default() += 1;
@@ -121,7 +125,8 @@ impl<'a> TaggedInsertion<'a> {
                     for col in &n.keys {
                         let k = &col.name as &str;
                         let val = d_map.get(k).unwrap_or(&Value::Null);
-                        let val = col.typing.coerce_ref(val)?;
+                        let val = col.typing.coerce_ref(val)
+                            .context("type coercion failed")?;
                         key_tuple.push_value(&val);
                     }
 
@@ -146,18 +151,20 @@ impl<'a> TaggedInsertion<'a> {
                     let mut val_tuple = OwnTuple::with_data_prefix(DataKind::Data);
 
                     for col in &src.as_node()?.keys {
-                        let k = &col.name as &str;
-                        let val = d_map.get(k).unwrap_or(&Value::Null);
-                        let val = col.typing.coerce_ref(val)?;
+                        let k = "_src_".to_string() + &col.name;
+                        let val = d_map.get(&k as &str).unwrap_or(&Value::Null);
+                        let val = col.typing.coerce_ref(val)
+                            .with_context(|| format!("Coercion failed {:?} {:?}", col, d_map))?;
                         key_tuple.push_value(&val);
                     }
 
                     key_tuple.push_bool(true);
 
                     for col in &dst.as_node()?.keys {
-                        let k = &col.name as &str;
-                        let val = d_map.get(k).unwrap_or(&Value::Null);
-                        let val = col.typing.coerce_ref(val)?;
+                        let k = "_dst_".to_string() + &col.name as &str;
+                        let val = d_map.get(&k as &str).unwrap_or(&Value::Null);
+                        let val = col.typing.coerce_ref(val)
+                            .with_context(|| format!("Coercion failed {:?} {:?}", col, d_map))?;
                         key_tuple.push_value(&val);
                         inv_key_tuple.push_value(&val);
                     }
@@ -165,23 +172,26 @@ impl<'a> TaggedInsertion<'a> {
                     inv_key_tuple.push_bool(false);
 
                     for col in &src.as_node()?.keys {
-                        let k = &col.name as &str;
-                        let val = d_map.get(k).unwrap_or(&Value::Null);
-                        let val = col.typing.coerce_ref(val)?;
+                        let k = "_src_".to_string() + &col.name;
+                        let val = d_map.get(&k as &str).unwrap_or(&Value::Null);
+                        let val = col.typing.coerce_ref(val)
+                            .with_context(|| format!("Coercion failed {:?} {:?}", col, d_map))?;
                         inv_key_tuple.push_value(&val);
                     }
 
                     for col in &e.keys {
                         let k = &col.name as &str;
                         let val = d_map.get(k).unwrap_or(&Value::Null);
-                        let val = col.typing.coerce_ref(val)?;
+                        let val = col.typing.coerce_ref(val)
+                            .with_context(|| format!("Coercion failed {:?} {:?}", col, d_map))?;
                         key_tuple.push_value(&val);
                     }
 
                     for col in &e.vals {
                         let k = &col.name as &str;
                         let val = d_map.get(k).unwrap_or(&Value::Null);
-                        let val = col.typing.coerce_ref(val)?;
+                        let val = col.typing.coerce_ref(val)
+                            .with_context(|| format!("Coercion failed {:?} {:?}", col, d_map))?;
                         val_tuple.push_value(&val);
                     }
 

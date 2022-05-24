@@ -82,13 +82,17 @@ pub(crate) fn build_relational_expr<'a>(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::data::tuple::Tuple;
     use crate::parser::{CozoParser, Rule};
     use crate::runtime::options::default_read_options;
     use crate::runtime::session::tests::create_test_db;
     use pest::Parser;
+    use anyhow::Result;
+    use crate::data::expr::Expr;
+
+    const HR_DATA: &str = include_str!("../../test_data/hr.json");
 
     #[test]
     fn parse_ra() -> Result<()> {
@@ -111,12 +115,12 @@ mod tests {
                 t.unwrap();
             }
 
-            let s = r#"
-                           InsertTagged([{id: 102, name: 'nobody knows', _type: 'Department'}])
-                          "#;
+            let s = format!(r#"
+                           InsertTagged({})
+                          "#, HR_DATA);
             let ra = build_relational_expr(
                 &ctx,
-                CozoParser::parse(Rule::ra_expr_all, s)
+                CozoParser::parse(Rule::ra_expr_all, &s)
                     .unwrap()
                     .into_iter()
                     .next()
