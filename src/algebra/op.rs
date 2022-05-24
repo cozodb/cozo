@@ -52,8 +52,8 @@ impl<'a> InterpretContext for TempDbContext<'a> {
         let mut bwd_edges = vec![];
 
         if let Some(assoc_tables) = self.sess.table_assocs.get(&DataKind::Edge) {
-            if let Some(x) = assoc_tables.get(&table_id) {
-                for id in x {
+            if let Some(edge_ids) = assoc_tables.get(&table_id) {
+                for id in edge_ids {
                     let tid = TableId {
                         in_root: false,
                         id: *id,
@@ -65,8 +65,8 @@ impl<'a> InterpretContext for TempDbContext<'a> {
         }
 
         if let Some(assoc_tables) = self.sess.table_assocs.get(&DataKind::EdgeBwd) {
-            if let Some(x) = assoc_tables.get(&table_id) {
-                for id in x {
+            if let Some(edge_ids) = assoc_tables.get(&table_id) {
+                for id in edge_ids {
                     let tid = TableId {
                         in_root: false,
                         id: *id,
@@ -124,8 +124,8 @@ impl<'a> InterpretContext for TempDbContext<'a> {
         let mut collected = vec![];
 
         if let Some(assoc_tables) = self.sess.table_assocs.get(&DataKind::Index) {
-            if let Some(x) = assoc_tables.get(&table_id) {
-                for id in x {
+            if let Some(index_ids) = assoc_tables.get(&table_id) {
+                for id in index_ids {
                     let tid = TableId {
                         in_root: false,
                         id: *id,
