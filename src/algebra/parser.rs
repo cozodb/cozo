@@ -52,7 +52,7 @@ pub(crate) fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Resu
             u,
             format!("{:?}", pair.as_rule()),
         )
-            .into())
+        .into())
     }
 }
 
@@ -83,15 +83,15 @@ pub(crate) fn build_relational_expr<'a>(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::collections::BTreeMap;
-    use std::time::Instant;
     use super::*;
     use crate::data::tuple::Tuple;
     use crate::parser::{CozoParser, Rule};
     use crate::runtime::options::default_read_options;
     use crate::runtime::session::tests::create_test_db;
-    use pest::Parser;
     use anyhow::Result;
+    use pest::Parser;
+    use std::collections::BTreeMap;
+    use std::time::Instant;
 
     const HR_DATA: &str = include_str!("../../test_data/hr.json");
 
@@ -117,9 +117,12 @@ pub(crate) mod tests {
                 t.unwrap();
             }
 
-            let s = format!(r#"
+            let s = format!(
+                r#"
                            UpsertTagged({})
-                          "#, HR_DATA);
+                          "#,
+                HR_DATA
+            );
             let ra = build_relational_expr(
                 &ctx,
                 CozoParser::parse(Rule::ra_expr_all, &s)
