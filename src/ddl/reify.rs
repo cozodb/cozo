@@ -48,6 +48,36 @@ pub(crate) enum TableInfo {
 }
 
 impl TableInfo {
+    pub(crate) fn as_node(&self) -> Result<&NodeInfo> {
+        match self {
+            TableInfo::Node(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
+    pub(crate) fn as_edge(&self) -> Result<&EdgeInfo> {
+        match self {
+            TableInfo::Edge(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
+    pub(crate) fn as_assoc(&self) -> Result<&AssocInfo> {
+        match self {
+            TableInfo::Assoc(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
+    pub(crate) fn as_index(&self) -> Result<&IndexInfo> {
+        match self {
+            TableInfo::Index(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
+    pub(crate) fn as_sequence(&self) -> Result<&SequenceInfo> {
+        match self {
+            TableInfo::Sequence(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
     pub(crate) fn data_kind(&self) -> DataKind {
         match self {
             TableInfo::Node(_) => DataKind::Node,

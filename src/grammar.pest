@@ -148,6 +148,7 @@ keyed_pair = { "*" ~ (ident | string) ~ ":" ~ expr}
 scoped_dict = { ident ~ ":" ~ keyed_dict }
 
 name_in_def = {(ident | string)}
+name_in_def_all = _{SOI ~ name_in_def ~ EOI}
 col_entry = { col_name ~ ":" ~ typing ~ ("=" ~ expr)? }
 
 col_name = { key_marker? ~ name_in_def }
@@ -210,9 +211,6 @@ ra_call_expr = { query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")" }
 ra_call = {"." ~ query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")"}
 ra_expr = { ra_call_expr ~ ra_call* }
 ra_expr_all = _{SOI ~ ra_expr ~ EOI}
-
-insert_values = { "InsertValues" ~ "(" ~ expr ~ ")" ~ ";" }
-insert_values_all = _{SOI ~ insert_values ~ EOI}
 
 scoped_list = { ident ~ ":" ~ "[" ~ (ident ~ ",")* ~ ident? ~ "]"}
 table_with_assocs = { name_in_def ~ ("+" ~ name_in_def)*}

@@ -1,23 +1,13 @@
-use crate::context::TempDbContext;
-use crate::data::eval::PartialEvalContext;
-use crate::data::expr::{Expr, StaticExpr};
-use crate::data::parser::parse_scoped_dict;
-use crate::data::tuple::{DataKind, OwnTuple};
-use crate::data::tuple_set::{
-    BindingMap, BindingMapEvalContext, TableId, TupleSet, TupleSetEvalContext, TupleSetIdx,
+use crate::algebra::op::{
+    Insertion, RelationFromValues, RelationalAlgebra, TaggedInsertion, NAME_INSERTION,
+    NAME_RELATION_FROM_VALUES, NAME_TAGGED_INSERTION, NAME_TAGGED_UPSERT, NAME_UPSERT,
 };
-use crate::data::typing::Typing;
-use crate::data::value::{StaticValue, Value};
-use crate::ddl::parser::ColExtractor;
-use crate::ddl::reify::{AssocInfo, DdlContext, EdgeInfo, IndexInfo, NodeInfo, TableInfo};
-use crate::parser::text_identifier::build_name_in_def;
-use crate::parser::{CozoParser, Pair, Pairs, Rule};
-use crate::runtime::options::default_write_options;
-use crate::runtime::session::Definable;
+use crate::context::TempDbContext;
+use crate::data::tuple::OwnTuple;
+use crate::data::tuple_set::TableId;
+use crate::data::value::StaticValue;
+use crate::parser::{Pair, Rule};
 use anyhow::Result;
-use pest::error::Error;
-use pest::Parser;
-use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
@@ -45,82 +35,15 @@ pub(crate) enum AlgebraParseError {
 
     #[error("Parse error {0}")]
     Parse(String),
+
+    #[error("Data key conflict {0:?}")]
+    KeyConflict(OwnTuple),
+
+    #[error("No association between {0} and {1}")]
+    NoAssociation(String, String),
 }
 
-impl From<pest::error::Error<Rule>> for AlgebraParseError {
-    fn from(err: Error<Rule>) -> Self {
-        AlgebraParseError::Parse(format!("{:?}", err))
-    }
-}
-
-pub(crate) trait InterpretContext: PartialEvalContext {
-    fn resolve_definable(&self, name: &str) -> Option<Definable>;
-    fn resolve_table(&self, name: &str) -> Option<TableId>;
-    fn get_table_info(&self, table_id: TableId) -> Result<TableInfo>;
-    fn get_node_info(&self, table_id: TableId) -> Result<NodeInfo>;
-    fn get_edge_info(&self, table_id: TableId) -> Result<EdgeInfo>;
-    fn get_table_assocs(&self, table_id: TableId) -> Result<Vec<AssocInfo>>;
-    fn get_node_edges(&self, table_id: TableId) -> Result<(Vec<EdgeInfo>, Vec<EdgeInfo>)>;
-    fn get_table_indices(&self, table_id: TableId) -> Result<Vec<IndexInfo>>;
-}
-
-impl<'a> InterpretContext for TempDbContext<'a> {
-    fn resolve_definable(&self, _name: &str) -> Option<Definable> {
-        todo!()
-    }
-
-    fn resolve_table(&self, name: &str) -> Option<TableId> {
-        self.table_id_by_name(name).ok()
-    }
-
-    fn get_table_info(&self, table_id: TableId) -> Result<TableInfo> {
-        self.table_by_id(table_id)
-            .map_err(|_| AlgebraParseError::TableIdNotFound(table_id).into())
-    }
-
-    fn get_node_info(&self, table_id: TableId) -> Result<NodeInfo> {
-        match self.get_table_info(table_id)? {
-            TableInfo::Node(n) => Ok(n),
-            _ => Err(AlgebraParseError::WrongTableKind(table_id).into()),
-        }
-    }
-
-    fn get_edge_info(&self, table_id: TableId) -> Result<EdgeInfo> {
-        match self.get_table_info(table_id)? {
-            TableInfo::Edge(n) => Ok(n),
-            _ => Err(AlgebraParseError::WrongTableKind(table_id).into()),
-        }
-    }
-
-    fn get_table_assocs(&self, table_id: TableId) -> Result<Vec<AssocInfo>> {
-        let res = self.assocs_by_main_id(table_id)?;
-        Ok(res)
-    }
-
-    fn get_node_edges(&self, table_id: TableId) -> Result<(Vec<EdgeInfo>, Vec<EdgeInfo>)> {
-        todo!()
-    }
-
-    fn get_table_indices(&self, table_id: TableId) -> Result<Vec<IndexInfo>> {
-        todo!()
-    }
-}
-
-pub(crate) trait RelationalAlgebra {
-    fn name(&self) -> &str;
-    fn binding_map(&self) -> Result<BindingMap>;
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>;
-}
-
-const NAME_RELATION_FROM_VALUES: &str = "Values";
-
-#[derive(Clone, Debug)]
-struct RelationFromValues {
-    binding_map: BindingMap,
-    values: Vec<Vec<StaticValue>>,
-}
-
-fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Result<()> {
+pub(crate) fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Result<()> {
     if pair.as_rule() == rule {
         Ok(())
     } else {
@@ -133,391 +56,6 @@ fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Result<()> {
     }
 }
 
-impl RelationFromValues {
-    fn build<'a>(
-        ctx: &'a TempDbContext<'a>,
-        prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
-        mut args: Pairs,
-    ) -> Result<Self> {
-        if !matches!(prev, None) {
-            return Err(
-                AlgebraParseError::Unchainable(NAME_RELATION_FROM_VALUES.to_string()).into(),
-            );
-        }
-        let not_enough_args =
-            || AlgebraParseError::NotEnoughArguments(NAME_RELATION_FROM_VALUES.to_string());
-        let schema = args
-            .next()
-            .ok_or_else(not_enough_args)?
-            .into_inner()
-            .next()
-            .ok_or_else(not_enough_args)?;
-        assert_rule(&schema, Rule::scoped_list, NAME_RELATION_FROM_VALUES, 0)?;
-        let mut schema_pairs = schema.into_inner();
-        let binding = schema_pairs.next().ok_or_else(not_enough_args)?.as_str();
-        let binding_map = schema_pairs
-            .enumerate()
-            .map(|(i, v)| {
-                (
-                    v.as_str().to_string(),
-                    TupleSetIdx {
-                        is_key: false,
-                        t_set: 0,
-                        col_idx: i,
-                    },
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-        let n_fields = binding_map.len();
-        let binding_map = BTreeMap::from([(binding.to_string(), binding_map)]);
-        let data = args
-            .next()
-            .ok_or_else(not_enough_args)?
-            .into_inner()
-            .next()
-            .ok_or_else(not_enough_args)?;
-        assert_rule(&data, Rule::expr, NAME_RELATION_FROM_VALUES, 1)?;
-        let data = Expr::try_from(data)?.interpret_eval(ctx)?.to_static();
-        let data = data.into_vec().map_err(AlgebraParseError::ValueError)?;
-        let values = data
-            .into_iter()
-            .map(|v| -> Result<Vec<Value>> {
-                match v.into_vec() {
-                    Ok(v) => {
-                        if v.len() == n_fields {
-                            Ok(v)
-                        } else {
-                            Err(AlgebraParseError::ValueError(Value::List(v)).into())
-                        }
-                    }
-                    Err(v) => Err(AlgebraParseError::ValueError(v).into()),
-                }
-            })
-            .collect::<Result<Vec<_>>>()?;
-        Ok(Self {
-            binding_map: binding_map,
-            values,
-        })
-    }
-}
-
-impl RelationalAlgebra for RelationFromValues {
-    fn name(&self) -> &str {
-        NAME_RELATION_FROM_VALUES
-    }
-
-    fn binding_map(&self) -> Result<BindingMap> {
-        Ok(self.binding_map.clone())
-    }
-
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
-        let it = self.values.iter().map(|vs| {
-            let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
-            for v in vs {
-                tuple.push_value(v);
-            }
-            let mut tset = TupleSet::default();
-            tset.push_val(tuple.into());
-            Ok(tset)
-        });
-        Ok(Box::new(it))
-    }
-}
-
-const NAME_INSERTION: &str = "Insert";
-
-struct Insertion<'a> {
-    ctx: &'a TempDbContext<'a>,
-    source: Arc<dyn RelationalAlgebra + 'a>,
-    binding: String,
-    target_info: TableInfo,
-    assoc_infos: Vec<AssocInfo>,
-    extract_map: StaticExpr,
-}
-
-// problem: binding map must survive optimization. now it doesn't
-impl<'a> Insertion<'a> {
-    fn build(
-        ctx: &'a TempDbContext<'a>,
-        prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
-        mut args: Pairs,
-    ) -> Result<Self> {
-        let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_INSERTION.to_string());
-        let source = match prev {
-            Some(v) => v,
-            None => build_relational_expr(ctx, args.next().ok_or_else(not_enough_args)?)?,
-        };
-        let table_name = args.next().ok_or_else(not_enough_args)?;
-        let (table_name, assoc_names) = parse_table_with_assocs(table_name)?;
-        let pair = args
-            .next()
-            .ok_or_else(not_enough_args)?
-            .into_inner()
-            .next()
-            .unwrap();
-        assert_rule(&pair, Rule::scoped_dict, NAME_INSERTION, 2)?;
-        let (binding, keys, extract_map) = parse_scoped_dict(pair)?;
-        if !keys.is_empty() {
-            return Err(
-                AlgebraParseError::Parse("Cannot have keyed map in Insert".to_string()).into(),
-            );
-        }
-        let extract_map = extract_map.to_static();
-
-        let target_id = ctx
-            .resolve_table(&table_name)
-            .ok_or_else(|| AlgebraParseError::TableNotFound(table_name.to_string()))?;
-        let target_info = ctx.get_table_info(target_id)?;
-        let assoc_infos = ctx
-            .get_table_assocs(target_id)?
-            .into_iter()
-            .filter(|v| assoc_names.contains(&v.name))
-            .collect::<Vec<_>>();
-        Ok(Self {
-            ctx,
-            binding,
-            source,
-            target_info,
-            assoc_infos,
-            extract_map,
-        })
-    }
-
-    fn build_binding_map_inner(&self) -> Result<BTreeMap<String, TupleSetIdx>> {
-        let mut binding_map_inner = BTreeMap::new();
-        match &self.target_info {
-            TableInfo::Node(n) => {
-                for (i, k) in n.keys.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: true,
-                            t_set: 0,
-                            col_idx: i,
-                        },
-                    );
-                }
-                for (i, k) in n.vals.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: false,
-                            t_set: 0,
-                            col_idx: i,
-                        },
-                    );
-                }
-            }
-            TableInfo::Edge(e) => {
-                let src = self.ctx.get_node_info(e.src_id)?;
-                let dst = self.ctx.get_node_info(e.dst_id)?;
-                for (i, k) in src.keys.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: true,
-                            t_set: 0,
-                            col_idx: i + 1,
-                        },
-                    );
-                }
-                for (i, k) in dst.keys.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: true,
-                            t_set: 0,
-                            col_idx: i + 2 + src.keys.len(),
-                        },
-                    );
-                }
-                for (i, k) in e.keys.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: true,
-                            t_set: 0,
-                            col_idx: i + 2 + src.keys.len() + dst.keys.len(),
-                        },
-                    );
-                }
-                for (i, k) in e.vals.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: false,
-                            t_set: 0,
-                            col_idx: i,
-                        },
-                    );
-                }
-            }
-            _ => unreachable!(),
-        }
-        for (iset, info) in self.assoc_infos.iter().enumerate() {
-            for (i, k) in info.vals.iter().enumerate() {
-                binding_map_inner.insert(
-                    k.name.clone(),
-                    TupleSetIdx {
-                        is_key: false,
-                        t_set: iset + 1,
-                        col_idx: i,
-                    },
-                );
-            }
-        }
-        Ok(binding_map_inner)
-    }
-}
-
-impl<'a> RelationalAlgebra for Insertion<'a> {
-    fn name(&self) -> &str {
-        NAME_INSERTION
-    }
-
-    fn binding_map(&self) -> Result<BindingMap> {
-        let inner = self.build_binding_map_inner()?;
-        Ok(BTreeMap::from([(self.binding.clone(), inner)]))
-    }
-
-    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'b>> {
-        let source_map = self.source.binding_map()?;
-        let binding_ctx = BindingMapEvalContext {
-            map: &source_map,
-            parent: self.ctx,
-        };
-        let extract_map = match self.extract_map.clone().partial_eval(&binding_ctx)? {
-            Expr::Dict(d) => d,
-            v => return Err(AlgebraParseError::Parse(format!("{:?}", v)).into()),
-        };
-
-        let (key_builder, val_builder, inv_key_builder) = self.make_key_builders(&extract_map)?;
-        let assoc_val_builders = self
-            .assoc_infos
-            .iter()
-            .map(|info| {
-                (
-                    info.tid,
-                    info.vals
-                        .iter()
-                        .map(|v| v.make_extractor(&extract_map))
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .collect::<Vec<_>>();
-        let target_key = self.target_info.table_id();
-
-        let mut eval_ctx = TupleSetEvalContext {
-            tuple_set: Default::default(),
-            txn: self.ctx.txn.clone(),
-            temp_db: self.ctx.sess.temp.clone(),
-            write_options: default_write_options(),
-        };
-
-        Ok(Box::new(self.source.iter()?.map(
-            move |tset| -> Result<TupleSet> {
-                eval_ctx.set_tuple_set(tset?);
-                let mut key = eval_ctx.eval_to_tuple(target_key.id, &key_builder)?;
-                let val = eval_ctx.eval_to_tuple(DataKind::Data as u32, &val_builder)?;
-                if target_key.in_root {
-                    eval_ctx.txn.put(&key, &val)?;
-                } else {
-                    eval_ctx.temp_db.put(&eval_ctx.write_options, &key, &val)?;
-                }
-                if let Some(builder) = &inv_key_builder {
-                    let inv_key = eval_ctx.eval_to_tuple(target_key.id, builder)?;
-                    if target_key.in_root {
-                        eval_ctx.txn.put(&inv_key, &key)?;
-                    } else {
-                        eval_ctx
-                            .temp_db
-                            .put(&eval_ctx.write_options, &inv_key, &key)?;
-                    }
-                }
-                let assoc_vals = assoc_val_builders
-                    .iter()
-                    .map(|(tid, builder)| -> Result<OwnTuple> {
-                        let ret = eval_ctx.eval_to_tuple(DataKind::Data as u32, builder)?;
-                        key.overwrite_prefix(tid.id);
-                        if tid.in_root {
-                            eval_ctx.txn.put(&key, &ret)?;
-                        } else {
-                            eval_ctx.temp_db.put(&eval_ctx.write_options, &key, &ret)?;
-                        }
-                        Ok(ret)
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-
-                key.overwrite_prefix(target_key.id);
-
-                let mut ret = TupleSet::default();
-                ret.push_key(key.into());
-                ret.push_val(val.into());
-                for av in assoc_vals {
-                    ret.push_val(av.into())
-                }
-                Ok(ret)
-            },
-        )))
-    }
-}
-
-type KeyBuilderSet = (
-    Vec<ColExtractor>,
-    Vec<ColExtractor>,
-    Option<Vec<ColExtractor>>,
-);
-
-impl<'a> Insertion<'a> {
-    fn make_key_builders(&self, extract_map: &BTreeMap<String, Expr>) -> Result<KeyBuilderSet> {
-        let ret = match &self.target_info {
-            TableInfo::Node(n) => {
-                let key_builder = n
-                    .keys
-                    .iter()
-                    .map(|v| v.make_extractor(&extract_map))
-                    .collect::<Vec<_>>();
-                let val_builder = n
-                    .vals
-                    .iter()
-                    .map(|v| v.make_extractor(&extract_map))
-                    .collect::<Vec<_>>();
-                (key_builder, val_builder, None)
-            }
-            TableInfo::Edge(e) => {
-                let src = self.ctx.get_node_info(e.src_id)?;
-                let dst = self.ctx.get_node_info(e.dst_id)?;
-                let src_key_part = [(Expr::Const(Value::Int(e.src_id.id as i64)), Typing::Any)];
-                let dst_key_part = [(Expr::Const(Value::Int(e.dst_id.id as i64)), Typing::Any)];
-                let fwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
-                let bwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
-                let key_builder = src_key_part
-                    .into_iter()
-                    .chain(src.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(fwd_edge_part.into_iter())
-                    .chain(dst.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(e.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .collect::<Vec<_>>();
-                let inv_key_builder = dst_key_part
-                    .into_iter()
-                    .chain(dst.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(bwd_edge_part.into_iter())
-                    .chain(src.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(e.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .collect::<Vec<_>>();
-                let val_builder = e
-                    .vals
-                    .iter()
-                    .map(|v| v.make_extractor(&extract_map))
-                    .collect::<Vec<_>>();
-                (key_builder, val_builder, Some(inv_key_builder))
-            }
-            _ => unreachable!(),
-        };
-        Ok(ret)
-    }
-}
-
 pub(crate) fn build_relational_expr<'a>(
     ctx: &'a TempDbContext,
     pair: Pair,
@@ -526,7 +64,14 @@ pub(crate) fn build_relational_expr<'a>(
     for pair in pair.into_inner() {
         let mut pairs = pair.into_inner();
         match pairs.next().unwrap().as_str() {
-            NAME_INSERTION => built = Some(Arc::new(Insertion::build(ctx, built, pairs)?)),
+            NAME_INSERTION => built = Some(Arc::new(Insertion::build(ctx, built, pairs, false)?)),
+            NAME_UPSERT => built = Some(Arc::new(Insertion::build(ctx, built, pairs, true)?)),
+            NAME_TAGGED_INSERTION => {
+                built = Some(Arc::new(TaggedInsertion::build(ctx, built, pairs, false)?))
+            }
+            NAME_TAGGED_UPSERT => {
+                built = Some(Arc::new(TaggedInsertion::build(ctx, built, pairs, true)?))
+            }
             NAME_RELATION_FROM_VALUES => {
                 built = Some(Arc::new(RelationFromValues::build(ctx, built, pairs)?));
             }
@@ -534,18 +79,6 @@ pub(crate) fn build_relational_expr<'a>(
         }
     }
     Ok(built.unwrap())
-}
-
-fn parse_table_with_assocs(pair: Pair) -> Result<(String, BTreeSet<String>)> {
-    let pair = CozoParser::parse(Rule::table_with_assocs_all, pair.as_str())?
-        .next()
-        .unwrap();
-    let mut pairs = pair.into_inner();
-    let name = build_name_in_def(pairs.next().unwrap(), true)?;
-    let assoc_names = pairs
-        .map(|v| build_name_in_def(v, true))
-        .collect::<Result<BTreeSet<_>>>()?;
-    Ok((name, assoc_names))
 }
 
 #[cfg(test)]
@@ -564,7 +97,7 @@ mod tests {
             let ctx = sess.temp_ctx(true);
             let s = r#"
                            Values(v: [id, name], [[100, 'confidential'], [101, 'top secret']])
-                          .Insert(Department, d: {...v})
+                          .Upsert(Department, d: {...v})
                           "#;
             let ra = build_relational_expr(
                 &ctx,
@@ -577,6 +110,22 @@ mod tests {
             for t in ra.iter().unwrap() {
                 t.unwrap();
             }
+
+            let s = r#"
+                           InsertTagged([{id: 102, name: 'nobody knows', _type: 'Department'}])
+                          "#;
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            for t in ra.iter().unwrap() {
+                t.unwrap();
+            }
+
             ctx.txn.commit().unwrap();
         }
         let mut r_opts = default_read_options();

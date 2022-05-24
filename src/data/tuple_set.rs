@@ -116,8 +116,8 @@ impl Debug for TupleSetIdx {
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
 pub(crate) struct TupleSet {
-    keys: Vec<ReifiedTuple>,
-    vals: Vec<ReifiedTuple>,
+    pub(crate) keys: Vec<ReifiedTuple>,
+    pub(crate) vals: Vec<ReifiedTuple>,
 }
 
 impl TupleSet {

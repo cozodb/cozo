@@ -1,6 +1,8 @@
 use crate::parser::number::parse_int;
-use crate::parser::{Pair, Rule};
+use crate::parser::{CozoParser, Pair, Rule};
 use anyhow::Result;
+use pest::Parser;
+use std::collections::BTreeSet;
 
 #[derive(thiserror::Error, Debug)]
 pub enum TextParseError {
@@ -112,4 +114,16 @@ pub(crate) fn build_name_in_def(pair: Pair, forbid_underscore: bool) -> Result<S
     } else {
         Ok(name)
     }
+}
+
+pub(crate) fn parse_table_with_assocs(s: &str) -> Result<(String, BTreeSet<String>)> {
+    let pair = CozoParser::parse(Rule::table_with_assocs_all, s)?
+        .next()
+        .unwrap();
+    let mut pairs = pair.into_inner();
+    let name = build_name_in_def(pairs.next().unwrap(), true)?;
+    let assoc_names = pairs
+        .map(|v| build_name_in_def(v, true))
+        .collect::<Result<BTreeSet<_>>>()?;
+    Ok((name, assoc_names))
 }

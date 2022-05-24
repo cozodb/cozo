@@ -3,6 +3,7 @@ use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{CozoParser, Pair, Rule};
 use anyhow::Result;
 use pest::Parser;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
 use uuid::Uuid;
@@ -97,6 +98,47 @@ impl Typing {
             Typing::Bytes => Value::from(b"".as_ref()),
         }
     }
+    pub(crate) fn coerce_ref<'a>(&self, v: &'a Value<'a>) -> Result<Cow<'a, Value<'a>>> {
+        if *self == Typing::Any {
+            return Ok(Cow::Borrowed(v));
+        }
+        if *v == Value::Null {
+            return if matches!(self, Typing::Nullable(_)) {
+                Ok(Cow::Borrowed(v))
+            } else {
+                Err(TypingError::NotNullViolated(self.clone()).into())
+            };
+        }
+
+        if let Typing::Nullable(t) = self {
+            return t.coerce_ref(v);
+        }
+
+        match self {
+            Typing::Bool => self.coerce_bool_ref(v),
+            Typing::Int => self.coerce_int_ref(v),
+            Typing::Float => self.coerce_float_ref(v),
+            Typing::Text => self.coerce_text_ref(v),
+            Typing::Uuid => self.coerce_uuid_ref(v),
+            Typing::Bytes => self.coerce_bytes_ref(v),
+            Typing::Homogeneous(t) => match v {
+                Value::List(vs) => Ok(Cow::Owned(Value::List(
+                    vs.into_iter()
+                        .map(|v| t.coerce(v.clone()))
+                        .collect::<Result<Vec<_>>>()?,
+                ))),
+                _ => Err(TypingError::TypeMismatch(self.clone(), v.clone().to_static()).into()),
+            },
+            Typing::UnnamedTuple(_ut) => {
+                todo!()
+            }
+            Typing::NamedTuple(_nt) => {
+                todo!()
+            }
+            Typing::Any => unreachable!(),
+            Typing::Nullable(_) => unreachable!(),
+        }
+    }
     pub(crate) fn coerce<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         if *self == Typing::Any {
             return Ok(v);
@@ -144,16 +186,36 @@ impl Typing {
             _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
+    fn coerce_bool_ref<'a>(&self, v: &'a Value<'a>) -> Result<Cow<'a, Value<'a>>> {
+        match v {
+            v @ Value::Bool(_) => Ok(Cow::Borrowed(v)),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.clone().to_static()).into()),
+        }
+    }
     fn coerce_int<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Int(_) => Ok(v),
             _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
+    fn coerce_int_ref<'a>(&self, v: &'a Value<'a>) -> Result<Cow<'a, Value<'a>>> {
+        match v {
+            v @ Value::Int(_) => Ok(Cow::Borrowed(v)),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.clone().to_static()).into()),
+        }
+    }
     fn coerce_float<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Float(_) => Ok(v),
+            Value::Int(i) => Ok((i as f64).into()),
             _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
+        }
+    }
+    fn coerce_float_ref<'a>(&self, v: &'a Value<'a>) -> Result<Cow<'a, Value<'a>>> {
+        match v {
+            v @ Value::Float(_) => Ok(Cow::Borrowed(v)),
+            Value::Int(i) => Ok(Cow::Owned((*i as f64).into())),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.clone().to_static()).into()),
         }
     }
     fn coerce_text<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
@@ -162,16 +224,34 @@ impl Typing {
             _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
+    fn coerce_text_ref<'a>(&self, v: &'a Value<'a>) -> Result<Cow<'a, Value<'a>>> {
+        match v {
+            v @ Value::Text(_) => Ok(Cow::Borrowed(v)),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.clone().to_static()).into()),
+        }
+    }
     fn coerce_uuid<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Uuid(_) => Ok(v),
             _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
         }
     }
+    fn coerce_uuid_ref<'a>(&self, v: &'a Value<'a>) -> Result<Cow<'a, Value<'a>>> {
+        match v {
+            v @ Value::Uuid(_) => Ok(Cow::Borrowed(v)),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.clone().to_static()).into()),
+        }
+    }
     fn coerce_bytes<'a>(&self, v: Value<'a>) -> Result<Value<'a>> {
         match v {
             v @ Value::Bytes(_) => Ok(v),
             _ => Err(TypingError::TypeMismatch(self.clone(), v.to_static()).into()),
+        }
+    }
+    fn coerce_bytes_ref<'a>(&self, v: &'a Value<'a>) -> Result<Cow<'a, Value<'a>>> {
+        match v {
+            v @ Value::Bytes(_) => Ok(Cow::Borrowed(v)),
+            _ => Err(TypingError::TypeMismatch(self.clone(), v.clone().to_static()).into()),
         }
     }
 }
