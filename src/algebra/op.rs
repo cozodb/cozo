@@ -6,7 +6,6 @@ use crate::ddl::parser::ColExtractor;
 use crate::ddl::reify::{
     AssocInfo, DdlContext, DdlReifyError, EdgeInfo, IndexInfo, TableInfo,
 };
-use crate::runtime::session::Definable;
 use anyhow::Result;
 use cozorocks::PinnableSlicePtr;
 use std::collections::btree_map::Entry;
@@ -26,7 +25,6 @@ pub(crate) use insert::*;
 pub(crate) use insert_tagged::*;
 
 pub(crate) trait InterpretContext: PartialEvalContext {
-    fn resolve_definable(&self, name: &str) -> Option<Definable>;
     fn resolve_table(&self, name: &str) -> Option<TableId>;
     fn get_table_info(&self, table_id: TableId) -> Result<TableInfo>;
     fn get_table_assocs(&self, table_id: TableId) -> Result<Vec<AssocInfo>>;
@@ -35,10 +33,6 @@ pub(crate) trait InterpretContext: PartialEvalContext {
 }
 
 impl<'a> InterpretContext for TempDbContext<'a> {
-    fn resolve_definable(&self, _name: &str) -> Option<Definable> {
-        todo!()
-    }
-
     fn resolve_table(&self, name: &str) -> Option<TableId> {
         self.table_id_by_name(name).ok()
     }
