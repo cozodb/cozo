@@ -104,8 +104,8 @@ impl<'a> TaggedInsertion<'a> {
             cache: Default::default(),
         };
 
+        let mut key_buffer = String::new();
         for value in source.iter() {
-            dbg!(1);
             let gen_err = || AlgebraParseError::ValueError(value.clone().to_static());
             let d_map = value.get_map().ok_or_else(gen_err)
                 .context("Value must be a dict")?;
@@ -151,8 +151,10 @@ impl<'a> TaggedInsertion<'a> {
                     let mut val_tuple = OwnTuple::with_data_prefix(DataKind::Data);
 
                     for col in &src.as_node()?.keys {
-                        let k = "_src_".to_string() + &col.name;
-                        let val = d_map.get(&k as &str).unwrap_or(&Value::Null);
+                        key_buffer.clear();
+                        key_buffer += "_src_";
+                        key_buffer += &col.name;
+                        let val = d_map.get(&key_buffer as &str).unwrap_or(&Value::Null);
                         let val = col.typing.coerce_ref(val)
                             .with_context(|| format!("Coercion failed {:?} {:?}", col, d_map))?;
                         key_tuple.push_value(&val);
@@ -161,8 +163,10 @@ impl<'a> TaggedInsertion<'a> {
                     key_tuple.push_bool(true);
 
                     for col in &dst.as_node()?.keys {
-                        let k = "_dst_".to_string() + &col.name as &str;
-                        let val = d_map.get(&k as &str).unwrap_or(&Value::Null);
+                        key_buffer.clear();
+                        key_buffer += "_dst_";
+                        key_buffer += &col.name;
+                        let val = d_map.get(&key_buffer as &str).unwrap_or(&Value::Null);
                         let val = col.typing.coerce_ref(val)
                             .with_context(|| format!("Coercion failed {:?} {:?}", col, d_map))?;
                         key_tuple.push_value(&val);
@@ -172,8 +176,10 @@ impl<'a> TaggedInsertion<'a> {
                     inv_key_tuple.push_bool(false);
 
                     for col in &src.as_node()?.keys {
-                        let k = "_src_".to_string() + &col.name;
-                        let val = d_map.get(&k as &str).unwrap_or(&Value::Null);
+                        key_buffer.clear();
+                        key_buffer += "_src_";
+                        key_buffer += &col.name;
+                        let val = d_map.get(&key_buffer as &str).unwrap_or(&Value::Null);
                         let val = col.typing.coerce_ref(val)
                             .with_context(|| format!("Coercion failed {:?} {:?}", col, d_map))?;
                         inv_key_tuple.push_value(&val);
@@ -222,8 +228,6 @@ impl<'a> TaggedInsertion<'a> {
                 .or_insert_with(Vec::new);
             cur_table.push((key_tuple, val_tuple, inv_key_tuple, assoc_vecs));
         }
-
-        dbg!(&collected);
 
         Ok((collected, tally))
     }

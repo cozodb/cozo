@@ -83,6 +83,7 @@ pub(crate) fn build_relational_expr<'a>(
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use std::time::Instant;
     use super::*;
     use crate::data::tuple::Tuple;
     use crate::parser::{CozoParser, Rule};
@@ -97,6 +98,7 @@ pub(crate) mod tests {
     #[test]
     fn parse_ra() -> Result<()> {
         let (db, mut sess) = create_test_db("_test_parser.db");
+        let start = Instant::now();
         {
             let ctx = sess.temp_ctx(true);
             let s = r#"
@@ -116,7 +118,7 @@ pub(crate) mod tests {
             }
 
             let s = format!(r#"
-                           InsertTagged({})
+                           UpsertTagged({})
                           "#, HR_DATA);
             let ra = build_relational_expr(
                 &ctx,
@@ -132,19 +134,25 @@ pub(crate) mod tests {
 
             ctx.txn.commit().unwrap();
         }
+        let duration = start.elapsed();
+        let start = Instant::now();
         let mut r_opts = default_read_options();
         r_opts.set_total_order_seek(true);
         let it = sess.main.iterator(&r_opts);
         it.to_first();
+        let mut n = 0;
         while it.is_valid() {
             let (k, v) = it.pair().unwrap();
             let k = Tuple::new(k);
             let v = Tuple::new(v);
             if k.get_prefix() != 0 {
-                dbg!((k, v));
+                // dbg!((k, v));
+                n += 1;
             }
             it.next();
         }
+        let duration2 = start.elapsed();
+        dbg!(duration, duration2, n);
         Ok(())
     }
 }
