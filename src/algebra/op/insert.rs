@@ -111,8 +111,8 @@ impl<'a> Insertion<'a> {
                 }
             }
             TableInfo::Edge(e) => {
-                let src = self.ctx.get_node_info(e.src_id)?;
-                let dst = self.ctx.get_node_info(e.dst_id)?;
+                let src = self.ctx.get_table_info(e.src_id)?.to_node()?;
+                let dst = self.ctx.get_table_info(e.dst_id)?.to_node()?;
                 for (i, k) in src.keys.iter().enumerate() {
                     binding_map_inner.insert(
                         k.name.clone(),
@@ -302,8 +302,8 @@ impl<'a> Insertion<'a> {
                 (key_builder, val_builder, None)
             }
             TableInfo::Edge(e) => {
-                let src = self.ctx.get_node_info(e.src_id)?;
-                let dst = self.ctx.get_node_info(e.dst_id)?;
+                let src = self.ctx.get_table_info(e.src_id)?.to_node()?;
+                let dst = self.ctx.get_table_info(e.dst_id)?.to_node()?;
                 let src_key_part = [(Expr::Const(Value::Int(e.src_id.id as i64)), Typing::Any)];
                 let dst_key_part = [(Expr::Const(Value::Int(e.dst_id.id as i64)), Typing::Any)];
                 let fwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];

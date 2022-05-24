@@ -54,7 +54,19 @@ impl TableInfo {
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
+    pub(crate) fn to_node(self) -> Result<NodeInfo> {
+        match self {
+            TableInfo::Node(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
     pub(crate) fn as_edge(&self) -> Result<&EdgeInfo> {
+        match self {
+            TableInfo::Edge(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
+    pub(crate) fn to_edge(self) -> Result<EdgeInfo> {
         match self {
             TableInfo::Edge(n) => Ok(n),
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
@@ -66,13 +78,31 @@ impl TableInfo {
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
+    pub(crate) fn to_assoc(self) -> Result<AssocInfo> {
+        match self {
+            TableInfo::Assoc(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
     pub(crate) fn as_index(&self) -> Result<&IndexInfo> {
         match self {
             TableInfo::Index(n) => Ok(n),
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
+    pub(crate) fn to_index(self) -> Result<IndexInfo> {
+        match self {
+            TableInfo::Index(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
     pub(crate) fn as_sequence(&self) -> Result<&SequenceInfo> {
+        match self {
+            TableInfo::Sequence(n) => Ok(n),
+            _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
+        }
+    }
+    pub(crate) fn to_sequence(self) -> Result<SequenceInfo> {
         match self {
             TableInfo::Sequence(n) => Ok(n),
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
@@ -926,6 +956,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
         match &info {
             TableInfo::Edge(info) => {
                 let mut key = OwnTuple::with_prefix(0);
+                // store fwd edge info
                 key.push_int(info.src_id.id as i64);
                 key.push_int(DataKind::Edge as i64);
                 let mut current = match self.txn.get_for_update_owned(read_opts, &key)? {
@@ -934,7 +965,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
                 };
                 current.push_int(tid as i64);
                 self.txn.put(&key, &current)?;
-
+                // store bwd edge info
                 key.truncate_all();
                 key.push_int(info.dst_id.id as i64);
                 key.push_int(DataKind::EdgeBwd as i64);
