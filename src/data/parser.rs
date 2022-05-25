@@ -324,6 +324,11 @@ pub(crate) fn parse_scoped_dict(pair: Pair) -> Result<(String, BTreeMap<String, 
     let mut pairs = pair.into_inner();
     let binding = pairs.next().unwrap().as_str().to_string();
     let keyed_dict = pairs.next().unwrap();
+    let (keys, vals) = parse_keyed_dict(keyed_dict)?;
+    Ok((binding, keys, vals))
+}
+
+pub(crate) fn parse_keyed_dict(keyed_dict: Pair) -> Result<(BTreeMap<String, Expr>, Expr)> {
     let mut keys = BTreeMap::new();
     let mut spread_collected = vec![];
     let mut collected = BTreeMap::new();
@@ -377,7 +382,7 @@ pub(crate) fn parse_scoped_dict(pair: Pair) -> Result<(String, BTreeMap<String, 
         }
         Expr::Apply(Arc::new(OpMerge), spread_collected)
     };
-    Ok((binding, keys, vals))
+    Ok((keys, vals))
 }
 
 #[cfg(test)]

@@ -147,7 +147,7 @@ pub(crate) mod tests {
             let s = r#"
              From(e:Employee)
             .Where(e.id >= 122, e.id < 130)
-            .Select(f: {...e, ohhh: 123312, x: e.id})
+            .Select({...e, ohhh: 123312, x: e.id})
             "#;
             let ra = build_relational_expr(
                 &ctx,

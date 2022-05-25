@@ -2,7 +2,7 @@ use crate::algebra::op::RelationalAlgebra;
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError};
 use crate::context::TempDbContext;
 use crate::data::expr::{Expr, StaticExpr};
-use crate::data::parser::parse_scoped_dict;
+use crate::data::parser::{parse_keyed_dict, parse_scoped_dict};
 use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{
     BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext, TupleSetIdx,
@@ -41,8 +41,17 @@ impl<'a> SelectOp<'a> {
             .into_inner()
             .next()
             .unwrap();
-        assert_rule(&pair, Rule::scoped_dict, NAME_SELECT, 2)?;
-        let (binding, keys, extract_map) = parse_scoped_dict(pair)?;
+        let (binding, keys, extract_map) = match pair.as_rule() {
+            Rule::keyed_dict => {
+                let (keys, vals) = parse_keyed_dict(pair)?;
+                ("_".to_string(), keys, vals)
+            }
+            _ => {
+                assert_rule(&pair, Rule::scoped_dict, NAME_SELECT, 2)?;
+                parse_scoped_dict(pair)?
+            }
+        };
+
         if !keys.is_empty() {
             return Err(
                 AlgebraParseError::Parse("Cannot have keyed map in Select".to_string()).into(),
