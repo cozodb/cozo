@@ -177,21 +177,21 @@ pub(crate) trait RelationalAlgebra {
     fn name(&self) -> &str;
     fn bindings(&self) -> Result<BTreeSet<String>>;
     fn binding_map(&self) -> Result<BindingMap>;
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>;
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>>;
     fn identity(&self) -> Option<TableInfo>;
     fn get_values(&self) -> Result<Vec<StaticValue>> {
         let bmap = self.binding_map()?;
         let bmap = bmap
             .into_iter()
-            .filter_map(|(k, v)| {
+            .flat_map(|(k, v)| {
                 if k.starts_with('@') {
-                    None
+                    vec![]
                 } else {
                     let v = v
                         .into_iter()
                         .map(|(k, v)| (k, Expr::TupleSetIdx(v)))
-                        .collect::<BTreeMap<_, _>>();
-                    Some((k, Expr::Dict(v)))
+                        .collect::<Vec<_>>();
+                    v
                 }
             })
             .collect::<BTreeMap<_, _>>();

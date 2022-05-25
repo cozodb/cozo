@@ -148,7 +148,7 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
 
         let iter = self.source.iter()?.map(move |tset| -> Result<TupleSet> {
             let tset = tset?;
-            let mut eval_ctx = TupleSetEvalContext {
+            let eval_ctx = TupleSetEvalContext {
                 tuple_set: &tset,
                 txn: &txn,
                 temp_db: &temp_db,
