@@ -1,7 +1,7 @@
 use crate::algebra::op::{
     build_from_clause, Insertion, RelationFromValues, RelationalAlgebra, TaggedInsertion,
-    NAME_FROM, NAME_INSERTION, NAME_RELATION_FROM_VALUES, NAME_TAGGED_INSERTION,
-    NAME_TAGGED_UPSERT, NAME_UPSERT,
+    WhereFilter, NAME_FROM, NAME_INSERTION, NAME_RELATION_FROM_VALUES, NAME_TAGGED_INSERTION,
+    NAME_TAGGED_UPSERT, NAME_UPSERT, NAME_WHERE,
 };
 use crate::context::TempDbContext;
 use crate::data::tuple::OwnTuple;
@@ -79,6 +79,7 @@ pub(crate) fn build_relational_expr<'a>(
             NAME_FROM => {
                 built = Some(build_from_clause(ctx, built, pairs)?);
             }
+            NAME_WHERE => built = Some(Arc::new(WhereFilter::build(ctx, built, pairs)?)),
             _ => unimplemented!(),
         }
     }
@@ -142,7 +143,7 @@ pub(crate) mod tests {
         let start = Instant::now();
         {
             let ctx = sess.temp_ctx(true);
-            let s = "From(e:HasDependent)";
+            let s = "From(e:Employee).Where(e.id >= 122, e.id < 130)";
             let ra = build_relational_expr(
                 &ctx,
                 CozoParser::parse(Rule::ra_expr_all, s)

@@ -204,14 +204,14 @@ where
     }
 }
 
-pub(crate) struct TupleSetEvalContext {
-    pub(crate) tuple_set: TupleSet,
-    pub(crate) txn: TransactionPtr,
-    pub(crate) temp_db: DbPtr,
-    pub(crate) write_options: WriteOptionsPtr,
+pub(crate) struct TupleSetEvalContext<'a> {
+    pub(crate) tuple_set: &'a TupleSet,
+    pub(crate) txn: &'a TransactionPtr,
+    pub(crate) temp_db: &'a DbPtr,
+    pub(crate) write_options: &'a WriteOptionsPtr,
 }
 
-impl RowEvalContext for TupleSetEvalContext {
+impl<'a> RowEvalContext for TupleSetEvalContext<'a> {
     fn resolve(&self, idx: &TupleSetIdx) -> Result<Value> {
         let val = self.tuple_set.get_value(idx)?;
         Ok(val)
@@ -251,10 +251,7 @@ impl RowEvalContext for TupleSet {
 
 pub(crate) type TupleBuilder<'a> = Vec<(Expr<'a>, Typing)>;
 
-impl TupleSetEvalContext {
-    pub(crate) fn set_tuple_set(&mut self, tuple_set: TupleSet) {
-        self.tuple_set = tuple_set;
-    }
+impl<'a> TupleSetEvalContext<'a> {
     pub(crate) fn eval_to_tuple(&self, prefix: u32, builder: &TupleBuilder) -> Result<OwnTuple> {
         let mut target = OwnTuple::with_prefix(prefix);
         for (expr, typing) in builder {

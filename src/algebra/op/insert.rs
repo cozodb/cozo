@@ -133,19 +133,20 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
             .collect::<Vec<_>>();
         let target_key = self.target_info.table_id();
 
-        let mut eval_ctx = TupleSetEvalContext {
-            tuple_set: Default::default(),
-            txn: self.ctx.txn.clone(),
-            temp_db: self.ctx.sess.temp.clone(),
-            write_options: default_write_options(),
-        };
-
         let r_opts = default_read_options();
         let mut temp_slice = PinnableSlicePtr::default();
+        let txn = self.ctx.txn.clone();
+        let temp_db = self.ctx.sess.temp.clone();
+        let w_opts = default_write_options();
 
         Ok(Box::new(self.source.iter()?.map(
             move |tset| -> Result<TupleSet> {
-                eval_ctx.set_tuple_set(tset?);
+                let mut eval_ctx = TupleSetEvalContext {
+                    tuple_set: &tset?,
+                    txn: &txn,
+                    temp_db: &temp_db,
+                    write_options: &w_opts,
+                };
                 let mut key = eval_ctx.eval_to_tuple(target_key.id, &key_builder)?;
                 let val = eval_ctx.eval_to_tuple(DataKind::Data as u32, &val_builder)?;
                 if !self.upsert {
