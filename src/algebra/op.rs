@@ -3,26 +3,34 @@ use crate::context::TempDbContext;
 use crate::data::eval::PartialEvalContext;
 use crate::data::tuple_set::{BindingMap, TableId, TupleSet};
 use crate::ddl::parser::ColExtractor;
-use crate::ddl::reify::{
-    AssocInfo, DdlContext, DdlReifyError, EdgeInfo, IndexInfo, TableInfo,
-};
+use crate::ddl::reify::{AssocInfo, DdlContext, DdlReifyError, EdgeInfo, IndexInfo, TableInfo};
 use anyhow::Result;
 use cozorocks::PinnableSlicePtr;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-mod from_values;
+mod filter;
+mod from;
+mod group;
 mod insert;
-mod insert_tagged;
+mod limit;
+mod select;
+mod tagged;
+mod values;
 
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::value::StaticValue;
 use crate::runtime::options::default_read_options;
-pub(crate) use from_values::*;
+pub(crate) use filter::*;
+pub(crate) use from::*;
+pub(crate) use group::*;
 pub(crate) use insert::*;
-pub(crate) use insert_tagged::*;
+pub(crate) use limit::*;
+pub(crate) use select::*;
+pub(crate) use tagged::*;
+pub(crate) use values::*;
 
 pub(crate) trait InterpretContext: PartialEvalContext {
     fn resolve_table(&self, name: &str) -> Option<TableId>;

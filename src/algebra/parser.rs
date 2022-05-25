@@ -1,6 +1,7 @@
 use crate::algebra::op::{
-    Insertion, RelationFromValues, RelationalAlgebra, TaggedInsertion, NAME_INSERTION,
-    NAME_RELATION_FROM_VALUES, NAME_TAGGED_INSERTION, NAME_TAGGED_UPSERT, NAME_UPSERT,
+    build_from_clause, Insertion, RelationFromValues, RelationalAlgebra, TaggedInsertion,
+    NAME_FROM, NAME_INSERTION, NAME_RELATION_FROM_VALUES, NAME_TAGGED_INSERTION,
+    NAME_TAGGED_UPSERT, NAME_UPSERT,
 };
 use crate::context::TempDbContext;
 use crate::data::tuple::OwnTuple;
@@ -74,6 +75,9 @@ pub(crate) fn build_relational_expr<'a>(
             }
             NAME_RELATION_FROM_VALUES => {
                 built = Some(Arc::new(RelationFromValues::build(ctx, built, pairs)?));
+            }
+            NAME_FROM => {
+                built = Some(build_from_clause(ctx, built, pairs)?);
             }
             _ => unimplemented!(),
         }
