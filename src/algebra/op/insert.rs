@@ -1,4 +1,6 @@
-use crate::algebra::op::{InterpretContext, KeyBuilderSet, RelationalAlgebra};
+use crate::algebra::op::{
+    build_binding_map_from_info, InterpretContext, KeyBuilderSet, RelationalAlgebra,
+};
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError};
 use crate::context::TempDbContext;
 use crate::data::expr::{Expr, StaticExpr};
@@ -15,7 +17,7 @@ use crate::parser::{Pairs, Rule};
 use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
 use cozorocks::PinnableSlicePtr;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 pub(crate) const NAME_INSERTION: &str = "Insert";
@@ -84,92 +86,6 @@ impl<'a> Insertion<'a> {
             upsert,
         })
     }
-
-    fn build_binding_map_inner(&self) -> Result<BTreeMap<String, TupleSetIdx>> {
-        let mut binding_map_inner = BTreeMap::new();
-        match &self.target_info {
-            TableInfo::Node(n) => {
-                for (i, k) in n.keys.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: true,
-                            t_set: 0,
-                            col_idx: i,
-                        },
-                    );
-                }
-                for (i, k) in n.vals.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: false,
-                            t_set: 0,
-                            col_idx: i,
-                        },
-                    );
-                }
-            }
-            TableInfo::Edge(e) => {
-                let src = self.ctx.get_table_info(e.src_id)?.to_node()?;
-                let dst = self.ctx.get_table_info(e.dst_id)?.to_node()?;
-                for (i, k) in src.keys.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: true,
-                            t_set: 0,
-                            col_idx: i + 1,
-                        },
-                    );
-                }
-                for (i, k) in dst.keys.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: true,
-                            t_set: 0,
-                            col_idx: i + 2 + src.keys.len(),
-                        },
-                    );
-                }
-                for (i, k) in e.keys.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: true,
-                            t_set: 0,
-                            col_idx: i + 2 + src.keys.len() + dst.keys.len(),
-                        },
-                    );
-                }
-                for (i, k) in e.vals.iter().enumerate() {
-                    binding_map_inner.insert(
-                        k.name.clone(),
-                        TupleSetIdx {
-                            is_key: false,
-                            t_set: 0,
-                            col_idx: i,
-                        },
-                    );
-                }
-            }
-            _ => unreachable!(),
-        }
-        for (iset, info) in self.assoc_infos.iter().enumerate() {
-            for (i, k) in info.vals.iter().enumerate() {
-                binding_map_inner.insert(
-                    k.name.clone(),
-                    TupleSetIdx {
-                        is_key: false,
-                        t_set: iset + 1,
-                        col_idx: i,
-                    },
-                );
-            }
-        }
-        Ok(binding_map_inner)
-    }
 }
 
 impl<'a> RelationalAlgebra for Insertion<'a> {
@@ -181,8 +97,12 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
         }
     }
 
+    fn bindings(&self) -> Result<BTreeSet<String>> {
+        Ok(BTreeSet::from([self.binding.clone()]))
+    }
+
     fn binding_map(&self) -> Result<BindingMap> {
-        let inner = self.build_binding_map_inner()?;
+        let inner = build_binding_map_from_info(self.ctx, &self.target_info, &self.assoc_infos)?;
         Ok(BTreeMap::from([(self.binding.clone(), inner)]))
     }
 

@@ -6,4 +6,5 @@ pub(crate) mod parser;
 pub(crate) mod tuple;
 pub(crate) mod tuple_set;
 pub(crate) mod typing;
+pub(crate) mod uuid;
 pub(crate) mod value;

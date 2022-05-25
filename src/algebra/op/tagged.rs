@@ -12,7 +12,7 @@ use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::{Context, Result};
 use cozorocks::PinnableSlicePtr;
 use pest::Parser;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 pub(crate) const NAME_TAGGED_INSERTION: &str = "InsertTagged";
@@ -249,6 +249,10 @@ impl<'b> RelationalAlgebra for TaggedInsertion<'b> {
         } else {
             NAME_TAGGED_INSERTION
         }
+    }
+
+    fn bindings(&self) -> Result<BTreeSet<String>> {
+        Ok(BTreeSet::from([self.binding.clone()]))
     }
 
     fn binding_map(&self) -> Result<BindingMap> {

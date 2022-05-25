@@ -24,7 +24,10 @@ pub fn default_options() -> OptionsPtr {
 }
 
 pub fn default_read_options() -> ReadOptionsPtr {
-    ReadOptionsPtr::default()
+    let mut ret = ReadOptionsPtr::default();
+    ret.set_prefix_same_as_start(true);
+    ret.set_total_order_seek(false);
+    ret
 }
 
 pub fn default_write_options() -> WriteOptionsPtr {

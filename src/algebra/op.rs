@@ -7,7 +7,7 @@ use crate::ddl::reify::{AssocInfo, DdlContext, DdlReifyError, EdgeInfo, IndexInf
 use anyhow::Result;
 use cozorocks::PinnableSlicePtr;
 use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 mod filter;
@@ -15,6 +15,7 @@ mod from;
 mod group;
 mod insert;
 mod limit;
+mod scan;
 mod select;
 mod tagged;
 mod values;
@@ -28,6 +29,7 @@ pub(crate) use from::*;
 pub(crate) use group::*;
 pub(crate) use insert::*;
 pub(crate) use limit::*;
+pub(crate) use scan::*;
 pub(crate) use select::*;
 pub(crate) use tagged::*;
 pub(crate) use values::*;
@@ -173,6 +175,7 @@ impl<'a> InterpretContext for TempDbContext<'a> {
 
 pub(crate) trait RelationalAlgebra {
     fn name(&self) -> &str;
+    fn bindings(&self) -> Result<BTreeSet<String>>;
     fn binding_map(&self) -> Result<BindingMap>;
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>;
     fn identity(&self) -> Option<TableInfo>;
@@ -180,12 +183,16 @@ pub(crate) trait RelationalAlgebra {
         let bmap = self.binding_map()?;
         let bmap = bmap
             .into_iter()
-            .map(|(k, v)| {
-                let v = v
-                    .into_iter()
-                    .map(|(k, v)| (k, Expr::TupleSetIdx(v)))
-                    .collect::<BTreeMap<_, _>>();
-                (k, Expr::Dict(v))
+            .filter_map(|(k, v)| {
+                if k.starts_with('@') {
+                    None
+                } else {
+                    let v = v
+                        .into_iter()
+                        .map(|(k, v)| (k, Expr::TupleSetIdx(v)))
+                        .collect::<BTreeMap<_, _>>();
+                    Some((k, Expr::Dict(v)))
+                }
             })
             .collect::<BTreeMap<_, _>>();
         let bmap = Expr::Dict(bmap);

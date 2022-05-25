@@ -117,16 +117,12 @@ pub(crate) mod tests {
                     .next()
                     .unwrap(),
             )?;
-            for t in ra.iter().unwrap() {
-                t.unwrap();
-            }
-
-            let s = format!(
-                r#"
-                           UpsertTagged({})
-                          "#,
-                HR_DATA
-            );
+            dbg!(ra.get_values()?);
+            ctx.txn.commit().unwrap();
+        }
+        {
+            let ctx = sess.temp_ctx(true);
+            let s = format!("UpsertTagged({})", HR_DATA);
             let ra = build_relational_expr(
                 &ctx,
                 CozoParser::parse(Rule::ra_expr_all, &s)
@@ -144,8 +140,24 @@ pub(crate) mod tests {
         }
         let duration = start.elapsed();
         let start = Instant::now();
+        {
+            let ctx = sess.temp_ctx(true);
+            let s = "From(e:HasDependent)";
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            dbg!(ra.get_values()?);
+        }
+        let duration2 = start.elapsed();
+        let start = Instant::now();
         let mut r_opts = default_read_options();
         r_opts.set_total_order_seek(true);
+        r_opts.set_prefix_same_as_start(false);
         let it = sess.main.iterator(&r_opts);
         it.to_first();
         let mut n: BTreeMap<u32, usize> = BTreeMap::new();
@@ -158,8 +170,8 @@ pub(crate) mod tests {
             }
             it.next();
         }
-        let duration2 = start.elapsed();
-        dbg!(duration, duration2, n);
+        let duration3 = start.elapsed();
+        dbg!(duration, duration2, duration3, n);
         Ok(())
     }
 }

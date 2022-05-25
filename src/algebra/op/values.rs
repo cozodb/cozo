@@ -8,7 +8,7 @@ use crate::data::value::{StaticValue, Value};
 use crate::ddl::reify::TableInfo;
 use crate::parser::{Pairs, Rule};
 use anyhow::Result;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 pub(crate) const NAME_RELATION_FROM_VALUES: &str = "Values";
@@ -90,6 +90,14 @@ impl RelationFromValues {
 impl RelationalAlgebra for RelationFromValues {
     fn name(&self) -> &str {
         NAME_RELATION_FROM_VALUES
+    }
+
+    fn bindings(&self) -> Result<BTreeSet<String>> {
+        Ok(self
+            .binding_map
+            .iter()
+            .map(|(k, v)| k.to_string())
+            .collect())
     }
 
     fn binding_map(&self) -> Result<BindingMap> {

@@ -194,7 +194,7 @@ persist_block = {"persist!" ~ "{" ~ definition* ~ "}" }
 
 // ra = { (ra_source | ra_fn_call) ~ ra_method_call* }
 chain = { (node_part ~ (edge_part ~ node_part)* ~ edge_part?) | (edge_part ~ (node_part ~ edge_part)* ~ node_part?) }
-node_part = {ident? ~ ":" ~ name_in_def}
+node_part = {ident? ~ ":" ~ table_with_assocs}
 edge_part = {edge_src_marker ~ node_part ~ edge_dst_marker}
 edge_src_marker = {outer_marker? ~ bwd_marker? ~ "-["}
 edge_dst_marker = {"]-" ~ fwd_marker? ~ outer_marker?}
