@@ -4,11 +4,11 @@ use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{BindingMap, TupleSet, TupleSetIdx};
+use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, TableInfo};
 use anyhow::Result;
 use cozorocks::IteratorPtr;
 use std::collections::{BTreeMap, BTreeSet};
-use crate::data::value::Value;
 
 pub(crate) struct TableScan<'a> {
     ctx: &'a TempDbContext<'a>,
@@ -81,31 +81,23 @@ impl<'a> TableScan<'a> {
                     let dst = dst.as_node()?;
                     key_extractors.push(Expr::Const(Value::Int(info.src_id.int_for_storage())));
                     for col in &src.keys {
-                        key_extractors.push(
-                            Expr::FieldAcc(
-                                "_src_".to_string() + &col.name,
-                                Expr::Variable(el.binding.clone()).into(),
-                            )
-                        );
-
+                        key_extractors.push(Expr::FieldAcc(
+                            "_src_".to_string() + &col.name,
+                            Expr::Variable(el.binding.clone()).into(),
+                        ));
                     }
                     key_extractors.push(Expr::Const(Value::Bool(true)));
                     for col in &dst.keys {
-                        key_extractors.push(
-                            Expr::FieldAcc(
-                                "_dst_".to_string() + &col.name,
-                                Expr::Variable(el.binding.clone()).into(),
-                            )
-                        );
-
+                        key_extractors.push(Expr::FieldAcc(
+                            "_dst_".to_string() + &col.name,
+                            Expr::Variable(el.binding.clone()).into(),
+                        ));
                     }
                     for col in &info.keys {
-                        key_extractors.push(
-                            Expr::FieldAcc(
-                                col.name.clone(),
-                                Expr::Variable(el.binding.clone()).into(),
-                            )
-                        );
+                        key_extractors.push(Expr::FieldAcc(
+                            col.name.clone(),
+                            Expr::Variable(el.binding.clone()).into(),
+                        ));
                     }
                 }
                 _ => unreachable!(),
@@ -114,7 +106,8 @@ impl<'a> TableScan<'a> {
                 ctx,
                 source: ret,
                 assoc_infos,
-                key_extractors
+                key_extractors,
+                binding: el.binding.clone(),
             }))
         }
         Ok(ret)

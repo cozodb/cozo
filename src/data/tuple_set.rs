@@ -5,7 +5,7 @@ use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use cozorocks::{DbPtr, TransactionPtr, WriteOptionsPtr};
-use std::cmp::Ordering;
+use std::cmp::{max, Ordering};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::result;
@@ -50,10 +50,11 @@ impl<'a> TryFrom<&'a Value<'a>> for TableId {
 
     fn try_from(value: &'a Value<'a>) -> result::Result<Self, Self::Error> {
         let make_err = || TupleSetError::Deser(value.clone().to_static());
-        let id = value
-            .get_int()
-            .ok_or_else(make_err)?;
-        Ok(TableId { in_root: id > 0, id: id.abs() as u32 })
+        let id = value.get_int().ok_or_else(make_err)?;
+        Ok(TableId {
+            in_root: id > 0,
+            id: id.abs() as u32,
+        })
     }
 }
 
@@ -267,6 +268,21 @@ impl<'a> TupleSetEvalContext<'a> {
 }
 
 pub(crate) type BindingMap = BTreeMap<String, BTreeMap<String, TupleSetIdx>>;
+
+pub(crate) fn next_tset_indices(map: &BindingMap) -> (usize, usize) {
+    let mut max_key_idx = -1;
+    let mut max_val_idx = -1;
+    for submap in map.values() {
+        for idx in submap.values() {
+            if idx.is_key {
+                max_key_idx = max(max_key_idx, idx.t_set as i64);
+            } else {
+                max_val_idx = max(max_val_idx, idx.t_set as i64);
+            }
+        }
+    }
+    ((max_key_idx + 1) as usize, (max_val_idx + 1) as usize)
+}
 
 pub(crate) struct BindingMapEvalContext<'a, T: PartialEvalContext + 'a> {
     pub(crate) map: &'a BindingMap,

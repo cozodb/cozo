@@ -222,8 +222,14 @@ impl<'a> Insertion<'a> {
             TableInfo::Edge(e) => {
                 let src = self.ctx.get_table_info(e.src_id)?.to_node()?;
                 let dst = self.ctx.get_table_info(e.dst_id)?.to_node()?;
-                let src_key_part = [(Expr::Const(Value::Int(e.src_id.int_for_storage())), Typing::Any)];
-                let dst_key_part = [(Expr::Const(Value::Int(e.dst_id.int_for_storage())), Typing::Any)];
+                let src_key_part = [(
+                    Expr::Const(Value::Int(e.src_id.int_for_storage())),
+                    Typing::Any,
+                )];
+                let dst_key_part = [(
+                    Expr::Const(Value::Int(e.dst_id.int_for_storage())),
+                    Typing::Any,
+                )];
                 let fwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
                 let bwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
                 let key_builder = src_key_part
