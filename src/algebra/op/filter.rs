@@ -1,5 +1,5 @@
 use crate::algebra::op::RelationalAlgebra;
-use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError};
+use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::op::OpAnd;
@@ -16,7 +16,7 @@ pub(crate) const NAME_WHERE: &str = "Where";
 
 pub(crate) struct WhereFilter<'a> {
     ctx: &'a TempDbContext<'a>,
-    source: Box<dyn RelationalAlgebra + 'a>,
+    pub(crate) source: RaBox<'a>,
     condition: StaticExpr,
 }
 
@@ -29,7 +29,7 @@ pub(crate) enum FilterError {
 impl<'a> WhereFilter<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
+        prev: Option<RaBox<'a>>,
         mut args: Pairs,
     ) -> Result<Self> {
         let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_WHERE.to_string());

@@ -1,5 +1,5 @@
 use crate::algebra::op::RelationalAlgebra;
-use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError};
+use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::parser::{parse_keyed_dict, parse_scoped_dict};
@@ -18,7 +18,7 @@ pub(crate) const NAME_SELECT: &str = "Select";
 
 pub(crate) struct SelectOp<'a> {
     ctx: &'a TempDbContext<'a>,
-    source: Box<dyn RelationalAlgebra + 'a>,
+    pub(crate) source: RaBox<'a>,
     binding: String,
     extract_map: StaticExpr,
 }
@@ -26,7 +26,7 @@ pub(crate) struct SelectOp<'a> {
 impl<'a> SelectOp<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
+        prev: Option<RaBox<'a>>,
         mut args: Pairs,
     ) -> Result<Self> {
         let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_SELECT.to_string());
@@ -121,7 +121,7 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
         Ok(BTreeMap::from([(self.binding.clone(), extract_map)]))
     }
 
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>> {
         let source_map = self.source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,

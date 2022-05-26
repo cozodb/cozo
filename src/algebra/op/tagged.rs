@@ -1,5 +1,5 @@
 use crate::algebra::op::{RelationalAlgebra, TableInfoByIdCache, TableInfoByNameCache};
-use crate::algebra::parser::{assert_rule, AlgebraParseError};
+use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple};
@@ -26,7 +26,6 @@ type TaggedInsertionSet = (
 
 pub(crate) struct TaggedInsertion<'a> {
     ctx: &'a TempDbContext<'a>,
-    // source: Box<Vec<StaticValue>>,
     values: BTreeMap<TableId, Vec<TaggedInsertionSet>>,
     tally: BTreeMap<String, usize>,
     binding: String,
@@ -36,7 +35,7 @@ pub(crate) struct TaggedInsertion<'a> {
 impl<'a> TaggedInsertion<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
+        prev: Option<RaBox<'a>>,
         mut args: Pairs,
         upsert: bool,
     ) -> Result<Self> {

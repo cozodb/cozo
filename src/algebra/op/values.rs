@@ -1,5 +1,5 @@
 use crate::algebra::op::RelationalAlgebra;
-use crate::algebra::parser::{assert_rule, AlgebraParseError};
+use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple};
@@ -21,7 +21,7 @@ pub(crate) struct RelationFromValues {
 impl RelationFromValues {
     pub(crate) fn build<'a>(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
+        prev: Option<RaBox<'a>>,
         mut args: Pairs,
     ) -> Result<Self> {
         if !matches!(prev, None) {

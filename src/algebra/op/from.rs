@@ -1,5 +1,5 @@
-use crate::algebra::op::{RelationalAlgebra, TableScan};
-use crate::algebra::parser::{assert_rule, AlgebraParseError};
+use crate::algebra::op::{TableScan};
+use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::uuid::random_uuid_v1;
 use crate::parser::text_identifier::build_name_in_def;
@@ -11,9 +11,9 @@ pub(crate) const NAME_FROM: &str = "From";
 
 pub(crate) fn build_from_clause<'a>(
     ctx: &'a TempDbContext<'a>,
-    prev: Option<Box<dyn RelationalAlgebra + 'a>>,
+    prev: Option<RaBox<'a>>,
     mut args: Pairs,
-) -> Result<Box<dyn RelationalAlgebra + 'a>> {
+) -> Result<RaBox<'a>> {
     if !matches!(prev, None) {
         return Err(AlgebraParseError::Unchainable(NAME_FROM.to_string()).into());
     }
@@ -26,7 +26,7 @@ pub(crate) fn build_from_clause<'a>(
         .ok_or_else(not_enough_args)?;
     let mut chain = parse_chain(chain)?.into_iter();
     let mut last_el = chain.next().ok_or_else(not_enough_args)?;
-    let mut ret = Box::new(TableScan::build(ctx, &last_el, true)?);
+    let mut ret = RaBox::TableScan(Box::new(TableScan::build(ctx, &last_el, true)?));
     for el in chain {
         todo!()
     }

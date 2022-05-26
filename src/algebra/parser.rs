@@ -1,14 +1,13 @@
-use crate::algebra::op::{
-    build_from_clause, Insertion, RelationFromValues, RelationalAlgebra, SelectOp, TaggedInsertion,
-    WhereFilter, NAME_FROM, NAME_INSERTION, NAME_RELATION_FROM_VALUES, NAME_SELECT,
-    NAME_TAGGED_INSERTION, NAME_TAGGED_UPSERT, NAME_UPSERT, NAME_WHERE,
-};
+use std::collections::BTreeSet;
+use std::error::Error;
+use crate::algebra::op::{build_from_clause, Insertion, RelationFromValues, RelationalAlgebra, SelectOp, TaggedInsertion, WhereFilter, NAME_FROM, NAME_INSERTION, NAME_RELATION_FROM_VALUES, NAME_SELECT, NAME_TAGGED_INSERTION, NAME_TAGGED_UPSERT, NAME_UPSERT, NAME_WHERE, TableScan};
 use crate::context::TempDbContext;
 use crate::data::tuple::OwnTuple;
-use crate::data::tuple_set::TableId;
+use crate::data::tuple_set::{BindingMap, TableId, TupleSet};
 use crate::data::value::StaticValue;
 use crate::parser::{Pair, Rule};
 use anyhow::Result;
+use crate::ddl::reify::TableInfo;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum AlgebraParseError {
@@ -52,34 +51,114 @@ pub(crate) fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Resu
             u,
             format!("{:?}", pair.as_rule()),
         )
-        .into())
+            .into())
+    }
+}
+
+// this looks stupid but is the easiest way to get downcasting
+pub(crate) enum RaBox<'a> {
+    Insertion(Box<Insertion<'a>>),
+    TaggedInsertion(Box<TaggedInsertion<'a>>),
+    FromValues(Box<RelationFromValues>),
+    TableScan(Box<TableScan<'a>>),
+    WhereFilter(Box<WhereFilter<'a>>),
+    SelectOp(Box<SelectOp<'a>>),
+}
+
+impl<'a> RaBox<'a> {
+    pub(crate) fn sources(&self) -> Vec<&RaBox> {
+        match self {
+            RaBox::Insertion(inner) => vec![&inner.source],
+            RaBox::TaggedInsertion(_inner) => vec![],
+            RaBox::FromValues(_inner) => vec![],
+            RaBox::TableScan(_inner) => vec![],
+            RaBox::WhereFilter(inner) => vec![&inner.source],
+            RaBox::SelectOp(inner) => vec![&inner.source]
+        }
+    }
+}
+
+impl<'b> RelationalAlgebra for RaBox<'b> {
+    fn name(&self) -> &str {
+        match self {
+            RaBox::Insertion(inner) => inner.name(),
+            RaBox::TaggedInsertion(inner) => inner.name(),
+            RaBox::FromValues(inner) => inner.name(),
+            RaBox::TableScan(inner) => inner.name(),
+            RaBox::WhereFilter(inner) => inner.name(),
+            RaBox::SelectOp(inner) => inner.name(),
+        }
+    }
+
+    fn bindings(&self) -> Result<BTreeSet<String>> {
+        match self {
+            RaBox::Insertion(inner) => inner.bindings(),
+            RaBox::TaggedInsertion(inner) => inner.bindings(),
+            RaBox::FromValues(inner) => inner.bindings(),
+            RaBox::TableScan(inner) => inner.bindings(),
+            RaBox::WhereFilter(inner) => inner.bindings(),
+            RaBox::SelectOp(inner) => inner.bindings(),
+        }
+    }
+
+    fn binding_map(&self) -> Result<BindingMap> {
+        match self {
+            RaBox::Insertion(inner) => inner.binding_map(),
+            RaBox::TaggedInsertion(inner) => inner.binding_map(),
+            RaBox::FromValues(inner) => inner.binding_map(),
+            RaBox::TableScan(inner) => inner.binding_map(),
+            RaBox::WhereFilter(inner) => inner.binding_map(),
+            RaBox::SelectOp(inner) => inner.binding_map(),
+        }
+    }
+
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>> {
+        match self {
+            RaBox::Insertion(inner) => inner.iter(),
+            RaBox::TaggedInsertion(inner) => inner.iter(),
+            RaBox::FromValues(inner) => inner.iter(),
+            RaBox::TableScan(inner) => inner.iter(),
+            RaBox::WhereFilter(inner) => inner.iter(),
+            RaBox::SelectOp(inner) => inner.iter(),
+        }
+    }
+
+    fn identity(&self) -> Option<TableInfo> {
+        match self {
+            RaBox::Insertion(inner) => inner.identity(),
+            RaBox::TaggedInsertion(inner) => inner.identity(),
+            RaBox::FromValues(inner) => inner.identity(),
+            RaBox::TableScan(inner) => inner.identity(),
+            RaBox::WhereFilter(inner) => inner.identity(),
+            RaBox::SelectOp(inner) => inner.identity(),
+        }
     }
 }
 
 pub(crate) fn build_relational_expr<'a>(
     ctx: &'a TempDbContext,
     pair: Pair,
-) -> Result<Box<dyn RelationalAlgebra + 'a>> {
-    let mut built: Option<Box<dyn RelationalAlgebra>> = None;
+) -> Result<RaBox<'a>> {
+    let mut built: Option<RaBox> = None;
     for pair in pair.into_inner() {
         let mut pairs = pair.into_inner();
         match pairs.next().unwrap().as_str() {
-            NAME_INSERTION => built = Some(Box::new(Insertion::build(ctx, built, pairs, false)?)),
-            NAME_UPSERT => built = Some(Box::new(Insertion::build(ctx, built, pairs, true)?)),
+            NAME_INSERTION => built = Some(RaBox::Insertion(Box::new(Insertion::build(ctx, built, pairs, false)?))),
+            NAME_UPSERT => built = Some(RaBox::Insertion(Box::new(Insertion::build(ctx, built, pairs, true)?))),
             NAME_TAGGED_INSERTION => {
-                built = Some(Box::new(TaggedInsertion::build(ctx, built, pairs, false)?))
+                built = Some(RaBox::TaggedInsertion(Box::new(TaggedInsertion::build(ctx, built, pairs, false)?)))
             }
             NAME_TAGGED_UPSERT => {
-                built = Some(Box::new(TaggedInsertion::build(ctx, built, pairs, true)?))
+                built = Some(RaBox::TaggedInsertion(Box::new(TaggedInsertion::build(ctx, built, pairs, true)?)))
             }
             NAME_RELATION_FROM_VALUES => {
-                built = Some(Box::new(RelationFromValues::build(ctx, built, pairs)?));
+                built = Some(RaBox::FromValues(Box::new(RelationFromValues::build(ctx, built, pairs)?)));
             }
             NAME_FROM => {
                 built = Some(build_from_clause(ctx, built, pairs)?);
             }
-            NAME_WHERE => built = Some(Box::new(WhereFilter::build(ctx, built, pairs)?)),
-            NAME_SELECT => built = Some(Box::new(SelectOp::build(ctx, built, pairs)?)),
+            NAME_WHERE => built = Some(RaBox::WhereFilter(Box::new(WhereFilter::build(ctx, built, pairs)?))),
+            NAME_SELECT => built = Some(RaBox::SelectOp(Box::new(SelectOp::build(ctx, built, pairs)?))),
             _ => unimplemented!(),
         }
     }

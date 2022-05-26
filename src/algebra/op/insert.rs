@@ -1,7 +1,7 @@
 use crate::algebra::op::{
     build_binding_map_from_info, InterpretContext, KeyBuilderSet, RelationalAlgebra,
 };
-use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError};
+use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::parser::parse_scoped_dict;
@@ -24,7 +24,7 @@ pub(crate) const NAME_UPSERT: &str = "Upsert";
 
 pub(crate) struct Insertion<'a> {
     ctx: &'a TempDbContext<'a>,
-    source: Box<dyn RelationalAlgebra + 'a>,
+    pub(crate) source: RaBox<'a>,
     binding: String,
     target_info: TableInfo,
     assoc_infos: Vec<AssocInfo>,
@@ -36,7 +36,7 @@ pub(crate) struct Insertion<'a> {
 impl<'a> Insertion<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
+        prev: Option<RaBox<'a>>,
         mut args: Pairs,
         upsert: bool,
     ) -> Result<Self> {
