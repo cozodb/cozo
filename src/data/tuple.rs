@@ -772,9 +772,7 @@ where
 
 pub(crate) enum ReifiedTupleData {
     Own(Vec<u8>),
-    Slice(SlicePtr),
     SharedSlice(SlicePtrShared),
-    PinnableSlice(PinnableSlicePtr),
     PinnableSliceShared(PinnableSlicePtrShared),
 }
 
@@ -782,9 +780,7 @@ impl Clone for ReifiedTupleData {
     fn clone(&self) -> Self {
         match self {
             ReifiedTupleData::Own(o) => ReifiedTupleData::Own(o.clone()),
-            ReifiedTupleData::Slice(s) => ReifiedTupleData::Own(s.as_ref().to_vec()),
             ReifiedTupleData::SharedSlice(s) => ReifiedTupleData::SharedSlice(s.clone()),
-            ReifiedTupleData::PinnableSlice(s) => ReifiedTupleData::Own(s.as_ref().to_vec()),
             ReifiedTupleData::PinnableSliceShared(s) => {
                 ReifiedTupleData::PinnableSliceShared(s.clone())
             }
@@ -800,7 +796,7 @@ impl From<Vec<u8>> for ReifiedTupleData {
 
 impl From<SlicePtr> for ReifiedTupleData {
     fn from(d: SlicePtr) -> Self {
-        ReifiedTupleData::Slice(d)
+        ReifiedTupleData::SharedSlice(d.to_shared())
     }
 }
 
@@ -812,7 +808,7 @@ impl From<SlicePtrShared> for ReifiedTupleData {
 
 impl From<PinnableSlicePtr> for ReifiedTupleData {
     fn from(d: PinnableSlicePtr) -> Self {
-        ReifiedTupleData::PinnableSlice(d)
+        ReifiedTupleData::PinnableSliceShared(d.to_shared())
     }
 }
 
@@ -826,9 +822,7 @@ impl AsRef<[u8]> for ReifiedTupleData {
     fn as_ref(&self) -> &[u8] {
         match self {
             ReifiedTupleData::Own(o) => o.as_ref(),
-            ReifiedTupleData::Slice(s) => s.as_ref(),
             ReifiedTupleData::SharedSlice(s) => s.as_ref(),
-            ReifiedTupleData::PinnableSlice(s) => s.as_ref(),
             ReifiedTupleData::PinnableSliceShared(s) => s.as_ref(),
         }
     }

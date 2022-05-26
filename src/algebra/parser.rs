@@ -295,7 +295,7 @@ pub(crate) mod tests {
             let s = r#"
              From(e:Employee, hj:HasJob, j:Job)
             .Where(e.id >= 122, e.id < 130, e.id == hj._src_id, hj._dst_id == j.id)
-            .Select({...e, ohhh: 123312, x: e.id, title: j.title})
+            .Select({...e, title: j.title, salary: hj.salary})
             .Skip(1)
             .Take(1)
             "#;
