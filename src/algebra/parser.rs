@@ -1,7 +1,8 @@
 use crate::algebra::op::{
-    build_from_clause, AssocOp, Insertion, RelationFromValues, RelationalAlgebra, SelectOp,
-    TableScan, TaggedInsertion, WhereFilter, NAME_FROM, NAME_INSERTION, NAME_RELATION_FROM_VALUES,
-    NAME_SELECT, NAME_TAGGED_INSERTION, NAME_TAGGED_UPSERT, NAME_UPSERT, NAME_WHERE,
+    build_from_clause, AssocOp, Insertion, LimitOp, RelationFromValues, RelationalAlgebra,
+    SelectOp, TableScan, TaggedInsertion, WhereFilter, NAME_FROM, NAME_INSERTION,
+    NAME_RELATION_FROM_VALUES, NAME_SELECT, NAME_SKIP, NAME_TAGGED_INSERTION, NAME_TAGGED_UPSERT,
+    NAME_TAKE, NAME_UPSERT, NAME_WHERE,
 };
 use crate::context::TempDbContext;
 use crate::data::tuple::OwnTuple;
@@ -11,7 +12,6 @@ use crate::ddl::reify::TableInfo;
 use crate::parser::{Pair, Rule};
 use anyhow::Result;
 use std::collections::BTreeSet;
-use std::error::Error;
 use std::fmt::{Debug, Formatter};
 
 #[derive(thiserror::Error, Debug)]
@@ -69,6 +69,7 @@ pub(crate) enum RaBox<'a> {
     WhereFilter(Box<WhereFilter<'a>>),
     SelectOp(Box<SelectOp<'a>>),
     AssocOp(Box<AssocOp<'a>>),
+    LimitOp(Box<LimitOp<'a>>),
 }
 
 impl<'a> RaBox<'a> {
@@ -81,6 +82,7 @@ impl<'a> RaBox<'a> {
             RaBox::WhereFilter(inner) => vec![&inner.source],
             RaBox::SelectOp(inner) => vec![&inner.source],
             RaBox::AssocOp(inner) => vec![&inner.source],
+            RaBox::LimitOp(inner) => vec![&inner.source],
         }
     }
 }
@@ -105,6 +107,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::WhereFilter(inner) => inner.name(),
             RaBox::SelectOp(inner) => inner.name(),
             RaBox::AssocOp(inner) => inner.name(),
+            RaBox::LimitOp(inner) => inner.name(),
         }
     }
 
@@ -117,6 +120,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::WhereFilter(inner) => inner.bindings(),
             RaBox::SelectOp(inner) => inner.bindings(),
             RaBox::AssocOp(inner) => inner.bindings(),
+            RaBox::LimitOp(inner) => inner.bindings(),
         }
     }
 
@@ -129,6 +133,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::WhereFilter(inner) => inner.binding_map(),
             RaBox::SelectOp(inner) => inner.binding_map(),
             RaBox::AssocOp(inner) => inner.binding_map(),
+            RaBox::LimitOp(inner) => inner.binding_map(),
         }
     }
 
@@ -141,6 +146,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::WhereFilter(inner) => inner.iter(),
             RaBox::SelectOp(inner) => inner.iter(),
             RaBox::AssocOp(inner) => inner.iter(),
+            RaBox::LimitOp(inner) => inner.iter(),
         }
     }
 
@@ -153,6 +159,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::WhereFilter(inner) => inner.identity(),
             RaBox::SelectOp(inner) => inner.identity(),
             RaBox::AssocOp(inner) => inner.identity(),
+            RaBox::LimitOp(inner) => inner.identity(),
         }
     }
 }
@@ -198,6 +205,16 @@ pub(crate) fn build_relational_expr<'a>(ctx: &'a TempDbContext, pair: Pair) -> R
             NAME_SELECT => {
                 built = Some(RaBox::SelectOp(Box::new(SelectOp::build(
                     ctx, built, pairs,
+                )?)))
+            }
+            NAME_TAKE => {
+                built = Some(RaBox::LimitOp(Box::new(LimitOp::build(
+                    ctx, built, pairs, NAME_TAKE,
+                )?)))
+            }
+            NAME_SKIP => {
+                built = Some(RaBox::LimitOp(Box::new(LimitOp::build(
+                    ctx, built, pairs, NAME_SKIP,
                 )?)))
             }
             _ => unimplemented!(),
@@ -269,6 +286,8 @@ pub(crate) mod tests {
              From(e:Employee)
             .Where(e.id >= 122, e.id < 130)
             .Select({...e, ohhh: 123312, x: e.id})
+            .Skip(1)
+            .Take(1)
             "#;
             let ra = build_relational_expr(
                 &ctx,
