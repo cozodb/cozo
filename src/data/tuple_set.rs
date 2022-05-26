@@ -287,7 +287,7 @@ pub(crate) fn merge_binding_maps(bmaps: impl Iterator<Item = BindingMap>) -> Bin
 }
 
 pub(crate) fn shift_binding_map(right: &mut BindingMap, left: &BindingMap) {
-    let (key_shift, val_shift) = next_tset_indices(left);
+    let (key_shift, val_shift) = next_tset_indices_from_binding_map(left);
     for vs in right.values_mut() {
         for v in vs.values_mut() {
             if v.is_key {
@@ -304,7 +304,7 @@ pub(crate) fn shift_merge_binding_map(left: &mut BindingMap, mut right: BindingM
     left.extend(right)
 }
 
-pub(crate) fn next_tset_indices(map: &BindingMap) -> (usize, usize) {
+pub(crate) fn next_tset_indices_from_binding_map(map: &BindingMap) -> (usize, usize) {
     let mut max_key_idx = -1;
     let mut max_val_idx = -1;
     for submap in map.values() {

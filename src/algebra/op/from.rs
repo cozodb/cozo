@@ -32,6 +32,7 @@ pub(crate) fn build_from_clause<'a>(
         ret = RaBox::Cartesian(Box::new(CartesianJoin {
             left: ret,
             right: nxt,
+            left_outer_join: false,
         }))
     }
 
@@ -43,13 +44,18 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
 
     let chain = arg.into_inner().next().ok_or_else(not_enough_args)?;
 
-    let mut chain = parse_chain(chain)?.into_iter();
-    let mut last_el = chain.next().ok_or_else(not_enough_args)?;
-    let mut ret = TableScan::build(ctx, &last_el, true)?;
-    for el in chain {
-        todo!()
+    let chain = parse_chain(chain)?;
+    let scans = chain
+        .iter()
+        .map(|el| TableScan::build(ctx, el, true))
+        .collect::<Result<Vec<_>>>()?;
+    if scans.is_empty() {
+        return Err(not_enough_args().into());
     }
-    Ok(ret)
+    if scans.len() == 1 {
+        return Ok(scans.into_iter().next().unwrap());
+    }
+    todo!()
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -64,7 +70,7 @@ pub(crate) enum JoinType {
     Inner,
     Left,
     Right,
-    FullOuter,
+    // FullOuter,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -82,6 +88,12 @@ pub(crate) struct ChainEl {
     pub(crate) binding: String,
     pub(crate) target: String,
     pub(crate) assocs: BTreeSet<String>,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum JoinError {
+    #[error("Cannot have both left and right join marker in a chain segment")]
+    NoFullOuterInChain,
 }
 
 pub(crate) fn parse_chain(pair: Pair) -> Result<Vec<ChainEl>> {
@@ -114,7 +126,7 @@ pub(crate) fn parse_chain(pair: Pair) -> Result<Vec<ChainEl>> {
                     ChainPartEdgeDir::Bwd
                 };
                 let join = match (src_outer, dst_outer) {
-                    (true, true) => JoinType::FullOuter,
+                    (true, true) => return Err(JoinError::NoFullOuterInChain.into()),
                     (true, false) => JoinType::Right,
                     (false, true) => JoinType::Left,
                     (false, false) => JoinType::Inner,

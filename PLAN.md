@@ -69,7 +69,6 @@ global query XXX() {
 Operations
 
 * [ ] `from(...rels)`, can use chain notation
-* [ ] `join(left, right, ...conds)`
 * [ ] `left_join(left, right, ...conds)`, similarly for `right_join`, `outer_join`)
 * [ ] `intersect(...rels)`, similarly for `union`
 * [ ] `diff(left, right)`, similarly for `sym_diff`
