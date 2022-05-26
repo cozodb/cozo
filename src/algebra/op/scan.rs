@@ -61,54 +61,15 @@ impl<'a> TableScan<'a> {
             ctx,
             binding: el.binding.clone(),
             table_info: table_info.clone(),
-            // assoc_infos,
         }));
         if !assoc_infos.is_empty() {
-            let mut key_extractors = vec![];
-            match &table_info {
-                TableInfo::Node(info) => {
-                    for col in &info.keys {
-                        key_extractors.push(Expr::FieldAcc(
-                            col.name.clone(),
-                            Expr::Variable(el.binding.clone()).into(),
-                        ))
-                    }
-                }
-                TableInfo::Edge(info) => {
-                    let src = ctx.get_table_info(info.src_id)?;
-                    let src = src.as_node()?;
-                    let dst = ctx.get_table_info(info.dst_id)?;
-                    let dst = dst.as_node()?;
-                    key_extractors.push(Expr::Const(Value::Int(info.src_id.int_for_storage())));
-                    for col in &src.keys {
-                        key_extractors.push(Expr::FieldAcc(
-                            "_src_".to_string() + &col.name,
-                            Expr::Variable(el.binding.clone()).into(),
-                        ));
-                    }
-                    key_extractors.push(Expr::Const(Value::Bool(true)));
-                    for col in &dst.keys {
-                        key_extractors.push(Expr::FieldAcc(
-                            "_dst_".to_string() + &col.name,
-                            Expr::Variable(el.binding.clone()).into(),
-                        ));
-                    }
-                    for col in &info.keys {
-                        key_extractors.push(Expr::FieldAcc(
-                            col.name.clone(),
-                            Expr::Variable(el.binding.clone()).into(),
-                        ));
-                    }
-                }
-                _ => unreachable!(),
-            }
-            ret = RaBox::AssocOp(Box::new(AssocOp {
+            ret = RaBox::AssocOp(Box::new(AssocOp::build(
                 ctx,
-                source: ret,
+                ret,
+                &el.binding,
+                &table_info,
                 assoc_infos,
-                key_extractors,
-                binding: el.binding.clone(),
-            }))
+            )?))
         }
         Ok(ret)
     }

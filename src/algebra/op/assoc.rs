@@ -1,9 +1,10 @@
-use crate::algebra::op::RelationalAlgebra;
+use crate::algebra::op::{InterpretContext, RelationalAlgebra};
 use crate::algebra::parser::RaBox;
 use crate::context::TempDbContext;
-use crate::data::expr::StaticExpr;
+use crate::data::expr::{Expr, StaticExpr};
 use crate::data::tuple::{OwnTuple, Tuple};
 use crate::data::tuple_set::{next_tset_indices, BindingMap, TupleSet, TupleSetIdx};
+use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, TableInfo};
 use crate::runtime::options::default_read_options;
 use anyhow::Result;
@@ -17,6 +18,62 @@ pub(crate) struct AssocOp<'a> {
     pub(crate) assoc_infos: Vec<AssocInfo>,
     pub(crate) key_extractors: Vec<StaticExpr>,
     pub(crate) binding: String,
+}
+
+impl<'a> AssocOp<'a> {
+    pub(crate) fn build(
+        ctx: &'a TempDbContext<'a>,
+        source: RaBox<'a>,
+        binding: &str,
+        table_info: &TableInfo,
+        assoc_infos: Vec<AssocInfo>,
+    ) -> Result<Self> {
+        let mut key_extractors = vec![];
+        match table_info {
+            TableInfo::Node(info) => {
+                for col in &info.keys {
+                    key_extractors.push(Expr::FieldAcc(
+                        col.name.clone(),
+                        Expr::Variable(binding.to_string()).into(),
+                    ))
+                }
+            }
+            TableInfo::Edge(info) => {
+                let src = ctx.get_table_info(info.src_id)?;
+                let src = src.as_node()?;
+                let dst = ctx.get_table_info(info.dst_id)?;
+                let dst = dst.as_node()?;
+                key_extractors.push(Expr::Const(Value::Int(info.src_id.int_for_storage())));
+                for col in &src.keys {
+                    key_extractors.push(Expr::FieldAcc(
+                        "_src_".to_string() + &col.name,
+                        Expr::Variable(binding.to_string()).into(),
+                    ));
+                }
+                key_extractors.push(Expr::Const(Value::Bool(true)));
+                for col in &dst.keys {
+                    key_extractors.push(Expr::FieldAcc(
+                        "_dst_".to_string() + &col.name,
+                        Expr::Variable(binding.to_string()).into(),
+                    ));
+                }
+                for col in &info.keys {
+                    key_extractors.push(Expr::FieldAcc(
+                        col.name.clone(),
+                        Expr::Variable(binding.to_string()).into(),
+                    ));
+                }
+            }
+            _ => unreachable!(),
+        }
+        Ok(AssocOp {
+            ctx,
+            source,
+            assoc_infos,
+            key_extractors,
+            binding: binding.to_string(),
+        })
+    }
 }
 
 impl<'b> RelationalAlgebra for AssocOp<'b> {
