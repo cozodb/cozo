@@ -425,7 +425,7 @@ impl<'a> Expr<'a> {
                 Value::Dict(mut d) => d.remove(f as &str).unwrap_or(Value::Null),
                 v => {
                     return Err(
-                        EvalError::FieldAccess(f.clone(), Expr::Const(v.to_static())).into(),
+                        EvalError::FieldAccess(f.clone(), Expr::Const(v.into_static())).into(),
                     );
                 }
             },
@@ -438,7 +438,7 @@ impl<'a> Expr<'a> {
                         d.swap_remove(*idx)
                     }
                 }
-                v => return Err(EvalError::IndexAccess(*idx, Expr::Const(v.to_static())).into()),
+                v => return Err(EvalError::IndexAccess(*idx, Expr::Const(v.into_static())).into()),
             },
             Expr::IfExpr(args) => {
                 let (cond, if_part, else_part) = args.as_ref();

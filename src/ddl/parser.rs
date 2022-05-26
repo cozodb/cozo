@@ -51,7 +51,7 @@ impl<'a> TryFrom<Value<'a>> for ColSchema {
     type Error = anyhow::Error;
 
     fn try_from(value: Value<'a>) -> Result<Self> {
-        let mk_err = || DdlParseError::ColSchemaDeser(value.clone().to_static());
+        let mk_err = || DdlParseError::ColSchemaDeser(value.clone().into_static());
         let fields = value.get_slice().ok_or_else(mk_err)?;
         let name = fields
             .get(0)
@@ -66,7 +66,7 @@ impl<'a> TryFrom<Value<'a>> for ColSchema {
             .ok_or_else(mk_err)?;
         let typing = Typing::try_from(typing)?;
         let default = fields.get(2).ok_or_else(mk_err)?;
-        let default = Expr::try_from(default.clone().to_static())?;
+        let default = Expr::try_from(default.clone().into_static())?;
         Ok(Self {
             name,
             typing,

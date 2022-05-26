@@ -54,7 +54,7 @@ impl TableInfo {
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
-    pub(crate) fn to_node(self) -> Result<NodeInfo> {
+    pub(crate) fn into_node(self) -> Result<NodeInfo> {
         match self {
             TableInfo::Node(n) => Ok(n),
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
@@ -66,7 +66,7 @@ impl TableInfo {
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
-    pub(crate) fn to_edge(self) -> Result<EdgeInfo> {
+    pub(crate) fn into_edge(self) -> Result<EdgeInfo> {
         match self {
             TableInfo::Edge(n) => Ok(n),
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
@@ -78,7 +78,7 @@ impl TableInfo {
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
-    pub(crate) fn to_assoc(self) -> Result<AssocInfo> {
+    pub(crate) fn into_assoc(self) -> Result<AssocInfo> {
         match self {
             TableInfo::Assoc(n) => Ok(n),
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
@@ -90,7 +90,7 @@ impl TableInfo {
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
-    pub(crate) fn to_index(self) -> Result<IndexInfo> {
+    pub(crate) fn into_index(self) -> Result<IndexInfo> {
         match self {
             TableInfo::Index(n) => Ok(n),
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
@@ -102,7 +102,7 @@ impl TableInfo {
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
-    pub(crate) fn to_sequence(self) -> Result<SequenceInfo> {
+    pub(crate) fn into_sequence(self) -> Result<SequenceInfo> {
         match self {
             TableInfo::Sequence(n) => Ok(n),
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
@@ -1097,14 +1097,9 @@ impl<'a> DdlContext for TempDbContext<'a> {
                     let src_assocs = edge_assocs.entry(info.src_id).or_default();
                     src_assocs.insert(tid);
 
-                    let back_edge_assocs = self
-                        .sess
-                        .table_assocs
-                        .entry(DataKind::EdgeBwd)
-                        .or_insert(Default::default());
-                    let dst_assocs = back_edge_assocs
-                        .entry(info.dst_id)
-                        .or_insert(Default::default());
+                    let back_edge_assocs =
+                        self.sess.table_assocs.entry(DataKind::EdgeBwd).or_default();
+                    let dst_assocs = back_edge_assocs.entry(info.dst_id).or_default();
                     dst_assocs.insert(tid);
                 }
                 TableInfo::Assoc(info) => {

@@ -44,8 +44,7 @@ fn parse_quoted_string(pair: Pair) -> Result<String> {
             r"\t" => ret.push('\t'),
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
-                let ch =
-                    char::from_u32(code).ok_or_else(|| TextParseError::InvalidUtfCode(code))?;
+                let ch = char::from_u32(code).ok_or(TextParseError::InvalidUtfCode(code))?;
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {
@@ -74,8 +73,7 @@ fn parse_s_quoted_string(pair: Pair) -> Result<String> {
             r"\t" => ret.push('\t'),
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
-                let ch =
-                    char::from_u32(code).ok_or_else(|| TextParseError::InvalidUtfCode(code))?;
+                let ch = char::from_u32(code).ok_or(TextParseError::InvalidUtfCode(code))?;
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {

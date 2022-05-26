@@ -75,7 +75,7 @@ impl<'a> Expr<'a> {
     }
     pub(crate) fn to_static(self) -> StaticExpr {
         match self {
-            Expr::Const(v) => Expr::Const(v.to_static()),
+            Expr::Const(v) => Expr::Const(v.into_static()),
             Expr::List(l) => Expr::List(l.into_iter().map(|v| v.to_static()).collect()),
             Expr::Dict(d) => Expr::Dict(d.into_iter().map(|(k, v)| (k, v.to_static())).collect()),
             Expr::Variable(v) => Expr::Variable(v),
@@ -267,11 +267,11 @@ pub type StaticExpr = Expr<'static>;
 fn extract_list_from_value(value: Value, n: usize) -> Result<Vec<Value>> {
     if let Value::List(l) = value {
         if n > 0 && l.len() != n {
-            return Err(ExprError::ListExtractionFailed(Value::List(l).to_static()).into());
+            return Err(ExprError::ListExtractionFailed(Value::List(l).into_static()).into());
         }
         Ok(l)
     } else {
-        return Err(ExprError::ListExtractionFailed(value.to_static()).into());
+        return Err(ExprError::ListExtractionFailed(value.into_static()).into());
     }
 }
 
@@ -281,7 +281,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
     fn try_from(value: Value<'a>) -> Result<Self> {
         if let Value::Dict(d) = value {
             if d.len() != 1 {
-                return Err(ExprError::ConversionFailure(Value::Dict(d).to_static()).into());
+                return Err(ExprError::ConversionFailure(Value::Dict(d).into_static()).into());
             }
             let (k, v) = d.into_iter().next().unwrap();
             match k.as_ref() {
@@ -304,7 +304,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     )),
                     v => {
                         return Err(ExprError::ConversionFailure(
-                            Value::Dict(BTreeMap::from([(k, v)])).to_static(),
+                            Value::Dict(BTreeMap::from([(k, v)])).into_static(),
                         )
                         .into());
                     }
@@ -314,7 +314,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                         Ok(Expr::Variable(t.to_string()))
                     } else {
                         return Err(ExprError::ConversionFailure(
-                            Value::Dict(BTreeMap::from([(k, v)])).to_static(),
+                            Value::Dict(BTreeMap::from([(k, v)])).into_static(),
                         )
                         .into());
                     }
@@ -323,15 +323,15 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut l = extract_list_from_value(v, 3)?.into_iter();
                     let is_key = match l.next().unwrap() {
                         Value::Bool(b) => b,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
+                        v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
                     };
                     let tid = match l.next().unwrap() {
                         Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
+                        v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
                     };
                     let cid = match l.next().unwrap() {
                         Value::Int(i) => i,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
+                        v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
                     };
                     Ok(Expr::TupleSetIdx(TupleSetIdx {
                         is_key,
@@ -343,7 +343,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let name = match ll.next().unwrap() {
                         Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
+                        v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
                     };
                     let op = Arc::new(UnresolvedOp(name.to_string()));
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
@@ -357,7 +357,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 3)?.into_iter();
                     let name = match ll.next().unwrap() {
                         Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
+                        v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
                     };
                     let op = Arc::new(UnresolvedOp(name.to_string()));
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
@@ -376,7 +376,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let field = match ll.next().unwrap() {
                         Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
+                        v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
                     };
                     let arg = Expr::try_from(ll.next().unwrap())?;
                     Ok(Expr::FieldAcc(field.to_string(), arg.into()))
@@ -385,7 +385,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let idx = match ll.next().unwrap() {
                         Value::Int(i) => i as usize,
-                        v => return Err(ExprError::ConversionFailure(v.to_static()).into()),
+                        v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
                     };
                     let arg = Expr::try_from(ll.next().unwrap())?;
                     Ok(Expr::IdxAcc(idx, arg.into()))
@@ -393,7 +393,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                 k => Err(ExprError::UnknownExprTag(k.to_string()).into()),
             }
         } else {
-            Err(ExprError::ConversionFailure(value.to_static()).into())
+            Err(ExprError::ConversionFailure(value.into_static()).into())
         }
     }
 }

@@ -34,7 +34,7 @@ impl Op for OpConcat {
                 v => {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
-                        vec![v.to_static()],
+                        vec![v.into_static()],
                     )
                     .into());
                 }
@@ -67,7 +67,7 @@ pub(crate) fn partial_eval_concat_expr<'a, T: PartialEvalContext>(
                 v => {
                     return Err(EvalError::OpTypeMismatch(
                         NAME_OP_CONCAT.to_string(),
-                        vec![v.to_static()],
+                        vec![v.into_static()],
                     )
                     .into());
                 }
@@ -88,7 +88,7 @@ pub(crate) fn partial_eval_concat_expr<'a, T: PartialEvalContext>(
                 v => {
                     return Err(EvalError::OpTypeMismatch(
                         NAME_OP_CONCAT.to_string(),
-                        vec![Value::from(v).to_static()],
+                        vec![Value::from(v).into_static()],
                     )
                     .into());
                 }
@@ -128,7 +128,7 @@ impl Op for OpMerge {
                 v => {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
-                        vec![v.to_static()],
+                        vec![v.into_static()],
                     )
                     .into());
                 }
@@ -162,7 +162,7 @@ pub(crate) fn partial_eval_merge_expr<'a, T: PartialEvalContext>(
                 v => {
                     return Err(EvalError::OpTypeMismatch(
                         NAME_OP_MERGE.to_string(),
-                        vec![v.to_static()],
+                        vec![v.into_static()],
                     )
                     .into());
                 }
@@ -183,7 +183,7 @@ pub(crate) fn partial_eval_merge_expr<'a, T: PartialEvalContext>(
                 v => {
                     return Err(EvalError::OpTypeMismatch(
                         NAME_OP_MERGE.to_string(),
-                        vec![Value::from(v).to_static()],
+                        vec![Value::from(v).into_static()],
                     )
                     .into());
                 }

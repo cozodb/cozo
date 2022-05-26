@@ -57,7 +57,7 @@ impl<'a> TaggedInsertion<'a> {
         assert_rule(&values, Rule::expr, a_name, 0)?;
         let values = Expr::try_from(values)?
             .interpret_eval(ctx)?
-            .to_static()
+            .into_static()
             .into_vec()
             .map_err(|e| {
                 AlgebraParseError::WrongArgumentType(a_name.to_string(), 0, format!("{:?}", e))
@@ -105,7 +105,7 @@ impl<'a> TaggedInsertion<'a> {
 
         let mut key_buffer = String::new();
         for value in source.iter() {
-            let gen_err = || AlgebraParseError::ValueError(value.clone().to_static());
+            let gen_err = || AlgebraParseError::ValueError(value.clone().into_static());
             let d_map = value
                 .get_map()
                 .ok_or_else(gen_err)

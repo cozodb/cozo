@@ -159,7 +159,7 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
                 if target_key.in_root {
                     eval_ctx.txn.put(&key, &val)?;
                 } else {
-                    eval_ctx.temp_db.put(&eval_ctx.write_options, &key, &val)?;
+                    eval_ctx.temp_db.put(eval_ctx.write_options, &key, &val)?;
                 }
                 if let Some(builder) = &inv_key_builder {
                     let inv_key = eval_ctx.eval_to_tuple(target_key.id, builder)?;
@@ -168,7 +168,7 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
                     } else {
                         eval_ctx
                             .temp_db
-                            .put(&eval_ctx.write_options, &inv_key, &key)?;
+                            .put(eval_ctx.write_options, &inv_key, &key)?;
                     }
                 }
                 let assoc_vals = assoc_val_builders
@@ -179,7 +179,7 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
                         if tid.in_root {
                             eval_ctx.txn.put(&key, &ret)?;
                         } else {
-                            eval_ctx.temp_db.put(&eval_ctx.write_options, &key, &ret)?;
+                            eval_ctx.temp_db.put(eval_ctx.write_options, &key, &ret)?;
                         }
                         Ok(ret)
                     })
@@ -210,18 +210,18 @@ impl<'a> Insertion<'a> {
                 let key_builder = n
                     .keys
                     .iter()
-                    .map(|v| v.make_extractor(&extract_map))
+                    .map(|v| v.make_extractor(extract_map))
                     .collect::<Vec<_>>();
                 let val_builder = n
                     .vals
                     .iter()
-                    .map(|v| v.make_extractor(&extract_map))
+                    .map(|v| v.make_extractor(extract_map))
                     .collect::<Vec<_>>();
                 (key_builder, val_builder, None)
             }
             TableInfo::Edge(e) => {
-                let src = self.ctx.get_table_info(e.src_id)?.to_node()?;
-                let dst = self.ctx.get_table_info(e.dst_id)?.to_node()?;
+                let src = self.ctx.get_table_info(e.src_id)?.into_node()?;
+                let dst = self.ctx.get_table_info(e.dst_id)?.into_node()?;
                 let src_key_part = [(
                     Expr::Const(Value::Int(e.src_id.int_for_storage())),
                     Typing::Any,
@@ -234,22 +234,22 @@ impl<'a> Insertion<'a> {
                 let bwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
                 let key_builder = src_key_part
                     .into_iter()
-                    .chain(src.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .chain(src.keys.iter().map(|v| v.make_extractor(extract_map)))
                     .chain(fwd_edge_part.into_iter())
-                    .chain(dst.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(e.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .chain(dst.keys.iter().map(|v| v.make_extractor(extract_map)))
+                    .chain(e.keys.iter().map(|v| v.make_extractor(extract_map)))
                     .collect::<Vec<_>>();
                 let inv_key_builder = dst_key_part
                     .into_iter()
-                    .chain(dst.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .chain(dst.keys.iter().map(|v| v.make_extractor(extract_map)))
                     .chain(bwd_edge_part.into_iter())
-                    .chain(src.keys.iter().map(|v| v.make_extractor(&extract_map)))
-                    .chain(e.keys.iter().map(|v| v.make_extractor(&extract_map)))
+                    .chain(src.keys.iter().map(|v| v.make_extractor(extract_map)))
+                    .chain(e.keys.iter().map(|v| v.make_extractor(extract_map)))
                     .collect::<Vec<_>>();
                 let val_builder = e
                     .vals
                     .iter()
-                    .map(|v| v.make_extractor(&extract_map))
+                    .map(|v| v.make_extractor(extract_map))
                     .collect::<Vec<_>>();
                 (key_builder, val_builder, Some(inv_key_builder))
             }

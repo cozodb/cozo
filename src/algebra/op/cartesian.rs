@@ -2,13 +2,11 @@ use crate::algebra::op::RelationalAlgebra;
 use crate::algebra::parser::RaBox;
 use crate::data::tuple::OwnTuple;
 use crate::data::tuple_set::{
-    merge_binding_maps, next_tset_indices_from_binding_map, shift_binding_map,
-    shift_merge_binding_map, BindingMap, TupleSet,
+    next_tset_indices_from_binding_map, shift_merge_binding_map, BindingMap, TupleSet,
 };
 use crate::ddl::reify::TableInfo;
 use anyhow::Result;
 use std::collections::BTreeSet;
-use std::mem;
 
 pub(crate) const NAME_CARTESIAN: &str = "Cartesian";
 

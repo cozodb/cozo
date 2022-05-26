@@ -83,7 +83,7 @@ pub(crate) fn row_eval_if_expr<'a, T: RowEvalContext + 'a>(
             else_part.row_eval(ctx)?
         }),
         Value::Null => Ok(Value::Null),
-        v => Err(EvalError::OpTypeMismatch(IF_NAME.to_string(), vec![v.to_static()]).into()),
+        v => Err(EvalError::OpTypeMismatch(IF_NAME.to_string(), vec![v.into_static()]).into()),
     }
 }
 

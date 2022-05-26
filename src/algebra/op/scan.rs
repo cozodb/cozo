@@ -47,7 +47,7 @@ impl<'a> TableScan<'a> {
             let tid = ctx
                 .resolve_table(assoc_name)
                 .ok_or_else(|| AlgebraParseError::TableNotFound(assoc_name.to_string()))?;
-            let tinfo = ctx.get_table_info(tid)?.to_assoc()?;
+            let tinfo = ctx.get_table_info(tid)?.into_assoc()?;
             if tinfo.src_id != table_info.table_id() {
                 return Err(AlgebraParseError::NoAssociation(
                     el.target.to_string(),
@@ -171,8 +171,8 @@ pub(crate) fn build_binding_map_from_info(
             }
         }
         TableInfo::Edge(e) => {
-            let src = ctx.get_table_info(e.src_id)?.to_node()?;
-            let dst = ctx.get_table_info(e.dst_id)?.to_node()?;
+            let src = ctx.get_table_info(e.src_id)?.into_node()?;
+            let dst = ctx.get_table_info(e.dst_id)?.into_node()?;
             for (i, k) in src.keys.iter().enumerate() {
                 binding_map_inner.insert(
                     "_src_".to_string() + &k.name,

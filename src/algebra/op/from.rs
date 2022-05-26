@@ -5,7 +5,7 @@ use crate::data::uuid::random_uuid_v1;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{Pair, Pairs, Rule};
 use anyhow::Result;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 
 pub(crate) const NAME_FROM: &str = "From";
 
@@ -45,9 +45,18 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
     let chain = arg.into_inner().next().ok_or_else(not_enough_args)?;
 
     let chain = parse_chain(chain)?;
+    let mut seen_bindings = HashSet::new();
     let scans = chain
         .iter()
-        .map(|el| TableScan::build(ctx, el, true))
+        .map(|el| -> Result<RaBox> {
+            let ts = TableScan::build(ctx, el, true)?;
+
+            if !seen_bindings.insert(el.binding.to_string()) {
+                return Err(AlgebraParseError::DuplicateBinding(el.binding.to_string()).into());
+            }
+
+            Ok(ts)
+        })
         .collect::<Result<Vec<_>>>()?;
     if scans.is_empty() {
         return Err(not_enough_args().into());

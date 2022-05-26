@@ -94,7 +94,7 @@ impl OpGt {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }
@@ -144,7 +144,7 @@ impl OpGe {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }
@@ -194,7 +194,7 @@ impl OpLt {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }
@@ -244,7 +244,7 @@ impl OpLe {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }

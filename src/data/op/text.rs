@@ -19,7 +19,7 @@ impl OpStrCat {
             }
             (l, r) => Err(EvalError::OpTypeMismatch(
                 self.name().to_string(),
-                vec![l.to_static(), r.to_static()],
+                vec![l.into_static(), r.into_static()],
             )
             .into()),
         }

@@ -4,7 +4,6 @@ use crate::data::tuple::{OwnTuple, ReifiedTuple};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
-use chrono::format::Item;
 use cozorocks::{DbPtr, TransactionPtr, WriteOptionsPtr};
 use std::cmp::{max, Ordering};
 use std::collections::BTreeMap;
@@ -50,7 +49,7 @@ impl<'a> TryFrom<&'a Value<'a>> for TableId {
     type Error = TupleSetError;
 
     fn try_from(value: &'a Value<'a>) -> result::Result<Self, Self::Error> {
-        let make_err = || TupleSetError::Deser(value.clone().to_static());
+        let make_err = || TupleSetError::Deser(value.clone().into_static());
         let id = value.get_int().ok_or_else(make_err)?;
         Ok(TableId {
             in_root: id > 0,
@@ -98,7 +97,7 @@ impl Debug for ColId {
 
 impl From<(bool, usize)> for ColId {
     fn from((is_key, id): (bool, usize)) -> Self {
-        Self { is_key, id: id }
+        Self { is_key, id }
     }
 }
 
@@ -223,15 +222,15 @@ impl<'a> RowEvalContext for TupleSetEvalContext<'a> {
     }
 
     fn get_temp_db(&self) -> Result<&DbPtr> {
-        Ok(&self.temp_db)
+        Ok(self.temp_db)
     }
 
     fn get_txn(&self) -> Result<&TransactionPtr> {
-        Ok(&self.txn)
+        Ok(self.txn)
     }
 
     fn get_write_options(&self) -> Result<&WriteOptionsPtr> {
-        Ok(&self.write_options)
+        Ok(self.write_options)
     }
 }
 
@@ -300,7 +299,7 @@ pub(crate) fn shift_binding_map(right: &mut BindingMap, left: &BindingMap) {
 }
 
 pub(crate) fn shift_merge_binding_map(left: &mut BindingMap, mut right: BindingMap) {
-    shift_binding_map(&mut right, &left);
+    shift_binding_map(&mut right, left);
     left.extend(right)
 }
 

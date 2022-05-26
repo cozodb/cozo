@@ -19,7 +19,7 @@ impl OpAdd {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }
@@ -68,7 +68,7 @@ impl OpSub {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }
@@ -117,7 +117,7 @@ impl OpMul {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }
@@ -167,7 +167,7 @@ impl OpDiv {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }
@@ -214,7 +214,7 @@ impl OpMod {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }
@@ -264,7 +264,7 @@ impl OpPow {
             (l, r) => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
-                    vec![l.to_static(), r.to_static()],
+                    vec![l.into_static(), r.into_static()],
                 )
                 .into());
             }
@@ -304,9 +304,9 @@ impl OpMinus {
         match arg {
             Value::Int(i) => Ok((-i).into()),
             Value::Float(i) => Ok((-i).into()),
-            v => {
-                Err(EvalError::OpTypeMismatch(self.name().to_string(), vec![v.to_static()]).into())
-            }
+            v => Err(
+                EvalError::OpTypeMismatch(self.name().to_string(), vec![v.into_static()]).into(),
+            ),
         }
     }
 }

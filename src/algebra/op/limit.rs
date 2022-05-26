@@ -41,7 +41,7 @@ impl<'a> LimitOp<'a> {
         let val = expr.interpret_eval(ctx)?;
         let n = val
             .get_int()
-            .ok_or_else(|| AlgebraParseError::ValueError(val.to_static()))?;
+            .ok_or_else(|| AlgebraParseError::ValueError(val.into_static()))?;
         let n = n.abs() as usize;
         let (skip_n, take_n) = match name {
             NAME_SKIP => (Some(n), None),

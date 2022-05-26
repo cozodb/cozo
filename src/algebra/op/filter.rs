@@ -97,7 +97,7 @@ impl<'b> RelationalAlgebra for WhereFilter<'b> {
                             Ok(val) => match val {
                                 Value::Null | Value::Bool(false) => None,
                                 Value::Bool(true) => Some(Ok(tset)),
-                                v => Some(Err(FilterError::ExpectBoolean(v.to_static()).into())),
+                                v => Some(Err(FilterError::ExpectBoolean(v.into_static()).into())),
                             },
                             Err(e) => Some(Err(e)),
                         }

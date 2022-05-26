@@ -229,13 +229,12 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                         let mut inner = p.into_inner();
                         let name = parse_string(inner.next().unwrap())?;
                         let val = Expr::try_from(inner.next().unwrap())?;
-                        collected.insert(name.into(), val);
+                        collected.insert(name, val);
                     }
                     Rule::scoped_accessor => {
                         let name = parse_string(p.into_inner().next().unwrap())?;
-                        let val =
-                            Expr::FieldAcc(name.clone().into(), Expr::Variable("_".into()).into());
-                        collected.insert(name.into(), val);
+                        let val = Expr::FieldAcc(name.clone(), Expr::Variable("_".into()).into());
+                        collected.insert(name, val);
                     }
                     Rule::spreading => {
                         let el = p.into_inner().next().unwrap();
@@ -338,18 +337,18 @@ pub(crate) fn parse_keyed_dict(keyed_dict: Pair) -> Result<(BTreeMap<String, Exp
                 let mut inner = p.into_inner();
                 let name = parse_string(inner.next().unwrap())?;
                 let val = Expr::try_from(inner.next().unwrap())?;
-                keys.insert(name.into(), val);
+                keys.insert(name, val);
             }
             Rule::dict_pair => {
                 let mut inner = p.into_inner();
                 let name = parse_string(inner.next().unwrap())?;
                 let val = Expr::try_from(inner.next().unwrap())?;
-                collected.insert(name.into(), val);
+                collected.insert(name, val);
             }
             Rule::scoped_accessor => {
                 let name = parse_string(p.into_inner().next().unwrap())?;
-                let val = Expr::FieldAcc(name.clone().into(), Expr::Variable("_".into()).into());
-                collected.insert(name.into(), val);
+                let val = Expr::FieldAcc(name.clone(), Expr::Variable("_".into()).into());
+                collected.insert(name, val);
             }
             Rule::spreading => {
                 let el = p.into_inner().next().unwrap();

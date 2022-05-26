@@ -62,7 +62,7 @@ impl RelationFromValues {
             .next()
             .ok_or_else(not_enough_args)?;
         assert_rule(&data, Rule::expr, NAME_RELATION_FROM_VALUES, 1)?;
-        let data = Expr::try_from(data)?.interpret_eval(ctx)?.to_static();
+        let data = Expr::try_from(data)?.interpret_eval(ctx)?.into_static();
         let data = data.into_vec().map_err(AlgebraParseError::ValueError)?;
         let values = data
             .into_iter()
@@ -80,7 +80,7 @@ impl RelationFromValues {
             })
             .collect::<Result<Vec<_>>>()?;
         Ok(Self {
-            binding_map: binding_map,
+            binding_map,
             values,
         })
     }

@@ -269,7 +269,7 @@ impl<'a> Display for Value<'a> {
 
 impl<'a> Value<'a> {
     #[inline]
-    pub fn to_static(self) -> StaticValue {
+    pub fn into_static(self) -> StaticValue {
         match self {
             Value::Null => Value::from(()),
             Value::Bool(b) => Value::from(b),
@@ -279,17 +279,17 @@ impl<'a> Value<'a> {
             Value::Text(t) => Value::from(t.into_owned()),
             Value::List(l) => l
                 .into_iter()
-                .map(|v| v.to_static())
+                .map(|v| v.into_static())
                 .collect::<Vec<StaticValue>>()
                 .into(),
             Value::Dict(d) => d
                 .into_iter()
-                .map(|(k, v)| (Cow::Owned(k.into_owned()), v.to_static()))
+                .map(|(k, v)| (Cow::Owned(k.into_owned()), v.into_static()))
                 .collect::<BTreeMap<Cow<'static, str>, StaticValue>>()
                 .into(),
             Value::Bottom => panic!("Cannot process sentinel value"),
             Value::Bytes(t) => Value::from(t.into_owned()),
-            Value::DescVal(Reverse(val)) => Value::DescVal(Reverse(val.to_static().into())),
+            Value::DescVal(Reverse(val)) => Value::DescVal(Reverse(val.into_static().into())),
         }
     }
 }

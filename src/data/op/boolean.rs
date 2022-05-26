@@ -90,7 +90,7 @@ impl Op for OpOr {
                 v => {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
-                        vec![v.to_static()],
+                        vec![v.into_static()],
                     )
                     .into());
                 }
@@ -121,7 +121,7 @@ pub(crate) fn partial_eval_or<'a, T: PartialEvalContext>(
             Expr::Const(v) => {
                 return Err(EvalError::OpTypeMismatch(
                     OpOr.name().to_string(),
-                    vec![v.to_static()],
+                    vec![v.into_static()],
                 )
                 .into());
             }
@@ -162,7 +162,7 @@ pub(crate) fn row_eval_or<'a, T: RowEvalContext + 'a>(
         (Value::Bool(false), Value::Bool(r)) => Ok(r.into()),
         (l, r) => Err(EvalError::OpTypeMismatch(
             OpOr.name().to_string(),
-            vec![l.to_static(), r.to_static()],
+            vec![l.into_static(), r.into_static()],
         )
         .into()),
     }
@@ -197,7 +197,7 @@ impl Op for OpAnd {
                 v => {
                     return Err(EvalError::OpTypeMismatch(
                         self.name().to_string(),
-                        vec![v.to_static()],
+                        vec![v.into_static()],
                     )
                     .into());
                 }
@@ -228,7 +228,7 @@ pub(crate) fn partial_eval_and<'a, T: PartialEvalContext>(
             Expr::Const(v) => {
                 return Err(EvalError::OpTypeMismatch(
                     OpAnd.name().to_string(),
-                    vec![v.to_static()],
+                    vec![v.into_static()],
                 )
                 .into());
             }
@@ -269,7 +269,7 @@ pub(crate) fn row_eval_and<'a, T: RowEvalContext + 'a>(
         (Value::Bool(true), Value::Bool(r)) => Ok(r.into()),
         (l, r) => Err(EvalError::OpTypeMismatch(
             OpAnd.name().to_string(),
-            vec![l.to_static(), r.to_static()],
+            vec![l.into_static(), r.into_static()],
         )
         .into()),
     }
@@ -281,9 +281,9 @@ impl OpNot {
     pub(crate) fn eval_one_non_null<'a>(&self, arg: Value<'a>) -> Result<Value<'a>> {
         match arg {
             Value::Bool(b) => Ok((!b).into()),
-            v => {
-                Err(EvalError::OpTypeMismatch(self.name().to_string(), vec![v.to_static()]).into())
-            }
+            v => Err(
+                EvalError::OpTypeMismatch(self.name().to_string(), vec![v.into_static()]).into(),
+            ),
         }
     }
 }

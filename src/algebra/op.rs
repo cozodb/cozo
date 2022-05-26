@@ -72,7 +72,7 @@ impl<'a> InterpretContext for TempDbContext<'a> {
                         in_root: false,
                         id: *id,
                     };
-                    let edge_info = self.get_table_info(tid)?.to_edge()?;
+                    let edge_info = self.get_table_info(tid)?.into_edge()?;
                     fwd_edges.push(edge_info)
                 }
             }
@@ -85,7 +85,7 @@ impl<'a> InterpretContext for TempDbContext<'a> {
                         in_root: false,
                         id: *id,
                     };
-                    let edge_info = self.get_table_info(tid)?.to_edge()?;
+                    let edge_info = self.get_table_info(tid)?.into_edge()?;
                     bwd_edges.push(edge_info)
                 }
             }
@@ -108,7 +108,7 @@ impl<'a> InterpretContext for TempDbContext<'a> {
                         in_root: true,
                         id: id as u32,
                     };
-                    let edge_info = self.get_table_info(tid)?.to_edge()?;
+                    let edge_info = self.get_table_info(tid)?.into_edge()?;
                     fwd_edges.push(edge_info)
                 }
             }
@@ -126,7 +126,7 @@ impl<'a> InterpretContext for TempDbContext<'a> {
                         in_root: true,
                         id: id as u32,
                     };
-                    let edge_info = self.get_table_info(tid)?.to_edge()?;
+                    let edge_info = self.get_table_info(tid)?.into_edge()?;
                     bwd_edges.push(edge_info)
                 }
             }
@@ -144,7 +144,7 @@ impl<'a> InterpretContext for TempDbContext<'a> {
                         in_root: false,
                         id: *id,
                     };
-                    let info = self.get_table_info(tid)?.to_index()?;
+                    let info = self.get_table_info(tid)?.into_index()?;
                     collected.push(info)
                 }
             }
@@ -167,7 +167,7 @@ impl<'a> InterpretContext for TempDbContext<'a> {
                         in_root: true,
                         id: id as u32,
                     };
-                    let edge_info = self.get_table_info(tid)?.to_index()?;
+                    let edge_info = self.get_table_info(tid)?.into_index()?;
                     collected.push(edge_info)
                 }
             }
@@ -191,11 +191,9 @@ pub(crate) trait RelationalAlgebra {
                 if k.starts_with('@') {
                     vec![]
                 } else {
-                    let v = v
-                        .into_iter()
+                    v.into_iter()
                         .map(|(k, v)| (k, Expr::TupleSetIdx(v)))
-                        .collect::<Vec<_>>();
-                    v
+                        .collect::<Vec<_>>()
                 }
             })
             .collect::<BTreeMap<_, _>>();
@@ -203,7 +201,7 @@ pub(crate) trait RelationalAlgebra {
         let mut collected = vec![];
         for tuple in self.iter()? {
             let tuple = tuple?;
-            let val = bmap.row_eval(&tuple)?.to_static();
+            let val = bmap.row_eval(&tuple)?.into_static();
             collected.push(val);
         }
         Ok(collected)
