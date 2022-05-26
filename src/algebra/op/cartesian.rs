@@ -13,7 +13,6 @@ pub(crate) const NAME_CARTESIAN: &str = "Cartesian";
 pub(crate) struct CartesianJoin<'a> {
     pub(crate) left: RaBox<'a>,
     pub(crate) right: RaBox<'a>,
-    pub(crate) left_outer_join: bool,
 }
 
 impl<'b> RelationalAlgebra for CartesianJoin<'b> {
@@ -36,13 +35,13 @@ impl<'b> RelationalAlgebra for CartesianJoin<'b> {
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
         let left = self.left.iter()?;
-        let left_join_padding = if self.left_outer_join {
-            let r_binding_map = self.right.binding_map()?;
-            let padding = next_tset_indices_from_binding_map(&r_binding_map);
-            Some(padding)
-        } else {
-            None
-        };
+        // let left_join_padding = if self.left_outer_join {
+        //     let r_binding_map = self.right.binding_map()?;
+        //     let padding = next_tset_indices_from_binding_map(&r_binding_map);
+        //     Some(padding)
+        // } else {
+        //     None
+        // };
         let it = CartesianJoinIter {
             left,
             right: &self.right,
@@ -50,7 +49,6 @@ impl<'b> RelationalAlgebra for CartesianJoin<'b> {
             right_cache: None,
             started: false,
             left_cache_used: false,
-            left_join_padding,
         };
         Ok(Box::new(it))
     }
@@ -67,7 +65,6 @@ pub(crate) struct CartesianJoinIter<'a> {
     right_cache: Option<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>,
     started: bool,
     left_cache_used: bool,
-    left_join_padding: Option<(usize, usize)>,
 }
 
 impl<'a> Iterator for CartesianJoinIter<'a> {
@@ -99,36 +96,21 @@ impl<'a> Iterator for CartesianJoinIter<'a> {
                 Some(left_tset) => match &mut self.right_cache {
                     None => return None,
                     Some(right_iter) => match right_iter.next() {
-                        None => {
-                            if self.left_cache_used || self.left_join_padding.is_none() {
-                                match self.left.next() {
-                                    None => return None,
-                                    Some(Err(e)) => return Some(Err(e)),
-                                    Some(Ok(left_tset)) => match self.right.iter() {
-                                        Ok(iter) => {
-                                            self.right_cache = Some(iter);
-                                            self.left_cache = Some(left_tset);
-                                            self.left_cache_used = false;
-                                            continue;
-                                        }
-                                        Err(e) => {
-                                            return Some(Err(e));
-                                        }
-                                    },
+                        None => match self.left.next() {
+                            None => return None,
+                            Some(Err(e)) => return Some(Err(e)),
+                            Some(Ok(left_tset)) => match self.right.iter() {
+                                Ok(iter) => {
+                                    self.right_cache = Some(iter);
+                                    self.left_cache = Some(left_tset);
+                                    self.left_cache_used = false;
+                                    continue;
                                 }
-                            } else {
-                                self.started = false;
-                                let mut left_tset = self.left_cache.take().unwrap();
-                                let (k_pad, v_pad) = self.left_join_padding.unwrap();
-                                for _ in 0..=k_pad {
-                                    left_tset.push_key(OwnTuple::empty_tuple().into());
+                                Err(e) => {
+                                    return Some(Err(e));
                                 }
-                                for _ in 0..=v_pad {
-                                    left_tset.push_val(OwnTuple::empty_tuple().into());
-                                }
-                                return Some(Ok(left_tset));
-                            }
-                        }
+                            },
+                        },
                         Some(Err(e)) => {
                             return Some(Err(e));
                         }

@@ -21,6 +21,7 @@ mod scan;
 mod select;
 mod tagged;
 mod values;
+mod nested_loop;
 
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
@@ -37,6 +38,7 @@ pub(crate) use scan::*;
 pub(crate) use select::*;
 pub(crate) use tagged::*;
 pub(crate) use values::*;
+pub(crate) use nested_loop::*;
 
 pub(crate) trait InterpretContext: PartialEvalContext {
     fn resolve_table(&self, name: &str) -> Option<TableId>;

@@ -1,11 +1,16 @@
-use crate::algebra::op::{CartesianJoin, RelationalAlgebra, TableScan};
+use crate::algebra::op::{
+    CartesianJoin, InterpretContext, RelationalAlgebra, TableScan, WhereFilter,
+};
 use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
+use crate::data::expr::{Expr, StaticExpr};
+use crate::data::op::{OpAnd, OpEq};
 use crate::data::uuid::random_uuid_v1;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{Pair, Pairs, Rule};
 use anyhow::Result;
 use std::collections::{BTreeSet, HashSet};
+use std::sync::Arc;
 
 pub(crate) const NAME_FROM: &str = "From";
 
@@ -32,7 +37,6 @@ pub(crate) fn build_from_clause<'a>(
         ret = RaBox::Cartesian(Box::new(CartesianJoin {
             left: ret,
             right: nxt,
-            left_outer_join: false,
         }))
     }
 
@@ -65,6 +69,54 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
         return Ok(scans.into_iter().next().unwrap());
     }
     todo!()
+}
+
+fn build_join_conditions(
+    ctx: &TempDbContext,
+    node_to_edge: bool,
+    is_outer: bool,
+    dir: ChainPartEdgeDir,
+    node_name: &str,
+    node_binding: &str,
+    edge_binding: &str,
+) -> Result<StaticExpr> {
+    let dir_prefix = if node_to_edge {
+        match dir {
+            ChainPartEdgeDir::Fwd => "_src_",
+            ChainPartEdgeDir::Bwd => "_dst_",
+            ChainPartEdgeDir::Bidi => todo!(),
+        }
+    } else {
+        match dir {
+            ChainPartEdgeDir::Fwd => "_dst_",
+            ChainPartEdgeDir::Bwd => "_src_",
+            ChainPartEdgeDir::Bidi => todo!(),
+        }
+    };
+    let the_node = ctx.resolve_table(node_name).unwrap();
+    let the_node = ctx.get_table_info(the_node).unwrap().into_node().unwrap();
+
+    let conditions = the_node
+        .keys
+        .into_iter()
+        .map(|k| {
+            Expr::Apply(
+                Arc::new(OpEq),
+                vec![
+                    Expr::FieldAcc(
+                        dir_prefix.to_string() + &k.name,
+                        Expr::Variable(edge_binding.to_string()).into(),
+                    ),
+                    Expr::FieldAcc(k.name, Expr::Variable(node_binding.to_string()).into()),
+                ],
+            )
+        })
+        .collect::<Vec<_>>();
+    Ok(if conditions.len() == 1 {
+        conditions.into_iter().next().unwrap()
+    } else {
+        Expr::Apply(Arc::new(OpAnd), conditions)
+    })
 }
 
 #[derive(Copy, Clone, Debug)]

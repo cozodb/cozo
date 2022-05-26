@@ -1,9 +1,4 @@
-use crate::algebra::op::{
-    build_from_clause, AssocOp, CartesianJoin, Insertion, LimitOp, RelationFromValues,
-    RelationalAlgebra, SelectOp, TableScan, TaggedInsertion, WhereFilter, NAME_FROM,
-    NAME_INSERTION, NAME_RELATION_FROM_VALUES, NAME_SELECT, NAME_SKIP, NAME_TAGGED_INSERTION,
-    NAME_TAGGED_UPSERT, NAME_TAKE, NAME_UPSERT, NAME_WHERE,
-};
+use crate::algebra::op::{build_from_clause, AssocOp, CartesianJoin, Insertion, LimitOp, RelationFromValues, RelationalAlgebra, SelectOp, TableScan, TaggedInsertion, WhereFilter, NAME_FROM, NAME_INSERTION, NAME_RELATION_FROM_VALUES, NAME_SELECT, NAME_SKIP, NAME_TAGGED_INSERTION, NAME_TAGGED_UPSERT, NAME_TAKE, NAME_UPSERT, NAME_WHERE, NestedLoopLeft, NestedLoopRight, NestedLoopOuter};
 use crate::context::TempDbContext;
 use crate::data::tuple::OwnTuple;
 use crate::data::tuple_set::{BindingMap, TableId, TupleSet};
@@ -74,6 +69,9 @@ pub(crate) enum RaBox<'a> {
     AssocOp(Box<AssocOp<'a>>),
     LimitOp(Box<LimitOp<'a>>),
     Cartesian(Box<CartesianJoin<'a>>),
+    NestedLoopLeft(Box<NestedLoopLeft<'a>>),
+    NestedLoopRight(Box<NestedLoopRight<'a>>),
+    NestedLoopOuter(Box<NestedLoopOuter<'a>>)
 }
 
 impl<'a> RaBox<'a> {
@@ -88,6 +86,9 @@ impl<'a> RaBox<'a> {
             RaBox::AssocOp(inner) => vec![&inner.source],
             RaBox::LimitOp(inner) => vec![&inner.source],
             RaBox::Cartesian(inner) => vec![&inner.left, &inner.right],
+            RaBox::NestedLoopLeft(inner) => vec![&inner.left],
+            RaBox::NestedLoopRight(inner) => vec![&inner.left],
+            RaBox::NestedLoopOuter(inner) => vec![&inner.left],
         }
     }
 }
@@ -114,6 +115,9 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::AssocOp(inner) => inner.name(),
             RaBox::LimitOp(inner) => inner.name(),
             RaBox::Cartesian(inner) => inner.name(),
+            RaBox::NestedLoopLeft(inner) => inner.name(),
+            RaBox::NestedLoopRight(inner) => inner.name(),
+            RaBox::NestedLoopOuter(inner) => inner.name(),
         }
     }
 
@@ -128,6 +132,9 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::AssocOp(inner) => inner.bindings(),
             RaBox::LimitOp(inner) => inner.bindings(),
             RaBox::Cartesian(inner) => inner.bindings(),
+            RaBox::NestedLoopLeft(inner) => inner.bindings(),
+            RaBox::NestedLoopRight(inner) => inner.bindings(),
+            RaBox::NestedLoopOuter(inner) => inner.bindings(),
         }
     }
 
@@ -142,6 +149,9 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::AssocOp(inner) => inner.binding_map(),
             RaBox::LimitOp(inner) => inner.binding_map(),
             RaBox::Cartesian(inner) => inner.binding_map(),
+            RaBox::NestedLoopLeft(inner) => inner.binding_map(),
+            RaBox::NestedLoopRight(inner) => inner.binding_map(),
+            RaBox::NestedLoopOuter(inner) => inner.binding_map(),
         }
     }
 
@@ -156,6 +166,9 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::AssocOp(inner) => inner.iter(),
             RaBox::LimitOp(inner) => inner.iter(),
             RaBox::Cartesian(inner) => inner.iter(),
+            RaBox::NestedLoopLeft(inner) => inner.iter(),
+            RaBox::NestedLoopRight(inner) => inner.iter(),
+            RaBox::NestedLoopOuter(inner) => inner.iter(),
         }
     }
 
@@ -170,6 +183,9 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::AssocOp(inner) => inner.identity(),
             RaBox::LimitOp(inner) => inner.identity(),
             RaBox::Cartesian(inner) => inner.identity(),
+            RaBox::NestedLoopLeft(inner) => inner.identity(),
+            RaBox::NestedLoopRight(inner) => inner.identity(),
+            RaBox::NestedLoopOuter(inner) => inner.identity(),
         }
     }
 }

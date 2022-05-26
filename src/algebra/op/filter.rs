@@ -15,9 +15,9 @@ use std::sync::Arc;
 pub(crate) const NAME_WHERE: &str = "Where";
 
 pub(crate) struct WhereFilter<'a> {
-    ctx: &'a TempDbContext<'a>,
+    pub(crate) ctx: &'a TempDbContext<'a>,
     pub(crate) source: RaBox<'a>,
-    condition: StaticExpr,
+    pub(crate) condition: StaticExpr,
 }
 
 #[derive(thiserror::Error, Debug)]
