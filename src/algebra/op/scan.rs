@@ -1,22 +1,28 @@
-use crate::algebra::op::{ChainEl, ChainPart, InterpretContext, RelationalAlgebra};
-use crate::algebra::parser::AlgebraParseError;
+use crate::algebra::op::{AssocOp, ChainEl, ChainPart, InterpretContext, RelationalAlgebra};
+use crate::algebra::parser::{AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
+use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{BindingMap, TupleSet, TupleSetIdx};
 use crate::ddl::reify::{AssocInfo, TableInfo};
 use anyhow::Result;
 use cozorocks::IteratorPtr;
 use std::collections::{BTreeMap, BTreeSet};
+use crate::data::value::Value;
 
 pub(crate) struct TableScan<'a> {
     ctx: &'a TempDbContext<'a>,
     binding: String,
     table_info: TableInfo,
-    assoc_infos: Vec<AssocInfo>,
+    // assoc_infos: Vec<AssocInfo>,
 }
 
 impl<'a> TableScan<'a> {
-    pub(crate) fn build(ctx: &'a TempDbContext<'a>, el: &ChainEl, only_one: bool) -> Result<Self> {
+    pub(crate) fn build(
+        ctx: &'a TempDbContext<'a>,
+        el: &ChainEl,
+        only_one: bool,
+    ) -> Result<RaBox<'a>> {
         let table_id = ctx
             .resolve_table(&el.target)
             .ok_or_else(|| AlgebraParseError::TableNotFound(el.target.to_string()))?;
@@ -51,12 +57,67 @@ impl<'a> TableScan<'a> {
             }
             assoc_infos.push(tinfo);
         }
-        Ok(Self {
+        let mut ret = RaBox::TableScan(Box::new(Self {
             ctx,
             binding: el.binding.clone(),
-            table_info,
-            assoc_infos,
-        })
+            table_info: table_info.clone(),
+            // assoc_infos,
+        }));
+        if !assoc_infos.is_empty() {
+            let mut key_extractors = vec![];
+            match &table_info {
+                TableInfo::Node(info) => {
+                    for col in &info.keys {
+                        key_extractors.push(Expr::FieldAcc(
+                            col.name.clone(),
+                            Expr::Variable(el.binding.clone()).into(),
+                        ))
+                    }
+                }
+                TableInfo::Edge(info) => {
+                    let src = ctx.get_table_info(info.src_id)?;
+                    let src = src.as_node()?;
+                    let dst = ctx.get_table_info(info.dst_id)?;
+                    let dst = dst.as_node()?;
+                    key_extractors.push(Expr::Const(Value::Int(info.src_id.int_for_storage())));
+                    for col in &src.keys {
+                        key_extractors.push(
+                            Expr::FieldAcc(
+                                "_src_".to_string() + &col.name,
+                                Expr::Variable(el.binding.clone()).into(),
+                            )
+                        );
+
+                    }
+                    key_extractors.push(Expr::Const(Value::Bool(true)));
+                    for col in &dst.keys {
+                        key_extractors.push(
+                            Expr::FieldAcc(
+                                "_dst_".to_string() + &col.name,
+                                Expr::Variable(el.binding.clone()).into(),
+                            )
+                        );
+
+                    }
+                    for col in &info.keys {
+                        key_extractors.push(
+                            Expr::FieldAcc(
+                                col.name.clone(),
+                                Expr::Variable(el.binding.clone()).into(),
+                            )
+                        );
+                    }
+                }
+                _ => unreachable!(),
+            }
+            ret = RaBox::AssocOp(Box::new(AssocOp {
+                ctx,
+                source: ret,
+                assoc_infos,
+                key_extractors
+            }))
+        }
+        Ok(ret)
     }
 }
 
@@ -72,7 +133,7 @@ impl<'b> RelationalAlgebra for TableScan<'b> {
     }
 
     fn binding_map(&self) -> Result<BindingMap> {
-        let inner = build_binding_map_from_info(self.ctx, &self.table_info, &self.assoc_infos)?;
+        let inner = build_binding_map_from_info(self.ctx, &self.table_info, &[])?;
         Ok(BTreeMap::from([(self.binding.clone(), inner)]))
     }
 

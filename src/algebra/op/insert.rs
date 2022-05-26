@@ -6,9 +6,7 @@ use crate::context::TempDbContext;
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::parser::parse_scoped_dict;
 use crate::data::tuple::{DataKind, OwnTuple};
-use crate::data::tuple_set::{
-    BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext,
-};
+use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext};
 use crate::data::typing::Typing;
 use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, TableInfo};
@@ -105,7 +103,7 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
         Ok(BTreeMap::from([(self.binding.clone(), inner)]))
     }
 
-    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'b>> {
+    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'b>> {
         let source_map = self.source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,
@@ -224,8 +222,8 @@ impl<'a> Insertion<'a> {
             TableInfo::Edge(e) => {
                 let src = self.ctx.get_table_info(e.src_id)?.to_node()?;
                 let dst = self.ctx.get_table_info(e.dst_id)?.to_node()?;
-                let src_key_part = [(Expr::Const(Value::Int(e.src_id.id as i64)), Typing::Any)];
-                let dst_key_part = [(Expr::Const(Value::Int(e.dst_id.id as i64)), Typing::Any)];
+                let src_key_part = [(Expr::Const(Value::Int(e.src_id.int_for_storage())), Typing::Any)];
+                let dst_key_part = [(Expr::Const(Value::Int(e.dst_id.int_for_storage())), Typing::Any)];
                 let fwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
                 let bwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
                 let key_builder = src_key_part

@@ -10,6 +10,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
+mod assoc;
 mod filter;
 mod from;
 mod group;
@@ -24,6 +25,7 @@ use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::value::StaticValue;
 use crate::runtime::options::default_read_options;
+pub(crate) use assoc::*;
 pub(crate) use filter::*;
 pub(crate) use from::*;
 pub(crate) use group::*;
@@ -177,7 +179,7 @@ pub(crate) trait RelationalAlgebra {
     fn name(&self) -> &str;
     fn bindings(&self) -> Result<BTreeSet<String>>;
     fn binding_map(&self) -> Result<BindingMap>;
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>>;
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>;
     fn identity(&self) -> Option<TableInfo>;
     fn get_values(&self) -> Result<Vec<StaticValue>> {
         let bmap = self.binding_map()?;

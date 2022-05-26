@@ -147,9 +147,9 @@ impl<'a> TaggedInsertion<'a> {
                         let src = id_cache.get_info(e.src_id)?;
                         let dst = id_cache.get_info(e.dst_id)?;
                         let mut key_tuple = OwnTuple::with_prefix(e.tid.id);
-                        key_tuple.push_int(e.src_id.id as i64);
+                        key_tuple.push_int(e.src_id.int_for_storage());
                         let mut inv_key_tuple = OwnTuple::with_prefix(e.tid.id);
-                        inv_key_tuple.push_int(e.dst_id.id as i64);
+                        inv_key_tuple.push_int(e.dst_id.int_for_storage());
                         let mut val_tuple = OwnTuple::with_data_prefix(DataKind::Data);
 
                         for col in &src.as_node()?.keys {

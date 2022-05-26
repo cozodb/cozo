@@ -298,11 +298,11 @@ impl From<&TableInfo> for OwnTuple {
     fn from(ti: &TableInfo) -> Self {
         match ti {
             TableInfo::Node(NodeInfo {
-                name,
-                tid,
-                keys,
-                vals,
-            }) => {
+                                name,
+                                tid,
+                                keys,
+                                vals,
+                            }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Node);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -313,13 +313,13 @@ impl From<&TableInfo> for OwnTuple {
                 target
             }
             TableInfo::Edge(EdgeInfo {
-                name,
-                tid,
-                src_id,
-                dst_id,
-                keys,
-                vals,
-            }) => {
+                                name,
+                                tid,
+                                src_id,
+                                dst_id,
+                                keys,
+                                vals,
+                            }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Edge);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -332,11 +332,11 @@ impl From<&TableInfo> for OwnTuple {
                 target
             }
             TableInfo::Assoc(AssocInfo {
-                name,
-                tid,
-                src_id,
-                vals,
-            }) => {
+                                 name,
+                                 tid,
+                                 src_id,
+                                 vals,
+                             }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Assoc);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -346,12 +346,12 @@ impl From<&TableInfo> for OwnTuple {
                 target
             }
             TableInfo::Index(IndexInfo {
-                name,
-                tid,
-                src_id,
-                assoc_ids,
-                index,
-            }) => {
+                                 name,
+                                 tid,
+                                 src_id,
+                                 assoc_ids,
+                                 index,
+                             }) => {
                 let mut target = OwnTuple::with_data_prefix(DataKind::Index);
                 target.push_str(name);
                 target.push_value(&Value::from(*tid));
@@ -443,7 +443,7 @@ pub(crate) trait DdlContext {
     fn gen_temp_table_id(&self) -> TableId;
     fn gen_table_id(&mut self) -> Result<TableId>;
     fn table_id_by_name(&self, name: &str) -> Result<TableId>;
-    fn table_by_name<I: IntoIterator<Item = DataKind>>(
+    fn table_by_name<I: IntoIterator<Item=DataKind>>(
         &self,
         name: &str,
         kind: I,
@@ -637,7 +637,7 @@ pub(crate) trait DdlContext {
     fn commit(&mut self) -> Result<()>;
 }
 
-fn check_name_clash<'a, I: IntoIterator<Item = II>, II: IntoIterator<Item = &'a ColSchema>>(
+fn check_name_clash<'a, I: IntoIterator<Item=II>, II: IntoIterator<Item=&'a ColSchema>>(
     kvs: I,
 ) -> Result<()> {
     let mut seen: BTreeSet<&str> = BTreeSet::new();
@@ -957,7 +957,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
             TableInfo::Edge(info) => {
                 let mut key = OwnTuple::with_prefix(0);
                 // store fwd edge info
-                key.push_int(info.src_id.id as i64);
+                key.push_int(info.src_id.int_for_storage());
                 key.push_int(DataKind::Edge as i64);
                 let mut current = match self.txn.get_for_update_owned(read_opts, &key)? {
                     Some(v) => OwnTuple::new(v.as_ref().to_vec()),
@@ -967,7 +967,7 @@ impl<'a> DdlContext for MainDbContext<'a> {
                 self.txn.put(&key, &current)?;
                 // store bwd edge info
                 key.truncate_all();
-                key.push_int(info.dst_id.id as i64);
+                key.push_int(info.dst_id.int_for_storage());
                 key.push_int(DataKind::EdgeBwd as i64);
                 let mut current = match self.txn.get_for_update_owned(read_opts, &key)? {
                     Some(v) => OwnTuple::new(v.as_ref().to_vec()),
@@ -1049,7 +1049,7 @@ impl<'a> DdlContext for TempDbContext<'a> {
                 .tables
                 .get(&id)
                 .cloned()
-                .ok_or(DdlReifyError::TableNotFound(TableId { id, in_root }).into())
+                .ok_or_else(|| DdlReifyError::TableNotFound(TableId { id, in_root }).into())
         } else {
             find_table_by_id_in_main(&self.txn, id)
         }
@@ -1097,8 +1097,8 @@ impl<'a> DdlContext for TempDbContext<'a> {
                         .sess
                         .table_assocs
                         .entry(DataKind::Edge)
-                        .or_insert(Default::default());
-                    let src_assocs = edge_assocs.entry(info.src_id).or_insert(Default::default());
+                        .or_default();
+                    let src_assocs = edge_assocs.entry(info.src_id).or_default();
                     src_assocs.insert(tid);
 
                     let back_edge_assocs = self
@@ -1116,8 +1116,8 @@ impl<'a> DdlContext for TempDbContext<'a> {
                         .sess
                         .table_assocs
                         .entry(DataKind::Assoc)
-                        .or_insert(Default::default());
-                    let src_assocs = assocs.entry(info.src_id).or_insert(Default::default());
+                        .or_default();
+                    let src_assocs = assocs.entry(info.src_id).or_default();
                     src_assocs.insert(tid);
                 }
                 TableInfo::Index(info) => {

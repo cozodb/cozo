@@ -121,7 +121,7 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
         Ok(BTreeMap::from([(self.binding.clone(), extract_map)]))
     }
 
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'a>> {
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
         let source_map = self.source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,

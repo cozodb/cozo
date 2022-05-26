@@ -28,9 +28,20 @@ pub struct TableId {
     pub(crate) id: u32,
 }
 
+impl TableId {
+    pub(crate) fn int_for_storage(&self) -> i64 {
+        if self.in_root {
+            self.id as i64
+        } else {
+            -(self.id as i64)
+        }
+    }
+}
+
 impl From<TableId> for StaticValue {
     fn from(tid: TableId) -> Self {
-        Value::from(vec![Value::from(tid.in_root), (tid.id as i64).into()])
+        // Value::from(vec![Value::from(tid.in_root), (tid.id as i64).into()])
+        Value::from(tid.int_for_storage())
     }
 }
 
@@ -39,18 +50,10 @@ impl<'a> TryFrom<&'a Value<'a>> for TableId {
 
     fn try_from(value: &'a Value<'a>) -> result::Result<Self, Self::Error> {
         let make_err = || TupleSetError::Deser(value.clone().to_static());
-        let fields = value.get_slice().ok_or_else(make_err)?;
-        let in_root = fields
-            .get(0)
-            .ok_or_else(make_err)?
-            .get_bool()
-            .ok_or_else(make_err)?;
-        let id = fields
-            .get(1)
-            .ok_or_else(make_err)?
+        let id = value
             .get_int()
-            .ok_or_else(make_err)? as u32;
-        Ok(TableId { in_root, id })
+            .ok_or_else(make_err)?;
+        Ok(TableId { in_root: id > 0, id: id.abs() as u32 })
     }
 }
 

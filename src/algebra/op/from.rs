@@ -1,4 +1,4 @@
-use crate::algebra::op::{TableScan};
+use crate::algebra::op::TableScan;
 use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::uuid::random_uuid_v1;
@@ -26,7 +26,7 @@ pub(crate) fn build_from_clause<'a>(
         .ok_or_else(not_enough_args)?;
     let mut chain = parse_chain(chain)?.into_iter();
     let mut last_el = chain.next().ok_or_else(not_enough_args)?;
-    let mut ret = RaBox::TableScan(Box::new(TableScan::build(ctx, &last_el, true)?));
+    let mut ret = TableScan::build(ctx, &last_el, true)?;
     for el in chain {
         todo!()
     }
