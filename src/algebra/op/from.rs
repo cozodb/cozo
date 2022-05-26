@@ -1,23 +1,19 @@
 use crate::algebra::op::{RelationalAlgebra, TableScan};
 use crate::algebra::parser::{assert_rule, AlgebraParseError};
 use crate::context::TempDbContext;
-use crate::data::tuple::DataKind;
-use crate::data::tuple_set::{BindingMap, TupleSet};
 use crate::data::uuid::random_uuid_v1;
-use crate::ddl::reify::TableInfo;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{Pair, Pairs, Rule};
 use anyhow::Result;
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 pub(crate) const NAME_FROM: &str = "From";
 
 pub(crate) fn build_from_clause<'a>(
     ctx: &'a TempDbContext<'a>,
-    prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
+    prev: Option<Box<dyn RelationalAlgebra + 'a>>,
     mut args: Pairs,
-) -> Result<Arc<dyn RelationalAlgebra + 'a>> {
+) -> Result<Box<dyn RelationalAlgebra + 'a>> {
     if !matches!(prev, None) {
         return Err(AlgebraParseError::Unchainable(NAME_FROM.to_string()).into());
     }
@@ -30,7 +26,7 @@ pub(crate) fn build_from_clause<'a>(
         .ok_or_else(not_enough_args)?;
     let mut chain = parse_chain(chain)?.into_iter();
     let mut last_el = chain.next().ok_or_else(not_enough_args)?;
-    let mut ret = Arc::new(TableScan::build(ctx, &last_el, true)?);
+    let mut ret = Box::new(TableScan::build(ctx, &last_el, true)?);
     for el in chain {
         todo!()
     }

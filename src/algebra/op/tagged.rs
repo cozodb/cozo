@@ -13,7 +13,6 @@ use anyhow::{Context, Result};
 use cozorocks::PinnableSlicePtr;
 use pest::Parser;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 pub(crate) const NAME_TAGGED_INSERTION: &str = "InsertTagged";
 pub(crate) const NAME_TAGGED_UPSERT: &str = "UpsertTagged";
@@ -27,7 +26,7 @@ type TaggedInsertionSet = (
 
 pub(crate) struct TaggedInsertion<'a> {
     ctx: &'a TempDbContext<'a>,
-    // source: Arc<Vec<StaticValue>>,
+    // source: Box<Vec<StaticValue>>,
     values: BTreeMap<TableId, Vec<TaggedInsertionSet>>,
     tally: BTreeMap<String, usize>,
     binding: String,
@@ -37,7 +36,7 @@ pub(crate) struct TaggedInsertion<'a> {
 impl<'a> TaggedInsertion<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
+        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
         mut args: Pairs,
         upsert: bool,
     ) -> Result<Self> {

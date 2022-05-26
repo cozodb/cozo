@@ -9,7 +9,6 @@ use crate::data::tuple_set::TableId;
 use crate::data::value::StaticValue;
 use crate::parser::{Pair, Rule};
 use anyhow::Result;
-use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum AlgebraParseError {
@@ -60,27 +59,27 @@ pub(crate) fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Resu
 pub(crate) fn build_relational_expr<'a>(
     ctx: &'a TempDbContext,
     pair: Pair,
-) -> Result<Arc<dyn RelationalAlgebra + 'a>> {
-    let mut built: Option<Arc<dyn RelationalAlgebra>> = None;
+) -> Result<Box<dyn RelationalAlgebra + 'a>> {
+    let mut built: Option<Box<dyn RelationalAlgebra>> = None;
     for pair in pair.into_inner() {
         let mut pairs = pair.into_inner();
         match pairs.next().unwrap().as_str() {
-            NAME_INSERTION => built = Some(Arc::new(Insertion::build(ctx, built, pairs, false)?)),
-            NAME_UPSERT => built = Some(Arc::new(Insertion::build(ctx, built, pairs, true)?)),
+            NAME_INSERTION => built = Some(Box::new(Insertion::build(ctx, built, pairs, false)?)),
+            NAME_UPSERT => built = Some(Box::new(Insertion::build(ctx, built, pairs, true)?)),
             NAME_TAGGED_INSERTION => {
-                built = Some(Arc::new(TaggedInsertion::build(ctx, built, pairs, false)?))
+                built = Some(Box::new(TaggedInsertion::build(ctx, built, pairs, false)?))
             }
             NAME_TAGGED_UPSERT => {
-                built = Some(Arc::new(TaggedInsertion::build(ctx, built, pairs, true)?))
+                built = Some(Box::new(TaggedInsertion::build(ctx, built, pairs, true)?))
             }
             NAME_RELATION_FROM_VALUES => {
-                built = Some(Arc::new(RelationFromValues::build(ctx, built, pairs)?));
+                built = Some(Box::new(RelationFromValues::build(ctx, built, pairs)?));
             }
             NAME_FROM => {
                 built = Some(build_from_clause(ctx, built, pairs)?);
             }
-            NAME_WHERE => built = Some(Arc::new(WhereFilter::build(ctx, built, pairs)?)),
-            NAME_SELECT => built = Some(Arc::new(SelectOp::build(ctx, built, pairs)?)),
+            NAME_WHERE => built = Some(Box::new(WhereFilter::build(ctx, built, pairs)?)),
+            NAME_SELECT => built = Some(Box::new(SelectOp::build(ctx, built, pairs)?)),
             _ => unimplemented!(),
         }
     }

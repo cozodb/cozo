@@ -16,7 +16,7 @@ pub(crate) const NAME_WHERE: &str = "Where";
 
 pub(crate) struct WhereFilter<'a> {
     ctx: &'a TempDbContext<'a>,
-    source: Arc<dyn RelationalAlgebra + 'a>,
+    source: Box<dyn RelationalAlgebra + 'a>,
     condition: StaticExpr,
 }
 
@@ -29,7 +29,7 @@ pub(crate) enum FilterError {
 impl<'a> WhereFilter<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
+        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
         mut args: Pairs,
     ) -> Result<Self> {
         let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_WHERE.to_string());
@@ -87,7 +87,7 @@ impl<'b> RelationalAlgebra for WhereFilter<'b> {
             .filter_map(move |tset| -> Option<Result<TupleSet>> {
                 match tset {
                     Ok(tset) => {
-                        let mut eval_ctx = TupleSetEvalContext {
+                        let eval_ctx = TupleSetEvalContext {
                             tuple_set: &tset,
                             txn: &txn,
                             temp_db: &temp_db,

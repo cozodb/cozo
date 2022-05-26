@@ -13,13 +13,12 @@ use crate::parser::{Pairs, Rule};
 use crate::runtime::options::default_write_options;
 use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 pub(crate) const NAME_SELECT: &str = "Select";
 
 pub(crate) struct SelectOp<'a> {
     ctx: &'a TempDbContext<'a>,
-    source: Arc<dyn RelationalAlgebra + 'a>,
+    source: Box<dyn RelationalAlgebra + 'a>,
     binding: String,
     extract_map: StaticExpr,
 }
@@ -27,7 +26,7 @@ pub(crate) struct SelectOp<'a> {
 impl<'a> SelectOp<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
+        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
         mut args: Pairs,
     ) -> Result<Self> {
         let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_SELECT.to_string());

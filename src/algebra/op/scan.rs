@@ -4,7 +4,6 @@ use crate::context::TempDbContext;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{BindingMap, TupleSet, TupleSetIdx};
 use crate::ddl::reify::{AssocInfo, TableInfo};
-use crate::runtime::options::default_read_options;
 use anyhow::Result;
 use cozorocks::IteratorPtr;
 use std::collections::{BTreeMap, BTreeSet};

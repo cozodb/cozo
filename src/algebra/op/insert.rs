@@ -7,7 +7,7 @@ use crate::data::expr::{Expr, StaticExpr};
 use crate::data::parser::parse_scoped_dict;
 use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{
-    BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext, TupleSetIdx,
+    BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext,
 };
 use crate::data::typing::Typing;
 use crate::data::value::Value;
@@ -18,14 +18,13 @@ use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
 use cozorocks::PinnableSlicePtr;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 pub(crate) const NAME_INSERTION: &str = "Insert";
 pub(crate) const NAME_UPSERT: &str = "Upsert";
 
 pub(crate) struct Insertion<'a> {
     ctx: &'a TempDbContext<'a>,
-    source: Arc<dyn RelationalAlgebra + 'a>,
+    source: Box<dyn RelationalAlgebra + 'a>,
     binding: String,
     target_info: TableInfo,
     assoc_infos: Vec<AssocInfo>,
@@ -37,7 +36,7 @@ pub(crate) struct Insertion<'a> {
 impl<'a> Insertion<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
+        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
         mut args: Pairs,
         upsert: bool,
     ) -> Result<Self> {
@@ -106,7 +105,7 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
         Ok(BTreeMap::from([(self.binding.clone(), inner)]))
     }
 
-    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'b>> {
+    fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item=Result<TupleSet>> + 'b>> {
         let source_map = self.source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,
@@ -141,7 +140,7 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
 
         Ok(Box::new(self.source.iter()?.map(
             move |tset| -> Result<TupleSet> {
-                let mut eval_ctx = TupleSetEvalContext {
+                let eval_ctx = TupleSetEvalContext {
                     tuple_set: &tset?,
                     txn: &txn,
                     temp_db: &temp_db,

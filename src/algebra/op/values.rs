@@ -9,7 +9,6 @@ use crate::ddl::reify::TableInfo;
 use crate::parser::{Pairs, Rule};
 use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 pub(crate) const NAME_RELATION_FROM_VALUES: &str = "Values";
 
@@ -22,7 +21,7 @@ pub(crate) struct RelationFromValues {
 impl RelationFromValues {
     pub(crate) fn build<'a>(
         ctx: &'a TempDbContext<'a>,
-        prev: Option<Arc<dyn RelationalAlgebra + 'a>>,
+        prev: Option<Box<dyn RelationalAlgebra + 'a>>,
         mut args: Pairs,
     ) -> Result<Self> {
         if !matches!(prev, None) {
