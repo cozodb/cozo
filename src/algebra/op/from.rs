@@ -1,4 +1,4 @@
-use crate::algebra::op::TableScan;
+use crate::algebra::op::{CartesianJoin, RelationalAlgebra, TableScan};
 use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::uuid::random_uuid_v1;
@@ -18,12 +18,31 @@ pub(crate) fn build_from_clause<'a>(
         return Err(AlgebraParseError::Unchainable(NAME_FROM.to_string()).into());
     }
     let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_FROM.to_string());
-    let chain = args
-        .next()
-        .ok_or_else(not_enough_args)?
-        .into_inner()
-        .next()
-        .ok_or_else(not_enough_args)?;
+    let arg = args.next().ok_or_else(not_enough_args)?;
+    let mut ret = build_chain(ctx, arg)?;
+
+    for arg in args {
+        let nxt = build_chain(ctx, arg)?;
+        let existing_bindings = ret.bindings()?;
+        let new_bindings = nxt.bindings()?;
+        if !existing_bindings.is_disjoint(&new_bindings) {
+            let mut dups = existing_bindings.intersection(&new_bindings);
+            return Err(AlgebraParseError::DuplicateBinding(dups.next().unwrap().clone()).into());
+        }
+        ret = RaBox::Cartesian(Box::new(CartesianJoin {
+            left: ret,
+            right: nxt,
+        }))
+    }
+
+    Ok(ret)
+}
+
+pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<RaBox<'a>> {
+    let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_FROM.to_string());
+
+    let chain = arg.into_inner().next().ok_or_else(not_enough_args)?;
+
     let mut chain = parse_chain(chain)?.into_iter();
     let mut last_el = chain.next().ok_or_else(not_enough_args)?;
     let mut ret = TableScan::build(ctx, &last_el, true)?;

@@ -1,8 +1,8 @@
 use crate::algebra::op::{
-    build_from_clause, AssocOp, Insertion, LimitOp, RelationFromValues, RelationalAlgebra,
-    SelectOp, TableScan, TaggedInsertion, WhereFilter, NAME_FROM, NAME_INSERTION,
-    NAME_RELATION_FROM_VALUES, NAME_SELECT, NAME_SKIP, NAME_TAGGED_INSERTION, NAME_TAGGED_UPSERT,
-    NAME_TAKE, NAME_UPSERT, NAME_WHERE,
+    build_from_clause, AssocOp, CartesianJoin, Insertion, LimitOp, RelationFromValues,
+    RelationalAlgebra, SelectOp, TableScan, TaggedInsertion, WhereFilter, NAME_FROM,
+    NAME_INSERTION, NAME_RELATION_FROM_VALUES, NAME_SELECT, NAME_SKIP, NAME_TAGGED_INSERTION,
+    NAME_TAGGED_UPSERT, NAME_TAKE, NAME_UPSERT, NAME_WHERE,
 };
 use crate::context::TempDbContext;
 use crate::data::tuple::OwnTuple;
@@ -45,6 +45,9 @@ pub(crate) enum AlgebraParseError {
 
     #[error("No association between {0} and {1}")]
     NoAssociation(String, String),
+
+    #[error("Duplicate binding {0}")]
+    DuplicateBinding(String),
 }
 
 pub(crate) fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Result<()> {
@@ -70,6 +73,7 @@ pub(crate) enum RaBox<'a> {
     SelectOp(Box<SelectOp<'a>>),
     AssocOp(Box<AssocOp<'a>>),
     LimitOp(Box<LimitOp<'a>>),
+    Cartesian(Box<CartesianJoin<'a>>),
 }
 
 impl<'a> RaBox<'a> {
@@ -83,6 +87,7 @@ impl<'a> RaBox<'a> {
             RaBox::SelectOp(inner) => vec![&inner.source],
             RaBox::AssocOp(inner) => vec![&inner.source],
             RaBox::LimitOp(inner) => vec![&inner.source],
+            RaBox::Cartesian(inner) => vec![&inner.left, &inner.right],
         }
     }
 }
@@ -108,6 +113,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SelectOp(inner) => inner.name(),
             RaBox::AssocOp(inner) => inner.name(),
             RaBox::LimitOp(inner) => inner.name(),
+            RaBox::Cartesian(inner) => inner.name(),
         }
     }
 
@@ -121,6 +127,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SelectOp(inner) => inner.bindings(),
             RaBox::AssocOp(inner) => inner.bindings(),
             RaBox::LimitOp(inner) => inner.bindings(),
+            RaBox::Cartesian(inner) => inner.bindings(),
         }
     }
 
@@ -134,6 +141,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SelectOp(inner) => inner.binding_map(),
             RaBox::AssocOp(inner) => inner.binding_map(),
             RaBox::LimitOp(inner) => inner.binding_map(),
+            RaBox::Cartesian(inner) => inner.binding_map(),
         }
     }
 
@@ -147,6 +155,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SelectOp(inner) => inner.iter(),
             RaBox::AssocOp(inner) => inner.iter(),
             RaBox::LimitOp(inner) => inner.iter(),
+            RaBox::Cartesian(inner) => inner.iter(),
         }
     }
 
@@ -160,6 +169,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SelectOp(inner) => inner.identity(),
             RaBox::AssocOp(inner) => inner.identity(),
             RaBox::LimitOp(inner) => inner.identity(),
+            RaBox::Cartesian(inner) => inner.identity(),
         }
     }
 }
@@ -283,9 +293,9 @@ pub(crate) mod tests {
         {
             let ctx = sess.temp_ctx(true);
             let s = r#"
-             From(e:Employee)
-            .Where(e.id >= 122, e.id < 130)
-            .Select({...e, ohhh: 123312, x: e.id})
+             From(e:Employee, hj:HasJob, j:Job)
+            .Where(e.id >= 122, e.id < 130, e.id == hj._src_id, hj._dst_id == j.id)
+            .Select({...e, ohhh: 123312, x: e.id, title: j.title})
             .Skip(1)
             .Take(1)
             "#;

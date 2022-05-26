@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 mod assoc;
+mod cartesian;
 mod filter;
 mod from;
 mod group;
@@ -26,6 +27,7 @@ use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::value::StaticValue;
 use crate::runtime::options::default_read_options;
 pub(crate) use assoc::*;
+pub(crate) use cartesian::*;
 pub(crate) use filter::*;
 pub(crate) use from::*;
 pub(crate) use group::*;

@@ -4,6 +4,7 @@ use crate::data::tuple::{OwnTuple, ReifiedTuple};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
+use chrono::format::Item;
 use cozorocks::{DbPtr, TransactionPtr, WriteOptionsPtr};
 use std::cmp::{max, Ordering};
 use std::collections::BTreeMap;
@@ -268,6 +269,40 @@ impl<'a> TupleSetEvalContext<'a> {
 }
 
 pub(crate) type BindingMap = BTreeMap<String, BTreeMap<String, TupleSetIdx>>;
+
+pub(crate) fn merge_binding_maps(bmaps: impl Iterator<Item = BindingMap>) -> BindingMap {
+    // TODO this is not right!
+    let mut ret: BindingMap = BTreeMap::new();
+
+    for cur in bmaps {
+        for (gk, vs) in cur {
+            let inner = ret.entry(gk).or_default();
+            for (lk, v) in vs {
+                inner.insert(lk, v);
+            }
+        }
+    }
+
+    ret
+}
+
+pub(crate) fn shift_binding_map(right: &mut BindingMap, left: &BindingMap) {
+    let (key_shift, val_shift) = next_tset_indices(left);
+    for vs in right.values_mut() {
+        for v in vs.values_mut() {
+            if v.is_key {
+                v.t_set += key_shift;
+            } else {
+                v.t_set += val_shift;
+            }
+        }
+    }
+}
+
+pub(crate) fn shift_merge_binding_map(left: &mut BindingMap, mut right: BindingMap) {
+    shift_binding_map(&mut right, &left);
+    left.extend(right)
+}
 
 pub(crate) fn next_tset_indices(map: &BindingMap) -> (usize, usize) {
     let mut max_key_idx = -1;
