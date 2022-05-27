@@ -189,7 +189,7 @@ pub(crate) fn build_binding_map_from_info(
                     TupleSetIdx {
                         is_key: true,
                         t_set: 0,
-                        col_idx: i + 2 + src.keys.len(),
+                        col_idx: i + 1 + src.keys.len(),
                     },
                 );
             }
@@ -199,7 +199,7 @@ pub(crate) fn build_binding_map_from_info(
                     TupleSetIdx {
                         is_key: true,
                         t_set: 0,
-                        col_idx: i + 2 + src.keys.len() + dst.keys.len(),
+                        col_idx: i + 1 + src.keys.len() + dst.keys.len(),
                     },
                 );
             }

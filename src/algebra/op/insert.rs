@@ -222,27 +222,17 @@ impl<'a> Insertion<'a> {
             TableInfo::Edge(e) => {
                 let src = self.ctx.get_table_info(e.src_id)?.into_node()?;
                 let dst = self.ctx.get_table_info(e.dst_id)?.into_node()?;
-                let src_key_part = [(
-                    Expr::Const(Value::Int(e.src_id.int_for_storage())),
-                    Typing::Any,
-                )];
-                let dst_key_part = [(
-                    Expr::Const(Value::Int(e.dst_id.int_for_storage())),
-                    Typing::Any,
-                )];
                 let fwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
-                let bwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
-                let key_builder = src_key_part
+                let bwd_edge_part = [(Expr::Const(Value::Bool(false)), Typing::Any)];
+                let key_builder = fwd_edge_part
                     .into_iter()
                     .chain(src.keys.iter().map(|v| v.make_extractor(extract_map)))
-                    .chain(fwd_edge_part.into_iter())
                     .chain(dst.keys.iter().map(|v| v.make_extractor(extract_map)))
                     .chain(e.keys.iter().map(|v| v.make_extractor(extract_map)))
                     .collect::<Vec<_>>();
-                let inv_key_builder = dst_key_part
+                let inv_key_builder = bwd_edge_part
                     .into_iter()
                     .chain(dst.keys.iter().map(|v| v.make_extractor(extract_map)))
-                    .chain(bwd_edge_part.into_iter())
                     .chain(src.keys.iter().map(|v| v.make_extractor(extract_map)))
                     .chain(e.keys.iter().map(|v| v.make_extractor(extract_map)))
                     .collect::<Vec<_>>();

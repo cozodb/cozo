@@ -23,7 +23,7 @@ pub(crate) struct NestedLoopLeft<'a> {
     pub(crate) right: TableInfo,
     pub(crate) right_binding: String,
     pub(crate) left_outer_join: bool,
-    pub(crate) join_key_extracter: Vec<StaticExpr>,
+    pub(crate) join_key_extractor: Vec<StaticExpr>,
     pub(crate) key_is_prefix: bool,
 }
 
@@ -66,7 +66,7 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
             parent: self.ctx,
         };
         let key_extractors = self
-            .join_key_extracter
+            .join_key_extractor
             .iter()
             .map(|ex| {
                 ex.clone()
@@ -128,6 +128,7 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
                     };
                     match result {
                         None => {
+                            dbg!(&key_tuple);
                             if left_join {
                                 tset.push_key(key_tuple.clone().into());
                                 tset.push_val(Tuple::empty_tuple().into());
@@ -211,7 +212,6 @@ impl<'a> NestLoopLeftPrefixIter<'a> {
                             self.started = false;
                             left_tset.push_key(OwnTuple::empty_tuple().into());
                             left_tset.push_val(OwnTuple::empty_tuple().into());
-                            dbg!(&left_tset);
                             return Ok(Some(left_tset));
                         } else {
                             self.left_cache.take();

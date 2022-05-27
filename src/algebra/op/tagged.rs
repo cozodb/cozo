@@ -147,9 +147,9 @@ impl<'a> TaggedInsertion<'a> {
                         let src = id_cache.get_info(e.src_id)?;
                         let dst = id_cache.get_info(e.dst_id)?;
                         let mut key_tuple = OwnTuple::with_prefix(e.tid.id);
-                        key_tuple.push_int(e.src_id.int_for_storage());
+                        key_tuple.push_bool(true);
                         let mut inv_key_tuple = OwnTuple::with_prefix(e.tid.id);
-                        inv_key_tuple.push_int(e.dst_id.int_for_storage());
+                        inv_key_tuple.push_bool(false);
                         let mut val_tuple = OwnTuple::with_data_prefix(DataKind::Data);
 
                         for col in &src.as_node()?.keys {
@@ -163,8 +163,6 @@ impl<'a> TaggedInsertion<'a> {
                             key_tuple.push_value(&val);
                         }
 
-                        key_tuple.push_bool(true);
-
                         for col in &dst.as_node()?.keys {
                             key_buffer.clear();
                             key_buffer += "_dst_";
@@ -176,8 +174,6 @@ impl<'a> TaggedInsertion<'a> {
                             key_tuple.push_value(&val);
                             inv_key_tuple.push_value(&val);
                         }
-
-                        inv_key_tuple.push_bool(false);
 
                         for col in &src.as_node()?.keys {
                             key_buffer.clear();
@@ -208,7 +204,7 @@ impl<'a> TaggedInsertion<'a> {
                             val_tuple.push_value(&val);
                         }
 
-                        (key_tuple, val_tuple, Some(inv_key_tuple))
+                        dbg!((key_tuple, val_tuple, Some(inv_key_tuple)))
                     }
                     _ => return Err(AlgebraParseError::WrongTableKind(main_info.table_id()).into()),
                 };

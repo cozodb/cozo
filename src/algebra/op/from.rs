@@ -109,7 +109,7 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                     right: table_info.clone(),
                     right_binding: cur_el.binding.clone(),
                     left_outer_join: false,
-                    join_key_extracter: left_join_keys,
+                    join_key_extractor: left_join_keys,
                     key_is_prefix: false,
                 }));
 
@@ -122,24 +122,18 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                     .resolve_table(&cur_el.target)
                     .ok_or_else(|| AlgebraParseError::TableNotFound(cur_el.target.clone()))?;
                 let table_info = ctx.get_table_info(edge_id)?;
-                let mut left_join_keys: Vec<StaticExpr> =
-                    vec![Expr::Const(Value::from(prev_tid.int_for_storage()))];
+                let mut left_join_keys: Vec<StaticExpr> = vec![Expr::Const(match dir {
+                    ChainPartEdgeDir::Fwd => true.into(),
+                    ChainPartEdgeDir::Bwd => false.into(),
+                    ChainPartEdgeDir::Bidi => {
+                        todo!()
+                    }
+                })];
                 for key in prev_info.as_node()?.keys.iter() {
                     left_join_keys.push(Expr::FieldAcc(
                         key.name.to_string(),
                         Expr::Variable(prev_el.binding.clone()).into(),
                     ))
-                }
-                match dir {
-                    ChainPartEdgeDir::Fwd => {
-                        left_join_keys.push(Expr::Const(true.into()));
-                    }
-                    ChainPartEdgeDir::Bwd => {
-                        left_join_keys.push(Expr::Const(false.into()));
-                    }
-                    ChainPartEdgeDir::Bidi => {
-                        todo!()
-                    }
                 }
                 ret = RaBox::NestedLoopLeft(Box::new(NestedLoopLeft {
                     ctx,
@@ -151,7 +145,7 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                         JoinType::Left => true,
                         JoinType::Right => todo!(),
                     },
-                    join_key_extracter: left_join_keys,
+                    join_key_extractor: left_join_keys,
                     key_is_prefix: true,
                 }));
                 prev_info = table_info;
