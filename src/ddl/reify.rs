@@ -440,8 +440,8 @@ pub(crate) struct SequenceInfo {
 }
 
 pub(crate) trait DdlContext {
-    fn gen_temp_table_id(&self) -> TableId;
-    fn gen_table_id(&mut self) -> Result<TableId>;
+    fn gen_invalid_table_id(&self) -> TableId;
+    fn gen_table_id(&self) -> Result<TableId>;
     fn table_id_by_name(&self, name: &str) -> Result<TableId>;
     fn table_by_name<I: IntoIterator<Item = DataKind>>(
         &self,
@@ -516,7 +516,7 @@ pub(crate) trait DdlContext {
         check_name_clash([&schema.keys, &schema.vals])?;
         let info = NodeInfo {
             name: schema.name,
-            tid: self.gen_temp_table_id(),
+            tid: self.gen_invalid_table_id(),
             keys: eval_defaults(schema.keys)?,
             vals: eval_defaults(schema.vals)?,
         };
@@ -526,7 +526,7 @@ pub(crate) trait DdlContext {
         check_name_clash([&schema.keys, &schema.vals])?;
         let info = EdgeInfo {
             name: schema.name,
-            tid: self.gen_temp_table_id(),
+            tid: self.gen_invalid_table_id(),
             src_id: self
                 .table_by_name(&schema.src_name, [DataKind::Node])?
                 .table_id(),
@@ -547,7 +547,7 @@ pub(crate) trait DdlContext {
         check_name_clash(names_to_check)?;
         let info = AssocInfo {
             name: schema.name,
-            tid: self.gen_temp_table_id(),
+            tid: self.gen_invalid_table_id(),
             src_id,
             vals: eval_defaults(schema.vals)?,
         };
@@ -612,7 +612,7 @@ pub(crate) trait DdlContext {
 
         let info = IndexInfo {
             name: schema.name,
-            tid: self.gen_temp_table_id(),
+            tid: self.gen_invalid_table_id(),
             src_id: src_schema.table_id(),
             assoc_ids: schema
                 .assoc_names
@@ -627,7 +627,7 @@ pub(crate) trait DdlContext {
         self.store_table(TableInfo::Index(info))
     }
     fn build_sequence(&mut self, schema: SequenceSchema) -> Result<()> {
-        let tid = self.gen_temp_table_id();
+        let tid = self.gen_invalid_table_id();
         self.store_table(TableInfo::Sequence(SequenceInfo {
             name: schema.name,
             tid,
@@ -864,14 +864,14 @@ fn find_table_by_id_in_main(txn: &TransactionPtr, id: u32) -> Result<TableInfo> 
 }
 
 impl<'a> DdlContext for MainDbContext<'a> {
-    fn gen_temp_table_id(&self) -> TableId {
+    fn gen_invalid_table_id(&self) -> TableId {
         TableId {
             in_root: true,
             id: 0,
         }
     }
 
-    fn gen_table_id(&mut self) -> Result<TableId> {
+    fn gen_table_id(&self) -> Result<TableId> {
         let id = self.sess.get_next_main_table_id()?;
         Ok(TableId { in_root: true, id })
     }
@@ -1015,14 +1015,14 @@ impl<'a> DdlContext for MainDbContext<'a> {
 }
 
 impl<'a> DdlContext for TempDbContext<'a> {
-    fn gen_temp_table_id(&self) -> TableId {
+    fn gen_invalid_table_id(&self) -> TableId {
         TableId {
             in_root: false,
             id: 0,
         }
     }
 
-    fn gen_table_id(&mut self) -> Result<TableId> {
+    fn gen_table_id(&self) -> Result<TableId> {
         let id = self.sess.get_next_temp_table_id();
         Ok(TableId { in_root: false, id })
     }

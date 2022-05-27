@@ -76,7 +76,7 @@ Operations
 * [x] `where(rel, ..conds)`
 * [x] `take(rel, n)`
 * [x] `skip(rel, n)`
-* [ ] `sort(rel, expr1, expr2: sort_dir)`
+* [x] `sort(rel, expr1, expr2: sort_dir)`
 * [ ] `group(rel, binding: {*key1: expr1, val1: expr2})`
 * [ ] `walk(pattern, ...conds, ...bindings)`
 * [ ] `walk_repeat(pattern, ...conds, ...bindings)` every element contains additional `_iter` and `_visited` fields

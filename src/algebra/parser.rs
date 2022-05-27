@@ -1,9 +1,4 @@
-use crate::algebra::op::{
-    build_from_clause, AssocOp, CartesianJoin, Insertion, LimitOp, NestedLoopLeft,
-    RelationFromValues, RelationalAlgebra, SelectOp, TableScan, TaggedInsertion, WhereFilter,
-    NAME_FROM, NAME_INSERTION, NAME_RELATION_FROM_VALUES, NAME_SELECT, NAME_SKIP,
-    NAME_TAGGED_INSERTION, NAME_TAGGED_UPSERT, NAME_TAKE, NAME_UPSERT, NAME_WHERE,
-};
+use crate::algebra::op::*;
 use crate::context::TempDbContext;
 use crate::data::tuple::OwnTuple;
 use crate::data::tuple_set::{BindingMap, TableId, TupleSet};
@@ -12,6 +7,7 @@ use crate::ddl::reify::TableInfo;
 use crate::parser::{Pair, Rule};
 use anyhow::Result;
 use std::collections::BTreeSet;
+use std::error::Error;
 use std::fmt::{Debug, Formatter};
 
 #[derive(thiserror::Error, Debug)]
@@ -75,6 +71,7 @@ pub(crate) enum RaBox<'a> {
     LimitOp(Box<LimitOp<'a>>),
     Cartesian(Box<CartesianJoin<'a>>),
     NestedLoopLeft(Box<NestedLoopLeft<'a>>),
+    SortOp(Box<SortOp<'a>>),
 }
 
 impl<'a> RaBox<'a> {
@@ -90,6 +87,7 @@ impl<'a> RaBox<'a> {
             RaBox::LimitOp(inner) => vec![&inner.source],
             RaBox::Cartesian(inner) => vec![&inner.left, &inner.right],
             RaBox::NestedLoopLeft(inner) => vec![&inner.left],
+            RaBox::SortOp(inner) => vec![&inner.source],
         }
     }
 }
@@ -117,6 +115,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::LimitOp(inner) => inner.name(),
             RaBox::Cartesian(inner) => inner.name(),
             RaBox::NestedLoopLeft(inner) => inner.name(),
+            RaBox::SortOp(inner) => inner.name(),
         }
     }
 
@@ -132,6 +131,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::LimitOp(inner) => inner.bindings(),
             RaBox::Cartesian(inner) => inner.bindings(),
             RaBox::NestedLoopLeft(inner) => inner.bindings(),
+            RaBox::SortOp(inner) => inner.bindings(),
         }
     }
 
@@ -147,6 +147,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::LimitOp(inner) => inner.binding_map(),
             RaBox::Cartesian(inner) => inner.binding_map(),
             RaBox::NestedLoopLeft(inner) => inner.binding_map(),
+            RaBox::SortOp(inner) => inner.binding_map(),
         }
     }
 
@@ -162,6 +163,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::LimitOp(inner) => inner.iter(),
             RaBox::Cartesian(inner) => inner.iter(),
             RaBox::NestedLoopLeft(inner) => inner.iter(),
+            RaBox::SortOp(inner) => inner.iter(),
         }
     }
 
@@ -177,6 +179,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::LimitOp(inner) => inner.identity(),
             RaBox::Cartesian(inner) => inner.identity(),
             RaBox::NestedLoopLeft(inner) => inner.identity(),
+            RaBox::SortOp(inner) => inner.identity(),
         }
     }
 }
@@ -234,6 +237,7 @@ pub(crate) fn build_relational_expr<'a>(ctx: &'a TempDbContext, pair: Pair) -> R
                     ctx, built, pairs, NAME_SKIP,
                 )?)))
             }
+            NAME_SORT => built = Some(RaBox::SortOp(Box::new(SortOp::build(ctx, built, pairs)?))),
             _ => unimplemented!(),
         }
     }
@@ -323,7 +327,8 @@ pub(crate) mod tests {
             let ctx = sess.temp_ctx(true);
             let s = r#"
              From(e:Employee-[:Manages]?->s:Employee)
-            .Select({boss: e.first_name ++ e.last_name, slave: s.first_name ++ s.last_name})
+            .Select(o: {boss: e.first_name ++ e.last_name, slave: s.first_name ++ s.last_name})
+            .Sort(o.boss => desc, o.slave)
             "#;
             let ra = build_relational_expr(
                 &ctx,

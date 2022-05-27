@@ -1,17 +1,19 @@
 use crate::algebra::op::RelationalAlgebra;
-use crate::algebra::parser::RaBox;
+use crate::algebra::parser::{build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::StaticExpr;
+use crate::data::expr::{Expr, StaticExpr};
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
-use crate::data::tuple_set::{BindingMap, TupleSet, MIN_TABLE_ID_BOUND, BindingMapEvalContext};
+use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TupleSet, MIN_TABLE_ID_BOUND};
+use crate::data::value::Value;
 use crate::ddl::reify::{DdlContext, TableInfo};
-use crate::runtime::options::{default_read_options};
+use crate::parser::{Pairs, Rule};
+use crate::runtime::options::default_read_options;
 use anyhow::Result;
 use log::error;
 use std::cell::RefCell;
 use std::cmp::Reverse;
-use std::collections::{BTreeSet};
-use crate::data::value::Value;
+use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub(crate) const NAME_SORT: &str = "Sort";
 
@@ -22,25 +24,63 @@ pub(crate) enum SortDirection {
 }
 
 pub(crate) struct SortOp<'a> {
-    source: RaBox<'a>,
+    pub(crate) source: RaBox<'a>,
     ctx: &'a TempDbContext<'a>,
     sort_exprs: Vec<(StaticExpr, SortDirection)>,
-    temp_table_id: RefCell<u32>,
+    temp_table_id: AtomicU32,
 }
 
 impl<'a> SortOp<'a> {
+    pub(crate) fn build(
+        ctx: &'a TempDbContext<'a>,
+        prev: Option<RaBox<'a>>,
+        mut args: Pairs,
+    ) -> Result<Self> {
+        let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_SORT.to_string());
+        let source = match prev {
+            Some(source) => source,
+            None => build_relational_expr(ctx, args.next().ok_or_else(not_enough_args)?)?,
+        };
+
+        let sort_exprs = args
+            .map(|arg| -> Result<(StaticExpr, SortDirection)> {
+                let mut arg = arg.into_inner().next().unwrap();
+                let mut dir = SortDirection::Asc;
+                if arg.as_rule() == Rule::sort_arg {
+                    let mut pairs = arg.into_inner();
+                    arg = pairs.next().unwrap();
+                    if pairs.next().unwrap().as_rule() == Rule::desc_dir {
+                        dir = SortDirection::Dsc
+                    }
+                }
+                let expr = Expr::try_from(arg)?.into_static();
+                Ok((expr, dir))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Self {
+            source,
+            ctx,
+            sort_exprs,
+            temp_table_id: AtomicU32::new(0),
+        })
+    }
     fn sort_data(&self) -> Result<()> {
-        let temp_table_id = *self.temp_table_id.borrow();
+        let temp_table_id = self.temp_table_id.load(Ordering::SeqCst);
+        dbg!(temp_table_id);
         assert!(temp_table_id > MIN_TABLE_ID_BOUND);
         let source_map = self.source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,
             parent: self.ctx,
         };
-        let sort_exprs = self.sort_exprs.iter().map(|(ex, dir)| -> Result<(StaticExpr, SortDirection)>{
-            let ex = ex.clone().partial_eval(&binding_ctx)?.into_static();
-            Ok((ex, *dir))
-        }).collect::<Result<Vec<_>>>()?;
+        let sort_exprs = self
+            .sort_exprs
+            .iter()
+            .map(|(ex, dir)| -> Result<(StaticExpr, SortDirection)> {
+                let ex = ex.clone().partial_eval(&binding_ctx)?.into_static();
+                Ok((ex, *dir))
+            })
+            .collect::<Result<Vec<_>>>()?;
         let mut insertion_key = OwnTuple::with_prefix(temp_table_id);
         let mut insertion_val = OwnTuple::with_data_prefix(DataKind::Data);
         for (i, tset) in self.source.iter()?.enumerate() {
@@ -56,7 +96,10 @@ impl<'a> SortOp<'a> {
             }
             insertion_key.push_int(i as i64);
             tset.encode_as_tuple(&mut insertion_val);
-            self.ctx.sess.temp.put(&self.ctx.sess.w_opts_temp, &insertion_key, &insertion_val)?;
+            self.ctx
+                .sess
+                .temp
+                .put(&self.ctx.sess.w_opts_temp, &insertion_key, &insertion_val)?;
         }
         Ok(())
     }
@@ -64,7 +107,7 @@ impl<'a> SortOp<'a> {
 
 impl<'a> Drop for SortOp<'a> {
     fn drop(&mut self) {
-        let id = *self.temp_table_id.borrow();
+        let id = self.temp_table_id.load(Ordering::SeqCst);
         if id > MIN_TABLE_ID_BOUND {
             let start_key = OwnTuple::with_prefix(id);
             let mut end_key = OwnTuple::with_prefix(id);
@@ -95,18 +138,21 @@ impl<'b> RelationalAlgebra for SortOp<'b> {
     }
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
-        if *self.temp_table_id.borrow() == 0 {
-            *self.temp_table_id.borrow_mut() = self.ctx.gen_temp_table_id().id;
+        if self.temp_table_id.load(Ordering::SeqCst) == 0 {
+            let temp_id = self.ctx.gen_table_id()?.id;
+            self.temp_table_id.store(temp_id, Ordering::SeqCst);
             self.sort_data()?;
         }
         let r_opts = default_read_options();
         let iter = self.ctx.sess.temp.iterator(&r_opts);
-        let key = OwnTuple::with_prefix(*self.temp_table_id.borrow());
-        Ok(Box::new(iter.iter_rows(key).map(|(_k, v)| -> Result<TupleSet> {
-            let v = Tuple::new(v);
-            let tset = TupleSet::decode_from_tuple(&v)?;
-            Ok(tset)
-        })))
+        let key = OwnTuple::with_prefix(self.temp_table_id.load(Ordering::SeqCst));
+        Ok(Box::new(iter.iter_rows(key).map(
+            |(_k, v)| -> Result<TupleSet> {
+                let v = Tuple::new(v);
+                let tset = TupleSet::decode_from_tuple(&v)?;
+                Ok(tset)
+            },
+        )))
     }
 
     fn identity(&self) -> Option<TableInfo> {
