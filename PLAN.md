@@ -68,7 +68,7 @@ global query XXX() {
 
 Operations
 
-* [ ] `from(...rels)`, can use chain notation
+* [x] `from(...rels)`, can use chain notation
 * [ ] `left_join(left, right, ...conds)`, similarly for `right_join`, `outer_join`)
 * [ ] `intersect(...rels)`, similarly for `union`
 * [ ] `diff(left, right)`, similarly for `sym_diff`
@@ -76,7 +76,7 @@ Operations
 * [x] `where(rel, ..conds)`
 * [x] `take(rel, n)`
 * [x] `skip(rel, n)`
-* [x] `sort(rel, expr1, expr2: sort_dir)`
+* [ ] `sort(rel, expr1, expr2: sort_dir)`
 * [ ] `group(rel, binding: {*key1: expr1, val1: expr2})`
 * [ ] `walk(pattern, ...conds, ...bindings)`
 * [ ] `walk_repeat(pattern, ...conds, ...bindings)` every element contains additional `_iter` and `_visited` fields

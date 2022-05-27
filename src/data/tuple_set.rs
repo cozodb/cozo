@@ -1,11 +1,11 @@
 use crate::data::eval::{PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
-use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple};
+use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple, Tuple};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use cozorocks::{DbPtr, TransactionPtr, WriteOptionsPtr};
-use std::cmp::{Ordering};
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::result;
@@ -124,6 +124,24 @@ impl Debug for TupleSetIdx {
 pub(crate) struct TupleSet {
     pub(crate) keys: Vec<ReifiedTuple>,
     pub(crate) vals: Vec<ReifiedTuple>,
+}
+
+impl TupleSet {
+    pub(crate) fn encode_as_tuple(&self, target: &mut OwnTuple) {
+        target.truncate_all();
+        target.push_int(self.keys.len() as i64);
+        target.push_int(self.vals.len() as i64);
+        for k in &self.keys {
+            target.push_bytes(k.as_ref());
+        }
+        for v in &self.vals {
+            target.push_bytes(v.as_ref());
+        }
+    }
+    pub(crate) fn decode_from_tuple<T: AsRef<[u8]>>(source: &Tuple<T>) {
+        // let k_len =
+        todo!()
+    }
 }
 
 impl TupleSet {

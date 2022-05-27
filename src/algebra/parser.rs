@@ -322,9 +322,8 @@ pub(crate) mod tests {
         {
             let ctx = sess.temp_ctx(true);
             let s = r#"
-             From(e:Employee-[id:InDepartment]->d:Department)
-            .Where(e.id >= 122, e.id < 130)
-            .Select({...e, dept_name: d.name})
+             From(e:Employee-[:Manages]?->s:Employee)
+            .Select({boss: e.first_name ++ e.last_name, slave: s.first_name ++ s.last_name})
             "#;
             let ra = build_relational_expr(
                 &ctx,
@@ -342,9 +341,9 @@ pub(crate) mod tests {
         {
             let ctx = sess.temp_ctx(true);
             let s = r#"
-             From(j:Job<-[hj:HasJob]?-e:Employee)
+             From(d:Department<-[id:InDepartment]-e:Employee)
             .Where(e.id >= 122, e.id < 130)
-            .Select({...e, title: j.title, salary: hj.salary})
+            .Select({...e, dept_name: d.name})
             "#;
             let ra = build_relational_expr(
                 &ctx,

@@ -70,6 +70,8 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
         .ok_or_else(|| AlgebraParseError::TableNotFound(prev_el.target.clone()))?;
     let mut prev_info = ctx.get_table_info(prev_tid)?;
 
+    let mut seen_outer = false;
+
     for cur_el in chain.iter().skip(1) {
         match cur_el.part {
             ChainPart::Node => {
@@ -104,7 +106,7 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                     left: ret,
                     right: table_info.clone(),
                     right_binding: cur_el.binding.clone(),
-                    left_outer_join: false,
+                    left_outer_join: seen_outer,
                     join_key_extractor: left_join_keys,
                     key_is_prefix: false,
                 }));
@@ -114,6 +116,7 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
             }
             ChainPart::Edge { dir, join } => {
                 // Node to edge join
+                seen_outer = seen_outer || join == JoinType::Left;
                 let edge_id = ctx
                     .resolve_table(&cur_el.target)
                     .ok_or_else(|| AlgebraParseError::TableNotFound(cur_el.target.clone()))?;
@@ -133,11 +136,7 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                     left: ret,
                     right: table_info.clone(),
                     right_binding: cur_el.binding.clone(),
-                    left_outer_join: match join {
-                        JoinType::Inner => false,
-                        JoinType::Left => true,
-                        JoinType::Right => todo!(),
-                    },
+                    left_outer_join: seen_outer,
                     join_key_extractor: left_join_keys,
                     key_is_prefix: true,
                 }));
@@ -156,7 +155,7 @@ pub(crate) enum ChainPartEdgeDir {
     Bwd,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) enum JoinType {
     Inner,
     Left,
