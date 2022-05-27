@@ -327,7 +327,7 @@ pub(crate) mod tests {
             let ctx = sess.temp_ctx(true);
             let s = r#"
              From(e:Employee-[:Manages]?->s:Employee)
-            .Select(o: {boss: e.first_name ++ e.last_name, slave: s.first_name ++ s.last_name})
+            .Select(o: {boss: e.first_name ++ ' ' ++ e.last_name, slave: (s.first_name ++ ' ' ++ s.last_name) ~ 'NO~ONE'})
             .Sort(o.boss => desc, o.slave)
             "#;
             let ra = build_relational_expr(

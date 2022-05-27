@@ -9,12 +9,8 @@ USE_RTTI=1 DEBUG_LEVEL=0 make static_lib
 
 ## Edge key layout
 
-* Different src/tgt
-  * Forward `[true, src_keys, null, tgt_keys]`
-  * Backward `[false, src_keys, null, tgt_keys]`
-* Same src/tgt
-  * Forward `[null, src_keys, true, tgt_keys]`
-  * Backward `[null, src_keys, false, tgt_keys]`
+* Forward `[true, *src_keys, *tgt_keys, *own_keys]`
+* Backward `[false, *src_keys, *tgt_keys, *own_keys]`
 
 ## Isolation levels
 
