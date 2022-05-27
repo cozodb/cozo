@@ -419,7 +419,7 @@ impl<'a> TryFrom<Value<'a>> for IndexCol {
     fn try_from(value: Value<'a>) -> Result<Self> {
         Ok(match Expr::try_from(value)? {
             Expr::TupleSetIdx(tidx) => IndexCol::Col(tidx),
-            expr => IndexCol::Expr(expr.to_static()),
+            expr => IndexCol::Expr(expr.into_static()),
         })
     }
 }
@@ -573,7 +573,7 @@ pub(crate) trait DdlContext {
                     .map(|ex| {
                         ex.partial_eval(&ctx).map(|ex| match ex {
                             Expr::TupleSetIdx(tidx) => IndexCol::Col(tidx),
-                            ex => IndexCol::Expr(ex.to_static()),
+                            ex => IndexCol::Expr(ex.into_static()),
                         })
                     })
                     .collect::<result::Result<Vec<_>, _>>()?
@@ -602,7 +602,7 @@ pub(crate) trait DdlContext {
                     .map(|ex| {
                         ex.partial_eval(&ctx).map(|ex| match ex {
                             Expr::TupleSetIdx(tidx) => IndexCol::Col(tidx),
-                            ex => IndexCol::Expr(ex.to_static()),
+                            ex => IndexCol::Expr(ex.into_static()),
                         })
                     })
                     .collect::<result::Result<Vec<_>, _>>()?

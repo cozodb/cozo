@@ -73,99 +73,99 @@ impl<'a> Expr<'a> {
             _ => None,
         }
     }
-    pub(crate) fn to_static(self) -> StaticExpr {
+    pub(crate) fn into_static(self) -> StaticExpr {
         match self {
             Expr::Const(v) => Expr::Const(v.into_static()),
-            Expr::List(l) => Expr::List(l.into_iter().map(|v| v.to_static()).collect()),
-            Expr::Dict(d) => Expr::Dict(d.into_iter().map(|(k, v)| (k, v.to_static())).collect()),
+            Expr::List(l) => Expr::List(l.into_iter().map(|v| v.into_static()).collect()),
+            Expr::Dict(d) => Expr::Dict(d.into_iter().map(|(k, v)| (k, v.into_static())).collect()),
             Expr::Variable(v) => Expr::Variable(v),
             Expr::TupleSetIdx(idx) => Expr::TupleSetIdx(idx),
             Expr::Apply(op, args) => {
-                Expr::Apply(op, args.into_iter().map(|v| v.to_static()).collect())
+                Expr::Apply(op, args.into_iter().map(|v| v.into_static()).collect())
             }
             Expr::ApplyAgg(op, a_args, args) => Expr::ApplyAgg(
                 op,
-                a_args.into_iter().map(|v| v.to_static()).collect(),
-                args.into_iter().map(|v| v.to_static()).collect(),
+                a_args.into_iter().map(|v| v.into_static()).collect(),
+                args.into_iter().map(|v| v.into_static()).collect(),
             ),
-            Expr::FieldAcc(f, arg) => Expr::FieldAcc(f, arg.to_static().into()),
-            Expr::IdxAcc(i, arg) => Expr::IdxAcc(i, arg.to_static().into()),
+            Expr::FieldAcc(f, arg) => Expr::FieldAcc(f, arg.into_static().into()),
+            Expr::IdxAcc(i, arg) => Expr::IdxAcc(i, arg.into_static().into()),
             Expr::IfExpr(args) => {
                 let (a, b, c) = *args;
-                Expr::IfExpr((a.to_static(), b.to_static(), c.to_static()).into())
+                Expr::IfExpr((a.into_static(), b.into_static(), c.into_static()).into())
             }
             Expr::SwitchExpr(args) => Expr::SwitchExpr(
                 args.into_iter()
-                    .map(|(a, b)| (a.to_static(), b.to_static()))
+                    .map(|(a, b)| (a.into_static(), b.into_static()))
                     .collect(),
             ),
             Expr::Add(args) => {
                 let (a, b) = *args;
-                Expr::Add((a.to_static(), b.to_static()).into())
+                Expr::Add((a.into_static(), b.into_static()).into())
             }
             Expr::Sub(args) => {
                 let (a, b) = *args;
-                Expr::Sub((a.to_static(), b.to_static()).into())
+                Expr::Sub((a.into_static(), b.into_static()).into())
             }
             Expr::Mul(args) => {
                 let (a, b) = *args;
-                Expr::Mul((a.to_static(), b.to_static()).into())
+                Expr::Mul((a.into_static(), b.into_static()).into())
             }
             Expr::Div(args) => {
                 let (a, b) = *args;
-                Expr::Div((a.to_static(), b.to_static()).into())
+                Expr::Div((a.into_static(), b.into_static()).into())
             }
             Expr::Pow(args) => {
                 let (a, b) = *args;
-                Expr::Pow((a.to_static(), b.to_static()).into())
+                Expr::Pow((a.into_static(), b.into_static()).into())
             }
             Expr::Mod(args) => {
                 let (a, b) = *args;
-                Expr::Mod((a.to_static(), b.to_static()).into())
+                Expr::Mod((a.into_static(), b.into_static()).into())
             }
             Expr::StrCat(args) => {
                 let (a, b) = *args;
-                Expr::StrCat((a.to_static(), b.to_static()).into())
+                Expr::StrCat((a.into_static(), b.into_static()).into())
             }
             Expr::Eq(args) => {
                 let (a, b) = *args;
-                Expr::Eq((a.to_static(), b.to_static()).into())
+                Expr::Eq((a.into_static(), b.into_static()).into())
             }
             Expr::Ne(args) => {
                 let (a, b) = *args;
-                Expr::Ne((a.to_static(), b.to_static()).into())
+                Expr::Ne((a.into_static(), b.into_static()).into())
             }
             Expr::Gt(args) => {
                 let (a, b) = *args;
-                Expr::Gt((a.to_static(), b.to_static()).into())
+                Expr::Gt((a.into_static(), b.into_static()).into())
             }
             Expr::Ge(args) => {
                 let (a, b) = *args;
-                Expr::Ge((a.to_static(), b.to_static()).into())
+                Expr::Ge((a.into_static(), b.into_static()).into())
             }
             Expr::Lt(args) => {
                 let (a, b) = *args;
-                Expr::Lt((a.to_static(), b.to_static()).into())
+                Expr::Lt((a.into_static(), b.into_static()).into())
             }
             Expr::Le(args) => {
                 let (a, b) = *args;
-                Expr::Le((a.to_static(), b.to_static()).into())
+                Expr::Le((a.into_static(), b.into_static()).into())
             }
-            Expr::Not(arg) => Expr::Not(arg.to_static().into()),
-            Expr::Minus(arg) => Expr::Minus(arg.to_static().into()),
-            Expr::IsNull(arg) => Expr::IsNull(arg.to_static().into()),
-            Expr::NotNull(arg) => Expr::NotNull(arg.to_static().into()),
+            Expr::Not(arg) => Expr::Not(arg.into_static().into()),
+            Expr::Minus(arg) => Expr::Minus(arg.into_static().into()),
+            Expr::IsNull(arg) => Expr::IsNull(arg.into_static().into()),
+            Expr::NotNull(arg) => Expr::NotNull(arg.into_static().into()),
             Expr::Coalesce(args) => {
                 let (a, b) = *args;
-                Expr::Coalesce((a.to_static(), b.to_static()).into())
+                Expr::Coalesce((a.into_static(), b.into_static()).into())
             }
             Expr::Or(args) => {
                 let (a, b) = *args;
-                Expr::Or((a.to_static(), b.to_static()).into())
+                Expr::Or((a.into_static(), b.into_static()).into())
             }
             Expr::And(args) => {
                 let (a, b) = *args;
-                Expr::And((a.to_static(), b.to_static()).into())
+                Expr::And((a.into_static(), b.into_static()).into())
             }
         }
     }

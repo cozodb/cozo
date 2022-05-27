@@ -31,7 +31,7 @@ impl ColSchema {
             .get(&self.name)
             .cloned()
             .unwrap_or(Expr::Const(Value::Null))
-            .to_static();
+            .into_static();
         let typing = self.typing.clone();
         (extractor, typing)
     }
@@ -201,7 +201,7 @@ impl<'a> TryFrom<Pair<'a>> for IndexSchema {
         for pair in pairs {
             match pair.as_rule() {
                 Rule::name_in_def => associate_names.push(build_name_in_def(pair, false)?),
-                _ => indices.push(Expr::try_from(pair)?.to_static()),
+                _ => indices.push(Expr::try_from(pair)?.into_static()),
             }
         }
         if indices.is_empty() {
@@ -242,7 +242,7 @@ fn parse_col_entry(pair: Pair) -> Result<(bool, ColSchema)> {
     let typing = Typing::try_from(pairs.next().unwrap())?;
     let default = match pairs.next() {
         None => Expr::Const(Value::Null),
-        Some(pair) => Expr::try_from(pair)?.to_static(),
+        Some(pair) => Expr::try_from(pair)?.into_static(),
     };
     Ok((
         is_key,

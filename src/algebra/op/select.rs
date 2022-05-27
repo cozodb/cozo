@@ -56,7 +56,7 @@ impl<'a> SelectOp<'a> {
                 AlgebraParseError::Parse("Cannot have keyed map in Select".to_string()).into(),
             );
         }
-        let extract_map = extract_map.to_static();
+        let extract_map = extract_map.into_static();
         Ok(Self {
             ctx,
             source,
@@ -116,7 +116,7 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
                     )
                 })
                 .collect::<BTreeMap<_, _>>(),
-            ex => return Err(SelectOpError::NeedsDict(ex.to_static()).into()),
+            ex => return Err(SelectOpError::NeedsDict(ex.into_static()).into()),
         };
         Ok(BTreeMap::from([(self.binding.clone(), extract_map)]))
     }
@@ -131,14 +131,14 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
             .extract_map
             .clone()
             .partial_eval(&binding_ctx)?
-            .to_static()
+            .into_static()
         {
             Expr::Dict(d) => d.values().cloned().collect::<Vec<_>>(),
             Expr::Const(Value::Dict(d)) => d
                 .values()
                 .map(|v| Expr::Const(v.clone()))
                 .collect::<Vec<_>>(),
-            ex => return Err(SelectOpError::NeedsDict(ex.to_static()).into()),
+            ex => return Err(SelectOpError::NeedsDict(ex.into_static()).into()),
         };
 
         let txn = self.ctx.txn.clone();

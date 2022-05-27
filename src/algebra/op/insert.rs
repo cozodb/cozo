@@ -62,7 +62,7 @@ impl<'a> Insertion<'a> {
                 AlgebraParseError::Parse("Cannot have keyed map in Insert".to_string()).into(),
             );
         }
-        let extract_map = extract_map.to_static();
+        let extract_map = extract_map.into_static();
 
         let target_id = ctx
             .resolve_table(&table_name)

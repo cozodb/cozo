@@ -165,7 +165,7 @@ impl<'a> Expr<'a> {
                         Expr::Dict(mut d) => {
                             d.remove(&f as &str).unwrap_or(Expr::Const(Value::Null))
                         }
-                        v => return Err(EvalError::FieldAccess(f, v.to_static()).into()),
+                        v => return Err(EvalError::FieldAccess(f, v.into_static()).into()),
                     },
                 }
             }
@@ -199,7 +199,7 @@ impl<'a> Expr<'a> {
                         | Expr::FieldAcc(_, _)
                         | Expr::Apply(_, _)
                         | Expr::ApplyAgg(_, _, _)) => Expr::IdxAcc(i, v.into()),
-                        v => return Err(EvalError::IndexAccess(i, v.to_static()).into()),
+                        v => return Err(EvalError::IndexAccess(i, v.into_static()).into()),
                     },
                 }
             }

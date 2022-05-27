@@ -2,9 +2,6 @@ mod bridge;
 mod options;
 mod status;
 
-use bridge::*;
-pub use options::*;
-
 pub use bridge::BridgeStatus;
 pub use bridge::PinnableSlice;
 pub use bridge::Slice;
@@ -12,8 +9,10 @@ pub use bridge::StatusBridgeCode;
 pub use bridge::StatusCode;
 pub use bridge::StatusSeverity;
 pub use bridge::StatusSubCode;
+use bridge::*;
 use cxx::let_cxx_string;
 pub use cxx::{SharedPtr, UniquePtr};
+pub use options::*;
 pub use status::BridgeError;
 use status::Result;
 use std::ops::Deref;
@@ -142,6 +141,42 @@ impl<'a> Deref for IteratorPtr {
     }
 }
 
+pub struct PrefixIterator<P: AsRef<[u8]>> {
+    iter: IteratorPtr,
+    started: bool,
+    prefix: P,
+}
+
+impl<P: AsRef<[u8]>> PrefixIterator<P> {
+    #[inline]
+    pub fn reset_prefix(&mut self, prefix: P) {
+        self.prefix = prefix;
+        self.iter.seek(self.prefix.as_ref());
+        self.started = false;
+    }
+}
+
+impl<P: AsRef<[u8]>> Iterator for PrefixIterator<P> {
+    type Item = (SlicePtr, SlicePtr);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.started {
+            self.iter.next()
+        } else {
+            self.started = true
+        }
+        match self.iter.pair() {
+            None => None,
+            Some((k, v)) => {
+                if k.as_ref().starts_with(self.prefix.as_ref()) {
+                    Some((k, v))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
 impl IteratorPtr {
     #[inline]
     pub fn to_first(&self) {
@@ -166,6 +201,15 @@ impl IteratorPtr {
     #[inline]
     pub fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
         IteratorBridge::do_seek_for_prev(self, key.as_ref())
+    }
+    #[inline]
+    pub fn iter_prefix<T: AsRef<[u8]>>(self, prefix: T) -> PrefixIterator<T> {
+        self.seek(prefix.as_ref());
+        PrefixIterator {
+            iter: self,
+            started: false,
+            prefix,
+        }
     }
     #[inline]
     pub fn refresh(&self) -> Result<()> {

@@ -15,13 +15,14 @@ mod cartesian;
 mod filter;
 mod from;
 mod group;
+mod hop;
 mod insert;
 mod limit;
+mod nested_loop;
 mod scan;
 mod select;
 mod tagged;
 mod values;
-mod nested_loop;
 
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
@@ -32,13 +33,20 @@ pub(crate) use cartesian::*;
 pub(crate) use filter::*;
 pub(crate) use from::*;
 pub(crate) use group::*;
+pub(crate) use hop::*;
 pub(crate) use insert::*;
 pub(crate) use limit::*;
+pub(crate) use nested_loop::*;
 pub(crate) use scan::*;
 pub(crate) use select::*;
 pub(crate) use tagged::*;
 pub(crate) use values::*;
-pub(crate) use nested_loop::*;
+
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum QueryError {
+    #[error("Data corruption")]
+    Corruption,
+}
 
 pub(crate) trait InterpretContext: PartialEvalContext {
     fn resolve_table(&self, name: &str) -> Option<TableId>;

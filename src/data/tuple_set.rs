@@ -1,6 +1,6 @@
 use crate::data::eval::{PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
-use crate::data::tuple::{OwnTuple, ReifiedTuple};
+use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
@@ -186,8 +186,12 @@ impl TupleSet {
         match tuple {
             None => Ok(Value::Null),
             Some(tuple) => {
-                let res = tuple.get(*col_idx)?;
-                Ok(res)
+                if matches!(tuple.data_kind(), Ok(DataKind::Empty)) {
+                    Ok(Value::Null)
+                } else {
+                    let res = tuple.get(*col_idx)?;
+                    Ok(res)
+                }
             }
         }
     }

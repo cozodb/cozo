@@ -42,7 +42,7 @@ impl<'a> WhereFilter<'a> {
             let arg = arg.into_inner().next().unwrap();
             assert_rule(&arg, Rule::expr, NAME_WHERE, 1)?;
             let cond = Expr::try_from(arg)?;
-            conds.push(cond.to_static());
+            conds.push(cond.into_static());
         }
         let condition = Expr::Apply(Arc::new(OpAnd), conds);
         Ok(Self {
@@ -76,7 +76,7 @@ impl<'b> RelationalAlgebra for WhereFilter<'b> {
             .condition
             .clone()
             .partial_eval(&binding_ctx)?
-            .to_static();
+            .into_static();
         let txn = self.ctx.txn.clone();
         let temp_db = self.ctx.sess.temp.clone();
         let w_opts = default_write_options();

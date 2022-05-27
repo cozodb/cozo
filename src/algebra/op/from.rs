@@ -1,11 +1,12 @@
 use crate::algebra::op::{
-    CartesianJoin, InterpretContext, RelationalAlgebra, TableScan, WhereFilter,
+    CartesianJoin, InterpretContext, NestedLoopLeft, RelationalAlgebra, TableScan, WhereFilter,
 };
 use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::op::{OpAnd, OpEq};
 use crate::data::uuid::random_uuid_v1;
+use crate::data::value::Value;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{Pair, Pairs, Rule};
 use anyhow::Result;
@@ -49,26 +50,117 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
     let chain = arg.into_inner().next().ok_or_else(not_enough_args)?;
 
     let chain = parse_chain(chain)?;
-    let mut seen_bindings = HashSet::new();
-    let scans = chain
-        .iter()
-        .map(|el| -> Result<RaBox> {
-            let ts = TableScan::build(ctx, el, true)?;
 
-            if !seen_bindings.insert(el.binding.to_string()) {
-                return Err(AlgebraParseError::DuplicateBinding(el.binding.to_string()).into());
-            }
-
-            Ok(ts)
-        })
-        .collect::<Result<Vec<_>>>()?;
-    if scans.is_empty() {
+    if chain.is_empty() {
         return Err(not_enough_args().into());
     }
-    if scans.len() == 1 {
-        return Ok(scans.into_iter().next().unwrap());
+
+    let mut seen_bindings = HashSet::new();
+    let first_el = chain.first().unwrap();
+    let mut ret = TableScan::build(ctx, first_el, true)?;
+
+    if !seen_bindings.insert(first_el.binding.to_string()) {
+        return Err(AlgebraParseError::DuplicateBinding(first_el.binding.to_string()).into());
     }
-    todo!()
+
+    if chain.len() == 1 {
+        return Ok(ret);
+    }
+
+    let mut prev_el = first_el;
+    let mut prev_tid = ctx
+        .resolve_table(&prev_el.target)
+        .ok_or_else(|| AlgebraParseError::TableNotFound(prev_el.target.clone()))?;
+    let mut prev_info = ctx.get_table_info(prev_tid)?;
+
+    for cur_el in chain.iter().skip(1) {
+        match cur_el.part {
+            ChainPart::Node => {
+                // Edge to node
+                let node_id = ctx
+                    .resolve_table(&cur_el.target)
+                    .ok_or_else(|| AlgebraParseError::TableNotFound(cur_el.target.clone()))?;
+                let table_info = ctx.get_table_info(node_id)?;
+
+                let (prev_dir, prev_join) = match prev_el.part {
+                    ChainPart::Node => unreachable!(),
+                    ChainPart::Edge { dir, join } => (dir, join),
+                };
+                let join_key_prefix = match prev_dir {
+                    ChainPartEdgeDir::Fwd => "_dst_",
+                    ChainPartEdgeDir::Bwd => "_src_",
+                    ChainPartEdgeDir::Bidi => todo!(),
+                };
+                let left_join_keys: Vec<StaticExpr> = table_info
+                    .as_node()?
+                    .keys
+                    .iter()
+                    .map(|col| {
+                        Expr::FieldAcc(
+                            join_key_prefix.to_string() + &col.name,
+                            Expr::Variable(prev_el.binding.clone()).into(),
+                        )
+                    })
+                    .collect();
+
+                ret = RaBox::NestedLoopLeft(Box::new(NestedLoopLeft {
+                    ctx,
+                    left: ret,
+                    right: table_info.clone(),
+                    right_binding: cur_el.binding.clone(),
+                    left_outer_join: false,
+                    join_key_extracter: left_join_keys,
+                    key_is_prefix: false,
+                }));
+
+                prev_info = table_info;
+                prev_tid = node_id;
+            }
+            ChainPart::Edge { dir, join } => {
+                // Node to edge join
+                let edge_id = ctx
+                    .resolve_table(&cur_el.target)
+                    .ok_or_else(|| AlgebraParseError::TableNotFound(cur_el.target.clone()))?;
+                let table_info = ctx.get_table_info(edge_id)?;
+                let mut left_join_keys: Vec<StaticExpr> =
+                    vec![Expr::Const(Value::from(prev_tid.int_for_storage()))];
+                for key in prev_info.as_node()?.keys.iter() {
+                    left_join_keys.push(Expr::FieldAcc(
+                        key.name.to_string(),
+                        Expr::Variable(prev_el.binding.clone()).into(),
+                    ))
+                }
+                match dir {
+                    ChainPartEdgeDir::Fwd => {
+                        left_join_keys.push(Expr::Const(true.into()));
+                    }
+                    ChainPartEdgeDir::Bwd => {
+                        left_join_keys.push(Expr::Const(false.into()));
+                    }
+                    ChainPartEdgeDir::Bidi => {
+                        todo!()
+                    }
+                }
+                ret = RaBox::NestedLoopLeft(Box::new(NestedLoopLeft {
+                    ctx,
+                    left: ret,
+                    right: table_info.clone(),
+                    right_binding: cur_el.binding.clone(),
+                    left_outer_join: match join {
+                        JoinType::Inner => false,
+                        JoinType::Left => true,
+                        JoinType::Right => todo!(),
+                    },
+                    join_key_extracter: left_join_keys,
+                    key_is_prefix: true,
+                }));
+                prev_info = table_info;
+                prev_tid = edge_id;
+            }
+        }
+        prev_el = cur_el;
+    }
+    Ok(ret)
 }
 
 fn build_join_conditions(
