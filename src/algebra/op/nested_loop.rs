@@ -41,7 +41,11 @@ fn nested_binding_map(
 ) -> Result<BindingMap> {
     let mut binding_map = left.binding_map()?;
     let right = build_binding_map_from_info(ctx, right_info, &[])?;
-    let right_map = BTreeMap::from([(right_binding.to_string(), right)]);
+    let right_map = BindingMap {
+        inner_map: BTreeMap::from([(right_binding.to_string(), right)]),
+        key_size: 1,
+        val_size: 1
+    };
     shift_merge_binding_map(&mut binding_map, right_map);
     Ok(binding_map)
 }
@@ -128,7 +132,6 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
                     };
                     match result {
                         None => {
-                            dbg!(&key_tuple);
                             if left_join {
                                 tset.push_key(key_tuple.clone().into());
                                 tset.push_val(Tuple::empty_tuple().into());

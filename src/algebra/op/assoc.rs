@@ -3,9 +3,7 @@ use crate::algebra::parser::RaBox;
 use crate::context::TempDbContext;
 use crate::data::expr::{Expr, StaticExpr};
 use crate::data::tuple::{OwnTuple, Tuple};
-use crate::data::tuple_set::{
-    next_tset_indices_from_binding_map, BindingMap, TupleSet, TupleSetIdx,
-};
+use crate::data::tuple_set::{BindingMap, TupleSet, TupleSetIdx};
 use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, TableInfo};
 use crate::runtime::options::default_read_options;
@@ -89,8 +87,8 @@ impl<'b> RelationalAlgebra for AssocOp<'b> {
 
     fn binding_map(&self) -> Result<BindingMap> {
         let mut binding_map = self.source.binding_map()?;
-        let (_, mvi) = next_tset_indices_from_binding_map(&binding_map);
-        let sub_map = binding_map.entry(self.binding.clone()).or_default();
+        let mvi = binding_map.val_size;
+        let sub_map = binding_map.inner_map.entry(self.binding.clone()).or_default();
         for (i, info) in self.assoc_infos.iter().enumerate() {
             for (j, col) in info.vals.iter().enumerate() {
                 sub_map.insert(

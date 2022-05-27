@@ -759,7 +759,7 @@ impl<'a> EdgeDefEvalCtx<'a> {
                     return Some(TupleSetIdx {
                         is_key: true,
                         t_set: 0,
-                        col_idx: i + 2 + self.src_keys.len() + self.dst_keys.len(),
+                        col_idx: i + 1 + self.src_keys.len() + self.dst_keys.len(),
                     });
                 }
             }

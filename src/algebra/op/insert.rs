@@ -100,7 +100,11 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
 
     fn binding_map(&self) -> Result<BindingMap> {
         let inner = build_binding_map_from_info(self.ctx, &self.target_info, &self.assoc_infos)?;
-        Ok(BTreeMap::from([(self.binding.clone(), inner)]))
+        Ok(BindingMap {
+            inner_map: BTreeMap::from([(self.binding.clone(), inner)]),
+            key_size: 1,
+            val_size: 1
+        })
     }
 
     fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'b>> {

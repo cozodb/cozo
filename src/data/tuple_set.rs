@@ -271,32 +271,30 @@ impl<'a> TupleSetEvalContext<'a> {
     }
 }
 
-pub(crate) type BindingMap = BTreeMap<String, BTreeMap<String, TupleSetIdx>>;
+#[derive(Default, Clone, Debug)]
+pub(crate) struct BindingMap {
+    pub(crate) inner_map: BTreeMap<String, BTreeMap<String, TupleSetIdx>>,
+    pub(crate) key_size: usize,
+    pub(crate) val_size: usize,
+}
 
 pub(crate) fn merge_binding_maps(bmaps: impl Iterator<Item = BindingMap>) -> BindingMap {
-    // TODO this is not right!
-    let mut ret: BindingMap = BTreeMap::new();
+    let mut ret: BindingMap = Default::default();
 
     for cur in bmaps {
-        for (gk, vs) in cur {
-            let inner = ret.entry(gk).or_default();
-            for (lk, v) in vs {
-                inner.insert(lk, v);
-            }
-        }
+        shift_merge_binding_map(&mut ret, cur);
     }
 
     ret
 }
 
 pub(crate) fn shift_binding_map(right: &mut BindingMap, left: &BindingMap) {
-    let (key_shift, val_shift) = next_tset_indices_from_binding_map(left);
-    for vs in right.values_mut() {
+    for vs in right.inner_map.values_mut() {
         for v in vs.values_mut() {
             if v.is_key {
-                v.t_set += key_shift;
+                v.t_set += left.key_size;
             } else {
-                v.t_set += val_shift;
+                v.t_set += left.val_size;
             }
         }
     }
@@ -304,22 +302,9 @@ pub(crate) fn shift_binding_map(right: &mut BindingMap, left: &BindingMap) {
 
 pub(crate) fn shift_merge_binding_map(left: &mut BindingMap, mut right: BindingMap) {
     shift_binding_map(&mut right, left);
-    left.extend(right)
-}
-
-pub(crate) fn next_tset_indices_from_binding_map(map: &BindingMap) -> (usize, usize) {
-    let mut max_key_idx = -1;
-    let mut max_val_idx = -1;
-    for submap in map.values() {
-        for idx in submap.values() {
-            if idx.is_key {
-                max_key_idx = max(max_key_idx, idx.t_set as i64);
-            } else {
-                max_val_idx = max(max_val_idx, idx.t_set as i64);
-            }
-        }
-    }
-    ((max_key_idx + 1) as usize, (max_val_idx + 1) as usize)
+    left.inner_map.extend(right.inner_map);
+    left.key_size += right.key_size;
+    left.val_size += right.val_size;
 }
 
 pub(crate) struct BindingMapEvalContext<'a, T: PartialEvalContext + 'a> {
@@ -329,7 +314,7 @@ pub(crate) struct BindingMapEvalContext<'a, T: PartialEvalContext + 'a> {
 
 impl<'a, T: PartialEvalContext + 'a> PartialEvalContext for BindingMapEvalContext<'a, T> {
     fn resolve(&self, key: &str) -> Option<Expr> {
-        match self.map.get(key) {
+        match self.map.inner_map.get(key) {
             None => self.parent.resolve(key),
             Some(d) => {
                 let d = d

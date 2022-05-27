@@ -196,6 +196,7 @@ pub(crate) trait RelationalAlgebra {
     fn get_values(&self) -> Result<Vec<StaticValue>> {
         let bmap = self.binding_map()?;
         let bmap = bmap
+            .inner_map
             .into_iter()
             .flat_map(|(k, v)| {
                 if k.starts_with('@') {

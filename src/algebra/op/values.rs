@@ -54,7 +54,11 @@ impl RelationFromValues {
             })
             .collect::<BTreeMap<_, _>>();
         let n_fields = binding_map.len();
-        let binding_map = BTreeMap::from([(binding.to_string(), binding_map)]);
+        let binding_map = BindingMap {
+            inner_map: BTreeMap::from([(binding.to_string(), binding_map)]),
+            key_size: 1,
+            val_size: 1,
+        };
         let data = args
             .next()
             .ok_or_else(not_enough_args)?
@@ -94,6 +98,7 @@ impl RelationalAlgebra for RelationFromValues {
     fn bindings(&self) -> Result<BTreeSet<String>> {
         Ok(self
             .binding_map
+            .inner_map
             .iter()
             .map(|(k, v)| k.to_string())
             .collect())

@@ -204,7 +204,7 @@ impl<'a> TaggedInsertion<'a> {
                             val_tuple.push_value(&val);
                         }
 
-                        dbg!((key_tuple, val_tuple, Some(inv_key_tuple)))
+                        (key_tuple, val_tuple, Some(inv_key_tuple))
                     }
                     _ => return Err(AlgebraParseError::WrongTableKind(main_info.table_id()).into()),
                 };
@@ -250,27 +250,31 @@ impl<'b> RelationalAlgebra for TaggedInsertion<'b> {
     }
 
     fn binding_map(&self) -> Result<BindingMap> {
-        Ok(BTreeMap::from([(
-            self.binding.clone(),
-            BTreeMap::from([
-                (
-                    "table".to_string(),
-                    TupleSetIdx {
-                        is_key: true,
-                        t_set: 0,
-                        col_idx: 0,
-                    },
-                ),
-                (
-                    "n".to_string(),
-                    TupleSetIdx {
-                        is_key: false,
-                        t_set: 0,
-                        col_idx: 0,
-                    },
-                ),
-            ]),
-        )]))
+        Ok(BindingMap {
+            inner_map: BTreeMap::from([(
+                self.binding.clone(),
+                BTreeMap::from([
+                    (
+                        "table".to_string(),
+                        TupleSetIdx {
+                            is_key: true,
+                            t_set: 0,
+                            col_idx: 0,
+                        },
+                    ),
+                    (
+                        "n".to_string(),
+                        TupleSetIdx {
+                            is_key: false,
+                            t_set: 0,
+                            col_idx: 0,
+                        },
+                    ),
+                ]),
+            )]),
+            key_size: 1,
+            val_size: 1
+        })
     }
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {

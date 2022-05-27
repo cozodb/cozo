@@ -260,7 +260,7 @@ pub(crate) fn parse_chain(pair: Pair) -> Result<Vec<ChainEl>> {
             Rule::edge_part => {
                 let mut pairs = pair.into_inner();
                 let src_marker = pairs.next().unwrap();
-                let (is_bwd, src_outer) = parse_edge_marker(src_marker);
+                let (is_bwd, _) = parse_edge_marker(src_marker);
                 let middle = pairs.next().unwrap();
                 let (binding, target, assocs) = parse_node_part(middle)?;
                 let dst_marker = pairs.next().unwrap();
@@ -272,11 +272,10 @@ pub(crate) fn parse_chain(pair: Pair) -> Result<Vec<ChainEl>> {
                 } else {
                     ChainPartEdgeDir::Bwd
                 };
-                let join = match (src_outer, dst_outer) {
-                    (true, true) => return Err(JoinError::NoFullOuterInChain.into()),
-                    (true, false) => JoinType::Right,
-                    (false, true) => JoinType::Left,
-                    (false, false) => JoinType::Inner,
+                let join = if dst_outer {
+                    JoinType::Left
+                } else {
+                    JoinType::Inner
                 };
                 collected.push(ChainEl {
                     part: ChainPart::Edge { dir, join },

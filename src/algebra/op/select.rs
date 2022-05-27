@@ -118,7 +118,11 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
                 .collect::<BTreeMap<_, _>>(),
             ex => return Err(SelectOpError::NeedsDict(ex.into_static()).into()),
         };
-        Ok(BTreeMap::from([(self.binding.clone(), extract_map)]))
+        Ok(BindingMap {
+            inner_map: BTreeMap::from([(self.binding.clone(), extract_map)]),
+            key_size: 1,
+            val_size: 1
+        })
     }
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {

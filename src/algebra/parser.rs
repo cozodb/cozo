@@ -322,9 +322,9 @@ pub(crate) mod tests {
         {
             let ctx = sess.temp_ctx(true);
             let s = r#"
-             From(e:Employee-[hj:HasJob]->?j:Job)
+             From(e:Employee-[id:InDepartment]->d:Department)
             .Where(e.id >= 122, e.id < 130)
-            .Select({...e, title: j.title, salary: hj.salary})
+            .Select({...e, dept_name: d.name})
             "#;
             let ra = build_relational_expr(
                 &ctx,
@@ -342,7 +342,7 @@ pub(crate) mod tests {
         {
             let ctx = sess.temp_ctx(true);
             let s = r#"
-             From(j:Job<-[hj:HasJob]-?e:Employee)
+             From(j:Job<-[hj:HasJob]?-e:Employee)
             .Where(e.id >= 122, e.id < 130)
             .Select({...e, title: j.title, salary: hj.salary})
             "#;

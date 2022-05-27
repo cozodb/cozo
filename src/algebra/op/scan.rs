@@ -88,7 +88,11 @@ impl<'b> RelationalAlgebra for TableScan<'b> {
 
     fn binding_map(&self) -> Result<BindingMap> {
         let inner = build_binding_map_from_info(self.ctx, &self.table_info, &[])?;
-        Ok(BTreeMap::from([(self.binding.clone(), inner)]))
+        Ok(BindingMap {
+            inner_map: BTreeMap::from([(self.binding.clone(), inner)]),
+            key_size: 1,
+            val_size: 1,
+        })
     }
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
