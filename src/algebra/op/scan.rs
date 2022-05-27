@@ -1,10 +1,8 @@
 use crate::algebra::op::{AssocOp, ChainEl, ChainPart, InterpretContext, RelationalAlgebra};
 use crate::algebra::parser::{AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{BindingMap, TupleSet, TupleSetIdx};
-use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, TableInfo};
 use anyhow::Result;
 use cozorocks::IteratorPtr;

@@ -1,17 +1,14 @@
 use crate::algebra::op::{
-    CartesianJoin, InterpretContext, NestedLoopLeft, RelationalAlgebra, TableScan, WhereFilter,
+    CartesianJoin, InterpretContext, NestedLoopLeft, RelationalAlgebra, TableScan,
 };
 use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::{Expr, StaticExpr};
-use crate::data::op::{OpAnd, OpEq};
 use crate::data::uuid::random_uuid_v1;
-use crate::data::value::Value;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{Pair, Pairs, Rule};
 use anyhow::Result;
 use std::collections::{BTreeSet, HashSet};
-use std::sync::Arc;
 
 pub(crate) const NAME_FROM: &str = "From";
 
@@ -82,14 +79,13 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                     .ok_or_else(|| AlgebraParseError::TableNotFound(cur_el.target.clone()))?;
                 let table_info = ctx.get_table_info(node_id)?;
 
-                let (prev_dir, prev_join) = match prev_el.part {
+                let (prev_dir, _prev_join) = match prev_el.part {
                     ChainPart::Node => unreachable!(),
                     ChainPart::Edge { dir, join } => (dir, join),
                 };
                 let join_key_prefix = match prev_dir {
                     ChainPartEdgeDir::Fwd => "_dst_",
                     ChainPartEdgeDir::Bwd => "_src_",
-                    ChainPartEdgeDir::Bidi => todo!(),
                 };
                 let left_join_keys: Vec<StaticExpr> = table_info
                     .as_node()?
@@ -125,9 +121,6 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                 let mut left_join_keys: Vec<StaticExpr> = vec![Expr::Const(match dir {
                     ChainPartEdgeDir::Fwd => true.into(),
                     ChainPartEdgeDir::Bwd => false.into(),
-                    ChainPartEdgeDir::Bidi => {
-                        todo!()
-                    }
                 })];
                 for key in prev_info.as_node()?.keys.iter() {
                     left_join_keys.push(Expr::FieldAcc(
@@ -157,59 +150,10 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
     Ok(ret)
 }
 
-fn build_join_conditions(
-    ctx: &TempDbContext,
-    node_to_edge: bool,
-    is_outer: bool,
-    dir: ChainPartEdgeDir,
-    node_name: &str,
-    node_binding: &str,
-    edge_binding: &str,
-) -> Result<StaticExpr> {
-    let dir_prefix = if node_to_edge {
-        match dir {
-            ChainPartEdgeDir::Fwd => "_src_",
-            ChainPartEdgeDir::Bwd => "_dst_",
-            ChainPartEdgeDir::Bidi => todo!(),
-        }
-    } else {
-        match dir {
-            ChainPartEdgeDir::Fwd => "_dst_",
-            ChainPartEdgeDir::Bwd => "_src_",
-            ChainPartEdgeDir::Bidi => todo!(),
-        }
-    };
-    let the_node = ctx.resolve_table(node_name).unwrap();
-    let the_node = ctx.get_table_info(the_node).unwrap().into_node().unwrap();
-
-    let conditions = the_node
-        .keys
-        .into_iter()
-        .map(|k| {
-            Expr::Apply(
-                Arc::new(OpEq),
-                vec![
-                    Expr::FieldAcc(
-                        dir_prefix.to_string() + &k.name,
-                        Expr::Variable(edge_binding.to_string()).into(),
-                    ),
-                    Expr::FieldAcc(k.name, Expr::Variable(node_binding.to_string()).into()),
-                ],
-            )
-        })
-        .collect::<Vec<_>>();
-    Ok(if conditions.len() == 1 {
-        conditions.into_iter().next().unwrap()
-    } else {
-        Expr::Apply(Arc::new(OpAnd), conditions)
-    })
-}
-
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum ChainPartEdgeDir {
     Fwd,
     Bwd,
-    Bidi,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -241,6 +185,8 @@ pub(crate) struct ChainEl {
 pub(crate) enum JoinError {
     #[error("Cannot have both left and right join marker in a chain segment")]
     NoFullOuterInChain,
+    #[error("Must specify edge direction")]
+    BidiEdge,
 }
 
 pub(crate) fn parse_chain(pair: Pair) -> Result<Vec<ChainEl>> {
@@ -266,7 +212,7 @@ pub(crate) fn parse_chain(pair: Pair) -> Result<Vec<ChainEl>> {
                 let dst_marker = pairs.next().unwrap();
                 let (is_fwd, dst_outer) = parse_edge_marker(dst_marker);
                 let dir = if (is_fwd && is_bwd) || (!is_fwd && !is_bwd) {
-                    ChainPartEdgeDir::Bidi
+                    return Err(JoinError::BidiEdge.into());
                 } else if is_fwd {
                     ChainPartEdgeDir::Fwd
                 } else {

@@ -11,7 +11,7 @@ use crate::ddl::reify::TableInfo;
 use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
 use cozorocks::{
-    DbPtr, IteratorPtr, PrefixIterator, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr,
+    DbPtr, PrefixIterator, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr,
 };
 use std::collections::{BTreeMap, BTreeSet};
 

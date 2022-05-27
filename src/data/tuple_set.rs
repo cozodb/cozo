@@ -5,7 +5,7 @@ use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use cozorocks::{DbPtr, TransactionPtr, WriteOptionsPtr};
-use std::cmp::{max, Ordering};
+use std::cmp::{Ordering};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::result;
