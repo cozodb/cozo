@@ -177,6 +177,23 @@ impl<P: AsRef<[u8]>> Iterator for PrefixIterator<P> {
     }
 }
 
+pub struct RowIterator {
+    iter: IteratorPtr,
+    started: bool,
+}
+
+impl Iterator for RowIterator {
+    type Item = (SlicePtr, SlicePtr);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.started {
+            self.iter.next()
+        } else {
+            self.started = true
+        }
+        self.iter.pair()
+    }
+}
+
 impl IteratorPtr {
     #[inline]
     pub fn to_first(&self) {
@@ -201,6 +218,14 @@ impl IteratorPtr {
     #[inline]
     pub fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
         IteratorBridge::do_seek_for_prev(self, key.as_ref())
+    }
+    #[inline]
+    pub fn iter_rows<T: AsRef<[u8]>>(self, prefix: T) -> RowIterator {
+        self.seek(prefix.as_ref());
+        RowIterator {
+            iter: self,
+            started: false,
+        }
     }
     #[inline]
     pub fn iter_prefix<T: AsRef<[u8]>>(self, prefix: T) -> PrefixIterator<T> {

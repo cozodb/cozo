@@ -51,6 +51,12 @@ impl<'a> Value<'a> {
             _ => None,
         }
     }
+    pub(crate) fn get_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Value::Bytes(b) => Some(b.as_ref()),
+            _ => None,
+        }
+    }
     pub(crate) fn get_slice(&self) -> Option<&[Value<'a>]> {
         match self {
             Value::List(l) => Some(l),

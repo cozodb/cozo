@@ -1,6 +1,7 @@
 use crate::data::eval::{PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple, Tuple};
+use crate::data::tuple_set::TupleSetError::DecodeFailure;
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
@@ -18,6 +19,8 @@ pub enum TupleSetError {
     Deser(StaticValue),
     #[error("resolve db on raw tuple set")]
     RawTupleSetDbResolve,
+    #[error("Decode tupleset from tuple failed for {0:?}")]
+    DecodeFailure(OwnTuple),
 }
 
 pub(crate) const MIN_TABLE_ID_BOUND: u32 = 10000;
@@ -138,9 +141,25 @@ impl TupleSet {
             target.push_bytes(v.as_ref());
         }
     }
-    pub(crate) fn decode_from_tuple<T: AsRef<[u8]>>(source: &Tuple<T>) {
-        // let k_len =
-        todo!()
+    pub(crate) fn decode_from_tuple<T: AsRef<[u8]>>(source: &Tuple<T>) -> Result<Self> {
+        let gen_err = || DecodeFailure(source.to_owned());
+        let k_len = source.get(0)?.get_int().ok_or_else(gen_err)? as usize;
+        let v_len = source.get(1)?.get_int().ok_or_else(gen_err)? as usize;
+        let mut ret = TupleSet {
+            keys: Vec::with_capacity(k_len),
+            vals: Vec::with_capacity(v_len),
+        };
+        for i in 2..k_len + 2 {
+            let d = source.get(i)?;
+            let d = d.get_bytes().ok_or_else(gen_err)?;
+            ret.keys.push(OwnTuple::new(d.to_vec()).into());
+        }
+        for i in k_len + 2..k_len + v_len + 2 {
+            let d = source.get(i)?;
+            let d = d.get_bytes().ok_or_else(gen_err)?;
+            ret.vals.push(OwnTuple::new(d.to_vec()).into());
+        }
+        Ok(ret)
     }
 }
 
