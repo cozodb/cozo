@@ -72,6 +72,7 @@ pub(crate) enum RaBox<'a> {
     NestedLoopLeft(Box<NestedLoopLeft<'a>>),
     SortOp(Box<SortOp<'a>>),
     MergeJoin(Box<MergeJoin<'a>>),
+    ConcatOp(Box<ConcatOp<'a>>),
 }
 
 impl<'a> RaBox<'a> {
@@ -89,6 +90,7 @@ impl<'a> RaBox<'a> {
             RaBox::NestedLoopLeft(inner) => vec![&inner.left],
             RaBox::SortOp(inner) => vec![&inner.source],
             RaBox::MergeJoin(inner) => vec![&inner.left, &inner.right],
+            RaBox::ConcatOp(inner) => inner.sources.iter().collect(),
         }
     }
 }
@@ -118,6 +120,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::NestedLoopLeft(inner) => inner.name(),
             RaBox::SortOp(inner) => inner.name(),
             RaBox::MergeJoin(inner) => inner.name(),
+            RaBox::ConcatOp(inner) => inner.name(),
         }
     }
 
@@ -135,6 +138,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::NestedLoopLeft(inner) => inner.bindings(),
             RaBox::SortOp(inner) => inner.bindings(),
             RaBox::MergeJoin(inner) => inner.bindings(),
+            RaBox::ConcatOp(inner) => inner.bindings(),
         }
     }
 
@@ -152,6 +156,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::NestedLoopLeft(inner) => inner.binding_map(),
             RaBox::SortOp(inner) => inner.binding_map(),
             RaBox::MergeJoin(inner) => inner.binding_map(),
+            RaBox::ConcatOp(inner) => inner.binding_map(),
         }
     }
 
@@ -169,6 +174,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::NestedLoopLeft(inner) => inner.iter(),
             RaBox::SortOp(inner) => inner.iter(),
             RaBox::MergeJoin(inner) => inner.iter(),
+            RaBox::ConcatOp(inner) => inner.iter(),
         }
     }
 
@@ -186,6 +192,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::NestedLoopLeft(inner) => inner.identity(),
             RaBox::SortOp(inner) => inner.identity(),
             RaBox::MergeJoin(inner) => inner.identity(),
+            RaBox::ConcatOp(inner) => inner.identity(),
         }
     }
 }
@@ -250,6 +257,11 @@ pub(crate) fn build_relational_expr<'a>(
             n @ (NAME_INNER_JOIN | NAME_LEFT_JOIN | NAME_RIGHT_JOIN | NAME_OUTER_JOIN) => {
                 built = Some(RaBox::MergeJoin(Box::new(MergeJoin::build(
                     ctx, built, pairs, n,
+                )?)))
+            }
+            NAME_CONCAT => {
+                built = Some(RaBox::ConcatOp(Box::new(ConcatOp::build(
+                    ctx, built, pairs,
                 )?)))
             }
             name => {
@@ -410,6 +422,24 @@ pub(crate) mod tests {
         }
         let duration_outer_join = start.elapsed();
         let start = Instant::now();
+        {
+            let ctx = sess.temp_ctx(true);
+            let s = r#"
+             Concat(From(d:Department), From(d:Job))
+            "#;
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            dbg!(&ra);
+            dbg!(ra.get_values()?);
+        }
+        let duration_concat = start.elapsed();
+        let start = Instant::now();
         let mut r_opts = default_read_options();
         r_opts.set_total_order_seek(true);
         r_opts.set_prefix_same_as_start(false);
@@ -431,6 +461,7 @@ pub(crate) mod tests {
             duration_scan,
             duration_join,
             duration_join_back,
+            duration_concat,
             duration_outer_join,
             duration_list,
             n

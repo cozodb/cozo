@@ -24,6 +24,7 @@ mod select;
 mod sort;
 mod tagged;
 mod values;
+mod concat;
 
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
@@ -43,6 +44,7 @@ pub(crate) use select::*;
 pub(crate) use sort::*;
 pub(crate) use tagged::*;
 pub(crate) use values::*;
+pub(crate) use concat::*;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum QueryError {
@@ -197,20 +199,19 @@ pub(crate) trait RelationalAlgebra {
     fn identity(&self) -> Option<TableInfo>;
     fn get_values(&self) -> Result<Vec<StaticValue>> {
         let bmap = self.binding_map()?;
-        let bmap = bmap
-            .inner_map
-            .into_iter()
-            .flat_map(|(k, v)| {
-                if k.starts_with('@') {
-                    vec![]
-                } else {
-                    v.into_iter()
-                        .map(|(k, v)| (k, Expr::TupleSetIdx(v)))
-                        .collect::<Vec<_>>()
+        let mut ret_map = BTreeMap::new();
+        for (k, vs) in &bmap.inner_map {
+            if !k.starts_with('@') {
+                for (sk, v) in vs {
+                    if ret_map.contains_key(sk) {
+                        ret_map.insert("__".to_string() + k + "_" + sk, Expr::TupleSetIdx(*v));
+                    } else {
+                        ret_map.insert(sk.to_string(), Expr::TupleSetIdx(*v));
+                    }
                 }
-            })
-            .collect::<BTreeMap<_, _>>();
-        let bmap = Expr::Dict(bmap);
+            }
+        }
+        let bmap = Expr::Dict(ret_map);
         let mut collected = vec![];
         for tuple in self.iter()? {
             let tuple = tuple?;

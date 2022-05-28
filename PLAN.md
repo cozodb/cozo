@@ -3,7 +3,8 @@
 Operations
 
 * [x] `from(...rels)`, can use chain notation
-* [ ] `left_join(left, right, ...conds)`, similarly for `right_join`, `outer_join`)
+* [x] `left_join(left, right, ...conds)`, similarly for `right_join`, `outer_join`)
+* [ ] `concat(...rels)`
 * [ ] `intersect(...rels)`, similarly for `union`
 * [ ] `diff(left, right)`, similarly for `sym_diff`
 * [x] `select(rel, binding: {..})`
