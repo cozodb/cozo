@@ -121,7 +121,7 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
         Ok(BindingMap {
             inner_map: BTreeMap::from([(self.binding.clone(), extract_map)]),
             key_size: 1,
-            val_size: 1
+            val_size: 1,
         })
     }
 

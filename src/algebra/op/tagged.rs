@@ -273,7 +273,7 @@ impl<'b> RelationalAlgebra for TaggedInsertion<'b> {
                 ]),
             )]),
             key_size: 1,
-            val_size: 1
+            val_size: 1,
         })
     }
 

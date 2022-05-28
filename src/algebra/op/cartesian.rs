@@ -1,8 +1,6 @@
 use crate::algebra::op::RelationalAlgebra;
 use crate::algebra::parser::RaBox;
-use crate::data::tuple_set::{
-    shift_merge_binding_map, BindingMap, TupleSet,
-};
+use crate::data::tuple_set::{shift_merge_binding_map, BindingMap, TupleSet};
 use crate::ddl::reify::TableInfo;
 use anyhow::Result;
 use std::collections::BTreeSet;

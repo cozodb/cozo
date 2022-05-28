@@ -10,7 +10,6 @@ use crate::parser::{Pairs, Rule};
 use crate::runtime::options::default_read_options;
 use anyhow::Result;
 use log::error;
-use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -66,7 +65,6 @@ impl<'a> SortOp<'a> {
     }
     fn sort_data(&self) -> Result<()> {
         let temp_table_id = self.temp_table_id.load(Ordering::SeqCst);
-        dbg!(temp_table_id);
         assert!(temp_table_id > MIN_TABLE_ID_BOUND);
         let source_map = self.source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
@@ -105,22 +103,24 @@ impl<'a> SortOp<'a> {
     }
 }
 
+pub(crate) fn drop_temp_table(ctx: &TempDbContext, id: u32) {
+    if id > MIN_TABLE_ID_BOUND {
+        let start_key = OwnTuple::with_prefix(id);
+        let mut end_key = OwnTuple::with_prefix(id);
+        end_key.seal_with_sentinel();
+        if let Err(e) = ctx
+            .sess
+            .temp
+            .del_range(&ctx.sess.w_opts_temp, start_key, end_key)
+        {
+            error!("Undefine temp table failed: {:?}", e)
+        }
+    }
+}
+
 impl<'a> Drop for SortOp<'a> {
     fn drop(&mut self) {
-        let id = self.temp_table_id.load(Ordering::SeqCst);
-        if id > MIN_TABLE_ID_BOUND {
-            let start_key = OwnTuple::with_prefix(id);
-            let mut end_key = OwnTuple::with_prefix(id);
-            end_key.seal_with_sentinel();
-            if let Err(e) =
-                self.ctx
-                    .sess
-                    .temp
-                    .del_range(&self.ctx.sess.w_opts_temp, start_key, end_key)
-            {
-                error!("Undefine temp table failed: {:?}", e)
-            }
-        }
+        drop_temp_table(self.ctx, self.temp_table_id.load(Ordering::SeqCst));
     }
 }
 

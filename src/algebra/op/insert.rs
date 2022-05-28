@@ -103,7 +103,7 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
         Ok(BindingMap {
             inner_map: BTreeMap::from([(self.binding.clone(), inner)]),
             key_size: 1,
-            val_size: 1
+            val_size: 1,
         })
     }
 

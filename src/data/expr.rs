@@ -7,7 +7,7 @@ use crate::data::value::{StaticValue, Value};
 use crate::parser::{CozoParser, Rule};
 use anyhow::Result;
 use pest::Parser;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::result;
 use std::sync::Arc;
@@ -72,6 +72,62 @@ impl<'a> Expr<'a> {
             Expr::Const(v) => Some(v),
             _ => None,
         }
+    }
+    pub(crate) fn all_variables(&self) -> BTreeSet<String> {
+        let mut ret = BTreeSet::new();
+        fn collect(ex: &Expr, accum: &mut BTreeSet<String>) {
+            match ex {
+                Expr::Const(_) => {}
+                Expr::List(ls) => {
+                    for el in ls {
+                        collect(el, accum);
+                    }
+                }
+                Expr::Dict(d) => {
+                    for el in d.values() {
+                        collect(el, accum);
+                    }
+                }
+                Expr::Variable(v) => {
+                    accum.insert(v.clone());
+                }
+                Expr::TupleSetIdx(_) => {}
+                Expr::Apply(_, args) => {
+                    for el in args {
+                        collect(el, accum);
+                    }
+                }
+                Expr::ApplyAgg(_, a_args, args) => {
+                    for el in args {
+                        collect(el, accum);
+                    }
+                    for el in a_args {
+                        collect(el, accum);
+                    }
+                }
+                Expr::FieldAcc(_, arg) => {
+                    collect(arg, accum);
+                }
+                Expr::IdxAcc(_, arg) => {
+                    collect(arg, accum);
+                }
+                Expr::IfExpr(args) => {
+                    let (if_p, then_p, else_p) = args.as_ref();
+                    collect(if_p, accum);
+                    collect(then_p, accum);
+                    collect(else_p, accum);
+                }
+                Expr::SwitchExpr(args) => {
+                    for (cond, el) in args {
+                        collect(cond, accum);
+                        collect(el, accum);
+                    }
+                }
+                ex => panic!("Unsupported on optimized expression: {:?}", ex),
+            }
+        }
+        collect(self, &mut ret);
+        ret
     }
     pub(crate) fn into_static(self) -> StaticExpr {
         match self {

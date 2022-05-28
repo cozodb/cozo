@@ -10,9 +10,7 @@ use crate::data::tuple_set::{
 use crate::ddl::reify::TableInfo;
 use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
-use cozorocks::{
-    DbPtr, PrefixIterator, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr,
-};
+use cozorocks::{DbPtr, PrefixIterator, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const NAME_NESTED_LOOP_LEFT: &str = "NestedLoop";
@@ -44,7 +42,7 @@ fn nested_binding_map(
     let right_map = BindingMap {
         inner_map: BTreeMap::from([(right_binding.to_string(), right)]),
         key_size: 1,
-        val_size: 1
+        val_size: 1,
     };
     shift_merge_binding_map(&mut binding_map, right_map);
     Ok(binding_map)

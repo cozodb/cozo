@@ -7,7 +7,6 @@ use crate::ddl::reify::TableInfo;
 use crate::parser::{Pair, Rule};
 use anyhow::Result;
 use std::collections::BTreeSet;
-use std::error::Error;
 use std::fmt::{Debug, Formatter};
 
 #[derive(thiserror::Error, Debug)]
@@ -72,6 +71,7 @@ pub(crate) enum RaBox<'a> {
     Cartesian(Box<CartesianJoin<'a>>),
     NestedLoopLeft(Box<NestedLoopLeft<'a>>),
     SortOp(Box<SortOp<'a>>),
+    MergeJoin(Box<MergeJoin<'a>>),
 }
 
 impl<'a> RaBox<'a> {
@@ -88,6 +88,7 @@ impl<'a> RaBox<'a> {
             RaBox::Cartesian(inner) => vec![&inner.left, &inner.right],
             RaBox::NestedLoopLeft(inner) => vec![&inner.left],
             RaBox::SortOp(inner) => vec![&inner.source],
+            RaBox::MergeJoin(inner) => vec![&inner.left, &inner.right],
         }
     }
 }
@@ -116,6 +117,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::Cartesian(inner) => inner.name(),
             RaBox::NestedLoopLeft(inner) => inner.name(),
             RaBox::SortOp(inner) => inner.name(),
+            RaBox::MergeJoin(inner) => inner.name(),
         }
     }
 
@@ -132,6 +134,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::Cartesian(inner) => inner.bindings(),
             RaBox::NestedLoopLeft(inner) => inner.bindings(),
             RaBox::SortOp(inner) => inner.bindings(),
+            RaBox::MergeJoin(inner) => inner.bindings(),
         }
     }
 
@@ -148,6 +151,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::Cartesian(inner) => inner.binding_map(),
             RaBox::NestedLoopLeft(inner) => inner.binding_map(),
             RaBox::SortOp(inner) => inner.binding_map(),
+            RaBox::MergeJoin(inner) => inner.binding_map(),
         }
     }
 
@@ -164,6 +168,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::Cartesian(inner) => inner.iter(),
             RaBox::NestedLoopLeft(inner) => inner.iter(),
             RaBox::SortOp(inner) => inner.iter(),
+            RaBox::MergeJoin(inner) => inner.iter(),
         }
     }
 
@@ -180,15 +185,24 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::Cartesian(inner) => inner.identity(),
             RaBox::NestedLoopLeft(inner) => inner.identity(),
             RaBox::SortOp(inner) => inner.identity(),
+            RaBox::MergeJoin(inner) => inner.identity(),
         }
     }
 }
 
-pub(crate) fn build_relational_expr<'a>(ctx: &'a TempDbContext, pair: Pair) -> Result<RaBox<'a>> {
+pub(crate) fn build_relational_expr<'a>(
+    ctx: &'a TempDbContext,
+    mut pair: Pair,
+) -> Result<RaBox<'a>> {
+    if pair.as_rule() == Rule::ra_arg {
+        pair = pair.into_inner().next().unwrap();
+    }
+    assert_rule(&pair, Rule::ra_expr, pair.as_str(), 0)?;
     let mut built: Option<RaBox> = None;
     for pair in pair.into_inner() {
         let mut pairs = pair.into_inner();
-        match pairs.next().unwrap().as_str() {
+        let pair = pairs.next().unwrap();
+        match pair.as_str() {
             NAME_INSERTION => {
                 built = Some(RaBox::Insertion(Box::new(Insertion::build(
                     ctx, built, pairs, false,
@@ -227,18 +241,20 @@ pub(crate) fn build_relational_expr<'a>(ctx: &'a TempDbContext, pair: Pair) -> R
                     ctx, built, pairs,
                 )?)))
             }
-            NAME_TAKE => {
+            n @ (NAME_TAKE | NAME_SKIP) => {
                 built = Some(RaBox::LimitOp(Box::new(LimitOp::build(
-                    ctx, built, pairs, NAME_TAKE,
-                )?)))
-            }
-            NAME_SKIP => {
-                built = Some(RaBox::LimitOp(Box::new(LimitOp::build(
-                    ctx, built, pairs, NAME_SKIP,
+                    ctx, built, pairs, n,
                 )?)))
             }
             NAME_SORT => built = Some(RaBox::SortOp(Box::new(SortOp::build(ctx, built, pairs)?))),
-            _ => unimplemented!(),
+            n @ (NAME_INNER_JOIN | NAME_LEFT_JOIN | NAME_RIGHT_JOIN | NAME_OUTER_JOIN) => {
+                built = Some(RaBox::MergeJoin(Box::new(MergeJoin::build(
+                    ctx, built, pairs, n,
+                )?)))
+            }
+            name => {
+                unimplemented!("{}", name)
+            }
         }
     }
     Ok(built.unwrap())
@@ -363,6 +379,37 @@ pub(crate) mod tests {
         }
         let duration_join_back = start.elapsed();
         let start = Instant::now();
+        {
+            let ctx = sess.temp_ctx(true);
+            let s = r#"
+            OuterJoin(
+              From(l:Job),
+              From(r:Job),
+              l.min_salary == r.max_salary
+            ).Select({
+                l_id: l.id,
+                r_id: r.id,
+                l_min: l.min_salary,
+                // l_max: l.max_salary,
+                // r_min: r.min_salary,
+                r_max: r.max_salary,
+                l_title: l.title,
+                r_title: r.title,
+            })
+            "#;
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            dbg!(&ra);
+            dbg!(ra.get_values()?);
+        }
+        let duration_outer_join = start.elapsed();
+        let start = Instant::now();
         let mut r_opts = default_read_options();
         r_opts.set_total_order_seek(true);
         r_opts.set_prefix_same_as_start(false);
@@ -384,6 +431,7 @@ pub(crate) mod tests {
             duration_scan,
             duration_join,
             duration_join_back,
+            duration_outer_join,
             duration_list,
             n
         );

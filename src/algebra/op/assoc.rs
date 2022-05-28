@@ -88,7 +88,10 @@ impl<'b> RelationalAlgebra for AssocOp<'b> {
     fn binding_map(&self) -> Result<BindingMap> {
         let mut binding_map = self.source.binding_map()?;
         let mvi = binding_map.val_size;
-        let sub_map = binding_map.inner_map.entry(self.binding.clone()).or_default();
+        let sub_map = binding_map
+            .inner_map
+            .entry(self.binding.clone())
+            .or_default();
         for (i, info) in self.assoc_infos.iter().enumerate() {
             for (j, col) in info.vals.iter().enumerate() {
                 sub_map.insert(

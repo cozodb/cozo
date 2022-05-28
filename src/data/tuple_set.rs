@@ -141,6 +141,24 @@ impl TupleSet {
             target.push_bytes(v.as_ref());
         }
     }
+
+    pub(crate) fn padded_tset(padding: (usize, usize)) -> Self {
+        let mut ret = TupleSet {
+            keys: Vec::with_capacity(padding.0),
+            vals: Vec::with_capacity(padding.1),
+        };
+
+        for _ in 0..padding.0 {
+            ret.push_key(OwnTuple::empty_tuple().into());
+        }
+
+        for _ in 0..padding.1 {
+            ret.push_val(OwnTuple::empty_tuple().into());
+        }
+
+        ret
+    }
+
     pub(crate) fn decode_from_tuple<T: AsRef<[u8]>>(source: &Tuple<T>) -> Result<Self> {
         let gen_err = || DecodeFailure(source.to_owned());
         let k_len = source.get(0)?.get_int().ok_or_else(gen_err)? as usize;
@@ -313,6 +331,12 @@ pub(crate) struct BindingMap {
     pub(crate) inner_map: BTreeMap<String, BTreeMap<String, TupleSetIdx>>,
     pub(crate) key_size: usize,
     pub(crate) val_size: usize,
+}
+
+impl BindingMap {
+    pub(crate) fn kv_size(&self) -> (usize, usize) {
+        (self.key_size, self.val_size)
+    }
 }
 
 pub(crate) fn merge_binding_maps(bmaps: impl Iterator<Item = BindingMap>) -> BindingMap {

@@ -208,6 +208,23 @@ impl<T: AsRef<[u8]>> Tuple<T> {
     }
 
     #[inline]
+    pub(crate) fn key_part_truncate_cmp<T2: AsRef<[u8]>>(
+        &self,
+        other: &Tuple<T2>,
+        n: usize,
+    ) -> Ordering {
+        self.iter()
+            .take(n)
+            .map(|v| v.expect("Key comparison failed"))
+            .cmp(
+                other
+                    .iter()
+                    .take(n)
+                    .map(|v| v.expect("Key comparison failed")),
+            )
+    }
+
+    #[inline]
     pub(crate) fn new(data: T) -> Self {
         Self {
             data,
