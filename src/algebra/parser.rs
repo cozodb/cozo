@@ -444,7 +444,7 @@ pub(crate) mod tests {
             let ctx = sess.temp_ctx(true);
             let s = r#"
               From(e:Employee)
-             .Select({id: e.id, sum_id: e.id.sum[], count: count[null]})
+             .Select({id: e.id, sum_id: count_with[e.id], nn: count_non_null[e.id.lag[;3]], count: count[null], prev_id: lag[e.id; 1], pprev_id: e.id.lag[;2]})
             "#;
             let ra = build_relational_expr(
                 &ctx,
