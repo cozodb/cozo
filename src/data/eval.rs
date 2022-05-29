@@ -98,7 +98,7 @@ impl Expr {
         }
     }
 
-    pub(crate) fn extract_agg_heads(&self) -> Result<Vec<(OpAgg, Vec<Expr>)>> {
+    pub(crate) fn extract_aggr_heads(&self) -> Result<Vec<(OpAgg, Vec<Expr>)>> {
         let mut coll = vec![];
         fn do_extract(ex: Expr, coll: &mut Vec<(OpAgg, Vec<Expr>)>) -> Result<()> {
             match ex {
@@ -167,29 +167,55 @@ impl Expr {
         Ok(coll)
     }
 
-    pub(crate) fn is_agg_compatible(&self) -> bool {
+    pub(crate) fn is_not_aggr(&self) -> bool {
         match self {
             Expr::Const(_) => true,
-            Expr::List(l) => l.iter().all(|el| el.is_agg_compatible()),
-            Expr::Dict(d) => d.values().all(|el| el.is_agg_compatible()),
-            Expr::Variable(_) => false,
-            Expr::TupleSetIdx(_) => false,
-            Expr::ApplyAgg(_, _, _) => true,
-            Expr::FieldAcc(_, arg) => arg.is_agg_compatible(),
-            Expr::IdxAcc(_, arg) => arg.is_agg_compatible(),
+            Expr::List(l) => l.iter().all(|el| el.is_not_aggr()),
+            Expr::Dict(d) => d.values().all(|el| el.is_not_aggr()),
+            Expr::Variable(_) => true,
+            Expr::TupleSetIdx(_) => true,
+            Expr::ApplyAgg(_, _, _) => false,
+            Expr::FieldAcc(_, arg) => arg.is_not_aggr(),
+            Expr::IdxAcc(_, arg) => arg.is_not_aggr(),
             Expr::IfExpr(args) => {
                 let (a, b, c) = args.as_ref();
-                a.is_agg_compatible() && b.is_agg_compatible() && c.is_agg_compatible()
+                a.is_not_aggr() && b.is_not_aggr() && c.is_not_aggr()
             }
             Expr::SwitchExpr(args) => args
                 .iter()
-                .all(|(cond, expr)| cond.is_agg_compatible() && expr.is_agg_compatible()),
-            Expr::OpAnd(args) => args.iter().all(|el| el.is_agg_compatible()),
-            Expr::OpOr(args) => args.iter().all(|el| el.is_agg_compatible()),
-            Expr::OpCoalesce(args) => args.iter().all(|el| el.is_agg_compatible()),
-            Expr::OpMerge(args) => args.iter().all(|el| el.is_agg_compatible()),
-            Expr::OpConcat(args) => args.iter().all(|el| el.is_agg_compatible()),
-            Expr::BuiltinFn(_, args) => args.iter().all(|el| el.is_agg_compatible()),
+                .all(|(cond, expr)| cond.is_not_aggr() && expr.is_not_aggr()),
+            Expr::OpAnd(args) => args.iter().all(|el| el.is_not_aggr()),
+            Expr::OpOr(args) => args.iter().all(|el| el.is_not_aggr()),
+            Expr::OpCoalesce(args) => args.iter().all(|el| el.is_not_aggr()),
+            Expr::OpMerge(args) => args.iter().all(|el| el.is_not_aggr()),
+            Expr::OpConcat(args) => args.iter().all(|el| el.is_not_aggr()),
+            Expr::BuiltinFn(_, args) => args.iter().all(|el| el.is_not_aggr()),
+        }
+    }
+
+    pub(crate) fn is_aggr_compatible(&self) -> bool {
+        match self {
+            Expr::Const(_) => true,
+            Expr::List(l) => l.iter().all(|el| el.is_aggr_compatible()),
+            Expr::Dict(d) => d.values().all(|el| el.is_aggr_compatible()),
+            Expr::Variable(_) => false,
+            Expr::TupleSetIdx(_) => false,
+            Expr::ApplyAgg(_, _, _) => true,
+            Expr::FieldAcc(_, arg) => arg.is_aggr_compatible(),
+            Expr::IdxAcc(_, arg) => arg.is_aggr_compatible(),
+            Expr::IfExpr(args) => {
+                let (a, b, c) = args.as_ref();
+                a.is_aggr_compatible() && b.is_aggr_compatible() && c.is_aggr_compatible()
+            }
+            Expr::SwitchExpr(args) => args
+                .iter()
+                .all(|(cond, expr)| cond.is_aggr_compatible() && expr.is_aggr_compatible()),
+            Expr::OpAnd(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::OpOr(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::OpCoalesce(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::OpMerge(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::OpConcat(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::BuiltinFn(_, args) => args.iter().all(|el| el.is_aggr_compatible()),
         }
     }
 
