@@ -3,7 +3,7 @@ use crate::algebra::op::{
 };
 use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::{Expr};
 use crate::data::uuid::random_uuid_v1;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{Pair, Pairs, Rule};
@@ -89,7 +89,7 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                     ChainPartEdgeDir::Fwd => "_dst_",
                     ChainPartEdgeDir::Bwd => "_src_",
                 };
-                let left_join_keys: Vec<StaticExpr> = table_info
+                let left_join_keys: Vec<Expr> = table_info
                     .as_node()?
                     .keys
                     .iter()
@@ -121,7 +121,7 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                     .resolve_table(&cur_el.target)
                     .ok_or_else(|| AlgebraParseError::TableNotFound(cur_el.target.clone()))?;
                 let table_info = ctx.get_table_info(edge_id)?;
-                let mut left_join_keys: Vec<StaticExpr> = vec![Expr::Const(match dir {
+                let mut left_join_keys: Vec<Expr> = vec![Expr::Const(match dir {
                     ChainPartEdgeDir::Fwd => true.into(),
                     ChainPartEdgeDir::Bwd => false.into(),
                 })];

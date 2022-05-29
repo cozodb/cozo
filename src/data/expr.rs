@@ -1,7 +1,4 @@
-use crate::data::op::{
-    AggOp, Op, OpAdd, OpAnd, OpCoalesce, OpDiv, OpEq, OpGe, OpGt, OpIsNull, OpLe, OpLt, OpMinus,
-    OpMod, OpMul, OpNe, OpNot, OpNotNull, OpOr, OpPow, OpStrCat, OpSub, UnresolvedOp,
-};
+use crate::data::op::*;
 use crate::data::tuple_set::TupleSetIdx;
 use crate::data::value::{StaticValue, Value};
 use crate::parser::{CozoParser, Rule};
@@ -10,7 +7,6 @@ use pest::Parser;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::result;
-use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ExprError {
@@ -28,46 +24,47 @@ pub enum ExprError {
 }
 
 #[derive(Clone)]
-pub enum Expr<'a> {
-    Const(Value<'a>),
-    List(Vec<Expr<'a>>),
-    Dict(BTreeMap<String, Expr<'a>>),
-    Variable(String),
-    TupleSetIdx(TupleSetIdx),
-    Apply(Arc<dyn Op + Send + Sync>, Vec<Expr<'a>>),
-    ApplyAgg(Arc<dyn AggOp + Send + Sync>, Vec<Expr<'a>>, Vec<Expr<'a>>),
-    FieldAcc(String, Box<Expr<'a>>),
-    IdxAcc(usize, Box<Expr<'a>>),
-    IfExpr(Box<(Expr<'a>, Expr<'a>, Expr<'a>)>),
-    SwitchExpr(Vec<(Expr<'a>, Expr<'a>)>),
-    // optimized
-    Add(Box<(Expr<'a>, Expr<'a>)>),
-    Sub(Box<(Expr<'a>, Expr<'a>)>),
-    Mul(Box<(Expr<'a>, Expr<'a>)>),
-    Div(Box<(Expr<'a>, Expr<'a>)>),
-    Pow(Box<(Expr<'a>, Expr<'a>)>),
-    Mod(Box<(Expr<'a>, Expr<'a>)>),
-    StrCat(Box<(Expr<'a>, Expr<'a>)>),
-    Eq(Box<(Expr<'a>, Expr<'a>)>),
-    Ne(Box<(Expr<'a>, Expr<'a>)>),
-    Gt(Box<(Expr<'a>, Expr<'a>)>),
-    Ge(Box<(Expr<'a>, Expr<'a>)>),
-    Lt(Box<(Expr<'a>, Expr<'a>)>),
-    Le(Box<(Expr<'a>, Expr<'a>)>),
-    Not(Box<Expr<'a>>),
-    Minus(Box<Expr<'a>>),
-    IsNull(Box<Expr<'a>>),
-    NotNull(Box<Expr<'a>>),
-    Coalesce(Box<(Expr<'a>, Expr<'a>)>),
-    Or(Box<(Expr<'a>, Expr<'a>)>),
-    And(Box<(Expr<'a>, Expr<'a>)>),
+pub struct BuiltinFn {
+    pub(crate) name: &'static str,
+    pub(crate) arity: Option<u8>,
+    pub(crate) non_null_args: bool,
+    pub(crate) func: for<'a> fn(&[Value<'a>]) -> Result<Value<'a>>,
 }
 
-impl<'a> Expr<'a> {
+impl PartialEq for BuiltinFn {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for BuiltinFn {}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum Expr {
+    Const(StaticValue),
+    List(Vec<Expr>),
+    Dict(BTreeMap<String, Expr>),
+    Variable(String),
+    TupleSetIdx(TupleSetIdx),
+    // Apply(Arc<dyn Op + Send + Sync>, Vec<Expr>),
+    ApplyAgg((), Vec<Expr>, Vec<Expr>),
+    FieldAcc(String, Box<Expr>),
+    IdxAcc(usize, Box<Expr>),
+    IfExpr(Box<(Expr, Expr, Expr)>),
+    SwitchExpr(Vec<(Expr, Expr)>),
+    OpAnd(Vec<Expr>),
+    OpOr(Vec<Expr>),
+    OpCoalesce(Vec<Expr>),
+    OpMerge(Vec<Expr>),
+    OpConcat(Vec<Expr>),
+    BuiltinFn(BuiltinFn, Vec<Expr>),
+}
+
+impl Expr {
     pub(crate) fn is_const(&self) -> bool {
         matches!(self, Expr::Const(_))
     }
-    pub(crate) fn extract_const(self) -> Option<Value<'a>> {
+    pub(crate) fn extract_const(self) -> Option<StaticValue> {
         match self {
             Expr::Const(v) => Some(v),
             _ => None,
@@ -92,7 +89,7 @@ impl<'a> Expr<'a> {
                     accum.insert(v.clone());
                 }
                 Expr::TupleSetIdx(_) => {}
-                Expr::Apply(_, args) => {
+                Expr::BuiltinFn(_, args) => {
                     for el in args {
                         collect(el, accum);
                     }
@@ -129,126 +126,33 @@ impl<'a> Expr<'a> {
         collect(self, &mut ret);
         ret
     }
-    pub(crate) fn into_static(self) -> StaticExpr {
-        match self {
-            Expr::Const(v) => Expr::Const(v.into_static()),
-            Expr::List(l) => Expr::List(l.into_iter().map(|v| v.into_static()).collect()),
-            Expr::Dict(d) => Expr::Dict(d.into_iter().map(|(k, v)| (k, v.into_static())).collect()),
-            Expr::Variable(v) => Expr::Variable(v),
-            Expr::TupleSetIdx(idx) => Expr::TupleSetIdx(idx),
-            Expr::Apply(op, args) => {
-                Expr::Apply(op, args.into_iter().map(|v| v.into_static()).collect())
-            }
-            Expr::ApplyAgg(op, a_args, args) => Expr::ApplyAgg(
-                op,
-                a_args.into_iter().map(|v| v.into_static()).collect(),
-                args.into_iter().map(|v| v.into_static()).collect(),
-            ),
-            Expr::FieldAcc(f, arg) => Expr::FieldAcc(f, arg.into_static().into()),
-            Expr::IdxAcc(i, arg) => Expr::IdxAcc(i, arg.into_static().into()),
-            Expr::IfExpr(args) => {
-                let (a, b, c) = *args;
-                Expr::IfExpr((a.into_static(), b.into_static(), c.into_static()).into())
-            }
-            Expr::SwitchExpr(args) => Expr::SwitchExpr(
-                args.into_iter()
-                    .map(|(a, b)| (a.into_static(), b.into_static()))
-                    .collect(),
-            ),
-            Expr::Add(args) => {
-                let (a, b) = *args;
-                Expr::Add((a.into_static(), b.into_static()).into())
-            }
-            Expr::Sub(args) => {
-                let (a, b) = *args;
-                Expr::Sub((a.into_static(), b.into_static()).into())
-            }
-            Expr::Mul(args) => {
-                let (a, b) = *args;
-                Expr::Mul((a.into_static(), b.into_static()).into())
-            }
-            Expr::Div(args) => {
-                let (a, b) = *args;
-                Expr::Div((a.into_static(), b.into_static()).into())
-            }
-            Expr::Pow(args) => {
-                let (a, b) = *args;
-                Expr::Pow((a.into_static(), b.into_static()).into())
-            }
-            Expr::Mod(args) => {
-                let (a, b) = *args;
-                Expr::Mod((a.into_static(), b.into_static()).into())
-            }
-            Expr::StrCat(args) => {
-                let (a, b) = *args;
-                Expr::StrCat((a.into_static(), b.into_static()).into())
-            }
-            Expr::Eq(args) => {
-                let (a, b) = *args;
-                Expr::Eq((a.into_static(), b.into_static()).into())
-            }
-            Expr::Ne(args) => {
-                let (a, b) = *args;
-                Expr::Ne((a.into_static(), b.into_static()).into())
-            }
-            Expr::Gt(args) => {
-                let (a, b) = *args;
-                Expr::Gt((a.into_static(), b.into_static()).into())
-            }
-            Expr::Ge(args) => {
-                let (a, b) = *args;
-                Expr::Ge((a.into_static(), b.into_static()).into())
-            }
-            Expr::Lt(args) => {
-                let (a, b) = *args;
-                Expr::Lt((a.into_static(), b.into_static()).into())
-            }
-            Expr::Le(args) => {
-                let (a, b) = *args;
-                Expr::Le((a.into_static(), b.into_static()).into())
-            }
-            Expr::Not(arg) => Expr::Not(arg.into_static().into()),
-            Expr::Minus(arg) => Expr::Minus(arg.into_static().into()),
-            Expr::IsNull(arg) => Expr::IsNull(arg.into_static().into()),
-            Expr::NotNull(arg) => Expr::NotNull(arg.into_static().into()),
-            Expr::Coalesce(args) => {
-                let (a, b) = *args;
-                Expr::Coalesce((a.into_static(), b.into_static()).into())
-            }
-            Expr::Or(args) => {
-                let (a, b) = *args;
-                Expr::Or((a.into_static(), b.into_static()).into())
-            }
-            Expr::And(args) => {
-                let (a, b) = *args;
-                Expr::And((a.into_static(), b.into_static()).into())
-            }
-        }
-    }
 }
 
-impl<'a> PartialEq for Expr<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        use Expr::*;
-
-        match (self, other) {
-            (Const(l), Const(r)) => l == r,
-            (List(l), List(r)) => l == r,
-            (Dict(l), Dict(r)) => l == r,
-            (Variable(l), Variable(r)) => l == r,
-            (TupleSetIdx(l), TupleSetIdx(r)) => l == r,
-            (Apply(lo, la), Apply(ro, ra)) => (lo.name() == ro.name()) && (la == ra),
-            (ApplyAgg(lo, laa, la), ApplyAgg(ro, raa, ra)) => {
-                (lo.name() == ro.name()) && (laa == raa) && (la == ra)
-            }
-            (FieldAcc(lf, la), FieldAcc(rf, ra)) => (lf == rf) && (la == ra),
-            (IdxAcc(li, la), IdxAcc(ri, ra)) => (li == ri) && (la == ra),
-            _ => false,
+fn write_fn_call<'a, T: IntoIterator<Item = &'a [Expr]>>(
+    f: &mut Formatter,
+    name: &str,
+    args_iter: T,
+) -> std::fmt::Result {
+    write!(f, "({}", name)?;
+    for (i, args) in args_iter.into_iter().enumerate() {
+        if i == 0 {
+            write!(f, " ")?;
+        } else {
+            write!(f, "; ")?;
         }
+        write!(
+            f,
+            "{}",
+            args.iter()
+                .map(|v| format!("{:?}", v))
+                .collect::<Vec<_>>()
+                .join(" ")
+        )?
     }
+    Ok(())
 }
 
-impl<'a> Debug for Expr<'a> {
+impl<'a> Debug for Expr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Expr::Const(c) => write!(f, "{}", c),
@@ -256,39 +160,10 @@ impl<'a> Debug for Expr<'a> {
             Expr::Dict(d) => write!(f, "{:?}", d),
             Expr::Variable(v) => write!(f, "`{}`", v),
             Expr::TupleSetIdx(sid) => write!(f, "{:?}", sid),
-            Expr::Apply(op, args) => write!(
-                f,
-                "({} {})",
-                op.name(),
-                args.iter()
-                    .map(|v| format!("{:?}", v))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
-            Expr::Add(args) => write!(f, "(`+ {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Sub(args) => write!(f, "(`- {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Mul(args) => write!(f, "(`* {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Div(args) => write!(f, "(`/ {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Pow(args) => write!(f, "(`** {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Mod(args) => write!(f, "(`% {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::StrCat(args) => write!(f, "(`++ {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Eq(args) => write!(f, "(`== {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Ne(args) => write!(f, "(`!= {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Gt(args) => write!(f, "(`> {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Ge(args) => write!(f, "(`>= {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Lt(args) => write!(f, "(`< {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Le(args) => write!(f, "(`<= {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Not(arg) => write!(f, "(`! {:?})", arg.as_ref()),
-            Expr::Minus(arg) => write!(f, "(`-- {:?})", arg.as_ref()),
-            Expr::IsNull(arg) => write!(f, "(`is_null {:?})", arg.as_ref()),
-            Expr::NotNull(arg) => write!(f, "(`not_null {:?})", arg.as_ref()),
-            Expr::Coalesce(args) => write!(f, "(`~ {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::Or(args) => write!(f, "(`|| {:?} {:?})", args.as_ref().0, args.as_ref().1),
-            Expr::And(args) => write!(f, "(`&& {:?} {:?})", args.as_ref().0, args.as_ref().1),
             Expr::ApplyAgg(op, a_args, args) => write!(
                 f,
                 "[|{} {} | {}|]",
-                op.name(),
+                todo!(),
                 a_args
                     .iter()
                     .map(|v| format!("{:?}", v))
@@ -314,11 +189,15 @@ impl<'a> Debug for Expr<'a> {
             }
             Expr::FieldAcc(field, arg) => write!(f, "(.{} {:?})", field, arg),
             Expr::IdxAcc(i, arg) => write!(f, "(.{} {:?})", i, arg),
+            Expr::OpAnd(args) => write_fn_call(f, "&&", [args.as_ref()]),
+            Expr::OpOr(args) => write_fn_call(f, "||", [args.as_ref()]),
+            Expr::OpCoalesce(args) => write_fn_call(f, "~", [args.as_ref()]),
+            Expr::OpMerge(args) => write_fn_call(f, "merge", [args.as_ref()]),
+            Expr::OpConcat(args) => write_fn_call(f, "concat", [args.as_ref()]),
+            Expr::BuiltinFn(op, args) => write_fn_call(f, op.name, [args.as_ref()]),
         }
     }
 }
-
-pub type StaticExpr = Expr<'static>;
 
 fn extract_list_from_value(value: Value, n: usize) -> Result<Vec<Value>> {
     if let Value::List(l) = value {
@@ -331,18 +210,18 @@ fn extract_list_from_value(value: Value, n: usize) -> Result<Vec<Value>> {
     }
 }
 
-impl<'a> TryFrom<Value<'a>> for Expr<'a> {
+impl TryFrom<StaticValue> for Expr {
     type Error = anyhow::Error;
 
-    fn try_from(value: Value<'a>) -> Result<Self> {
+    fn try_from(value: StaticValue) -> Result<Self> {
         if let Value::Dict(d) = value {
             if d.len() != 1 {
                 return Err(ExprError::ConversionFailure(Value::Dict(d).into_static()).into());
             }
             let (k, v) = d.into_iter().next().unwrap();
             match k.as_ref() {
-                "Const" => Ok(Expr::Const(v)),
-                "List" => {
+                EXPR_TAG_CONST => Ok(Expr::Const(v)),
+                EXPR_TAG_LIST => {
                     let l = extract_list_from_value(v, 0)?;
                     Ok(Expr::List(
                         l.into_iter()
@@ -350,7 +229,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                             .collect::<Result<Vec<_>>>()?,
                     ))
                 }
-                "Dict" => match v {
+                EXPR_TAG_DICT => match v {
                     Value::Dict(d) => Ok(Expr::Dict(
                         d.into_iter()
                             .map(|(k, v)| -> Result<(String, Expr)> {
@@ -365,7 +244,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                         .into());
                     }
                 },
-                "Variable" => {
+                EXPR_TAG_VARIABLE => {
                     if let Value::Text(t) = v {
                         Ok(Expr::Variable(t.to_string()))
                     } else {
@@ -375,7 +254,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                         .into());
                     }
                 }
-                "TupleSetIdx" => {
+                EXPR_TAG_TUPLE_SET_IDX => {
                     let mut l = extract_list_from_value(v, 3)?.into_iter();
                     let is_key = match l.next().unwrap() {
                         Value::Bool(b) => b,
@@ -395,40 +274,38 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                         col_idx: cid as usize,
                     }))
                 }
-                "Apply" => {
+                EXPR_TAG_APPLY => {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let name = match ll.next().unwrap() {
                         Value::Text(t) => t,
                         v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
                     };
-                    let op = Arc::new(UnresolvedOp(name.to_string()));
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
-                    let args = l
+                    let _args = l
                         .into_iter()
                         .map(Expr::try_from)
                         .collect::<Result<Vec<_>>>()?;
-                    Ok(Expr::Apply(op, args))
+                    todo!()
                 }
-                "ApplyAgg" => {
+                EXPR_TAG_APPLY_AGG => {
                     let mut ll = extract_list_from_value(v, 3)?.into_iter();
                     let name = match ll.next().unwrap() {
                         Value::Text(t) => t,
                         v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
                     };
-                    let op = Arc::new(UnresolvedOp(name.to_string()));
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
                     let a_args = l
                         .into_iter()
                         .map(Expr::try_from)
                         .collect::<Result<Vec<_>>>()?;
                     let l = extract_list_from_value(ll.next().unwrap(), 0)?;
-                    let args = l
+                    let _args = l
                         .into_iter()
                         .map(Expr::try_from)
                         .collect::<Result<Vec<_>>>()?;
-                    Ok(Expr::ApplyAgg(op, a_args, args))
+                    todo!()
                 }
-                "FieldAcc" => {
+                EXPR_TAG_FIELD_ACC => {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let field = match ll.next().unwrap() {
                         Value::Text(t) => t,
@@ -437,7 +314,7 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
                     let arg = Expr::try_from(ll.next().unwrap())?;
                     Ok(Expr::FieldAcc(field.to_string(), arg.into()))
                 }
-                "IdxAcc" => {
+                EXPR_TAG_IDX_ACC => {
                     let mut ll = extract_list_from_value(v, 2)?.into_iter();
                     let idx = match ll.next().unwrap() {
                         Value::Int(i) => i as usize,
@@ -454,9 +331,9 @@ impl<'a> TryFrom<Value<'a>> for Expr<'a> {
     }
 }
 
-fn build_value_from_binop<'a>(name: &str, (left, right): (Expr<'a>, Expr<'a>)) -> Value<'a> {
+fn build_value_from_binop<'a>(name: &str, (left, right): (Expr, Expr)) -> Value<'a> {
     build_tagged_value(
-        "Apply",
+        EXPR_TAG_APPLY,
         vec![
             Value::from(name.to_string()),
             Value::from(vec![Value::from(left), Value::from(right)]),
@@ -465,9 +342,9 @@ fn build_value_from_binop<'a>(name: &str, (left, right): (Expr<'a>, Expr<'a>)) -
     )
 }
 
-fn build_value_from_uop<'a>(name: &str, arg: Expr<'a>) -> Value<'a> {
+fn build_value_from_uop<'a>(name: &str, arg: Expr) -> Value<'a> {
     build_tagged_value(
-        "Apply",
+        EXPR_TAG_APPLY,
         vec![
             Value::from(name.to_string()),
             Value::from(vec![Value::from(arg)]),
@@ -476,24 +353,34 @@ fn build_value_from_uop<'a>(name: &str, arg: Expr<'a>) -> Value<'a> {
     )
 }
 
-impl<'a> From<Expr<'a>> for Value<'a> {
-    fn from(expr: Expr<'a>) -> Self {
+pub(crate) const EXPR_TAG_CONST: &str = "Const";
+pub(crate) const EXPR_TAG_LIST: &str = "List";
+pub(crate) const EXPR_TAG_DICT: &str = "Dict";
+pub(crate) const EXPR_TAG_VARIABLE: &str = "Variable";
+pub(crate) const EXPR_TAG_TUPLE_SET_IDX: &str = "TupleSetIdx";
+pub(crate) const EXPR_TAG_APPLY: &str = "Apply";
+pub(crate) const EXPR_TAG_APPLY_AGG: &str = "ApplyAgg";
+pub(crate) const EXPR_TAG_FIELD_ACC: &str = "FieldAcc";
+pub(crate) const EXPR_TAG_IDX_ACC: &str = "IndexAcc";
+
+impl<'a> From<Expr> for Value<'a> {
+    fn from(expr: Expr) -> Self {
         match expr {
-            Expr::Const(c) => build_tagged_value("Const", c),
+            Expr::Const(c) => build_tagged_value(EXPR_TAG_CONST, c),
             Expr::List(l) => build_tagged_value(
-                "List",
+                EXPR_TAG_LIST,
                 l.into_iter().map(Value::from).collect::<Vec<_>>().into(),
             ),
             Expr::Dict(d) => build_tagged_value(
-                "Dict",
+                EXPR_TAG_DICT,
                 d.into_iter()
                     .map(|(k, v)| (k.into(), v.into()))
                     .collect::<BTreeMap<_, _>>()
                     .into(),
             ),
-            Expr::Variable(v) => build_tagged_value("Variable", v.into()),
+            Expr::Variable(v) => build_tagged_value(EXPR_TAG_VARIABLE, v.into()),
             Expr::TupleSetIdx(sid) => build_tagged_value(
-                "TupleSetIdx",
+                EXPR_TAG_TUPLE_SET_IDX,
                 vec![
                     sid.is_key.into(),
                     Value::from(sid.t_set as i64),
@@ -501,30 +388,50 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                 ]
                 .into(),
             ),
-            Expr::Add(arg) => build_value_from_binop(OpAdd.name(), *arg),
-            Expr::Sub(arg) => build_value_from_binop(OpSub.name(), *arg),
-            Expr::Mul(arg) => build_value_from_binop(OpMul.name(), *arg),
-            Expr::Div(arg) => build_value_from_binop(OpDiv.name(), *arg),
-            Expr::Pow(arg) => build_value_from_binop(OpPow.name(), *arg),
-            Expr::Mod(arg) => build_value_from_binop(OpMod.name(), *arg),
-            Expr::StrCat(arg) => build_value_from_binop(OpStrCat.name(), *arg),
-            Expr::Eq(arg) => build_value_from_binop(OpEq.name(), *arg),
-            Expr::Ne(arg) => build_value_from_binop(OpNe.name(), *arg),
-            Expr::Gt(arg) => build_value_from_binop(OpGt.name(), *arg),
-            Expr::Ge(arg) => build_value_from_binop(OpGe.name(), *arg),
-            Expr::Lt(arg) => build_value_from_binop(OpLt.name(), *arg),
-            Expr::Le(arg) => build_value_from_binop(OpLe.name(), *arg),
-            Expr::Not(arg) => build_value_from_uop(OpNot.name(), *arg),
-            Expr::Minus(arg) => build_value_from_uop(OpMinus.name(), *arg),
-            Expr::IsNull(arg) => build_value_from_uop(OpIsNull.name(), *arg),
-            Expr::NotNull(arg) => build_value_from_uop(OpNotNull.name(), *arg),
-            Expr::Coalesce(arg) => build_value_from_binop(OpCoalesce.name(), *arg),
-            Expr::Or(arg) => build_value_from_binop(OpOr.name(), *arg),
-            Expr::And(arg) => build_value_from_binop(OpAnd.name(), *arg),
-            Expr::Apply(op, args) => build_tagged_value(
-                "Apply",
+            Expr::BuiltinFn(op, args) => build_tagged_value(
+                EXPR_TAG_APPLY,
                 vec![
-                    Value::from(op.name().to_string()),
+                    Value::from(op.name.to_string()),
+                    args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
+                ]
+                .into(),
+            ),
+            Expr::OpAnd(args) => build_tagged_value(
+                EXPR_TAG_APPLY,
+                vec![
+                    Value::from(NAME_OP_ADD),
+                    args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
+                ]
+                .into(),
+            ),
+            Expr::OpOr(args) => build_tagged_value(
+                EXPR_TAG_APPLY,
+                vec![
+                    Value::from(NAME_OP_OR),
+                    args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
+                ]
+                .into(),
+            ),
+            Expr::OpCoalesce(args) => build_tagged_value(
+                EXPR_TAG_APPLY,
+                vec![
+                    Value::from(NAME_OP_COALESCE),
+                    args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
+                ]
+                .into(),
+            ),
+            Expr::OpMerge(args) => build_tagged_value(
+                EXPR_TAG_APPLY,
+                vec![
+                    Value::from(NAME_OP_MERGE),
+                    args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
+                ]
+                .into(),
+            ),
+            Expr::OpConcat(args) => build_tagged_value(
+                EXPR_TAG_APPLY,
+                vec![
+                    Value::from(NAME_OP_CONCAT),
                     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
                 ]
                 .into(),
@@ -536,9 +443,9 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                 todo!()
             }
             Expr::ApplyAgg(op, a_args, args) => build_tagged_value(
-                "ApplyAgg",
+                EXPR_TAG_APPLY_AGG,
                 vec![
-                    Value::from(op.name().to_string()),
+                    Value::from(todo!()),
                     a_args
                         .into_iter()
                         .map(Value::from)
@@ -549,11 +456,12 @@ impl<'a> From<Expr<'a>> for Value<'a> {
                 .into(),
             ),
             Expr::FieldAcc(f, v) => {
-                build_tagged_value("FieldAcc", vec![f.into(), Value::from(*v)].into())
+                build_tagged_value(EXPR_TAG_FIELD_ACC, vec![f.into(), Value::from(*v)].into())
             }
-            Expr::IdxAcc(idx, v) => {
-                build_tagged_value("IdxAcc", vec![(idx as i64).into(), Value::from(*v)].into())
-            }
+            Expr::IdxAcc(idx, v) => build_tagged_value(
+                EXPR_TAG_IDX_ACC,
+                vec![(idx as i64).into(), Value::from(*v)].into(),
+            ),
         }
     }
 }
@@ -562,7 +470,7 @@ fn build_tagged_value<'a>(tag: &'static str, val: Value<'a>) -> Value<'a> {
     Value::Dict(BTreeMap::from([(tag.into(), val)]))
 }
 
-impl<'a> TryFrom<&'a str> for Expr<'a> {
+impl<'a> TryFrom<&'a str> for Expr {
     type Error = anyhow::Error;
 
     fn try_from(value: &'a str) -> result::Result<Self, Self::Error> {

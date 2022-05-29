@@ -1,8 +1,8 @@
 use crate::algebra::op::{drop_temp_table, RelationalAlgebra};
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr, StaticExpr};
-use crate::data::op::NAME_OP_EQ;
+use crate::data::expr::{Expr};
+use crate::data::op::{OP_EQ};
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{merge_binding_maps, BindingMap, BindingMapEvalContext, TupleSet};
 use crate::ddl::reify::{DdlContext, TableInfo};
@@ -23,7 +23,7 @@ pub(crate) struct MergeJoin<'a> {
     ctx: &'a TempDbContext<'a>,
     pub(crate) left: RaBox<'a>,
     pub(crate) right: RaBox<'a>,
-    pub(crate) join_keys: Vec<(StaticExpr, StaticExpr)>,
+    pub(crate) join_keys: Vec<(Expr, Expr)>,
     pub(crate) left_outer: bool,
     pub(crate) right_outer: bool,
     left_temp_id: AtomicU32,
@@ -33,11 +33,11 @@ pub(crate) struct MergeJoin<'a> {
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum JoinError {
     #[error("Invalid join condition {0:?}")]
-    JoinCondition(StaticExpr),
+    JoinCondition(Expr),
     #[error("Join condition {0:?} must contain variables {1:?}")]
-    NoBoundVariable(StaticExpr, BTreeSet<String>),
+    NoBoundVariable(Expr, BTreeSet<String>),
     #[error("Join condition {0:?} must not contain variables {1:?}")]
-    WrongBoundVariable(StaticExpr, BTreeSet<String>),
+    WrongBoundVariable(Expr, BTreeSet<String>),
 }
 
 impl<'a> MergeJoin<'a> {
@@ -66,16 +66,16 @@ impl<'a> MergeJoin<'a> {
             )
             .into());
         }
-        let mut join_keys: Vec<(StaticExpr, StaticExpr)> = vec![];
+        let mut join_keys: Vec<(Expr, Expr)> = vec![];
         for (i, arg) in args.enumerate() {
             let pair = arg.into_inner().next().unwrap();
             assert_rule(&pair, Rule::expr, kind, i + 2)?;
             let expr = Expr::try_from(pair)?;
             match expr {
-                Expr::Apply(op, args) if op.name() == NAME_OP_EQ => {
+                Expr::BuiltinFn(op, args) if op == OP_EQ => {
                     let mut args = args.into_iter();
-                    let left_condition = args.next().unwrap().into_static();
-                    let right_condition = args.next().unwrap().into_static();
+                    let left_condition = args.next().unwrap();
+                    let right_condition = args.next().unwrap();
                     let left_variables = left_condition.all_variables();
                     let right_variables = right_condition.all_variables();
                     if left_variables.is_disjoint(&left_bindings) {
@@ -100,7 +100,7 @@ impl<'a> MergeJoin<'a> {
                     }
                     join_keys.push((left_condition, right_condition))
                 }
-                ex => return Err(JoinError::JoinCondition(ex.into_static()).into()),
+                ex => return Err(JoinError::JoinCondition(ex).into()),
             }
         }
 
@@ -115,12 +115,7 @@ impl<'a> MergeJoin<'a> {
             right_temp_id: Default::default(),
         })
     }
-    fn materialize(
-        &self,
-        temp_table_id: u32,
-        keys: Vec<StaticExpr>,
-        source: &RaBox<'a>,
-    ) -> Result<()> {
+    fn materialize(&self, temp_table_id: u32, keys: Vec<Expr>, source: &RaBox<'a>) -> Result<()> {
         let source_map = source.binding_map()?;
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,

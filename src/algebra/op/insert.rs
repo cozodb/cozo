@@ -3,7 +3,7 @@ use crate::algebra::op::{
 };
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::{Expr};
 use crate::data::parser::parse_scoped_dict;
 use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext};
@@ -26,7 +26,7 @@ pub(crate) struct Insertion<'a> {
     binding: String,
     target_info: TableInfo,
     assoc_infos: Vec<AssocInfo>,
-    extract_map: StaticExpr,
+    extract_map: Expr,
     upsert: bool,
 }
 
@@ -62,7 +62,6 @@ impl<'a> Insertion<'a> {
                 AlgebraParseError::Parse("Cannot have keyed map in Insert".to_string()).into(),
             );
         }
-        let extract_map = extract_map.into_static();
 
         let target_id = ctx
             .resolve_table(&table_name)

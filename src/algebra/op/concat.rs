@@ -1,7 +1,7 @@
 use crate::algebra::op::RelationalAlgebra;
 use crate::algebra::parser::{build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::{Expr};
 use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{BindingMap, TupleSet, TupleSetIdx};
 use crate::data::value::Value;
@@ -40,7 +40,7 @@ impl<'a> ConcatOp<'a> {
         }
         Ok(Self { sources })
     }
-    fn value_entries(&self, binding_map: &BindingMap) -> Result<Vec<StaticExpr>> {
+    fn value_entries(&self, binding_map: &BindingMap) -> Result<Vec<Expr>> {
         let dft = BTreeMap::new();
         let own_binding_map = self.binding_map()?;
         let mut ret = vec![];
@@ -109,7 +109,6 @@ impl<'b> RelationalAlgebra for ConcatOp<'b> {
         for source in &self.sources {
             let source_map = source.binding_map()?;
             let val_extractors = self.value_entries(&source_map)?;
-            let own_map = self.binding_map()?;
 
             let iter = source.iter()?.map(move |tset| -> Result<TupleSet> {
                 let tset = tset?;

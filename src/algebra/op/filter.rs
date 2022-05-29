@@ -1,8 +1,7 @@
 use crate::algebra::op::RelationalAlgebra;
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr, StaticExpr};
-use crate::data::op::OpAnd;
+use crate::data::expr::{Expr};
 use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext};
 use crate::data::value::{StaticValue, Value};
 use crate::ddl::reify::TableInfo;
@@ -10,14 +9,13 @@ use crate::parser::{Pairs, Rule};
 use crate::runtime::options::default_write_options;
 use anyhow::Result;
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 pub(crate) const NAME_WHERE: &str = "Where";
 
 pub(crate) struct WhereFilter<'a> {
     pub(crate) ctx: &'a TempDbContext<'a>,
     pub(crate) source: RaBox<'a>,
-    pub(crate) condition: StaticExpr,
+    pub(crate) condition: Expr,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -42,9 +40,9 @@ impl<'a> WhereFilter<'a> {
             let arg = arg.into_inner().next().unwrap();
             assert_rule(&arg, Rule::expr, NAME_WHERE, 1)?;
             let cond = Expr::try_from(arg)?;
-            conds.push(cond.into_static());
+            conds.push(cond);
         }
-        let condition = Expr::Apply(Arc::new(OpAnd), conds);
+        let condition = Expr::OpAnd(conds);
         Ok(Self {
             ctx,
             source,
@@ -75,8 +73,7 @@ impl<'b> RelationalAlgebra for WhereFilter<'b> {
         let condition = self
             .condition
             .clone()
-            .partial_eval(&binding_ctx)?
-            .into_static();
+            .partial_eval(&binding_ctx)?;
         let txn = self.ctx.txn.clone();
         let temp_db = self.ctx.sess.temp.clone();
         let w_opts = default_write_options();

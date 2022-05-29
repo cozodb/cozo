@@ -1,53 +1,39 @@
-use crate::data::eval::{EvalError, PartialEvalContext};
+use crate::data::eval::{EvalError, PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
-use crate::data::op::Op;
 use crate::data::value::Value;
 use anyhow::Result;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 pub(crate) struct OpConcat;
 
 pub(crate) const NAME_OP_CONCAT: &str = "concat";
 
-impl Op for OpConcat {
-    fn arity(&self) -> Option<usize> {
-        None
-    }
-
-    fn has_side_effect(&self) -> bool {
-        false
-    }
-
-    fn name(&self) -> &str {
-        NAME_OP_CONCAT
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        let mut coll = vec![];
-        for v in args.into_iter() {
-            match v {
-                Value::Null => {}
-                Value::List(l) => coll.extend(l),
-                v => {
-                    return Err(EvalError::OpTypeMismatch(
-                        self.name().to_string(),
-                        vec![v.into_static()],
-                    )
-                    .into());
-                }
+pub(crate) fn row_eval_concat<'a, T: RowEvalContext + 'a>(
+    ctx: &'a T,
+    args: &'a [Expr],
+) -> Result<Value<'a>> {
+    let mut coll: Vec<Value> = vec![];
+    for v in args.into_iter() {
+        match v.row_eval(ctx)? {
+            Value::Null => {}
+            Value::List(l) => coll.extend(l.clone()),
+            v => {
+                return Err(EvalError::OpTypeMismatch(
+                    NAME_OP_CONCAT.to_string(),
+                    vec![v.clone().into_static()],
+                )
+                .into());
             }
         }
-        Ok(coll.into())
     }
+    Ok(coll.into())
 }
 
 pub(crate) fn partial_eval_concat_expr<'a, T: PartialEvalContext>(
     ctx: &'a T,
-    args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>> {
+    args: Vec<Expr>,
+) -> Result<Expr> {
     let mut can_concat = true;
     let mut all_const = true;
     let args = args
@@ -96,52 +82,37 @@ pub(crate) fn partial_eval_concat_expr<'a, T: PartialEvalContext>(
         }
         Ok(Expr::List(result))
     } else {
-        Ok(Expr::Apply(Arc::new(OpConcat), args))
+        Ok(Expr::OpConcat(args))
     }
 }
 
-pub(crate) struct OpMerge;
-
 pub(crate) const NAME_OP_MERGE: &str = "merge";
 
-impl Op for OpMerge {
-    fn arity(&self) -> Option<usize> {
-        None
-    }
-
-    fn has_side_effect(&self) -> bool {
-        false
-    }
-
-    fn name(&self) -> &str {
-        NAME_OP_MERGE
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        let mut coll = BTreeMap::new();
-        for v in args.into_iter() {
-            match v {
-                Value::Null => {}
-                Value::Dict(d) => coll.extend(d),
-                v => {
-                    return Err(EvalError::OpTypeMismatch(
-                        self.name().to_string(),
-                        vec![v.into_static()],
-                    )
-                    .into());
-                }
+pub(crate) fn row_eval_merge<'a, T: RowEvalContext + 'a>(
+    ctx: &'a T,
+    args: &'a [Expr],
+) -> Result<Value<'a>> {
+    let mut coll: BTreeMap<Cow<str>, Value> = BTreeMap::new();
+    for v in args.into_iter() {
+        match v.row_eval(ctx)? {
+            Value::Null => {}
+            Value::Dict(d) => coll.extend(d.clone()),
+            v => {
+                return Err(EvalError::OpTypeMismatch(
+                    NAME_OP_MERGE.to_string(),
+                    vec![v.clone().into_static()],
+                )
+                .into());
             }
         }
-        Ok(coll.into())
     }
+    Ok(coll.into())
 }
 
 pub(crate) fn partial_eval_merge_expr<'a, T: PartialEvalContext>(
     ctx: &'a T,
-    args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>> {
+    args: Vec<Expr>,
+) -> Result<Expr> {
     let mut can_merge = true;
     let mut all_const = true;
     let args = args
@@ -191,6 +162,6 @@ pub(crate) fn partial_eval_merge_expr<'a, T: PartialEvalContext>(
         }
         Ok(Expr::Dict(result))
     } else {
-        Ok(Expr::Apply(Arc::new(OpMerge), args))
+        Ok(Expr::OpMerge(args))
     }
 }

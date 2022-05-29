@@ -1,7 +1,7 @@
 use crate::algebra::op::RelationalAlgebra;
 use crate::algebra::parser::{build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::{Expr};
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TupleSet, MIN_TABLE_ID_BOUND};
 use crate::data::value::Value;
@@ -25,7 +25,7 @@ pub(crate) enum SortDirection {
 pub(crate) struct SortOp<'a> {
     pub(crate) source: RaBox<'a>,
     ctx: &'a TempDbContext<'a>,
-    sort_exprs: Vec<(StaticExpr, SortDirection)>,
+    sort_exprs: Vec<(Expr, SortDirection)>,
     temp_table_id: AtomicU32,
 }
 
@@ -42,7 +42,7 @@ impl<'a> SortOp<'a> {
         };
 
         let sort_exprs = args
-            .map(|arg| -> Result<(StaticExpr, SortDirection)> {
+            .map(|arg| -> Result<(Expr, SortDirection)> {
                 let mut arg = arg.into_inner().next().unwrap();
                 let mut dir = SortDirection::Asc;
                 if arg.as_rule() == Rule::sort_arg {
@@ -52,7 +52,7 @@ impl<'a> SortOp<'a> {
                         dir = SortDirection::Dsc
                     }
                 }
-                let expr = Expr::try_from(arg)?.into_static();
+                let expr = Expr::try_from(arg)?;
                 Ok((expr, dir))
             })
             .collect::<Result<Vec<_>>>()?;
@@ -74,8 +74,8 @@ impl<'a> SortOp<'a> {
         let sort_exprs = self
             .sort_exprs
             .iter()
-            .map(|(ex, dir)| -> Result<(StaticExpr, SortDirection)> {
-                let ex = ex.clone().partial_eval(&binding_ctx)?.into_static();
+            .map(|(ex, dir)| -> Result<(Expr, SortDirection)> {
+                let ex = ex.clone().partial_eval(&binding_ctx)?;
                 Ok((ex, *dir))
             })
             .collect::<Result<Vec<_>>>()?;

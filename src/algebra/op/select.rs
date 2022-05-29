@@ -1,7 +1,7 @@
 use crate::algebra::op::RelationalAlgebra;
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::{Expr};
 use crate::data::parser::{parse_keyed_dict, parse_scoped_dict};
 use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{
@@ -20,7 +20,7 @@ pub(crate) struct SelectOp<'a> {
     ctx: &'a TempDbContext<'a>,
     pub(crate) source: RaBox<'a>,
     binding: String,
-    extract_map: StaticExpr,
+    extract_map: Expr,
 }
 
 impl<'a> SelectOp<'a> {
@@ -56,7 +56,7 @@ impl<'a> SelectOp<'a> {
                 AlgebraParseError::Parse("Cannot have keyed map in Select".to_string()).into(),
             );
         }
-        let extract_map = extract_map.into_static();
+
         Ok(Self {
             ctx,
             source,
@@ -69,7 +69,7 @@ impl<'a> SelectOp<'a> {
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum SelectOpError {
     #[error("Selection needs a dict, got {0:?}")]
-    NeedsDict(StaticExpr),
+    NeedsDict(Expr),
 }
 
 impl<'b> RelationalAlgebra for SelectOp<'b> {
@@ -116,7 +116,7 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
                     )
                 })
                 .collect::<BTreeMap<_, _>>(),
-            ex => return Err(SelectOpError::NeedsDict(ex.into_static()).into()),
+            ex => return Err(SelectOpError::NeedsDict(ex).into()),
         };
         Ok(BindingMap {
             inner_map: BTreeMap::from([(self.binding.clone(), extract_map)]),
@@ -135,14 +135,13 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
             .extract_map
             .clone()
             .partial_eval(&binding_ctx)?
-            .into_static()
         {
             Expr::Dict(d) => d.values().cloned().collect::<Vec<_>>(),
             Expr::Const(Value::Dict(d)) => d
                 .values()
                 .map(|v| Expr::Const(v.clone()))
                 .collect::<Vec<_>>(),
-            ex => return Err(SelectOpError::NeedsDict(ex.into_static()).into()),
+            ex => return Err(SelectOpError::NeedsDict(ex).into()),
         };
 
         let txn = self.ctx.txn.clone();

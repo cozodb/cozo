@@ -312,7 +312,7 @@ impl RowEvalContext for TupleSet {
     }
 }
 
-pub(crate) type TupleBuilder<'a> = Vec<(Expr<'a>, Typing)>;
+pub(crate) type TupleBuilder<'a> = Vec<(Expr, Typing)>;
 
 impl<'a> TupleSetEvalContext<'a> {
     pub(crate) fn eval_to_tuple(&self, prefix: u32, builder: &TupleBuilder) -> Result<OwnTuple> {

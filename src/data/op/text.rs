@@ -1,52 +1,31 @@
 use crate::data::eval::EvalError;
-use crate::data::op::{extract_two_args, Op};
 use crate::data::value::Value;
 use anyhow::Result;
+use crate::data::expr::BuiltinFn;
 
-pub(crate) struct OpStrCat;
-
-impl OpStrCat {
-    pub(crate) fn eval_two_non_null<'a>(
-        &self,
-        left: Value<'a>,
-        right: Value<'a>,
-    ) -> Result<Value<'a>> {
-        match (left, right) {
-            (Value::Text(l), Value::Text(r)) => {
-                let mut l = l.into_owned();
-                l += r.as_ref();
-                Ok(l.into())
-            }
-            (l, r) => Err(EvalError::OpTypeMismatch(
-                self.name().to_string(),
-                vec![l.into_static(), r.into_static()],
-            )
-            .into()),
-        }
-    }
-}
+pub(crate) const OP_STR_CAT: BuiltinFn = BuiltinFn {
+    name: NAME_OP_STR_CAT,
+    arity: None,
+    non_null_args: true,
+    func: op_str_cat
+};
 
 pub(crate) const NAME_OP_STR_CAT: &str = "++";
-
-impl Op for OpStrCat {
-    fn arity(&self) -> Option<usize> {
-        Some(2)
+pub(crate) fn op_str_cat<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
+    let mut ret = String::new();
+    for arg in args {
+        match arg {
+            Value::Text(t) => {
+                ret += t.as_ref();
+            }
+            _ => {
+                return Err(EvalError::OpTypeMismatch(
+                    NAME_OP_STR_CAT.to_string(),
+                    args.iter().cloned().map(|v| v.into_static()).collect(),
+                )
+                .into());
+            }
+        }
     }
-
-    fn has_side_effect(&self) -> bool {
-        false
-    }
-
-    fn name(&self) -> &str {
-        NAME_OP_STR_CAT
-    }
-
-    fn non_null_args(&self) -> bool {
-        true
-    }
-
-    fn eval<'a>(&self, args: Vec<Value<'a>>) -> crate::data::op::Result<Value<'a>> {
-        let (left, right) = extract_two_args(args);
-        self.eval_two_non_null(left, right)
-    }
+    Ok(ret.into())
 }

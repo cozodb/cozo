@@ -1,6 +1,6 @@
 use crate::context::{MainDbContext, TempDbContext};
 use crate::data::eval::PartialEvalContext;
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::Expr;
 use crate::data::tuple::{
     DataKind, OwnTuple, Tuple, DATAKIND_ASSOC, DATAKIND_EDGE, DATAKIND_INDEX, DATAKIND_NODE,
     DATAKIND_SEQUENCE,
@@ -220,7 +220,7 @@ impl<T: AsRef<[u8]>> TryFrom<Tuple<T>> for TableInfo {
                 }))
             }
             DATAKIND_INDEX => {
-                let mut it = tuple.iter();
+                let mut it = tuple.iter().map(|v| v.map(|v| v.into_static()));
                 let name = it
                     .next()
                     .ok_or_else(gen_err)??
@@ -401,7 +401,7 @@ pub(crate) struct AssocInfo {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum IndexCol {
     Col(TupleSetIdx),
-    Expr(StaticExpr),
+    Expr(Expr),
 }
 
 impl From<IndexCol> for StaticValue {
@@ -413,13 +413,13 @@ impl From<IndexCol> for StaticValue {
     }
 }
 
-impl<'a> TryFrom<Value<'a>> for IndexCol {
+impl TryFrom<StaticValue> for IndexCol {
     type Error = anyhow::Error;
 
-    fn try_from(value: Value<'a>) -> Result<Self> {
+    fn try_from(value: StaticValue) -> Result<Self> {
         Ok(match Expr::try_from(value)? {
             Expr::TupleSetIdx(tidx) => IndexCol::Col(tidx),
-            expr => IndexCol::Expr(expr.into_static()),
+            expr => IndexCol::Expr(expr),
         })
     }
 }
@@ -573,7 +573,7 @@ pub(crate) trait DdlContext {
                     .map(|ex| {
                         ex.partial_eval(&ctx).map(|ex| match ex {
                             Expr::TupleSetIdx(tidx) => IndexCol::Col(tidx),
-                            ex => IndexCol::Expr(ex.into_static()),
+                            ex => IndexCol::Expr(ex),
                         })
                     })
                     .collect::<result::Result<Vec<_>, _>>()?
@@ -602,7 +602,7 @@ pub(crate) trait DdlContext {
                     .map(|ex| {
                         ex.partial_eval(&ctx).map(|ex| match ex {
                             Expr::TupleSetIdx(tidx) => IndexCol::Col(tidx),
-                            ex => IndexCol::Expr(ex.into_static()),
+                            ex => IndexCol::Expr(ex),
                         })
                     })
                     .collect::<result::Result<Vec<_>, _>>()?

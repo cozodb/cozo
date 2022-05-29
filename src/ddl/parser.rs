@@ -1,4 +1,4 @@
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::{Expr};
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use crate::parser::text_identifier::build_name_in_def;
@@ -20,18 +20,17 @@ pub enum DdlParseError {
 pub(crate) struct ColSchema {
     pub(crate) name: String,
     pub(crate) typing: Typing,
-    pub(crate) default: StaticExpr,
+    pub(crate) default: Expr,
 }
 
-pub(crate) type ColExtractor = (StaticExpr, Typing);
+pub(crate) type ColExtractor = (Expr, Typing);
 
 impl ColSchema {
     pub(crate) fn make_extractor(&self, extractor_map: &BTreeMap<String, Expr>) -> ColExtractor {
         let extractor = extractor_map
             .get(&self.name)
             .cloned()
-            .unwrap_or(Expr::Const(Value::Null))
-            .into_static();
+            .unwrap_or(Expr::Const(Value::Null));
         let typing = self.typing.clone();
         (extractor, typing)
     }
@@ -103,7 +102,7 @@ pub(crate) struct IndexSchema {
     pub(crate) name: String,
     pub(crate) src_name: String,
     pub(crate) assoc_names: Vec<String>,
-    pub(crate) index: Vec<StaticExpr>,
+    pub(crate) index: Vec<Expr>,
 }
 
 #[derive(Debug, Clone)]
@@ -201,7 +200,7 @@ impl<'a> TryFrom<Pair<'a>> for IndexSchema {
         for pair in pairs {
             match pair.as_rule() {
                 Rule::name_in_def => associate_names.push(build_name_in_def(pair, false)?),
-                _ => indices.push(Expr::try_from(pair)?.into_static()),
+                _ => indices.push(Expr::try_from(pair)?),
             }
         }
         if indices.is_empty() {
@@ -242,7 +241,7 @@ fn parse_col_entry(pair: Pair) -> Result<(bool, ColSchema)> {
     let typing = Typing::try_from(pairs.next().unwrap())?;
     let default = match pairs.next() {
         None => Expr::Const(Value::Null),
-        Some(pair) => Expr::try_from(pair)?.into_static(),
+        Some(pair) => Expr::try_from(pair)?,
     };
     Ok((
         is_key,

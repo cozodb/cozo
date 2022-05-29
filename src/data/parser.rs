@@ -9,7 +9,6 @@ use lazy_static::lazy_static;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ExprParseError {
@@ -17,7 +16,7 @@ pub enum ExprParseError {
     SpreadingError(String),
 }
 
-impl<'a> TryFrom<Pair<'a>> for Expr<'a> {
+impl<'a> TryFrom<Pair<'a>> for Expr {
     type Error = anyhow::Error;
 
     fn try_from(pair: Pair<'a>) -> Result<Self> {
@@ -77,9 +76,9 @@ fn build_cond_expr(pair: Pair) -> Result<Expr> {
 
 fn build_call_expr(pair: Pair) -> Result<Expr> {
     let mut pairs = pair.into_inner();
-    let method = get_method(pairs.next().unwrap().as_str());
+    let op_name = pairs.next().unwrap().as_str();
     let args = pairs.map(Expr::try_from).collect::<Result<Vec<_>>>()?;
-    Ok(Expr::Apply(method, args))
+    build_method_call(op_name, args)
 }
 
 fn build_switch_expr(pair: Pair) -> Result<Expr> {
@@ -138,11 +137,10 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                     }
                     Rule::call => {
                         let mut pairs = p.into_inner();
-                        let op: Arc<dyn Op + Send + Sync> =
-                            get_method(pairs.next().unwrap().as_str());
+                        let op_name = pairs.next().unwrap().as_str();
                         let mut args = vec![head];
                         args.extend(pairs.map(Expr::try_from).collect::<Result<Vec<_>>>()?);
-                        head = Expr::Apply(op, args);
+                        head = build_method_call(op_name, args)?;
                     }
                     _ => todo!(),
                 }
@@ -155,17 +153,19 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
             let mut inner = pair.into_inner();
             let p = inner.next().unwrap();
             let op = p.as_rule();
-            let op: Arc<dyn Op + Send + Sync> = match op {
+            Ok(match op {
                 Rule::term => return build_expr_primary(p),
-                Rule::negate => Arc::new(OpNot),
-                Rule::minus => Arc::new(OpMinus),
+                Rule::minus => {
+                    Expr::BuiltinFn(OP_MINUS, vec![build_expr_primary(inner.next().unwrap())?])
+                }
+                Rule::negate => {
+                    Expr::BuiltinFn(OP_NOT, vec![build_expr_primary(inner.next().unwrap())?])
+                }
                 Rule::if_expr => return build_if_expr(p),
                 Rule::cond_expr => return build_cond_expr(p),
                 Rule::switch_expr => return build_switch_expr(p),
                 r => unreachable!("Encountered unknown op {:?}", r),
-            };
-            let term = build_expr_primary(inner.next().unwrap())?;
-            Ok(Expr::Apply(op, vec![term]))
+            })
         }
 
         Rule::pos_int => Ok(Expr::Const(Value::Int(
@@ -197,7 +197,10 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                                 | Expr::Variable(_)
                                 | Expr::IdxAcc(_, _)
                                 | Expr::FieldAcc(_, _)
-                                | Expr::Apply(_, _)
+                                | Expr::BuiltinFn(_, _)
+                                | Expr::OpConcat(_)
+                                | Expr::OpMerge(_)
+                                | Expr::OpCoalesce(_)
                         ) {
                             return Err(
                                 ExprParseError::SpreadingError(format!("{:?}", to_concat)).into()
@@ -218,7 +221,7 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
             if !collected.is_empty() {
                 spread_collected.push(Expr::List(collected));
             }
-            Ok(Expr::Apply(Arc::new(OpConcat), spread_collected))
+            Ok(Expr::OpConcat(spread_collected))
         }
         Rule::dict => {
             let mut spread_collected = vec![];
@@ -245,7 +248,10 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                                 | Expr::Variable(_)
                                 | Expr::IdxAcc(_, _)
                                 | Expr::FieldAcc(_, _)
-                                | Expr::Apply(_, _)
+                                | Expr::BuiltinFn(_, _)
+                                | Expr::OpConcat(_)
+                                | Expr::OpMerge(_)
+                                | Expr::OpCoalesce(_)
                         ) {
                             return Err(
                                 ExprParseError::SpreadingError(format!("{:?}", to_concat)).into()
@@ -268,7 +274,7 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
             if !collected.is_empty() {
                 spread_collected.push(Expr::Dict(collected));
             }
-            Ok(Expr::Apply(Arc::new(OpMerge), spread_collected))
+            Ok(Expr::OpMerge(spread_collected))
         }
         Rule::param => Ok(Expr::Variable(pair.as_str().into())),
         Rule::ident => Ok(Expr::Variable(pair.as_str().into())),
@@ -280,43 +286,37 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
     }
 }
 
-fn get_method(name: &str) -> Arc<dyn Op + Send + Sync> {
-    match name {
-        NAME_OP_IS_NULL => Arc::new(OpIsNull),
-        NAME_OP_NOT_NULL => Arc::new(OpNotNull),
-        NAME_OP_CONCAT => Arc::new(OpConcat),
-        NAME_OP_MERGE => Arc::new(OpMerge),
-        method_name => Arc::new(UnresolvedOp(method_name.to_string())),
-    }
+fn build_method_call(name: &str, args: Vec<Expr>) -> Result<Expr> {
+    Ok(match name {
+        NAME_OP_IS_NULL => Expr::BuiltinFn(OP_IS_NULL, args),
+        NAME_OP_NOT_NULL => Expr::BuiltinFn(OP_NOT_NULL, args),
+        NAME_OP_CONCAT => Expr::OpConcat(args),
+        NAME_OP_MERGE => Expr::OpMerge(args),
+        _method_name => unimplemented!(),
+    })
 }
 
-fn build_expr_infix<'a>(
-    lhs: Result<Expr<'a>>,
-    op: Pair,
-    rhs: Result<Expr<'a>>,
-) -> Result<Expr<'a>> {
-    let lhs = lhs?;
-    let rhs = rhs?;
-    let op: Arc<dyn Op + Send + Sync> = match op.as_rule() {
-        Rule::op_add => Arc::new(OpAdd),
-        Rule::op_str_cat => Arc::new(OpStrCat),
-        Rule::op_sub => Arc::new(OpSub),
-        Rule::op_mul => Arc::new(OpMul),
-        Rule::op_div => Arc::new(OpDiv),
-        Rule::op_eq => Arc::new(OpEq),
-        Rule::op_ne => Arc::new(OpNe),
-        Rule::op_or => Arc::new(OpOr),
-        Rule::op_and => Arc::new(OpAnd),
-        Rule::op_mod => Arc::new(OpMod),
-        Rule::op_gt => Arc::new(OpGt),
-        Rule::op_ge => Arc::new(OpGe),
-        Rule::op_lt => Arc::new(OpLt),
-        Rule::op_le => Arc::new(OpLe),
-        Rule::op_pow => Arc::new(OpPow),
-        Rule::op_coalesce => Arc::new(OpCoalesce),
+fn build_expr_infix<'a>(lhs: Result<Expr>, op: Pair, rhs: Result<Expr>) -> Result<Expr> {
+    let args = vec![lhs?, rhs?];
+    Ok(match op.as_rule() {
+        Rule::op_add => Expr::BuiltinFn(OP_ADD, args),
+        Rule::op_sub => Expr::BuiltinFn(OP_SUB, args),
+        Rule::op_mul => Expr::BuiltinFn(OP_MUL, args),
+        Rule::op_div => Expr::BuiltinFn(OP_DIV, args),
+        Rule::op_mod => Expr::BuiltinFn(OP_MOD, args),
+        Rule::op_pow => Expr::BuiltinFn(OP_POW, args),
+        Rule::op_eq => Expr::BuiltinFn(OP_EQ, args),
+        Rule::op_ne => Expr::BuiltinFn(OP_NE, args),
+        Rule::op_gt => Expr::BuiltinFn(OP_GT, args),
+        Rule::op_ge => Expr::BuiltinFn(OP_GE, args),
+        Rule::op_lt => Expr::BuiltinFn(OP_LT, args),
+        Rule::op_le => Expr::BuiltinFn(OP_LE, args),
+        Rule::op_str_cat => Expr::BuiltinFn(OP_STR_CAT, args),
+        Rule::op_or => Expr::OpOr(args),
+        Rule::op_and => Expr::OpAnd(args),
+        Rule::op_coalesce => Expr::OpCoalesce(args),
         _ => unreachable!(),
-    };
-    Ok(Expr::Apply(op, vec![lhs, rhs]))
+    })
 }
 
 pub(crate) fn parse_scoped_dict(pair: Pair) -> Result<(String, BTreeMap<String, Expr>, Expr)> {
@@ -359,7 +359,10 @@ pub(crate) fn parse_keyed_dict(keyed_dict: Pair) -> Result<(BTreeMap<String, Exp
                         | Expr::Variable(_)
                         | Expr::IdxAcc(_, _)
                         | Expr::FieldAcc(_, _)
-                        | Expr::Apply(_, _)
+                        | Expr::BuiltinFn(_, _)
+                        | Expr::OpConcat(_)
+                        | Expr::OpMerge(_)
+                        | Expr::OpCoalesce(_)
                 ) {
                     return Err(ExprParseError::SpreadingError(format!("{:?}", to_concat)).into());
                 }
@@ -379,7 +382,7 @@ pub(crate) fn parse_keyed_dict(keyed_dict: Pair) -> Result<(BTreeMap<String, Exp
         if !collected.is_empty() {
             spread_collected.push(Expr::Dict(collected));
         }
-        Expr::Apply(Arc::new(OpMerge), spread_collected)
+        Expr::OpMerge(spread_collected)
     };
     Ok((keys, vals))
 }

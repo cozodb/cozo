@@ -1,7 +1,6 @@
 use crate::algebra::op::{build_binding_map_from_info, QueryError, RelationalAlgebra};
 use crate::algebra::parser::RaBox;
 use crate::context::TempDbContext;
-use crate::data::expr::StaticExpr;
 use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple, Tuple};
 use crate::data::tuple_set::{
     shift_merge_binding_map, BindingMap, BindingMapEvalContext, TableId, TupleSet,
@@ -12,6 +11,7 @@ use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
 use cozorocks::{DbPtr, PrefixIterator, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use std::collections::{BTreeMap, BTreeSet};
+use crate::data::expr::Expr;
 
 pub(crate) const NAME_NESTED_LOOP_LEFT: &str = "NestedLoop";
 
@@ -21,7 +21,7 @@ pub(crate) struct NestedLoopLeft<'a> {
     pub(crate) right: TableInfo,
     pub(crate) right_binding: String,
     pub(crate) left_outer_join: bool,
-    pub(crate) join_key_extractor: Vec<StaticExpr>,
+    pub(crate) join_key_extractor: Vec<Expr>,
     pub(crate) key_is_prefix: bool,
 }
 
@@ -73,7 +73,7 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
             .map(|ex| {
                 ex.clone()
                     .partial_eval(&binding_ctx)
-                    .map(|ex| ex.into_static())
+                    .map(|ex| ex)
             })
             .collect::<Result<Vec<_>>>()?;
         let table_id = self.right.table_id();
@@ -164,7 +164,7 @@ pub(crate) struct NestLoopLeftPrefixIter<'a> {
     left_iter: Box<dyn Iterator<Item = Result<TupleSet>> + 'a>,
     right_iter: PrefixIterator<OwnTuple>,
     right_table_id: TableId,
-    key_extractors: Vec<StaticExpr>,
+    key_extractors: Vec<Expr>,
     left_cache: Option<TupleSet>,
     left_cache_used: bool,
     txn: TransactionPtr,

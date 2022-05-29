@@ -1,7 +1,7 @@
 use crate::algebra::op::{InterpretContext, RelationalAlgebra};
 use crate::algebra::parser::RaBox;
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::{Expr};
 use crate::data::tuple::{OwnTuple, Tuple};
 use crate::data::tuple_set::{BindingMap, TupleSet, TupleSetIdx};
 use crate::data::value::Value;
@@ -16,7 +16,7 @@ pub(crate) struct AssocOp<'a> {
     pub(crate) ctx: &'a TempDbContext<'a>,
     pub(crate) source: RaBox<'a>,
     pub(crate) assoc_infos: Vec<AssocInfo>,
-    pub(crate) key_extractors: Vec<StaticExpr>,
+    pub(crate) key_extractors: Vec<Expr>,
     pub(crate) binding: String,
 }
 

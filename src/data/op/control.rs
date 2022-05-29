@@ -1,62 +1,34 @@
 use crate::data::eval::{EvalError, PartialEvalContext, RowEvalContext};
 use crate::data::expr::Expr;
-use crate::data::op::Op;
 use crate::data::value::Value;
 use anyhow::Result;
-use std::sync::Arc;
-
-pub(crate) struct OpCoalesce;
 
 pub(crate) const NAME_OP_COALESCE: &str = "~~";
 
-impl Op for OpCoalesce {
-    fn arity(&self) -> Option<usize> {
-        None
-    }
-
-    fn has_side_effect(&self) -> bool {
-        false
-    }
-
-    fn name(&self) -> &str {
-        NAME_OP_COALESCE
-    }
-    fn non_null_args(&self) -> bool {
-        false
-    }
-    fn eval<'a>(&self, args: Vec<Value<'a>>) -> Result<Value<'a>> {
-        for arg in args {
-            if arg != Value::Null {
-                return Ok(arg);
-            }
-        }
-        Ok(Value::Null)
-    }
-}
-
 pub(crate) fn row_eval_coalesce<'a, T: RowEvalContext + 'a>(
     ctx: &'a T,
-    left: &'a Expr<'a>,
-    right: &'a Expr<'a>,
+    args: &'a [Expr],
 ) -> Result<Value<'a>> {
-    let left = left.row_eval(ctx)?;
-    if left != Value::Null {
-        return Ok(left);
+    for arg in args {
+        let arg = arg.row_eval(ctx)?;
+        if arg != Value::Null {
+            return Ok(arg.clone());
+        }
     }
-    right.row_eval(ctx)
+    Ok(Value::Null)
 }
 
 pub(crate) const IF_NAME: &str = "if";
 
 pub(crate) fn partial_eval_coalesce<'a, T: PartialEvalContext>(
     ctx: &'a T,
-    args: Vec<Expr<'a>>,
-) -> Result<Expr<'a>> {
+    args: Vec<Expr>,
+) -> Result<Expr> {
     let mut collected = vec![];
     for arg in args {
         match arg.partial_eval(ctx)? {
             Expr::Const(Value::Null) => {}
-            Expr::Apply(op, args) if op.name() == OpCoalesce.name() => {
+            Expr::OpCoalesce(args) => {
                 collected.extend(args);
             }
             expr => collected.push(expr),
@@ -65,15 +37,15 @@ pub(crate) fn partial_eval_coalesce<'a, T: PartialEvalContext>(
     Ok(match collected.len() {
         0 => Expr::Const(Value::Null),
         1 => collected.pop().unwrap(),
-        _ => Expr::Apply(Arc::new(OpCoalesce), collected),
+        _ => Expr::OpCoalesce(collected),
     })
 }
 
 pub(crate) fn row_eval_if_expr<'a, T: RowEvalContext + 'a>(
     ctx: &'a T,
-    cond: &'a Expr<'a>,
-    if_part: &'a Expr<'a>,
-    else_part: &'a Expr<'a>,
+    cond: &'a Expr,
+    if_part: &'a Expr,
+    else_part: &'a Expr,
 ) -> Result<Value<'a>> {
     let cond = cond.row_eval(ctx)?;
     match cond {
@@ -89,10 +61,10 @@ pub(crate) fn row_eval_if_expr<'a, T: RowEvalContext + 'a>(
 
 pub(crate) fn partial_eval_if_expr<'a, T: PartialEvalContext>(
     ctx: &'a T,
-    cond: Expr<'a>,
-    if_part: Expr<'a>,
-    else_part: Expr<'a>,
-) -> Result<Expr<'a>> {
+    cond: Expr,
+    if_part: Expr,
+    else_part: Expr,
+) -> Result<Expr> {
     let cond = cond.partial_eval(ctx)?;
     match cond {
         Expr::Const(Value::Null) => Ok(Expr::Const(Value::Null)),
@@ -114,7 +86,7 @@ pub(crate) fn partial_eval_if_expr<'a, T: PartialEvalContext>(
 
 pub(crate) fn row_eval_switch_expr<'a, T: RowEvalContext + 'a>(
     ctx: &'a T,
-    args: &'a [(Expr<'a>, Expr<'a>)],
+    args: &'a [(Expr, Expr)],
 ) -> Result<Value<'a>> {
     let mut args = args.iter();
     let (expr, default) = args.next().unwrap();
@@ -130,8 +102,8 @@ pub(crate) fn row_eval_switch_expr<'a, T: RowEvalContext + 'a>(
 
 pub(crate) fn partial_eval_switch_expr<'a, T: PartialEvalContext>(
     ctx: &'a T,
-    args: Vec<(Expr<'a>, Expr<'a>)>,
-) -> Result<Expr<'a>> {
+    args: Vec<(Expr, Expr)>,
+) -> Result<Expr> {
     let mut args = args.into_iter();
     let (expr, mut default) = args.next().unwrap();
     let expr = expr.partial_eval(ctx)?;

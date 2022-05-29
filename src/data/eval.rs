@@ -1,4 +1,4 @@
-use crate::data::expr::{Expr, StaticExpr};
+use crate::data::expr::Expr;
 use crate::data::op::*;
 use crate::data::tuple_set::TupleSetIdx;
 use crate::data::value::{StaticValue, Value};
@@ -13,16 +13,13 @@ pub enum EvalError {
     UnresolvedVariable(String),
 
     #[error("Cannot access field {0} for {1:?}")]
-    FieldAccess(String, StaticExpr),
+    FieldAccess(String, Expr),
 
     #[error("Cannot access index {0} for {1:?}")]
-    IndexAccess(usize, StaticExpr),
+    IndexAccess(usize, Expr),
 
     #[error("Cannot apply `{0}` to `{1:?}`")]
     OpTypeMismatch(String, Vec<StaticValue>),
-
-    #[error("Optimized before partial eval")]
-    OptimizedBeforePartialEval,
 
     #[error("Arity mismatch for {0}, {1} arguments given ")]
     ArityMismatch(String, usize),
@@ -77,27 +74,27 @@ impl PartialEvalContext for () {
     }
 }
 
-fn extract_optimized_bin_args(args: Vec<Expr>) -> (Expr, Expr) {
-    let mut args = args.into_iter();
-    (
-        args.next().unwrap().optimize_ops(),
-        args.next().unwrap().optimize_ops(),
-    )
-}
+// fn extract_optimized_bin_args(args: Vec<Expr>) -> (Expr, Expr) {
+//     let mut args = args.into_iter();
+//     (
+//         args.next().unwrap().optimize_ops(),
+//         args.next().unwrap().optimize_ops(),
+//     )
+// }
 
-fn extract_optimized_u_args(args: Vec<Expr>) -> Expr {
-    args.into_iter().next().unwrap().optimize_ops()
-}
+// fn extract_optimized_u_args(args: Vec<Expr>) -> Expr {
+//     args.into_iter().next().unwrap().optimize_ops()
+// }
 
-impl<'a> Expr<'a> {
-    pub(crate) fn interpret_eval<C: PartialEvalContext>(self, ctx: &'a C) -> Result<Value> {
+impl Expr {
+    pub(crate) fn interpret_eval<C: PartialEvalContext>(self, ctx: &C) -> Result<Value> {
         match self.partial_eval(ctx)? {
             Expr::Const(v) => Ok(v),
             v => Err(EvalError::IncompleteEvaluation(format!("{:?}", v)).into()),
         }
     }
 
-    pub(crate) fn partial_eval<C: PartialEvalContext>(self, ctx: &'a C) -> Result<Self> {
+    pub(crate) fn partial_eval<C: PartialEvalContext>(self, ctx: &C) -> Result<Self> {
         let res = match self {
             v @ (Expr::Const(_) | Expr::TupleSetIdx(_)) => v,
             Expr::List(l) => {
@@ -145,30 +142,29 @@ impl<'a> Expr<'a> {
             Expr::Variable(var) => ctx
                 .resolve(&var)
                 .ok_or(EvalError::UnresolvedVariable(var))?,
-            Expr::FieldAcc(f, arg) => {
-                match *arg {
-                    Expr::Dict(mut d) => {
-                        // This skips evaluation of other keys
-                        d.remove(&f as &str)
-                            .unwrap_or(Expr::Const(Value::Null))
-                            .partial_eval(ctx)?
-                    }
-                    arg => match arg.partial_eval(ctx)? {
-                        Expr::Const(Value::Null) => Expr::Const(Value::Null),
-                        Expr::Const(Value::Dict(mut d)) => {
-                            Expr::Const(d.remove(&f as &str).unwrap_or(Value::Null))
-                        }
-                        v @ (Expr::IdxAcc(_, _)
-                        | Expr::FieldAcc(_, _)
-                        | Expr::Apply(_, _)
-                        | Expr::ApplyAgg(_, _, _)) => Expr::FieldAcc(f, v.into()),
-                        Expr::Dict(mut d) => {
-                            d.remove(&f as &str).unwrap_or(Expr::Const(Value::Null))
-                        }
-                        v => return Err(EvalError::FieldAccess(f, v.into_static()).into()),
-                    },
+            Expr::FieldAcc(f, arg) => match *arg {
+                Expr::Dict(mut d) => {
+                    // This skips evaluation of other keys
+                    d.remove(&f as &str)
+                        .unwrap_or(Expr::Const(Value::Null))
+                        .partial_eval(ctx)?
                 }
-            }
+                arg => match arg.partial_eval(ctx)? {
+                    Expr::Const(Value::Null) => Expr::Const(Value::Null),
+                    Expr::Const(Value::Dict(mut d)) => {
+                        Expr::Const(d.remove(&f as &str).unwrap_or(Value::Null))
+                    }
+                    v @ (Expr::IdxAcc(_, _)
+                    | Expr::FieldAcc(_, _)
+                    | Expr::BuiltinFn(_, _)
+                    | Expr::ApplyAgg(_, _, _)
+                    | Expr::OpConcat(_)
+                    | Expr::OpMerge(_)
+                    | Expr::OpCoalesce(_)) => Expr::FieldAcc(f, v.into()),
+                    Expr::Dict(mut d) => d.remove(&f as &str).unwrap_or(Expr::Const(Value::Null)),
+                    v => return Err(EvalError::FieldAccess(f, v).into()),
+                },
+            },
             Expr::IdxAcc(i, arg) => {
                 match *arg {
                     // This skips evaluation of other keys
@@ -197,57 +193,51 @@ impl<'a> Expr<'a> {
                         }
                         v @ (Expr::IdxAcc(_, _)
                         | Expr::FieldAcc(_, _)
-                        | Expr::Apply(_, _)
+                        | Expr::BuiltinFn(_, _)
                         | Expr::ApplyAgg(_, _, _)) => Expr::IdxAcc(i, v.into()),
-                        v => return Err(EvalError::IndexAccess(i, v.into_static()).into()),
+                        v => return Err(EvalError::IndexAccess(i, v).into()),
                     },
                 }
             }
-            Expr::Apply(op, args) => {
-                if let Some(n) = op.arity() {
-                    if n != args.len() {
+            Expr::BuiltinFn(op, args) => {
+                if let Some(n) = op.arity {
+                    if n as usize != args.len() {
                         return Err(
-                            EvalError::ArityMismatch(op.name().to_string(), args.len()).into()
+                            EvalError::ArityMismatch(op.name.to_string(), args.len()).into()
                         );
                     }
                 }
-                match op.name() {
-                    // special cases
-                    NAME_OP_AND => partial_eval_and(ctx, args)?,
-                    NAME_OP_OR => partial_eval_or(ctx, args)?,
-                    NAME_OP_COALESCE => partial_eval_coalesce(ctx, args)?,
-                    NAME_OP_MERGE => partial_eval_merge_expr(ctx, args)?,
-                    NAME_OP_CONCAT => partial_eval_concat_expr(ctx, args)?,
-                    _ => {
-                        let mut has_unevaluated = false;
-                        let non_null_args_fn = op.non_null_args();
-                        let mut eval_args = Vec::with_capacity(args.len());
-                        for v in args {
-                            let v = v.partial_eval(ctx)?;
-                            if !matches!(v, Expr::Const(_)) {
-                                has_unevaluated = true;
-                                eval_args.push(v);
-                            } else if non_null_args_fn && matches!(v, Expr::Const(Value::Null)) {
-                                return Ok(Expr::Const(Value::Null));
-                            } else {
-                                eval_args.push(v);
-                            }
-                        }
-                        if has_unevaluated {
-                            Expr::Apply(op, eval_args)
-                        } else {
-                            let args = eval_args
-                                .into_iter()
-                                .map(|v| match v {
-                                    Expr::Const(v) => v,
-                                    _ => unreachable!(),
-                                })
-                                .collect();
-                            op.eval(args).map(Expr::Const)?
-                        }
+                let mut has_unevaluated = false;
+                let mut eval_args = Vec::with_capacity(args.len());
+                for v in args {
+                    let v = v.partial_eval(ctx)?;
+                    if !matches!(v, Expr::Const(_)) {
+                        has_unevaluated = true;
+                        eval_args.push(v);
+                    } else if op.non_null_args && matches!(v, Expr::Const(Value::Null)) {
+                        return Ok(Expr::Const(Value::Null));
+                    } else {
+                        eval_args.push(v);
                     }
                 }
+                if has_unevaluated {
+                    Expr::BuiltinFn(op, eval_args)
+                } else {
+                    let args = eval_args
+                        .into_iter()
+                        .map(|v| match v {
+                            Expr::Const(v) => v,
+                            _ => unreachable!(),
+                        })
+                        .collect::<Vec<_>>();
+                    (op.func)(&args).map(Expr::Const)?
+                }
             }
+            Expr::OpMerge(args) => partial_eval_merge_expr(ctx, args)?,
+            Expr::OpConcat(args) => partial_eval_concat_expr(ctx, args)?,
+            Expr::OpOr(args) => partial_eval_or(ctx, args)?,
+            Expr::OpAnd(args) => partial_eval_and(ctx, args)?,
+            Expr::OpCoalesce(args) => partial_eval_coalesce(ctx, args)?,
             Expr::ApplyAgg(op, a_args, args) => {
                 let a_args = a_args
                     .into_iter()
@@ -264,129 +254,10 @@ impl<'a> Expr<'a> {
                 partial_eval_if_expr(ctx, cond, if_part, else_part)?
             }
             Expr::SwitchExpr(args) => partial_eval_switch_expr(ctx, args)?,
-            Expr::Add(_)
-            | Expr::Sub(_)
-            | Expr::Mul(_)
-            | Expr::Div(_)
-            | Expr::Pow(_)
-            | Expr::Mod(_)
-            | Expr::StrCat(_)
-            | Expr::Eq(_)
-            | Expr::Ne(_)
-            | Expr::Gt(_)
-            | Expr::Ge(_)
-            | Expr::Lt(_)
-            | Expr::Le(_)
-            | Expr::Not(_)
-            | Expr::Minus(_)
-            | Expr::IsNull(_)
-            | Expr::NotNull(_)
-            | Expr::Coalesce(_)
-            | Expr::Or(_)
-            | Expr::And(_) => return Err(EvalError::OptimizedBeforePartialEval.into()),
         };
         Ok(res)
     }
-    pub(crate) fn optimize_ops(self) -> Self {
-        // Note: `and`, `or` and `coalesce` do not short-circuit if not optimized
-        match self {
-            Expr::List(l) => Expr::List(l.into_iter().map(|v| v.optimize_ops()).collect()),
-            Expr::Dict(d) => {
-                Expr::Dict(d.into_iter().map(|(k, v)| (k, v.optimize_ops())).collect())
-            }
-            Expr::Apply(op, args) => match op.name() {
-                NAME_OP_ADD => Expr::Add(extract_optimized_bin_args(args).into()),
-                NAME_OP_SUB => Expr::Sub(extract_optimized_bin_args(args).into()),
-                NAME_OP_MUL => Expr::Mul(extract_optimized_bin_args(args).into()),
-                NAME_OP_DIV => Expr::Div(extract_optimized_bin_args(args).into()),
-                NAME_OP_POW => Expr::Pow(extract_optimized_bin_args(args).into()),
-                NAME_OP_MOD => Expr::Mod(extract_optimized_bin_args(args).into()),
-                NAME_OP_STR_CAT => Expr::StrCat(extract_optimized_bin_args(args).into()),
-                NAME_OP_EQ => Expr::Eq(extract_optimized_bin_args(args).into()),
-                NAME_OP_NE => Expr::Ne(extract_optimized_bin_args(args).into()),
-                NAME_OP_GT => Expr::Gt(extract_optimized_bin_args(args).into()),
-                NAME_OP_GE => Expr::Ge(extract_optimized_bin_args(args).into()),
-                NAME_OP_LT => Expr::Lt(extract_optimized_bin_args(args).into()),
-                NAME_OP_LE => Expr::Le(extract_optimized_bin_args(args).into()),
-                NAME_OP_NOT => Expr::Not(extract_optimized_u_args(args).into()),
-                NAME_OP_MINUS => Expr::Minus(extract_optimized_u_args(args).into()),
-                NAME_OP_IS_NULL => Expr::IsNull(extract_optimized_u_args(args).into()),
-                NAME_OP_NOT_NULL => Expr::NotNull(extract_optimized_u_args(args).into()),
-                NAME_OP_COALESCE => {
-                    let mut args = args.into_iter();
-                    let mut arg = args.next().unwrap().optimize_ops();
-                    for nxt in args {
-                        arg = Expr::Coalesce((arg, nxt.optimize_ops()).into());
-                    }
-                    arg
-                }
-                NAME_OP_OR => {
-                    let mut args = args.into_iter();
-                    let mut arg = args.next().unwrap().optimize_ops();
-                    for nxt in args {
-                        arg = Expr::Or((arg, nxt.optimize_ops()).into());
-                    }
-                    arg
-                }
-                NAME_OP_AND => {
-                    let mut args = args.into_iter();
-                    let mut arg = args.next().unwrap().optimize_ops();
-                    for nxt in args {
-                        arg = Expr::And((arg, nxt.optimize_ops()).into());
-                    }
-                    arg
-                }
-                _ => Expr::Apply(op, args.into_iter().map(|v| v.optimize_ops()).collect()),
-            },
-            Expr::ApplyAgg(op, a_args, args) => Expr::ApplyAgg(
-                op,
-                a_args.into_iter().map(|v| v.optimize_ops()).collect(),
-                args.into_iter().map(|v| v.optimize_ops()).collect(),
-            ),
-            Expr::FieldAcc(f, arg) => Expr::FieldAcc(f, arg.optimize_ops().into()),
-            Expr::IdxAcc(i, arg) => Expr::IdxAcc(i, arg.optimize_ops().into()),
-            Expr::IfExpr(args) => {
-                let (cond, if_part, else_part) = *args;
-                Expr::IfExpr(
-                    (
-                        cond.optimize_ops(),
-                        if_part.optimize_ops(),
-                        else_part.optimize_ops(),
-                    )
-                        .into(),
-                )
-            }
-            Expr::SwitchExpr(args) => Expr::SwitchExpr(
-                args.into_iter()
-                    .map(|(e1, e2)| (e1.optimize_ops(), e2.optimize_ops()))
-                    .collect(),
-            ),
-            v @ (Expr::Const(_)
-            | Expr::Variable(_)
-            | Expr::TupleSetIdx(_)
-            | Expr::Add(_)
-            | Expr::Sub(_)
-            | Expr::Mul(_)
-            | Expr::Div(_)
-            | Expr::Pow(_)
-            | Expr::Mod(_)
-            | Expr::StrCat(_)
-            | Expr::Eq(_)
-            | Expr::Ne(_)
-            | Expr::Gt(_)
-            | Expr::Ge(_)
-            | Expr::Lt(_)
-            | Expr::Le(_)
-            | Expr::Not(_)
-            | Expr::Minus(_)
-            | Expr::IsNull(_)
-            | Expr::NotNull(_)
-            | Expr::Coalesce(_)
-            | Expr::Or(_)
-            | Expr::And(_)) => v,
-        }
-    }
-    pub(crate) fn row_eval<C: RowEvalContext + 'a>(&'a self, ctx: &'a C) -> Result<Value<'a>> {
+    pub(crate) fn row_eval<'a, C: RowEvalContext + 'a>(&'a self, ctx: &'a C) -> Result<Value<'a>> {
         let res: Value = match self {
             Expr::Const(v) => v.clone(),
             Expr::List(l) => l
@@ -404,18 +275,17 @@ impl<'a> Expr<'a> {
                 .into(),
             Expr::Variable(v) => return Err(EvalError::UnresolvedVariable(v.clone()).into()),
             Expr::TupleSetIdx(idx) => ctx.resolve(idx)?.clone(),
-            Expr::Apply(op, args) => {
+            Expr::BuiltinFn(op, args) => {
                 let mut eval_args = Vec::with_capacity(args.len());
-                let op_non_null_args = op.non_null_args();
                 for v in args {
                     let v = v.row_eval(ctx)?;
-                    if op_non_null_args && v == Value::Null {
+                    if op.non_null_args && v == Value::Null {
                         return Ok(Value::Null);
                     } else {
                         eval_args.push(v);
                     }
                 }
-                op.eval(eval_args)?
+                (op.func)(&eval_args)?
             }
             Expr::ApplyAgg(_, _, _) => {
                 todo!()
@@ -445,151 +315,11 @@ impl<'a> Expr<'a> {
                 row_eval_if_expr(ctx, cond, if_part, else_part)?
             }
             Expr::SwitchExpr(args) => row_eval_switch_expr(ctx, args)?,
-            // optimized implementations, not really necessary
-            Expr::Add(args) => OpAdd.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Sub(args) => OpSub.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Mul(args) => OpMul.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Div(args) => OpDiv.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Pow(args) => OpPow.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Mod(args) => OpMod.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::StrCat(args) => OpStrCat.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Eq(args) => OpEq.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Ne(args) => OpNe.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Gt(args) => OpGt.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Ge(args) => OpGe.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Lt(args) => OpLt.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Le(args) => OpLe.eval_two_non_null(
-                match args.as_ref().0.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-                match args.as_ref().1.row_eval(ctx)? {
-                    v @ Value::Null => return Ok(v),
-                    v => v,
-                },
-            )?,
-            Expr::Not(arg) => OpNot.eval_one_non_null(match arg.as_ref().row_eval(ctx)? {
-                v @ Value::Null => return Ok(v),
-                v => v,
-            })?,
-            Expr::Minus(arg) => OpMinus.eval_one_non_null(match arg.as_ref().row_eval(ctx)? {
-                v @ Value::Null => return Ok(v),
-                v => v,
-            })?,
-            Expr::IsNull(arg) => OpIsNull.eval_one(arg.as_ref().row_eval(ctx)?)?,
-            Expr::NotNull(arg) => OpNotNull.eval_one(arg.as_ref().row_eval(ctx)?)?,
-            // These implementations are special in that they short-circuit
-            Expr::Coalesce(args) => row_eval_coalesce(ctx, &args.as_ref().0, &args.as_ref().1)?,
-            Expr::Or(args) => row_eval_or(ctx, &args.as_ref().0, &args.as_ref().1)?,
-            Expr::And(args) => row_eval_and(ctx, &args.as_ref().0, &args.as_ref().1)?,
+            Expr::OpAnd(args) => row_eval_and(ctx, args)?,
+            Expr::OpOr(args) => row_eval_or(ctx, args)?,
+            Expr::OpCoalesce(args) => row_eval_coalesce(ctx, args)?,
+            Expr::OpMerge(args) => row_eval_merge(ctx, args)?,
+            Expr::OpConcat(args) => row_eval_concat(ctx, args)?
         };
         Ok(res)
     }
