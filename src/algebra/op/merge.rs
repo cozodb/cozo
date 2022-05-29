@@ -1,8 +1,8 @@
 use crate::algebra::op::{drop_temp_table, RelationalAlgebra};
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr};
-use crate::data::op::{OP_EQ};
+use crate::data::expr::Expr;
+use crate::data::op::OP_EQ;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{merge_binding_maps, BindingMap, BindingMapEvalContext, TupleSet};
 use crate::ddl::reify::{DdlContext, TableInfo};

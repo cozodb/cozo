@@ -3,7 +3,7 @@ use crate::algebra::op::{
 };
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr};
+use crate::data::expr::Expr;
 use crate::data::parser::parse_scoped_dict;
 use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext};

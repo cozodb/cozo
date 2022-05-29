@@ -1,4 +1,4 @@
-use crate::data::expr::{Expr};
+use crate::data::expr::Expr;
 use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use crate::parser::text_identifier::build_name_in_def;

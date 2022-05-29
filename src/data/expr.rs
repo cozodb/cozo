@@ -1,4 +1,5 @@
 use crate::data::op::*;
+use crate::data::op_agg::OpAgg;
 use crate::data::tuple_set::TupleSetIdx;
 use crate::data::value::{StaticValue, Value};
 use crate::parser::{CozoParser, Rule};
@@ -39,15 +40,14 @@ impl PartialEq for BuiltinFn {
 
 impl Eq for BuiltinFn {}
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq)]
 pub enum Expr {
     Const(StaticValue),
     List(Vec<Expr>),
     Dict(BTreeMap<String, Expr>),
     Variable(String),
     TupleSetIdx(TupleSetIdx),
-    // Apply(Arc<dyn Op + Send + Sync>, Vec<Expr>),
-    ApplyAgg((), Vec<Expr>, Vec<Expr>),
+    ApplyAgg(OpAgg, Vec<Expr>, Vec<Expr>),
     FieldAcc(String, Box<Expr>),
     IdxAcc(usize, Box<Expr>),
     IfExpr(Box<(Expr, Expr, Expr)>),
@@ -163,7 +163,7 @@ impl<'a> Debug for Expr {
             Expr::ApplyAgg(op, a_args, args) => write!(
                 f,
                 "[|{} {} | {}|]",
-                todo!(),
+                op.name(),
                 a_args
                     .iter()
                     .map(|v| format!("{:?}", v))

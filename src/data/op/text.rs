@@ -1,13 +1,13 @@
 use crate::data::eval::EvalError;
+use crate::data::expr::BuiltinFn;
 use crate::data::value::Value;
 use anyhow::Result;
-use crate::data::expr::BuiltinFn;
 
 pub(crate) const OP_STR_CAT: BuiltinFn = BuiltinFn {
     name: NAME_OP_STR_CAT,
     arity: None,
     non_null_args: true,
-    func: op_str_cat
+    func: op_str_cat,
 };
 
 pub(crate) const NAME_OP_STR_CAT: &str = "++";

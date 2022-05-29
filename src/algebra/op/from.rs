@@ -3,7 +3,7 @@ use crate::algebra::op::{
 };
 use crate::algebra::parser::{assert_rule, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr};
+use crate::data::expr::Expr;
 use crate::data::uuid::random_uuid_v1;
 use crate::parser::text_identifier::build_name_in_def;
 use crate::parser::{Pair, Pairs, Rule};

@@ -1,5 +1,6 @@
 use crate::data::expr::Expr;
 use crate::data::op::*;
+use crate::data::op_agg::OpAgg;
 use crate::data::tuple_set::TupleSetIdx;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
@@ -20,6 +21,9 @@ pub enum EvalError {
 
     #[error("Cannot apply `{0}` to `{1:?}`")]
     OpTypeMismatch(String, Vec<StaticValue>),
+
+    #[error("Expect aggregate expression")]
+    NotAggregate,
 
     #[error("Arity mismatch for {0}, {1} arguments given ")]
     ArityMismatch(String, usize),
@@ -91,6 +95,101 @@ impl Expr {
         match self.partial_eval(ctx)? {
             Expr::Const(v) => Ok(v),
             v => Err(EvalError::IncompleteEvaluation(format!("{:?}", v)).into()),
+        }
+    }
+
+    pub(crate) fn extract_agg_heads(&self) -> Result<Vec<(OpAgg, Vec<Expr>)>> {
+        let mut coll = vec![];
+        fn do_extract(ex: Expr, coll: &mut Vec<(OpAgg, Vec<Expr>)>) -> Result<()> {
+            match ex {
+                Expr::Const(_) => {}
+                Expr::List(l) => {
+                    for ex in l {
+                        do_extract(ex, coll)?;
+                    }
+                }
+                Expr::Dict(d) => {
+                    for (_, ex) in d {
+                        do_extract(ex, coll)?;
+                    }
+                }
+                Expr::Variable(_) => return Err(EvalError::NotAggregate.into()),
+                Expr::TupleSetIdx(_) => return Err(EvalError::NotAggregate.into()),
+                Expr::ApplyAgg(op, _, args) => coll.push((op, args)),
+                Expr::FieldAcc(_, arg) => do_extract(*arg, coll)?,
+                Expr::IdxAcc(_, arg) => do_extract(*arg, coll)?,
+                Expr::IfExpr(args) => {
+                    let (a, b, c) = *args;
+                    do_extract(a, coll)?;
+                    do_extract(b, coll)?;
+                    do_extract(c, coll)?;
+                }
+                Expr::SwitchExpr(args) => {
+                    for (cond, expr) in args {
+                        do_extract(cond, coll)?;
+                        do_extract(expr, coll)?;
+                    }
+                }
+                Expr::OpAnd(args) => {
+                    for ex in args {
+                        do_extract(ex, coll)?
+                    }
+                }
+                Expr::OpOr(args) => {
+                    for ex in args {
+                        do_extract(ex, coll)?
+                    }
+                }
+                Expr::OpCoalesce(args) => {
+                    for ex in args {
+                        do_extract(ex, coll)?
+                    }
+                }
+                Expr::OpMerge(args) => {
+                    for ex in args {
+                        do_extract(ex, coll)?
+                    }
+                }
+                Expr::OpConcat(args) => {
+                    for ex in args {
+                        do_extract(ex, coll)?
+                    }
+                }
+                Expr::BuiltinFn(_, args) => {
+                    for ex in args {
+                        do_extract(ex, coll)?
+                    }
+                }
+            }
+            Ok(())
+        }
+        do_extract(self.clone(), &mut coll)?;
+        Ok(coll)
+    }
+
+    pub(crate) fn is_agg_compatible(&self) -> bool {
+        match self {
+            Expr::Const(_) => true,
+            Expr::List(l) => l.iter().all(|el| el.is_agg_compatible()),
+            Expr::Dict(d) => d.values().all(|el| el.is_agg_compatible()),
+            Expr::Variable(_) => false,
+            Expr::TupleSetIdx(_) => false,
+            Expr::ApplyAgg(_, _, _) => true,
+            Expr::FieldAcc(_, arg) => arg.is_agg_compatible(),
+            Expr::IdxAcc(_, arg) => arg.is_agg_compatible(),
+            Expr::IfExpr(args) => {
+                let (a, b, c) = args.as_ref();
+                a.is_agg_compatible() && b.is_agg_compatible() && c.is_agg_compatible()
+            }
+            Expr::SwitchExpr(args) => args
+                .iter()
+                .all(|(cond, expr)| cond.is_agg_compatible() && expr.is_agg_compatible()),
+            Expr::OpAnd(args) => args.iter().all(|el| el.is_agg_compatible()),
+            Expr::OpOr(args) => args.iter().all(|el| el.is_agg_compatible()),
+            Expr::OpCoalesce(args) => args.iter().all(|el| el.is_agg_compatible()),
+            Expr::OpMerge(args) => args.iter().all(|el| el.is_agg_compatible()),
+            Expr::OpConcat(args) => args.iter().all(|el| el.is_agg_compatible()),
+            Expr::BuiltinFn(_, args) => args.iter().all(|el| el.is_agg_compatible()),
         }
     }
 
@@ -241,13 +340,14 @@ impl Expr {
             Expr::ApplyAgg(op, a_args, args) => {
                 let a_args = a_args
                     .into_iter()
-                    .map(|v| v.partial_eval(ctx))
+                    .map(|v| v.interpret_eval(ctx).map(|v| v.into_static()))
                     .collect::<Result<Vec<_>>>()?;
                 let args = args
                     .into_iter()
                     .map(|v| v.partial_eval(ctx))
                     .collect::<Result<Vec<_>>>()?;
-                Expr::ApplyAgg(op, a_args, args)
+                op.initialize(a_args)?;
+                Expr::ApplyAgg(op, vec![], args)
             }
             Expr::IfExpr(args) => {
                 let (cond, if_part, else_part) = *args;
@@ -275,20 +375,47 @@ impl Expr {
                 .into(),
             Expr::Variable(v) => return Err(EvalError::UnresolvedVariable(v.clone()).into()),
             Expr::TupleSetIdx(idx) => ctx.resolve(idx)?.clone(),
-            Expr::BuiltinFn(op, args) => {
-                let mut eval_args = Vec::with_capacity(args.len());
-                for v in args {
-                    let v = v.row_eval(ctx)?;
+            Expr::BuiltinFn(op, args) => match args.len() {
+                0 => (op.func)(&[])?,
+                1 => {
+                    let v = args.iter().next().unwrap().row_eval(ctx)?;
                     if op.non_null_args && v == Value::Null {
                         return Ok(Value::Null);
                     } else {
-                        eval_args.push(v);
+                        (op.func)(&[v])?
                     }
                 }
-                (op.func)(&eval_args)?
-            }
-            Expr::ApplyAgg(_, _, _) => {
-                todo!()
+                2 => {
+                    let mut args = args.iter();
+                    let v1 = args.next().unwrap().row_eval(ctx)?;
+                    if op.non_null_args && v1 == Value::Null {
+                        return Ok(Value::Null);
+                    }
+                    let v2 = args.next().unwrap().row_eval(ctx)?;
+                    if op.non_null_args && v2 == Value::Null {
+                        return Ok(Value::Null);
+                    }
+                    (op.func)(&[v1, v2])?
+                }
+                _ => {
+                    let mut eval_args = Vec::with_capacity(args.len());
+                    for v in args {
+                        let v = v.row_eval(ctx)?;
+                        if op.non_null_args && v == Value::Null {
+                            return Ok(Value::Null);
+                        } else {
+                            eval_args.push(v);
+                        }
+                    }
+                    (op.func)(&eval_args)?
+                }
+            },
+            Expr::ApplyAgg(op, _, args) => {
+                let mut eval_args = Vec::with_capacity(args.len());
+                for v in args {
+                    eval_args.push(v.row_eval(ctx)?);
+                }
+                op.put_get(&eval_args)?
             }
             Expr::FieldAcc(f, arg) => match arg.row_eval(ctx)? {
                 Value::Null => Value::Null,
@@ -319,7 +446,7 @@ impl Expr {
             Expr::OpOr(args) => row_eval_or(ctx, args)?,
             Expr::OpCoalesce(args) => row_eval_coalesce(ctx, args)?,
             Expr::OpMerge(args) => row_eval_merge(ctx, args)?,
-            Expr::OpConcat(args) => row_eval_concat(ctx, args)?
+            Expr::OpConcat(args) => row_eval_concat(ctx, args)?,
         };
         Ok(res)
     }

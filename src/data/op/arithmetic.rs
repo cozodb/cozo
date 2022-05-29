@@ -1,13 +1,13 @@
 use crate::data::eval::EvalError;
+use crate::data::expr::BuiltinFn;
 use crate::data::value::Value;
 use anyhow::Result;
-use crate::data::expr::BuiltinFn;
 
 pub(crate) const OP_ADD: BuiltinFn = BuiltinFn {
     name: NAME_OP_ADD,
     arity: Some(2),
     non_null_args: true,
-    func: op_add
+    func: op_add,
 };
 
 pub(crate) const NAME_OP_ADD: &str = "+";
@@ -36,7 +36,7 @@ pub(crate) const OP_SUB: BuiltinFn = BuiltinFn {
     name: NAME_OP_SUB,
     arity: Some(2),
     non_null_args: true,
-    func: op_sub
+    func: op_sub,
 };
 
 pub(crate) const NAME_OP_SUB: &str = "-";
@@ -65,7 +65,7 @@ pub(crate) const OP_MUL: BuiltinFn = BuiltinFn {
     name: NAME_OP_MUL,
     arity: Some(2),
     non_null_args: true,
-    func: op_mul
+    func: op_mul,
 };
 
 pub(crate) const NAME_OP_MUL: &str = "*";
@@ -95,7 +95,7 @@ pub(crate) const OP_DIV: BuiltinFn = BuiltinFn {
     name: NAME_OP_DIV,
     arity: Some(2),
     non_null_args: true,
-    func: op_div
+    func: op_div,
 };
 
 pub(crate) const NAME_OP_DIV: &str = "/";
@@ -125,7 +125,7 @@ pub(crate) const OP_MOD: BuiltinFn = BuiltinFn {
     name: NAME_OP_MOD,
     arity: Some(2),
     non_null_args: true,
-    func: op_mod
+    func: op_mod,
 };
 
 pub(crate) const NAME_OP_MOD: &str = "%";
@@ -152,7 +152,7 @@ pub(crate) const OP_POW: BuiltinFn = BuiltinFn {
     name: NAME_OP_POW,
     arity: Some(2),
     non_null_args: true,
-    func: op_pow
+    func: op_pow,
 };
 
 pub(crate) const NAME_OP_POW: &str = "**";
@@ -182,7 +182,7 @@ pub(crate) const OP_MINUS: BuiltinFn = BuiltinFn {
     name: NAME_OP_MINUS,
     arity: Some(1),
     non_null_args: true,
-    func: op_mul
+    func: op_mul,
 };
 
 pub(crate) const NAME_OP_MINUS: &str = "--";
@@ -192,8 +192,10 @@ pub(crate) fn op_minus<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
     match arg {
         Value::Int(i) => Ok((-i).into()),
         Value::Float(i) => Ok((-i).into()),
-        v => {
-            Err(EvalError::OpTypeMismatch(NAME_OP_MINUS.to_string(), vec![v.clone().into_static()]).into())
-        }
+        v => Err(EvalError::OpTypeMismatch(
+            NAME_OP_MINUS.to_string(),
+            vec![v.clone().into_static()],
+        )
+        .into()),
     }
 }

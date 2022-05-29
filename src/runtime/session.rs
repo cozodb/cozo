@@ -1,3 +1,4 @@
+use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{TableId, MIN_TABLE_ID_BOUND};
 use crate::data::value::{StaticValue, Value};
@@ -14,7 +15,6 @@ use pest::Parser;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use crate::data::expr::Expr;
 
 pub(crate) enum Definable {
     Value(StaticValue),

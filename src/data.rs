@@ -2,6 +2,7 @@ pub(crate) mod eval;
 pub(crate) mod expr;
 pub(crate) mod key_order;
 pub(crate) mod op;
+pub(crate) mod op_agg;
 pub(crate) mod parser;
 pub(crate) mod tuple;
 pub(crate) mod tuple_set;

@@ -76,7 +76,7 @@ pub(crate) fn partial_eval_or<'a, T: PartialEvalContext>(
 
 pub(crate) fn row_eval_or<'a, T: RowEvalContext + 'a>(
     ctx: &'a T,
-    args: &[Expr]
+    args: &[Expr],
 ) -> Result<Value<'a>> {
     let mut has_null = false;
     for arg in args {
@@ -90,7 +90,7 @@ pub(crate) fn row_eval_or<'a, T: RowEvalContext + 'a>(
                     NAME_OP_OR.to_string(),
                     vec![v.clone().into_static()],
                 )
-                    .into());
+                .into());
             }
         }
     }
@@ -146,7 +146,7 @@ pub(crate) fn partial_eval_and<'a, T: PartialEvalContext>(
 
 pub(crate) fn row_eval_and<'a, T: RowEvalContext + 'a>(
     ctx: &'a T,
-    args: &[Expr]
+    args: &[Expr],
 ) -> Result<Value<'a>> {
     let mut has_null = false;
     for arg in args {
@@ -160,7 +160,7 @@ pub(crate) fn row_eval_and<'a, T: RowEvalContext + 'a>(
                     NAME_OP_AND.to_string(),
                     vec![v.clone().into_static()],
                 )
-                    .into());
+                .into());
             }
         }
     }
@@ -183,6 +183,9 @@ pub(crate) const NAME_OP_NOT: &str = "!";
 pub(crate) fn op_not<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
     match args.into_iter().next().unwrap() {
         Value::Bool(b) => Ok((!b).into()),
-        v => Err(EvalError::OpTypeMismatch(NAME_OP_NOT.to_string(), vec![v.clone().into_static()]).into()),
+        v => Err(
+            EvalError::OpTypeMismatch(NAME_OP_NOT.to_string(), vec![v.clone().into_static()])
+                .into(),
+        ),
     }
 }

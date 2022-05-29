@@ -1,7 +1,7 @@
 use crate::algebra::op::RelationalAlgebra;
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr};
+use crate::data::expr::Expr;
 use crate::data::parser::{parse_keyed_dict, parse_scoped_dict};
 use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{
@@ -131,11 +131,7 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
             map: &source_map,
             parent: self.ctx,
         };
-        let extraction_vec = match self
-            .extract_map
-            .clone()
-            .partial_eval(&binding_ctx)?
-        {
+        let extraction_vec = match self.extract_map.clone().partial_eval(&binding_ctx)? {
             Expr::Dict(d) => d.values().cloned().collect::<Vec<_>>(),
             Expr::Const(Value::Dict(d)) => d
                 .values()

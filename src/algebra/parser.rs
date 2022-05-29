@@ -440,6 +440,25 @@ pub(crate) mod tests {
         }
         let duration_concat = start.elapsed();
         let start = Instant::now();
+        {
+            let ctx = sess.temp_ctx(true);
+            let s = r#"
+              From(e:Employee)
+             .Select({id: e.id, sum_id: e.id.sum[], count: count[null]})
+            "#;
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            dbg!(&ra);
+            dbg!(ra.get_values()?);
+        }
+        let duration_aggr = start.elapsed();
+        let start = Instant::now();
         let mut r_opts = default_read_options();
         r_opts.set_total_order_seek(true);
         r_opts.set_prefix_same_as_start(false);
@@ -464,6 +483,7 @@ pub(crate) mod tests {
             duration_concat,
             duration_outer_join,
             duration_list,
+            duration_aggr,
             n
         );
         Ok(())

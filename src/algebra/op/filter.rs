@@ -1,7 +1,7 @@
 use crate::algebra::op::RelationalAlgebra;
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::{Expr};
+use crate::data::expr::Expr;
 use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext};
 use crate::data::value::{StaticValue, Value};
 use crate::ddl::reify::TableInfo;
@@ -70,10 +70,7 @@ impl<'b> RelationalAlgebra for WhereFilter<'b> {
             map: &source_map,
             parent: self.ctx,
         };
-        let condition = self
-            .condition
-            .clone()
-            .partial_eval(&binding_ctx)?;
+        let condition = self.condition.clone().partial_eval(&binding_ctx)?;
         let txn = self.ctx.txn.clone();
         let temp_db = self.ctx.sess.temp.clone();
         let w_opts = default_write_options();

@@ -1,6 +1,7 @@
 use crate::algebra::op::{build_binding_map_from_info, QueryError, RelationalAlgebra};
 use crate::algebra::parser::RaBox;
 use crate::context::TempDbContext;
+use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple, Tuple};
 use crate::data::tuple_set::{
     shift_merge_binding_map, BindingMap, BindingMapEvalContext, TableId, TupleSet,
@@ -11,7 +12,6 @@ use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
 use cozorocks::{DbPtr, PrefixIterator, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use std::collections::{BTreeMap, BTreeSet};
-use crate::data::expr::Expr;
 
 pub(crate) const NAME_NESTED_LOOP_LEFT: &str = "NestedLoop";
 
@@ -70,11 +70,7 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
         let key_extractors = self
             .join_key_extractor
             .iter()
-            .map(|ex| {
-                ex.clone()
-                    .partial_eval(&binding_ctx)
-                    .map(|ex| ex)
-            })
+            .map(|ex| ex.clone().partial_eval(&binding_ctx).map(|ex| ex))
             .collect::<Result<Vec<_>>>()?;
         let table_id = self.right.table_id();
         let mut key_tuple = OwnTuple::with_prefix(table_id.id);

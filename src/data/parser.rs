@@ -1,5 +1,6 @@
 use crate::data::expr::Expr;
 use crate::data::op::*;
+use crate::data::op_agg::*;
 use crate::data::value::Value;
 use crate::parser::number::parse_int;
 use crate::parser::text_identifier::parse_string;
@@ -9,6 +10,7 @@ use lazy_static::lazy_static;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ExprParseError {
@@ -74,13 +76,6 @@ fn build_cond_expr(pair: Pair) -> Result<Expr> {
     Ok(res)
 }
 
-fn build_call_expr(pair: Pair) -> Result<Expr> {
-    let mut pairs = pair.into_inner();
-    let op_name = pairs.next().unwrap().as_str();
-    let args = pairs.map(Expr::try_from).collect::<Result<Vec<_>>>()?;
-    build_method_call(op_name, args)
-}
-
 fn build_switch_expr(pair: Pair) -> Result<Expr> {
     let mut pairs = pair.into_inner();
     let expr = pairs.next().unwrap();
@@ -141,6 +136,24 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
                         let mut args = vec![head];
                         args.extend(pairs.map(Expr::try_from).collect::<Result<Vec<_>>>()?);
                         head = build_method_call(op_name, args)?;
+                    }
+                    Rule::aggr => {
+                        let mut pairs = p.into_inner();
+                        let op_name = pairs.next().unwrap().as_str();
+                        let mut args = vec![head];
+                        let mut a_args = vec![];
+                        for pair in pairs {
+                            match pair.as_rule() {
+                                Rule::expr => args.push(Expr::try_from(pair)?),
+                                Rule::aggr_params => {
+                                    for pair in pair.into_inner() {
+                                        a_args.push(Expr::try_from(pair)?);
+                                    }
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        head = build_aggr_call(op_name, a_args, args)?;
                     }
                     _ => todo!(),
                 }
@@ -278,7 +291,30 @@ fn build_expr_primary(pair: Pair) -> Result<Expr> {
         }
         Rule::param => Ok(Expr::Variable(pair.as_str().into())),
         Rule::ident => Ok(Expr::Variable(pair.as_str().into())),
-        Rule::call_expr => build_call_expr(pair),
+        Rule::call_expr => {
+            let mut pairs = pair.into_inner();
+            let op_name = pairs.next().unwrap().as_str();
+            let args = pairs.map(Expr::try_from).collect::<Result<Vec<_>>>()?;
+            build_method_call(op_name, args)
+        }
+        Rule::aggr_expr => {
+            let mut pairs = pair.into_inner();
+            let op_name = pairs.next().unwrap().as_str();
+            let mut args = vec![];
+            let mut a_args = vec![];
+            for pair in pairs {
+                match pair.as_rule() {
+                    Rule::expr => args.push(Expr::try_from(pair)?),
+                    Rule::aggr_params => {
+                        for pair in pair.into_inner() {
+                            a_args.push(Expr::try_from(pair)?);
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            build_aggr_call(op_name, a_args, args)
+        }
         _ => {
             println!("Unhandled rule {:?}", pair.as_rule());
             unimplemented!()
@@ -292,7 +328,19 @@ fn build_method_call(name: &str, args: Vec<Expr>) -> Result<Expr> {
         NAME_OP_NOT_NULL => Expr::BuiltinFn(OP_NOT_NULL, args),
         NAME_OP_CONCAT => Expr::OpConcat(args),
         NAME_OP_MERGE => Expr::OpMerge(args),
-        _method_name => unimplemented!(),
+        method_name => unimplemented!("{}", method_name),
+    })
+}
+
+fn build_aggr_call(name: &str, a_args: Vec<Expr>, args: Vec<Expr>) -> Result<Expr> {
+    Ok(match name {
+        NAME_OP_SUM => Expr::ApplyAgg(OpAgg(Arc::new(OpSum::default())), a_args, args),
+        NAME_OP_COUNT => Expr::ApplyAgg(
+            OpAgg(Arc::new(OpSum::default())),
+            a_args,
+            vec![Expr::Const(Value::Int(1))],
+        ),
+        method_name => unimplemented!("{}", method_name),
     })
 }
 

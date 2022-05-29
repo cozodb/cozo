@@ -114,10 +114,11 @@ minus = { "-" }
 negate = { "!" }
 
 call_expr = { fn_ident ~ "(" ~ (expr ~ ",")* ~ expr? ~ ")" }
-aggr_expr = { fn_ident ~ "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
+aggr_expr = { fn_ident ~ "[" ~ (expr ~ ",")* ~ expr? ~ aggr_params? ~ "]" }
+aggr_params = { ";" ~ (expr ~ ",")* ~ expr? }
 term = { (grouping | call_expr | aggr_expr | literal | ident | param | list | dict) ~ (call | aggr | accessor | index_accessor)* }
 call = {"." ~ fn_ident ~ "(" ~ (expr ~ ",")* ~ expr? ~ ")"}
-aggr = {"." ~ fn_ident ~ "[" ~ (expr ~ ",")* ~ expr? ~ "]"}
+aggr = {"." ~ fn_ident ~ "[" ~ (expr ~ ",")* ~ expr? ~ aggr_params? ~ "]"}
 accessor = {"." ~ ident}
 index_accessor = {"[" ~ int ~ "]"}
 grouping = { "(" ~ expr ~ ")" }
