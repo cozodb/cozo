@@ -1,4 +1,3 @@
-use crate::data::eval::EvalError;
 use crate::data::expr::Expr;
 use crate::data::op::*;
 use crate::data::op_agg::*;

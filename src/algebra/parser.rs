@@ -7,7 +7,6 @@ use crate::ddl::reify::TableInfo;
 use crate::parser::{Pair, Rule};
 use anyhow::Result;
 use std::collections::BTreeSet;
-use std::error::Error;
 use std::fmt::{Debug, Formatter};
 
 #[derive(thiserror::Error, Debug)]
@@ -83,6 +82,7 @@ pub(crate) enum RaBox<'a> {
     UnionOp(Box<UnionOp<'a>>),
     IntersectOp(Box<IntersectOp<'a>>),
     SymDiffOp(Box<SymDiffOp<'a>>),
+    DiffOp(Box<DiffOp<'a>>),
     GroupOp(Box<GroupOp<'a>>),
 }
 
@@ -103,6 +103,7 @@ impl<'a> RaBox<'a> {
             RaBox::MergeJoin(inner) => vec![&inner.left, &inner.right],
             RaBox::ConcatOp(inner) => inner.sources.iter().collect(),
             RaBox::UnionOp(inner) => inner.sources.iter().collect(),
+            RaBox::DiffOp(inner) => inner.sources.iter().collect(),
             RaBox::IntersectOp(inner) => inner.sources.iter().collect(),
             RaBox::SymDiffOp(inner) => vec![&inner.sources[0], &inner.sources[1]],
             RaBox::GroupOp(inner) => vec![&inner.source],
@@ -139,6 +140,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::UnionOp(inner) => inner.name(),
             RaBox::IntersectOp(inner) => inner.name(),
             RaBox::SymDiffOp(inner) => inner.name(),
+            RaBox::DiffOp(inner) => inner.name(),
             RaBox::GroupOp(inner) => inner.name(),
         }
     }
@@ -161,6 +163,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::UnionOp(inner) => inner.bindings(),
             RaBox::IntersectOp(inner) => inner.bindings(),
             RaBox::SymDiffOp(inner) => inner.bindings(),
+            RaBox::DiffOp(inner) => inner.bindings(),
             RaBox::GroupOp(inner) => inner.bindings(),
         }
     }
@@ -183,6 +186,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::UnionOp(inner) => inner.binding_map(),
             RaBox::IntersectOp(inner) => inner.binding_map(),
             RaBox::SymDiffOp(inner) => inner.binding_map(),
+            RaBox::DiffOp(inner) => inner.binding_map(),
             RaBox::GroupOp(inner) => inner.binding_map(),
         }
     }
@@ -205,6 +209,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::UnionOp(inner) => inner.iter(),
             RaBox::IntersectOp(inner) => inner.iter(),
             RaBox::SymDiffOp(inner) => inner.iter(),
+            RaBox::DiffOp(inner) => inner.iter(),
             RaBox::GroupOp(inner) => inner.iter(),
         }
     }
@@ -227,6 +232,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::UnionOp(inner) => inner.identity(),
             RaBox::IntersectOp(inner) => inner.identity(),
             RaBox::SymDiffOp(inner) => inner.identity(),
+            RaBox::DiffOp(inner) => inner.identity(),
             RaBox::GroupOp(inner) => inner.identity(),
         }
     }
@@ -304,6 +310,11 @@ pub(crate) fn build_relational_expr<'a>(
             }
             NAME_INTERSECT => {
                 built = Some(RaBox::IntersectOp(Box::new(IntersectOp::build(
+                    ctx, built, pairs,
+                )?)))
+            }
+            NAME_DIFF => {
+                built = Some(RaBox::DiffOp(Box::new(DiffOp::build(
                     ctx, built, pairs,
                 )?)))
             }
@@ -533,7 +544,7 @@ pub(crate) mod tests {
         {
             let ctx = sess.temp_ctx(true);
             let s = r#"
-             SymDiff(From(d:Job).Where(d.id <= 15), From(d:Job).Where(d.id >= 10))
+             Diff(From(d:Job).Where(d.id <= 15), From(d:Job).Where(d.id >= 15))
             "#;
             let ra = build_relational_expr(
                 &ctx,

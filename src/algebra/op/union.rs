@@ -1,11 +1,9 @@
 use crate::algebra::op::{
-    concat_binding_map, concat_value_entries, drop_temp_table, make_concat_iter, ConcatIterator,
-    RelationalAlgebra,
+    concat_binding_map, drop_temp_table, make_concat_iter, RelationalAlgebra,
 };
 use crate::algebra::parser::{build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::Expr;
-use crate::data::tuple::{DataKind, OwnTuple, Tuple};
+use crate::data::tuple::{OwnTuple, Tuple};
 use crate::data::tuple_set::{BindingMap, TupleSet};
 use crate::ddl::reify::{DdlContext, TableInfo};
 use crate::parser::Pairs;
