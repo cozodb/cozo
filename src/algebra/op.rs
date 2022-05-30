@@ -24,6 +24,7 @@ mod scan;
 mod select;
 mod sort;
 mod tagged;
+mod union;
 mod values;
 
 use crate::data::expr::Expr;
@@ -44,6 +45,7 @@ pub(crate) use scan::*;
 pub(crate) use select::*;
 pub(crate) use sort::*;
 pub(crate) use tagged::*;
+pub(crate) use union::*;
 pub(crate) use values::*;
 
 #[derive(thiserror::Error, Debug)]

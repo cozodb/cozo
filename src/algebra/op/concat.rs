@@ -12,7 +12,6 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const NAME_CONCAT: &str = "Concat";
-pub(crate) const NAME_UNION: &str = "Union";
 pub(crate) const NAME_INTERSECT: &str = "Intersect";
 pub(crate) const NAME_DIFF: &str = "Diff";
 pub(crate) const NAME_SYM_DIFF: &str = "SymDiff";
@@ -40,21 +39,57 @@ impl<'a> ConcatOp<'a> {
         }
         Ok(Self { sources })
     }
-    fn value_entries(&self, binding_map: &BindingMap) -> Result<Vec<Expr>> {
-        let dft = BTreeMap::new();
-        let own_binding_map = self.binding_map()?;
-        let mut ret = vec![];
-        for (k, vs) in own_binding_map.inner_map {
-            let sub_map = binding_map.inner_map.get(&k).unwrap_or(&dft);
+}
+
+pub(crate) fn concat_value_entries(
+    binding_map: &BindingMap,
+    own_binding_map: BindingMap,
+) -> Vec<Expr> {
+    let dft = BTreeMap::new();
+    let mut ret = vec![];
+    for (k, vs) in own_binding_map.inner_map {
+        let sub_map = binding_map.inner_map.get(&k).unwrap_or(&dft);
+        for (sk, _) in vs {
+            match sub_map.get(&sk) {
+                None => ret.push(Expr::Const(Value::Null)),
+                Some(idx) => ret.push(Expr::TupleSetIdx(*idx)),
+            }
+        }
+    }
+
+    ret
+}
+
+pub(crate) fn concat_binding_map<T: Iterator<Item = BindingMap>>(binding_maps: T) -> BindingMap {
+    let mut ret: BTreeMap<String, BTreeMap<String, TupleSetIdx>> = BTreeMap::new();
+    for el in binding_maps {
+        let el = el.inner_map;
+        for (k, vs) in el {
+            let tgt = ret.entry(k).or_default();
             for (sk, _) in vs {
-                match sub_map.get(&sk) {
-                    None => ret.push(Expr::Const(Value::Null)),
-                    Some(idx) => ret.push(Expr::TupleSetIdx(*idx)),
+                if let Entry::Vacant(e) = tgt.entry(sk) {
+                    e.insert(TupleSetIdx {
+                        is_key: false,
+                        t_set: 0,
+                        col_idx: 0,
+                    });
                 }
             }
         }
+    }
 
-        Ok(ret)
+    let mut idx: usize = 0;
+    for vs in ret.values_mut() {
+        for v in vs.values_mut() {
+            v.col_idx = idx;
+            idx += 1;
+        }
+    }
+
+    BindingMap {
+        inner_map: ret,
+        key_size: 0,
+        val_size: 1,
     }
 }
 
@@ -72,64 +107,39 @@ impl<'b> RelationalAlgebra for ConcatOp<'b> {
     }
 
     fn binding_map(&self) -> Result<BindingMap> {
-        let mut ret: BTreeMap<String, BTreeMap<String, TupleSetIdx>> = BTreeMap::new();
-        for el in self.sources.iter() {
-            let el = el.binding_map()?.inner_map;
-            for (k, vs) in el {
-                let tgt = ret.entry(k).or_default();
-                for (sk, _) in vs {
-                    if let Entry::Vacant(e) = tgt.entry(sk) {
-                        e.insert(TupleSetIdx {
-                            is_key: false,
-                            t_set: 0,
-                            col_idx: 0,
-                        });
-                    }
-                }
-            }
-        }
+        let maps = self
+            .sources
+            .iter()
+            .map(|el| el.binding_map())
+            .collect::<Result<Vec<_>>>()?;
 
-        let mut idx: usize = 0;
-        for vs in ret.values_mut() {
-            for v in vs.values_mut() {
-                v.col_idx = idx;
-                idx += 1;
-            }
-        }
-
-        Ok(BindingMap {
-            inner_map: ret,
-            key_size: 0,
-            val_size: 1,
-        })
+        Ok(concat_binding_map(maps.into_iter()))
     }
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
-        let mut sources: Vec<Box<dyn Iterator<Item = Result<TupleSet>>>> = vec![];
-        for source in &self.sources {
-            let source_map = source.binding_map()?;
-            let val_extractors = self.value_entries(&source_map)?;
-
-            let iter = source.iter()?.map(move |tset| -> Result<TupleSet> {
-                let tset = tset?;
-                let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
-                for extractor in &val_extractors {
-                    let value = extractor.row_eval(&tset)?;
-                    tuple.push_value(&value);
-                }
-                let ret = TupleSet {
-                    keys: vec![],
-                    vals: vec![tuple.into()],
-                };
-                Ok(ret)
-            });
-            sources.push(Box::new(iter));
-        }
-
-        Ok(Box::new(ConcatIterator {
-            sources: sources.into_iter(),
-            current_source: Box::new([].into_iter()),
-        }))
+        let ret = make_concat_iter(&self.sources, self.binding_map()?)?;
+        Ok(Box::new(ret))
+        // let mut sources: Vec<Box<dyn Iterator<Item = Result<TupleSet>>>> = vec![];
+        // for source in &self.sources {
+        //     let source_map = source.binding_map()?;
+        //     let own_binding_map = self.binding_map()?;
+        //     let val_extractors = concat_value_entries(&source_map, &own_binding_map);
+        //
+        //     let iter = source.iter()?.map(move |tset| -> Result<TupleSet> {
+        //         let tset = tset?;
+        //         let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
+        //         for extractor in &val_extractors {
+        //             let value = extractor.row_eval(&tset)?;
+        //             tuple.push_value(&value);
+        //         }
+        //         let ret = TupleSet {
+        //             keys: vec![],
+        //             vals: vec![tuple.into()],
+        //         };
+        //         Ok(ret)
+        //     });
+        //     sources.push(Box::new(iter));
+        // }
     }
 
     fn identity(&self) -> Option<TableInfo> {
@@ -137,12 +147,44 @@ impl<'b> RelationalAlgebra for ConcatOp<'b> {
     }
 }
 
+pub(crate) fn make_concat_iter<'a>(
+    sources: &'a [RaBox],
+    own_binding_map: BindingMap,
+) -> Result<ConcatIterator<'a, impl Iterator<Item = Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>>>
+{
+    let mut it_sources: Vec<Box<dyn Iterator<Item = Result<TupleSet>>>> = vec![];
+    for source in sources {
+        let source_map = source.binding_map()?;
+        let val_extractors = concat_value_entries(&source_map, own_binding_map.clone());
+
+        let iter = source.iter()?.map(move |tset| -> Result<TupleSet> {
+            let tset = tset?;
+            let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
+            for extractor in &val_extractors {
+                let value = extractor.row_eval(&tset)?;
+                tuple.push_value(&value);
+            }
+            let ret = TupleSet {
+                keys: vec![],
+                vals: vec![tuple.into()],
+            };
+            Ok(ret)
+        });
+        it_sources.push(Box::new(iter));
+    }
+
+    Ok(ConcatIterator {
+        sources: it_sources.into_iter(),
+        current_source: Box::new([].into_iter()),
+    })
+}
+
 pub(crate) struct ConcatIterator<
     'a,
     T: Iterator<Item = Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>,
 > {
-    sources: T,
-    current_source: Box<dyn Iterator<Item = Result<TupleSet>> + 'a>,
+    pub(crate) sources: T,
+    pub(crate) current_source: Box<dyn Iterator<Item = Result<TupleSet>> + 'a>,
 }
 
 impl<'a, T: Iterator<Item = Box<dyn Iterator<Item = Result<TupleSet>> + 'a>>> Iterator
