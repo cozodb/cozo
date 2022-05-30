@@ -76,7 +76,11 @@ impl<'a> SortOp<'a> {
             .iter()
             .map(|(ex, dir)| -> Result<(Expr, SortDirection)> {
                 let ex = ex.clone().partial_eval(&binding_ctx)?;
-                Ok((ex, *dir))
+                if !ex.is_not_aggr() {
+                    Err(AlgebraParseError::AggregateFnNotAllowed.into())
+                } else {
+                    Ok((ex, *dir))
+                }
             })
             .collect::<Result<Vec<_>>>()?;
         let mut insertion_key = OwnTuple::with_prefix(temp_table_id);

@@ -123,7 +123,14 @@ impl<'a> MergeJoin<'a> {
         };
         let sort_exprs = keys
             .iter()
-            .map(|ex| ex.clone().partial_eval(&binding_ctx))
+            .map(|ex| -> Result<Expr> {
+                let ex = ex.clone().partial_eval(&binding_ctx)?;
+                if !ex.is_not_aggr() {
+                    Err(AlgebraParseError::AggregateFnNotAllowed.into())
+                } else {
+                    Ok(ex)
+                }
+            })
             .collect::<Result<Vec<_>>>()?;
         let mut insertion_key = OwnTuple::with_prefix(temp_table_id);
         let mut insertion_val = OwnTuple::with_data_prefix(DataKind::Data);

@@ -1,5 +1,5 @@
 use crate::algebra::op::{build_binding_map_from_info, QueryError, RelationalAlgebra};
-use crate::algebra::parser::RaBox;
+use crate::algebra::parser::{AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple, Tuple};
@@ -70,7 +70,14 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
         let key_extractors = self
             .join_key_extractor
             .iter()
-            .map(|ex| ex.clone().partial_eval(&binding_ctx).map(|ex| ex))
+            .map(|ex| -> Result<Expr> {
+                let ex = ex.clone().partial_eval(&binding_ctx)?;
+                if !ex.is_not_aggr() {
+                    Err(AlgebraParseError::AggregateFnNotAllowed.into())
+                } else {
+                    Ok(ex)
+                }
+            })
             .collect::<Result<Vec<_>>>()?;
         let table_id = self.right.table_id();
         let mut key_tuple = OwnTuple::with_prefix(table_id.id);

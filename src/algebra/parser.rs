@@ -7,6 +7,7 @@ use crate::ddl::reify::TableInfo;
 use crate::parser::{Pair, Rule};
 use anyhow::Result;
 use std::collections::BTreeSet;
+use std::error::Error;
 use std::fmt::{Debug, Formatter};
 
 #[derive(thiserror::Error, Debug)]
@@ -43,6 +44,12 @@ pub(crate) enum AlgebraParseError {
 
     #[error("Duplicate binding {0}")]
     DuplicateBinding(String),
+
+    #[error("Aggregate function in forbidden place")]
+    AggregateFnNotAllowed,
+
+    #[error("Scalar function in forbidden place")]
+    ScalarFnNotAllowed,
 }
 
 pub(crate) fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Result<()> {
@@ -73,6 +80,7 @@ pub(crate) enum RaBox<'a> {
     SortOp(Box<SortOp<'a>>),
     MergeJoin(Box<MergeJoin<'a>>),
     ConcatOp(Box<ConcatOp<'a>>),
+    GroupOp(Box<GroupOp<'a>>),
 }
 
 impl<'a> RaBox<'a> {
@@ -91,6 +99,7 @@ impl<'a> RaBox<'a> {
             RaBox::SortOp(inner) => vec![&inner.source],
             RaBox::MergeJoin(inner) => vec![&inner.left, &inner.right],
             RaBox::ConcatOp(inner) => inner.sources.iter().collect(),
+            RaBox::GroupOp(inner) => vec![&inner.source],
         }
     }
 }
@@ -121,6 +130,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SortOp(inner) => inner.name(),
             RaBox::MergeJoin(inner) => inner.name(),
             RaBox::ConcatOp(inner) => inner.name(),
+            RaBox::GroupOp(inner) => inner.name(),
         }
     }
 
@@ -139,6 +149,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SortOp(inner) => inner.bindings(),
             RaBox::MergeJoin(inner) => inner.bindings(),
             RaBox::ConcatOp(inner) => inner.bindings(),
+            RaBox::GroupOp(inner) => inner.bindings(),
         }
     }
 
@@ -157,6 +168,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SortOp(inner) => inner.binding_map(),
             RaBox::MergeJoin(inner) => inner.binding_map(),
             RaBox::ConcatOp(inner) => inner.binding_map(),
+            RaBox::GroupOp(inner) => inner.binding_map(),
         }
     }
 
@@ -175,6 +187,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SortOp(inner) => inner.iter(),
             RaBox::MergeJoin(inner) => inner.iter(),
             RaBox::ConcatOp(inner) => inner.iter(),
+            RaBox::GroupOp(inner) => inner.iter(),
         }
     }
 
@@ -193,6 +206,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SortOp(inner) => inner.identity(),
             RaBox::MergeJoin(inner) => inner.identity(),
             RaBox::ConcatOp(inner) => inner.identity(),
+            RaBox::GroupOp(inner) => inner.identity(),
         }
     }
 }
@@ -263,6 +277,9 @@ pub(crate) fn build_relational_expr<'a>(
                 built = Some(RaBox::ConcatOp(Box::new(ConcatOp::build(
                     ctx, built, pairs,
                 )?)))
+            }
+            NAME_GROUP => {
+                built = Some(RaBox::GroupOp(Box::new(GroupOp::build(ctx, built, pairs)?)))
             }
             name => {
                 unimplemented!("{}", name)
@@ -458,6 +475,27 @@ pub(crate) mod tests {
             dbg!(ra.get_values()?);
         }
         let duration_aggr = start.elapsed();
+
+        let start = Instant::now();
+        {
+            let ctx = sess.temp_ctx(true);
+            let s = r#"
+              From(e:Employee)
+             .Group({*key: e.id % 3, ct: count_with[e.id]})
+            "#;
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            dbg!(&ra);
+            dbg!(ra.get_values()?);
+        }
+        let duration_group = start.elapsed();
+
         let start = Instant::now();
         let mut r_opts = default_read_options();
         r_opts.set_total_order_seek(true);
@@ -484,6 +522,7 @@ pub(crate) mod tests {
             duration_outer_join,
             duration_list,
             duration_aggr,
+            duration_group,
             n
         );
         Ok(())

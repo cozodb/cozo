@@ -167,6 +167,40 @@ impl Expr {
         Ok(coll)
     }
 
+    pub(crate) fn aggr_reset(&self) {
+        match self {
+            Expr::Const(_) => {}
+            Expr::List(l) => l.iter().for_each(|el| el.aggr_reset()),
+            Expr::Dict(d) => d.values().for_each(|el| el.aggr_reset()),
+            Expr::Variable(_) => {}
+            Expr::TupleSetIdx(_) => {}
+            Expr::ApplyAgg(op, _, args) => {
+                op.reset();
+                for arg in args {
+                    arg.aggr_reset();
+                }
+            }
+            Expr::FieldAcc(_, arg) => arg.aggr_reset(),
+            Expr::IdxAcc(_, arg) => arg.aggr_reset(),
+            Expr::IfExpr(args) => {
+                let (a, b, c) = args.as_ref();
+                a.aggr_reset();
+                b.aggr_reset();
+                c.aggr_reset();
+            }
+            Expr::SwitchExpr(args) => args.iter().for_each(|(cond, expr)| {
+                cond.aggr_reset();
+                expr.aggr_reset();
+            }),
+            Expr::OpAnd(args) => args.iter().for_each(|el| el.aggr_reset()),
+            Expr::OpOr(args) => args.iter().for_each(|el| el.aggr_reset()),
+            Expr::OpCoalesce(args) => args.iter().for_each(|el| el.aggr_reset()),
+            Expr::OpMerge(args) => args.iter().for_each(|el| el.aggr_reset()),
+            Expr::OpConcat(args) => args.iter().for_each(|el| el.aggr_reset()),
+            Expr::BuiltinFn(_, args) => args.iter().for_each(|el| el.aggr_reset()),
+        }
+    }
+
     pub(crate) fn is_not_aggr(&self) -> bool {
         match self {
             Expr::Const(_) => true,

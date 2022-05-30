@@ -43,11 +43,15 @@ impl<'a> WhereFilter<'a> {
             conds.push(cond);
         }
         let condition = Expr::OpAnd(conds);
-        Ok(Self {
-            ctx,
-            source,
-            condition,
-        })
+        if !condition.is_not_aggr() {
+            Err(AlgebraParseError::AggregateFnNotAllowed.into())
+        } else {
+            Ok(Self {
+                ctx,
+                source,
+                condition,
+            })
+        }
     }
 }
 

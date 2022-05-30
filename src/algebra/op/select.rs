@@ -140,6 +140,8 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
             ex => return Err(SelectOpError::NeedsDict(ex).into()),
         };
 
+        extraction_vec.iter().for_each(|ex| ex.aggr_reset());
+
         let txn = self.ctx.txn.clone();
         let temp_db = self.ctx.sess.temp.clone();
         let w_opts = default_write_options();

@@ -12,7 +12,7 @@ Operations
 * [x] `take(rel, n)`
 * [x] `skip(rel, n)`
 * [x] `sort(rel, expr1, expr2: sort_dir)`
-* [ ] `group(rel, binding: {*key1: expr1, val1: expr2}, *ordering)` may order elements within groups
+* [x] `group(rel, binding: {*key1: expr1, val1: expr2}, *ordering)` may order elements within groups
 * [ ] `walk(pattern, ...conds, ...bindings)`
 * [ ] `walk_repeat(pattern, ...conds, ...bindings)` every element contains additional `_iter` and `_visited` fields
 * [x] `values(data, ?Table)`
@@ -38,3 +38,11 @@ Differentiation
 * function calls use parentheses, names start with lowercase letters or "_"
 * aggregation calls are the same as function calls except that square brackets are used instead
 * query calls are the same as function calls except that query names start with upper case or "#"
+
+Others
+
+* [ ] language within query
+* [ ] constraints and indices
+* [ ] datetime and array types
+* [ ] GUI and TUI
+* [ ] query optimization
