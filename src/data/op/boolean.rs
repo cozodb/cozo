@@ -13,7 +13,7 @@ pub(crate) const OP_IS_NULL: BuiltinFn = BuiltinFn {
 pub(crate) const NAME_OP_IS_NULL: &str = "is_null";
 
 pub(crate) fn op_is_null<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
-    let arg = args.into_iter().next().unwrap();
+    let arg = args.iter().next().unwrap();
     Ok((*arg == Value::Null).into())
 }
 
@@ -27,16 +27,13 @@ pub(crate) const OP_NOT_NULL: BuiltinFn = BuiltinFn {
 pub(crate) const NAME_OP_NOT_NULL: &str = "not_null";
 
 pub(crate) fn op_not_null<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
-    let arg = args.into_iter().next().unwrap();
+    let arg = args.iter().next().unwrap();
     Ok((*arg != Value::Null).into())
 }
 
 pub(crate) const NAME_OP_OR: &str = "||";
 
-pub(crate) fn partial_eval_or<'a, T: PartialEvalContext>(
-    ctx: &'a T,
-    args: Vec<Expr>,
-) -> Result<Expr> {
+pub(crate) fn partial_eval_or<T: PartialEvalContext>(ctx: &T, args: Vec<Expr>) -> Result<Expr> {
     let mut collected = vec![];
     let mut has_null = false;
     for arg in args {
@@ -103,10 +100,7 @@ pub(crate) fn row_eval_or<'a, T: RowEvalContext + 'a>(
 
 pub(crate) const NAME_OP_AND: &str = "&&";
 
-pub(crate) fn partial_eval_and<'a, T: PartialEvalContext>(
-    ctx: &'a T,
-    args: Vec<Expr>,
-) -> Result<Expr> {
+pub(crate) fn partial_eval_and<T: PartialEvalContext>(ctx: &T, args: Vec<Expr>) -> Result<Expr> {
     let mut collected = vec![];
     let mut has_null = false;
     for arg in args {
@@ -181,7 +175,7 @@ pub(crate) const OP_NOT: BuiltinFn = BuiltinFn {
 pub(crate) const NAME_OP_NOT: &str = "!";
 
 pub(crate) fn op_not<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
-    match args.into_iter().next().unwrap() {
+    match args.iter().next().unwrap() {
         Value::Bool(b) => Ok((!b).into()),
         v => Err(
             EvalError::OpTypeMismatch(NAME_OP_NOT.to_string(), vec![v.clone().into_static()])

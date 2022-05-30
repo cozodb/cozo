@@ -313,11 +313,7 @@ pub(crate) fn build_relational_expr<'a>(
                     ctx, built, pairs,
                 )?)))
             }
-            NAME_DIFF => {
-                built = Some(RaBox::DiffOp(Box::new(DiffOp::build(
-                    ctx, built, pairs,
-                )?)))
-            }
+            NAME_DIFF => built = Some(RaBox::DiffOp(Box::new(DiffOp::build(ctx, built, pairs)?))),
             NAME_SYM_DIFF => {
                 built = Some(RaBox::SymDiffOp(Box::new(SymDiffOp::build(
                     ctx, built, pairs,

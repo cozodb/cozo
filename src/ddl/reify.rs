@@ -661,7 +661,7 @@ fn eval_defaults(cols: Vec<ColSchema>) -> Result<Vec<ColSchema>> {
                     typing,
                     default,
                 }),
-                Err(e) => Err(e.into()),
+                Err(e) => Err(e),
             },
         )
         .collect::<Result<Vec<_>>>()

@@ -456,6 +456,6 @@ impl<'a> TryFrom<&'a str> for Expr {
             .map_err(|_| ExprError::Parse(value.to_string()))?
             .next()
             .ok_or_else(|| ExprError::Parse(value.to_string()))?;
-        Ok(Expr::try_from(pair)?)
+        Expr::try_from(pair)
     }
 }

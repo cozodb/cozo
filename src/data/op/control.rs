@@ -20,8 +20,8 @@ pub(crate) fn row_eval_coalesce<'a, T: RowEvalContext + 'a>(
 
 pub(crate) const IF_NAME: &str = "if";
 
-pub(crate) fn partial_eval_coalesce<'a, T: PartialEvalContext>(
-    ctx: &'a T,
+pub(crate) fn partial_eval_coalesce<T: PartialEvalContext>(
+    ctx: &T,
     args: Vec<Expr>,
 ) -> Result<Expr> {
     let mut collected = vec![];
@@ -59,8 +59,8 @@ pub(crate) fn row_eval_if_expr<'a, T: RowEvalContext + 'a>(
     }
 }
 
-pub(crate) fn partial_eval_if_expr<'a, T: PartialEvalContext>(
-    ctx: &'a T,
+pub(crate) fn partial_eval_if_expr<T: PartialEvalContext>(
+    ctx: &T,
     cond: Expr,
     if_part: Expr,
     else_part: Expr,
@@ -100,8 +100,8 @@ pub(crate) fn row_eval_switch_expr<'a, T: RowEvalContext + 'a>(
     default.row_eval(ctx)
 }
 
-pub(crate) fn partial_eval_switch_expr<'a, T: PartialEvalContext>(
-    ctx: &'a T,
+pub(crate) fn partial_eval_switch_expr<T: PartialEvalContext>(
+    ctx: &T,
     args: Vec<(Expr, Expr)>,
 ) -> Result<Expr> {
     let mut args = args.into_iter();

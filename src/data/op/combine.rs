@@ -12,7 +12,7 @@ pub(crate) fn row_eval_concat<'a, T: RowEvalContext + 'a>(
     args: &'a [Expr],
 ) -> Result<Value<'a>> {
     let mut coll: Vec<Value> = vec![];
-    for v in args.into_iter() {
+    for v in args.iter() {
         match v.row_eval(ctx)? {
             Value::Null => {}
             Value::List(l) => coll.extend(l.clone()),
@@ -28,8 +28,8 @@ pub(crate) fn row_eval_concat<'a, T: RowEvalContext + 'a>(
     Ok(coll.into())
 }
 
-pub(crate) fn partial_eval_concat_expr<'a, T: PartialEvalContext>(
-    ctx: &'a T,
+pub(crate) fn partial_eval_concat_expr<T: PartialEvalContext>(
+    ctx: &T,
     args: Vec<Expr>,
 ) -> Result<Expr> {
     let mut can_concat = true;
@@ -91,7 +91,7 @@ pub(crate) fn row_eval_merge<'a, T: RowEvalContext + 'a>(
     args: &'a [Expr],
 ) -> Result<Value<'a>> {
     let mut coll: BTreeMap<Cow<str>, Value> = BTreeMap::new();
-    for v in args.into_iter() {
+    for v in args.iter() {
         match v.row_eval(ctx)? {
             Value::Null => {}
             Value::Dict(d) => coll.extend(d.clone()),
@@ -107,8 +107,8 @@ pub(crate) fn row_eval_merge<'a, T: RowEvalContext + 'a>(
     Ok(coll.into())
 }
 
-pub(crate) fn partial_eval_merge_expr<'a, T: PartialEvalContext>(
-    ctx: &'a T,
+pub(crate) fn partial_eval_merge_expr<T: PartialEvalContext>(
+    ctx: &T,
     args: Vec<Expr>,
 ) -> Result<Expr> {
     let mut can_merge = true;

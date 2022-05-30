@@ -13,7 +13,7 @@ pub(crate) const OP_EQ: BuiltinFn = BuiltinFn {
 pub(crate) const NAME_OP_EQ: &str = "==";
 
 pub(crate) fn op_eq<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = args.next().unwrap();
     let right = args.next().unwrap();
 
@@ -30,7 +30,7 @@ pub(crate) const OP_NE: BuiltinFn = BuiltinFn {
 pub(crate) const NAME_OP_NE: &str = "!=";
 
 pub(crate) fn op_ne<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = args.next().unwrap();
     let right = args.next().unwrap();
 
@@ -47,7 +47,7 @@ pub(crate) const OP_GT: BuiltinFn = BuiltinFn {
 pub(crate) const NAME_OP_GT: &str = ">";
 
 pub(crate) fn op_gt<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = args.next().unwrap();
     let right = args.next().unwrap();
 
@@ -78,7 +78,7 @@ pub(crate) const OP_GE: BuiltinFn = BuiltinFn {
 pub(crate) const NAME_OP_GE: &str = ">=";
 
 pub(crate) fn op_ge<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = args.next().unwrap();
     let right = args.next().unwrap();
 
@@ -109,7 +109,7 @@ pub(crate) const OP_LT: BuiltinFn = BuiltinFn {
 pub(crate) const NAME_OP_LT: &str = "<";
 
 pub(crate) fn op_lt<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = args.next().unwrap();
     let right = args.next().unwrap();
 
@@ -140,7 +140,7 @@ pub(crate) const OP_LE: BuiltinFn = BuiltinFn {
 pub(crate) const NAME_OP_LE: &str = "<=";
 
 pub(crate) fn op_le<'a>(args: &[Value<'a>]) -> Result<Value<'a>> {
-    let mut args = args.into_iter();
+    let mut args = args.iter();
     let left = args.next().unwrap();
     let right = args.next().unwrap();
 
