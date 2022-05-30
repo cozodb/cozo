@@ -81,6 +81,7 @@ pub(crate) enum RaBox<'a> {
     MergeJoin(Box<MergeJoin<'a>>),
     ConcatOp(Box<ConcatOp<'a>>),
     UnionOp(Box<UnionOp<'a>>),
+    IntersectOp(Box<IntersectOp<'a>>),
     GroupOp(Box<GroupOp<'a>>),
 }
 
@@ -101,6 +102,7 @@ impl<'a> RaBox<'a> {
             RaBox::MergeJoin(inner) => vec![&inner.left, &inner.right],
             RaBox::ConcatOp(inner) => inner.sources.iter().collect(),
             RaBox::UnionOp(inner) => inner.sources.iter().collect(),
+            RaBox::IntersectOp(inner) => inner.sources.iter().collect(),
             RaBox::GroupOp(inner) => vec![&inner.source],
         }
     }
@@ -133,6 +135,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::MergeJoin(inner) => inner.name(),
             RaBox::ConcatOp(inner) => inner.name(),
             RaBox::UnionOp(inner) => inner.name(),
+            RaBox::IntersectOp(inner) => inner.name(),
             RaBox::GroupOp(inner) => inner.name(),
         }
     }
@@ -153,6 +156,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::MergeJoin(inner) => inner.bindings(),
             RaBox::ConcatOp(inner) => inner.bindings(),
             RaBox::UnionOp(inner) => inner.bindings(),
+            RaBox::IntersectOp(inner) => inner.bindings(),
             RaBox::GroupOp(inner) => inner.bindings(),
         }
     }
@@ -173,6 +177,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::MergeJoin(inner) => inner.binding_map(),
             RaBox::ConcatOp(inner) => inner.binding_map(),
             RaBox::UnionOp(inner) => inner.binding_map(),
+            RaBox::IntersectOp(inner) => inner.binding_map(),
             RaBox::GroupOp(inner) => inner.binding_map(),
         }
     }
@@ -193,6 +198,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::MergeJoin(inner) => inner.iter(),
             RaBox::ConcatOp(inner) => inner.iter(),
             RaBox::UnionOp(inner) => inner.iter(),
+            RaBox::IntersectOp(inner) => inner.iter(),
             RaBox::GroupOp(inner) => inner.iter(),
         }
     }
@@ -213,6 +219,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::MergeJoin(inner) => inner.identity(),
             RaBox::ConcatOp(inner) => inner.identity(),
             RaBox::UnionOp(inner) => inner.identity(),
+            RaBox::IntersectOp(inner) => inner.identity(),
             RaBox::GroupOp(inner) => inner.identity(),
         }
     }
@@ -286,7 +293,10 @@ pub(crate) fn build_relational_expr<'a>(
                 )?)))
             }
             NAME_UNION => {
-                built = Some(RaBox::UnionOp(Box::new(UnionOp::build(
+                built = Some(RaBox::UnionOp(Box::new(UnionOp::build(ctx, built, pairs)?)))
+            }
+            NAME_INTERSECT => {
+                built = Some(RaBox::IntersectOp(Box::new(IntersectOp::build(
                     ctx, built, pairs,
                 )?)))
             }
@@ -511,7 +521,7 @@ pub(crate) mod tests {
         {
             let ctx = sess.temp_ctx(true);
             let s = r#"
-             Union(From(d:Job), From(d:Job))
+             Intersect(From(d:Job).Where(d.id < 15), From(d:Job).Where(d.id > 10))
             "#;
             let ra = build_relational_expr(
                 &ctx,

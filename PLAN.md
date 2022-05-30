@@ -5,7 +5,7 @@ Operations
 * [x] `from(...rels)`, can use chain notation
 * [x] `left_join(left, right, ...conds)`, similarly for `right_join`, `outer_join`)
 * [x] `concat(...rels)`
-* [ ] `intersect(...rels)`, similarly for `union`
+* [x] `intersect(...rels)`, similarly for `union`
 * [ ] `diff(left, right)`, similarly for `sym_diff`
 * [x] `select(rel, binding: {..})`
 * [x] `where(rel, ..conds)`

@@ -1,41 +1,40 @@
 use crate::algebra::op::{
-    concat_binding_map, concat_value_entries, drop_temp_table, make_concat_iter, ConcatIterator,
-    RelationalAlgebra,
+    concat_binding_map, drop_temp_table, make_concat_iter, RelationalAlgebra,
 };
 use crate::algebra::parser::{build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{BindingMap, TupleSet};
 use crate::ddl::reify::{DdlContext, TableInfo};
 use crate::parser::Pairs;
 use crate::runtime::options::default_read_options;
 use anyhow::Result;
+use cozorocks::PinnableSlicePtr;
 use std::collections::BTreeSet;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-pub(crate) const NAME_UNION: &str = "Union";
+pub(crate) const NAME_INTERSECT: &str = "Intersect";
 
-pub(crate) struct UnionOp<'a> {
+pub(crate) struct IntersectOp<'a> {
     pub(crate) sources: Vec<RaBox<'a>>,
     ctx: &'a TempDbContext<'a>,
     temp_table_id: AtomicU32,
 }
 
-impl<'a> Drop for UnionOp<'a> {
+impl<'a> Drop for IntersectOp<'a> {
     fn drop(&mut self) {
         drop_temp_table(self.ctx, self.temp_table_id.load(Ordering::SeqCst));
     }
 }
 
-impl<'a> UnionOp<'a> {
+impl<'a> IntersectOp<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
         prev: Option<RaBox<'a>>,
         mut args: Pairs,
     ) -> Result<Self> {
-        let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_UNION.to_string());
+        let not_enough_args = || AlgebraParseError::NotEnoughArguments(NAME_INTERSECT.to_string());
         let mut sources = vec![];
         let source = match prev {
             Some(v) => v,
@@ -57,21 +56,33 @@ impl<'a> UnionOp<'a> {
         let iter = make_concat_iter(&self.sources, self.binding_map()?)?;
 
         let mut cache_tuple = OwnTuple::with_prefix(self.temp_table_id.load(SeqCst));
-        let dummy = OwnTuple::empty_tuple();
+        let mut counter = OwnTuple::with_data_prefix(DataKind::Data);
+        let mut slice_cache = PinnableSlicePtr::default();
+        let r_opts = default_read_options();
         let db = &self.ctx.sess.temp;
         let w_opts = &self.ctx.sess.w_opts_temp;
         for tset in iter {
             let tset = tset?;
             tset.encode_as_tuple(&mut cache_tuple);
-            db.put(w_opts, &cache_tuple, &dummy)?;
+            let existing = db.get(&r_opts, &cache_tuple, &mut slice_cache)?;
+            if existing {
+                let found = Tuple::new(slice_cache.as_ref());
+                let i = found.get_int(0)?;
+                counter.truncate_all();
+                counter.push_int(i + 1);
+            } else {
+                counter.truncate_all();
+                counter.push_int(1);
+            }
+            db.put(w_opts, &cache_tuple, &counter)?;
         }
         Ok(())
     }
 }
 
-impl<'b> RelationalAlgebra for UnionOp<'b> {
+impl<'b> RelationalAlgebra for IntersectOp<'b> {
     fn name(&self) -> &str {
-        NAME_UNION
+        NAME_INTERSECT
     }
 
     fn bindings(&self) -> Result<BTreeSet<String>> {
@@ -101,11 +112,26 @@ impl<'b> RelationalAlgebra for UnionOp<'b> {
         let r_opts = default_read_options();
         let iter = self.ctx.sess.temp.iterator(&r_opts);
         let key = OwnTuple::with_prefix(self.temp_table_id.load(Ordering::SeqCst));
-        Ok(Box::new(iter.iter_rows(key).map(
-            |(k, _v)| -> Result<TupleSet> {
+        let n_required = self.sources.len() as i64;
+        Ok(Box::new(iter.iter_rows(key).filter_map(
+            move |(k, counter)| -> Option<Result<TupleSet>> {
                 let v = Tuple::new(k);
-                let tset = TupleSet::decode_from_tuple(&v)?;
-                Ok(tset)
+                match TupleSet::decode_from_tuple(&v) {
+                    Ok(tset) => {
+                        let counter = Tuple::new(counter);
+                        match counter.get_int(0) {
+                            Ok(i) => {
+                                if i == n_required {
+                                    Some(Ok(tset))
+                                } else {
+                                    None
+                                }
+                            }
+                            Err(e) => Some(Err(e)),
+                        }
+                    }
+                    Err(e) => Some(Err(e)),
+                }
             },
         )))
     }
