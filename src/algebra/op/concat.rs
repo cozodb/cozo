@@ -12,8 +12,6 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const NAME_CONCAT: &str = "Concat";
-pub(crate) const NAME_DIFF: &str = "Diff";
-pub(crate) const NAME_SYM_DIFF: &str = "SymDiff";
 
 pub(crate) struct ConcatOp<'a> {
     pub(crate) sources: Vec<RaBox<'a>>,
