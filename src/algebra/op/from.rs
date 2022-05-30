@@ -65,10 +65,10 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
     }
 
     let mut prev_el = first_el;
-    let mut prev_tid = ctx
+    let tid = ctx
         .resolve_table(&prev_el.target)
         .ok_or_else(|| AlgebraParseError::TableNotFound(prev_el.target.clone()))?;
-    let mut prev_info = ctx.get_table_info(prev_tid)?;
+    let mut prev_info = ctx.get_table_info(tid)?;
 
     let mut seen_outer = false;
 
@@ -112,7 +112,6 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                 }));
 
                 prev_info = table_info;
-                prev_tid = node_id;
             }
             ChainPart::Edge { dir, join } => {
                 // Node to edge join
@@ -141,7 +140,6 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
                     key_is_prefix: true,
                 }));
                 prev_info = table_info;
-                prev_tid = edge_id;
             }
         }
         prev_el = cur_el;

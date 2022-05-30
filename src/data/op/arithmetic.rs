@@ -182,7 +182,7 @@ pub(crate) const OP_MINUS: BuiltinFn = BuiltinFn {
     name: NAME_OP_MINUS,
     arity: Some(1),
     non_null_args: true,
-    func: op_mul,
+    func: op_minus,
 };
 
 pub(crate) const NAME_OP_MINUS: &str = "--";

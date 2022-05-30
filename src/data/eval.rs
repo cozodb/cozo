@@ -30,9 +30,6 @@ pub enum EvalError {
 
     #[error("Incomplete evaluation {0}")]
     IncompleteEvaluation(String),
-
-    #[error("Called resolve on null context")]
-    NullContext,
 }
 
 // type Result<T> = result::Result<T, EvalError>;

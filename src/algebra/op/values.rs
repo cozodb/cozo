@@ -100,7 +100,7 @@ impl RelationalAlgebra for RelationFromValues {
             .binding_map
             .inner_map
             .iter()
-            .map(|(k, v)| k.to_string())
+            .map(|(k, _v)| k.to_string())
             .collect())
     }
 

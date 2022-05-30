@@ -13,18 +13,6 @@ pub enum DbInstanceError {
     #[error("Cannot obtain session lock")]
     SessionLock,
 
-    #[error("Cannot obtain table access lock")]
-    TableAccessLock,
-
-    #[error("Cannot obtain table mutation lock")]
-    TableMutationLock,
-
-    #[error("Table does not exist: {0}")]
-    TableDoesNotExist(u32),
-
-    #[error("Name conflict {0}")]
-    NameConflict(String),
-
     #[error("Parse error {0}")]
     Parse(String),
 

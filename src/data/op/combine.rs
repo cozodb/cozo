@@ -5,8 +5,6 @@ use anyhow::Result;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-pub(crate) struct OpConcat;
-
 pub(crate) const NAME_OP_CONCAT: &str = "concat";
 
 pub(crate) fn row_eval_concat<'a, T: RowEvalContext + 'a>(

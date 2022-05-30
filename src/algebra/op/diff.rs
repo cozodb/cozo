@@ -3,7 +3,7 @@ use crate::algebra::op::{
 };
 use crate::algebra::parser::{build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
-use crate::data::tuple::{OwnTuple, Tuple};
+use crate::data::tuple::{OwnTuple};
 use crate::data::tuple_set::{BindingMap, TupleSet};
 use crate::ddl::reify::{DdlContext, TableInfo};
 use crate::parser::Pairs;

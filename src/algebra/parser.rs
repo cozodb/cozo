@@ -350,7 +350,7 @@ pub(crate) mod tests {
 
     #[test]
     fn parse_ra() -> Result<()> {
-        let (db, mut sess) = create_test_db("_test_parser.db");
+        let (_db, mut sess) = create_test_db("_test_parser.db");
         let start = Instant::now();
         {
             let ctx = sess.temp_ctx(true);

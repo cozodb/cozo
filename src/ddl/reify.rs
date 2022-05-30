@@ -5,7 +5,7 @@ use crate::data::tuple::{
     DataKind, OwnTuple, Tuple, DATAKIND_ASSOC, DATAKIND_EDGE, DATAKIND_INDEX, DATAKIND_NODE,
     DATAKIND_SEQUENCE,
 };
-use crate::data::tuple_set::{BindingMap, TableId, TupleSetIdx};
+use crate::data::tuple_set::{TableId, TupleSetIdx};
 use crate::data::value::{StaticValue, Value};
 use crate::ddl::parser::{
     AssocSchema, ColSchema, DdlSchema, EdgeSchema, IndexSchema, NodeSchema, SequenceSchema,
@@ -143,9 +143,6 @@ impl TableInfo {
             TableInfo::Index(t) => t.tid = id,
             TableInfo::Sequence(t) => t.tid = id,
         }
-    }
-    pub(crate) fn binding_map(&self) -> BindingMap {
-        todo!()
     }
 }
 

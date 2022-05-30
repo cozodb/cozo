@@ -6,7 +6,7 @@ Operations
 * [x] `left_join(left, right, ...conds)`, similarly for `right_join`, `outer_join`)
 * [x] `concat(...rels)`
 * [x] `intersect(...rels)`, similarly for `union`
-* [ ] `diff(left, right)`, similarly for `sym_diff`
+* [x] `diff(left, right)`, similarly for `sym_diff`
 * [x] `select(rel, binding: {..})`
 * [x] `where(rel, ..conds)`
 * [x] `take(rel, n)`
@@ -41,6 +41,7 @@ Differentiation
 
 Others
 
+* [ ] assoc magic better work
 * [ ] language within query
 * [ ] constraints and indices
 * [ ] datetime and array types

@@ -331,28 +331,6 @@ impl TryFrom<StaticValue> for Expr {
     }
 }
 
-fn build_value_from_binop<'a>(name: &str, (left, right): (Expr, Expr)) -> Value<'a> {
-    build_tagged_value(
-        EXPR_TAG_APPLY,
-        vec![
-            Value::from(name.to_string()),
-            Value::from(vec![Value::from(left), Value::from(right)]),
-        ]
-        .into(),
-    )
-}
-
-fn build_value_from_uop<'a>(name: &str, arg: Expr) -> Value<'a> {
-    build_tagged_value(
-        EXPR_TAG_APPLY,
-        vec![
-            Value::from(name.to_string()),
-            Value::from(vec![Value::from(arg)]),
-        ]
-        .into(),
-    )
-}
-
 pub(crate) const EXPR_TAG_CONST: &str = "Const";
 pub(crate) const EXPR_TAG_LIST: &str = "List";
 pub(crate) const EXPR_TAG_DICT: &str = "Dict";
