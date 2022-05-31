@@ -1,7 +1,4 @@
-use crate::algebra::op::{
-    build_binding_map_from_info, make_key_builders, parse_chain, InterpretContext,
-    RelationalAlgebra,
-};
+use crate::algebra::op::{make_key_builders, parse_chain, InterpretContext, RelationalAlgebra};
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::Expr;
@@ -34,49 +31,55 @@ impl<'a> DeleteOp<'a> {
             None => build_relational_expr(ctx, args.next().ok_or_else(not_enough_args)?)?,
         };
 
-        let chain = args
-            .next()
-            .ok_or_else(not_enough_args)?
-            .into_inner()
-            .next()
-            .unwrap();
-        assert_rule(&chain, Rule::chain, NAME_DELETE, 1)?;
-        let mut chain = parse_chain(chain)?;
-        if chain.len() != 1 {
-            return Err(MutationError::WrongSpecification.into());
-        }
-        let chain_el = chain.pop().unwrap();
-        let mut chain_el_names = chain_el.assocs;
-        chain_el_names.insert(chain_el.target);
-        let mut binding = chain_el.binding;
-        if !binding.starts_with('@') {
-            return Err(MutationError::WrongSpecification.into());
-        }
         let mut assocs = vec![];
         let mut main = vec![];
-        for name in chain_el_names {
-            let tid = ctx
-                .resolve_table(&name)
-                .ok_or(AlgebraParseError::TableNotFound(name))?;
-            match ctx.table_by_id(tid)? {
-                TableInfo::Assoc(info) => assocs.push(info),
-                info @ (TableInfo::Node(_) | TableInfo::Edge(_)) => main.push(info),
-                _ => return Err(AlgebraParseError::WrongTableKind(tid).into()),
+        let mut delete_main = true;
+
+        let chain = args.next();
+
+        match chain {
+            None => match source.identity() {
+                None => return Err(not_enough_args().into()),
+                Some(table_info) => main.push(table_info),
+            },
+            Some(chain) => {
+                let chain = chain.into_inner().next().unwrap();
+                assert_rule(&chain, Rule::chain, NAME_DELETE, 1)?;
+                let mut chain = parse_chain(chain)?;
+                if chain.len() != 1 {
+                    return Err(MutationError::WrongSpecification.into());
+                }
+                let chain_el = chain.pop().unwrap();
+                let mut chain_el_names = chain_el.assocs;
+                chain_el_names.insert(chain_el.target);
+                if !chain_el.binding.starts_with('@') {
+                    return Err(MutationError::WrongSpecification.into());
+                }
+                for name in chain_el_names {
+                    let tid = ctx
+                        .resolve_table(&name)
+                        .ok_or(AlgebraParseError::TableNotFound(name))?;
+                    match ctx.table_by_id(tid)? {
+                        TableInfo::Assoc(info) => assocs.push(info),
+                        info @ (TableInfo::Node(_) | TableInfo::Edge(_)) => main.push(info),
+                        _ => return Err(AlgebraParseError::WrongTableKind(tid).into()),
+                    }
+                }
+                match main.len() {
+                    0 => {
+                        let main_id = assocs.get(0).unwrap().src_id;
+                        let main_info = ctx.table_by_id(main_id)?;
+                        main.push(main_info);
+                        delete_main = false;
+                    }
+                    1 => {
+                        assocs = ctx.assocs_by_main_id(main.get(0).unwrap().table_id())?;
+                        delete_main = true;
+                    }
+                    _ => return Err(MutationError::WrongSpecification.into()),
+                };
             }
         }
-        let delete_main = match main.len() {
-            0 => {
-                let main_id = assocs.get(0).unwrap().src_id;
-                let main_info = ctx.table_by_id(main_id)?;
-                main.push(main_info);
-                false
-            }
-            1 => {
-                assocs = ctx.assocs_by_main_id(main.get(0).unwrap().table_id())?;
-                true
-            }
-            _ => return Err(MutationError::WrongSpecification.into()),
-        };
 
         let main = main.pop().unwrap();
         let main_id = main.table_id();

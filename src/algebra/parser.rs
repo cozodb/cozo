@@ -571,7 +571,7 @@ pub(crate) mod tests {
             let s = r#"
               From(e:Employee)
              .Where(e.id >= 110)
-             .Delete(:Employee)
+             .Delete()
             "#;
             let ra = build_relational_expr(
                 &ctx,

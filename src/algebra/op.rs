@@ -30,6 +30,7 @@ mod tagged;
 mod union;
 mod values;
 mod delete;
+mod update;
 
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
@@ -55,6 +56,7 @@ pub(crate) use tagged::*;
 pub(crate) use union::*;
 pub(crate) use values::*;
 pub(crate) use delete::*;
+pub(crate) use update::*;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum QueryError {
