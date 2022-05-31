@@ -149,7 +149,7 @@ fn write_fn_call<'a, T: IntoIterator<Item = &'a [Expr]>>(
                 .join(" ")
         )?
     }
-    Ok(())
+    write!(f, ")")
 }
 
 impl<'a> Debug for Expr {

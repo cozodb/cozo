@@ -599,11 +599,26 @@ pub(crate) mod tests {
                     .unwrap(),
             )?;
             dbg!(&ra);
-
             dbg!(ra.get_values()?);
+
             let s = r#"
                From(e:Employee)
+              .Where(e.id > 105)
               .Update(e: {last_name: 'FUCKER: ' ++ e.last_name})
+            "#;
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            dbg!(&ra);
+            dbg!(ra.get_values()?);
+
+            let s = r#"
+               From(e:Employee)
             "#;
             let ra = build_relational_expr(
                 &ctx,

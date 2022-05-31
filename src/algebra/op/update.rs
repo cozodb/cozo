@@ -1,5 +1,5 @@
 use crate::algebra::op::{
-    build_binding_map_from_info, make_key_builders, parse_chain, parse_chain_names_single,
+    build_binding_map_from_info, parse_chain_names_single,
     InterpretContext, KeyBuilderSet, MutationError, RelationalAlgebra,
 };
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
@@ -11,7 +11,6 @@ use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TupleSet, TupleS
 use crate::data::typing::Typing;
 use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, DdlContext, TableInfo};
-use crate::parser::text_identifier::parse_table_with_assocs;
 use crate::parser::{Pairs, Rule};
 use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
@@ -141,24 +140,33 @@ impl<'a> RelationalAlgebra for UpdateOp<'a> {
         Ok(BindingMap {
             inner_map: BTreeMap::from([(self.binding.clone(), inner)]),
             key_size: 1,
-            val_size: 1 + self.assoc_infos.len(),
+            val_size: self.assoc_infos.len() + if self.update_main { 1 } else { 0 },
         })
     }
 
     fn iter<'b>(&'b self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'b>> {
-        todo!();
         let source_map = self.source.binding_map()?;
+        if source_map.inner_map.len() != 1 {
+            return Err(MutationError::WrongSpecification.into());
+        }
+
         let binding_ctx = BindingMapEvalContext {
             map: &source_map,
             parent: self.ctx,
         };
-        let extract_map = match self.extract_map.clone().partial_eval(&binding_ctx)? {
+        let mut extract_map = match self.extract_map.clone().partial_eval(&binding_ctx)? {
             Expr::Dict(d) => d,
             v => return Err(AlgebraParseError::Parse(format!("{:?}", v)).into()),
         };
 
-        let (key_builder, val_builder, inv_key_builder) =
-            make_key_builders(self.ctx, &self.target_info, &extract_map)?;
+        for (k, v) in source_map.inner_map.values().next().unwrap() {
+            if !extract_map.contains_key(k) {
+                extract_map.insert(k.to_string(), Expr::TupleSetIdx(*v));
+            }
+        }
+
+        let (key_builder, val_builder, _) =
+            make_update_key_builders(self.ctx, &self.target_info, &extract_map)?;
         let assoc_val_builders = self
             .assoc_infos
             .iter()
@@ -189,32 +197,30 @@ impl<'a> RelationalAlgebra for UpdateOp<'a> {
                     write_options: &w_opts,
                 };
                 let mut key = eval_ctx.eval_to_tuple(target_key.id, &key_builder)?;
-                let val = eval_ctx.eval_to_tuple(DataKind::Data as u32, &val_builder)?;
-                // if !self.upsert {
-                //     let existing = if target_key.in_root {
-                //         eval_ctx.txn.get(&r_opts, &key, &mut temp_slice)?
-                //     } else {
-                //         eval_ctx.temp_db.get(&r_opts, &key, &mut temp_slice)?
-                //     };
-                //     if existing {
-                //         return Err(AlgebraParseError::KeyConflict(key.to_owned()).into());
-                //     }
-                // }
-                if target_key.in_root {
-                    eval_ctx.txn.put(&key, &val)?;
+
+                let existing = if target_key.in_root {
+                    eval_ctx.txn.get(&r_opts, &key, &mut temp_slice)?
                 } else {
-                    eval_ctx.temp_db.put(eval_ctx.write_options, &key, &val)?;
+                    eval_ctx.temp_db.get(&r_opts, &key, &mut temp_slice)?
+                };
+                if !existing {
+                    return Err(AlgebraParseError::ValueNotFound(key.to_owned()).into());
                 }
-                if let Some(builder) = &inv_key_builder {
-                    let inv_key = eval_ctx.eval_to_tuple(target_key.id, builder)?;
+
+                let mut ret = TupleSet::default();
+
+                if self.update_main {
+                    let val = eval_ctx.eval_to_tuple(DataKind::Data as u32, &val_builder)?;
+
                     if target_key.in_root {
-                        eval_ctx.txn.put(&inv_key, &key)?;
+                        eval_ctx.txn.put(&key, &val)?;
                     } else {
-                        eval_ctx
-                            .temp_db
-                            .put(eval_ctx.write_options, &inv_key, &key)?;
+                        eval_ctx.temp_db.put(eval_ctx.write_options, &key, &val)?;
                     }
+
+                    ret.push_val(val.into());
                 }
+
                 let assoc_vals = assoc_val_builders
                     .iter()
                     .map(|(tid, builder)| -> Result<OwnTuple> {
@@ -231,9 +237,7 @@ impl<'a> RelationalAlgebra for UpdateOp<'a> {
 
                 key.overwrite_prefix(target_key.id);
 
-                let mut ret = TupleSet::default();
                 ret.push_key(key.into());
-                ret.push_val(val.into());
                 for av in assoc_vals {
                     ret.push_val(av.into())
                 }
@@ -245,4 +249,45 @@ impl<'a> RelationalAlgebra for UpdateOp<'a> {
     fn identity(&self) -> Option<TableInfo> {
         Some(self.target_info.clone())
     }
+}
+
+fn make_update_key_builders(
+    ctx: &TempDbContext,
+    target_info: &TableInfo,
+    extract_map: &BTreeMap<String, Expr>,
+) -> Result<KeyBuilderSet> {
+    let ret = match target_info {
+        TableInfo::Node(n) => {
+            let key_builder = n
+                .keys
+                .iter()
+                .map(|v| v.make_extractor(extract_map))
+                .collect::<Vec<_>>();
+            let val_builder = n
+                .vals
+                .iter()
+                .map(|v| v.make_extractor(extract_map))
+                .collect::<Vec<_>>();
+            (key_builder, val_builder, None)
+        }
+        TableInfo::Edge(e) => {
+            let src = ctx.get_table_info(e.src_id)?.into_node()?;
+            let dst = ctx.get_table_info(e.dst_id)?.into_node()?;
+            let fwd_edge_part = [(Expr::Const(Value::Bool(true)), Typing::Any)];
+            let key_builder = fwd_edge_part
+                .into_iter()
+                .chain(src.keys.iter().map(|v| v.make_extractor(extract_map)))
+                .chain(dst.keys.iter().map(|v| v.make_extractor(extract_map)))
+                .chain(e.keys.iter().map(|v| v.make_extractor(extract_map)))
+                .collect::<Vec<_>>();
+            let val_builder = e
+                .vals
+                .iter()
+                .map(|v| v.make_extractor(extract_map))
+                .collect::<Vec<_>>();
+            (key_builder, val_builder, None)
+        }
+        _ => unreachable!(),
+    };
+    Ok(ret)
 }
