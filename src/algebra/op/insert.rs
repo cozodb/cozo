@@ -1,5 +1,6 @@
 use crate::algebra::op::{
-    build_binding_map_from_info, InterpretContext, KeyBuilderSet, RelationalAlgebra,
+    build_binding_map_from_info, parse_chain_names_single, InterpretContext, KeyBuilderSet,
+    MutationError, RelationalAlgebra,
 };
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
@@ -9,8 +10,7 @@ use crate::data::tuple::{DataKind, OwnTuple};
 use crate::data::tuple_set::{BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext};
 use crate::data::typing::Typing;
 use crate::data::value::Value;
-use crate::ddl::reify::{AssocInfo, TableInfo};
-use crate::parser::text_identifier::parse_table_with_assocs;
+use crate::ddl::reify::{AssocInfo, DdlContext, TableInfo};
 use crate::parser::{Pairs, Rule};
 use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
@@ -30,7 +30,6 @@ pub(crate) struct Insertion<'a> {
     upsert: bool,
 }
 
-// problem: binding map must survive optimization. now it doesn't
 impl<'a> Insertion<'a> {
     pub(crate) fn build(
         ctx: &'a TempDbContext<'a>,
@@ -47,8 +46,45 @@ impl<'a> Insertion<'a> {
             Some(v) => v,
             None => build_relational_expr(ctx, args.next().ok_or_else(not_enough_args)?)?,
         };
-        let table_name = args.next().ok_or_else(not_enough_args)?;
-        let (table_name, assoc_names) = parse_table_with_assocs(table_name.as_str())?;
+        let pair = args
+            .next()
+            .ok_or_else(not_enough_args)?
+            .into_inner()
+            .next()
+            .unwrap();
+        let chain_el_names = parse_chain_names_single(pair)?;
+        let mut assocs = vec![];
+        let mut main = vec![];
+        for name in chain_el_names {
+            let tid = ctx
+                .resolve_table(&name)
+                .ok_or(AlgebraParseError::TableNotFound(name))?;
+            match ctx.table_by_id(tid)? {
+                TableInfo::Assoc(info) => assocs.push(info),
+                info @ (TableInfo::Node(_) | TableInfo::Edge(_)) => main.push(info),
+                _ => return Err(AlgebraParseError::WrongTableKind(tid).into()),
+            }
+        }
+        match main.len() {
+            1 => {
+                assocs = ctx.assocs_by_main_id(main.get(0).unwrap().table_id())?;
+            }
+            _ => return Err(MutationError::WrongSpecification.into()),
+        };
+
+        let main = main.pop().unwrap();
+        let main_id = main.table_id();
+
+        for assoc in &assocs {
+            if assoc.src_id != main_id {
+                return Err(AlgebraParseError::NoAssociation(
+                    assoc.name.clone(),
+                    main.table_name().to_string(),
+                )
+                .into());
+            }
+        }
+
         let pair = args
             .next()
             .ok_or_else(not_enough_args)?
@@ -63,21 +99,12 @@ impl<'a> Insertion<'a> {
             );
         }
 
-        let target_id = ctx
-            .resolve_table(&table_name)
-            .ok_or_else(|| AlgebraParseError::TableNotFound(table_name.to_string()))?;
-        let target_info = ctx.get_table_info(target_id)?;
-        let assoc_infos = ctx
-            .get_table_assocs(target_id)?
-            .into_iter()
-            .filter(|v| assoc_names.contains(&v.name))
-            .collect::<Vec<_>>();
         Ok(Self {
             ctx,
             binding,
             source,
-            target_info,
-            assoc_infos,
+            target_info: main,
+            assoc_infos: assocs,
             extract_map,
             upsert,
         })
@@ -118,7 +145,8 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
             v => return Err(AlgebraParseError::Parse(format!("{:?}", v)).into()),
         };
 
-        let (key_builder, val_builder, inv_key_builder) = make_key_builders(self.ctx, &self.target_info, &extract_map)?;
+        let (key_builder, val_builder, inv_key_builder) =
+            make_key_builders(self.ctx, &self.target_info, &extract_map)?;
         let assoc_val_builders = self
             .assoc_infos
             .iter()
@@ -207,7 +235,11 @@ impl<'a> RelationalAlgebra for Insertion<'a> {
     }
 }
 
-pub(crate) fn make_key_builders(ctx: &TempDbContext, target_info: &TableInfo, extract_map: &BTreeMap<String, Expr>) -> Result<KeyBuilderSet> {
+pub(crate) fn make_key_builders(
+    ctx: &TempDbContext,
+    target_info: &TableInfo,
+    extract_map: &BTreeMap<String, Expr>,
+) -> Result<KeyBuilderSet> {
     let ret = match target_info {
         TableInfo::Node(n) => {
             let key_builder = n
