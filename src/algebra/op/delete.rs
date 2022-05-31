@@ -20,7 +20,6 @@ pub(crate) struct DeleteOp<'a> {
     pub(crate) main_info: TableInfo,
     pub(crate) assoc_infos: Vec<AssocInfo>,
     pub(crate) delete_main: bool,
-    pub(crate) binding: String,
 }
 
 impl<'a> DeleteOp<'a> {
@@ -50,8 +49,8 @@ impl<'a> DeleteOp<'a> {
         let mut chain_el_names = chain_el.assocs;
         chain_el_names.insert(chain_el.target);
         let mut binding = chain_el.binding;
-        if binding.starts_with('@') {
-            binding = "_".to_string();
+        if !binding.starts_with('@') {
+            return Err(MutationError::WrongSpecification.into());
         }
         let mut assocs = vec![];
         let mut main = vec![];
@@ -98,7 +97,6 @@ impl<'a> DeleteOp<'a> {
             main_info: main,
             assoc_infos: assocs,
             delete_main,
-            binding,
         })
     }
 }
@@ -109,16 +107,11 @@ impl<'b> RelationalAlgebra for DeleteOp<'b> {
     }
 
     fn bindings(&self) -> Result<BTreeSet<String>> {
-        Ok(BTreeSet::from([self.binding.clone()]))
+        self.source.bindings()
     }
 
     fn binding_map(&self) -> Result<BindingMap> {
-        let inner = build_binding_map_from_info(self.ctx, &self.main_info, &[], false)?;
-        Ok(BindingMap {
-            inner_map: BTreeMap::from([(self.binding.clone(), inner)]),
-            key_size: 1,
-            val_size: 0,
-        })
+        self.source.binding_map()
     }
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
@@ -148,8 +141,9 @@ impl<'b> RelationalAlgebra for DeleteOp<'b> {
         let temp_db = self.ctx.sess.temp.clone();
         let w_opts = default_write_options();
         let iter = self.source.iter()?.map(move |tset| -> Result<TupleSet> {
+            let tset = tset?;
             let eval_ctx = TupleSetEvalContext {
-                tuple_set: &tset?,
+                tuple_set: &tset,
                 txn: &txn,
                 temp_db: &temp_db,
                 write_options: &w_opts,
@@ -163,10 +157,7 @@ impl<'b> RelationalAlgebra for DeleteOp<'b> {
                     temp_db.del(&w_opts, &key)?;
                 }
             }
-            Ok(TupleSet {
-                keys: vec![key.into()],
-                vals: vec![],
-            })
+            Ok(tset)
         });
 
         Ok(Box::new(iter))
