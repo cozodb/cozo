@@ -38,6 +38,9 @@ pub(crate) enum AlgebraParseError {
     #[error("Data key conflict {0:?}")]
     KeyConflict(OwnTuple),
 
+    #[error("Value not found for {0:?}")]
+    ValueNotFound(OwnTuple),
+
     #[error("No association between {0} and {1}")]
     NoAssociation(String, String),
 
@@ -84,7 +87,8 @@ pub(crate) enum RaBox<'a> {
     SymDiffOp(Box<SymDiffOp<'a>>),
     DiffOp(Box<DiffOp<'a>>),
     GroupOp(Box<GroupOp<'a>>),
-    DeleteOp(Box<DeleteOp<'a>>)
+    DeleteOp(Box<DeleteOp<'a>>),
+    UpdateOp(Box<UpdateOp<'a>>),
 }
 
 impl<'a> RaBox<'a> {
@@ -109,6 +113,7 @@ impl<'a> RaBox<'a> {
             RaBox::SymDiffOp(inner) => vec![&inner.sources[0], &inner.sources[1]],
             RaBox::GroupOp(inner) => vec![&inner.source],
             RaBox::DeleteOp(inner) => vec![&inner.source],
+            RaBox::UpdateOp(inner) => vec![&inner.source],
         }
     }
 }
@@ -145,6 +150,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DiffOp(inner) => inner.name(),
             RaBox::GroupOp(inner) => inner.name(),
             RaBox::DeleteOp(inner) => inner.name(),
+            RaBox::UpdateOp(inner) => inner.name(),
         }
     }
 
@@ -169,6 +175,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DiffOp(inner) => inner.bindings(),
             RaBox::GroupOp(inner) => inner.bindings(),
             RaBox::DeleteOp(inner) => inner.bindings(),
+            RaBox::UpdateOp(inner) => inner.bindings(),
         }
     }
 
@@ -193,6 +200,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DiffOp(inner) => inner.binding_map(),
             RaBox::GroupOp(inner) => inner.binding_map(),
             RaBox::DeleteOp(inner) => inner.binding_map(),
+            RaBox::UpdateOp(inner) => inner.binding_map(),
         }
     }
 
@@ -217,6 +225,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DiffOp(inner) => inner.iter(),
             RaBox::GroupOp(inner) => inner.iter(),
             RaBox::DeleteOp(inner) => inner.iter(),
+            RaBox::UpdateOp(inner) => inner.iter(),
         }
     }
 
@@ -241,6 +250,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DiffOp(inner) => inner.identity(),
             RaBox::GroupOp(inner) => inner.identity(),
             RaBox::DeleteOp(inner) => inner.identity(),
+            RaBox::UpdateOp(inner) => inner.identity(),
         }
     }
 }
@@ -330,7 +340,14 @@ pub(crate) fn build_relational_expr<'a>(
                 built = Some(RaBox::GroupOp(Box::new(GroupOp::build(ctx, built, pairs)?)))
             }
             NAME_DELETE => {
-                built = Some(RaBox::DeleteOp(Box::new(DeleteOp::build(ctx, built, pairs)?)))
+                built = Some(RaBox::DeleteOp(Box::new(DeleteOp::build(
+                    ctx, built, pairs,
+                )?)))
+            }
+            NAME_UPDATE => {
+                built = Some(RaBox::UpdateOp(Box::new(UpdateOp::build(
+                    ctx, built, pairs,
+                )?)))
             }
             name => {
                 unimplemented!("{}", name)
@@ -362,7 +379,7 @@ pub(crate) mod tests {
             let ctx = sess.temp_ctx(true);
             let s = r#"
                            Values(v: [id, name], [[100, 'confidential'], [101, 'top secret']])
-                          .Upsert(Department, d: {...v})
+                          .Upsert(:Department, d: {...v})
                           "#;
             let ra = build_relational_expr(
                 &ctx,
@@ -585,7 +602,8 @@ pub(crate) mod tests {
 
             dbg!(ra.get_values()?);
             let s = r#"
-              From(e:Employee)
+               From(e:Employee)
+              .Update(e: {last_name: 'FUCKER: ' ++ e.last_name})
             "#;
             let ra = build_relational_expr(
                 &ctx,

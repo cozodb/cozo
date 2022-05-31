@@ -4,7 +4,7 @@ use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::tuple_set::{BindingMap, TupleSet, TupleSetEvalContext};
 use crate::ddl::reify::{AssocInfo, DdlContext, TableInfo};
-use crate::parser::{Pairs, Rule};
+use crate::parser::{Pair, Pairs, Rule};
 use crate::runtime::options::default_write_options;
 use anyhow::Result;
 use std::collections::{BTreeMap, BTreeSet};
@@ -45,16 +45,7 @@ impl<'a> DeleteOp<'a> {
             Some(chain) => {
                 let chain = chain.into_inner().next().unwrap();
                 assert_rule(&chain, Rule::chain, NAME_DELETE, 1)?;
-                let mut chain = parse_chain(chain)?;
-                if chain.len() != 1 {
-                    return Err(MutationError::WrongSpecification.into());
-                }
-                let chain_el = chain.pop().unwrap();
-                let mut chain_el_names = chain_el.assocs;
-                chain_el_names.insert(chain_el.target);
-                if !chain_el.binding.starts_with('@') {
-                    return Err(MutationError::WrongSpecification.into());
-                }
+                let chain_el_names = parse_chain_names_single(chain)?;
                 for name in chain_el_names {
                     let tid = ctx
                         .resolve_table(&name)
@@ -178,4 +169,19 @@ pub(crate) enum MutationError {
 
     #[error("Wrong specification of mutation target")]
     WrongSpecification,
+}
+
+
+pub(crate) fn parse_chain_names_single(chain: Pair) -> Result<BTreeSet<String>> {
+    let mut chain = parse_chain(chain)?;
+    if chain.len() != 1 {
+        return Err(MutationError::WrongSpecification.into());
+    }
+    let chain_el = chain.pop().unwrap();
+    let mut chain_el_names = chain_el.assocs;
+    chain_el_names.insert(chain_el.target);
+    if !chain_el.binding.starts_with('@') {
+        return Err(MutationError::WrongSpecification.into());
+    }
+    Ok(chain_el_names)
 }
