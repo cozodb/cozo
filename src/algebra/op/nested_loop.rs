@@ -38,7 +38,7 @@ fn nested_binding_map(
     right_binding: &str,
 ) -> Result<BindingMap> {
     let mut binding_map = left.binding_map()?;
-    let right = build_binding_map_from_info(ctx, right_info, &[])?;
+    let right = build_binding_map_from_info(ctx, right_info, &[], true)?;
     let right_map = BindingMap {
         inner_map: BTreeMap::from([(right_binding.to_string(), right)]),
         key_size: 1,

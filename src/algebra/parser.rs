@@ -84,6 +84,7 @@ pub(crate) enum RaBox<'a> {
     SymDiffOp(Box<SymDiffOp<'a>>),
     DiffOp(Box<DiffOp<'a>>),
     GroupOp(Box<GroupOp<'a>>),
+    DeleteOp(Box<DeleteOp<'a>>)
 }
 
 impl<'a> RaBox<'a> {
@@ -107,6 +108,7 @@ impl<'a> RaBox<'a> {
             RaBox::IntersectOp(inner) => inner.sources.iter().collect(),
             RaBox::SymDiffOp(inner) => vec![&inner.sources[0], &inner.sources[1]],
             RaBox::GroupOp(inner) => vec![&inner.source],
+            RaBox::DeleteOp(inner) => vec![&inner.source],
         }
     }
 }
@@ -142,6 +144,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SymDiffOp(inner) => inner.name(),
             RaBox::DiffOp(inner) => inner.name(),
             RaBox::GroupOp(inner) => inner.name(),
+            RaBox::DeleteOp(inner) => inner.name(),
         }
     }
 
@@ -165,6 +168,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SymDiffOp(inner) => inner.bindings(),
             RaBox::DiffOp(inner) => inner.bindings(),
             RaBox::GroupOp(inner) => inner.bindings(),
+            RaBox::DeleteOp(inner) => inner.bindings(),
         }
     }
 
@@ -188,6 +192,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SymDiffOp(inner) => inner.binding_map(),
             RaBox::DiffOp(inner) => inner.binding_map(),
             RaBox::GroupOp(inner) => inner.binding_map(),
+            RaBox::DeleteOp(inner) => inner.binding_map(),
         }
     }
 
@@ -211,6 +216,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SymDiffOp(inner) => inner.iter(),
             RaBox::DiffOp(inner) => inner.iter(),
             RaBox::GroupOp(inner) => inner.iter(),
+            RaBox::DeleteOp(inner) => inner.iter(),
         }
     }
 
@@ -234,6 +240,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::SymDiffOp(inner) => inner.identity(),
             RaBox::DiffOp(inner) => inner.identity(),
             RaBox::GroupOp(inner) => inner.identity(),
+            RaBox::DeleteOp(inner) => inner.identity(),
         }
     }
 }
@@ -321,6 +328,9 @@ pub(crate) fn build_relational_expr<'a>(
             }
             NAME_GROUP => {
                 built = Some(RaBox::GroupOp(Box::new(GroupOp::build(ctx, built, pairs)?)))
+            }
+            NAME_DELETE => {
+                built = Some(RaBox::DeleteOp(Box::new(DeleteOp::build(ctx, built, pairs)?)))
             }
             name => {
                 unimplemented!("{}", name)
@@ -554,6 +564,42 @@ pub(crate) mod tests {
             dbg!(ra.get_values()?);
         }
         let duration_union = start.elapsed();
+
+        let start = Instant::now();
+        {
+            let ctx = sess.temp_ctx(true);
+            let s = r#"
+              From(e:Employee)
+             .Where(e.id >= 110)
+             .Delete(:Employee)
+            "#;
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            dbg!(&ra);
+
+            dbg!(ra.get_values()?);
+            let s = r#"
+              From(e:Employee)
+            "#;
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            dbg!(&ra);
+            dbg!(ra.get_values()?);
+        }
+        let duration_delete = start.elapsed();
+
         let start = Instant::now();
         let mut r_opts = default_read_options();
         r_opts.set_total_order_seek(true);
@@ -582,6 +628,7 @@ pub(crate) mod tests {
             duration_aggr,
             duration_group,
             duration_union,
+            duration_delete,
             n
         );
         Ok(())

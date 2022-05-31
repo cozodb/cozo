@@ -85,7 +85,7 @@ impl<'b> RelationalAlgebra for TableScan<'b> {
     }
 
     fn binding_map(&self) -> Result<BindingMap> {
-        let inner = build_binding_map_from_info(self.ctx, &self.table_info, &[])?;
+        let inner = build_binding_map_from_info(self.ctx, &self.table_info, &[], true)?;
         Ok(BindingMap {
             inner_map: BTreeMap::from([(self.binding.clone(), inner)]),
             key_size: 1,
@@ -147,6 +147,7 @@ pub(crate) fn build_binding_map_from_info(
     ctx: &TempDbContext,
     info: &TableInfo,
     assoc_infos: &[AssocInfo],
+    include_main_vals: bool,
 ) -> Result<BTreeMap<String, TupleSetIdx>> {
     let mut binding_map_inner = BTreeMap::new();
     match info {
@@ -161,15 +162,17 @@ pub(crate) fn build_binding_map_from_info(
                     },
                 );
             }
-            for (i, k) in n.vals.iter().enumerate() {
-                binding_map_inner.insert(
-                    k.name.clone(),
-                    TupleSetIdx {
-                        is_key: false,
-                        t_set: 0,
-                        col_idx: i,
-                    },
-                );
+            if include_main_vals {
+                for (i, k) in n.vals.iter().enumerate() {
+                    binding_map_inner.insert(
+                        k.name.clone(),
+                        TupleSetIdx {
+                            is_key: false,
+                            t_set: 0,
+                            col_idx: i,
+                        },
+                    );
+                }
             }
         }
         TableInfo::Edge(e) => {
@@ -205,26 +208,29 @@ pub(crate) fn build_binding_map_from_info(
                     },
                 );
             }
-            for (i, k) in e.vals.iter().enumerate() {
-                binding_map_inner.insert(
-                    k.name.clone(),
-                    TupleSetIdx {
-                        is_key: false,
-                        t_set: 0,
-                        col_idx: i,
-                    },
-                );
+            if include_main_vals {
+                for (i, k) in e.vals.iter().enumerate() {
+                    binding_map_inner.insert(
+                        k.name.clone(),
+                        TupleSetIdx {
+                            is_key: false,
+                            t_set: 0,
+                            col_idx: i,
+                        },
+                    );
+                }
             }
         }
         _ => unreachable!(),
     }
+    let val_shift = if include_main_vals { 1 } else { 0 };
     for (iset, info) in assoc_infos.iter().enumerate() {
         for (i, k) in info.vals.iter().enumerate() {
             binding_map_inner.insert(
                 k.name.clone(),
                 TupleSetIdx {
                     is_key: false,
-                    t_set: iset + 1,
+                    t_set: iset + val_shift,
                     col_idx: i,
                 },
             );

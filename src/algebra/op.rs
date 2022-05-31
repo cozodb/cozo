@@ -29,6 +29,7 @@ mod sym_diff;
 mod tagged;
 mod union;
 mod values;
+mod delete;
 
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
@@ -53,6 +54,7 @@ pub(crate) use sym_diff::*;
 pub(crate) use tagged::*;
 pub(crate) use union::*;
 pub(crate) use values::*;
+pub(crate) use delete::*;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum QueryError {
