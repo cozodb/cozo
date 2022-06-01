@@ -1,6 +1,6 @@
 use crate::algebra::op::{
-    build_binding_map_from_info, parse_chain_names_single,
-    InterpretContext, KeyBuilderSet, MutationError, RelationalAlgebra,
+    build_binding_map_from_info, parse_chain_names_single, InterpretContext, KeyBuilderSet,
+    MutationError, RelationalAlgebra,
 };
 use crate::algebra::parser::{assert_rule, build_relational_expr, AlgebraParseError, RaBox};
 use crate::context::TempDbContext;

@@ -13,6 +13,7 @@ use std::rc::Rc;
 mod assoc;
 mod cartesian;
 mod concat;
+mod delete;
 mod diff;
 mod filter;
 mod from;
@@ -28,9 +29,9 @@ mod sort;
 mod sym_diff;
 mod tagged;
 mod union;
-mod values;
-mod delete;
 mod update;
+mod values;
+mod walk;
 
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
@@ -39,6 +40,7 @@ use crate::runtime::options::default_read_options;
 pub(crate) use assoc::*;
 pub(crate) use cartesian::*;
 pub(crate) use concat::*;
+pub(crate) use delete::*;
 pub(crate) use diff::*;
 pub(crate) use filter::*;
 pub(crate) use from::*;
@@ -54,9 +56,9 @@ pub(crate) use sort::*;
 pub(crate) use sym_diff::*;
 pub(crate) use tagged::*;
 pub(crate) use union::*;
-pub(crate) use values::*;
-pub(crate) use delete::*;
 pub(crate) use update::*;
+pub(crate) use values::*;
+pub(crate) use walk::*;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum QueryError {

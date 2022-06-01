@@ -147,7 +147,7 @@ pub(crate) fn build_chain<'a>(ctx: &'a TempDbContext<'a>, arg: Pair) -> Result<R
     Ok(ret)
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ChainPartEdgeDir {
     Fwd,
     Bwd,
@@ -161,7 +161,7 @@ pub(crate) enum JoinType {
     // FullOuter,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ChainPart {
     Node,
     Edge {

@@ -171,7 +171,6 @@ pub(crate) enum MutationError {
     WrongSpecification,
 }
 
-
 pub(crate) fn parse_chain_names_single(chain: Pair) -> Result<BTreeSet<String>> {
     let mut chain = parse_chain(chain)?;
     if chain.len() != 1 {

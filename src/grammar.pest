@@ -207,11 +207,13 @@ sort_arg = {expr ~ "=>" ~ sort_dir}
 sort_dir = _{asc_dir | desc_dir}
 asc_dir = {"asc"}
 desc_dir = {"desc"}
-ra_arg = { ra_expr | chain | scoped_list | scoped_dict | keyed_dict | sort_arg | expr }
+ra_arg = { ra_expr | chain | scoped_list | scoped_dict | keyed_dict | walk_cond | sort_arg | expr }
 ra_call_expr = { query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")" }
 ra_call = {"." ~ query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")"}
 ra_expr = { ra_call_expr ~ ra_call* }
 ra_expr_all = _{SOI ~ ra_expr ~ EOI}
+
+walk_cond = { ident ~ "=>" ~ "(" ~ ((sort_arg | expr) ~ ",")* ~ (sort_arg | expr)? ~ ")" }
 
 scoped_list = { ident ~ ":" ~ "[" ~ (ident ~ ",")* ~ ident? ~ "]"}
 table_with_assocs = { name_in_def ~ ("+" ~ name_in_def)*}

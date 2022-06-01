@@ -17,8 +17,8 @@ Operations
 * [ ] `walk_repeat(pattern, ...conds, ...bindings)` every element contains additional `_iter` and `_visited` fields
 * [x] `values(data, ?Table)`
 * [x] `nested_values(data, ?Table).extract(Table)`
-* [ ] `update(rel, Table)`
-* [ ] `delete(rel, Table)`
+* [x] `update(rel, Table)`
+* [x] `delete(rel, Table)`
 * [x] `insert(rel, Table)`
 * [x] `upsert(rel, Table)`
 
@@ -47,3 +47,19 @@ Others
 * [ ] datetime and array types
 * [ ] GUI and TUI
 * [ ] query optimization
+* [ ] regex as a value type
+
+```
+Walk(a:A-[e:E]->b:B,
+     a => (a.id == 10),
+     e => (e.id < 20, count[] <= 1, rand() => asc),
+     b: {
+        ...b,
+        ...e,
+        ...a
+     })
+
+WalkChain(a:A-[p:Path]->b:B,
+          b => b._steps < 100)
+WalkChainOverlapping(...)
+```
