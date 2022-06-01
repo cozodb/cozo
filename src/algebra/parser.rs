@@ -647,7 +647,7 @@ pub(crate) mod tests {
             let ctx = sess.temp_ctx(true);
             let s = r#"
              Walk(j:Job<-[:HasJob]-e:Employee-[:InDepartment]->d:Department,
-                  j => (j.id == 6),
+                  j => (j.id <= 6),
                   e => (d.id => asc),
                   e: {
                     job_title: j.title,

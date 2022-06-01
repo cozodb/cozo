@@ -1,15 +1,18 @@
 use crate::algebra::op::{
-    build_binding_map_from_info, parse_chain, ChainPart, ChainPartEdgeDir, InterpretContext,
-    JoinType, RelationalAlgebra, SortDirection,
+    build_binding_map_from_info, parse_chain, ChainPart, ChainPartEdgeDir, FilterError,
+    InterpretContext, JoinType, RelationalAlgebra, SortDirection,
 };
 use crate::algebra::parser::{AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::parser::parse_scoped_dict;
-use crate::data::tuple_set::{merge_binding_maps, BindingMap, TupleSet};
+use crate::data::tuple::{OwnTuple, ReifiedTuple, Tuple};
+use crate::data::tuple_set::{merge_binding_maps, BindingMap, BindingMapEvalContext, TupleSet};
+use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, EdgeInfo, NodeInfo, TableInfo};
 use crate::parser::{Pair, Pairs, Rule};
 use anyhow::Result;
+use cozorocks::{IteratorPtr, RowIterator};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const NAME_WALK: &str = "Walk";
@@ -303,6 +306,26 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
     }
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
+        let starting_tid = self.starting.node_info.tid;
+        let it = if starting_tid.in_root {
+            self.ctx.txn.iterator(&self.ctx.sess.r_opts_main)
+        } else {
+            self.ctx.sess.temp.iterator(&self.ctx.sess.r_opts_temp)
+        };
+        let key_tuple = OwnTuple::with_prefix(starting_tid.id);
+        let it = it.iter_rows(&key_tuple);
+
+        let binding_ctx = BindingMapEvalContext {
+            map: &self.binding_map,
+            parent: self.ctx,
+        };
+        let starting_cond =
+            Expr::OpAnd(self.starting.filters.clone()).partial_eval(&binding_ctx)?;
+
+        let it = node_iterator(it, starting_cond);
+        for val in it {
+            dbg!(val);
+        }
         todo!()
     }
 
@@ -362,3 +385,22 @@ fn parse_walk_cond(pair: Pair) -> Result<(String, Vec<Expr>, Vec<(Expr, SortDire
     }
     Ok((binding, conds, ordering))
 }
+
+fn node_iterator(iter: RowIterator, conds: Expr) -> impl Iterator<Item = Result<TupleSet>> {
+    iter.filter_map(move |(key_slice, val_slice)| -> Option<Result<TupleSet>> {
+        let tset = TupleSet::from((
+            [ReifiedTuple::from(Tuple::new(key_slice))],
+            [ReifiedTuple::from(Tuple::new(val_slice))],
+        ));
+        match conds.row_eval(&tset) {
+            Err(e) => Some(Err(e)),
+            Ok(Value::Null) | Ok(Value::Bool(false)) => return None,
+            Ok(Value::Bool(true)) => Some(Ok(tset)),
+            Ok(v) => Some(Err(FilterError::ExpectBoolean(v.into_static()).into())),
+        }
+    })
+}
+
+fn simple_hop_iterator() {}
+
+struct SortingHopIterator {}
