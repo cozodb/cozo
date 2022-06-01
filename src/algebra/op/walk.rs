@@ -1,16 +1,16 @@
 use crate::algebra::op::{
-    parse_chain, ChainPart, ChainPartEdgeDir, InterpretContext, JoinType, RelationalAlgebra,
-    SortDirection,
+    build_binding_map_from_info, parse_chain, ChainPart, ChainPartEdgeDir, InterpretContext,
+    JoinType, RelationalAlgebra, SortDirection,
 };
 use crate::algebra::parser::{AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::parser::parse_scoped_dict;
-use crate::data::tuple_set::{BindingMap, TupleSet};
+use crate::data::tuple_set::{merge_binding_maps, BindingMap, TupleSet};
 use crate::ddl::reify::{AssocInfo, EdgeInfo, NodeInfo, TableInfo};
 use crate::parser::{Pair, Pairs, Rule};
 use anyhow::Result;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const NAME_WALK: &str = "Walk";
 
@@ -20,6 +20,8 @@ pub(crate) struct WalkOp<'a> {
     hops: Vec<HoppingEls>,
     collector: Expr,
     binding: String,
+    pivot: TableInfo,
+    binding_map: BindingMap,
 }
 
 impl<'a> WalkOp<'a> {
@@ -65,6 +67,13 @@ impl<'a> WalkOp<'a> {
         let (first_info, first_assocs) =
             get_chain_el_info(ctx, &first_el.target, &first_el.assocs)?;
 
+        let bmap_inner = build_binding_map_from_info(ctx, &first_info, &first_assocs, true)?;
+        let mut binding_map = BindingMap {
+            inner_map: BTreeMap::from([(first_el.binding.clone(), bmap_inner)]),
+            key_size: 1,
+            val_size: 1 + first_el.assocs.len(),
+        };
+
         let mut starting_el = StartingEl {
             node_info: first_info.into_node()?,
             assocs: first_assocs,
@@ -81,6 +90,16 @@ impl<'a> WalkOp<'a> {
                 None => break,
                 Some(el) => {
                     let (edge_info, edge_assocs) = get_chain_el_info(ctx, &el.target, &el.assocs)?;
+
+                    let bmap_inner =
+                        build_binding_map_from_info(ctx, &edge_info, &edge_assocs, true)?;
+                    let bmap = BindingMap {
+                        inner_map: BTreeMap::from([(el.binding.clone(), bmap_inner)]),
+                        key_size: 1,
+                        val_size: 1 + el.assocs.len(),
+                    };
+                    binding_map = merge_binding_maps([binding_map, bmap].into_iter());
+
                     let edge_info = edge_info.into_edge()?;
                     let edge_binding = el.binding;
                     let direction = match el.part {
@@ -94,6 +113,17 @@ impl<'a> WalkOp<'a> {
                     };
                     let el = chain.next().unwrap();
                     let (node_info, node_assocs) = get_chain_el_info(ctx, &el.target, &el.assocs)?;
+
+                    let bmap_inner =
+                        build_binding_map_from_info(ctx, &node_info, &node_assocs, true)?;
+                    let bmap = BindingMap {
+                        inner_map: BTreeMap::from([(el.binding.clone(), bmap_inner)]),
+                        key_size: 1,
+                        val_size: 1 + el.assocs.len(),
+                    };
+
+                    binding_map = merge_binding_maps([binding_map, bmap].into_iter());
+
                     let node_info = node_info.into_node()?;
                     let node_binding = el.binding;
 
@@ -135,6 +165,7 @@ impl<'a> WalkOp<'a> {
 
         let mut collectors = vec![];
         let mut bindings = vec![];
+        let mut pivots = vec![];
 
         for arg in args {
             let arg = arg.into_inner().next().unwrap();
@@ -148,6 +179,7 @@ impl<'a> WalkOp<'a> {
                             return Err(WalkError::SorterOnStart.into());
                         }
                         starting_el.filters.extend(filters);
+                        pivots.push(TableInfo::Node(starting_el.node_info.clone()));
                     } else {
                         for hop in hops.iter_mut() {
                             if hop.node_binding == binding || hop.edge_binding == binding {
@@ -174,6 +206,11 @@ impl<'a> WalkOp<'a> {
                     } else {
                         for hop in hops.iter_mut() {
                             if hop.node_binding == binding || hop.edge_binding == binding {
+                                if hop.node_binding == binding {
+                                    pivots.push(TableInfo::Node(hop.node_info.clone()));
+                                } else {
+                                    pivots.push(TableInfo::Edge(hop.edge_info.clone()));
+                                }
                                 hop.pivot = true;
                                 found = true;
                                 break;
@@ -203,6 +240,8 @@ impl<'a> WalkOp<'a> {
             hops,
             collector,
             binding: bindings.pop().unwrap(),
+            pivot: pivots.pop().unwrap(),
+            binding_map,
         })
     }
 }
@@ -260,8 +299,7 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
     }
 
     fn binding_map(&self) -> Result<BindingMap> {
-        // include the keys of the bound map!
-        todo!()
+        Ok(self.binding_map.clone())
     }
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
@@ -269,8 +307,7 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
     }
 
     fn identity(&self) -> Option<TableInfo> {
-        // find the bound element and return its tableinfo
-        todo!()
+        None
     }
 }
 
