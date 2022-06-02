@@ -1,5 +1,6 @@
 mod count;
 mod lag;
+mod sum;
 
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
@@ -8,6 +9,7 @@ use std::sync::{Arc};
 
 pub(crate) use count::*;
 pub(crate) use lag::*;
+pub(crate) use sum::*;
 
 #[derive(Clone)]
 pub struct OpAgg(pub(crate) Arc<dyn OpAggT + Send + Sync>);

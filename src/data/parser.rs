@@ -334,24 +334,12 @@ fn build_method_call(name: &str, args: Vec<Expr>) -> Result<Expr> {
 
 fn build_aggr_call(name: &str, a_args: Vec<Expr>, args: Vec<Expr>) -> Result<Expr> {
     Ok(match name {
-        NAME_OP_COUNT_WITH => Expr::ApplyAgg(OpAgg(Arc::new(OpCountWith::default())), a_args, args),
-        NAME_OP_COUNT => Expr::ApplyAgg(
-            OpAgg(Arc::new(OpCountWith::default())),
-            a_args,
-            vec![Expr::Const(Value::Int(1))],
-        ),
-        NAME_OP_COUNT_NON_NULL => Expr::ApplyAgg(
-            OpAgg(Arc::new(OpCountWith::default())),
-            a_args,
-            vec![Expr::IfExpr(
-                (
-                    Expr::BuiltinFn(OP_IS_NULL, args),
-                    Expr::Const(Value::from(0i64)),
-                    Expr::Const(Value::from(1i64)),
-                )
-                    .into(),
-            )],
-        ),
+        NAME_OP_SUM => build_op_sum(a_args, args),
+        NAME_OP_AVG => build_op_avg(a_args, args),
+        NAME_OP_VAR => build_op_var(a_args, args),
+        NAME_OP_COUNT_WITH => build_op_count_with(a_args, args),
+        NAME_OP_COUNT => build_op_count(a_args, args),
+        NAME_OP_COUNT_NON_NULL => build_op_count_non_null(a_args, args),
         NAME_OP_LAG => Expr::ApplyAgg(OpAgg(Arc::new(OpLag::default())), a_args, args),
         method_name => unimplemented!("{}", method_name),
     })

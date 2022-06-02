@@ -653,7 +653,9 @@ pub(crate) mod tests {
                     name: e.first_name ++ ' ' ++ e.last_name,
                     job_title: j.title,
                     n_depts: count[d.id],
-                    did_sum: count_with[d.id],
+                    did_avg: avg[d.id],
+                    did: d.id,
+                    dvar: var[d.id],
                   })
             "#;
             let ra = build_relational_expr(
