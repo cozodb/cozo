@@ -3,8 +3,8 @@ use crate::data::expr::Expr;
 use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
-use std::sync::{Arc, Mutex};
 use ordered_float::Float;
+use std::sync::{Arc, Mutex};
 
 pub(crate) const NAME_OP_MIN: &str = "min";
 pub(crate) const NAME_OP_MAX: &str = "max";
@@ -51,7 +51,7 @@ impl OpAggT for OpMin {
                     self.name().to_string(),
                     vec![v.clone().into_static()],
                 )
-                    .into())
+                .into())
             }
         };
         let current = *self.total.lock().unwrap();
@@ -64,8 +64,6 @@ impl OpAggT for OpMin {
         Ok(f.into())
     }
 }
-
-
 
 #[derive(Default)]
 pub struct OpMax {
@@ -101,7 +99,7 @@ impl OpAggT for OpMax {
                     self.name().to_string(),
                     vec![v.clone().into_static()],
                 )
-                    .into())
+                .into())
             }
         };
         let current = *self.total.lock().unwrap();

@@ -1,10 +1,10 @@
 use crate::data::eval::EvalError;
+use crate::data::expr::Expr;
 use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use crate::data::expr::Expr;
 
 #[derive(Default)]
 pub(crate) struct OpLag {

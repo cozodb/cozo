@@ -1,11 +1,11 @@
-use std::sync::Arc;
 use crate::data::eval::EvalError;
+use crate::data::expr::Expr;
+use crate::data::op::OP_IS_NULL;
 use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::data::expr::Expr;
-use crate::data::op::OP_IS_NULL;
+use std::sync::Arc;
 
 #[derive(Default)]
 pub struct OpCountWith {
@@ -16,8 +16,7 @@ pub(crate) const NAME_OP_COUNT: &str = "count";
 pub(crate) const NAME_OP_COUNT_WITH: &str = "count_with";
 pub(crate) const NAME_OP_COUNT_NON_NULL: &str = "count_non_null";
 
-
-pub(crate) fn build_op_count_with(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr  {
+pub(crate) fn build_op_count_with(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
     Expr::ApplyAgg(OpAgg(Arc::new(OpCountWith::default())), a_args, args)
 }
 

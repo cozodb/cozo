@@ -1,9 +1,9 @@
 use crate::data::eval::EvalError;
+use crate::data::expr::Expr;
 use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use std::sync::{Arc, Mutex};
-use crate::data::expr::Expr;
 
 #[derive(Default)]
 pub(crate) struct OpCollectIf {
@@ -18,7 +18,10 @@ pub(crate) fn build_op_collect_if(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
 }
 
 pub(crate) fn build_op_collect(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
-    let args = vec![args.into_iter().next().unwrap(), Expr::Const(Value::Bool(true))];
+    let args = vec![
+        args.into_iter().next().unwrap(),
+        Expr::Const(Value::Bool(true)),
+    ];
     Expr::ApplyAgg(OpAgg(Arc::new(OpCollectIf::default())), a_args, args)
 }
 
@@ -41,20 +44,22 @@ impl OpAggT for OpCollectIf {
 
     fn put(&self, args: &[Value]) -> Result<()> {
         let mut args = args.iter();
-        let val = args.next().ok_or_else(||EvalError::ArityMismatch(self.name().to_string(), 1))?;
-        let cond = args.next().ok_or_else(||EvalError::ArityMismatch(self.name().to_string(), 2))?;
+        let val = args
+            .next()
+            .ok_or_else(|| EvalError::ArityMismatch(self.name().to_string(), 1))?;
+        let cond = args
+            .next()
+            .ok_or_else(|| EvalError::ArityMismatch(self.name().to_string(), 2))?;
 
         match cond {
-            Value::Bool(false) | Value::Null => {
-                return Ok(())
-            }
-            Value::Bool(true) => {},
+            Value::Bool(false) | Value::Null => return Ok(()),
+            Value::Bool(true) => {}
             v => {
                 return Err(EvalError::OpTypeMismatch(
                     self.name().to_string(),
                     vec![v.clone().into_static()],
                 )
-                    .into())
+                .into())
             }
         }
 
