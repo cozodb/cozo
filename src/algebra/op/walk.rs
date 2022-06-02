@@ -1,6 +1,6 @@
 use crate::algebra::op::{
     build_binding_map_from_info, parse_chain, unique_prefix_nested_loop, ChainPart,
-    ChainPartEdgeDir, FilterError, InterpretContext, JoinType, NestLoopLeftPrefixIter, QueryError,
+    ChainPartEdgeDir, FilterError, InterpretContext, JoinType, NestLoopLeftPrefixIter,
     RelationalAlgebra, SelectOpError, SortDirection, NAME_SKIP, NAME_SORT, NAME_TAKE, NAME_WHERE,
 };
 use crate::algebra::parser::{AlgebraParseError, RaBox};
@@ -9,7 +9,7 @@ use crate::data::expr::Expr;
 use crate::data::parser::parse_scoped_dict;
 use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple, Tuple};
 use crate::data::tuple_set::{
-    merge_binding_maps, BindingMap, BindingMapEvalContext, TableId, TupleSet, TupleSetEvalContext,
+    merge_binding_maps, BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext,
     TupleSetIdx,
 };
 use crate::data::value::Value;
@@ -17,10 +17,7 @@ use crate::ddl::reify::{AssocInfo, EdgeInfo, NodeInfo, TableInfo};
 use crate::parser::{Pair, Pairs, Rule};
 use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
-use cozorocks::{
-    DbPtr, IteratorPtr, PrefixIterator, ReadOptionsPtr, RowIterator, TransactionPtr,
-    WriteOptionsPtr,
-};
+use cozorocks::RowIterator;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const NAME_WALK: &str = "Walk";

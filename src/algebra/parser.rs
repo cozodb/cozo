@@ -656,6 +656,9 @@ pub(crate) mod tests {
                     did_avg: avg[d.id],
                     did: d.id,
                     dvar: var[d.id],
+                    dmin: min[d.id],
+                    dmax: max[d.id],
+                    dcoll: collect[d.id],
                   })
             "#;
             let ra = build_relational_expr(

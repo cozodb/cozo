@@ -10,7 +10,6 @@ use lazy_static::lazy_static;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum ExprParseError {
@@ -343,6 +342,8 @@ fn build_aggr_call(name: &str, a_args: Vec<Expr>, args: Vec<Expr>) -> Result<Exp
         NAME_OP_LAG => build_op_lag(a_args, args),
         NAME_OP_COLLECT_IF => build_op_collect_if(a_args, args),
         NAME_OP_COLLECT => build_op_collect(a_args, args),
+        NAME_OP_MIN => build_op_min(a_args, args),
+        NAME_OP_MAX => build_op_max(a_args, args),
         method_name => unimplemented!("{}", method_name),
     })
 }

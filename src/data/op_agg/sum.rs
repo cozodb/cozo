@@ -1,7 +1,6 @@
 use crate::data::eval::EvalError;
 use crate::data::expr::Expr;
-use crate::data::op::{OP_ADD, OP_DIV, OP_IS_NULL, OP_MUL, OP_POW, OP_SUB};
-use crate::data::op_agg::{build_op_count_non_null, OpAgg, OpAggT, OpCountWith};
+use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use std::sync::atomic::{AtomicUsize, Ordering};
