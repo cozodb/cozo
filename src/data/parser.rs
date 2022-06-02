@@ -340,7 +340,9 @@ fn build_aggr_call(name: &str, a_args: Vec<Expr>, args: Vec<Expr>) -> Result<Exp
         NAME_OP_COUNT_WITH => build_op_count_with(a_args, args),
         NAME_OP_COUNT => build_op_count(a_args, args),
         NAME_OP_COUNT_NON_NULL => build_op_count_non_null(a_args, args),
-        NAME_OP_LAG => Expr::ApplyAgg(OpAgg(Arc::new(OpLag::default())), a_args, args),
+        NAME_OP_LAG => build_op_lag(a_args, args),
+        NAME_OP_COLLECT_IF => build_op_collect_if(a_args, args),
+        NAME_OP_COLLECT => build_op_collect(a_args, args),
         method_name => unimplemented!("{}", method_name),
     })
 }

@@ -1,9 +1,10 @@
 use crate::data::eval::EvalError;
-use crate::data::op_agg::OpAggT;
+use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use crate::data::expr::Expr;
 
 #[derive(Default)]
 pub(crate) struct OpLag {
@@ -12,6 +13,10 @@ pub(crate) struct OpLag {
 }
 
 pub(crate) const NAME_OP_LAG: &str = "lag";
+
+pub(crate) fn build_op_lag(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
+    Expr::ApplyAgg(OpAgg(Arc::new(OpLag::default())), a_args, args)
+}
 
 impl OpAggT for OpLag {
     fn name(&self) -> &str {
