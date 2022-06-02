@@ -649,7 +649,7 @@ pub(crate) mod tests {
              Walk(j:Job<-[:HasJob]-e:Employee-[:InDepartment]->d:Department,
                   j => Sort(d.id => asc).Take(10).Where(j.id <= 6, j.id > 3),
                   e => Sort(d.id => asc),
-                  e: {
+                  j: {
                     name: e.first_name ++ ' ' ++ e.last_name,
                     job_title: j.title,
                     n_depts: count[d.id],
@@ -667,7 +667,7 @@ pub(crate) mod tests {
             dbg!(&ra);
             dbg!(ra.get_values()?);
         }
-        let duration_union = start.elapsed();
+        let duration_walk = start.elapsed();
 
         let start = Instant::now();
         let mut r_opts = default_read_options();
@@ -698,6 +698,7 @@ pub(crate) mod tests {
             duration_group,
             duration_union,
             duration_delete,
+            duration_walk,
             n
         );
         Ok(())

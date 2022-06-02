@@ -364,6 +364,8 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             parent: self.ctx,
         };
 
+        let mut met_pivot = self.starting.pivot;
+
         for op in &self.starting.ops {
             match op {
                 WalkElOp::Sort(_) => {
@@ -412,8 +414,8 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             };
             let right_iter = right_iter.iter_prefix(OwnTuple::empty_tuple());
             it = Box::new(NestLoopLeftPrefixIter {
-                left_join: true,
-                always_output_padded: true,
+                left_join: met_pivot,
+                always_output_padded: false,
                 left_iter: it,
                 right_iter,
                 right_table_id: hop.edge_info.tid,
@@ -480,23 +482,17 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
                 hop.node_info.tid,
             ));
 
+            met_pivot = met_pivot || hop.pivot;
+
             // todo add filters
         }
 
-        let source_map = self.binding_maps.last().unwrap();
-        let binding_ctx = BindingMapEvalContext {
-            map: source_map,
-            parent: self.ctx,
-        };
         let extraction_vec = self
             .extraction_map
-            .values()
-            .map(|v| v.clone())
+            .values().cloned()
             .collect::<Vec<_>>();
 
         extraction_vec.iter().for_each(|ex| ex.aggr_reset());
-
-        dbg!(&extraction_vec);
 
         let txn = self.ctx.txn.clone();
         let temp_db = self.ctx.sess.temp.clone();
@@ -517,8 +513,6 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             }
             let mut out = TupleSet::default();
             out.vals.push(tuple.into());
-            dbg!(&tset);
-            dbg!(&out);
             Ok(out)
         });
         Ok(Box::new(iter))
