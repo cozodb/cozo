@@ -213,7 +213,7 @@ ra_call = {"." ~ query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")"}
 ra_expr = { ra_call_expr ~ ra_call* }
 ra_expr_all = _{SOI ~ ra_expr ~ EOI}
 
-walk_cond = { ident ~ "=>" ~ "(" ~ ((sort_arg | expr) ~ ",")* ~ (sort_arg | expr)? ~ ")" }
+walk_cond = { ident ~ "=>" ~ ra_expr }
 
 scoped_list = { ident ~ ":" ~ "[" ~ (ident ~ ",")* ~ ident? ~ "]"}
 table_with_assocs = { name_in_def ~ ("+" ~ name_in_def)*}

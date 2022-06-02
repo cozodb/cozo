@@ -647,8 +647,8 @@ pub(crate) mod tests {
             let ctx = sess.temp_ctx(true);
             let s = r#"
              Walk(j:Job<-[:HasJob]-e:Employee-[:InDepartment]->d:Department,
-                  j => (j.id <= 6),
-                  e => (d.id => asc),
+                  j => Sort(d.id => asc).Take(10).Where(j.id <= 6, j.id > 3),
+                  e => Sort(d.id => asc),
                   e: {
                     job_title: j.title,
                     n_depts: count[d.id]

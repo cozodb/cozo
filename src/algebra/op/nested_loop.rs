@@ -99,7 +99,7 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
                 left_join,
                 left_iter,
                 right_iter,
-                right_table_id: self.right.table_id(),
+                right_table_id: table_id,
                 key_extractors,
                 left_cache: None,
                 left_cache_used: false,
@@ -107,7 +107,7 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
                 temp_db,
                 w_opts,
                 r_opts,
-                started: false,
+                always_output_padded: false,
             }))
         } else {
             let iter = self
@@ -163,18 +163,18 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
 }
 
 pub(crate) struct NestLoopLeftPrefixIter<'a> {
-    left_join: bool,
-    left_iter: Box<dyn Iterator<Item = Result<TupleSet>> + 'a>,
-    right_iter: PrefixIterator<OwnTuple>,
-    right_table_id: TableId,
-    key_extractors: Vec<Expr>,
-    left_cache: Option<TupleSet>,
-    left_cache_used: bool,
-    txn: TransactionPtr,
-    temp_db: DbPtr,
-    w_opts: WriteOptionsPtr,
-    r_opts: ReadOptionsPtr,
-    started: bool,
+    pub(crate) left_join: bool,
+    pub(crate) always_output_padded: bool,
+    pub(crate) left_iter: Box<dyn Iterator<Item = Result<TupleSet>> + 'a>,
+    pub(crate) right_iter: PrefixIterator<OwnTuple>,
+    pub(crate) right_table_id: TableId,
+    pub(crate) key_extractors: Vec<Expr>,
+    pub(crate) left_cache: Option<TupleSet>,
+    pub(crate) left_cache_used: bool,
+    pub(crate) txn: TransactionPtr,
+    pub(crate) temp_db: DbPtr,
+    pub(crate) w_opts: WriteOptionsPtr,
+    pub(crate) r_opts: ReadOptionsPtr,
 }
 
 impl<'a> NestLoopLeftPrefixIter<'a> {
@@ -213,11 +213,12 @@ impl<'a> NestLoopLeftPrefixIter<'a> {
                     None => {
                         if self.left_join && !self.left_cache_used {
                             let mut left_tset = self.left_cache.take().unwrap();
-                            self.started = false;
+                            self.left_cache_used = true;
                             left_tset.push_key(OwnTuple::empty_tuple().into());
                             left_tset.push_val(OwnTuple::empty_tuple().into());
                             return Ok(Some(left_tset));
                         } else {
+                            // advance left on next hoop
                             self.left_cache.take();
                         }
                     }
@@ -245,7 +246,9 @@ impl<'a> NestLoopLeftPrefixIter<'a> {
                         }
                         left_tset.push_key(key);
                         left_tset.push_val(val);
-                        self.left_cache_used = true;
+                        if !self.always_output_padded {
+                            self.left_cache_used = true;
+                        }
                         return Ok(Some(left_tset));
                     }
                 },

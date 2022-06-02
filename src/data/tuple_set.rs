@@ -182,6 +182,14 @@ impl TupleSet {
 }
 
 impl TupleSet {
+    pub(crate) fn last_key_is_empty(&self) -> bool {
+        match self.keys.last() {
+            None => false,
+            Some(tuple) => {
+                matches!(tuple.data_kind(), Ok(DataKind::Empty))
+            }
+        }
+    }
     pub(crate) fn push_key(&mut self, t: ReifiedTuple) {
         self.keys.push(t);
     }
