@@ -68,6 +68,7 @@ impl OpAggT for OpCountWith {
                 self.total.fetch_add(*i as usize, Ordering::Relaxed);
                 Ok(())
             }
+            Value::Null => Ok(()),
             v => Err(EvalError::OpTypeMismatch(
                 self.name().to_string(),
                 vec![v.clone().into_static()],

@@ -1,22 +1,27 @@
-use crate::algebra::op::{build_binding_map_from_info, parse_chain, ChainPart, ChainPartEdgeDir, FilterError, InterpretContext, JoinType, QueryError, RelationalAlgebra, SortDirection, NAME_SKIP, NAME_SORT, NAME_TAKE, NAME_WHERE, NestLoopLeftPrefixIter};
+use crate::algebra::op::{
+    build_binding_map_from_info, parse_chain, unique_prefix_nested_loop, ChainPart,
+    ChainPartEdgeDir, FilterError, InterpretContext, JoinType, NestLoopLeftPrefixIter, QueryError,
+    RelationalAlgebra, SelectOpError, SortDirection, NAME_SKIP, NAME_SORT, NAME_TAKE, NAME_WHERE,
+};
 use crate::algebra::parser::{AlgebraParseError, RaBox};
 use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::parser::parse_scoped_dict;
-use crate::data::tuple::{OwnTuple, ReifiedTuple, Tuple};
+use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple, Tuple};
 use crate::data::tuple_set::{
     merge_binding_maps, BindingMap, BindingMapEvalContext, TableId, TupleSet, TupleSetEvalContext,
+    TupleSetIdx,
 };
 use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, EdgeInfo, NodeInfo, TableInfo};
 use crate::parser::{Pair, Pairs, Rule};
+use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
 use cozorocks::{
     DbPtr, IteratorPtr, PrefixIterator, ReadOptionsPtr, RowIterator, TransactionPtr,
     WriteOptionsPtr,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use crate::runtime::options::{default_read_options, default_write_options};
 
 pub(crate) const NAME_WALK: &str = "Walk";
 
@@ -24,7 +29,7 @@ pub(crate) struct WalkOp<'a> {
     ctx: &'a TempDbContext<'a>,
     starting: StartingEl,
     hops: Vec<HoppingEls>,
-    collector: Expr,
+    extraction_map: BTreeMap<String, Expr>,
     binding: String,
     pivot: TableInfo,
     binding_maps: Vec<BindingMap>,
@@ -236,11 +241,25 @@ impl<'a> WalkOp<'a> {
 
         let collector = collectors.pop().unwrap();
 
+        let source_map = binding_maps.last().unwrap();
+        let binding_ctx = BindingMapEvalContext {
+            map: source_map,
+            parent: ctx,
+        };
+        let extraction_map = match collector.clone().partial_eval(&binding_ctx)? {
+            Expr::Dict(d) => d,
+            Expr::Const(Value::Dict(d)) => d
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), Expr::Const(v.clone())))
+                .collect(),
+            ex => return Err(SelectOpError::NeedsDict(ex).into()),
+        };
+
         Ok(Self {
             ctx,
             starting: starting_el,
             hops,
-            collector,
+            extraction_map,
             binding: bindings.pop().unwrap(),
             pivot: pivots.pop().unwrap(),
             binding_maps,
@@ -304,7 +323,27 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
     }
 
     fn binding_map(&self) -> Result<BindingMap> {
-        Ok(self.binding_maps.last().unwrap().clone())
+        Ok(BindingMap {
+            inner_map: BTreeMap::from([(
+                self.binding.clone(),
+                self.extraction_map
+                    .keys()
+                    .enumerate()
+                    .map(|(i, k)| {
+                        (
+                            k.to_string(),
+                            TupleSetIdx {
+                                is_key: false,
+                                t_set: 0,
+                                col_idx: i,
+                            },
+                        )
+                    })
+                    .collect(),
+            )]),
+            key_size: 0,
+            val_size: 1,
+        })
     }
 
     fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
@@ -353,23 +392,20 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        for hop in &self.hops {
+        for (hop, binding_map) in self.hops.iter().zip(self.binding_maps.iter().skip(1)) {
             // node to edge hop
             let mut key_extractors = vec![match hop.direction {
                 ChainPartEdgeDir::Fwd => Expr::Const(Value::Bool(true)),
-                ChainPartEdgeDir::Bwd => Expr::Const(Value::Bool(false))
+                ChainPartEdgeDir::Bwd => Expr::Const(Value::Bool(false)),
             }];
             key_extractors.extend_from_slice(&last_node_keys_extractors);
 
-            let table_id = hop.edge_info.tid;
             let txn = self.ctx.txn.clone();
             let temp_db = self.ctx.sess.temp.clone();
-
             let w_opts = default_write_options();
             let r_opts = default_read_options();
 
-
-            let right_iter = if table_id.in_root {
+            let right_iter = if hop.edge_info.tid.in_root {
                 txn.iterator(&r_opts)
             } else {
                 temp_db.iterator(&r_opts)
@@ -380,22 +416,112 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
                 always_output_padded: true,
                 left_iter: it,
                 right_iter,
-                right_table_id: table_id,
+                right_table_id: hop.edge_info.tid,
                 key_extractors,
                 left_cache: None,
                 left_cache_used: false,
                 txn,
                 temp_db,
                 w_opts,
-                r_opts
+                r_opts,
             });
-            todo!()
+
+            // edge to node hop
+            let key_prefix = match hop.direction {
+                ChainPartEdgeDir::Fwd => "_dst_",
+                ChainPartEdgeDir::Bwd => "_src_",
+            };
+
+            let binding_ctx = BindingMapEvalContext {
+                map: binding_map,
+                parent: self.ctx,
+            };
+
+            let key_extractors = hop
+                .node_info
+                .keys
+                .iter()
+                .map(|col| {
+                    Expr::FieldAcc(
+                        key_prefix.to_string() + &col.name,
+                        Expr::Variable(hop.edge_binding.clone()).into(),
+                    )
+                    .partial_eval(&binding_ctx)
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            last_node_keys_extractors = hop
+                .node_info
+                .keys
+                .iter()
+                .map(|col| {
+                    Expr::FieldAcc(
+                        col.name.clone(),
+                        Expr::Variable(hop.node_binding.clone()).into(),
+                    )
+                    .partial_eval(&binding_ctx)
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            let txn = self.ctx.txn.clone();
+            let temp_db = self.ctx.sess.temp.clone();
+            let w_opts = default_write_options();
+            let r_opts = default_read_options();
+
+            it = Box::new(unique_prefix_nested_loop(
+                it,
+                txn,
+                temp_db,
+                w_opts,
+                r_opts,
+                true,
+                OwnTuple::with_prefix(hop.node_info.tid.id),
+                key_extractors,
+                hop.node_info.tid,
+            ));
+
+            // todo add filters
         }
 
-        for val in it {
-            dbg!(val);
-        }
-        todo!()
+        let source_map = self.binding_maps.last().unwrap();
+        let binding_ctx = BindingMapEvalContext {
+            map: source_map,
+            parent: self.ctx,
+        };
+        let extraction_vec = self
+            .extraction_map
+            .values()
+            .map(|v| v.clone())
+            .collect::<Vec<_>>();
+
+        extraction_vec.iter().for_each(|ex| ex.aggr_reset());
+
+        dbg!(&extraction_vec);
+
+        let txn = self.ctx.txn.clone();
+        let temp_db = self.ctx.sess.temp.clone();
+        let w_opts = default_write_options();
+
+        let iter = it.map(move |tset| -> Result<TupleSet> {
+            let tset = tset?;
+            let eval_ctx = TupleSetEvalContext {
+                tuple_set: &tset,
+                txn: &txn,
+                temp_db: &temp_db,
+                write_options: &w_opts,
+            };
+            let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
+            for expr in &extraction_vec {
+                let value = expr.row_eval(&eval_ctx)?;
+                tuple.push_value(&value);
+            }
+            let mut out = TupleSet::default();
+            out.vals.push(tuple.into());
+            dbg!(&tset);
+            dbg!(&out);
+            Ok(out)
+        });
+        Ok(Box::new(iter))
     }
 
     fn identity(&self) -> Option<TableInfo> {

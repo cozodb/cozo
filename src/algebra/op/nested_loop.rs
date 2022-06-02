@@ -10,6 +10,7 @@ use crate::data::tuple_set::{
 use crate::ddl::reify::TableInfo;
 use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
+use chrono::format::Item;
 use cozorocks::{DbPtr, PrefixIterator, ReadOptionsPtr, TransactionPtr, WriteOptionsPtr};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -110,49 +111,17 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
                 always_output_padded: false,
             }))
         } else {
-            let iter = self
-                .left
-                .iter()?
-                .map(move |tset| -> Result<Option<TupleSet>> {
-                    let mut tset = tset?;
-                    let eval_ctx = TupleSetEvalContext {
-                        tuple_set: &tset,
-                        txn: &txn,
-                        temp_db: &temp_db,
-                        write_options: &w_opts,
-                    };
-                    key_tuple.truncate_all();
-                    for extractor in &key_extractors {
-                        let value = extractor.row_eval(&eval_ctx)?;
-                        key_tuple.push_value(&value)
-                    }
-                    let result = if table_id.in_root {
-                        txn.get_owned(&r_opts, &key_tuple)?
-                    } else {
-                        temp_db.get_owned(&r_opts, &key_tuple)?
-                    };
-                    match result {
-                        None => {
-                            if left_join {
-                                tset.push_key(key_tuple.clone().into());
-                                tset.push_val(Tuple::empty_tuple().into());
-                                Ok(Some(tset))
-                            } else {
-                                Ok(None)
-                            }
-                        }
-                        Some(tuple) => {
-                            tset.push_key(key_tuple.clone().into());
-                            tset.push_val(Tuple::new(tuple).into());
-                            Ok(Some(tset))
-                        }
-                    }
-                })
-                .filter_map(|rs| match rs {
-                    Ok(None) => None,
-                    Ok(Some(t)) => Some(Ok(t)),
-                    Err(e) => Some(Err(e)),
-                });
+            let iter = unique_prefix_nested_loop(
+                self.left.iter()?,
+                txn,
+                temp_db,
+                w_opts,
+                r_opts,
+                left_join,
+                key_tuple,
+                key_extractors,
+                table_id,
+            );
             Ok(Box::new(iter))
         }
     }
@@ -160,6 +129,59 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
     fn identity(&self) -> Option<TableInfo> {
         None
     }
+}
+
+pub(crate) fn unique_prefix_nested_loop<'a>(
+    iter: Box<dyn Iterator<Item = Result<TupleSet>> + 'a>,
+    txn: TransactionPtr,
+    temp_db: DbPtr,
+    w_opts: WriteOptionsPtr,
+    r_opts: ReadOptionsPtr,
+    left_join: bool,
+    mut key_tuple: OwnTuple,
+    key_extractors: Vec<Expr>,
+    table_id: TableId,
+) -> impl Iterator<Item = Result<TupleSet>> + 'a {
+    iter.map(move |tset| -> Result<Option<TupleSet>> {
+        let mut tset = tset?;
+        let eval_ctx = TupleSetEvalContext {
+            tuple_set: &tset,
+            txn: &txn,
+            temp_db: &temp_db,
+            write_options: &w_opts,
+        };
+        key_tuple.truncate_all();
+        for extractor in &key_extractors {
+            let value = extractor.row_eval(&eval_ctx)?;
+            key_tuple.push_value(&value)
+        }
+        let result = if table_id.in_root {
+            txn.get_owned(&r_opts, &key_tuple)?
+        } else {
+            temp_db.get_owned(&r_opts, &key_tuple)?
+        };
+        match result {
+            None => {
+                if left_join {
+                    tset.push_key(key_tuple.clone().into());
+                    tset.push_val(Tuple::empty_tuple().into());
+                    Ok(Some(tset))
+                } else {
+                    Ok(None)
+                }
+            }
+            Some(tuple) => {
+                tset.push_key(key_tuple.clone().into());
+                tset.push_val(Tuple::new(tuple).into());
+                Ok(Some(tset))
+            }
+        }
+    })
+    .filter_map(|rs| match rs {
+        Ok(None) => None,
+        Ok(Some(t)) => Some(Ok(t)),
+        Err(e) => Some(Err(e)),
+    })
 }
 
 pub(crate) struct NestLoopLeftPrefixIter<'a> {

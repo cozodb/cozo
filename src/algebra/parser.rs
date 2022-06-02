@@ -650,8 +650,10 @@ pub(crate) mod tests {
                   j => Sort(d.id => asc).Take(10).Where(j.id <= 6, j.id > 3),
                   e => Sort(d.id => asc),
                   e: {
+                    name: e.first_name ++ ' ' ++ e.last_name,
                     job_title: j.title,
-                    n_depts: count[d.id]
+                    n_depts: count[d.id],
+                    did_sum: count_with[d.id],
                   })
             "#;
             let ra = build_relational_expr(
