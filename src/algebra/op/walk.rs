@@ -487,10 +487,7 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             // todo add filters
         }
 
-        let extraction_vec = self
-            .extraction_map
-            .values().cloned()
-            .collect::<Vec<_>>();
+        let extraction_vec = self.extraction_map.values().cloned().collect::<Vec<_>>();
 
         extraction_vec.iter().for_each(|ex| ex.aggr_reset());
 
