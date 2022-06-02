@@ -1,6 +1,8 @@
 mod count;
 mod lag;
 mod sum;
+mod min_max;
+mod collect;
 
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
@@ -10,6 +12,8 @@ use std::sync::{Arc};
 pub(crate) use count::*;
 pub(crate) use lag::*;
 pub(crate) use sum::*;
+pub(crate) use min_max::*;
+pub(crate) use collect::*;
 
 #[derive(Clone)]
 pub struct OpAgg(pub(crate) Arc<dyn OpAggT + Send + Sync>);
