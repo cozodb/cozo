@@ -651,8 +651,8 @@ pub(crate) mod tests {
                   e => Sort(e.id => desc).Skip(1).Where(e.id > 110),
                   j: {
                     id_1_job: j.id,
-                    id_2_emp: e.id,
-                    id_3_dep: d.id,
+                    id_2_emp: sum[e.id],
+                    id_3_dep: sum[d.id],
                   })
             "#;
             let ra = build_relational_expr(

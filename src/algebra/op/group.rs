@@ -297,16 +297,16 @@ impl<'b> RelationalAlgebra for GroupOp<'b> {
     }
 }
 
-struct GroupIterator {
-    source: IteratorPtr,
-    last_key: OwnTuple,
-    last_val: OwnTuple,
-    group_key_len: usize,
-    val_extractors: Vec<Expr>,
-    val_collectors: Vec<(OpAgg, Vec<Expr>)>,
-    txn: TransactionPtr,
-    temp_db: DbPtr,
-    write_options: WriteOptionsPtr,
+pub(crate) struct GroupIterator {
+    pub(crate) source: IteratorPtr,
+    pub(crate) last_key: OwnTuple,
+    pub(crate) last_val: OwnTuple,
+    pub(crate) group_key_len: usize,
+    pub(crate) val_extractors: Vec<Expr>,
+    pub(crate) val_collectors: Vec<(OpAgg, Vec<Expr>)>,
+    pub(crate) txn: TransactionPtr,
+    pub(crate) temp_db: DbPtr,
+    pub(crate) write_options: WriteOptionsPtr,
 }
 
 impl GroupIterator {

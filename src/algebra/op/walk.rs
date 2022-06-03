@@ -8,10 +8,7 @@ use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::parser::parse_scoped_dict;
 use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple, Tuple};
-use crate::data::tuple_set::{
-    merge_binding_maps, BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext,
-    TupleSetIdx,
-};
+use crate::data::tuple_set::{merge_binding_maps, BindingMap, BindingMapEvalContext, TupleSet, TupleSetIdx, TupleSetEvalContext};
 use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, EdgeInfo, NodeInfo, TableInfo};
 use crate::parser::{Pair, Pairs, Rule};
@@ -30,7 +27,6 @@ pub(crate) struct WalkOp<'a> {
     hops: Vec<HoppingEls>,
     extraction_map: BTreeMap<String, Expr>,
     binding: String,
-    pivot: TableInfo,
     binding_maps: Vec<BindingMap>,
 }
 
@@ -260,7 +256,6 @@ impl<'a> WalkOp<'a> {
             hops,
             extraction_map,
             binding: bindings.pop().unwrap(),
-            pivot: pivots.pop().unwrap(),
             binding_maps,
         })
     }
@@ -402,6 +397,13 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             })
             .collect::<Result<Vec<_>>>()?;
 
+        let mut final_truncate_kv_size: (usize, usize) = if self.starting.pivot {
+            let bmap = self.binding_maps.first().unwrap();
+            (bmap.key_size, bmap.val_size)
+        } else {
+            (0, 0)
+        };
+
         for (hop_id, hop) in self.hops.iter().enumerate() {
             let binding_map = self.binding_maps.get(hop_id + 1).unwrap();
             // node to edge hop
@@ -542,43 +544,114 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
 
             it = Box::new(remove_empty_tuples(it));
 
-            // todo add filters
+            if hop.pivot {
+                final_truncate_kv_size = (binding_map.key_size, binding_map.val_size);
+            }
 
             met_pivot = met_pivot || hop.pivot;
         }
 
-        for tset in it {
-            dbg!(tset?);
-        }
-        todo!()
+        it = Box::new(ClusterIterator {
+            source: it,
+            last_tuple: None,
+            output_cache: false,
+            key_len: final_truncate_kv_size.0,
+        });
 
-        //
-        // let extraction_vec = self.extraction_map.values().cloned().collect::<Vec<_>>();
-        //
-        // extraction_vec.iter().for_each(|ex| ex.aggr_reset());
-        //
-        // let txn = self.ctx.txn.clone();
-        // let temp_db = self.ctx.sess.temp.clone();
-        // let w_opts = default_write_options();
-        //
-        // let iter = it.map(move |tset| -> Result<TupleSet> {
-        //     let tset = tset?;
-        //     let eval_ctx = TupleSetEvalContext {
-        //         tuple_set: &tset,
-        //         txn: &txn,
-        //         temp_db: &temp_db,
-        //         write_options: &w_opts,
-        //     };
-        //     let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
-        //     for expr in &extraction_vec {
-        //         let value = expr.row_eval(&eval_ctx)?;
-        //         tuple.push_value(&value);
-        //     }
-        //     let mut out = TupleSet::default();
-        //     out.vals.push(tuple.into());
-        //     Ok(out)
-        // });
-        // Ok(Box::new(iter))
+        let extraction_vec = self.extraction_map.values().cloned().collect::<Vec<_>>();
+
+        extraction_vec.iter().for_each(|ex| ex.aggr_reset());
+        let mut val_collectors = vec![];
+        for ex in &extraction_vec {
+            // TODO the check here is more complicated than in the group case:
+            // check that nothing non-aggr exceeds the allowed kv range
+            // if !ex.is_aggr_compatible() {
+            //     return Err(AlgebraParseError::ScalarFnNotAllowed.into());
+            // }
+            if let Ok(heads) = ex.clone().extract_aggr_heads() {
+                val_collectors.extend(heads)
+            }
+
+            ex.aggr_reset();
+        }
+
+        let txn = self.ctx.txn.clone();
+        let temp_db = self.ctx.sess.temp.clone();
+        let w_opts = default_write_options();
+        let mut last_tset = TupleSet::default();
+
+        let iter = it.filter_map(move |tset| -> Option<Result<TupleSet>> {
+            match tset {
+                Err(e) => Some(Err(e)),
+                Ok(tset) => {
+                    if tset.keys.is_empty() {
+                        let eval_ctx = TupleSetEvalContext {
+                            tuple_set: &last_tset,
+                            txn: &txn,
+                            temp_db: &temp_db,
+                            write_options: &w_opts,
+                        };
+                        let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
+                        for expr in &extraction_vec {
+                            let value = match expr.row_eval(&eval_ctx) {
+                                Err(e) => return Some(Err(e)),
+                                Ok(v) => v,
+                            };
+                            tuple.push_value(&value);
+                            expr.aggr_reset();
+                        }
+                        let mut out = TupleSet::default();
+                        out.vals.push(tuple.into());
+
+                        Some(Ok(out))
+                    } else {
+                        let eval_ctx = TupleSetEvalContext {
+                            tuple_set: &tset,
+                            txn: &txn,
+                            temp_db: &temp_db,
+                            write_options: &w_opts,
+                        };
+                        for (op, args) in &val_collectors {
+                            match args.len() {
+                                0 => match op.put(&[]) {
+                                    Ok(_) => {}
+                                    Err(e) => return Some(Err(e)),
+                                },
+                                1 => {
+                                    let arg = args.iter().next().unwrap();
+                                    let arg = match arg.row_eval(&eval_ctx) {
+                                        Ok(v) => v,
+                                        Err(e) => return Some(Err(e)),
+                                    };
+                                    match op.put(&[arg]) {
+                                        Ok(_) => {}
+                                        Err(e) => return Some(Err(e)),
+                                    };
+                                }
+                                _ => {
+                                    let mut args_vals = Vec::with_capacity(args.len());
+                                    for arg in args {
+                                        let arg = match arg.row_eval(&eval_ctx) {
+                                            Ok(v) => v,
+                                            Err(e) => return Some(Err(e)),
+                                        };
+                                        args_vals.push(arg);
+                                    }
+                                    match op.put(&args_vals) {
+                                        Ok(_) => {}
+                                        Err(e) => return Some(Err(e)),
+                                    };
+                                }
+                            }
+                        }
+
+                        last_tset = tset.into_owned();
+                        None
+                    }
+                }
+            }
+        });
+        Ok(Box::new(iter))
     }
 
     fn identity(&self) -> Option<TableInfo> {
