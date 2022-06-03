@@ -647,8 +647,8 @@ pub(crate) mod tests {
             let ctx = sess.temp_ctx(true);
             let s = r#"
              Walk(j:Job<-[:HasJob]-e:Employee-[:InDepartment]->d:Department,
-                  j => Sort(d.id => asc).Take(10).Where(j.id <= 6, j.id > 3),
-                  e => Sort(d.id => asc).Skip(1).Where(e.id > 110),
+                  j => Sort(j.id => asc).Take(10).Where(j.id <= 6, j.id > 3),
+                  e => Sort(e.id => desc).Skip(1).Where(e.id > 110),
                   j: {
                     id_1_job: j.id,
                     id_2_emp: e.id,

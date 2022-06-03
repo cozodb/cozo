@@ -18,6 +18,7 @@ use crate::parser::{Pair, Pairs, Rule};
 use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
 use cozorocks::RowIterator;
+use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
@@ -366,8 +367,17 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
 
         for op in &self.starting.ops {
             match op {
-                WalkElOp::Sort(_) => {
-                    // TODO
+                WalkElOp::Sort(sort_exprs) => {
+                    let sort_exprs = sort_exprs
+                        .iter()
+                        .map(
+                            |(expr, dir)| match expr.clone().partial_eval(&first_binding_ctx) {
+                                Err(e) => Err(e),
+                                Ok(expr) => Ok((expr, *dir)),
+                            },
+                        )
+                        .collect::<Result<Vec<_>>>()?;
+                    it = Box::new(in_mem_sort(it, sort_exprs)?)
                 }
                 WalkElOp::Filter(expr) => {
                     let expr = expr.clone().partial_eval(&first_binding_ctx)?;
@@ -491,7 +501,18 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
 
                 for op in &hop.ops {
                     match op {
-                        WalkElOp::Sort(_) => {}
+                        WalkElOp::Sort(sort_exprs) => {
+                            let sort_exprs = sort_exprs
+                                .iter()
+                                .map(
+                                    |(expr, dir)| match expr.clone().partial_eval(&binding_ctx) {
+                                        Err(e) => Err(e),
+                                        Ok(expr) => Ok((expr, *dir)),
+                                    },
+                                )
+                                .collect::<Result<Vec<_>>>()?;
+                            it = Box::new(clustered_in_mem_sort(it, sort_exprs)?)
+                        }
                         WalkElOp::Filter(expr) => {
                             if met_pivot {
                                 let expr = expr.clone().partial_eval(&binding_ctx)?;
@@ -689,6 +710,7 @@ fn filter_iterator(
     iter: Box<dyn Iterator<Item = Result<TupleSet>>>,
     filter: Expr,
 ) -> impl Iterator<Item = Result<TupleSet>> {
+    filter.aggr_reset();
     iter.filter_map(move |tset| -> Option<Result<TupleSet>> {
         match tset {
             Err(e) => Some(Err(e)),
@@ -716,6 +738,7 @@ fn filter_iterator_outer(
 ) -> impl Iterator<Item = Result<TupleSet>> {
     let mut cluster_output = false;
     let mut last_filtered = TupleSet::default();
+    filter.aggr_reset();
     iter.flat_map(move |tset| match tset {
         Err(e) => vec![Err(e)].into_iter(),
         Ok(tset) => {
@@ -907,4 +930,94 @@ fn clustered_skip_outer(
         }
         Err(e) => vec![Err(e)].into_iter(),
     })
+}
+
+fn clustered_in_mem_sort(
+    it: Box<dyn Iterator<Item = Result<TupleSet>>>,
+    sort_exprs: Vec<(Expr, SortDirection)>,
+) -> Result<impl Iterator<Item = Result<TupleSet>>> {
+    for (expr, _) in &sort_exprs {
+        if !expr.is_not_aggr() {
+            return Err(AlgebraParseError::AggregateFnNotAllowed.into());
+        }
+    }
+
+    let comparator = make_tuple_comparator(sort_exprs);
+
+    let mut collected = vec![];
+    let it = it.flat_map(move |tset| match tset {
+        Err(e) => vec![Err(e)].into_iter(),
+        Ok(tset) => {
+            if tset.keys.is_empty() {
+                let mut to_output = vec![];
+                mem::swap(&mut to_output, &mut collected);
+                to_output.sort_by(&comparator);
+                to_output.push(Ok(tset));
+                to_output.into_iter()
+            } else {
+                collected.push(Ok(tset.into_owned()));
+                vec![].into_iter()
+            }
+        }
+    });
+    Ok(it)
+}
+
+fn in_mem_sort(
+    it: Box<dyn Iterator<Item = Result<TupleSet>>>,
+    sort_exprs: Vec<(Expr, SortDirection)>,
+) -> Result<impl Iterator<Item = Result<TupleSet>>> {
+    for (expr, _) in &sort_exprs {
+        if !expr.is_not_aggr() {
+            return Err(AlgebraParseError::AggregateFnNotAllowed.into());
+        }
+    }
+
+    let mut collected = it
+        .map(|v| match v {
+            Err(e) => Err(e),
+            Ok(v) => Ok(v.into_owned()),
+        })
+        .collect::<Vec<_>>();
+
+    collected.sort_by(make_tuple_comparator(sort_exprs));
+    Ok(collected.into_iter())
+}
+
+fn make_tuple_comparator(
+    sort_exprs: Vec<(Expr, SortDirection)>,
+) -> impl Fn(&Result<TupleSet>, &Result<TupleSet>) -> Ordering {
+    move |a: &Result<TupleSet>, b: &Result<TupleSet>| match (a, b) {
+        (Err(_), Err(_)) => Ordering::Equal,
+        (Err(_), Ok(_)) => Ordering::Greater,
+        (Ok(_), Err(_)) => Ordering::Less,
+        (Ok(a), Ok(b)) => {
+            let a_res = sort_exprs
+                .iter()
+                .map(|(ex, dir)| -> Result<Value> {
+                    let mut res = ex.row_eval(a)?;
+                    if *dir == SortDirection::Dsc {
+                        res = Value::DescVal(Reverse(res.into()))
+                    }
+                    Ok(res)
+                })
+                .collect::<Result<Vec<_>>>();
+            let b_res = sort_exprs
+                .iter()
+                .map(|(ex, dir)| -> Result<Value> {
+                    let mut res = ex.row_eval(b)?;
+                    if *dir == SortDirection::Dsc {
+                        res = Value::DescVal(Reverse(res.into()))
+                    }
+                    Ok(res)
+                })
+                .collect::<Result<Vec<_>>>();
+            match (a_res, b_res) {
+                (Err(_), Err(_)) => Ordering::Equal,
+                (Err(_), Ok(_)) => Ordering::Greater,
+                (Ok(_), Err(_)) => Ordering::Less,
+                (Ok(av), Ok(bv)) => av.cmp(&bv),
+            }
+        }
+    }
 }
