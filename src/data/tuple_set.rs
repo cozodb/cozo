@@ -6,7 +6,7 @@ use crate::data::typing::Typing;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use cozorocks::{DbPtr, TransactionPtr, WriteOptionsPtr};
-use std::cmp::Ordering;
+use std::cmp::{min, Ordering};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::result;
@@ -130,6 +130,22 @@ pub(crate) struct TupleSet {
 }
 
 impl TupleSet {
+    pub(crate) fn deep_clone(&self) -> Self {
+        Self {
+            keys: self.keys.iter().map(|v| v.to_owned().into()).collect(),
+            vals: self.vals.iter().map(|v| v.to_owned().into()).collect(),
+        }
+    }
+
+    pub(crate) fn truncate_to_empty(&mut self, (k_size, v_size): (usize, usize)) {
+        for t in self.keys.iter_mut().skip(k_size) {
+            *t = OwnTuple::empty_tuple().into();
+        }
+        for t in self.vals.iter_mut().skip(v_size) {
+            *t = OwnTuple::empty_tuple().into();
+        }
+    }
+
     pub(crate) fn encode_as_tuple(&self, target: &mut OwnTuple) {
         target.truncate_all();
         target.push_int(self.keys.len() as i64);
@@ -220,6 +236,17 @@ impl TupleSet {
             return false;
         }
         for (l, r) in self.keys.iter().zip(&other.keys) {
+            if !l.key_part_eq(r) {
+                return false;
+            }
+        }
+        true
+    }
+    pub(crate) fn keys_truncate_eq(&self, other: &Self, n: usize) -> bool {
+        if min(n, self.keys.len()) != min(other.keys.len(), n) {
+            return false;
+        }
+        for (l, r) in self.keys.iter().take(n).zip(other.keys.iter().take(n)) {
             if !l.key_part_eq(r) {
                 return false;
             }

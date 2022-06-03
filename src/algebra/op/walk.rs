@@ -19,6 +19,7 @@ use crate::runtime::options::{default_read_options, default_write_options};
 use anyhow::Result;
 use cozorocks::RowIterator;
 use std::collections::{BTreeMap, BTreeSet};
+use std::mem;
 
 pub(crate) const NAME_WALK: &str = "Walk";
 
@@ -391,7 +392,8 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        for (hop, binding_map) in self.hops.iter().zip(self.binding_maps.iter().skip(1)) {
+        for (hop_id, hop) in self.hops.iter().enumerate() {
+            let binding_map = self.binding_maps.get(hop_id + 1).unwrap();
             // node to edge hop
             let mut key_extractors = vec![match hop.direction {
                 ChainPartEdgeDir::Fwd => Expr::Const(Value::Bool(true)),
@@ -479,37 +481,72 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
                 hop.node_info.tid,
             ));
 
-            met_pivot = met_pivot || hop.pivot;
+            if !hop.ops.is_empty() {
+                it = Box::new(ClusterIterator {
+                    source: it,
+                    last_tuple: None,
+                    output_cache: false,
+                    key_len: self.binding_maps.get(hop_id).unwrap().key_size,
+                });
+
+                for op in &hop.ops {
+                    match op {
+                        WalkElOp::Sort(_) => {}
+                        WalkElOp::Filter(_) => {}
+                        WalkElOp::Take(n) => it = Box::new(clustered_take(it, *n)?),
+                        WalkElOp::Skip(n) => {
+                            if met_pivot {
+                                let last_map = self.binding_maps.get(hop_id).unwrap();
+                                let k_size = last_map.key_size;
+                                let v_size = last_map.val_size;
+                                it = Box::new(clustered_skip_outer(it, *n, (k_size, v_size)));
+                            } else {
+                                it = Box::new(clustered_skip(it, *n));
+                            }
+                        }
+                    }
+                }
+            }
+
+            it = Box::new(remove_empty_tuples(it));
 
             // todo add filters
+
+            met_pivot = met_pivot || hop.pivot;
         }
 
-        let extraction_vec = self.extraction_map.values().cloned().collect::<Vec<_>>();
+        for tset in it {
+            dbg!(tset?);
+        }
+        todo!()
 
-        extraction_vec.iter().for_each(|ex| ex.aggr_reset());
-
-        let txn = self.ctx.txn.clone();
-        let temp_db = self.ctx.sess.temp.clone();
-        let w_opts = default_write_options();
-
-        let iter = it.map(move |tset| -> Result<TupleSet> {
-            let tset = tset?;
-            let eval_ctx = TupleSetEvalContext {
-                tuple_set: &tset,
-                txn: &txn,
-                temp_db: &temp_db,
-                write_options: &w_opts,
-            };
-            let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
-            for expr in &extraction_vec {
-                let value = expr.row_eval(&eval_ctx)?;
-                tuple.push_value(&value);
-            }
-            let mut out = TupleSet::default();
-            out.vals.push(tuple.into());
-            Ok(out)
-        });
-        Ok(Box::new(iter))
+        //
+        // let extraction_vec = self.extraction_map.values().cloned().collect::<Vec<_>>();
+        //
+        // extraction_vec.iter().for_each(|ex| ex.aggr_reset());
+        //
+        // let txn = self.ctx.txn.clone();
+        // let temp_db = self.ctx.sess.temp.clone();
+        // let w_opts = default_write_options();
+        //
+        // let iter = it.map(move |tset| -> Result<TupleSet> {
+        //     let tset = tset?;
+        //     let eval_ctx = TupleSetEvalContext {
+        //         tuple_set: &tset,
+        //         txn: &txn,
+        //         temp_db: &temp_db,
+        //         write_options: &w_opts,
+        //     };
+        //     let mut tuple = OwnTuple::with_data_prefix(DataKind::Data);
+        //     for expr in &extraction_vec {
+        //         let value = expr.row_eval(&eval_ctx)?;
+        //         tuple.push_value(&value);
+        //     }
+        //     let mut out = TupleSet::default();
+        //     out.vals.push(tuple.into());
+        //     Ok(out)
+        // });
+        // Ok(Box::new(iter))
     }
 
     fn identity(&self) -> Option<TableInfo> {
@@ -673,3 +710,158 @@ fn filter_iterator(
 // fn edge_node_hop_iterator(
 //
 // )
+
+pub(crate) struct ClusterIterator {
+    source: Box<dyn Iterator<Item = Result<TupleSet>>>,
+    last_tuple: Option<TupleSet>,
+    output_cache: bool,
+    key_len: usize,
+}
+
+impl ClusterIterator {
+    fn next_inner(&mut self) -> Result<Option<TupleSet>> {
+        if self.output_cache {
+            self.output_cache = false;
+            Ok(self.last_tuple.clone())
+        } else {
+            match self.source.next() {
+                None => match self.last_tuple.take() {
+                    None => Ok(None),
+                    Some(_) => Ok(Some(TupleSet::default())),
+                },
+                Some(Err(e)) => Err(e),
+                Some(Ok(tuple)) => match &self.last_tuple {
+                    None => {
+                        self.last_tuple = Some(tuple.deep_clone());
+                        Ok(Some(tuple))
+                    }
+                    Some(last) => {
+                        if last.keys_truncate_eq(&tuple, self.key_len) {
+                            Ok(Some(tuple))
+                        } else {
+                            self.output_cache = true;
+                            self.last_tuple = Some(tuple.deep_clone());
+                            Ok(Some(TupleSet::default()))
+                        }
+                    }
+                },
+            }
+        }
+    }
+}
+
+impl Iterator for ClusterIterator {
+    type Item = Result<TupleSet>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.next_inner() {
+            Err(e) => Some(Err(e)),
+            Ok(Some(t)) => Some(Ok(t)),
+            Ok(None) => None,
+        }
+    }
+}
+
+fn remove_empty_tuples(
+    it: Box<dyn Iterator<Item = Result<TupleSet>>>,
+) -> impl Iterator<Item = Result<TupleSet>> {
+    it.filter_map(|tset| -> Option<Result<TupleSet>> {
+        match tset {
+            Err(e) => Some(Err(e)),
+            Ok(t) => {
+                if t.keys.is_empty() {
+                    None
+                } else {
+                    Some(Ok(t))
+                }
+            }
+        }
+    })
+}
+
+fn clustered_take(
+    it: Box<dyn Iterator<Item = Result<TupleSet>>>,
+    n: usize,
+) -> Result<impl Iterator<Item = Result<TupleSet>>> {
+    if n < 1 {}
+    let mut counter: usize = 0;
+    let it = it.filter_map(move |tset| -> Option<Result<TupleSet>> {
+        match tset {
+            Ok(t) => {
+                if t.keys.is_empty() {
+                    counter = 0;
+                    Some(Ok(t))
+                } else {
+                    counter += 1;
+                    if counter > n {
+                        None
+                    } else {
+                        Some(Ok(t))
+                    }
+                }
+            }
+            Err(e) => Some(Err(e)),
+        }
+    });
+    Ok(it)
+}
+
+fn clustered_skip(
+    it: Box<dyn Iterator<Item = Result<TupleSet>>>,
+    n: usize,
+) -> impl Iterator<Item = Result<TupleSet>> {
+    let mut counter: usize = 0;
+    it.filter_map(move |tset| -> Option<Result<TupleSet>> {
+        match tset {
+            Ok(t) => {
+                if t.keys.is_empty() {
+                    counter = 0;
+                    Some(Ok(t))
+                } else {
+                    counter += 1;
+                    if counter <= n {
+                        None
+                    } else {
+                        Some(Ok(t))
+                    }
+                }
+            }
+            Err(e) => Some(Err(e)),
+        }
+    })
+}
+
+fn clustered_skip_outer(
+    it: Box<dyn Iterator<Item = Result<TupleSet>>>,
+    n: usize,
+    kv_sizes: (usize, usize),
+) -> impl Iterator<Item = Result<TupleSet>> {
+    let mut counter: usize = 0;
+    let mut last_tset = TupleSet::default();
+    it.flat_map(move |tset| match tset {
+        Ok(t) => {
+            if t.keys.is_empty() {
+                if counter > n {
+                    counter = 0;
+                    last_tset = TupleSet::default();
+                    vec![Ok(t)].into_iter()
+                } else {
+                    counter = 0;
+                    let mut to_output = TupleSet::default();
+                    mem::swap(&mut to_output, &mut last_tset);
+                    to_output.truncate_to_empty(kv_sizes);
+                    vec![Ok(to_output), Ok(t)].into_iter()
+                }
+            } else {
+                counter += 1;
+                if counter <= n {
+                    last_tset = t.deep_clone();
+                    vec![].into_iter()
+                } else {
+                    vec![Ok(t)].into_iter()
+                }
+            }
+        }
+        Err(e) => vec![Err(e)].into_iter(),
+    })
+}

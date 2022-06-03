@@ -648,17 +648,11 @@ pub(crate) mod tests {
             let s = r#"
              Walk(j:Job<-[:HasJob]-e:Employee-[:InDepartment]->d:Department,
                   j => Sort(d.id => asc).Take(10).Where(j.id <= 6, j.id > 3),
-                  e => Sort(d.id => asc),
+                  e => Sort(d.id => asc).Skip(1),
                   j: {
-                    name: e.first_name ++ ' ' ++ e.last_name,
-                    job_title: j.title,
-                    n_depts: count[d.id],
-                    did_avg: avg[d.id],
-                    did: d.id,
-                    dvar: var[d.id],
-                    dmin: min[d.id],
-                    dmax: max[d.id],
-                    dcoll: collect[d.id],
+                    id_1_job: j.id,
+                    id_2_emp: e.id,
+                    id_3_dep: d.id,
                   })
             "#;
             let ra = build_relational_expr(
