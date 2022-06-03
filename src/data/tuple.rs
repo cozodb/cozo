@@ -847,6 +847,16 @@ impl AsRef<[u8]> for ReifiedTupleData {
 
 pub(crate) type ReifiedTuple = Tuple<ReifiedTupleData>;
 
+impl ReifiedTuple {
+    pub(crate) fn into_owned(self) -> Self {
+        let data = match self.data {
+            ReifiedTupleData::Own(d) => d,
+            data => data.as_ref().to_vec(),
+        };
+        Tuple::new(ReifiedTupleData::Own(data))
+    }
+}
+
 impl From<OwnTuple> for ReifiedTuple {
     fn from(t: OwnTuple) -> Self {
         ReifiedTuple {

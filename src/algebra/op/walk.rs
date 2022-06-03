@@ -732,15 +732,15 @@ impl ClusterIterator {
                 Some(Err(e)) => Err(e),
                 Some(Ok(tuple)) => match &self.last_tuple {
                     None => {
-                        self.last_tuple = Some(tuple.deep_clone());
-                        Ok(Some(tuple))
+                        self.last_tuple = Some(tuple.into_owned());
+                        Ok(self.last_tuple.clone())
                     }
                     Some(last) => {
                         if last.keys_truncate_eq(&tuple, self.key_len) {
                             Ok(Some(tuple))
                         } else {
                             self.output_cache = true;
-                            self.last_tuple = Some(tuple.deep_clone());
+                            self.last_tuple = Some(tuple.into_owned());
                             Ok(Some(TupleSet::default()))
                         }
                     }
@@ -855,7 +855,7 @@ fn clustered_skip_outer(
             } else {
                 counter += 1;
                 if counter <= n {
-                    last_tset = t.deep_clone();
+                    last_tset = t.into_owned();
                     vec![].into_iter()
                 } else {
                     vec![Ok(t)].into_iter()

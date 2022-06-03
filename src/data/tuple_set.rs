@@ -130,10 +130,10 @@ pub(crate) struct TupleSet {
 }
 
 impl TupleSet {
-    pub(crate) fn deep_clone(&self) -> Self {
+    pub(crate) fn into_owned(self) -> Self {
         Self {
-            keys: self.keys.iter().map(|v| v.to_owned().into()).collect(),
-            vals: self.vals.iter().map(|v| v.to_owned().into()).collect(),
+            keys: self.keys.into_iter().map(|v| v.into_owned()).collect(),
+            vals: self.vals.into_iter().map(|v| v.into_owned()).collect(),
         }
     }
 
