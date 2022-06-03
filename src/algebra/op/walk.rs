@@ -492,7 +492,18 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
                 for op in &hop.ops {
                     match op {
                         WalkElOp::Sort(_) => {}
-                        WalkElOp::Filter(_) => {}
+                        WalkElOp::Filter(expr) => {
+                            if met_pivot {
+                                let expr = expr.clone().partial_eval(&binding_ctx)?;
+                                let last_map = self.binding_maps.get(hop_id).unwrap();
+                                let k_size = last_map.key_size;
+                                let v_size = last_map.val_size;
+                                it = Box::new(filter_iterator_outer(it, expr, (k_size, v_size)));
+                            } else {
+                                let expr = expr.clone().partial_eval(&binding_ctx)?;
+                                it = Box::new(filter_iterator(it, expr));
+                            }
+                        }
                         WalkElOp::Take(n) => it = Box::new(clustered_take(it, *n)?),
                         WalkElOp::Skip(n) => {
                             if met_pivot {
@@ -678,38 +689,70 @@ fn filter_iterator(
     iter: Box<dyn Iterator<Item = Result<TupleSet>>>,
     filter: Expr,
 ) -> impl Iterator<Item = Result<TupleSet>> {
-    // TODO key extractors and assocs
     iter.filter_map(move |tset| -> Option<Result<TupleSet>> {
         match tset {
             Err(e) => Some(Err(e)),
-            Ok(tset) => match filter.row_eval(&tset) {
-                Ok(Value::Null) | Ok(Value::Bool(false)) => None,
-                Ok(Value::Bool(true)) => Some(Ok(tset)),
-                Ok(v) => Some(Err(FilterError::ExpectBoolean(v.into_static()).into())),
-                Err(e) => Some(Err(e)),
-            },
+            Ok(tset) => {
+                if tset.keys.is_empty() {
+                    filter.aggr_reset();
+                    Some(Ok(tset))
+                } else {
+                    match filter.row_eval(&tset) {
+                        Ok(Value::Null) | Ok(Value::Bool(false)) => None,
+                        Ok(Value::Bool(true)) => Some(Ok(tset)),
+                        Ok(v) => Some(Err(FilterError::ExpectBoolean(v.into_static()).into())),
+                        Err(e) => Some(Err(e)),
+                    }
+                }
+            }
         }
     })
 }
 
-// fn node_edge_hop_iterator(
-//     iter: Box<dyn Iterator<Item = Result<TupleSet>>>,
-//     bridge_key_extractors: Vec<Expr>,
-//     txn: TransactionPtr,
-//     temp_db: DbPtr,
-//     target_tid: TableId,
-// ) -> impl Iterator<Item = Result<TupleSet>> {
-//     iter.flat_map(|tset| {
-//         match tset {
-//             Err(e) => [Err(e)].into_iter(),
-//             Ok(tset) => vec![Ok(tset)].into_iter()
-//         }
-//     })
-// }
-
-// fn edge_node_hop_iterator(
-//
-// )
+fn filter_iterator_outer(
+    iter: Box<dyn Iterator<Item = Result<TupleSet>>>,
+    filter: Expr,
+    kv_sizes: (usize, usize),
+) -> impl Iterator<Item = Result<TupleSet>> {
+    let mut cluster_output = false;
+    let mut last_filtered = TupleSet::default();
+    iter.flat_map(move |tset| match tset {
+        Err(e) => vec![Err(e)].into_iter(),
+        Ok(tset) => {
+            if tset.keys.is_empty() {
+                if cluster_output {
+                    cluster_output = false;
+                    last_filtered = TupleSet::default();
+                    filter.aggr_reset();
+                    vec![Ok(tset)].into_iter()
+                } else {
+                    let mut to_output = TupleSet::default();
+                    mem::swap(&mut to_output, &mut last_filtered);
+                    to_output.truncate_to_empty(kv_sizes);
+                    cluster_output = false;
+                    last_filtered = TupleSet::default();
+                    filter.aggr_reset();
+                    vec![Ok(to_output), Ok(tset)].into_iter()
+                }
+            } else {
+                match filter.row_eval(&tset) {
+                    Ok(Value::Null) | Ok(Value::Bool(false)) => {
+                        last_filtered = tset.into_owned();
+                        vec![].into_iter()
+                    }
+                    Ok(Value::Bool(true)) => {
+                        cluster_output = true;
+                        vec![Ok(tset)].into_iter()
+                    }
+                    Ok(v) => {
+                        vec![Err(FilterError::ExpectBoolean(v.into_static()).into())].into_iter()
+                    }
+                    Err(e) => vec![Err(e)].into_iter(),
+                }
+            }
+        }
+    })
+}
 
 pub(crate) struct ClusterIterator {
     source: Box<dyn Iterator<Item = Result<TupleSet>>>,
