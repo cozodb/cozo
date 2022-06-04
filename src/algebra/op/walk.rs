@@ -80,97 +80,18 @@ impl<'a> WalkOp<'a> {
             binding_maps,
         })
     }
-}
 
-#[derive(Debug)]
-pub(crate) struct StartingEl {
-    node_info: NodeInfo,
-    assocs: Vec<AssocInfo>,
-    binding: String,
-    pivot: bool,
-    ops: Vec<WalkElOp>,
-}
-
-#[derive(Debug)]
-pub(crate) struct HoppingEls {
-    node_info: NodeInfo,
-    node_assocs: Vec<AssocInfo>,
-    node_binding: String,
-    edge_info: EdgeInfo,
-    edge_assocs: Vec<AssocInfo>,
-    edge_binding: String,
-    direction: ChainPartEdgeDir,
-    pivot: bool,
-    ops: Vec<WalkElOp>,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub(crate) enum WalkError {
-    #[error("Walk chain must start and end with nodes, not edges")]
-    Chain,
-    #[error("Outer join not allowed in Walk")]
-    OuterJoin,
-    #[error("Walk chain does not connect")]
-    Disconnect,
-    #[error("Keyed collection not allowed")]
-    Keyed,
-    #[error("Unbound collection")]
-    UnboundCollection,
-    #[error("Unbound filter")]
-    UnboundFilter,
-    #[error("No/multiple collectors")]
-    CollectorNumberMismatch,
-    #[error("Starting el cannot have sorters")]
-    SorterOnStart,
-    #[error("Unsupported operation {0} on walk element")]
-    UnsupportedWalkOp(String),
-    #[error("Wrong argument to walk op")]
-    WalkOpWrongArg,
-}
-
-impl<'b> RelationalAlgebra for WalkOp<'b> {
-    fn name(&self) -> &str {
-        NAME_WALK
-    }
-
-    fn bindings(&self) -> Result<BTreeSet<String>> {
-        Ok(BTreeSet::from([self.binding.clone()]))
-    }
-
-    fn binding_map(&self) -> Result<BindingMap> {
-        Ok(BindingMap {
-            inner_map: BTreeMap::from([(
-                self.binding.clone(),
-                self.extraction_map
-                    .keys()
-                    .enumerate()
-                    .map(|(i, k)| {
-                        (
-                            k.to_string(),
-                            TupleSetIdx {
-                                is_key: false,
-                                t_set: 0,
-                                col_idx: i,
-                            },
-                        )
-                    })
-                    .collect(),
-            )]),
-            key_size: 0,
-            val_size: 1,
-        })
-    }
-
-    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
+    fn build_starting_it(&self) -> Result<(Box<dyn Iterator<Item = Result<TupleSet>>>, Vec<Expr>)> {
+        // build starter
         let starting_tid = self.starting.node_info.tid;
-        let it = if starting_tid.in_root {
+        let db_it = if starting_tid.in_root {
             self.ctx.txn.iterator(&self.ctx.sess.r_opts_main)
         } else {
             self.ctx.sess.temp.iterator(&self.ctx.sess.r_opts_temp)
         };
         let key_tuple = OwnTuple::with_prefix(starting_tid.id);
-        let it = it.iter_rows(&key_tuple);
-        let mut it: Box<dyn Iterator<Item = Result<TupleSet>>> = Box::new(node_iterator(it));
+        let row_it = db_it.iter_rows(&key_tuple);
+        let mut it: Box<dyn Iterator<Item = Result<TupleSet>>> = Box::new(node_iterator(row_it));
 
         let first_binding_map = self.binding_maps.first().unwrap();
 
@@ -178,8 +99,6 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             map: first_binding_map,
             parent: self.ctx,
         };
-
-        let mut met_pivot = self.starting.pivot;
 
         for op in &self.starting.ops {
             match op {
@@ -204,7 +123,7 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             }
         }
 
-        let mut last_node_keys_extractors = self
+        let keys_extractors = self
             .starting
             .node_info
             .keys
@@ -218,167 +137,169 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let mut final_truncate_kv_size: (usize, usize) = if self.starting.pivot {
-            let bmap = self.binding_maps.first().unwrap();
-            (bmap.key_size, bmap.val_size)
+        Ok((it, keys_extractors))
+    }
+
+    fn build_hop_it(
+        &self,
+        prev_it: Box<dyn Iterator<Item = Result<TupleSet>>>,
+        hop_id: usize,
+        hop: &HoppingEls,
+        last_node_keys_extractors: &mut Vec<Expr>,
+        met_pivot: &mut bool,
+        final_truncate_kv_size: &mut (usize, usize),
+    ) -> Result<Box<dyn Iterator<Item = Result<TupleSet>>>> {
+        let binding_map = self.binding_maps.get(hop_id + 1).unwrap();
+        // node to edge hop
+        let mut key_extractors = vec![match hop.direction {
+            ChainPartEdgeDir::Fwd => Expr::Const(Value::Bool(true)),
+            ChainPartEdgeDir::Bwd => Expr::Const(Value::Bool(false)),
+        }];
+        key_extractors.extend_from_slice(last_node_keys_extractors);
+
+        let txn = self.ctx.txn.clone();
+        let temp_db = self.ctx.sess.temp.clone();
+        let w_opts = default_write_options();
+        let r_opts = default_read_options();
+
+        let right_iter = if hop.edge_info.tid.in_root {
+            txn.iterator(&r_opts)
         } else {
-            (0, 0)
+            temp_db.iterator(&r_opts)
+        };
+        let right_iter = right_iter.iter_prefix(OwnTuple::empty_tuple());
+        let mut it: Box<dyn Iterator<Item = Result<TupleSet>>> = Box::new(NestLoopLeftPrefixIter {
+            left_join: *met_pivot,
+            always_output_padded: false,
+            left_iter: prev_it,
+            right_iter,
+            right_table_id: hop.edge_info.tid,
+            key_extractors,
+            left_cache: None,
+            left_cache_used: false,
+            txn,
+            temp_db,
+            w_opts,
+            r_opts,
+        });
+
+        // edge to node hop
+        let key_prefix = match hop.direction {
+            ChainPartEdgeDir::Fwd => "_dst_",
+            ChainPartEdgeDir::Bwd => "_src_",
         };
 
-        for (hop_id, hop) in self.hops.iter().enumerate() {
-            let binding_map = self.binding_maps.get(hop_id + 1).unwrap();
-            // node to edge hop
-            let mut key_extractors = vec![match hop.direction {
-                ChainPartEdgeDir::Fwd => Expr::Const(Value::Bool(true)),
-                ChainPartEdgeDir::Bwd => Expr::Const(Value::Bool(false)),
-            }];
-            key_extractors.extend_from_slice(&last_node_keys_extractors);
+        let binding_ctx = BindingMapEvalContext {
+            map: binding_map,
+            parent: self.ctx,
+        };
 
-            let txn = self.ctx.txn.clone();
-            let temp_db = self.ctx.sess.temp.clone();
-            let w_opts = default_write_options();
-            let r_opts = default_read_options();
+        let key_extractors = hop
+            .node_info
+            .keys
+            .iter()
+            .map(|col| {
+                Expr::FieldAcc(
+                    key_prefix.to_string() + &col.name,
+                    Expr::Variable(hop.edge_binding.clone()).into(),
+                )
+                .partial_eval(&binding_ctx)
+            })
+            .collect::<Result<Vec<_>>>()?;
 
-            let right_iter = if hop.edge_info.tid.in_root {
-                txn.iterator(&r_opts)
-            } else {
-                temp_db.iterator(&r_opts)
-            };
-            let right_iter = right_iter.iter_prefix(OwnTuple::empty_tuple());
-            it = Box::new(NestLoopLeftPrefixIter {
-                left_join: met_pivot,
-                always_output_padded: false,
-                left_iter: it,
-                right_iter,
-                right_table_id: hop.edge_info.tid,
-                key_extractors,
-                left_cache: None,
-                left_cache_used: false,
-                txn,
-                temp_db,
-                w_opts,
-                r_opts,
+        *last_node_keys_extractors = hop
+            .node_info
+            .keys
+            .iter()
+            .map(|col| {
+                Expr::FieldAcc(
+                    col.name.clone(),
+                    Expr::Variable(hop.node_binding.clone()).into(),
+                )
+                .partial_eval(&binding_ctx)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let txn = self.ctx.txn.clone();
+        let temp_db = self.ctx.sess.temp.clone();
+        let w_opts = default_write_options();
+        let r_opts = default_read_options();
+
+        it = Box::new(unique_prefix_nested_loop(
+            it,
+            txn,
+            temp_db,
+            w_opts,
+            r_opts,
+            true,
+            OwnTuple::with_prefix(hop.node_info.tid.id),
+            key_extractors,
+            hop.node_info.tid,
+        ));
+
+        if !hop.ops.is_empty() {
+            it = Box::new(ClusterIterator {
+                source: it,
+                last_tuple: None,
+                output_cache: false,
+                key_len: self.binding_maps.get(hop_id).unwrap().key_size,
             });
 
-            // edge to node hop
-            let key_prefix = match hop.direction {
-                ChainPartEdgeDir::Fwd => "_dst_",
-                ChainPartEdgeDir::Bwd => "_src_",
-            };
-
-            let binding_ctx = BindingMapEvalContext {
-                map: binding_map,
-                parent: self.ctx,
-            };
-
-            let key_extractors = hop
-                .node_info
-                .keys
-                .iter()
-                .map(|col| {
-                    Expr::FieldAcc(
-                        key_prefix.to_string() + &col.name,
-                        Expr::Variable(hop.edge_binding.clone()).into(),
-                    )
-                    .partial_eval(&binding_ctx)
-                })
-                .collect::<Result<Vec<_>>>()?;
-
-            last_node_keys_extractors = hop
-                .node_info
-                .keys
-                .iter()
-                .map(|col| {
-                    Expr::FieldAcc(
-                        col.name.clone(),
-                        Expr::Variable(hop.node_binding.clone()).into(),
-                    )
-                    .partial_eval(&binding_ctx)
-                })
-                .collect::<Result<Vec<_>>>()?;
-
-            let txn = self.ctx.txn.clone();
-            let temp_db = self.ctx.sess.temp.clone();
-            let w_opts = default_write_options();
-            let r_opts = default_read_options();
-
-            it = Box::new(unique_prefix_nested_loop(
-                it,
-                txn,
-                temp_db,
-                w_opts,
-                r_opts,
-                true,
-                OwnTuple::with_prefix(hop.node_info.tid.id),
-                key_extractors,
-                hop.node_info.tid,
-            ));
-
-            if !hop.ops.is_empty() {
-                it = Box::new(ClusterIterator {
-                    source: it,
-                    last_tuple: None,
-                    output_cache: false,
-                    key_len: self.binding_maps.get(hop_id).unwrap().key_size,
-                });
-
-                for op in &hop.ops {
-                    match op {
-                        WalkElOp::Sort(sort_exprs) => {
-                            let sort_exprs = sort_exprs
-                                .iter()
-                                .map(
-                                    |(expr, dir)| match expr.clone().partial_eval(&binding_ctx) {
-                                        Err(e) => Err(e),
-                                        Ok(expr) => Ok((expr, *dir)),
-                                    },
-                                )
-                                .collect::<Result<Vec<_>>>()?;
-                            it = Box::new(clustered_in_mem_sort(it, sort_exprs)?)
+            for op in &hop.ops {
+                match op {
+                    WalkElOp::Sort(sort_exprs) => {
+                        let sort_exprs = sort_exprs
+                            .iter()
+                            .map(
+                                |(expr, dir)| match expr.clone().partial_eval(&binding_ctx) {
+                                    Err(e) => Err(e),
+                                    Ok(expr) => Ok((expr, *dir)),
+                                },
+                            )
+                            .collect::<Result<Vec<_>>>()?;
+                        it = Box::new(clustered_in_mem_sort(it, sort_exprs)?)
+                    }
+                    WalkElOp::Filter(expr) => {
+                        if *met_pivot {
+                            let expr = expr.clone().partial_eval(&binding_ctx)?;
+                            let last_map = self.binding_maps.get(hop_id).unwrap();
+                            let k_size = last_map.key_size;
+                            let v_size = last_map.val_size;
+                            it = Box::new(filter_iterator_outer(it, expr, (k_size, v_size)));
+                        } else {
+                            let expr = expr.clone().partial_eval(&binding_ctx)?;
+                            it = Box::new(filter_iterator(it, expr));
                         }
-                        WalkElOp::Filter(expr) => {
-                            if met_pivot {
-                                let expr = expr.clone().partial_eval(&binding_ctx)?;
-                                let last_map = self.binding_maps.get(hop_id).unwrap();
-                                let k_size = last_map.key_size;
-                                let v_size = last_map.val_size;
-                                it = Box::new(filter_iterator_outer(it, expr, (k_size, v_size)));
-                            } else {
-                                let expr = expr.clone().partial_eval(&binding_ctx)?;
-                                it = Box::new(filter_iterator(it, expr));
-                            }
-                        }
-                        WalkElOp::Take(n) => it = Box::new(clustered_take(it, *n)?),
-                        WalkElOp::Skip(n) => {
-                            if met_pivot {
-                                let last_map = self.binding_maps.get(hop_id).unwrap();
-                                let k_size = last_map.key_size;
-                                let v_size = last_map.val_size;
-                                it = Box::new(clustered_skip_outer(it, *n, (k_size, v_size)));
-                            } else {
-                                it = Box::new(clustered_skip(it, *n));
-                            }
+                    }
+                    WalkElOp::Take(n) => it = Box::new(clustered_take(it, *n)?),
+                    WalkElOp::Skip(n) => {
+                        if *met_pivot {
+                            let last_map = self.binding_maps.get(hop_id).unwrap();
+                            let k_size = last_map.key_size;
+                            let v_size = last_map.val_size;
+                            it = Box::new(clustered_skip_outer(it, *n, (k_size, v_size)));
+                        } else {
+                            it = Box::new(clustered_skip(it, *n));
                         }
                     }
                 }
             }
-
-            it = Box::new(remove_empty_tuples(it));
-
-            if hop.pivot {
-                final_truncate_kv_size = (binding_map.key_size, binding_map.val_size);
-            }
-
-            met_pivot = met_pivot || hop.pivot;
         }
 
-        it = Box::new(ClusterIterator {
-            source: it,
-            last_tuple: None,
-            output_cache: false,
-            key_len: final_truncate_kv_size.0,
-        });
+        it = Box::new(remove_empty_tuples(it));
 
+        if hop.pivot {
+            *final_truncate_kv_size = (binding_map.key_size, binding_map.val_size);
+        }
+
+        *met_pivot = *met_pivot || hop.pivot;
+        Ok(it)
+    }
+
+    fn build_selection_iter(
+        &self,
+        it: Box<dyn Iterator<Item = Result<TupleSet>>>,
+    ) -> Result<impl Iterator<Item = Result<TupleSet>>> {
         let extraction_vec = self.extraction_map.values().cloned().collect::<Vec<_>>();
 
         extraction_vec.iter().for_each(|ex| ex.aggr_reset());
@@ -472,6 +393,119 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
                 }
             }
         });
+        Ok(iter)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StartingEl {
+    node_info: NodeInfo,
+    assocs: Vec<AssocInfo>,
+    binding: String,
+    pivot: bool,
+    ops: Vec<WalkElOp>,
+}
+
+#[derive(Debug)]
+pub(crate) struct HoppingEls {
+    node_info: NodeInfo,
+    node_assocs: Vec<AssocInfo>,
+    node_binding: String,
+    edge_info: EdgeInfo,
+    edge_assocs: Vec<AssocInfo>,
+    edge_binding: String,
+    direction: ChainPartEdgeDir,
+    pivot: bool,
+    ops: Vec<WalkElOp>,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub(crate) enum WalkError {
+    #[error("Walk chain must start and end with nodes, not edges")]
+    Chain,
+    #[error("Outer join not allowed in Walk")]
+    OuterJoin,
+    #[error("Walk chain does not connect")]
+    Disconnect,
+    #[error("Keyed collection not allowed")]
+    Keyed,
+    #[error("Unbound collection")]
+    UnboundCollection,
+    #[error("Unbound filter")]
+    UnboundFilter,
+    #[error("No/multiple collectors")]
+    CollectorNumberMismatch,
+    #[error("Starting el cannot have sorters")]
+    SorterOnStart,
+    #[error("Unsupported operation {0} on walk element")]
+    UnsupportedWalkOp(String),
+    #[error("Wrong argument to walk op")]
+    WalkOpWrongArg,
+}
+
+impl<'b> RelationalAlgebra for WalkOp<'b> {
+    fn name(&self) -> &str {
+        NAME_WALK
+    }
+
+    fn bindings(&self) -> Result<BTreeSet<String>> {
+        Ok(BTreeSet::from([self.binding.clone()]))
+    }
+
+    fn binding_map(&self) -> Result<BindingMap> {
+        Ok(BindingMap {
+            inner_map: BTreeMap::from([(
+                self.binding.clone(),
+                self.extraction_map
+                    .keys()
+                    .enumerate()
+                    .map(|(i, k)| {
+                        (
+                            k.to_string(),
+                            TupleSetIdx {
+                                is_key: false,
+                                t_set: 0,
+                                col_idx: i,
+                            },
+                        )
+                    })
+                    .collect(),
+            )]),
+            key_size: 0,
+            val_size: 1,
+        })
+    }
+
+    fn iter<'a>(&'a self) -> Result<Box<dyn Iterator<Item = Result<TupleSet>> + 'a>> {
+        let (mut it, mut last_node_keys_extractors) = self.build_starting_it()?;
+        let mut met_pivot = self.starting.pivot;
+        let mut final_truncate_kv_size: (usize, usize) = if self.starting.pivot {
+            let bmap = self.binding_maps.first().unwrap();
+            (bmap.key_size, bmap.val_size)
+        } else {
+            (0, 0)
+        };
+
+        for (hop_id, hop) in self.hops.iter().enumerate() {
+            it = self.build_hop_it(
+                it,
+                hop_id,
+                hop,
+                &mut last_node_keys_extractors,
+                &mut met_pivot,
+                &mut final_truncate_kv_size,
+            )?;
+        }
+
+        it = Box::new(ClusterIterator {
+            source: it,
+            last_tuple: None,
+            output_cache: false,
+            key_len: final_truncate_kv_size.0,
+        });
+
+        let iter = self.build_selection_iter(it)?;
+
         Ok(Box::new(iter))
     }
 
@@ -525,7 +559,7 @@ fn parse_walk_cond(pair: Pair) -> Result<(String, Vec<WalkElOp>)> {
             NAME_WHERE => {
                 let mut exprs = vec![];
                 for pair in pairs {
-                    let mut arg = pair.into_inner().next().unwrap();
+                    let arg = pair.into_inner().next().unwrap();
                     let expr = Expr::try_from(arg)?;
                     exprs.push(expr);
                 }
@@ -941,7 +975,7 @@ pub(crate) fn resolve_walk_chain(
         val_size: 1 + first_el.assocs.len(),
     }];
 
-    let mut starting_el = StartingEl {
+    let starting_el = StartingEl {
         node_info: first_info.into_node()?,
         assocs: first_assocs,
         binding: first_el.binding,
