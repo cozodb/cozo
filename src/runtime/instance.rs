@@ -50,6 +50,10 @@ pub struct DbInstance {
     destroy_on_close: bool,
 }
 
+unsafe impl Send for DbInstance {}
+
+unsafe impl Sync for DbInstance {}
+
 impl DbInstance {
     pub fn new(path: &str, optimistic: bool) -> Result<Self> {
         let options = default_options().make_shared();
