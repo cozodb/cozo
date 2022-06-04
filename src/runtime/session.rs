@@ -1,3 +1,5 @@
+use crate::algebra::op::RelationalAlgebra;
+use crate::algebra::parser::build_relational_expr;
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
 use crate::data::tuple_set::{TableId, MIN_TABLE_ID_BOUND};
@@ -179,12 +181,26 @@ impl Session {
     }
     fn execute_query(&mut self, pair: Pair, writable_main: bool) -> Result<Value> {
         let mut ctx = self.temp_ctx(writable_main);
+        let mut ret = vec![];
         for pair in pair.into_inner() {
-            let schema = DdlSchema::try_from(pair)?;
-            ctx.build_table(schema)?;
+            match pair.as_rule() {
+                Rule::node_def
+                | Rule::assoc_def
+                | Rule::edge_def
+                | Rule::index_def
+                | Rule::seq_def => {
+                    let schema = DdlSchema::try_from(pair)?;
+                    ctx.build_table(schema)?;
+                }
+                Rule::ra_expr => {
+                    let ra = build_relational_expr(&ctx, pair)?;
+                    ret.extend(ra.get_values()?);
+                }
+                _ => todo!("{:?}", pair.as_rule()),
+            }
         }
         ctx.commit()?;
-        Ok(Value::Null)
+        Ok(Value::List(ret))
     }
     fn execute_persist_block(&mut self, pair: Pair) -> Result<Value> {
         let mut ctx = self.main_ctx();

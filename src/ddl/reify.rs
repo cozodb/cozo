@@ -1120,6 +1120,7 @@ impl<'a> DdlContext for TempDbContext<'a> {
     }
 
     fn commit(&mut self) -> Result<()> {
+        self.txn.commit()?;
         Ok(())
     }
 }

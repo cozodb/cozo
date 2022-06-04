@@ -299,17 +299,16 @@ impl<'a> WalkOp<'a> {
     fn build_selection_iter(
         &self,
         it: Box<dyn Iterator<Item = Result<TupleSet>>>,
+        truncate_kv_sizes: (usize, usize),
     ) -> Result<impl Iterator<Item = Result<TupleSet>>> {
         let extraction_vec = self.extraction_map.values().cloned().collect::<Vec<_>>();
 
         extraction_vec.iter().for_each(|ex| ex.aggr_reset());
         let mut val_collectors = vec![];
         for ex in &extraction_vec {
-            // TODO the check here is more complicated than in the group case:
-            // check that nothing non-aggr exceeds the allowed kv range
-            // if !ex.is_aggr_compatible() {
-            //     return Err(AlgebraParseError::ScalarFnNotAllowed.into());
-            // }
+            if !ex.is_truncate_aggr_compatible(truncate_kv_sizes.0, truncate_kv_sizes.1) {
+                return Err(AlgebraParseError::ScalarFnNotAllowed.into());
+            }
             if let Ok(heads) = ex.clone().extract_aggr_heads() {
                 val_collectors.extend(heads)
             }
@@ -344,49 +343,50 @@ impl<'a> WalkOp<'a> {
                         }
                         let mut out = TupleSet::default();
                         out.vals.push(tuple.into());
-
+                        last_tset = TupleSet::default();
                         Some(Ok(out))
                     } else {
-                        let eval_ctx = TupleSetEvalContext {
-                            tuple_set: &tset,
-                            txn: &txn,
-                            temp_db: &temp_db,
-                            write_options: &w_opts,
-                        };
-                        for (op, args) in &val_collectors {
-                            match args.len() {
-                                0 => match op.put(&[]) {
-                                    Ok(_) => {}
-                                    Err(e) => return Some(Err(e)),
-                                },
-                                1 => {
-                                    let arg = args.iter().next().unwrap();
-                                    let arg = match arg.row_eval(&eval_ctx) {
-                                        Ok(v) => v,
-                                        Err(e) => return Some(Err(e)),
-                                    };
-                                    match op.put(&[arg]) {
+                        if !last_tset.keys.is_empty() {
+                            let eval_ctx = TupleSetEvalContext {
+                                tuple_set: &last_tset,
+                                txn: &txn,
+                                temp_db: &temp_db,
+                                write_options: &w_opts,
+                            };
+                            for (op, args) in &val_collectors {
+                                match args.len() {
+                                    0 => match op.put(&[]) {
                                         Ok(_) => {}
                                         Err(e) => return Some(Err(e)),
-                                    };
-                                }
-                                _ => {
-                                    let mut args_vals = Vec::with_capacity(args.len());
-                                    for arg in args {
+                                    },
+                                    1 => {
+                                        let arg = args.iter().next().unwrap();
                                         let arg = match arg.row_eval(&eval_ctx) {
                                             Ok(v) => v,
                                             Err(e) => return Some(Err(e)),
                                         };
-                                        args_vals.push(arg);
+                                        match op.put(&[arg]) {
+                                            Ok(_) => {}
+                                            Err(e) => return Some(Err(e)),
+                                        };
                                     }
-                                    match op.put(&args_vals) {
-                                        Ok(_) => {}
-                                        Err(e) => return Some(Err(e)),
-                                    };
+                                    _ => {
+                                        let mut args_vals = Vec::with_capacity(args.len());
+                                        for arg in args {
+                                            let arg = match arg.row_eval(&eval_ctx) {
+                                                Ok(v) => v,
+                                                Err(e) => return Some(Err(e)),
+                                            };
+                                            args_vals.push(arg);
+                                        }
+                                        match op.put(&args_vals) {
+                                            Ok(_) => {}
+                                            Err(e) => return Some(Err(e)),
+                                        };
+                                    }
                                 }
                             }
                         }
-
                         last_tset = tset.into_owned();
                         None
                     }
@@ -504,7 +504,7 @@ impl<'b> RelationalAlgebra for WalkOp<'b> {
             key_len: final_truncate_kv_size.0,
         });
 
-        let iter = self.build_selection_iter(it)?;
+        let iter = self.build_selection_iter(it, final_truncate_kv_size)?;
 
         Ok(Box::new(iter))
     }

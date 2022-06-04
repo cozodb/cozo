@@ -186,7 +186,7 @@ seq_def = { "sequence" ~ name_in_def ~ ";" }
 
 definition = _{ node_def | assoc_def | edge_def | index_def | seq_def }
 definition_all = _{SOI ~ definition ~ EOI}
-statement = _{ scope | definition }
+statement = _{ scope | definition | ra_expr_stmt }
 scope = {"{" ~ statement* ~ "}"}
 
 persist_block = {"persist!" ~ "{" ~ definition* ~ "}" }
@@ -211,6 +211,7 @@ ra_arg = { ra_expr | chain | scoped_list | scoped_dict | keyed_dict | walk_cond 
 ra_call_expr = { query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")" }
 ra_call = {"." ~ query_ident ~ "(" ~ (ra_arg ~ ",")* ~ ra_arg? ~ ")"}
 ra_expr = { ra_call_expr ~ ra_call* }
+ra_expr_stmt = _{ra_expr ~ ";"?}
 ra_expr_all = _{SOI ~ ra_expr ~ EOI}
 
 walk_cond = { ident ~ "=>" ~ ra_expr }

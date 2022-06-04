@@ -129,7 +129,7 @@ impl<'a> TryFrom<Pair<'a>> for DdlSchema {
             Rule::assoc_def => DdlSchema::Assoc(pair.try_into()?),
             Rule::seq_def => DdlSchema::Sequence(pair.try_into()?),
             Rule::index_def => DdlSchema::Index(pair.try_into()?),
-            _ => todo!(),
+            _ => todo!("{:?}", pair.as_rule()),
         })
     }
 }

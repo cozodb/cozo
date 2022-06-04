@@ -3,23 +3,15 @@ use cozo::DbInstance;
 use std::sync::Arc;
 
 struct AppStateWithDb {
-    db: DbInstance,
+    db: DbInstance
 }
 
-#[get("/")]
-async fn hello(data: web::Data<AppStateWithDb>) -> impl Responder {
-    // let sess = data.db.session().unwrap().start().unwrap();
-    // let res = sess.get_next_main_table_id();
-    HttpResponse::Ok().body(format!("Hello world! {:?}", None))
-}
-
-#[post("/echo")]
-async fn echo(req_body: String) -> impl Responder {
-    HttpResponse::Ok().body(req_body)
-}
-
-async fn manual_hello() -> impl Responder {
-    HttpResponse::Ok().body("Hey there!")
+#[post("/")]
+async fn query(body: web::Bytes, data: web::Data<AppStateWithDb>) -> impl Responder {
+    let text = String::from_utf8_lossy(body.as_ref());
+    let mut sess = data.db.session().unwrap().start().unwrap();
+    let res = sess.run_script(text, true);
+    HttpResponse::Ok().body(format!("{:?}", res))
 }
 
 #[actix_web::main]
@@ -34,9 +26,7 @@ async fn main() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data(db.clone())
-            .service(hello)
-            .service(echo)
-            .route("/hey", web::get().to(manual_hello))
+            .service(query)
     })
     .bind(("127.0.0.1", 8080))?
     .run()

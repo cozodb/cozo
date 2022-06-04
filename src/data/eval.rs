@@ -224,6 +224,38 @@ impl Expr {
         }
     }
 
+    pub(crate) fn is_truncate_aggr_compatible(&self, key_size: usize, val_size: usize) -> bool {
+        match self {
+            Expr::Const(_) => true,
+            Expr::List(l) => l.iter().all(|el| el.is_aggr_compatible()),
+            Expr::Dict(d) => d.values().all(|el| el.is_aggr_compatible()),
+            Expr::Variable(_) => false,
+            Expr::TupleSetIdx(TupleSetIdx { is_key, t_set, .. }) => {
+                if *is_key {
+                    *t_set < key_size
+                } else {
+                    *t_set < val_size
+                }
+            }
+            Expr::ApplyAgg(_, _, _) => true,
+            Expr::FieldAcc(_, arg) => arg.is_aggr_compatible(),
+            Expr::IdxAcc(_, arg) => arg.is_aggr_compatible(),
+            Expr::IfExpr(args) => {
+                let (a, b, c) = args.as_ref();
+                a.is_aggr_compatible() && b.is_aggr_compatible() && c.is_aggr_compatible()
+            }
+            Expr::SwitchExpr(args) => args
+                .iter()
+                .all(|(cond, expr)| cond.is_aggr_compatible() && expr.is_aggr_compatible()),
+            Expr::OpAnd(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::OpOr(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::OpCoalesce(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::OpMerge(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::OpConcat(args) => args.iter().all(|el| el.is_aggr_compatible()),
+            Expr::BuiltinFn(_, args) => args.iter().all(|el| el.is_aggr_compatible()),
+        }
+    }
+
     pub(crate) fn is_aggr_compatible(&self) -> bool {
         match self {
             Expr::Const(_) => true,
