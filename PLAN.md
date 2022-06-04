@@ -13,7 +13,7 @@ Operations
 * [x] `skip(rel, n)`
 * [x] `sort(rel, expr1, expr2: sort_dir)`
 * [x] `group(rel, binding: {*key1: expr1, val1: expr2}, *ordering)` may order elements within groups
-* [ ] `walk(pattern, ...conds, ...bindings)`
+* [x] `walk(pattern, ...conds, ...bindings)`
 * [ ] `walk_repeat(pattern, ...conds, ...bindings)` every element contains additional `_iter` and `_visited` fields
 * [x] `values(data, ?Table)`
 * [x] `nested_values(data, ?Table).extract(Table)`
@@ -59,7 +59,6 @@ Walk(a:A-[e:E]->b:B,
         ...a
      })
 
-WalkChain(a:A-[p:Path]->b:B,
-          b => b._steps < 100)
-WalkChainOverlapping(...)
+Chain(a:A-[p:Path]->b:B,
+      _next => _hops < 10)
 ```

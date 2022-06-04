@@ -8,7 +8,10 @@ use crate::context::TempDbContext;
 use crate::data::expr::Expr;
 use crate::data::parser::parse_scoped_dict;
 use crate::data::tuple::{DataKind, OwnTuple, ReifiedTuple, Tuple};
-use crate::data::tuple_set::{merge_binding_maps, BindingMap, BindingMapEvalContext, TupleSet, TupleSetIdx, TupleSetEvalContext};
+use crate::data::tuple_set::{
+    merge_binding_maps, BindingMap, BindingMapEvalContext, TupleSet, TupleSetEvalContext,
+    TupleSetIdx,
+};
 use crate::data::value::Value;
 use crate::ddl::reify::{AssocInfo, EdgeInfo, NodeInfo, TableInfo};
 use crate::parser::{Pair, Pairs, Rule};
@@ -1015,23 +1018,41 @@ fn clustered_in_mem_sort(
         }
     }
 
-    let comparator = make_tuple_comparator(sort_exprs);
-
     let mut collected = vec![];
-    let it = it.flat_map(move |tset| match tset {
-        Err(e) => vec![Err(e)].into_iter(),
-        Ok(tset) => {
-            if tset.keys.is_empty() {
-                let mut to_output = vec![];
-                mem::swap(&mut to_output, &mut collected);
-                to_output.sort_by(&comparator);
-                to_output.push(Ok(tset));
-                to_output.into_iter()
-            } else {
-                collected.push(Ok(tset.into_owned()));
-                vec![].into_iter()
+    let it = it.flat_map(move |tset| {
+        let inner_it: Box<dyn Iterator<Item = Result<TupleSet>>>;
+        match tset {
+            Err(e) => inner_it = Box::new([Err(e)].into_iter()),
+            Ok(tset) => {
+                if tset.keys.is_empty() {
+                    let mut to_output = vec![];
+                    mem::swap(&mut to_output, &mut collected);
+                    to_output.sort_by(sort_value_comparator);
+                    to_output.push((vec![], tset));
+                    inner_it = Box::new(to_output.into_iter().map(|(_, tset)| Ok(tset)));
+                } else {
+                    match sort_exprs
+                        .iter()
+                        .map(|(ex, dir)| -> Result<Value> {
+                            let mut res = ex.row_eval(&tset)?.into_static();
+                            if *dir == SortDirection::Dsc {
+                                res = Value::DescVal(Reverse(res.into()))
+                            }
+                            Ok(res)
+                        })
+                        .collect::<Result<Vec<_>>>()
+                    {
+                        Err(e) => inner_it = Box::new([Err(e)].into_iter()),
+                        Ok(sort_vals) => {
+                            // Ok((sort_vals, v.into_owned()))
+                            collected.push((sort_vals, tset.into_owned()));
+                            inner_it = Box::new(vec![].into_iter());
+                        }
+                    }
+                }
             }
         }
+        inner_it
     });
     Ok(it)
 }
@@ -1046,51 +1067,32 @@ fn in_mem_sort(
         }
     }
 
-    let mut collected = it
+    let mut collected: Vec<(Vec<Value>, TupleSet)> = it
         .map(|v| match v {
             Err(e) => Err(e),
-            Ok(v) => Ok(v.into_owned()),
+            Ok(v) => {
+                match sort_exprs
+                    .iter()
+                    .map(|(ex, dir)| -> Result<Value> {
+                        let mut res = ex.row_eval(&v)?.into_static();
+                        if *dir == SortDirection::Dsc {
+                            res = Value::DescVal(Reverse(res.into()))
+                        }
+                        Ok(res)
+                    })
+                    .collect::<Result<Vec<_>>>()
+                {
+                    Err(e) => Err(e),
+                    Ok(sort_vals) => Ok((sort_vals, v.into_owned())),
+                }
+            }
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>>>()?;
 
-    collected.sort_by(make_tuple_comparator(sort_exprs));
-    Ok(collected.into_iter())
+    collected.sort_by(sort_value_comparator);
+    Ok(collected.into_iter().map(|(_, v)| Ok(v)))
 }
 
-fn make_tuple_comparator(
-    sort_exprs: Vec<(Expr, SortDirection)>,
-) -> impl Fn(&Result<TupleSet>, &Result<TupleSet>) -> Ordering {
-    move |a: &Result<TupleSet>, b: &Result<TupleSet>| match (a, b) {
-        (Err(_), Err(_)) => Ordering::Equal,
-        (Err(_), Ok(_)) => Ordering::Greater,
-        (Ok(_), Err(_)) => Ordering::Less,
-        (Ok(a), Ok(b)) => {
-            let a_res = sort_exprs
-                .iter()
-                .map(|(ex, dir)| -> Result<Value> {
-                    let mut res = ex.row_eval(a)?;
-                    if *dir == SortDirection::Dsc {
-                        res = Value::DescVal(Reverse(res.into()))
-                    }
-                    Ok(res)
-                })
-                .collect::<Result<Vec<_>>>();
-            let b_res = sort_exprs
-                .iter()
-                .map(|(ex, dir)| -> Result<Value> {
-                    let mut res = ex.row_eval(b)?;
-                    if *dir == SortDirection::Dsc {
-                        res = Value::DescVal(Reverse(res.into()))
-                    }
-                    Ok(res)
-                })
-                .collect::<Result<Vec<_>>>();
-            match (a_res, b_res) {
-                (Err(_), Err(_)) => Ordering::Equal,
-                (Err(_), Ok(_)) => Ordering::Greater,
-                (Ok(_), Err(_)) => Ordering::Less,
-                (Ok(av), Ok(bv)) => av.cmp(&bv),
-            }
-        }
-    }
+fn sort_value_comparator(a: &(Vec<Value>, TupleSet), b: &(Vec<Value>, TupleSet)) -> Ordering {
+    a.0.cmp(&b.0)
 }

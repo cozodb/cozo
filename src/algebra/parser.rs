@@ -647,12 +647,12 @@ pub(crate) mod tests {
             let ctx = sess.temp_ctx(true);
             let s = r#"
              Walk(j:Job<-[:HasJob]-e:Employee-[:InDepartment]->d:Department,
-                  j => Sort(j.id => asc).Take(10).Where(j.id <= 6, j.id > 3),
-                  e => Sort(e.id => desc).Skip(1).Where(e.id > 110),
+                  j => Sort(j.id => desc),
+                  // e => Sort(e.id => desc).Skip(1).Where(e.id > 110),
                   j: {
                     id_1_job: j.id,
-                    id_2_emp: sum[e.id],
-                    id_3_dep: sum[d.id],
+                    id_2_emp: count_non_null[e.id],
+                    id_3_dep: count_non_null[d.id],
                   })
             "#;
             let ra = build_relational_expr(
