@@ -203,7 +203,7 @@ impl<'b> RelationalAlgebra for GroupOp<'b> {
                     )
                 })
                 .collect::<BTreeMap<_, _>>(),
-            ex => return Err(SelectOpError::NeedsDict(ex).into()),
+            ex => return Err(SelectOpError::NeedsDict.into()),
         };
 
         for (i, (k, _)) in extract_map.iter().enumerate() {
@@ -255,7 +255,7 @@ impl<'b> RelationalAlgebra for GroupOp<'b> {
                 .values()
                 .map(|v| Expr::Const(v.clone()))
                 .collect::<Vec<_>>(),
-            ex => return Err(SelectOpError::NeedsDict(ex).into()),
+            ex => return Err(SelectOpError::NeedsDict.into()),
         };
 
         for ex in extraction_vec {

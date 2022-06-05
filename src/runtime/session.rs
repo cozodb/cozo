@@ -16,7 +16,7 @@ use log::error;
 use pest::Parser;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Mutex, Arc};
 
 pub(crate) enum Definable {
     Value(StaticValue),

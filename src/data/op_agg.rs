@@ -7,7 +7,7 @@ mod sum;
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use std::ops::Deref;
-use std::sync::Arc;
+use std::rc::Rc;
 
 pub(crate) use collect::*;
 pub(crate) use count::*;
@@ -16,10 +16,10 @@ pub(crate) use min_max::*;
 pub(crate) use sum::*;
 
 #[derive(Clone)]
-pub struct OpAgg(pub(crate) Arc<dyn OpAggT + Send + Sync>);
+pub struct OpAgg(pub(crate) Rc<dyn OpAggT>);
 
 impl Deref for OpAgg {
-    type Target = Arc<dyn OpAggT + Send + Sync>;
+    type Target = Rc<dyn OpAggT>;
 
     fn deref(&self) -> &Self::Target {
         &self.0

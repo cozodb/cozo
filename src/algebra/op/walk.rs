@@ -1145,7 +1145,7 @@ pub(crate) fn parse_walk_conditions_and_collectors(
             .into_iter()
             .map(|(k, v)| (k.to_string(), Expr::Const(v.clone())))
             .collect(),
-        ex => return Err(SelectOpError::NeedsDict(ex).into()),
+        ex => return Err(SelectOpError::NeedsDict.into()),
     };
     Ok((bindings.pop().unwrap(), extraction_map))
 }

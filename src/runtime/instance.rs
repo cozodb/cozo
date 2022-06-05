@@ -6,7 +6,7 @@ use anyhow::Result;
 use cozorocks::*;
 use log::error;
 use std::mem;
-use std::sync::{Arc, Mutex};
+use std::sync::{Mutex, Arc};
 
 #[derive(thiserror::Error, Debug)]
 pub enum DbInstanceError {
@@ -188,7 +188,6 @@ mod tests {
     use crate::runtime::instance::DbInstance;
     use std::time::Instant;
 
-    fn test_send<T: Send>(_x: T) {}
 
     #[test]
     fn creation() -> Result<()> {
@@ -205,7 +204,6 @@ mod tests {
             let i1 = db2.session()?.start()?;
             dbg!(i1.get_next_temp_table_id());
             dbg!(i1.get_next_main_table_id()?);
-            test_send(i1);
         }
         dbg!(start.elapsed());
         Ok(())

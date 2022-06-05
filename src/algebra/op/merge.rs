@@ -32,12 +32,12 @@ pub(crate) struct MergeJoin<'a> {
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum JoinError {
-    #[error("Invalid join condition {0:?}")]
-    JoinCondition(Expr),
-    #[error("Join condition {0:?} must contain variables {1:?}")]
-    NoBoundVariable(Expr, BTreeSet<String>),
-    #[error("Join condition {0:?} must not contain variables {1:?}")]
-    WrongBoundVariable(Expr, BTreeSet<String>),
+    #[error("Invalid join condition")]
+    JoinCondition,
+    #[error("Join condition must contain variables {0:?}")]
+    NoBoundVariable(BTreeSet<String>),
+    #[error("Join condition must not contain variables {0:?}")]
+    WrongBoundVariable(BTreeSet<String>),
 }
 
 impl<'a> MergeJoin<'a> {
@@ -80,27 +80,27 @@ impl<'a> MergeJoin<'a> {
                     let right_variables = right_condition.all_variables();
                     if left_variables.is_disjoint(&left_bindings) {
                         return Err(
-                            JoinError::NoBoundVariable(left_condition, left_bindings).into()
+                            JoinError::NoBoundVariable(left_bindings).into()
                         );
                     }
                     if right_variables.is_disjoint(&right_bindings) {
                         return Err(
-                            JoinError::NoBoundVariable(right_condition, right_bindings).into()
+                            JoinError::NoBoundVariable(right_bindings).into()
                         );
                     }
                     if !left_variables.is_disjoint(&right_bindings) {
                         return Err(
-                            JoinError::WrongBoundVariable(left_condition, right_bindings).into(),
+                            JoinError::WrongBoundVariable(right_bindings).into(),
                         );
                     }
                     if !right_variables.is_disjoint(&left_bindings) {
                         return Err(
-                            JoinError::WrongBoundVariable(right_condition, left_bindings).into(),
+                            JoinError::WrongBoundVariable(left_bindings).into(),
                         );
                     }
                     join_keys.push((left_condition, right_condition))
                 }
-                ex => return Err(JoinError::JoinCondition(ex).into()),
+                ex => return Err(JoinError::JoinCondition.into()),
             }
         }
 

@@ -1,9 +1,8 @@
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use cozo::DbInstance;
-use std::sync::Arc;
 
 struct AppStateWithDb {
-    db: DbInstance
+    db: DbInstance,
 }
 
 #[post("/")]
@@ -18,17 +17,10 @@ async fn query(body: web::Bytes, data: web::Data<AppStateWithDb>) -> impl Respon
 async fn main() -> std::io::Result<()> {
     let mut db = DbInstance::new("_test_rest", false).unwrap();
     db.set_destroy_on_close(true);
-    let db = web::Data::new(AppStateWithDb {
-        db
-    });
+    let db = web::Data::new(AppStateWithDb { db });
 
-
-    HttpServer::new(move || {
-        App::new()
-            .app_data(db.clone())
-            .service(query)
-    })
-    .bind(("127.0.0.1", 8080))?
-    .run()
-    .await
+    HttpServer::new(move || App::new().app_data(db.clone()).service(query))
+        .bind(("127.0.0.1", 8080))?
+        .run()
+        .await
 }

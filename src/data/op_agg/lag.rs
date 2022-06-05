@@ -1,21 +1,22 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use crate::data::eval::EvalError;
 use crate::data::expr::Expr;
 use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 pub(crate) struct OpLag {
-    buffer: Mutex<Vec<StaticValue>>,
+    buffer: RefCell<Vec<StaticValue>>,
     ptr: AtomicUsize,
 }
 
 pub(crate) const NAME_OP_LAG: &str = "lag";
 
 pub(crate) fn build_op_lag(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
-    Expr::ApplyAgg(OpAgg(Arc::new(OpLag::default())), a_args, args)
+    Expr::ApplyAgg(OpAgg(Rc::new(OpLag::default())), a_args, args)
 }
 
 impl OpAggT for OpLag {
@@ -28,7 +29,7 @@ impl OpAggT for OpLag {
     }
 
     fn reset(&self) {
-        self.buffer.lock().unwrap().fill(Value::Null);
+        self.buffer.borrow_mut().fill(Value::Null);
         self.ptr.store(0, Ordering::Relaxed);
     }
 
@@ -40,14 +41,14 @@ impl OpAggT for OpLag {
         let n = n
             .get_int()
             .ok_or_else(|| EvalError::OpTypeMismatch(self.name().to_string(), vec![]))?;
-        let mut buffer = self.buffer.lock().unwrap();
+        let mut buffer = self.buffer.borrow_mut();
         buffer.clear();
         buffer.resize((n + 1) as usize, Value::Null);
         Ok(())
     }
 
     fn put(&self, args: &[Value]) -> Result<()> {
-        let mut buffer = self.buffer.lock().unwrap();
+        let mut buffer = self.buffer.borrow_mut();
         let n = buffer.len();
         let mut i = self.ptr.load(Ordering::Relaxed);
         for arg in args {
@@ -60,7 +61,7 @@ impl OpAggT for OpLag {
 
     fn get(&self) -> Result<StaticValue> {
         let i = self.ptr.load(Ordering::Relaxed);
-        let buffer = self.buffer.lock().unwrap();
+        let buffer = self.buffer.borrow();
         Ok(buffer.get(i).unwrap().clone())
     }
 }

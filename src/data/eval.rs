@@ -13,11 +13,11 @@ pub enum EvalError {
     #[error("Unresolved variable `{0}`")]
     UnresolvedVariable(String),
 
-    #[error("Cannot access field {0} for {1:?}")]
-    FieldAccess(String, Expr),
+    #[error("Cannot access field {0}")]
+    FieldAccess(String),
 
-    #[error("Cannot access index {0} for {1:?}")]
-    IndexAccess(usize, Expr),
+    #[error("Cannot access index {0}")]
+    IndexAccess(usize),
 
     #[error("Cannot apply `{0}` to `{1:?}`")]
     OpTypeMismatch(String, Vec<StaticValue>),
@@ -350,7 +350,7 @@ impl Expr {
                     | Expr::OpMerge(_)
                     | Expr::OpCoalesce(_)) => Expr::FieldAcc(f, v.into()),
                     Expr::Dict(mut d) => d.remove(&f as &str).unwrap_or(Expr::Const(Value::Null)),
-                    v => return Err(EvalError::FieldAccess(f, v).into()),
+                    v => return Err(EvalError::FieldAccess(f).into()),
                 },
             },
             Expr::IdxAcc(i, arg) => {
@@ -383,7 +383,7 @@ impl Expr {
                         | Expr::FieldAcc(_, _)
                         | Expr::BuiltinFn(_, _)
                         | Expr::ApplyAgg(_, _, _)) => Expr::IdxAcc(i, v.into()),
-                        v => return Err(EvalError::IndexAccess(i, v).into()),
+                        v => return Err(EvalError::IndexAccess(i).into()),
                     },
                 }
             }
@@ -511,7 +511,7 @@ impl Expr {
                 Value::Dict(mut d) => d.remove(f as &str).unwrap_or(Value::Null),
                 v => {
                     return Err(
-                        EvalError::FieldAccess(f.clone(), Expr::Const(v.into_static())).into(),
+                        EvalError::FieldAccess(f.clone()).into(),
                     );
                 }
             },
@@ -524,7 +524,7 @@ impl Expr {
                         d.swap_remove(*idx)
                     }
                 }
-                v => return Err(EvalError::IndexAccess(*idx, Expr::Const(v.into_static())).into()),
+                v => return Err(EvalError::IndexAccess(*idx).into()),
             },
             Expr::IfExpr(args) => {
                 let (cond, if_part, else_part) = args.as_ref();

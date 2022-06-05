@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::data::eval::EvalError;
 use crate::data::expr::Expr;
 use crate::data::op::OP_IS_NULL;
@@ -5,7 +6,6 @@ use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
 
 #[derive(Default)]
 pub struct OpCountWith {
@@ -17,12 +17,12 @@ pub(crate) const NAME_OP_COUNT_WITH: &str = "count_with";
 pub(crate) const NAME_OP_COUNT_NON_NULL: &str = "count_non_null";
 
 pub(crate) fn build_op_count_with(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
-    Expr::ApplyAgg(OpAgg(Arc::new(OpCountWith::default())), a_args, args)
+    Expr::ApplyAgg(OpAgg(Rc::new(OpCountWith::default())), a_args, args)
 }
 
 pub(crate) fn build_op_count(a_args: Vec<Expr>, _args: Vec<Expr>) -> Expr {
     Expr::ApplyAgg(
-        OpAgg(Arc::new(OpCountWith::default())),
+        OpAgg(Rc::new(OpCountWith::default())),
         a_args,
         vec![Expr::Const(Value::Int(1))],
     )
@@ -30,7 +30,7 @@ pub(crate) fn build_op_count(a_args: Vec<Expr>, _args: Vec<Expr>) -> Expr {
 
 pub(crate) fn build_op_count_non_null(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
     Expr::ApplyAgg(
-        OpAgg(Arc::new(OpCountWith::default())),
+        OpAgg(Rc::new(OpCountWith::default())),
         a_args,
         vec![Expr::IfExpr(
             (

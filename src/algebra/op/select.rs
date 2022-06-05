@@ -68,8 +68,8 @@ impl<'a> SelectOp<'a> {
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum SelectOpError {
-    #[error("Selection needs a dict, got {0:?}")]
-    NeedsDict(Expr),
+    #[error("Selection needs a dict")]
+    NeedsDict,
 }
 
 impl<'b> RelationalAlgebra for SelectOp<'b> {
@@ -116,7 +116,7 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
                     )
                 })
                 .collect::<BTreeMap<_, _>>(),
-            ex => return Err(SelectOpError::NeedsDict(ex).into()),
+            ex => return Err(SelectOpError::NeedsDict.into()),
         };
         Ok(BindingMap {
             inner_map: BTreeMap::from([(self.binding.clone(), extract_map)]),
@@ -137,7 +137,7 @@ impl<'b> RelationalAlgebra for SelectOp<'b> {
                 .values()
                 .map(|v| Expr::Const(v.clone()))
                 .collect::<Vec<_>>(),
-            ex => return Err(SelectOpError::NeedsDict(ex).into()),
+            ex => return Err(SelectOpError::NeedsDict.into()),
         };
 
         extraction_vec.iter().for_each(|ex| ex.aggr_reset());

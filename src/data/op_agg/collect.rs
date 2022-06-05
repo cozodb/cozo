@@ -3,18 +3,19 @@ use crate::data::expr::Expr;
 use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
-use std::sync::{Arc, Mutex};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Default)]
 pub(crate) struct OpCollectIf {
-    buffer: Mutex<Vec<StaticValue>>,
+    buffer: RefCell<Vec<StaticValue>>,
 }
 
 pub(crate) const NAME_OP_COLLECT_IF: &str = "collect_if";
 pub(crate) const NAME_OP_COLLECT: &str = "collect";
 
 pub(crate) fn build_op_collect_if(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
-    Expr::ApplyAgg(OpAgg(Arc::new(OpCollectIf::default())), a_args, args)
+    Expr::ApplyAgg(OpAgg(Rc::new(OpCollectIf::default())), a_args, args)
 }
 
 pub(crate) fn build_op_collect(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
@@ -22,7 +23,7 @@ pub(crate) fn build_op_collect(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
         args.into_iter().next().unwrap(),
         Expr::Const(Value::Bool(true)),
     ];
-    Expr::ApplyAgg(OpAgg(Arc::new(OpCollectIf::default())), a_args, args)
+    Expr::ApplyAgg(OpAgg(Rc::new(OpCollectIf::default())), a_args, args)
 }
 
 impl OpAggT for OpCollectIf {
@@ -35,7 +36,7 @@ impl OpAggT for OpCollectIf {
     }
 
     fn reset(&self) {
-        self.buffer.lock().unwrap().clear();
+        self.buffer.borrow_mut().clear();
     }
 
     fn initialize(&self, a_args: Vec<StaticValue>) -> Result<()> {
@@ -63,13 +64,13 @@ impl OpAggT for OpCollectIf {
             }
         }
 
-        let mut buffer = self.buffer.lock().unwrap();
+        let mut buffer = self.buffer.borrow_mut();
         buffer.push(val.clone().into_static());
 
         Ok(())
     }
 
     fn get(&self) -> Result<StaticValue> {
-        Ok(Value::List(self.buffer.lock().unwrap().clone()))
+        Ok(Value::List(self.buffer.borrow().clone()))
     }
 }

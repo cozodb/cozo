@@ -1,30 +1,31 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use crate::data::eval::EvalError;
 use crate::data::expr::Expr;
 use crate::data::op_agg::{OpAgg, OpAggT};
 use crate::data::value::{StaticValue, Value};
 use anyhow::Result;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
 
 pub(crate) const NAME_OP_SUM: &str = "sum";
 pub(crate) const NAME_OP_AVG: &str = "avg";
 pub(crate) const NAME_OP_VAR: &str = "var";
 
 pub(crate) fn build_op_sum(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
-    Expr::ApplyAgg(OpAgg(Arc::new(OpSum::default())), a_args, args)
+    Expr::ApplyAgg(OpAgg(Rc::new(OpSum::default())), a_args, args)
 }
 
 pub(crate) fn build_op_avg(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
-    Expr::ApplyAgg(OpAgg(Arc::new(OpAvg::default())), a_args, args)
+    Expr::ApplyAgg(OpAgg(Rc::new(OpAvg::default())), a_args, args)
 }
 
 pub(crate) fn build_op_var(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
-    Expr::ApplyAgg(OpAgg(Arc::new(OpVar::default())), a_args, args)
+    Expr::ApplyAgg(OpAgg(Rc::new(OpVar::default())), a_args, args)
 }
 
 #[derive(Default)]
 pub struct OpSum {
-    total: Mutex<f64>,
+    total: RefCell<f64>,
 }
 
 impl OpAggT for OpSum {
@@ -37,7 +38,7 @@ impl OpAggT for OpSum {
     }
 
     fn reset(&self) {
-        let mut total = self.total.lock().unwrap();
+        let mut total = self.total.borrow_mut();
         *total = 0.;
     }
 
@@ -59,19 +60,19 @@ impl OpAggT for OpSum {
                 .into())
             }
         };
-        *self.total.lock().unwrap() += to_add;
+        *self.total.borrow_mut() += to_add;
         Ok(())
     }
 
     fn get(&self) -> Result<StaticValue> {
-        let f = *self.total.lock().unwrap();
+        let f = *self.total.borrow();
         Ok(f.into())
     }
 }
 
 #[derive(Default)]
 pub struct OpAvg {
-    total: Mutex<f64>,
+    total: RefCell<f64>,
     ct: AtomicUsize,
 }
 
@@ -85,7 +86,7 @@ impl OpAggT for OpAvg {
     }
 
     fn reset(&self) {
-        let mut total = self.total.lock().unwrap();
+        let mut total = self.total.borrow_mut();
         *total = 0.;
         self.ct.store(0, Ordering::Relaxed);
     }
@@ -108,13 +109,13 @@ impl OpAggT for OpAvg {
                 .into())
             }
         };
-        *self.total.lock().unwrap() += to_add;
+        *self.total.borrow_mut() += to_add;
         self.ct.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 
     fn get(&self) -> Result<StaticValue> {
-        let f = *self.total.lock().unwrap();
+        let f = *self.total.borrow();
         let ct = self.ct.load(Ordering::Relaxed);
         Ok((f / ct as f64).into())
     }
@@ -122,8 +123,8 @@ impl OpAggT for OpAvg {
 
 #[derive(Default)]
 pub struct OpVar {
-    sum: Mutex<f64>,
-    sum_sq: Mutex<f64>,
+    sum: RefCell<f64>,
+    sum_sq: RefCell<f64>,
     ct: AtomicUsize,
 }
 
@@ -137,8 +138,8 @@ impl OpAggT for OpVar {
     }
 
     fn reset(&self) {
-        *self.sum.lock().unwrap() = 0.;
-        *self.sum_sq.lock().unwrap() = 0.;
+        *self.sum.borrow_mut() = 0.;
+        *self.sum_sq.borrow_mut() = 0.;
         self.ct.store(0, Ordering::Relaxed);
     }
 
@@ -160,15 +161,15 @@ impl OpAggT for OpVar {
                 .into())
             }
         };
-        *self.sum.lock().unwrap() += to_add;
-        *self.sum_sq.lock().unwrap() += f64::powf(to_add, 2.);
+        *self.sum.borrow_mut() += to_add;
+        *self.sum_sq.borrow_mut() += f64::powf(to_add, 2.);
         self.ct.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 
     fn get(&self) -> Result<StaticValue> {
-        let sum = *self.sum.lock().unwrap();
-        let sum_sq = *self.sum_sq.lock().unwrap();
+        let sum = *self.sum.borrow();
+        let sum_sq = *self.sum_sq.borrow();
         let ct = self.ct.load(Ordering::Relaxed) as f64;
         let res = (sum_sq / ct - (sum / ct).powf(2.)) * ct / (ct - 1.);
         Ok(res.into())
