@@ -32,6 +32,7 @@ mod union;
 mod update;
 mod values;
 mod walk;
+mod chainwalk;
 
 use crate::data::expr::Expr;
 use crate::data::tuple::{DataKind, OwnTuple, Tuple};
@@ -59,6 +60,7 @@ pub(crate) use union::*;
 pub(crate) use update::*;
 pub(crate) use values::*;
 pub(crate) use walk::*;
+pub(crate) use chainwalk::*;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum QueryError {

@@ -93,6 +93,7 @@ pub(crate) enum RaBox<'a> {
     DeleteOp(Box<DeleteOp<'a>>),
     UpdateOp(Box<UpdateOp<'a>>),
     WalkOp(Box<WalkOp<'a>>),
+    ChainWalkOp(Box<ChainWalkOp<'a>>),
 }
 
 impl<'a> RaBox<'a> {
@@ -102,6 +103,7 @@ impl<'a> RaBox<'a> {
             RaBox::TaggedInsertion(_inner) => vec![],
             RaBox::FromValues(_inner) => vec![],
             RaBox::WalkOp(_inner) => vec![],
+            RaBox::ChainWalkOp(_inner) => vec![],
             RaBox::TableScan(_inner) => vec![],
             RaBox::WhereFilter(inner) => vec![&inner.source],
             RaBox::SelectOp(inner) => vec![&inner.source],
@@ -157,6 +159,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DeleteOp(inner) => inner.name(),
             RaBox::UpdateOp(inner) => inner.name(),
             RaBox::WalkOp(inner) => inner.name(),
+            RaBox::ChainWalkOp(inner) => inner.name(),
         }
     }
 
@@ -183,6 +186,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DeleteOp(inner) => inner.bindings(),
             RaBox::UpdateOp(inner) => inner.bindings(),
             RaBox::WalkOp(inner) => inner.bindings(),
+            RaBox::ChainWalkOp(inner) => inner.bindings(),
         }
     }
 
@@ -209,6 +213,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DeleteOp(inner) => inner.binding_map(),
             RaBox::UpdateOp(inner) => inner.binding_map(),
             RaBox::WalkOp(inner) => inner.binding_map(),
+            RaBox::ChainWalkOp(inner) => inner.binding_map(),
         }
     }
 
@@ -235,6 +240,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DeleteOp(inner) => inner.iter(),
             RaBox::UpdateOp(inner) => inner.iter(),
             RaBox::WalkOp(inner) => inner.iter(),
+            RaBox::ChainWalkOp(inner) => inner.iter(),
         }
     }
 
@@ -261,6 +267,7 @@ impl<'b> RelationalAlgebra for RaBox<'b> {
             RaBox::DeleteOp(inner) => inner.identity(),
             RaBox::UpdateOp(inner) => inner.identity(),
             RaBox::WalkOp(inner) => inner.identity(),
+            RaBox::ChainWalkOp(inner) => inner.identity(),
         }
     }
 }
@@ -360,6 +367,11 @@ pub(crate) fn build_relational_expr<'a>(
                 )?)))
             }
             NAME_WALK => built = Some(RaBox::WalkOp(Box::new(WalkOp::build(ctx, built, pairs)?))),
+            NAME_CHAIN_WALK => {
+                built = Some(RaBox::ChainWalkOp(Box::new(ChainWalkOp::build(
+                    ctx, built, pairs,
+                )?)))
+            }
             name => {
                 unimplemented!("{}", name)
             }
@@ -672,6 +684,30 @@ pub(crate) mod tests {
         let duration_walk = start.elapsed();
 
         let start = Instant::now();
+        {
+            let ctx = sess.temp_ctx(true);
+            let s = r#"
+             Chain(e:Employee-[:Manages]->e2:Employee,
+                  e => Where(e.id == 100),
+                  e: {
+                    name: e.first_name,
+                    manages: e2.first_name.collect_non_null[]
+                  })
+            "#;
+            let ra = build_relational_expr(
+                &ctx,
+                CozoParser::parse(Rule::ra_expr_all, s)
+                    .unwrap()
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            )?;
+            dbg!(&ra);
+            dbg!(ra.get_values()?);
+        }
+        let duration_chain = start.elapsed();
+
+        let start = Instant::now();
         let mut r_opts = default_read_options();
         r_opts.set_total_order_seek(true);
         r_opts.set_prefix_same_as_start(false);
@@ -701,6 +737,7 @@ pub(crate) mod tests {
             duration_union,
             duration_delete,
             duration_walk,
+            duration_chain,
             n
         );
         Ok(())

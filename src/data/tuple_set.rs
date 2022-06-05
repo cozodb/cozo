@@ -150,6 +150,10 @@ impl TupleSet {
 
     pub(crate) fn encode_as_tuple(&self, target: &mut OwnTuple) {
         target.truncate_all();
+        self.append_encode_as_tuple(target)
+    }
+
+    pub(crate) fn append_encode_as_tuple(&self, target: &mut OwnTuple) {
         target.push_int(self.keys.len() as i64);
         target.push_int(self.vals.len() as i64);
         for k in &self.keys {
@@ -178,19 +182,25 @@ impl TupleSet {
     }
 
     pub(crate) fn decode_from_tuple<T: AsRef<[u8]>>(source: &Tuple<T>) -> Result<Self> {
+        Self::append_decode_from_tuple(source, 0)
+    }
+    pub(crate) fn append_decode_from_tuple<T: AsRef<[u8]>>(
+        source: &Tuple<T>,
+        pos: usize,
+    ) -> Result<Self> {
         let gen_err = || DecodeFailure(source.to_owned());
-        let k_len = source.get_int(0)? as usize;
-        let v_len = source.get_int(1)? as usize;
+        let k_len = source.get_int(pos)? as usize;
+        let v_len = source.get_int(pos + 1)? as usize;
         let mut ret = TupleSet {
             keys: Vec::with_capacity(k_len),
             vals: Vec::with_capacity(v_len),
         };
-        for i in 2..k_len + 2 {
+        for i in pos + 2..pos + k_len + 2 {
             let d = source.get(i)?;
             let d = d.get_bytes().ok_or_else(gen_err)?;
             ret.keys.push(OwnTuple::new(d.to_vec()).into());
         }
-        for i in k_len + 2..k_len + v_len + 2 {
+        for i in pos + k_len + 2..pos + k_len + v_len + 2 {
             let d = source.get(i)?;
             let d = d.get_bytes().ok_or_else(gen_err)?;
             ret.vals.push(OwnTuple::new(d.to_vec()).into());

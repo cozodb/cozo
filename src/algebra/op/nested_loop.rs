@@ -162,7 +162,7 @@ pub(crate) fn unique_prefix_nested_loop<'a>(
         match result {
             None => {
                 if left_join {
-                    tset.push_key(key_tuple.clone().into());
+                    tset.push_key(Tuple::empty_tuple().into());
                     tset.push_val(Tuple::empty_tuple().into());
                     Ok(Some(tset))
                 } else {

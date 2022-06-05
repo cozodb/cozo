@@ -13,9 +13,14 @@ pub(crate) struct OpCollectIf {
 
 pub(crate) const NAME_OP_COLLECT_IF: &str = "collect_if";
 pub(crate) const NAME_OP_COLLECT: &str = "collect";
+pub(crate) const NAME_OP_COLLECT_NON_NULL: &str = "collect_non_null";
 
 pub(crate) fn build_op_collect_if(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
     Expr::ApplyAgg(OpAgg(Rc::new(OpCollectIf::default())), a_args, args)
+}
+
+pub(crate) fn build_op_collect_non_null(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
+    Expr::ApplyAgg(OpAgg(Rc::new(OpCollectNonNull::default())), a_args, args)
 }
 
 pub(crate) fn build_op_collect(a_args: Vec<Expr>, args: Vec<Expr>) -> Expr {
@@ -62,6 +67,49 @@ impl OpAggT for OpCollectIf {
                 )
                 .into())
             }
+        }
+
+        let mut buffer = self.buffer.borrow_mut();
+        buffer.push(val.clone().into_static());
+
+        Ok(())
+    }
+
+    fn get(&self) -> Result<StaticValue> {
+        Ok(Value::List(self.buffer.borrow().clone()))
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct OpCollectNonNull {
+    buffer: RefCell<Vec<StaticValue>>,
+}
+
+impl OpAggT for OpCollectNonNull {
+    fn name(&self) -> &str {
+        NAME_OP_COLLECT_NON_NULL
+    }
+
+    fn arity(&self) -> Option<usize> {
+        Some(1)
+    }
+
+    fn reset(&self) {
+        self.buffer.borrow_mut().clear();
+    }
+
+    fn initialize(&self, _a_args: Vec<StaticValue>) -> Result<()> {
+        Ok(())
+    }
+
+    fn put(&self, args: &[Value]) -> Result<()> {
+        let mut args = args.iter();
+        let val = args
+            .next()
+            .ok_or_else(|| EvalError::ArityMismatch(self.name().to_string(), 1))?;
+
+        if val.is_null() {
+            return Ok(());
         }
 
         let mut buffer = self.buffer.borrow_mut();

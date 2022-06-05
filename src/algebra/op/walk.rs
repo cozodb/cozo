@@ -65,9 +65,10 @@ impl<'a> WalkOp<'a> {
 
         let (mut starting_el, mut hops, binding_maps) = resolve_walk_chain(ctx, chain)?;
 
-        let (binding, extraction_map) = parse_walk_conditions_and_collectors(
+        let (binding, extraction_map, _) = parse_walk_conditions_and_collectors(
             ctx,
             args,
+            false,
             &mut starting_el,
             &mut hops,
             binding_maps.last().unwrap(),
@@ -84,7 +85,7 @@ impl<'a> WalkOp<'a> {
     }
 }
 
-fn build_starting_it(
+pub(crate) fn build_starting_it(
     ctx: &TempDbContext,
     starting: &StartingEl,
     binding_maps: &[BindingMap],
@@ -146,7 +147,7 @@ fn build_starting_it(
     Ok((it, keys_extractors))
 }
 
-fn build_hop_it(
+pub(crate) fn build_hop_it<'a>(
     ctx: &TempDbContext,
     binding_maps: &[BindingMap],
     prev_it: Box<dyn Iterator<Item = Result<TupleSet>>>,
@@ -303,7 +304,7 @@ fn build_hop_it(
     Ok(it)
 }
 
-fn build_selection_iter(
+pub(crate) fn build_selection_iter(
     ctx: &TempDbContext,
     it: Box<dyn Iterator<Item = Result<TupleSet>>>,
     extraction_map: &BTreeMap<String, Expr>,
@@ -410,7 +411,7 @@ pub(crate) struct StartingEl {
     #[allow(dead_code)]
     assocs: Vec<AssocInfo>,
     binding: String,
-    pivot: bool,
+    pub(crate) pivot: bool,
     ops: Vec<WalkElOp>,
 }
 
@@ -553,7 +554,7 @@ fn get_chain_el_info(
 }
 
 #[derive(Debug)]
-enum WalkElOp {
+pub(crate) enum WalkElOp {
     Sort(Vec<(Expr, SortDirection)>),
     Filter(Expr),
     Take(usize),
@@ -718,10 +719,10 @@ fn filter_iterator_outer(
 }
 
 pub(crate) struct ClusterIterator {
-    source: Box<dyn Iterator<Item = Result<TupleSet>>>,
-    last_tuple: Option<TupleSet>,
-    output_cache: bool,
-    key_len: usize,
+    pub(crate) source: Box<dyn Iterator<Item = Result<TupleSet>>>,
+    pub(crate) last_tuple: Option<TupleSet>,
+    pub(crate) output_cache: bool,
+    pub(crate) key_len: usize,
 }
 
 impl ClusterIterator {
@@ -1183,13 +1184,15 @@ pub(crate) fn resolve_walk_chain(
 pub(crate) fn parse_walk_conditions_and_collectors(
     ctx: &TempDbContext,
     args: Pairs,
+    is_chain: bool,
     starting_el: &mut StartingEl,
     hops: &mut [HoppingEls],
     binding_map: &BindingMap,
-) -> Result<(String, BTreeMap<String, Expr>)> {
+) -> Result<(String, BTreeMap<String, Expr>, Vec<WalkElOp>)> {
     let mut collectors = vec![];
     let mut bindings = vec![];
-    let mut pivots = vec![];
+    // let mut pivots = vec![];
+    let mut walk_ops = vec![];
 
     for arg in args {
         let arg = arg.into_inner().next().unwrap();
@@ -1197,10 +1200,13 @@ pub(crate) fn parse_walk_conditions_and_collectors(
             Rule::walk_cond => {
                 let (binding, ops) = parse_walk_cond(arg)?;
                 let mut found = false;
-                if binding == starting_el.binding {
+                if is_chain && binding == "_loop" {
+                    found = true;
+                    walk_ops.extend(ops);
+                } else if binding == starting_el.binding {
                     found = true;
                     starting_el.ops.extend(ops);
-                    pivots.push(TableInfo::Node(starting_el.node_info.clone()));
+                    // pivots.push(TableInfo::Node(starting_el.node_info.clone()));
                 } else {
                     for hop in hops.iter_mut() {
                         if hop.node_binding == binding || hop.edge_binding == binding {
@@ -1226,11 +1232,11 @@ pub(crate) fn parse_walk_conditions_and_collectors(
                 } else {
                     for hop in hops.iter_mut() {
                         if hop.node_binding == binding || hop.edge_binding == binding {
-                            if hop.node_binding == binding {
-                                pivots.push(TableInfo::Node(hop.node_info.clone()));
-                            } else {
-                                pivots.push(TableInfo::Edge(hop.edge_info.clone()));
-                            }
+                            // if hop.node_binding == binding {
+                            //     pivots.push(TableInfo::Node(hop.node_info.clone()));
+                            // } else {
+                            //     pivots.push(TableInfo::Edge(hop.edge_info.clone()));
+                            // }
                             hop.pivot = true;
                             found = true;
                             break;
@@ -1267,5 +1273,5 @@ pub(crate) fn parse_walk_conditions_and_collectors(
             .collect(),
         _ex => return Err(SelectOpError::NeedsDict.into()),
     };
-    Ok((bindings.pop().unwrap(), extraction_map))
+    Ok((bindings.pop().unwrap(), extraction_map, walk_ops))
 }
