@@ -52,6 +52,9 @@ pub(crate) enum AlgebraParseError {
 
     #[error("Scalar function in forbidden place")]
     ScalarFnNotAllowed,
+
+    #[error("sorting failed")]
+    Sorting,
 }
 
 pub(crate) fn assert_rule(pair: &Pair, rule: Rule, name: &str, u: usize) -> Result<()> {
@@ -648,7 +651,7 @@ pub(crate) mod tests {
             let s = r#"
              Walk(j:Job<-[:HasJob]-e:Employee-[:InDepartment]->d:Department,
                   j => Sort(j.id => desc),
-                  // e => Sort(e.id => desc).Skip(1).Where(e.id > 110),
+                  e => Sort(e.id => desc).Skip(1).Where(e.id > 110),
                   j: {
                     id_1_job: j.id,
                     id_2_emp: count_non_null[e.id],

@@ -1,4 +1,4 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use cozo::DbInstance;
 
 struct AppStateWithDb {
@@ -9,8 +9,10 @@ struct AppStateWithDb {
 async fn query(body: web::Bytes, data: web::Data<AppStateWithDb>) -> impl Responder {
     let text = String::from_utf8_lossy(body.as_ref());
     let mut sess = data.db.session().unwrap().start().unwrap();
-    let res = sess.run_script(text, true);
-    HttpResponse::Ok().body(format!("{:?}", res))
+    match sess.run_script(text, true) {
+        Ok(res) => HttpResponse::Ok().body(res.to_string()),
+        Err(e) => HttpResponse::BadRequest().body(format!("{:?}", e)),
+    }
 }
 
 #[actix_web::main]

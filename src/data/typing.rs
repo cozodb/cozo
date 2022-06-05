@@ -20,6 +20,7 @@ pub enum TypingError {
     UndefinedType(String),
 }
 
+#[allow(dead_code)]
 #[derive(Ord, PartialOrd, Eq, PartialEq, Clone)]
 pub enum Typing {
     Any,
@@ -73,6 +74,7 @@ impl Debug for Typing {
 }
 
 impl Typing {
+    #[allow(dead_code)]
     pub(crate) fn representative_value(&self) -> StaticValue {
         match self {
             Typing::Any => Value::Bottom,
@@ -257,6 +259,7 @@ impl Typing {
 }
 
 impl<'a> Value<'a> {
+    #[allow(dead_code)]
     pub(crate) fn deduce_typing(&self) -> Typing {
         match self {
             Value::Null => Typing::Any,

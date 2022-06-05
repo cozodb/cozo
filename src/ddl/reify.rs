@@ -84,6 +84,7 @@ impl TableInfo {
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn as_index(&self) -> Result<&IndexInfo> {
         match self {
             TableInfo::Index(n) => Ok(n),
@@ -96,12 +97,14 @@ impl TableInfo {
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn as_sequence(&self) -> Result<&SequenceInfo> {
         match self {
             TableInfo::Sequence(n) => Ok(n),
             _ => Err(DdlReifyError::WrongDataKind(self.table_id()).into()),
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn into_sequence(self) -> Result<SequenceInfo> {
         match self {
             TableInfo::Sequence(n) => Ok(n),

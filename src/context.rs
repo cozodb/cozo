@@ -8,6 +8,7 @@ pub(crate) struct MainDbContext<'a> {
     pub(crate) txn: TransactionPtr,
 }
 
+#[allow(dead_code)]
 pub(crate) struct TempDbContext<'a> {
     pub(crate) sess: &'a mut Session,
     pub(crate) txn: TransactionPtr,

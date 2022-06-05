@@ -68,6 +68,7 @@ impl Debug for TableId {
 }
 
 impl TableId {
+    #[allow(dead_code)]
     pub(crate) fn new(in_root: bool, id: u32) -> Result<Self> {
         if id <= MIN_TABLE_ID_BOUND {
             Err(TupleSetError::InvalidTableId(id).into())
@@ -75,6 +76,7 @@ impl TableId {
             Ok(TableId { in_root, id })
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn is_valid(&self) -> bool {
         self.id > MIN_TABLE_ID_BOUND
     }
@@ -177,8 +179,8 @@ impl TupleSet {
 
     pub(crate) fn decode_from_tuple<T: AsRef<[u8]>>(source: &Tuple<T>) -> Result<Self> {
         let gen_err = || DecodeFailure(source.to_owned());
-        let k_len = source.get(0)?.get_int().ok_or_else(gen_err)? as usize;
-        let v_len = source.get(1)?.get_int().ok_or_else(gen_err)? as usize;
+        let k_len = source.get_int(0)? as usize;
+        let v_len = source.get_int(1)? as usize;
         let mut ret = TupleSet {
             keys: Vec::with_capacity(k_len),
             vals: Vec::with_capacity(v_len),
@@ -198,6 +200,7 @@ impl TupleSet {
 }
 
 impl TupleSet {
+    #[allow(dead_code)]
     pub(crate) fn last_key_is_empty(&self) -> bool {
         match self.keys.last() {
             None => false,
@@ -216,6 +219,7 @@ impl TupleSet {
         self.keys.extend(o.keys);
         self.vals.extend(o.vals);
     }
+    #[allow(dead_code)]
     pub(crate) fn extend_keys<I, T>(&mut self, keys: I)
     where
         I: IntoIterator<Item = T>,
@@ -223,6 +227,7 @@ impl TupleSet {
     {
         self.keys.extend(keys.into_iter().map(ReifiedTuple::from));
     }
+    #[allow(dead_code)]
     pub(crate) fn extend_vals<I, T>(&mut self, keys: I)
     where
         I: IntoIterator<Item = T>,
@@ -231,6 +236,7 @@ impl TupleSet {
         self.vals.extend(keys.into_iter().map(ReifiedTuple::from));
     }
 
+    #[allow(dead_code)]
     pub(crate) fn all_keys_eq(&self, other: &Self) -> bool {
         if self.keys.len() != other.keys.len() {
             return false;
@@ -253,6 +259,7 @@ impl TupleSet {
         }
         true
     }
+    #[allow(dead_code)]
     pub(crate) fn all_keys_cmp(&self, other: &Self) -> Ordering {
         for (l, r) in self.keys.iter().zip(&other.keys) {
             match l.key_part_cmp(r) {

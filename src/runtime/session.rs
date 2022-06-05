@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, Arc};
 
+#[allow(dead_code)]
 pub(crate) enum Definable {
     Value(StaticValue),
     Expr(Expr),
@@ -32,6 +33,7 @@ pub struct Session {
     pub(crate) temp: DbPtr,
     pub(crate) r_opts_main: ReadOptionsPtr,
     pub(crate) r_opts_temp: ReadOptionsPtr,
+    #[allow(dead_code)]
     pub(crate) w_opts_main: WriteOptionsPtr,
     pub(crate) w_opts_temp: WriteOptionsPtr,
     pub(crate) optimistic: bool,
@@ -59,6 +61,7 @@ impl Session {
     pub(crate) fn push_env(&mut self) {
         self.stack.push(BTreeMap::new());
     }
+    #[allow(dead_code)]
     pub(crate) fn pop_env(&mut self) {
         if !self.stack.is_empty() {
             let popped_frame = self.stack.pop().unwrap();
@@ -72,6 +75,7 @@ impl Session {
             self.push_env()
         }
     }
+    #[allow(dead_code)]
     fn undefine_temp_table(&mut self, id: u32) {
         // remove table
         self.tables.remove(&id);

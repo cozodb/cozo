@@ -190,6 +190,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn starts_with<T2: AsRef<[u8]>>(&self, other: &Tuple<T2>) -> bool {
         self.data.as_ref().starts_with(other.data.as_ref())
@@ -329,6 +330,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn get_null(&self, idx: usize) -> Result<()> {
         match self.get(idx)? {
@@ -345,6 +347,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn get_text(&self, idx: usize) -> Result<Cow<str>> {
         match self.get(idx)? {
@@ -353,6 +356,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn get_bool(&self, idx: usize) -> Result<bool> {
         match self.get(idx)? {
@@ -361,6 +365,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn get_float(&self, idx: usize) -> Result<f64> {
         match self.get(idx)? {
@@ -369,6 +374,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn get_uuid(&self, idx: usize) -> Result<Uuid> {
         match self.get(idx)? {
@@ -377,6 +383,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn get_list(&self, idx: usize) -> Result<Vec<Value>> {
         match self.get(idx)? {
@@ -385,6 +392,7 @@ impl<T: AsRef<[u8]>> Tuple<T> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn get_dict(&self, idx: usize) -> Result<BTreeMap<Cow<str>, Value>> {
         match self.get(idx)? {
@@ -723,12 +731,14 @@ impl OwnTuple {
         self.push_varint(u);
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn concat_data<T: AsRef<[u8]>>(&mut self, other: &Tuple<T>) {
         let other_data_part = &other.as_ref()[4..];
         self.data.extend_from_slice(other_data_part);
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn insert_values_at<'a, T: AsRef<[Value<'a>]>>(
         &self,

@@ -39,7 +39,7 @@ impl OpAggT for OpCollectIf {
         self.buffer.borrow_mut().clear();
     }
 
-    fn initialize(&self, a_args: Vec<StaticValue>) -> Result<()> {
+    fn initialize(&self, _a_args: Vec<StaticValue>) -> Result<()> {
         Ok(())
     }
 

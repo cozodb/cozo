@@ -80,7 +80,7 @@ impl<'b> RelationalAlgebra for NestedLoopLeft<'b> {
             })
             .collect::<Result<Vec<_>>>()?;
         let table_id = self.right.table_id();
-        let mut key_tuple = OwnTuple::with_prefix(table_id.id);
+        let key_tuple = OwnTuple::with_prefix(table_id.id);
         let txn = self.ctx.txn.clone();
         let temp_db = self.ctx.sess.temp.clone();
         let w_opts = default_write_options();

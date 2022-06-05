@@ -24,9 +24,11 @@ pub enum Value<'a> {
 }
 
 impl<'a> Value<'a> {
+    #[allow(dead_code)]
     pub(crate) fn is_null(&self) -> bool {
         *self == Value::Null
     }
+    #[allow(dead_code)]
     pub(crate) fn get_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
@@ -39,6 +41,7 @@ impl<'a> Value<'a> {
             _ => None,
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn get_float(&self) -> Option<f64> {
         match self {
             Value::Float(b) => Some(b.into_inner()),
@@ -75,6 +78,7 @@ impl<'a> Value<'a> {
             _ => None,
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn into_map(self) -> Result<BTreeMap<Cow<'a, str>, Value<'a>>, Value<'a>> {
         match self {
             Value::Dict(m) => Ok(m),

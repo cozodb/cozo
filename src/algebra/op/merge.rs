@@ -100,7 +100,7 @@ impl<'a> MergeJoin<'a> {
                     }
                     join_keys.push((left_condition, right_condition))
                 }
-                ex => return Err(JoinError::JoinCondition.into()),
+                _ex => return Err(JoinError::JoinCondition.into()),
             }
         }
 

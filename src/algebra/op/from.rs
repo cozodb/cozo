@@ -157,6 +157,7 @@ pub(crate) enum ChainPartEdgeDir {
 pub(crate) enum JoinType {
     Inner,
     Left,
+    #[allow(dead_code)]
     Right,
     // FullOuter,
 }
@@ -180,8 +181,6 @@ pub(crate) struct ChainEl {
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum JoinError {
-    #[error("Cannot have both left and right join marker in a chain segment")]
-    NoFullOuterInChain,
     #[error("Must specify edge direction")]
     BidiEdge,
 }

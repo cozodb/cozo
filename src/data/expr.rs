@@ -275,34 +275,34 @@ impl TryFrom<StaticValue> for Expr {
                     }))
                 }
                 EXPR_TAG_APPLY => {
-                    let mut ll = extract_list_from_value(v, 2)?.into_iter();
-                    let name = match ll.next().unwrap() {
-                        Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
-                    };
-                    let l = extract_list_from_value(ll.next().unwrap(), 0)?;
-                    let _args = l
-                        .into_iter()
-                        .map(Expr::try_from)
-                        .collect::<Result<Vec<_>>>()?;
+                    // let mut ll = extract_list_from_value(v, 2)?.into_iter();
+                    // let name = match ll.next().unwrap() {
+                    //     Value::Text(t) => t,
+                    //     v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
+                    // };
+                    // let l = extract_list_from_value(ll.next().unwrap(), 0)?;
+                    // let _args = l
+                    //     .into_iter()
+                    //     .map(Expr::try_from)
+                    //     .collect::<Result<Vec<_>>>()?;
                     todo!()
                 }
                 EXPR_TAG_APPLY_AGG => {
-                    let mut ll = extract_list_from_value(v, 3)?.into_iter();
-                    let name = match ll.next().unwrap() {
-                        Value::Text(t) => t,
-                        v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
-                    };
-                    let l = extract_list_from_value(ll.next().unwrap(), 0)?;
-                    let a_args = l
-                        .into_iter()
-                        .map(Expr::try_from)
-                        .collect::<Result<Vec<_>>>()?;
-                    let l = extract_list_from_value(ll.next().unwrap(), 0)?;
-                    let _args = l
-                        .into_iter()
-                        .map(Expr::try_from)
-                        .collect::<Result<Vec<_>>>()?;
+                    // let mut ll = extract_list_from_value(v, 3)?.into_iter();
+                    // let name = match ll.next().unwrap() {
+                    //     Value::Text(t) => t,
+                    //     v => return Err(ExprError::ConversionFailure(v.into_static()).into()),
+                    // };
+                    // let l = extract_list_from_value(ll.next().unwrap(), 0)?;
+                    // let a_args = l
+                    //     .into_iter()
+                    //     .map(Expr::try_from)
+                    //     .collect::<Result<Vec<_>>>()?;
+                    // let l = extract_list_from_value(ll.next().unwrap(), 0)?;
+                    // let _args = l
+                    //     .into_iter()
+                    //     .map(Expr::try_from)
+                    //     .collect::<Result<Vec<_>>>()?;
                     todo!()
                 }
                 EXPR_TAG_FIELD_ACC => {
@@ -420,19 +420,23 @@ impl<'a> From<Expr> for Value<'a> {
             Expr::SwitchExpr(_) => {
                 todo!()
             }
-            Expr::ApplyAgg(op, a_args, args) => build_tagged_value(
-                EXPR_TAG_APPLY_AGG,
-                vec![
-                    Value::from(todo!()),
-                    a_args
-                        .into_iter()
-                        .map(Value::from)
-                        .collect::<Vec<_>>()
-                        .into(),
-                    args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
-                ]
-                .into(),
-            ),
+            Expr::ApplyAgg(_op, _a_args, _args) => {
+                todo!()
+                // build_tagged_value(
+                //     // EXPR_TAG_APPLY_AGG,
+                //     // vec![
+                //     //     Value::from(todo!()),
+                //     //     a_args
+                //     //         .into_iter()
+                //     //         .map(Value::from)
+                //     //         .collect::<Vec<_>>()
+                //     //         .into(),
+                //     //     args.into_iter().map(Value::from).collect::<Vec<_>>().into(),
+                //     // ]
+                //     // .into(),
+                //     todo!()
+                // )
+            },
             Expr::FieldAcc(f, v) => {
                 build_tagged_value(EXPR_TAG_FIELD_ACC, vec![f.into(), Value::from(*v)].into())
             }

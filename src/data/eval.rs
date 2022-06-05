@@ -350,7 +350,7 @@ impl Expr {
                     | Expr::OpMerge(_)
                     | Expr::OpCoalesce(_)) => Expr::FieldAcc(f, v.into()),
                     Expr::Dict(mut d) => d.remove(&f as &str).unwrap_or(Expr::Const(Value::Null)),
-                    v => return Err(EvalError::FieldAccess(f).into()),
+                    _v => return Err(EvalError::FieldAccess(f).into()),
                 },
             },
             Expr::IdxAcc(i, arg) => {
@@ -383,7 +383,7 @@ impl Expr {
                         | Expr::FieldAcc(_, _)
                         | Expr::BuiltinFn(_, _)
                         | Expr::ApplyAgg(_, _, _)) => Expr::IdxAcc(i, v.into()),
-                        v => return Err(EvalError::IndexAccess(i).into()),
+                        _v => return Err(EvalError::IndexAccess(i).into()),
                     },
                 }
             }
@@ -509,7 +509,7 @@ impl Expr {
             Expr::FieldAcc(f, arg) => match arg.row_eval(ctx)? {
                 Value::Null => Value::Null,
                 Value::Dict(mut d) => d.remove(f as &str).unwrap_or(Value::Null),
-                v => {
+                _v => {
                     return Err(
                         EvalError::FieldAccess(f.clone()).into(),
                     );
@@ -524,7 +524,7 @@ impl Expr {
                         d.swap_remove(*idx)
                     }
                 }
-                v => return Err(EvalError::IndexAccess(*idx).into()),
+                _v => return Err(EvalError::IndexAccess(*idx).into()),
             },
             Expr::IfExpr(args) => {
                 let (cond, if_part, else_part) = args.as_ref();

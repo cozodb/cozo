@@ -348,7 +348,7 @@ fn build_aggr_call(name: &str, a_args: Vec<Expr>, args: Vec<Expr>) -> Result<Exp
     })
 }
 
-fn build_expr_infix<'a>(lhs: Result<Expr>, op: Pair, rhs: Result<Expr>) -> Result<Expr> {
+fn build_expr_infix(lhs: Result<Expr>, op: Pair, rhs: Result<Expr>) -> Result<Expr> {
     let args = vec![lhs?, rhs?];
     Ok(match op.as_rule() {
         Rule::op_add => Expr::BuiltinFn(OP_ADD, args),
