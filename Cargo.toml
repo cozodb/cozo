@@ -20,3 +20,6 @@ env_logger = "0.9.0"
 actix-web = "4.0.1"
 extsort = "0.4.2"
 cozorocks = { path = "cozorocks" }
+
+[profile.release]
+lto = true

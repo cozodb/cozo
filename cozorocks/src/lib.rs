@@ -1,572 +1,192 @@
-mod bridge;
-mod options;
-mod status;
+extern crate core;
 
-pub use bridge::BridgeStatus;
-pub use bridge::PinnableSlice;
-pub use bridge::Slice;
-pub use bridge::StatusBridgeCode;
-pub use bridge::StatusCode;
-pub use bridge::StatusSeverity;
-pub use bridge::StatusSubCode;
-use bridge::*;
-use cxx::let_cxx_string;
-pub use cxx::{SharedPtr, UniquePtr};
-pub use options::*;
-pub use status::BridgeError;
-use status::Result;
-use std::ops::Deref;
+use autocxx::prelude::*;
+use std::os::raw::c_char;
 use std::pin::Pin;
 
-pub struct PinnableSlicePtr(UniquePtr<PinnableSlice>);
+include_cpp! {
+    #include "bridge.h"
 
-impl PinnableSlicePtr {
-    #[inline]
-    pub fn pin_mut(&mut self) -> Pin<&mut PinnableSlice> {
-        self.0.pin_mut()
-    }
+    safety!(unsafe)
+    generate!("rocksdb::ReadOptions")
+    generate!("rocksdb::WriteOptions")
+    generate!("rocksdb::Options")
+    generate!("rocksdb::DBOptions")
+    generate!("rocksdb::Status")
+    generate_pod!("rocksdb::Slice")
+    generate!("rocksdb::PinnableSlice")
+    generate!("rocksdb::TransactionOptions")
+    generate!("rocksdb::OptimisticTransactionOptions")
+    generate!("rocksdb::TransactionDBOptions")
+    generate!("rocksdb::OptimisticTransactionDBOptions")
+    generate!("rocksdb::FlushOptions")
+    generate!("rocksdb::Iterator")
+    generate!("rocksdb::Transaction")
+    generate!("rocksdb::TransactionDB")
+    generate!("rocksdb::OptimisticTransactionDB")
+    generate!("rocksdb::StackableDB")
+    generate!("rocksdb::DB")
+    generate!("rocksdb::Snapshot")
+    generate_ns!("rocksdb_additions")
+}
 
-    #[inline]
-    pub fn to_shared(self) -> PinnableSlicePtrShared {
-        PinnableSlicePtrShared(make_shared_pinnable_slice(self.0))
+pub use ffi::rocksdb::Options;
+pub use ffi::rocksdb::ReadOptions;
+pub use ffi::rocksdb::Slice;
+pub use ffi::rocksdb::Snapshot;
+pub use ffi::rocksdb::Status;
+pub use ffi::rocksdb::Status_Code as StatusCode;
+pub use ffi::rocksdb::Status_Severity as StatusSeverity;
+pub use ffi::rocksdb::Status_SubCode as StatusSubCode;
+pub use ffi::rocksdb::WriteOptions;
+pub use ffi::rocksdb::DB;
+pub use ffi::rocksdb_additions::set_iterate_lower_bound;
+pub use ffi::rocksdb_additions::set_iterate_upper_bound;
+pub use ffi::rocksdb_additions::set_snapshot;
+
+pub struct DbStatus {
+    pub code: StatusCode,
+    pub subcode: StatusSubCode,
+    pub severity: StatusSeverity,
+}
+
+fn convert_status(status: &ffi::rocksdb::Status) -> DbStatus {
+    let code = status.code();
+    let subcode = status.subcode();
+    let severity = status.severity();
+    DbStatus {
+        code,
+        subcode,
+        severity,
     }
 }
 
-impl Default for PinnableSlicePtr {
-    #[inline]
-    fn default() -> Self {
-        PinnableSlicePtr(new_pinnable_slice())
+fn convert_slice(src: impl AsRef<[u8]>) -> Slice {
+    let src = src.as_ref();
+    Slice {
+        data_: src.as_ptr() as *const c_char,
+        size_: src.len(),
     }
 }
 
-impl PinnableSlicePtr {
-    #[inline]
-    pub fn reset(&mut self) {
-        reset_pinnable_slice(self.pin_mut());
-    }
+pub fn put(
+    db: Pin<&mut DB>,
+    opts: &WriteOptions,
+    key: impl AsRef<[u8]>,
+    val: impl AsRef<[u8]>,
+) -> DbStatus {
+    let key = convert_slice(key);
+    let val = convert_slice(val);
+    moveit! { let status = db.Put2(opts, &key, &val); }
+    convert_status(&status)
 }
 
-impl AsRef<[u8]> for PinnableSlicePtr {
-    #[inline]
-    fn as_ref(&self) -> &[u8] {
-        convert_pinnable_slice_back(&self.0)
-    }
-}
-
-impl Deref for PinnableSlicePtr {
-    type Target = PinnableSlice;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[derive(Clone)]
-pub struct PinnableSlicePtrShared(SharedPtr<PinnableSlice>);
-
-impl AsRef<[u8]> for PinnableSlicePtrShared {
-    #[inline]
-    fn as_ref(&self) -> &[u8] {
-        convert_pinnable_slice_back(&self.0)
-    }
-}
-
-impl Deref for PinnableSlicePtrShared {
-    type Target = PinnableSlice;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-pub struct SlicePtr(UniquePtr<Slice>);
-
-impl SlicePtr {
-    #[inline]
-    pub fn pin_mut(&mut self) -> Pin<&mut Slice> {
-        self.0.pin_mut()
-    }
-
-    #[inline]
-    pub fn to_shared(self) -> SlicePtrShared {
-        SlicePtrShared(make_shared_slice(self.0))
-    }
-}
-
-impl AsRef<[u8]> for SlicePtr {
-    #[inline]
-    fn as_ref(&self) -> &[u8] {
-        convert_slice_back(&self.0)
-    }
-}
-
-impl Deref for SlicePtr {
-    type Target = Slice;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-#[derive(Clone)]
-pub struct SlicePtrShared(SharedPtr<Slice>);
-
-impl AsRef<[u8]> for SlicePtrShared {
-    #[inline]
-    fn as_ref(&self) -> &[u8] {
-        convert_slice_back(&self.0)
-    }
-}
-
-impl Deref for SlicePtrShared {
-    type Target = Slice;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-pub struct IteratorPtr(UniquePtr<IteratorBridge>);
-
-impl<'a> Deref for IteratorPtr {
-    type Target = UniquePtr<IteratorBridge>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-pub struct PrefixIterator<P: AsRef<[u8]>> {
-    iter: IteratorPtr,
-    started: bool,
-    prefix: P,
-}
-
-impl<P: AsRef<[u8]>> PrefixIterator<P> {
-    #[inline]
-    pub fn reset_prefix(&mut self, prefix: P) {
-        self.prefix = prefix;
-        self.iter.seek(self.prefix.as_ref());
-        self.started = false;
-    }
-}
-
-impl<P: AsRef<[u8]>> Iterator for PrefixIterator<P> {
-    type Item = (SlicePtr, SlicePtr);
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.started {
-            self.iter.next()
-        } else {
-            self.started = true
+#[macro_export]
+macro_rules! let_write_opts {
+    ($i:ident = [$( $opt:ident ),*]) => {
+        $crate::moveit! {
+            let mut $i = $crate::WriteOptions::new();
         }
-        match self.iter.pair() {
-            None => None,
-            Some((k, v)) => {
-                if k.as_ref().starts_with(self.prefix.as_ref()) {
-                    Some((k, v))
-                } else {
-                    None
+
+        $(
+            match stringify!($opt) {
+                "sync" => {
+                    $crate::ffi::rocksdb_additions::set_w_opts_sync($i.as_mut(), true);
                 }
-            }
-        }
+                "no_sync" => {
+                    $crate::ffi::rocksdb_additions::set_w_opts_sync($i.as_mut(), false);
+                }
+                "disable_wal" => {
+                    $crate::ffi::rocksdb_additions::set_w_opts_disable_wal($i.as_mut(), true);
+                }
+                "no_disable_wal" => {
+                    $crate::ffi::rocksdb_additions::set_w_opts_disable_wal($i.as_mut(), false);
+                }
+                "low_pri" => {
+                    $crate::ffi::rocksdb_additions::set_w_opts_low_pri($i.as_mut(), true);
+                }
+                "no_set_w_opts_low_pri" => {
+                    $crate::ffi::rocksdb_additions::set_w_opts_low_pri($i.as_mut(), false);
+                }
+                _ => panic!("unknown option to let_write_opts: {}", stringify!($i))
+            };
+        )*
     }
 }
 
-pub struct RowIterator {
-    iter: IteratorPtr,
-    started: bool,
+#[macro_export]
+macro_rules! let_read_opts {
+    ($i:ident = [$( $opt:ident ),*]) => {
+        $crate::moveit! {
+            let mut $i = $crate::ReadOptions::new();
+        }
+
+        $(
+            match stringify!($opt) {
+                "total_order_seek" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_total_order_seek($i.as_mut(), true);
+                }
+                "no_total_order_seek" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_total_order_seek($i.as_mut(), false);
+                }
+                "auto_prefix_mode" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_auto_prefix_mode($i.as_mut(), true);
+                }
+                "no_auto_prefix_mode" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_auto_prefix_mode($i.as_mut(), false);
+                }
+                "prefix_same_as_start" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_prefix_same_as_start($i.as_mut(), true);
+                }
+                "no_prefix_same_as_start" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_prefix_same_as_start($i.as_mut(), false);
+                }
+                "tailing" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_tailing($i.as_mut(), true);
+                }
+                "no_tailing" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_tailing($i.as_mut(), false);
+                }
+                "pin_data" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_pin_data($i.as_mut(), true);
+                }
+                "no_pin_data" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_pin_data($i.as_mut(), false);
+                }
+                "verify_checksums" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_verify_checksums($i.as_mut(), true);
+                }
+                "no_verify_checksums" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_verify_checksums($i.as_mut(), false);
+                }
+                "fill_cache" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_fill_cache($i.as_mut(), true);
+                }
+                "fill_cache" => {
+                    $crate::ffi::rocksdb_additions::set_r_opts_fill_cache($i.as_mut(), false);
+                }
+                _ => panic!("unknown option to let_read_opts: {}", stringify!($i))
+            };
+        )*
+    };
 }
 
-impl Iterator for RowIterator {
-    type Item = (SlicePtr, SlicePtr);
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.started {
-            self.iter.next()
-        } else {
-            self.started = true
+#[cfg(test)]
+mod tests {
+    use super::ffi::rocksdb::{Options, ReadOptions, WriteOptions};
+    use super::*;
+    use std::mem::{size_of, size_of_val};
+
+    #[test]
+    fn it_works() {
+        dbg!(size_of::<ReadOptions>());
+        for i in 0..100000 {
+            let mut g_opts = Options::new().within_unique_ptr();
+            g_opts.pin_mut().OptimizeForSmallDb();
+
+            let_read_opts!(r_opts = []);
+            let_write_opts!(w_opts = [disable_wal]);
         }
-        self.iter.pair()
+        dbg!(size_of::<ReadOptions>());
     }
-}
-
-impl IteratorPtr {
-    #[inline]
-    pub fn to_first(&self) {
-        IteratorBridge::seek_to_first(self)
-    }
-    #[inline]
-    pub fn to_last(&self) {
-        IteratorBridge::seek_to_last(self)
-    }
-    #[inline]
-    pub fn next(&self) {
-        IteratorBridge::next(self)
-    }
-    #[inline]
-    pub fn is_valid(&self) -> bool {
-        IteratorBridge::is_valid(self)
-    }
-    #[inline]
-    pub fn seek(&self, key: impl AsRef<[u8]>) {
-        IteratorBridge::do_seek(self, key.as_ref())
-    }
-    #[inline]
-    pub fn seek_for_prev(&self, key: impl AsRef<[u8]>) {
-        IteratorBridge::do_seek_for_prev(self, key.as_ref())
-    }
-    #[inline]
-    pub fn iter_rows<T: AsRef<[u8]>>(self, prefix: T) -> RowIterator {
-        self.seek(prefix.as_ref());
-        RowIterator {
-            iter: self,
-            started: false,
-        }
-    }
-    #[inline]
-    pub fn iter_prefix<T: AsRef<[u8]>>(self, prefix: T) -> PrefixIterator<T> {
-        self.seek(prefix.as_ref());
-        PrefixIterator {
-            iter: self,
-            started: false,
-            prefix,
-        }
-    }
-    #[inline]
-    pub fn refresh(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        IteratorBridge::refresh(self, &mut status);
-        status.check_err(())
-    }
-
-    #[inline]
-    pub fn key(&self) -> Option<SlicePtr> {
-        if self.is_valid() {
-            Some(SlicePtr(IteratorBridge::key_raw(self)))
-        } else {
-            None
-        }
-    }
-    #[inline]
-    pub fn val(&self) -> Option<SlicePtr> {
-        if self.is_valid() {
-            Some(SlicePtr(IteratorBridge::value_raw(self)))
-        } else {
-            None
-        }
-    }
-    #[inline]
-    pub fn pair(&self) -> Option<(SlicePtr, SlicePtr)> {
-        if self.is_valid() {
-            Some((
-                SlicePtr(IteratorBridge::key_raw(self)),
-                SlicePtr(IteratorBridge::value_raw(self)),
-            ))
-        } else {
-            None
-        }
-    }
-    #[inline]
-    pub fn status(&self) -> BridgeStatus {
-        IteratorBridge::status(self)
-    }
-}
-
-#[derive(Clone)]
-pub struct TransactionPtr(SharedPtr<TransactionBridge>);
-
-impl Deref for TransactionPtr {
-    type Target = TransactionBridge;
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl TransactionPtr {
-    /// # Safety
-    ///
-    /// Only for testing use, as a placeholder
-    #[inline]
-    pub unsafe fn null() -> Self {
-        TransactionPtr(SharedPtr::null())
-    }
-    #[inline]
-    pub fn set_snapshot(&self) {
-        TransactionBridge::set_snapshot(self)
-    }
-    #[inline]
-    pub fn commit(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        TransactionBridge::commit(self, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn rollback(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        TransactionBridge::rollback(self, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn set_savepoint(&self) {
-        TransactionBridge::set_savepoint(self);
-    }
-    #[inline]
-    pub fn rollback_to_savepoint(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        TransactionBridge::rollback_to_savepoint(self, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn pop_savepoint(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        TransactionBridge::pop_savepoint(self, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn get(
-        &self,
-        options: &ReadOptions,
-        key: impl AsRef<[u8]>,
-        slice: &mut PinnableSlicePtr,
-    ) -> Result<bool> {
-        let mut status = BridgeStatus::default();
-        let res = {
-            self.get_txn(options, key.as_ref(), slice.pin_mut(), &mut status);
-            status.check_err(())
-        };
-        match res {
-            Ok(_) => Ok(true),
-            Err(e) if e.status.code == StatusCode::kNotFound => Ok(false),
-            Err(e) => Err(e),
-        }
-    }
-    #[inline]
-    pub fn get_owned(
-        &self,
-        options: &ReadOptions,
-        key: impl AsRef<[u8]>,
-    ) -> Result<Option<PinnableSlicePtr>> {
-        let mut slice = PinnableSlicePtr::default();
-        if self.get(options, key, &mut slice)? {
-            Ok(Some(slice))
-        } else {
-            Ok(None)
-        }
-    }
-    #[inline]
-    pub fn get_for_update(
-        &self,
-        options: &ReadOptions,
-        key: impl AsRef<[u8]>,
-        slice: &mut PinnableSlicePtr,
-    ) -> Result<bool> {
-        let mut status = BridgeStatus::default();
-        self.get_for_update_txn(options, key.as_ref(), slice.pin_mut(), &mut status);
-        match status.check_err(()) {
-            Ok(_) => Ok(true),
-            Err(e) if e.status.code == StatusCode::kNotFound => Ok(false),
-            Err(e) => Err(e),
-        }
-    }
-    #[inline]
-    pub fn get_for_update_owned(
-        &self,
-        options: &ReadOptions,
-        key: impl AsRef<[u8]>,
-    ) -> Result<Option<PinnableSlicePtr>> {
-        let mut slice = PinnableSlicePtr::default();
-        if self.get_for_update(options, key, &mut slice)? {
-            Ok(Some(slice))
-        } else {
-            Ok(None)
-        }
-    }
-    #[inline]
-    pub fn del(&self, key: impl AsRef<[u8]>) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        let ret = self.del_txn(key.as_ref(), &mut status);
-        status.check_err(ret)
-    }
-    #[inline]
-    pub fn put(&self, key: impl AsRef<[u8]>, val: impl AsRef<[u8]>) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        let ret = self.put_txn(key.as_ref(), val.as_ref(), &mut status);
-        status.check_err(ret)
-    }
-    #[inline]
-    pub fn iterator(&self, options: &ReadOptions) -> IteratorPtr {
-        IteratorPtr(self.iterator_txn(options))
-    }
-}
-
-#[derive(Clone)]
-pub struct DbPtr(SharedPtr<TDBBridge>);
-
-impl Deref for DbPtr {
-    type Target = SharedPtr<TDBBridge>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-unsafe impl Send for DbPtr {}
-
-unsafe impl Sync for DbPtr {}
-
-impl DbPtr {
-    /// # Safety
-    ///
-    /// Only for testing use, as a placeholder
-    pub unsafe fn null() -> Self {
-        DbPtr(SharedPtr::null())
-    }
-
-    pub fn open_non_txn(options: &Options, path: impl AsRef<str>) -> Result<Self> {
-        let_cxx_string!(cname = path.as_ref());
-        let mut status = BridgeStatus::default();
-        let ret = open_db_raw(options, &cname, &mut status);
-        status.check_err(Self(ret))
-    }
-
-    pub fn open(options: &Options, t_options: &TDbOptions, path: impl AsRef<str>) -> Result<Self> {
-        let_cxx_string!(cname = path.as_ref());
-        let mut status = BridgeStatus::default();
-        let ret = match t_options {
-            TDbOptions::Pessimistic(o) => open_tdb_raw(options, o, &cname, &mut status),
-            TDbOptions::Optimistic(_o) => open_odb_raw(options, &cname, &mut status),
-        };
-        status.check_err(Self(ret))
-    }
-
-    #[inline]
-    pub fn get(
-        &self,
-        options: &ReadOptions,
-        key: impl AsRef<[u8]>,
-        slice: &mut PinnableSlicePtr,
-    ) -> Result<bool> {
-        let mut status = BridgeStatus::default();
-        let res = {
-            self.get_raw(options, key.as_ref(), slice.pin_mut(), &mut status);
-            status.check_err(())
-        };
-        match res {
-            Ok(_) => Ok(true),
-            Err(e) if e.status.code == StatusCode::kNotFound => Ok(false),
-            Err(e) => Err(e),
-        }
-    }
-    #[inline]
-    pub fn get_owned(
-        &self,
-        options: &ReadOptions,
-        key: impl AsRef<[u8]>,
-    ) -> Result<Option<PinnableSlicePtr>> {
-        let mut slice = PinnableSlicePtr::default();
-        if self.get(options, key, &mut slice)? {
-            Ok(Some(slice))
-        } else {
-            Ok(None)
-        }
-    }
-    #[inline]
-    pub fn del(&self, options: &WriteOptions, key: impl AsRef<[u8]>) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        let ret = self.del_raw(options, key.as_ref(), &mut status);
-        status.check_err(ret)
-    }
-    #[inline]
-    pub fn put(
-        &self,
-        options: &WriteOptions,
-        key: impl AsRef<[u8]>,
-        val: impl AsRef<[u8]>,
-    ) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        let ret = self.put_raw(options, key.as_ref(), val.as_ref(), &mut status);
-        status.check_err(ret)
-    }
-    #[inline]
-    pub fn iterator(&self, options: &ReadOptions) -> IteratorPtr {
-        IteratorPtr(self.iterator_raw(options))
-    }
-
-    #[inline]
-    pub fn txn(&self, options: TransactOptions, write_ops: WriteOptionsPtr) -> TransactionPtr {
-        TransactionPtr(match options {
-            TransactOptions::Optimistic(o) => self.begin_o_transaction(write_ops.0, o.0),
-            TransactOptions::Pessimistic(o) => self.begin_t_transaction(write_ops.0, o.0),
-        })
-    }
-
-    #[inline]
-    pub fn del_range(
-        &self,
-        options: &WriteOptions,
-        start_key: impl AsRef<[u8]>,
-        end_key: impl AsRef<[u8]>,
-    ) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        let ret = self.del_range_raw(options, start_key.as_ref(), end_key.as_ref(), &mut status);
-        status.check_err(ret)
-    }
-    #[inline]
-    pub fn flush(&self, options: FlushOptionsPtr) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        self.flush_raw(&options, &mut status);
-        status.check_err(())
-    }
-    #[inline]
-    pub fn compact_all(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        self.compact_all_raw(&mut status);
-        status.check_err(())
-    }
-
-    #[inline]
-    pub fn get_approximate_sizes<T: AsRef<[u8]>>(&self, ranges: &[(T, T)]) -> Result<Vec<u64>> {
-        let mut status = BridgeStatus::default();
-        let n = ranges.len();
-        let mut ret = vec![0u64; n];
-
-        let mut bridge_range = Vec::with_capacity(2 * n);
-        for (start, end) in ranges {
-            let start = start.as_ref();
-            let end = end.as_ref();
-            bridge_range.push(start);
-            bridge_range.push(end);
-        }
-
-        self.get_approximate_sizes_raw(&bridge_range, &mut ret, &mut status);
-
-        status.check_err(ret)
-    }
-
-    #[inline]
-    pub fn close(&self) -> Result<()> {
-        let mut status = BridgeStatus::default();
-        self.close_raw(&mut status);
-        status.check_err(())
-    }
-}
-
-pub fn destroy_db(options: &Options, path: impl AsRef<str>) -> Result<()> {
-    let_cxx_string!(cname = path.as_ref());
-    let mut status = BridgeStatus::default();
-    destroy_db_raw(options, &cname, &mut status);
-    status.check_err(())
-}
-
-pub fn repair_db(options: &Options, path: impl AsRef<str>) -> Result<()> {
-    let_cxx_string!(cname = path.as_ref());
-    let mut status = BridgeStatus::default();
-    repair_db_raw(options, &cname, &mut status);
-    status.check_err(())
 }

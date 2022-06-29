@@ -62,3 +62,14 @@ Walk(a:A-[e:E]->b:B,
 Chain(a:A-[p:Path]->b:B,
       _next => _hops < 10)
 ```
+
+Walk, ChainWalk, MaxChainWalk, TreeWalk, ChainWalkSegments
+
+```
+Walk(p:Person - [:Follows> ~ :<Follows | :Likes>].. - p2:Person)
+```
+
+
+```
+sum()(x.id)
+```
