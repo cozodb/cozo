@@ -67,17 +67,124 @@ pub fn convert_slice_back(src: &Slice) -> &[u8] {
     unsafe { std::slice::from_raw_parts(src.data() as *const u8, src.size()) }
 }
 
-#[inline]
-pub fn put(
-    db: Pin<&mut DB>,
-    opts: &WriteOptions,
-    key: impl AsRef<[u8]>,
-    val: impl AsRef<[u8]>,
-) -> DbStatus {
-    let key = convert_slice(key.as_ref());
-    let val = convert_slice(val.as_ref());
-    moveit! { let status = db.Put2(opts, &key, &val); }
-    convert_status(&status)
+impl DbBridge {
+    #[inline]
+    fn get_raw_db(&self) -> Pin<&mut DB> {
+        unsafe { Pin::new_unchecked(&mut *self.inner_db()) }
+    }
+    #[inline]
+    fn get_tdb(&self) -> Pin<&mut TransactionDB> {
+        debug_assert_eq!(self.kind(), DbKind::PESSIMISTIC);
+        unsafe { Pin::new_unchecked(&mut *self.inner_tdb()) }
+    }
+    #[inline]
+    fn get_odb(&self) -> Pin<&mut OptimisticTransactionDB> {
+        debug_assert_eq!(self.kind(), DbKind::OPTIMISTIC);
+        unsafe { Pin::new_unchecked(&mut *self.inner_odb()) }
+    }
+
+    #[inline]
+    pub fn p_txn(
+        &self,
+        write_options: &WriteOptions,
+        txn_options: &TransactionOptions,
+    ) -> UniquePtr<Transaction> {
+        let tdb = self.get_tdb();
+        unsafe {
+            UniquePtr::from_raw(tdb.BeginTransaction(
+                write_options,
+                txn_options,
+                std::ptr::null_mut(),
+            ))
+        }
+    }
+
+    #[inline]
+    pub fn o_txn(
+        &self,
+        write_options: &WriteOptions,
+        txn_options: &OptimisticTransactionOptions,
+    ) -> UniquePtr<Transaction> {
+        let odb = self.get_odb();
+        unsafe {
+            UniquePtr::from_raw(odb.BeginTransaction(
+                write_options,
+                txn_options,
+                std::ptr::null_mut(),
+            ))
+        }
+    }
+
+    #[inline]
+    pub fn get(
+        &self,
+        opts: &ReadOptions,
+        key: impl AsRef<[u8]>,
+        val: Pin<&mut PinnableSlice>,
+    ) -> DbStatus {
+        let db = self.get_raw_db();
+        let key = convert_slice(key.as_ref());
+        let cf = db.DefaultColumnFamily();
+
+        moveit! { let status = unsafe {
+            let val = Pin::into_inner_unchecked(val) as *mut PinnableSlice;
+            db.Get1(opts, cf, &key, val)
+        }; }
+        convert_status(&status)
+    }
+
+    #[inline]
+    pub fn put(
+        &self,
+        opts: &WriteOptions,
+        key: impl AsRef<[u8]>,
+        val: impl AsRef<[u8]>,
+    ) -> DbStatus {
+        let db = self.get_raw_db();
+        let key = convert_slice(key.as_ref());
+        let val = convert_slice(val.as_ref());
+        moveit! { let status = db.Put2(opts, &key, &val); }
+        convert_status(&status)
+    }
+
+    #[inline]
+    pub fn delete(&self, opts: &WriteOptions, key: impl AsRef<[u8]>) -> DbStatus {
+        let db = self.get_raw_db();
+        let key = convert_slice(key.as_ref());
+        moveit! { let status = db.Delete2(opts, &key); }
+        convert_status(&status)
+    }
+    #[inline]
+    pub fn delete_range(
+        &self,
+        opts: &WriteOptions,
+        start: impl AsRef<[u8]>,
+        end: impl AsRef<[u8]>,
+    ) -> DbStatus {
+        let db = self.get_raw_db();
+        let start = convert_slice(start.as_ref());
+        let end = convert_slice(end.as_ref());
+        let cf = db.DefaultColumnFamily();
+        moveit! { let status = unsafe { db.DeleteRange(opts, cf, &start, &end) }; }
+        convert_status(&status)
+    }
+    #[inline]
+    pub fn iterator(&self, opts: &ReadOptions) -> UniquePtr<Iterator> {
+        let db = self.get_raw_db();
+        unsafe { UniquePtr::from_raw(db.NewIterator1(opts)) }
+    }
+
+    #[inline]
+    pub fn get_snapshot(&self) -> *const Snapshot {
+        let db = self.get_raw_db();
+        db.GetSnapshot()
+    }
+
+    #[inline]
+    pub fn release_snapshot(&self, snapshot: *const Snapshot) {
+        let db = self.get_raw_db();
+        unsafe { db.ReleaseSnapshot(snapshot) }
+    }
 }
 
 #[macro_export]
@@ -165,12 +272,6 @@ macro_rules! let_read_opts {
 
 unsafe impl Send for RustComparator {}
 unsafe impl Sync for RustComparator {}
-
-impl ReadOptions {
-    pub fn x(&self) -> bool {
-        true
-    }
-}
 
 #[cfg(test)]
 mod tests {

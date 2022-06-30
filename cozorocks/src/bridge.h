@@ -20,6 +20,17 @@ namespace rocksdb_additions {
 
     // for write options
 
+    // force generation
+
+    unique_ptr<Iterator> _u1() {
+        return unique_ptr<Iterator>(nullptr);
+    }
+
+    unique_ptr<Transaction> _u2() {
+        return unique_ptr<Transaction>(nullptr);
+    }
+
+
     inline void set_w_opts_sync(WriteOptions &opts, bool v) {
         Status s;
         opts.sync = v;
@@ -145,17 +156,58 @@ namespace rocksdb_additions {
         opts.cmp = &cmp;
     }
 
-    // opening
+    // database
 
-    inline shared_ptr<DB>
+    enum DbKind {
+        RAW = 0,
+        PESSIMISTIC = 1,
+        OPTIMISTIC = 2,
+    };
+
+    struct DbBridge {
+        mutable unique_ptr<DB> db;
+        mutable TransactionDB *tdb;
+        mutable OptimisticTransactionDB *odb;
+        bool is_odb;
+
+        DbBridge(DB *db_) : db(db_) {}
+
+        DbBridge(TransactionDB *db_) : db(db_), tdb(db_) {}
+
+        DbBridge(OptimisticTransactionDB *db_) : db(db_), odb(db_) {}
+
+        DbKind kind() const {
+            if (tdb != nullptr) {
+                return DbKind::PESSIMISTIC;
+            } else if (odb != nullptr) {
+                return DbKind::OPTIMISTIC;
+            } else {
+                return DbKind::RAW;
+            }
+        }
+
+        DB *inner_db() const {
+            return db.get();
+        }
+
+        TransactionDB *inner_tdb() const {
+            return tdb;
+        }
+
+        OptimisticTransactionDB *inner_odb() const {
+            return odb;
+        }
+    };
+
+    inline shared_ptr<DbBridge>
     open_db_raw(const Options &options, const string &path, Status &status) {
         DB *db = nullptr;
 
         status = DB::Open(options, path, &db);
-        return shared_ptr<DB>(db);
+        return make_shared<DbBridge>(db);
     }
 
-    inline shared_ptr<TransactionDB>
+    inline shared_ptr<DbBridge>
     open_tdb_raw(const Options &options,
                  const TransactionDBOptions &txn_db_options,
                  const string &path,
@@ -164,11 +216,11 @@ namespace rocksdb_additions {
 
         status = TransactionDB::Open(options, txn_db_options, path, &txn_db);
 
-        return shared_ptr<TransactionDB>(txn_db);
+        return make_shared<DbBridge>(txn_db);
     }
 
 
-    inline shared_ptr<OptimisticTransactionDB>
+    inline shared_ptr<DbBridge>
     open_odb_raw(const Options &options, const string &path, Status &status) {
         OptimisticTransactionDB *txn_db = nullptr;
 
@@ -176,13 +228,13 @@ namespace rocksdb_additions {
                                                path,
                                                &txn_db);
 
-        return shared_ptr<OptimisticTransactionDB>(txn_db);
+        return make_shared<DbBridge>(txn_db);
     }
 
 
     // comparator
 
-    typedef int(*CmpFn)(const rocksdb::Slice &a, const rocksdb::Slice &b);
+    typedef int(*CmpFn)(const Slice &a, const Slice &b);
 
     class RustComparator : public Comparator {
     public:
@@ -193,7 +245,7 @@ namespace rocksdb_additions {
             ext_cmp = f_;
         }
 
-        inline int Compare(const rocksdb::Slice &a, const rocksdb::Slice &b) const {
+        inline int Compare(const Slice &a, const Slice &b) const {
             return ext_cmp(a, b);
         }
 
@@ -205,11 +257,11 @@ namespace rocksdb_additions {
             return can_different_bytes_be_equal;
         }
 
-        inline void FindShortestSeparator(std::string *, const rocksdb::Slice &) const {}
+        inline void FindShortestSeparator(string *, const Slice &) const {}
 
-        inline void FindShortSuccessor(std::string *) const {}
+        inline void FindShortSuccessor(string *) const {}
 
-        std::string name;
+        string name;
         CmpFn ext_cmp;
         bool can_different_bytes_be_equal;
     };
