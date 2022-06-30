@@ -1,5 +1,3 @@
-extern crate core;
-
 use autocxx::prelude::*;
 use std::os::raw::c_char;
 use std::pin::Pin;
@@ -30,20 +28,13 @@ include_cpp! {
     generate_ns!("rocksdb_additions")
 }
 
-pub use ffi::rocksdb::Options;
-pub use ffi::rocksdb::PinnableSlice;
-pub use ffi::rocksdb::ReadOptions;
-pub use ffi::rocksdb::Slice;
-pub use ffi::rocksdb::Snapshot;
-pub use ffi::rocksdb::Status;
+pub use autocxx::{c_int, c_void};
+pub use cxx::{CxxString, CxxVector, SharedPtr, UniquePtr};
 pub use ffi::rocksdb::Status_Code as StatusCode;
 pub use ffi::rocksdb::Status_Severity as StatusSeverity;
 pub use ffi::rocksdb::Status_SubCode as StatusSubCode;
-pub use ffi::rocksdb::WriteOptions;
-pub use ffi::rocksdb::DB;
-pub use ffi::rocksdb_additions::set_iterate_lower_bound;
-pub use ffi::rocksdb_additions::set_iterate_upper_bound;
-pub use ffi::rocksdb_additions::set_snapshot;
+pub use ffi::rocksdb::*;
+pub use ffi::rocksdb_additions::*;
 
 pub struct DbStatus {
     pub code: StatusCode,
@@ -64,7 +55,7 @@ fn convert_status(status: &ffi::rocksdb::Status) -> DbStatus {
 }
 
 #[inline(always)]
-fn convert_slice(src: &[u8]) -> Slice {
+pub fn convert_slice(src: &[u8]) -> Slice {
     Slice {
         data_: src.as_ptr() as *const c_char,
         size_: src.len(),
@@ -72,7 +63,7 @@ fn convert_slice(src: &[u8]) -> Slice {
 }
 
 #[inline(always)]
-fn convert_slice_back(src: &Slice) -> &[u8] {
+pub fn convert_slice_back(src: &Slice) -> &[u8] {
     unsafe { std::slice::from_raw_parts(src.data() as *const u8, src.size()) }
 }
 
@@ -172,6 +163,15 @@ macro_rules! let_read_opts {
     };
 }
 
+unsafe impl Send for RustComparator {}
+unsafe impl Sync for RustComparator {}
+
+impl ReadOptions {
+    pub fn x(&self) -> bool {
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::ffi::rocksdb::{Options, ReadOptions, WriteOptions};
@@ -193,5 +193,25 @@ mod tests {
             let_write_opts!(w_opts = { disable_wal => true });
         }
         dbg!(size_of::<ReadOptions>());
+        // let cmp = RustComparator::new().within_unique_ptr();
+
+        #[no_mangle]
+        extern "C" fn rusty_cmp(
+            a: &ffi::rocksdb::Slice,
+            b: &ffi::rocksdb::Slice,
+        ) -> autocxx::c_int {
+            dbg!(convert_slice_back(a));
+            dbg!(convert_slice_back(b));
+            autocxx::c_int(0)
+        }
+
+        let cmp = unsafe {
+            let f_ptr = rusty_cmp as *const autocxx::c_void;
+            new_rust_comparator("hello", false, f_ptr)
+        };
+
+        let a = convert_slice(&[1, 2, 3]);
+        let b = convert_slice(&[4, 5, 6, 7]);
+        cmp.Compare(&a, &b);
     }
 }
