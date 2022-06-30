@@ -67,6 +67,8 @@ pub fn convert_slice_back(src: &Slice) -> &[u8] {
     unsafe { std::slice::from_raw_parts(src.data() as *const u8, src.size()) }
 }
 
+pub type SnapshotPtr = *const Snapshot;
+
 impl DbBridge {
     #[inline]
     fn get_raw_db(&self) -> Pin<&mut DB> {
@@ -175,18 +177,16 @@ impl DbBridge {
     }
 
     #[inline]
-    pub fn get_snapshot(&self) -> *const Snapshot {
+    pub fn get_snapshot(&self) -> SnapshotPtr {
         let db = self.get_raw_db();
         db.GetSnapshot()
     }
 
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
-    pub fn release_snapshot(&self, snapshot: *const Snapshot) {
+    pub fn release_snapshot(&self, snapshot: SnapshotPtr) {
         let db = self.get_raw_db();
-        unsafe {
-            db.ReleaseSnapshot(snapshot)
-        }
+        unsafe { db.ReleaseSnapshot(snapshot) }
     }
 }
 
