@@ -180,10 +180,13 @@ impl DbBridge {
         db.GetSnapshot()
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
     pub fn release_snapshot(&self, snapshot: *const Snapshot) {
         let db = self.get_raw_db();
-        unsafe { db.ReleaseSnapshot(snapshot) }
+        unsafe {
+            db.ReleaseSnapshot(snapshot)
+        }
     }
 }
 
