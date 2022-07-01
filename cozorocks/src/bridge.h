@@ -88,7 +88,7 @@ namespace rocksdb_additions {
 
     // for options
 
-    inline void set_opts_create_if_mission(Options &opts, bool v) {
+    inline void set_opts_create_if_missing(Options &opts, bool v) {
         opts.create_if_missing = v;
     }
 
@@ -150,6 +150,14 @@ namespace rocksdb_additions {
         inner.enable_blob_garbage_collection = v;
     }
 
+    inline unique_ptr<OptimisticTransactionDBOptions> new_odb_opts() {
+        return make_unique<OptimisticTransactionDBOptions>();
+    }
+
+    inline unique_ptr<TransactionDBOptions> new_tdb_opts() {
+        return make_unique<TransactionDBOptions>();
+    }
+
     // otopts
 
     inline void set_otopts_comparator(OptimisticTransactionOptions &opts, Comparator &cmp) {
@@ -200,7 +208,7 @@ namespace rocksdb_additions {
     };
 
     inline shared_ptr<DbBridge>
-    open_db_raw(const Options &options, const string &path, Status &status) {
+    open_db_raw(const Options &options, const string path, Status &status) {
         DB *db = nullptr;
 
         status = DB::Open(options, path, &db);
@@ -210,7 +218,7 @@ namespace rocksdb_additions {
     inline shared_ptr<DbBridge>
     open_tdb_raw(const Options &options,
                  const TransactionDBOptions &txn_db_options,
-                 const string &path,
+                 const string path,
                  Status &status) {
         TransactionDB *txn_db = nullptr;
 
@@ -221,7 +229,7 @@ namespace rocksdb_additions {
 
 
     inline shared_ptr<DbBridge>
-    open_odb_raw(const Options &options, const string &path, Status &status) {
+    open_odb_raw(const Options &options, const string path, Status &status) {
         OptimisticTransactionDB *txn_db = nullptr;
 
         status = OptimisticTransactionDB::Open(options,

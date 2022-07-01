@@ -1,4 +1,5 @@
 use autocxx::prelude::*;
+use std::fmt::{Display, Formatter};
 use std::os::raw::c_char;
 use std::pin::Pin;
 
@@ -6,12 +7,13 @@ include_cpp! {
     #include "bridge.h"
 
     safety!(unsafe)
+    generate_ns!("rocksdb_additions")
+    generate_pod!("rocksdb::Slice")
     generate!("rocksdb::ReadOptions")
     generate!("rocksdb::WriteOptions")
     generate!("rocksdb::Options")
     generate!("rocksdb::DBOptions")
     generate!("rocksdb::Status")
-    generate_pod!("rocksdb::Slice")
     generate!("rocksdb::PinnableSlice")
     generate!("rocksdb::TransactionOptions")
     generate!("rocksdb::OptimisticTransactionOptions")
@@ -25,10 +27,9 @@ include_cpp! {
     generate!("rocksdb::StackableDB")
     generate!("rocksdb::DB")
     generate!("rocksdb::Snapshot")
-    generate_ns!("rocksdb_additions")
 }
 
-pub use autocxx::{c_int, c_void};
+pub use autocxx::{c_int, c_void, WithinUniquePtr};
 pub use cxx::{CxxString, CxxVector, SharedPtr, UniquePtr};
 pub use ffi::rocksdb::Status_Code as StatusCode;
 pub use ffi::rocksdb::Status_Severity as StatusSeverity;
@@ -36,11 +37,20 @@ pub use ffi::rocksdb::Status_SubCode as StatusSubCode;
 pub use ffi::rocksdb::*;
 pub use ffi::rocksdb_additions::*;
 
+#[derive(Debug, Copy, Clone)]
 pub struct DbStatus {
     pub code: StatusCode,
     pub subcode: StatusSubCode,
     pub severity: StatusSeverity,
 }
+
+impl Display for DbStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for DbStatus {}
 
 #[inline(always)]
 fn convert_status(status: &ffi::rocksdb::Status) -> DbStatus {
@@ -70,6 +80,44 @@ pub fn convert_slice_back(src: &Slice) -> &[u8] {
 pub type SnapshotPtr = *const Snapshot;
 
 impl DbBridge {
+    pub fn new_raw_db(path: &str, opts: &Options) -> Result<SharedPtr<Self>, DbStatus> {
+        let mut status = Status::new().within_unique_ptr();
+        let bridge = open_db_raw(opts, path, status.pin_mut());
+        if !status.ok() {
+            Err(convert_status(&status))
+        } else {
+            Ok(bridge)
+        }
+    }
+
+    pub fn new_tdb(
+        path: &str,
+        opts: &Options,
+        tdb_opts: &TransactionDBOptions,
+    ) -> Result<SharedPtr<Self>, DbStatus> {
+        let mut status = Status::new().within_unique_ptr();
+        let bridge = open_tdb_raw(opts, tdb_opts, path, status.pin_mut());
+        if !status.ok() {
+            Err(convert_status(&status))
+        } else {
+            Ok(bridge)
+        }
+    }
+
+    pub fn new_odb(
+        path: &str,
+        opts: &Options,
+        _odb_opts: &OptimisticTransactionDBOptions,
+    ) -> Result<SharedPtr<Self>, DbStatus> {
+        let mut status = Status::new().within_unique_ptr();
+        let bridge = open_odb_raw(opts, path, status.pin_mut());
+        if !status.ok() {
+            Err(convert_status(&status))
+        } else {
+            Ok(bridge)
+        }
+    }
+
     #[inline]
     fn get_raw_db(&self) -> Pin<&mut DB> {
         unsafe { Pin::new_unchecked(&mut *self.inner_db()) }
