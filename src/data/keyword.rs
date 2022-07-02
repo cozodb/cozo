@@ -13,7 +13,9 @@ pub enum KeywordError {
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Deserialize, Serialize)]
 pub struct Keyword {
+    #[serde(rename = "n")]
     pub(crate) ns: SmartString<LazyCompact>,
+    #[serde(rename = "i")]
     pub(crate) ident: SmartString<LazyCompact>,
 }
 

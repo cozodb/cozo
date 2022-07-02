@@ -1,4 +1,3 @@
-use crate::data::encode::StorageTag::Tx;
 use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
@@ -21,6 +20,8 @@ pub(crate) enum StorageTag {
     Tx = 7,
     UniqueEntity = 8,
     UniqueAttrValue = 9,
+    UniqueAttrById = 10,
+    UniqueAttrByKeyword = 11,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -288,4 +289,32 @@ pub(crate) fn decode_unique_attr_val(src: &[u8]) -> Result<(AttrId, Value)> {
     let a_id = AttrId::from_bytes(&src[..4]);
     let val = rmp_serde::from_slice(&src[4..])?;
     Ok((a_id, val))
+}
+
+#[inline]
+pub(crate) fn encode_unique_attr_by_id(aid: AttrId) -> impl Deref<Target = [u8]> {
+    let mut ret = SmallVec::<[u8; 4]>::new();
+    ret.extend(aid.0.to_be_bytes());
+    ret[0] = StorageTag::UniqueAttrById as u8;
+    debug_assert_eq!(ret.len(), 4);
+    ret
+}
+
+pub(crate) fn decode_unique_attr_by_id(src: &[u8]) -> Result<AttrId> {
+    Ok(AttrId::from_bytes(src))
+}
+
+#[inline]
+pub(crate) fn encode_unique_attr_by_kw(kw: Keyword) -> impl Deref<Target = [u8]> {
+    let mut ret = SmallVec::<[u8; 60]>::new();
+    ret.push(StorageTag::UniqueAttrByKeyword as u8);
+    ret.extend_from_slice(kw.ns.as_bytes());
+    ret.push(b'/');
+    ret.extend_from_slice(kw.ident.as_bytes());
+    ret
+}
+
+#[inline]
+pub(crate) fn decode_unique_attr_by_kw(src: &[u8]) -> Result<Keyword> {
+    Ok(Keyword::try_from(&src[1..])?)
 }

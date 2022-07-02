@@ -53,6 +53,8 @@ fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
         Tx => compare_key_tx(a, b),
         UniqueEntity => compare_key_unique_entity(a, b),
         UniqueAttrValue => compare_key_unique_attr_val(a, b),
+        UniqueAttrById => compare_key_unique_attr_by_id(a, b),
+        UniqueAttrByKeyword => compare_key_unique_attr_by_kw(a, b),
     }
 }
 
@@ -145,9 +147,7 @@ fn compare_key_tx(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_unique_entity(a: &[u8], b: &[u8]) -> Ordering {
-    let a_e = EntityId::from_bytes(a);
-    let b_e = EntityId::from_bytes(b);
-    a_e.cmp(&b_e)
+    a.cmp(b)
 }
 
 #[inline]
@@ -156,4 +156,14 @@ fn compare_key_unique_attr_val(a: &[u8], b: &[u8]) -> Ordering {
     let (b_a, b_v) = decode_unique_attr_val(b).unwrap();
     return_if_resolved!(a_a.cmp(&b_a));
     a_v.cmp(&b_v)
+}
+
+#[inline]
+fn compare_key_unique_attr_by_id(a: &[u8], b: &[u8]) -> Ordering {
+    a.cmp(b)
+}
+
+#[inline]
+fn compare_key_unique_attr_by_kw(a: &[u8], b: &[u8]) -> Ordering {
+    a.cmp(b)
 }
