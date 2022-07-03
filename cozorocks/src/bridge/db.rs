@@ -1,6 +1,7 @@
 use crate::bridge::ffi::*;
 use crate::bridge::tx::TxBuilder;
 use cxx::*;
+use std::borrow::Cow;
 use std::ptr::null;
 
 #[derive(Default, Debug)]
@@ -107,7 +108,7 @@ impl<'a> DbBuilder<'a> {
         different_bytes_can_be_equal: bool,
     ) -> Self {
         self.opts.comparator_name = name;
-        self.opts.comparator_impl = unsafe { cmp as *const u8 };
+        self.opts.comparator_impl = cmp as *const u8;
         self.opts.comparator_different_bytes_can_be_equal = different_bytes_can_be_equal;
         self
     }
@@ -132,6 +133,9 @@ pub struct RocksDb {
 }
 
 impl RocksDb {
+    pub fn db_path(&self) -> Cow<str> {
+        self.inner.get_db_path().to_string_lossy()
+    }
     pub fn transact(&self) -> TxBuilder {
         TxBuilder {
             inner: self.inner.transact(),
@@ -141,4 +145,3 @@ impl RocksDb {
 
 unsafe impl Send for RocksDb {}
 unsafe impl Sync for RocksDb {}
-

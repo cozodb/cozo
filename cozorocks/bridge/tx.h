@@ -19,15 +19,25 @@ struct TxBridge {
     unique_ptr<OptimisticTransactionOptions> o_tx_opts;
     unique_ptr<TransactionOptions> p_tx_opts;
 
-    TxBridge(OptimisticTransactionDB *odb_) : odb(odb_), tdb(nullptr), w_opts(new WriteOptions),
-                                              r_opts(new ReadOptions),
-                                              o_tx_opts(new OptimisticTransactionOptions), p_tx_opts(nullptr), tx() {
+    TxBridge(OptimisticTransactionDB *odb_) :
+            odb(odb_),
+            tdb(nullptr),
+            tx(),
+            w_opts(new WriteOptions),
+            r_opts(new ReadOptions),
+            o_tx_opts(new OptimisticTransactionOptions),
+            p_tx_opts(nullptr) {
         r_opts->ignore_range_deletions = true;
     }
 
-    TxBridge(TransactionDB *tdb_) : odb(nullptr), tdb(tdb_), w_opts(new WriteOptions), o_tx_opts(nullptr),
-                                    r_opts(new ReadOptions),
-                                    p_tx_opts(new TransactionOptions), tx() {
+    TxBridge(TransactionDB *tdb_) :
+            odb(nullptr),
+            tdb(tdb_),
+            tx(),
+            w_opts(new WriteOptions),
+            r_opts(new ReadOptions),
+            o_tx_opts(nullptr),
+            p_tx_opts(new TransactionOptions) {
         r_opts->ignore_range_deletions = true;
     }
 

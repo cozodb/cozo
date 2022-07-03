@@ -1,6 +1,5 @@
 use crate::bridge::ffi::*;
 use cxx::UniquePtr;
-use std::os::macos::raw::stat;
 
 pub struct IterBuilder {
     pub(crate) inner: UniquePtr<IterBridge>,
