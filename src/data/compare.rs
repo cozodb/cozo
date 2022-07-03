@@ -6,27 +6,27 @@ use crate::data::id::{EntityId, TxId};
 use lazy_static::lazy_static;
 use std::cmp::Ordering;
 
-#[no_mangle]
-extern "C" fn rusty_cmp(a: &cozorocks::Slice, b: &cozorocks::Slice) -> cozorocks::c_int {
-    let a = cozorocks::convert_slice_back(a);
-    let b = cozorocks::convert_slice_back(b);
-    cozorocks::c_int(match compare_key(a, b) {
-        Ordering::Greater => 1,
-        Ordering::Equal => 0,
-        Ordering::Less => -1,
-    })
-}
+// #[no_mangle]
+// extern "C" fn rusty_cmp(a: &cozorocks::Slice, b: &cozorocks::Slice) -> cozorocks::c_int {
+//     let a = cozorocks::convert_slice_back(a);
+//     let b = cozorocks::convert_slice_back(b);
+//     cozorocks::c_int(match compare_key(a, b) {
+//         Ordering::Greater => 1,
+//         Ordering::Equal => 0,
+//         Ordering::Less => -1,
+//     })
+// }
 
 pub(crate) const DB_KEY_PREFIX_LEN: usize = 4;
-
-lazy_static! {
-    pub(crate) static ref RUSTY_COMPARATOR: cozorocks::UniquePtr<cozorocks::RustComparator> = {
-        unsafe {
-            let f_ptr = rusty_cmp as *const cozorocks::c_void;
-            cozorocks::new_rust_comparator("cozo_rusty_cmp_v1", false, f_ptr)
-        }
-    };
-}
+//
+// lazy_static! {
+//     pub(crate) static ref RUSTY_COMPARATOR: cozorocks::UniquePtr<cozorocks::RustComparator> = {
+//         unsafe {
+//             let f_ptr = rusty_cmp as *const cozorocks::c_void;
+//             cozorocks::new_rust_comparator("cozo_rusty_cmp_v1", false, f_ptr)
+//         }
+//     };
+// }
 
 macro_rules! return_if_resolved {
     ($o:expr) => {
