@@ -6,7 +6,7 @@
 #include "db.h"
 #include "cozorocks/src/bridge/mod.rs.h"
 
-shared_ptr<RocksDb> open_db(const DbOpts &opts, RdbStatus &status) {
+shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RdbStatus &status) {
     auto options = make_unique<Options>();
     if (opts.prepare_for_bulk_load) {
         options->PrepareForBulkLoad();
@@ -46,7 +46,7 @@ shared_ptr<RocksDb> open_db(const DbOpts &opts, RdbStatus &status) {
         options->comparator = cmp;
     }
 
-    shared_ptr<RocksDb> db_wrapper = shared_ptr<RocksDb>(nullptr);
+    shared_ptr<RocksDbBridge> db_wrapper = shared_ptr<RocksDbBridge>(nullptr);
     if (opts.optimistic) {
         auto db = new OptimisticRocksDb();
         db->options = std::move(options);
@@ -74,15 +74,6 @@ shared_ptr<RocksDb> open_db(const DbOpts &opts, RdbStatus &status) {
 
     return db_wrapper;
 }
-
-unique_ptr<RdbTx> OptimisticRocksDb::start_txn() {
-    return unique_ptr<RdbTx>(nullptr);
-}
-
-unique_ptr<RdbTx> PessimisticRocksDb::start_txn() {
-    return unique_ptr<RdbTx>(nullptr);
-}
-
 
 PessimisticRocksDb::~PessimisticRocksDb() {
     if (destroy_on_exit) {

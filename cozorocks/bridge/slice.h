@@ -7,4 +7,13 @@
 
 #include "common.h"
 
+inline Slice convert_slice(RustBytes d) {
+    return Slice(reinterpret_cast<const char *>(d.data()), d.size());
+}
+
+inline RustBytes convert_slice_back(const Slice &s) {
+    return rust::Slice(reinterpret_cast<const std::uint8_t *>(s.data()), s.size());
+}
+
+
 #endif //COZOROCKS_SLICE_H

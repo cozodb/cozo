@@ -25,6 +25,7 @@ struct DbOpts;
 typedef Status::Code StatusCode;
 typedef Status::SubCode StatusSubCode;
 typedef Status::Severity StatusSeverity;
+typedef rust::Slice<const uint8_t> RustBytes;
 
 
 #endif //COZOROCKS_ROCKS_BRIDGE_H

@@ -16,10 +16,12 @@ fn main() {
     println!("cargo:rerun-if-changed=cozorocks/bridge/slice.h");
     println!("cargo:rerun-if-changed=cozorocks/bridge/status.h");
     println!("cargo:rerun-if-changed=cozorocks/bridge/status.cpp");
+    println!("cargo:rerun-if-changed=cozorocks/bridge/opts.h");
     println!("cargo:rerun-if-changed=cozorocks/bridge/tx.h");
+    println!("cargo:rerun-if-changed=cozorocks/bridge/tx.cpp");
 
     cxx_build::bridge("src/bridge/mod.rs")
-        .files(["bridge/status.cpp", "bridge/db.cpp"])
+        .files(["bridge/status.cpp", "bridge/db.cpp", "bridge/tx.cpp"])
         .include("../deps/include")
         .include("bridge")
         .flag_if_supported("-std=c++17")

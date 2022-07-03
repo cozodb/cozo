@@ -9,5 +9,6 @@
 #include "slice.h"
 #include "tx.h"
 #include "status.h"
+#include "opts.h"
 
 #endif //COZOROCKS_BRIDGE_H

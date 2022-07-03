@@ -1,6 +1,7 @@
 use crate::bridge::ffi::*;
 use cxx::*;
 use std::ptr::null;
+use crate::bridge::tx::TxBuilder;
 
 #[derive(Default, Debug)]
 struct DbBuilder<'a> {
@@ -114,17 +115,32 @@ impl<'a> DbBuilder<'a> {
         self.opts.destroy_on_exit = destroy;
         self
     }
-    pub fn build(self) -> Result<SharedPtr<RocksDb>, RdbStatus> {
-        dbg!(&self.opts);
+    pub fn build(self) -> Result<RocksDb, RdbStatus> {
         let mut status = RdbStatus::default();
         let result = open_db(&self.opts, &mut status);
         if status.is_ok() {
-            Ok(result)
+            Ok(RocksDb { inner: result })
         } else {
             Err(status)
         }
     }
 }
+
+#[derive(Clone)]
+pub struct RocksDb {
+    inner: SharedPtr<RocksDbBridge>,
+}
+
+impl RocksDb {
+    pub fn transact(&self) -> TxBuilder {
+        TxBuilder {
+            inner: self.inner.transact(),
+        }
+    }
+}
+
+unsafe impl Send for RocksDb {}
+unsafe impl Sync for RocksDb {}
 
 #[cfg(test)]
 mod tests {
@@ -142,18 +158,20 @@ mod tests {
 
     #[test]
     fn creation() {
-        {
+        for optimistic in [true, false] {
             let db = DbBuilder::default()
-                .path("_test_db")
-                .optimistic(true)
+                .path(&format!("_test_db_{:?}", optimistic))
+                .optimistic(optimistic)
                 .create_if_missing(true)
                 .use_custom_comparator("rusty_cmp", test_comparator, false)
                 .destroy_on_exit(true)
                 .build()
                 .unwrap();
-        }
-        for _ in 0..10000000 {
 
+            let mut tx = db.transact()
+                .disable_wal(true)
+                .start(false);
+            tx.set_snapshot();
         }
     }
 }

@@ -1,4 +1,8 @@
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+
 pub(crate) mod db;
+pub(crate) mod tx;
 
 #[cxx::bridge]
 pub(crate) mod ffi {
@@ -93,11 +97,36 @@ pub(crate) mod ffi {
         type StatusCode;
         type StatusSubCode;
         type StatusSeverity;
+        type WriteOptions;
+        type PinnableSlice;
 
-        type RocksDb;
-        fn get_db_path(self: &RocksDb) -> &CxxString;
+        fn set_w_opts_sync(o: Pin<&mut WriteOptions>, val: bool);
+        fn set_w_opts_disable_wal(o: Pin<&mut WriteOptions>, val: bool);
+        fn set_w_opts_no_slowdown(o: Pin<&mut WriteOptions>, val: bool);
 
-        fn open_db(builder: &DbOpts, status: &mut RdbStatus) -> SharedPtr<RocksDb>;
+        type ReadOptions;
+
+        type RocksDbBridge;
+        fn get_db_path(self: &RocksDbBridge) -> &CxxString;
+        fn open_db(builder: &DbOpts, status: &mut RdbStatus) -> SharedPtr<RocksDbBridge>;
+        fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
+
+        type TxBridge;
+        fn get_w_opts(self: Pin<&mut TxBridge>) -> Pin<&mut WriteOptions>;
+        fn set_snapshot(self: Pin<&mut TxBridge>);
+        fn clear_snapshot(self: Pin<&mut TxBridge>);
+        fn get(
+            self: Pin<&mut TxBridge>,
+            key: &[u8],
+            for_update: bool,
+            status: &mut RdbStatus,
+        ) -> UniquePtr<PinnableSlice>;
+        fn put(self: Pin<&mut TxBridge>, key: &[u8], val: &[u8], status: &mut RdbStatus);
+        fn del(self: Pin<&mut TxBridge>, key: &[u8], status: &mut RdbStatus);
+        fn commit(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
+        fn rollback(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
+        fn rollback_to_savepoint(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
+        fn pop_savepoint(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
     }
 }
 
@@ -108,6 +137,18 @@ impl Default for ffi::RdbStatus {
             subcode: ffi::StatusSubCode::kNone,
             severity: ffi::StatusSeverity::kNoError,
             message: "".to_string(),
+        }
+    }
+}
+
+impl Error for ffi::RdbStatus {}
+
+impl Display for ffi::RdbStatus {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if self.message.is_empty() {
+            write!(f, "RocksDB error: {:?}", self)
+        } else {
+            write!(f, "RocksDB error: {}", self.message)
         }
     }
 }
