@@ -1,10 +1,10 @@
 use crate::bridge::ffi::*;
+use crate::bridge::tx::TxBuilder;
 use cxx::*;
 use std::ptr::null;
-use crate::bridge::tx::TxBuilder;
 
 #[derive(Default, Debug)]
-struct DbBuilder<'a> {
+pub struct DbBuilder<'a> {
     opts: DbOpts<'a>,
 }
 
@@ -142,36 +142,3 @@ impl RocksDb {
 unsafe impl Send for RocksDb {}
 unsafe impl Sync for RocksDb {}
 
-#[cfg(test)]
-mod tests {
-    use crate::bridge::db::DbBuilder;
-
-    fn test_comparator(a: &[u8], b: &[u8]) -> i8 {
-        use std::cmp::Ordering::*;
-
-        match a.cmp(b) {
-            Equal => 0,
-            Greater => 1,
-            Less => -1,
-        }
-    }
-
-    #[test]
-    fn creation() {
-        for optimistic in [true, false] {
-            let db = DbBuilder::default()
-                .path(&format!("_test_db_{:?}", optimistic))
-                .optimistic(optimistic)
-                .create_if_missing(true)
-                .use_custom_comparator("rusty_cmp", test_comparator, false)
-                .destroy_on_exit(true)
-                .build()
-                .unwrap();
-
-            let mut tx = db.transact()
-                .disable_wal(true)
-                .start(false);
-            tx.set_snapshot();
-        }
-    }
-}

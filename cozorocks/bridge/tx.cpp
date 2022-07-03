@@ -13,4 +13,5 @@ void TxBridge::start() {
         Transaction *txn = tdb->BeginTransaction(*w_opts, *p_tx_opts);
         tx.reset(txn);
     }
+    assert(tx);
 }

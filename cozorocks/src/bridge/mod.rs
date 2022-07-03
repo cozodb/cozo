@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 pub(crate) mod db;
+pub(crate) mod iter;
 pub(crate) mod tx;
 
 #[cxx::bridge]
@@ -99,12 +100,13 @@ pub(crate) mod ffi {
         type StatusSeverity;
         type WriteOptions;
         type PinnableSlice;
+        fn convert_pinnable_slice_back(s: &PinnableSlice) -> &[u8];
 
         fn set_w_opts_sync(o: Pin<&mut WriteOptions>, val: bool);
         fn set_w_opts_disable_wal(o: Pin<&mut WriteOptions>, val: bool);
         fn set_w_opts_no_slowdown(o: Pin<&mut WriteOptions>, val: bool);
 
-        type ReadOptions;
+        // type ReadOptions;
 
         type RocksDbBridge;
         fn get_db_path(self: &RocksDbBridge) -> &CxxString;
@@ -112,8 +114,12 @@ pub(crate) mod ffi {
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
 
         type TxBridge;
+        // fn get_r_opts(self: Pin<&mut TxBridge>) -> Pin<&mut ReadOptions>;
+        fn verify_checksums(self: Pin<&mut TxBridge>, val: bool);
+        fn fill_cache(self: Pin<&mut TxBridge>, val: bool);
         fn get_w_opts(self: Pin<&mut TxBridge>) -> Pin<&mut WriteOptions>;
-        fn set_snapshot(self: Pin<&mut TxBridge>);
+        fn start(self: Pin<&mut TxBridge>);
+        fn set_snapshot(self: Pin<&mut TxBridge>, val: bool);
         fn clear_snapshot(self: Pin<&mut TxBridge>);
         fn get(
             self: Pin<&mut TxBridge>,
@@ -127,10 +133,39 @@ pub(crate) mod ffi {
         fn rollback(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
         fn rollback_to_savepoint(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
         fn pop_savepoint(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
+        fn set_savepoint(self: Pin<&mut TxBridge>);
+        fn iterator(self: Pin<&mut TxBridge>) -> UniquePtr<IterBridge>;
+
+        type IterBridge;
+        fn start(self: Pin<&mut IterBridge>);
+        fn reset(self: Pin<&mut IterBridge>);
+        // fn get_r_opts(self: Pin<&mut IterBridge>) -> Pin<&mut ReadOptions>;
+        fn clear_bounds(self: Pin<&mut IterBridge>);
+        fn set_lower_bound(self: Pin<&mut IterBridge>, bound: &[u8]);
+        fn set_upper_bound(self: Pin<&mut IterBridge>, bound: &[u8]);
+        fn verify_checksums(self: Pin<&mut IterBridge>, val: bool);
+        fn fill_cache(self: Pin<&mut IterBridge>, val: bool);
+        fn tailing(self: Pin<&mut IterBridge>, val: bool);
+        fn total_order_seek(self: Pin<&mut IterBridge>, val: bool);
+        fn auto_prefix_mode(self: Pin<&mut IterBridge>, val: bool);
+        fn prefix_same_as_start(self: Pin<&mut IterBridge>, val: bool);
+        fn pin_data(self: Pin<&mut IterBridge>, val: bool);
+
+        fn to_start(self: Pin<&mut IterBridge>);
+        fn to_end(self: Pin<&mut IterBridge>);
+        fn seek(self: Pin<&mut IterBridge>, key: &[u8]);
+        fn seek_backward(self: Pin<&mut IterBridge>, key: &[u8]);
+        fn is_valid(self: &IterBridge) -> bool;
+        fn next(self: Pin<&mut IterBridge>);
+        fn prev(self: Pin<&mut IterBridge>);
+        fn status(self: &IterBridge, status: &mut RdbStatus);
+        fn key(self: &IterBridge) -> &[u8];
+        fn val(self: &IterBridge) -> &[u8];
     }
 }
 
 impl Default for ffi::RdbStatus {
+    #[inline]
     fn default() -> Self {
         ffi::RdbStatus {
             code: ffi::StatusCode::kOk,

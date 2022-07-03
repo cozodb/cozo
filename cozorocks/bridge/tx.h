@@ -8,6 +8,7 @@
 #include "common.h"
 #include "slice.h"
 #include "status.h"
+#include "iter.h"
 
 struct TxBridge {
     OptimisticTransactionDB *odb;
@@ -20,23 +21,45 @@ struct TxBridge {
 
     TxBridge(OptimisticTransactionDB *odb_) : odb(odb_), tdb(nullptr), w_opts(new WriteOptions),
                                               r_opts(new ReadOptions),
-                                              o_tx_opts(new OptimisticTransactionOptions), p_tx_opts(nullptr), tx() {}
+                                              o_tx_opts(new OptimisticTransactionOptions), p_tx_opts(nullptr), tx() {
+        r_opts->ignore_range_deletions = true;
+    }
 
     TxBridge(TransactionDB *tdb_) : odb(nullptr), tdb(tdb_), w_opts(new WriteOptions), o_tx_opts(nullptr),
                                     r_opts(new ReadOptions),
-                                    p_tx_opts(new TransactionOptions), tx() {}
+                                    p_tx_opts(new TransactionOptions), tx() {
+        r_opts->ignore_range_deletions = true;
+    }
 
-    WriteOptions &get_w_opts() {
+    inline WriteOptions &get_w_opts() {
         return *w_opts;
     }
 
-    inline void set_snapshot() {
+//    inline ReadOptions &get_r_opts() {
+//        return *r_opts;
+//    }
+
+    inline void verify_checksums(bool val) {
+        r_opts->verify_checksums = val;
+    }
+
+    inline void fill_cache(bool val) {
+        r_opts->fill_cache = val;
+    }
+
+    inline unique_ptr<IterBridge> iterator() {
+        return make_unique<IterBridge>(&*tx);
+    };
+
+    inline void set_snapshot(bool val) {
         if (tx != nullptr) {
-            tx->SetSnapshot();
+            if (val) {
+                tx->SetSnapshot();
+            }
         } else if (o_tx_opts != nullptr) {
-            o_tx_opts->set_snapshot = true;
+            o_tx_opts->set_snapshot = val;
         } else if (p_tx_opts != nullptr) {
-            p_tx_opts->set_snapshot = true;
+            p_tx_opts->set_snapshot = val;
         }
     }
 

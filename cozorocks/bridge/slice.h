@@ -15,5 +15,8 @@ inline RustBytes convert_slice_back(const Slice &s) {
     return rust::Slice(reinterpret_cast<const std::uint8_t *>(s.data()), s.size());
 }
 
+inline RustBytes convert_pinnable_slice_back(const PinnableSlice &s) {
+    return rust::Slice(reinterpret_cast<const std::uint8_t *>(s.data()), s.size());
+}
 
 #endif //COZOROCKS_SLICE_H

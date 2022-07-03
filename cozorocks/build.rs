@@ -17,6 +17,7 @@ fn main() {
     println!("cargo:rerun-if-changed=cozorocks/bridge/status.h");
     println!("cargo:rerun-if-changed=cozorocks/bridge/status.cpp");
     println!("cargo:rerun-if-changed=cozorocks/bridge/opts.h");
+    println!("cargo:rerun-if-changed=cozorocks/bridge/iter.h");
     println!("cargo:rerun-if-changed=cozorocks/bridge/tx.h");
     println!("cargo:rerun-if-changed=cozorocks/bridge/tx.cpp");
 

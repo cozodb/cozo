@@ -10,5 +10,6 @@
 #include "tx.h"
 #include "status.h"
 #include "opts.h"
+#include "iter.h"
 
 #endif //COZOROCKS_BRIDGE_H
