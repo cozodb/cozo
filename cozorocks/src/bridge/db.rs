@@ -116,8 +116,8 @@ impl<'a> DbBuilder<'a> {
         self.opts.destroy_on_exit = destroy;
         self
     }
-    pub fn build(self) -> Result<RocksDb, RdbStatus> {
-        let mut status = RdbStatus::default();
+    pub fn build(self) -> Result<RocksDb, RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
         let result = open_db(&self.opts, &mut status);
         if status.is_ok() {
             Ok(RocksDb { inner: result })

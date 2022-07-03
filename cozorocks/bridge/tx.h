@@ -87,7 +87,7 @@ struct TxBridge {
 
     void start();
 
-    inline unique_ptr<PinnableSlice> get(RustBytes key, bool for_update, RdbStatus &status) {
+    inline unique_ptr<PinnableSlice> get(RustBytes key, bool for_update, RocksDbStatus &status) {
         Slice key_ = convert_slice(key);
         auto ret = make_unique<PinnableSlice>();
         if (for_update) {
@@ -100,27 +100,27 @@ struct TxBridge {
         return ret;
     }
 
-    inline void put(RustBytes key, RustBytes val, RdbStatus &status) {
+    inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) {
         write_status(tx->Put(convert_slice(key), convert_slice(val)), status);
     }
 
-    inline void del(RustBytes key, RdbStatus &status) {
+    inline void del(RustBytes key, RocksDbStatus &status) {
         write_status(tx->Delete(convert_slice(key)), status);
     }
 
-    inline void commit(RdbStatus &status) {
+    inline void commit(RocksDbStatus &status) {
         write_status(tx->Commit(), status);
     }
 
-    inline void rollback(RdbStatus &status) {
+    inline void rollback(RocksDbStatus &status) {
         write_status(tx->Rollback(), status);
     }
 
-    inline void rollback_to_savepoint(RdbStatus &status) {
+    inline void rollback_to_savepoint(RocksDbStatus &status) {
         write_status(tx->RollbackToSavePoint(), status);
     }
 
-    inline void pop_savepoint(RdbStatus &status) {
+    inline void pop_savepoint(RocksDbStatus &status) {
         write_status(tx->PopSavePoint(), status);
     }
 

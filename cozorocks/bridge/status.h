@@ -7,8 +7,8 @@
 
 #include "common.h"
 
-void write_status(const Status &rstatus, RdbStatus &status);
+void write_status(const Status &rstatus, RocksDbStatus &status);
 
-RdbStatus convert_status(const Status &status);
+RocksDbStatus convert_status(const Status &status);
 
 #endif //COZOROCKS_STATUS_H

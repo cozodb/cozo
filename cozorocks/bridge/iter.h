@@ -106,7 +106,7 @@ struct IterBridge {
         iter->Prev();
     }
 
-    inline void status(RdbStatus &status) const {
+    inline void status(RocksDbStatus &status) const {
         write_status(iter->status(), status);
     }
 

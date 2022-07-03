@@ -6,7 +6,7 @@
 #include "db.h"
 #include "cozorocks/src/bridge/mod.rs.h"
 
-shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RdbStatus &status) {
+shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     auto options = make_unique<Options>();
     if (opts.prepare_for_bulk_load) {
         options->PrepareForBulkLoad();

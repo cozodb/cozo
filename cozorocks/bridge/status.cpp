@@ -5,7 +5,7 @@
 #include "status.h"
 #include "cozorocks/src/bridge/mod.rs.h"
 
-void write_status(const Status &rstatus, RdbStatus &status) {
+void write_status(const Status &rstatus, RocksDbStatus &status) {
     status.code = rstatus.code();
     status.subcode = rstatus.subcode();
     status.severity = rstatus.severity();
@@ -14,8 +14,8 @@ void write_status(const Status &rstatus, RdbStatus &status) {
     }
 }
 
-RdbStatus convert_status(const Status &status) {
-    RdbStatus ret;
+RocksDbStatus convert_status(const Status &status) {
+    RocksDbStatus ret;
     write_status(status, ret);
     return ret;
 }

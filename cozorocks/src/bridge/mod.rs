@@ -8,7 +8,7 @@ pub(crate) mod tx;
 #[cxx::bridge]
 pub(crate) mod ffi {
     #[derive(Debug)]
-    pub struct DbOpts<'a> {
+    struct DbOpts<'a> {
         pub db_path: &'a str,
         pub optimistic: bool,
         pub prepare_for_bulk_load: bool,
@@ -34,7 +34,7 @@ pub(crate) mod ffi {
     }
 
     #[derive(Clone, Debug, Eq, PartialEq)]
-    pub struct RdbStatus {
+    pub struct RocksDbStatus {
         pub code: StatusCode,
         pub subcode: StatusSubCode,
         pub severity: StatusSeverity,
@@ -110,7 +110,7 @@ pub(crate) mod ffi {
 
         type RocksDbBridge;
         fn get_db_path(self: &RocksDbBridge) -> &CxxString;
-        fn open_db(builder: &DbOpts, status: &mut RdbStatus) -> SharedPtr<RocksDbBridge>;
+        fn open_db(builder: &DbOpts, status: &mut RocksDbStatus) -> SharedPtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
 
         type TxBridge;
@@ -125,14 +125,14 @@ pub(crate) mod ffi {
             self: Pin<&mut TxBridge>,
             key: &[u8],
             for_update: bool,
-            status: &mut RdbStatus,
+            status: &mut RocksDbStatus,
         ) -> UniquePtr<PinnableSlice>;
-        fn put(self: Pin<&mut TxBridge>, key: &[u8], val: &[u8], status: &mut RdbStatus);
-        fn del(self: Pin<&mut TxBridge>, key: &[u8], status: &mut RdbStatus);
-        fn commit(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
-        fn rollback(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
-        fn rollback_to_savepoint(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
-        fn pop_savepoint(self: Pin<&mut TxBridge>, status: &mut RdbStatus);
+        fn put(self: Pin<&mut TxBridge>, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
+        fn del(self: Pin<&mut TxBridge>, key: &[u8], status: &mut RocksDbStatus);
+        fn commit(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
+        fn rollback(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
+        fn rollback_to_savepoint(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
+        fn pop_savepoint(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn set_savepoint(self: Pin<&mut TxBridge>);
         fn iterator(self: Pin<&mut TxBridge>) -> UniquePtr<IterBridge>;
 
@@ -158,16 +158,16 @@ pub(crate) mod ffi {
         fn is_valid(self: &IterBridge) -> bool;
         fn next(self: Pin<&mut IterBridge>);
         fn prev(self: Pin<&mut IterBridge>);
-        fn status(self: &IterBridge, status: &mut RdbStatus);
+        fn status(self: &IterBridge, status: &mut RocksDbStatus);
         fn key(self: &IterBridge) -> &[u8];
         fn val(self: &IterBridge) -> &[u8];
     }
 }
 
-impl Default for ffi::RdbStatus {
+impl Default for ffi::RocksDbStatus {
     #[inline]
     fn default() -> Self {
-        ffi::RdbStatus {
+        ffi::RocksDbStatus {
             code: ffi::StatusCode::kOk,
             subcode: ffi::StatusSubCode::kNone,
             severity: ffi::StatusSeverity::kNoError,
@@ -176,9 +176,9 @@ impl Default for ffi::RdbStatus {
     }
 }
 
-impl Error for ffi::RdbStatus {}
+impl Error for ffi::RocksDbStatus {}
 
-impl Display for ffi::RdbStatus {
+impl Display for ffi::RocksDbStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.message.is_empty() {
             write!(f, "RocksDB error: {:?}", self)
@@ -188,7 +188,7 @@ impl Display for ffi::RdbStatus {
     }
 }
 
-impl ffi::RdbStatus {
+impl ffi::RocksDbStatus {
     #[inline(always)]
     pub fn is_ok(&self) -> bool {
         self.code == ffi::StatusCode::kOk

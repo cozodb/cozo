@@ -82,8 +82,8 @@ impl Tx {
         self.inner.pin_mut().clear_snapshot()
     }
     #[inline]
-    pub fn put(&mut self, key: &[u8], val: &[u8]) -> Result<(), RdbStatus> {
-        let mut status = RdbStatus::default();
+    pub fn put(&mut self, key: &[u8], val: &[u8]) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
         self.inner.pin_mut().put(key, val, &mut status);
         if status.is_ok() {
             Ok(())
@@ -92,8 +92,8 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn del(&mut self, key: &[u8]) -> Result<(), RdbStatus> {
-        let mut status = RdbStatus::default();
+    pub fn del(&mut self, key: &[u8]) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
         self.inner.pin_mut().del(key, &mut status);
         if status.is_ok() {
             Ok(())
@@ -102,8 +102,8 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn get(&mut self, key: &[u8], for_update: bool) -> Result<Option<PinSlice>, RdbStatus> {
-        let mut status = RdbStatus::default();
+    pub fn get(&mut self, key: &[u8], for_update: bool) -> Result<Option<PinSlice>, RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
         let ret = self.inner.pin_mut().get(key, for_update, &mut status);
         match status.code {
             StatusCode::kOk => Ok(Some(PinSlice { inner: ret })),
@@ -112,8 +112,8 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn commit(&mut self) -> Result<(), RdbStatus> {
-        let mut status = RdbStatus::default();
+    pub fn commit(&mut self) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
         self.inner.pin_mut().commit(&mut status);
         if status.is_ok() {
             Ok(())
@@ -122,8 +122,8 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn rollback(&mut self) -> Result<(), RdbStatus> {
-        let mut status = RdbStatus::default();
+    pub fn rollback(&mut self) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
         self.inner.pin_mut().rollback(&mut status);
         if status.is_ok() {
             Ok(())
@@ -132,8 +132,8 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn rollback_to_save(&mut self) -> Result<(), RdbStatus> {
-        let mut status = RdbStatus::default();
+    pub fn rollback_to_save(&mut self) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
         self.inner.pin_mut().rollback_to_savepoint(&mut status);
         if status.is_ok() {
             Ok(())
@@ -146,8 +146,8 @@ impl Tx {
         self.inner.pin_mut().set_savepoint();
     }
     #[inline]
-    pub fn pop_save(&mut self) -> Result<(), RdbStatus> {
-        let mut status = RdbStatus::default();
+    pub fn pop_save(&mut self) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
         self.inner.pin_mut().pop_savepoint(&mut status);
         if status.is_ok() {
             Ok(())

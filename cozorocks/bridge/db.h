@@ -79,6 +79,6 @@ public:
     bool can_different_bytes_be_equal;
 };
 
-shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RdbStatus &status);
+shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status);
 
 #endif //COZOROCKS_DB_H

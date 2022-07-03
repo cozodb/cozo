@@ -19,7 +19,7 @@
 using namespace rocksdb;
 using namespace std;
 
-struct RdbStatus;
+struct RocksDbStatus;
 struct DbOpts;
 
 typedef Status::Code StatusCode;

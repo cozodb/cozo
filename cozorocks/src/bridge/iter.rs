@@ -101,13 +101,13 @@ impl DbIter {
         self.inner.pin_mut().prev();
     }
     #[inline]
-    pub fn status(&self) -> RdbStatus {
-        let mut status = RdbStatus::default();
+    pub fn status(&self) -> RocksDbStatus {
+        let mut status = RocksDbStatus::default();
         self.inner.status(&mut status);
         status
     }
     #[inline]
-    pub fn key(&self) -> Result<Option<&[u8]>, RdbStatus> {
+    pub fn key(&self) -> Result<Option<&[u8]>, RocksDbStatus> {
         if self.is_valid() {
             Ok(Some(self.inner.key()))
         } else {
@@ -120,7 +120,7 @@ impl DbIter {
         }
     }
     #[inline]
-    pub fn val(&self) -> Result<Option<&[u8]>, RdbStatus> {
+    pub fn val(&self) -> Result<Option<&[u8]>, RocksDbStatus> {
         if self.is_valid() {
             Ok(Some(self.inner.val()))
         } else {
@@ -133,7 +133,7 @@ impl DbIter {
         }
     }
     #[inline]
-    pub fn pair(&self) -> Result<Option<(&[u8], &[u8])>, RdbStatus> {
+    pub fn pair(&self) -> Result<Option<(&[u8], &[u8])>, RocksDbStatus> {
         if self.is_valid() {
             Ok(Some((self.inner.key(), self.inner.val())))
         } else {

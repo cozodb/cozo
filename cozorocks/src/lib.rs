@@ -5,8 +5,7 @@ mod tests;
 
 pub use bridge::db::DbBuilder;
 pub use bridge::db::RocksDb;
-pub use bridge::ffi::DbOpts;
-pub use bridge::ffi::RdbStatus;
+pub use bridge::ffi::RocksDbStatus;
 pub use bridge::ffi::StatusCode;
 pub use bridge::ffi::StatusSeverity;
 pub use bridge::ffi::StatusSubCode;
