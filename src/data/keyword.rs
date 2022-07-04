@@ -1,6 +1,6 @@
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::str::Utf8Error;
 
 #[derive(Debug, thiserror::Error)]
@@ -12,7 +12,7 @@ pub enum KeywordError {
     Utf8(#[from] Utf8Error),
 }
 
-#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Deserialize, Serialize)]
 pub struct Keyword {
     #[serde(rename = "n")]
     pub(crate) ns: SmartString<LazyCompact>,
@@ -23,6 +23,12 @@ pub struct Keyword {
 impl Display for Keyword {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}/{}", self.ns, self.ident)
+    }
+}
+
+impl Debug for Keyword {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, ":{}", self)
     }
 }
 

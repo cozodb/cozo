@@ -238,15 +238,38 @@ pub(crate) struct Attribute {
     pub(crate) with_history: bool,
 }
 
-const LARGE_VEC_SIZE: usize = 60;
+const ATTR_VEC_SIZE: usize = 80;
 
 impl Attribute {
-    pub(crate) fn encode(&self) -> Encoded<LARGE_VEC_SIZE> {
-        let mut inner = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
+    pub(crate) fn encode(&self) -> Encoded<ATTR_VEC_SIZE> {
+        let mut inner = SmallVec::<[u8; ATTR_VEC_SIZE]>::new();
         self.serialize(&mut Serializer::new(&mut inner)).unwrap();
         Encoded { inner }
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
         Ok(rmp_serde::from_slice(data)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
+    use crate::data::id::AttrId;
+    use crate::data::keyword::Keyword;
+
+    #[test]
+    fn show_sizes() {
+        let attr = Attribute {
+            id: AttrId(0),
+            alias: Keyword::try_from("01234567890123456789012/01234567890123456789012").unwrap(),
+            cardinality: AttributeCardinality::One,
+            val_type: AttributeTyping::Ref,
+            indexing: AttributeIndex::None,
+            with_history: false,
+        };
+        let encoded = attr.encode();
+        dbg!(encoded.len());
+        dbg!("01234567890123456789012".as_bytes().len());
+        dbg!(Attribute::decode(&encoded).unwrap());
     }
 }
