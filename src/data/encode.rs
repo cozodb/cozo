@@ -291,7 +291,11 @@ pub(crate) fn decode_attr_key_by_id(src: &[u8]) -> Result<(AttrId, TxId, StoreOp
 /// tx: 8 bytes (incl. op)
 /// attr as kw: variable (segmented by \0)
 #[inline]
-pub(crate) fn encode_attr_by_kw(attr_name: Keyword, tx: TxId, op: StoreOp) -> Encoded<LARGE_VEC_SIZE> {
+pub(crate) fn encode_attr_by_kw(
+    attr_name: Keyword,
+    tx: TxId,
+    op: StoreOp,
+) -> Encoded<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     ret.push(StorageTag::AttrByKeyword as u8);
     let ns_bytes = attr_name.ns.as_bytes();
@@ -328,7 +332,7 @@ pub(crate) fn encode_tx(tx: TxId) -> Encoded<VEC_SIZE_8> {
 }
 
 #[inline]
-pub(crate) fn encode_unique_entity_placeholder(eid: EntityId) -> Encoded<VEC_SIZE_8> {
+pub(crate) fn encode_unique_entity(eid: EntityId) -> Encoded<VEC_SIZE_8> {
     let mut ret = SmallVec::<[u8; VEC_SIZE_8]>::new();
     ret.extend(eid.0.to_be_bytes());
     ret[0] = StorageTag::UniqueEntity as u8;

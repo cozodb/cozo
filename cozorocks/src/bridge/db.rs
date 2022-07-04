@@ -104,7 +104,7 @@ impl<'a> DbBuilder<'a> {
     pub fn use_custom_comparator(
         mut self,
         name: &'a str,
-        cmp: fn(&[u8], &[u8]) -> i8,
+        cmp: extern "C" fn(&[u8], &[u8]) -> i8,
         different_bytes_can_be_equal: bool,
     ) -> Self {
         self.opts.comparator_name = name;

@@ -1,9 +1,19 @@
 use crate::*;
 
-fn test_comparator(a: &[u8], b: &[u8]) -> i8 {
+#[allow(improper_ctypes_definitions)]
+#[no_mangle]
+extern "C" fn test_comparator(a: &[u8], b: &[u8]) -> i8 {
     use std::cmp::Ordering::*;
+    let res = a.cmp(b);
 
-    match a.cmp(b) {
+    // println!(
+    //     "comparator called: {} vs {} => {:?}",
+    //     String::from_utf8_lossy(a),
+    //     String::from_utf8_lossy(b),
+    //     res
+    // );
+
+    match res {
         Equal => 0,
         Greater => 1,
         Less => -1,
@@ -36,8 +46,7 @@ fn creation() {
         );
         assert!(tx.get("bye".as_bytes(), false).unwrap().is_none());
 
-        let mut it = tx.iterator()
-            .total_order_seek(true).start();
+        let mut it = tx.iterator().total_order_seek(true).start();
         it.seek_to_start();
         while let Some((k, v)) = it.pair().unwrap() {
             let mut res = String::from_utf8_lossy(k);

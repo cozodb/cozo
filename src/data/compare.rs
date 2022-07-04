@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 
 #[allow(improper_ctypes_definitions)]
 #[no_mangle]
-extern "C" fn rusty_cmp(a: &[u8], b: &[u8]) -> i8 {
+pub(crate) extern "C" fn rusty_cmp(a: &[u8], b: &[u8]) -> i8 {
     match compare_key(a, b) {
         Ordering::Greater => 1,
         Ordering::Equal => 0,
