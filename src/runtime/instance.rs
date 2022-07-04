@@ -60,7 +60,7 @@ impl Db {
     }
     pub(crate) fn transact(&self) -> SessionTx {
         SessionTx {
-            tx: self.db.transact().start(),
+            tx: self.db.transact().set_snapshot(true).start(),
         }
     }
 }

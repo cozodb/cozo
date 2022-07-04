@@ -1,10 +1,11 @@
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
+use std::fmt::{Display, Formatter};
 use std::str::Utf8Error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum KeywordError {
-    #[error("invalid keyword: {0}")]
+    #[error("cannot convert to keyword: {0}")]
     InvalidKeyword(String),
 
     #[error(transparent)]
@@ -17,6 +18,12 @@ pub struct Keyword {
     pub(crate) ns: SmartString<LazyCompact>,
     #[serde(rename = "i")]
     pub(crate) ident: SmartString<LazyCompact>,
+}
+
+impl Display for Keyword {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.ns, self.ident)
+    }
 }
 
 impl TryFrom<&str> for Keyword {

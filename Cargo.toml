@@ -21,6 +21,7 @@ serde_derive = "1.0.137"
 rmp = "0.8.11"
 rmp-serde = "1.1.0"
 rmpv = "1.0.0"
+base64 = "0.13.0"
 ordered-float = { version = "3.0", features = ["serde"] }
 cozorocks = { path = "cozorocks" }
 

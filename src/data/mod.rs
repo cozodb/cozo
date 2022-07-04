@@ -5,3 +5,5 @@ pub(crate) mod triple;
 pub(crate) mod tx;
 pub(crate) mod encode;
 pub(crate) mod keyword;
+pub(crate) mod attr;
+pub(crate) mod json;

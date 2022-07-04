@@ -15,10 +15,6 @@ pub enum Value<'a> {
     Bool(bool),
     #[serde(rename = "e")]
     EnId(EntityId),
-    #[serde(rename = "a")]
-    AtId(AttrId),
-    #[serde(rename = "t")]
-    TxId(TxId),
     #[serde(rename = "i")]
     Int(i64),
     #[serde(rename = "f")]
@@ -42,4 +38,21 @@ pub enum Value<'a> {
     DescVal(Reverse<Box<Value<'a>>>),
     #[serde(rename = "r")]
     Bottom,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::data::keyword::Keyword;
+    use crate::data::value::Value;
+    use std::collections::{BTreeMap, HashMap};
+    use std::mem::size_of;
+
+    #[test]
+    fn show_size() {
+        dbg!(size_of::<Value>());
+        dbg!(size_of::<Keyword>());
+        dbg!(size_of::<String>());
+        dbg!(size_of::<HashMap<String, String>>());
+        dbg!(size_of::<BTreeMap<String, String>>());
+    }
 }

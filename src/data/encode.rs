@@ -31,7 +31,7 @@ pub enum StorageTagError {
 }
 
 pub(crate) struct Encoded<const N: usize> {
-    inner: SmallVec<[u8; N]>,
+    pub(crate) inner: SmallVec<[u8; N]>,
 }
 
 impl<const N: usize> Encoded<N> {
