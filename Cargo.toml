@@ -30,3 +30,6 @@ tikv-jemallocator = "0.5"
 
 [profile.release]
 lto = true
+
+[workspace]
+members = ["cozorocks"]
