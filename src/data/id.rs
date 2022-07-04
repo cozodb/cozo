@@ -23,11 +23,13 @@ pub(crate) const MAX_TEMP_ENTITY_ID: EntityId = EntityId(10_000_000);
 pub(crate) const MAX_PERM_ENTITY_ID: EntityId = EntityId(0x00ff_ffff_ff00_0000);
 
 #[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq, Deserialize, Serialize, Hash)]
-pub struct AttrId(pub u32);
+pub struct AttrId(pub u64);
 
 impl AttrId {
     pub(crate) fn from_bytes(b: &[u8]) -> Self {
-        AttrId(u32::from_be_bytes([0, b[1], b[2], b[3]]))
+        AttrId(u64::from_be_bytes([
+            0, b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
     }
 }
 
@@ -38,8 +40,8 @@ impl Debug for AttrId {
 }
 
 pub(crate) const MAX_SYS_ATTR_ID: AttrId = AttrId(1000);
-pub(crate) const MAX_TEMP_ATTR_ID: AttrId = AttrId(1000000);
-pub(crate) const MAX_PERM_ATTR_ID: AttrId = AttrId(0x00ff_ffff);
+pub(crate) const MAX_TEMP_ATTR_ID: AttrId = AttrId(10_000_000);
+pub(crate) const MAX_PERM_ATTR_ID: AttrId = AttrId(0x00ff_ffff_ff00_0000);
 
 #[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq, Deserialize, Serialize, Hash)]
 pub struct TxId(pub u64);

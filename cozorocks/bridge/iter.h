@@ -18,6 +18,7 @@ struct IterBridge {
 
     IterBridge(Transaction *tx_) : tx(tx_), iter(nullptr), lower_bound(), upper_bound(), r_opts(new ReadOptions) {
         r_opts->ignore_range_deletions = true;
+        r_opts->auto_prefix_mode = true;
     }
 
 //    inline ReadOptions &get_r_opts() {

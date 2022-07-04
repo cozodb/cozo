@@ -1,35 +1,37 @@
+use cozorocks::RocksDb;
+use std::sync::atomic::{AtomicU32, AtomicU64};
+use std::sync::{Arc, Mutex};
+
 // use crate::data::compare::DB_KEY_PREFIX_LEN;
 // use anyhow::Result;
 // use cozorocks::*;
 // use std::sync::atomic::{AtomicU32, AtomicU64};
 // use std::sync::{Arc, Mutex};
 //
-// pub struct DbInstance {
-//x     pub destroy_on_close: bool,
-//     db: SharedPtr<DbBridge>,
-//x     db_opts: UniquePtr<Options>,
-//x     tdb_opts: Option<UniquePtr<TransactionDBOptions>>,
-//x     odb_opts: Option<UniquePtr<OptimisticTransactionDBOptions>>,
-//x     path: String,
-//     last_attr_id: Arc<AtomicU32>,
-//     last_ent_id: Arc<AtomicU64>,
-//     last_tx_id: Arc<AtomicU64>,
-//     sessions: Mutex<Vec<Arc<Mutex<SessionHandle>>>>,
-// }
-//
-// struct SessionHandle {
-//     id: usize,
-//     temp: SharedPtr<DbBridge>,
-//     status: SessionStatus,
-// }
-//
-// #[derive(Eq, PartialEq, Debug, Clone, Copy)]
-// pub enum SessionStatus {
-//     Prepared,
-//     Running,
-//     Completed,
-// }
-//
+pub struct DbInstance {
+    db: RocksDb,
+    last_attr_id: Arc<AtomicU32>,
+    last_ent_id: Arc<AtomicU64>,
+    last_tx_id: Arc<AtomicU64>,
+    sessions: Mutex<Vec<Arc<Mutex<SessionHandle>>>>,
+}
+
+struct SessionHandle {
+    id: usize,
+    db: RocksDb,
+    last_attr_id: Arc<AtomicU32>,
+    last_ent_id: Arc<AtomicU64>,
+    last_tx_id: Arc<AtomicU64>,
+    status: SessionStatus,
+}
+
+#[derive(Eq, PartialEq, Debug, Clone, Copy)]
+pub enum SessionStatus {
+    Prepared,
+    Running,
+    Completed,
+}
+
 // impl DbInstance {
 //     pub fn new(path: &str, optimistic: bool, destroy_on_close: bool) -> Result<Self> {
 //         let mut db_opts = Options::new().within_unique_ptr();

@@ -14,7 +14,7 @@ extern "C" fn rusty_cmp(a: &[u8], b: &[u8]) -> i8 {
     }
 }
 
-pub(crate) const DB_KEY_PREFIX_LEN: usize = 4;
+pub(crate) const DB_KEY_PREFIX_LEN: usize = 8;
 
 macro_rules! return_if_resolved {
     ($o:expr) => {
