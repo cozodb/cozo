@@ -6,7 +6,7 @@ use anyhow::Result;
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -30,6 +30,60 @@ pub enum StorageTagError {
     UnexpectedValue(u8),
 }
 
+pub(crate) struct Encoded<const N: usize> {
+    inner: SmallVec<[u8; N]>,
+}
+
+impl<const N: usize> Encoded<N> {
+    pub(crate) fn encoded_entity_amend_tx(&mut self, tx: TxId) {
+        let tx_bytes = tx.0.to_be_bytes();
+        #[allow(clippy::needless_range_loop)]
+        for i in 1..8 {
+            self.inner[VEC_SIZE_12 + i] = tx_bytes[i];
+        }
+    }
+    pub(crate) fn encoded_entity_amend_tx_to_last(&mut self) {
+        self.encoded_entity_amend_tx(TxId(u64::MAX))
+    }
+    pub(crate) fn encoded_entity_amend_tx_to_first(&mut self) {
+        self.encoded_entity_amend_tx(TxId(0))
+    }
+
+    pub(crate) fn encoded_attr_amend_tx(&mut self, tx: TxId) {
+        let tx_bytes = tx.0.to_be_bytes();
+        #[allow(clippy::needless_range_loop)]
+        for i in 1..8 {
+            self.inner[VEC_SIZE_4 + i] = tx_bytes[i];
+        }
+    }
+    pub(crate) fn encoded_attr_amend_tx_to_last(&mut self) {
+        self.encoded_attr_amend_tx(TxId(u64::MAX))
+    }
+    pub(crate) fn encoded_attr_amend_tx_to_first(&mut self) {
+        self.encoded_attr_amend_tx(TxId(0))
+    }
+}
+
+impl<const N: usize> Deref for Encoded<N> {
+    type Target = SmallVec<[u8; N]>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<const N: usize> DerefMut for Encoded<N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl<const N: usize> From<SmallVec<[u8; N]>> for Encoded<N> {
+    fn from(inner: SmallVec<[u8; N]>) -> Self {
+        Self { inner }
+    }
+}
+
 impl TryFrom<u8> for StorageTag {
     type Error = StorageTagError;
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
@@ -49,11 +103,18 @@ impl TryFrom<u8> for StorageTag {
     }
 }
 
+const LARGE_VEC_SIZE: usize = 60;
+const VEC_SIZE_28: usize = 28;
+const VEC_SIZE_20: usize = 20;
+const VEC_SIZE_12: usize = 12;
+const VEC_SIZE_8: usize = 8;
+const VEC_SIZE_4: usize = 4;
+
 #[inline]
-pub(crate) fn encode_value(val: Value) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 60]>::new();
+pub(crate) fn encode_value(val: Value) -> Encoded<LARGE_VEC_SIZE> {
+    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     val.serialize(&mut Serializer::new(&mut ret)).unwrap();
-    ret
+    ret.into()
 }
 
 #[inline]
@@ -63,7 +124,7 @@ pub(crate) fn decode_value(src: &[u8]) -> Result<Value> {
 
 #[inline]
 pub(crate) fn decode_value_from_key(src: &[u8]) -> Result<Value> {
-    Ok(rmp_serde::from_slice(&src[20..])?)
+    Ok(rmp_serde::from_slice(&src[VEC_SIZE_20..])?)
 }
 
 /// eid: 8 bytes (incl. tag)
@@ -77,8 +138,8 @@ pub(crate) fn encode_eav_key(
     val: Value,
     tx: TxId,
     op: StoreOp,
-) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 60]>::new();
+) -> Encoded<LARGE_VEC_SIZE> {
+    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
 
     ret.extend(eid.0.to_be_bytes());
     ret[0] = StorageTag::TripleEntityAttrValue as u8;
@@ -86,20 +147,20 @@ pub(crate) fn encode_eav_key(
     ret.extend(aid.0.to_be_bytes());
 
     ret.extend(tx.0.to_be_bytes());
-    ret[12] = op as u8;
-    debug_assert_eq!(ret.len(), 20);
+    ret[VEC_SIZE_12] = op as u8;
+    debug_assert_eq!(ret.len(), VEC_SIZE_20);
 
     val.serialize(&mut Serializer::new(&mut ret)).unwrap();
 
-    ret
+    ret.into()
 }
 
 #[inline]
 pub(crate) fn decode_ea_key(src: &[u8]) -> Result<(EntityId, AttrId, TxId, StoreOp)> {
-    let eid = EntityId::from_bytes(&src[0..8]);
-    let aid = AttrId::from_bytes(&src[8..12]);
-    let tx = TxId::from_bytes(&src[12..20]);
-    let op = src[12].try_into()?;
+    let eid = EntityId::from_bytes(&src[0..VEC_SIZE_8]);
+    let aid = AttrId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_12]);
+    let tx = TxId::from_bytes(&src[VEC_SIZE_12..VEC_SIZE_20]);
+    let op = src[VEC_SIZE_12].try_into()?;
 
     Ok((eid, aid, tx, op))
 }
@@ -115,28 +176,28 @@ pub(crate) fn encode_aev_key(
     val: Value,
     tx: TxId,
     op: StoreOp,
-) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 60]>::new();
+) -> Encoded<LARGE_VEC_SIZE> {
+    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
 
     ret.extend(aid.0.to_be_bytes());
     ret[0] = StorageTag::TripleAttrEntityValue as u8;
 
     ret.extend(eid.0.to_be_bytes());
     ret.extend(tx.0.to_be_bytes());
-    ret[12] = op as u8;
-    debug_assert_eq!(ret.len(), 20);
+    ret[VEC_SIZE_12] = op as u8;
+    debug_assert_eq!(ret.len(), VEC_SIZE_20);
 
     val.serialize(&mut Serializer::new(&mut ret)).unwrap();
 
-    ret
+    ret.into()
 }
 
 #[inline]
 pub(crate) fn decode_ae_key(src: &[u8]) -> Result<(AttrId, EntityId, TxId, StoreOp)> {
-    let aid = AttrId::from_bytes(&src[0..4]);
-    let eid = EntityId::from_bytes(&src[4..12]);
-    let tx = TxId::from_bytes(&src[12..20]);
-    let op = src[12].try_into()?;
+    let aid = AttrId::from_bytes(&src[0..VEC_SIZE_4]);
+    let eid = EntityId::from_bytes(&src[VEC_SIZE_4..VEC_SIZE_12]);
+    let tx = TxId::from_bytes(&src[VEC_SIZE_12..VEC_SIZE_20]);
+    let op = src[VEC_SIZE_12].try_into()?;
 
     Ok((aid, eid, tx, op))
 }
@@ -152,20 +213,20 @@ pub(crate) fn encode_ave_key(
     eid: EntityId,
     tx: TxId,
     op: StoreOp,
-) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 60]>::new();
+) -> Encoded<LARGE_VEC_SIZE> {
+    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
 
     ret.extend(aid.0.to_be_bytes());
     ret[0] = StorageTag::TripleAttrValueEntity as u8;
 
     ret.extend(eid.0.to_be_bytes());
     ret.extend(tx.0.to_be_bytes());
-    ret[12] = op as u8;
-    debug_assert_eq!(ret.len(), 20);
+    ret[VEC_SIZE_12] = op as u8;
+    debug_assert_eq!(ret.len(), VEC_SIZE_20);
 
     val.serialize(&mut Serializer::new(&mut ret)).unwrap();
 
-    ret
+    ret.into()
 }
 
 /// val: 8 bytes (incl. tag)
@@ -179,29 +240,29 @@ pub(crate) fn encode_vae_key(
     eid: EntityId,
     tx: TxId,
     op: StoreOp,
-) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 60]>::new();
+) -> Encoded<LARGE_VEC_SIZE> {
+    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
 
     ret.extend(val.0.to_be_bytes());
     ret[0] = StorageTag::TripleAttrValueEntity as u8;
 
     ret.extend(aid.0.to_be_bytes());
     ret.extend(tx.0.to_be_bytes());
-    ret[12] = op as u8;
-    debug_assert_eq!(ret.len(), 20);
+    ret[VEC_SIZE_12] = op as u8;
+    debug_assert_eq!(ret.len(), VEC_SIZE_20);
     ret.extend(eid.0.to_be_bytes());
-    debug_assert_eq!(ret.len(), 28);
+    debug_assert_eq!(ret.len(), VEC_SIZE_28);
 
-    ret
+    ret.into()
 }
 
 #[inline]
 pub(crate) fn decode_vae_key(src: &[u8]) -> Result<(EntityId, AttrId, EntityId, TxId, StoreOp)> {
-    let vid = EntityId::from_bytes(&src[0..8]);
-    let aid = AttrId::from_bytes(&src[8..12]);
-    let tx = TxId::from_bytes(&src[12..20]);
-    let eid = EntityId::from_bytes(&src[20..28]);
-    let op = src[12].try_into()?;
+    let vid = EntityId::from_bytes(&src[0..VEC_SIZE_8]);
+    let aid = AttrId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_12]);
+    let tx = TxId::from_bytes(&src[VEC_SIZE_12..VEC_SIZE_20]);
+    let eid = EntityId::from_bytes(&src[VEC_SIZE_20..VEC_SIZE_28]);
+    let op = src[VEC_SIZE_12].try_into()?;
 
     Ok((vid, aid, eid, tx, op))
 }
@@ -209,21 +270,21 @@ pub(crate) fn decode_vae_key(src: &[u8]) -> Result<(EntityId, AttrId, EntityId, 
 /// aid: 4 bytes (incl. tag)
 /// tx: 8 bytes (incl. op)
 #[inline]
-pub(crate) fn encode_attr_by_id(aid: AttrId, tx: TxId, op: StoreOp) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 12]>::new();
+pub(crate) fn encode_attr_by_id(aid: AttrId, tx: TxId, op: StoreOp) -> Encoded<VEC_SIZE_12> {
+    let mut ret = SmallVec::<[u8; VEC_SIZE_12]>::new();
     ret.extend(aid.0.to_be_bytes());
     ret[0] = StorageTag::AttrById as u8;
     ret.extend(tx.0.to_be_bytes());
-    ret[4] = op as u8;
-    debug_assert_eq!(ret.len(), 12);
-    ret
+    ret[VEC_SIZE_4] = op as u8;
+    debug_assert_eq!(ret.len(), VEC_SIZE_12);
+    ret.into()
 }
 
 #[inline]
 pub(crate) fn decode_attr_key_by_id(src: &[u8]) -> Result<(AttrId, TxId, StoreOp)> {
-    let aid = AttrId::from_bytes(&src[0..4]);
-    let tx = TxId::from_bytes(&src[4..12]);
-    let op = src[4].try_into()?;
+    let aid = AttrId::from_bytes(&src[0..VEC_SIZE_4]);
+    let tx = TxId::from_bytes(&src[VEC_SIZE_4..VEC_SIZE_12]);
+    let op = src[VEC_SIZE_4].try_into()?;
     Ok((aid, tx, op))
 }
 
@@ -231,73 +292,69 @@ pub(crate) fn decode_attr_key_by_id(src: &[u8]) -> Result<(AttrId, TxId, StoreOp
 /// tx: 8 bytes (incl. op)
 /// attr as kw: variable (segmented by \0)
 #[inline]
-pub(crate) fn encode_attr_by_kw(
-    attr_name: Keyword,
-    tx: TxId,
-    op: StoreOp,
-) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 12]>::new();
+pub(crate) fn encode_attr_by_kw(attr_name: Keyword, tx: TxId, op: StoreOp) -> Encoded<VEC_SIZE_12> {
+    let mut ret = SmallVec::<[u8; VEC_SIZE_12]>::new();
     ret.push(StorageTag::AttrByKeyword as u8);
     let ns_bytes = attr_name.ns.as_bytes();
     ret.push(ns_bytes.get(0).cloned().unwrap_or(0));
     ret.push(ns_bytes.get(1).cloned().unwrap_or(0));
     ret.push(ns_bytes.get(2).cloned().unwrap_or(0));
     ret.extend(tx.0.to_be_bytes());
-    ret[4] = op as u8;
+    ret[VEC_SIZE_4] = op as u8;
     ret.extend_from_slice(ns_bytes);
     ret.push(b'/');
     ret.extend_from_slice(attr_name.ident.as_bytes());
-    ret
+    ret.into()
 }
 
 #[inline]
 pub(crate) fn decode_attr_key_by_kw(src: &[u8]) -> Result<(Keyword, TxId, StoreOp)> {
-    let tx = TxId::from_bytes(&src[4..12]);
-    let op = src[4].try_into()?;
-    let kw = Keyword::try_from(&src[12..])?;
+    let tx = TxId::from_bytes(&src[VEC_SIZE_4..VEC_SIZE_12]);
+    let op = src[VEC_SIZE_4].try_into()?;
+    let kw = Keyword::try_from(&src[VEC_SIZE_12..])?;
     Ok((kw, tx, op))
 }
 
 /// tx: 8 bytes (incl. tag)
 #[inline]
-pub(crate) fn encode_tx(tx: TxId) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 8]>::new();
+pub(crate) fn encode_tx(tx: TxId) -> Encoded<VEC_SIZE_8> {
+    let mut ret = SmallVec::<[u8; VEC_SIZE_8]>::new();
     ret.extend(tx.0.to_be_bytes());
     ret[0] = StorageTag::Tx as u8;
-    ret
+    ret.into()
 }
 
 #[inline]
-pub(crate) fn encode_unique_entity_placeholder(eid: EntityId) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 8]>::new();
+pub(crate) fn encode_unique_entity_placeholder(eid: EntityId) -> Encoded<VEC_SIZE_8> {
+    let mut ret = SmallVec::<[u8; VEC_SIZE_8]>::new();
     ret.extend(eid.0.to_be_bytes());
     ret[0] = StorageTag::UniqueEntity as u8;
-    ret
+    ret.into()
 }
 
 #[inline]
-pub(crate) fn encode_unique_attr_val(aid: AttrId, val: Value) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 60]>::new();
+pub(crate) fn encode_unique_attr_val(aid: AttrId, val: Value) -> Encoded<LARGE_VEC_SIZE> {
+    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     ret.extend(aid.0.to_be_bytes());
     ret[0] = StorageTag::UniqueAttrValue as u8;
     val.serialize(&mut Serializer::new(&mut ret)).unwrap();
-    ret
+    ret.into()
 }
 
 #[inline]
 pub(crate) fn decode_unique_attr_val(src: &[u8]) -> Result<(AttrId, Value)> {
-    let a_id = AttrId::from_bytes(&src[..4]);
-    let val = rmp_serde::from_slice(&src[4..])?;
+    let a_id = AttrId::from_bytes(&src[..VEC_SIZE_4]);
+    let val = rmp_serde::from_slice(&src[VEC_SIZE_4..])?;
     Ok((a_id, val))
 }
 
 #[inline]
-pub(crate) fn encode_unique_attr_by_id(aid: AttrId) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 4]>::new();
+pub(crate) fn encode_unique_attr_by_id(aid: AttrId) -> Encoded<VEC_SIZE_4> {
+    let mut ret = SmallVec::<[u8; VEC_SIZE_4]>::new();
     ret.extend(aid.0.to_be_bytes());
     ret[0] = StorageTag::UniqueAttrById as u8;
-    debug_assert_eq!(ret.len(), 4);
-    ret
+    debug_assert_eq!(ret.len(), VEC_SIZE_4);
+    ret.into()
 }
 
 pub(crate) fn decode_unique_attr_by_id(src: &[u8]) -> Result<AttrId> {
@@ -305,13 +362,13 @@ pub(crate) fn decode_unique_attr_by_id(src: &[u8]) -> Result<AttrId> {
 }
 
 #[inline]
-pub(crate) fn encode_unique_attr_by_kw(kw: Keyword) -> impl Deref<Target = [u8]> {
-    let mut ret = SmallVec::<[u8; 60]>::new();
+pub(crate) fn encode_unique_attr_by_kw(kw: Keyword) -> Encoded<LARGE_VEC_SIZE> {
+    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     ret.push(StorageTag::UniqueAttrByKeyword as u8);
     ret.extend_from_slice(kw.ns.as_bytes());
     ret.push(b'/');
     ret.extend_from_slice(kw.ident.as_bytes());
-    ret
+    ret.into()
 }
 
 #[inline]

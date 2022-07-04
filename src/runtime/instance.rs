@@ -5,12 +5,12 @@
 // use std::sync::{Arc, Mutex};
 //
 // pub struct DbInstance {
-//     pub destroy_on_close: bool,
+//x     pub destroy_on_close: bool,
 //     db: SharedPtr<DbBridge>,
-//     db_opts: UniquePtr<Options>,
-//     tdb_opts: Option<UniquePtr<TransactionDBOptions>>,
-//     odb_opts: Option<UniquePtr<OptimisticTransactionDBOptions>>,
-//     path: String,
+//x     db_opts: UniquePtr<Options>,
+//x     tdb_opts: Option<UniquePtr<TransactionDBOptions>>,
+//x     odb_opts: Option<UniquePtr<OptimisticTransactionDBOptions>>,
+//x     path: String,
 //     last_attr_id: Arc<AtomicU32>,
 //     last_ent_id: Arc<AtomicU64>,
 //     last_tx_id: Arc<AtomicU64>,
