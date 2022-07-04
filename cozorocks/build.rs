@@ -3,7 +3,6 @@ use std::env::var;
 fn main() {
     let manifest_dir = var("CARGO_MANIFEST_DIR").unwrap();
 
-    // println!("cargo:rustc-link-search=/opt/homebrew/lib/");
     println!("cargo:rustc-link-search={}/deps/lib/", manifest_dir);
     println!("cargo:rustc-link-lib=rocksdb");
     println!("cargo:rustc-link-lib=z");
