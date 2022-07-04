@@ -29,4 +29,5 @@ _deps
 _test*
 
 *.db
-deps/
+cozorocks/deps/
+.DS_Store
