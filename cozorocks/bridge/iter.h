@@ -16,7 +16,7 @@ struct IterBridge {
     Slice upper_bound;
     unique_ptr<ReadOptions> r_opts;
 
-    IterBridge(Transaction *tx_) : tx(tx_), iter(nullptr), lower_bound(), upper_bound(), r_opts(new ReadOptions) {
+    explicit IterBridge(Transaction *tx_) : tx(tx_), iter(nullptr), lower_bound(), upper_bound(), r_opts(new ReadOptions) {
         r_opts->ignore_range_deletions = true;
         r_opts->auto_prefix_mode = true;
     }
@@ -111,11 +111,11 @@ struct IterBridge {
         write_status(iter->status(), status);
     }
 
-    inline RustBytes key() const {
+    [[nodiscard]] inline RustBytes key() const {
         return convert_slice_back(iter->key());
     }
 
-    inline RustBytes val() const {
+    [[nodiscard]] inline RustBytes val() const {
         return convert_slice_back(iter->value());
     }
 };

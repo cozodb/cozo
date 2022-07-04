@@ -19,7 +19,7 @@ struct TxBridge {
     unique_ptr<OptimisticTransactionOptions> o_tx_opts;
     unique_ptr<TransactionOptions> p_tx_opts;
 
-    TxBridge(OptimisticTransactionDB *odb_) :
+    explicit TxBridge(OptimisticTransactionDB *odb_) :
             odb(odb_),
             tdb(nullptr),
             tx(),
@@ -30,7 +30,7 @@ struct TxBridge {
         r_opts->ignore_range_deletions = true;
     }
 
-    TxBridge(TransactionDB *tdb_) :
+    explicit TxBridge(TransactionDB *tdb_) :
             odb(nullptr),
             tdb(tdb_),
             tx(),
@@ -77,7 +77,7 @@ struct TxBridge {
         tx->ClearSnapshot();
     }
 
-    inline DB *get_db() const {
+    [[nodiscard]] inline DB *get_db() const {
         if (tdb != nullptr) {
             return tdb;
         } else {
