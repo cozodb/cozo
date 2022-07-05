@@ -5,9 +5,11 @@ use tikv_jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-pub(crate) mod data;
-pub(crate) mod runtime;
 #[cfg(test)]
 mod tests;
+
+pub(crate) mod data;
+pub(crate) mod runtime;
+pub(crate) mod transact;
 
 pub use runtime::instance::Db;

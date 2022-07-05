@@ -1,5 +1,5 @@
 use crate::data::encode::Encoded;
-use crate::data::id::{AttrId, EntityId, TxId};
+use crate::data::id::{AttrId, EntityId};
 use crate::data::keyword::Keyword;
 use crate::data::value::Value;
 use anyhow::Result;

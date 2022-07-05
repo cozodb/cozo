@@ -16,4 +16,5 @@ fn creation() {
     let db = create_db("_test_db");
     test_send_sync(&db);
     let session = db.new_session().unwrap();
+    dbg!(&session);
 }

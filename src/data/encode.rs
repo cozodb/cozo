@@ -292,7 +292,7 @@ pub(crate) fn decode_attr_key_by_id(src: &[u8]) -> Result<(AttrId, TxId, StoreOp
 /// attr as kw: variable (segmented by \0)
 #[inline]
 pub(crate) fn encode_attr_by_kw(
-    attr_name: Keyword,
+    attr_name: &Keyword,
     tx: TxId,
     op: StoreOp,
 ) -> Encoded<LARGE_VEC_SIZE> {
@@ -369,7 +369,7 @@ pub(crate) fn decode_unique_attr_by_id(src: &[u8]) -> Result<AttrId> {
 }
 
 #[inline]
-pub(crate) fn encode_unique_attr_by_kw(kw: Keyword) -> Encoded<LARGE_VEC_SIZE> {
+pub(crate) fn encode_unique_attr_by_kw(kw: &Keyword) -> Encoded<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     ret.push(StorageTag::UniqueAttrByKeyword as u8);
     ret.extend_from_slice(kw.ns.as_bytes());

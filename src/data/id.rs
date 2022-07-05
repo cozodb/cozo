@@ -17,6 +17,12 @@ impl EntityId {
     }
 }
 
+impl From<u64> for EntityId {
+    fn from(u: u64) -> Self {
+        EntityId(u)
+    }
+}
+
 impl Debug for EntityId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "e{}", self.0)
@@ -39,6 +45,12 @@ impl AttrId {
     }
 }
 
+impl From<u64> for AttrId {
+    fn from(u: u64) -> Self {
+        AttrId(u)
+    }
+}
+
 impl Debug for AttrId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "a{}", self.0)
@@ -57,6 +69,16 @@ impl TxId {
         TxId(u64::from_be_bytes([
             0, b[1], b[2], b[3], b[4], b[5], b[6], b[7],
         ]))
+    }
+
+    pub(crate) fn bytes(&self) -> [u8; 8] {
+        self.0.to_be_bytes()
+    }
+}
+
+impl From<u64> for TxId {
+    fn from(u: u64) -> Self {
+        TxId(u)
     }
 }
 

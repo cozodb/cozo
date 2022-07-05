@@ -1,7 +1,9 @@
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
+use crate::data::id::TxId;
 use crate::runtime::transact::SessionTx;
 use anyhow::Result;
 use cozorocks::{DbBuilder, RocksDb};
+use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -12,6 +14,16 @@ pub struct Db {
     last_tx_id: Arc<AtomicU64>,
     n_sessions: Arc<AtomicUsize>,
     session_id: usize,
+}
+
+impl Debug for Db {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Db<session {}, attrs {:?}, entities {:?}, txs {:?}, sessions: {:?}>",
+            self.session_id, self.last_tx_id, self.last_ent_id, self.last_tx_id, self.n_sessions
+        )
+    }
 }
 
 impl Db {
@@ -49,18 +61,42 @@ impl Db {
     }
 
     fn load_last_ids(&self) -> Result<()> {
-        let mut tx = self.transact();
+        let mut tx = self.transact(None)?;
+        self.last_tx_id.store(tx.r_tx_id.0, Ordering::Release);
         self.last_attr_id
             .store(tx.load_last_attr_id()?.0, Ordering::Release);
         self.last_ent_id
             .store(tx.load_last_entity_id()?.0, Ordering::Release);
-        self.last_tx_id
-            .store(tx.load_last_tx_id()?.0, Ordering::Release);
         Ok(())
     }
-    pub(crate) fn transact(&self) -> SessionTx {
-        SessionTx {
+    pub(crate) fn transact(&self, at: Option<TxId>) -> Result<SessionTx> {
+        let tx_id = at.unwrap_or(TxId(0));
+        let mut ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
+            r_tx_id: tx_id,
+            w_tx_id: None,
+            last_attr_id: self.last_attr_id.clone(),
+            last_ent_id: self.last_ent_id.clone(),
+            last_tx_id: self.last_tx_id.clone(),
+        };
+        if at.is_none() {
+            let tid = ret.load_last_tx_id()?;
+            ret.r_tx_id = tid;
         }
+        Ok(ret)
+    }
+    pub(crate) fn transact_write(&self) -> Result<SessionTx> {
+        let last_tx_id = self.last_tx_id.fetch_add(1, Ordering::AcqRel);
+        let cur_tx_id = TxId(last_tx_id + 1);
+
+        let ret = SessionTx {
+            tx: self.db.transact().set_snapshot(true).start(),
+            r_tx_id: cur_tx_id,
+            w_tx_id: Some(cur_tx_id),
+            last_attr_id: self.last_attr_id.clone(),
+            last_ent_id: self.last_ent_id.clone(),
+            last_tx_id: self.last_tx_id.clone(),
+        };
+        Ok(ret)
     }
 }

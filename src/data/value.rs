@@ -1,4 +1,4 @@
-use crate::data::id::{AttrId, EntityId, TxId};
+use crate::data::id::EntityId;
 use crate::data::keyword::Keyword;
 use ordered_float::OrderedFloat;
 use serde_derive::{Deserialize, Serialize};

@@ -13,6 +13,16 @@ pub enum StoreOp {
     Assert = 1,
 }
 
+impl StoreOp {
+    pub(crate) fn is_assert(&self) -> bool{
+        *self == StoreOp::Assert
+    }
+    pub(crate) fn is_retract(&self) -> bool{
+        *self == StoreOp::Retract
+    }
+
+}
+
 impl TryFrom<u8> for StoreOp {
     type Error = StoreOpError;
 
