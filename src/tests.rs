@@ -1,6 +1,6 @@
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::encode::Encoded;
-use crate::data::id::{AttrId, TxId};
+use crate::data::id::AttrId;
 use crate::data::keyword::Keyword;
 use crate::Db;
 use anyhow::Result;
@@ -41,7 +41,6 @@ fn creation() {
     .unwrap();
     tx.commit_tx("", false).unwrap();
     let mut tx = session.transact(None).unwrap();
-    // tx.r_tx_id = TxId(10000);
     let found = tx
         .attr_by_kw(&Keyword::try_from("hello/world").unwrap())
         .unwrap();
@@ -52,17 +51,10 @@ fn creation() {
     dbg!(&session);
     dbg!(tx.r_tx_id);
 
-    let mut it = session
-        .db
-        .transact()
-        .start()
-        .iterator()
-        .total_order_seek(true)
-        .start();
+    let mut it = session.db.transact().start().iterator().start();
     it.seek_to_start();
     while let Some(k) = it.key().unwrap() {
         dbg!(Encoded::new(k));
         it.next();
-        // dbg!("loop");
     }
 }
