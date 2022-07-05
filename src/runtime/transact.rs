@@ -1,11 +1,14 @@
+use crate::data::attr::Attribute;
 use crate::data::encode::{encode_tx, encode_unique_attr_by_id, encode_unique_entity, EncodedVec};
 use crate::data::id::{AttrId, EntityId, TxId};
+use crate::data::keyword::Keyword;
 use anyhow::Result;
 use cozorocks::{DbIter, Tx};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::SmallVec;
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -17,6 +20,8 @@ pub(crate) struct SessionTx {
     pub(crate) last_attr_id: Arc<AtomicU64>,
     pub(crate) last_ent_id: Arc<AtomicU64>,
     pub(crate) last_tx_id: Arc<AtomicU64>,
+    pub(crate) attr_by_id_cache: BTreeMap<AttrId, Option<Attribute>>,
+    pub(crate) attr_by_kw_cache: BTreeMap<Keyword, Option<Attribute>>,
 }
 
 #[derive(Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
@@ -52,6 +57,11 @@ impl TxLog {
 }
 
 impl SessionTx {
+    pub(crate) fn clear_cache(&mut self) {
+        self.attr_by_id_cache.clear();
+        self.attr_by_kw_cache.clear();
+    }
+
     pub(crate) fn load_last_entity_id(&mut self) -> Result<EntityId> {
         let e_lower = encode_unique_entity(EntityId::MIN_PERM);
         let e_upper = encode_unique_entity(EntityId::MAX_PERM);
@@ -95,6 +105,7 @@ impl SessionTx {
             self.tx.set_snapshot();
             self.r_tx_id = new_tx_id;
             self.w_tx_id = Some(new_tx_id);
+            self.clear_cache();
         }
         Ok(())
     }

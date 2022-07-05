@@ -227,7 +227,7 @@ pub(crate) struct Attribute {
     #[serde(rename = "i")]
     pub(crate) id: AttrId,
     #[serde(rename = "n")]
-    pub(crate) alias: Keyword,
+    pub(crate) keyword: Keyword,
     #[serde(rename = "c")]
     pub(crate) cardinality: AttributeCardinality,
     #[serde(rename = "t")]
@@ -261,7 +261,7 @@ mod tests {
     fn show_sizes() {
         let attr = Attribute {
             id: AttrId(0),
-            alias: Keyword::try_from("01234567890123456789012/01234567890123456789012").unwrap(),
+            keyword: Keyword::try_from("01234567890123456789012/01234567890123456789012").unwrap(),
             cardinality: AttributeCardinality::One,
             val_type: AttributeTyping::Ref,
             indexing: AttributeIndex::None,

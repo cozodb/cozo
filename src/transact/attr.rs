@@ -14,35 +14,57 @@ use std::sync::atomic::Ordering;
 
 impl SessionTx {
     pub(crate) fn attr_by_id(&mut self, aid: AttrId) -> Result<Option<Attribute>> {
+        if let Some(res) = self.attr_by_id_cache.get(&aid) {
+            return Ok(res.clone());
+        }
+
         let anchor = encode_attr_by_id(aid, self.r_tx_id, StoreOp::Retract);
         let upper = encode_attr_by_id(aid, TxId::MAX_SYS, StoreOp::Assert);
         let it = self.bounded_scan_first(&anchor, &upper);
         Ok(match it.pair()? {
-            None => None,
+            None => {
+                self.attr_by_id_cache.insert(aid, None);
+                None
+            },
             Some((k, v)) => {
                 debug_assert_eq!(k[0], StorageTag::AttrById as u8);
                 let (_, _, op) = decode_attr_key_by_id(k)?;
                 if op.is_retract() {
+                    self.attr_by_id_cache.insert(aid, None);
                     None
                 } else {
-                    Some(Attribute::decode(v)?)
+                    let attr = Attribute::decode(v)?;
+                    self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
+                    self.attr_by_kw_cache.insert(attr.keyword.clone(), Some(attr.clone()));
+                    Some(attr)
                 }
             }
         })
     }
 
     pub(crate) fn attr_by_kw(&mut self, kw: &Keyword) -> Result<Option<Attribute>> {
+        if let Some(res) = self.attr_by_kw_cache.get(kw) {
+            return Ok(res.clone());
+        }
+
         let anchor = encode_attr_by_kw(kw, self.r_tx_id, StoreOp::Retract);
         let upper = encode_attr_by_kw(kw, TxId::MAX_SYS, StoreOp::Assert);
         let it = self.bounded_scan_first(&anchor, &upper);
         Ok(match it.pair()? {
-            None => None,
+            None => {
+                self.attr_by_kw_cache.insert(kw.clone(), None);
+                None
+            }
             Some((k, v)) => {
                 let (_, _, op) = decode_attr_key_by_kw(k)?;
                 if op.is_retract() {
+                    self.attr_by_kw_cache.insert(kw.clone(), None);
                     None
                 } else {
-                    Some(Attribute::decode(v)?)
+                    let attr = Attribute::decode(v)?;
+                    self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
+                    self.attr_by_kw_cache.insert(attr.keyword.clone(), Some(attr.clone()));
+                    Some(attr)
                 }
             }
         })
@@ -54,12 +76,12 @@ impl SessionTx {
 
     /// conflict if new attribute has same name as existing one
     pub(crate) fn new_attr(&mut self, mut attr: Attribute) -> Result<()> {
-        if self.attr_by_kw(&attr.alias)?.is_some() {
+        if self.attr_by_kw(&attr.keyword)?.is_some() {
             return Err(TransactError::AttrConflict(
                 attr.id,
                 format!(
                     "new attribute conflicts with existing one for alias {}",
-                    attr.alias
+                    attr.keyword
                 ),
             )
             .into());
@@ -76,11 +98,11 @@ impl SessionTx {
             TransactError::AttrConflict(attr.id, "expected attributed not found".to_string())
         })?;
         let tx_id = self.get_write_tx_id()?;
-        if existing.alias != attr.alias {
-            if self.attr_by_kw(&attr.alias)?.is_some() {
+        if existing.keyword != attr.keyword {
+            if self.attr_by_kw(&attr.keyword)?.is_some() {
                 return Err(TransactError::AttrConflict(
                     attr.id,
-                    format!("alias conflict: {}", attr.alias),
+                    format!("alias conflict: {}", attr.keyword),
                 )
                 .into());
             }
@@ -90,9 +112,9 @@ impl SessionTx {
             {
                 return Err(TransactError::ChangingImmutableProperty(attr.id).into());
             }
-            let kw_encoded = encode_attr_by_kw(&existing.alias, tx_id, StoreOp::Retract);
+            let kw_encoded = encode_attr_by_kw(&existing.keyword, tx_id, StoreOp::Retract);
             self.tx.put(&kw_encoded, &[])?;
-            let kw_signal = encode_unique_attr_by_kw(&existing.alias);
+            let kw_signal = encode_unique_attr_by_kw(&existing.keyword);
             self.tx.put(&kw_signal, &tx_id.bytes())?;
         }
         self.put_attr(&attr)
@@ -103,7 +125,7 @@ impl SessionTx {
         let tx_id = self.get_write_tx_id()?;
         let id_encoded = encode_attr_by_id(attr.id, tx_id, StoreOp::Assert);
         self.tx.put(&id_encoded, &attr_data)?;
-        let kw_encoded = encode_attr_by_kw(&attr.alias, tx_id, StoreOp::Assert);
+        let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id, StoreOp::Assert);
         self.tx.put(&kw_encoded, &attr_data)?;
         self.put_attr_guard(attr)?;
         Ok(())
@@ -121,7 +143,7 @@ impl SessionTx {
                 let tx_id = self.get_write_tx_id()?;
                 let id_encoded = encode_attr_by_id(aid, tx_id, StoreOp::Retract);
                 self.tx.put(&id_encoded, &[])?;
-                let kw_encoded = encode_attr_by_kw(&attr.alias, tx_id, StoreOp::Retract);
+                let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id, StoreOp::Retract);
                 self.tx.put(&kw_encoded, &[])?;
                 self.put_attr_guard(&attr)?;
                 Ok(())
@@ -134,7 +156,7 @@ impl SessionTx {
         let tx_id_bytes = tx_id.bytes();
         let id_signal = encode_unique_attr_by_id(attr.id);
         self.tx.put(&id_signal, &tx_id_bytes)?;
-        let kw_signal = encode_unique_attr_by_kw(&attr.alias);
+        let kw_signal = encode_unique_attr_by_kw(&attr.keyword);
         self.tx.put(&kw_signal, &tx_id_bytes)?;
         Ok(())
     }

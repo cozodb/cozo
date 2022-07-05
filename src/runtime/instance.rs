@@ -78,6 +78,8 @@ impl Db {
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
+            attr_by_id_cache: Default::default(),
+            attr_by_kw_cache: Default::default(),
         };
         if at.is_none() {
             let tid = ret.load_last_tx_id()?;
@@ -96,6 +98,8 @@ impl Db {
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
+            attr_by_id_cache: Default::default(),
+            attr_by_kw_cache: Default::default(),
         };
         Ok(ret)
     }

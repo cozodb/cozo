@@ -33,7 +33,7 @@ fn creation() {
     let mut tx = session.transact_write().unwrap();
     tx.new_attr(Attribute {
         id: AttrId(0),
-        alias: Keyword::try_from("hello/world").unwrap(),
+        keyword: Keyword::try_from("hello/world").unwrap(),
         cardinality: AttributeCardinality::One,
         val_type: AttributeTyping::Ref,
         indexing: AttributeIndex::None,
@@ -45,7 +45,7 @@ fn creation() {
     let mut tx = session.transact_write().unwrap();
     tx.ammend_attr(Attribute {
         id: AttrId(10000001),
-        alias: Keyword::try_from("hello/sucker").unwrap(),
+        keyword: Keyword::try_from("hello/sucker").unwrap(),
         cardinality: AttributeCardinality::One,
         val_type: AttributeTyping::Ref,
         indexing: AttributeIndex::None,

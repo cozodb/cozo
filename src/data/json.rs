@@ -78,10 +78,10 @@ impl TryFrom<&'_ JsonValue> for Attribute {
             None => AttrId(0),
             Some(v) => AttrId::try_from(v)?,
         };
-        let alias = map
-            .get("alias")
-            .ok_or_else(|| JsonError::MissingField(value.clone(), "alias".to_string()))?;
-        let alias = Keyword::try_from(alias)?;
+        let keyword = map
+            .get("keyword")
+            .ok_or_else(|| JsonError::MissingField(value.clone(), "keyword".to_string()))?;
+        let keyword = Keyword::try_from(keyword)?;
         let cardinality = map
             .get("cardinality")
             .ok_or_else(|| JsonError::MissingField(value.clone(), "cardinality".to_string()))?
@@ -113,7 +113,7 @@ impl TryFrom<&'_ JsonValue> for Attribute {
 
         Ok(Attribute {
             id,
-            alias,
+            keyword,
             cardinality,
             val_type,
             indexing,
@@ -126,7 +126,7 @@ impl From<Attribute> for JsonValue {
     fn from(attr: Attribute) -> Self {
         json!({
             "id": attr.id.0,
-            "alias": attr.alias.to_string(),
+            "keyword": attr.keyword.to_string(),
             "cardinality": attr.cardinality.to_string(),
             "type": attr.val_type.to_string(),
             "index": attr.indexing.to_string(),
