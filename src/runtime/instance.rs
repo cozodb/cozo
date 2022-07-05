@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 pub struct Db {
-    db: RocksDb,
+    pub(crate) db: RocksDb,
     last_attr_id: Arc<AtomicU64>,
     last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,

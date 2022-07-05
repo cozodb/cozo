@@ -11,6 +11,10 @@ inline Slice convert_slice(RustBytes d) {
     return {reinterpret_cast<const char *>(d.data()), d.size()};
 }
 
+inline string convert_slice_to_string(RustBytes d) {
+    return {reinterpret_cast<const char *>(d.data()), d.size()};
+}
+
 inline RustBytes convert_slice_back(const Slice &s) {
     return {reinterpret_cast<const std::uint8_t *>(s.data()), s.size()};
 }

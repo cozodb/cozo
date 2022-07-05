@@ -11,5 +11,6 @@ mod tests;
 pub(crate) mod data;
 pub(crate) mod runtime;
 pub(crate) mod transact;
+pub(crate) mod utils;
 
 pub use runtime::instance::Db;

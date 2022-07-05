@@ -6,7 +6,7 @@
 #include "db.h"
 #include "cozorocks/src/bridge/mod.rs.h"
 
-shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
+shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl) {
     auto options = make_unique<Options>();
     if (opts.prepare_for_bulk_load) {
         options->PrepareForBulkLoad();
@@ -38,11 +38,11 @@ shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
         options->prefix_extractor.reset(NewFixedPrefixTransform(opts.fixed_prefix_extractor_len));
     }
     RustComparator *cmp = nullptr;
-    if (opts.comparator_impl != nullptr) {
+    if (use_cmp) {
         cmp = new RustComparator(
                 string(opts.comparator_name),
                 opts.comparator_different_bytes_can_be_equal,
-                opts.comparator_impl);
+                cmp_impl);
         options->comparator = cmp;
     }
 

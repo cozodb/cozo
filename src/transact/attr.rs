@@ -1,14 +1,16 @@
 use crate::data::attr::Attribute;
 use crate::data::encode::{
     decode_attr_key_by_id, decode_attr_key_by_kw, encode_attr_by_id, encode_attr_by_kw,
-    encode_unique_attr_by_id, encode_unique_attr_by_kw,
+    encode_unique_attr_by_id, encode_unique_attr_by_kw, StorageTag,
 };
-use crate::data::id::{AttrId,  TxId};
+use crate::data::id::{AttrId, TxId};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::runtime::transact::{SessionTx, TransactError};
+use crate::utils::swap_option_result;
 use anyhow::Result;
-use std::sync::atomic::{ Ordering};
+use cozorocks::{DbIter, IterBuilder};
+use std::sync::atomic::Ordering;
 
 impl SessionTx {
     pub(crate) fn attr_by_id(&mut self, aid: AttrId) -> Result<Option<Attribute>> {
@@ -18,6 +20,7 @@ impl SessionTx {
         Ok(match it.pair()? {
             None => None,
             Some((k, v)) => {
+                debug_assert_eq!(k[0], StorageTag::AttrById as u8);
                 let (_, _, op) = decode_attr_key_by_id(k)?;
                 if op.is_retract() {
                     None
@@ -29,8 +32,8 @@ impl SessionTx {
     }
 
     pub(crate) fn attr_by_kw(&mut self, kw: &Keyword) -> Result<Option<Attribute>> {
-        let anchor = encode_attr_by_kw(&kw, self.r_tx_id, StoreOp::Retract);
-        let upper = encode_attr_by_kw(&kw, TxId::MAX_SYS, StoreOp::Assert);
+        let anchor = encode_attr_by_kw(kw, self.r_tx_id, StoreOp::Retract);
+        let upper = encode_attr_by_kw(kw, TxId::MAX_SYS, StoreOp::Assert);
         let it = self.bounded_scan_first(&anchor, &upper);
         Ok(match it.pair()? {
             None => None,
@@ -45,8 +48,8 @@ impl SessionTx {
         })
     }
 
-    pub(crate) fn all_attrs(&mut self) -> Result<Vec<Attribute>> {
-        todo!()
+    pub(crate) fn all_attrs(&mut self) -> impl Iterator<Item = Result<Attribute>> {
+        AttrIter::new(self.tx.iterator(), self.r_tx_id)
     }
 
     /// conflict if new attribute has same name as existing one
@@ -96,7 +99,7 @@ impl SessionTx {
         self.tx.put(&id_encoded, &attr_data)?;
         let kw_encoded = encode_attr_by_kw(&attr.alias, tx_id, StoreOp::Assert);
         self.tx.put(&kw_encoded, &attr_data)?;
-        self.put_attr_guard(&attr)?;
+        self.put_attr_guard(attr)?;
         Ok(())
     }
 
@@ -128,5 +131,58 @@ impl SessionTx {
         let kw_signal = encode_unique_attr_by_kw(&attr.alias);
         self.tx.put(&kw_signal, &tx_id_bytes)?;
         Ok(())
+    }
+}
+
+struct AttrIter {
+    it: DbIter,
+    tx_bound: TxId,
+    last_found: Option<AttrId>,
+}
+
+impl AttrIter {
+    fn new(builder: IterBuilder, tx_bound: TxId) -> Self {
+        let upper_bound = encode_attr_by_id(AttrId::MAX_PERM, TxId::MAX_SYS, StoreOp::Assert);
+        let it = builder.upper_bound(&upper_bound).start();
+        Self {
+            it,
+            tx_bound,
+            last_found: None,
+        }
+    }
+
+    fn next_inner(&mut self) -> Result<Option<Attribute>> {
+        loop {
+            let id_to_seek = match self.last_found {
+                None => AttrId::MIN_PERM,
+                Some(id) => AttrId(id.0 + 1),
+            };
+            let encoded = encode_attr_by_id(id_to_seek, self.tx_bound, StoreOp::Retract);
+            self.it.seek(&encoded);
+            match self.it.pair()? {
+                None => return Ok(None),
+                Some((k, v)) => {
+                    debug_assert_eq!(k[0], StorageTag::AttrById as u8);
+                    let (found_aid, found_tid, found_op) = decode_attr_key_by_id(k)?;
+                    if found_tid > self.tx_bound {
+                        self.last_found = Some(AttrId(found_aid.0 - 1));
+                        continue;
+                    }
+                    self.last_found = Some(AttrId(found_aid.0));
+                    if found_op.is_retract() {
+                        continue;
+                    }
+                    return Ok(Some(Attribute::decode(v)?));
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for AttrIter {
+    type Item = Result<Attribute>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
     }
 }

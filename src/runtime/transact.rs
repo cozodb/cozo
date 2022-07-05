@@ -38,7 +38,7 @@ impl SessionTx {
 
     pub(crate) fn load_last_tx_id(&mut self) -> Result<TxId> {
         let e_lower = encode_tx(TxId::MAX_USER);
-        let e_upper = encode_tx(TxId::MIN_USER);
+        let e_upper = encode_tx(TxId::MAX_SYS);
         let it = self.bounded_scan_first(&e_lower, &e_upper);
         Ok(match it.key()? {
             None => TxId::MAX_SYS,

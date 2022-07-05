@@ -61,8 +61,8 @@ impl Debug for AttrId {
 pub struct TxId(pub u64);
 
 impl TxId {
-    pub(crate) const MAX_SYS: TxId = TxId(1000);
-    pub(crate) const MIN_USER: TxId = TxId(1001);
+    pub(crate) const MAX_SYS: TxId = TxId(10000);
+    pub(crate) const MIN_USER: TxId = TxId(10001);
     pub(crate) const MAX_USER: TxId = TxId(0x00ff_ffff_ffff_ffff);
 
     pub(crate) fn from_bytes(b: &[u8]) -> Self {

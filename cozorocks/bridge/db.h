@@ -49,15 +49,15 @@ struct PessimisticRocksDb : public RocksDbBridge {
     virtual ~PessimisticRocksDb();
 };
 
-typedef int8_t (*CmpFn)(RustBytes a, RustBytes b);
+//typedef int8_t (*CmpFn)(RustBytes a, RustBytes b);
+typedef rust::Fn<std::int8_t(rust::Slice<const std::uint8_t>, rust::Slice<const std::uint8_t>)> RustComparatorFn;
 
 class RustComparator : public Comparator {
 public:
-    inline RustComparator(string name_, bool can_different_bytes_be_equal_, uint8_t const *const f) :
+    inline RustComparator(string name_, bool can_different_bytes_be_equal_, RustComparatorFn f) :
             name(std::move(name_)),
+            ext_cmp(f),
             can_different_bytes_be_equal(can_different_bytes_be_equal_) {
-        auto f_ = CmpFn(f);
-        ext_cmp = f_;
     }
 
     [[nodiscard]] inline int Compare(const Slice &a, const Slice &b) const override {
@@ -77,10 +77,10 @@ public:
     inline void FindShortSuccessor(string *) const override {}
 
     string name;
-    CmpFn ext_cmp;
+    RustComparatorFn ext_cmp;
     bool can_different_bytes_be_equal;
 };
 
-shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status);
+shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl);
 
 #endif //COZOROCKS_DB_H

@@ -14,13 +14,12 @@ pub enum StoreOp {
 }
 
 impl StoreOp {
-    pub(crate) fn is_assert(&self) -> bool{
+    pub(crate) fn is_assert(&self) -> bool {
         *self == StoreOp::Assert
     }
-    pub(crate) fn is_retract(&self) -> bool{
+    pub(crate) fn is_retract(&self) -> bool {
         *self == StoreOp::Retract
     }
-
 }
 
 impl TryFrom<u8> for StoreOp {

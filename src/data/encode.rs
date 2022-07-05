@@ -6,6 +6,7 @@ use anyhow::Result;
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
+use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 
 #[repr(u8)]
@@ -32,6 +33,74 @@ pub enum StorageTagError {
 
 pub(crate) struct Encoded<const N: usize> {
     pub(crate) inner: SmallVec<[u8; N]>,
+}
+
+impl Encoded<LARGE_VEC_SIZE> {
+    pub(crate) fn new(data: &[u8]) -> Self {
+        Self {
+            inner: SmallVec::from_slice(data),
+        }
+    }
+}
+
+impl<const N: usize> Debug for Encoded<N> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match StorageTag::try_from(self.inner[0]) {
+            Err(_) => {
+                write!(
+                    f,
+                    "?{:x?} {}",
+                    self.inner,
+                    String::from_utf8_lossy(&self.inner)
+                )
+            }
+            Ok(tag) => {
+                write!(f, "{:?} ", tag)?;
+                match tag {
+                    StorageTag::TripleEntityAttrValue => {
+                        let (e, a, t, s) = decode_ea_key(self).unwrap();
+                        let v = decode_value_from_key(self).unwrap();
+                        write!(f, "[{:?}, {:?}, {:?}, {:?}, {:?}]", e, a, v, t, s)
+                    }
+                    StorageTag::TripleAttrEntityValue | StorageTag::TripleAttrValueEntity => {
+                        let (a, e, t, s) = decode_ae_key(self).unwrap();
+                        let v = decode_value_from_key(self).unwrap();
+                        write!(f, "[{:?}, {:?}, {:?}, {:?}, {:?}]", e, a, v, t, s)
+                    }
+                    StorageTag::TripleValueAttrEntity => {
+                        let (v, a, e, t, s) = decode_vae_key(self).unwrap();
+                        write!(f, "[{:?}, {:?}, {:?}, {:?}, {:?}]", e, a, v, t, s)
+                    }
+                    StorageTag::AttrById => {
+                        debug_assert_eq!(self[0], StorageTag::AttrById as u8);
+                        let (a, t, s) = decode_attr_key_by_id(self).unwrap();
+                        write!(f, "<{:?}, {:?}, {:?}>", a, t, s)
+                    }
+                    StorageTag::AttrByKeyword => {
+                        let (a, t, s) = decode_attr_key_by_kw(self).unwrap();
+                        write!(f, "<{:?}, {:?}, {:?}>", a, t, s)
+                    }
+                    StorageTag::Tx => {
+                        write!(f, "{:?}", TxId::from_bytes(self))
+                    }
+                    StorageTag::UniqueEntity => {
+                        write!(f, "{:?}", EntityId::from_bytes(self))
+                    }
+                    StorageTag::UniqueAttrValue => {
+                        let (a, v) = decode_unique_attr_val(self).unwrap();
+                        write!(f, "<{:?}: {:?}>", a, v)
+                    }
+                    StorageTag::UniqueAttrById => {
+                        write!(f, "{:?}", AttrId::from_bytes(self))
+                    }
+                    StorageTag::UniqueAttrByKeyword => {
+                        let kw = decode_unique_attr_by_kw(self).unwrap();
+                        write!(f, "{:?}", kw)
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl<const N: usize> Encoded<N> {
@@ -98,6 +167,8 @@ impl TryFrom<u8> for StorageTag {
             7 => Tx,
             8 => UniqueEntity,
             9 => UniqueAttrValue,
+            10 => UniqueAttrById,
+            11 => UniqueAttrByKeyword,
             n => return Err(StorageTagError::UnexpectedValue(n)),
         })
     }
@@ -243,7 +314,7 @@ pub(crate) fn encode_vae_key(
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
 
     ret.extend(val.0.to_be_bytes());
-    ret[0] = StorageTag::TripleAttrValueEntity as u8;
+    ret[0] = StorageTag::TripleValueAttrEntity as u8;
 
     ret.extend(aid.0.to_be_bytes());
     ret.extend(tx.0.to_be_bytes());
@@ -281,6 +352,7 @@ pub(crate) fn encode_attr_by_id(aid: AttrId, tx: TxId, op: StoreOp) -> Encoded<V
 
 #[inline]
 pub(crate) fn decode_attr_key_by_id(src: &[u8]) -> Result<(AttrId, TxId, StoreOp)> {
+    debug_assert_eq!(src[0], StorageTag::AttrById as u8);
     let aid = AttrId::from_bytes(&src[0..VEC_SIZE_8]);
     let tx = TxId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
     let op = src[VEC_SIZE_8].try_into()?;

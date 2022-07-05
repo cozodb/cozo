@@ -12,11 +12,14 @@
 struct IterBridge {
     Transaction *tx;
     unique_ptr<Iterator> iter;
+    string lower_storage;
+    string upper_storage;
     Slice lower_bound;
     Slice upper_bound;
     unique_ptr<ReadOptions> r_opts;
 
-    explicit IterBridge(Transaction *tx_) : tx(tx_), iter(nullptr), lower_bound(), upper_bound(), r_opts(new ReadOptions) {
+    explicit IterBridge(Transaction *tx_) : tx(tx_), iter(nullptr), lower_bound(), upper_bound(),
+                                            r_opts(new ReadOptions) {
         r_opts->ignore_range_deletions = true;
         r_opts->auto_prefix_mode = true;
     }
@@ -61,12 +64,14 @@ struct IterBridge {
     }
 
     inline void set_lower_bound(RustBytes bound) {
-        lower_bound = convert_slice(bound);
+        lower_storage = convert_slice_to_string(bound);
+        lower_bound = lower_storage;
         r_opts->iterate_lower_bound = &lower_bound;
     }
 
     inline void set_upper_bound(RustBytes bound) {
-        upper_bound = convert_slice(bound);
+        upper_storage = convert_slice_to_string(bound);
+        upper_bound = upper_storage;
         r_opts->iterate_upper_bound = &upper_bound;
     }
 

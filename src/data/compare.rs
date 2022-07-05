@@ -4,9 +4,7 @@ use crate::data::encode::{
 };
 use std::cmp::Ordering;
 
-#[allow(improper_ctypes_definitions)]
-#[no_mangle]
-pub(crate) extern "C" fn rusty_cmp(a: &[u8], b: &[u8]) -> i8 {
+pub(crate) fn rusty_cmp(a: &[u8], b: &[u8]) -> i8 {
     match compare_key(a, b) {
         Ordering::Greater => 1,
         Ordering::Equal => 0,
@@ -31,7 +29,14 @@ fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
 
     return_if_resolved!(a[0].cmp(&b[0]));
 
-    match StorageTag::try_from(a[0]).unwrap() {
+    let tag = match StorageTag::try_from(a[0]) {
+        Ok(tag) => tag,
+        Err(e) => {
+            panic!("comparison failed with {:?} for {:x?}, {:x?}", e, a, b)
+        }
+    };
+
+    match tag {
         TripleEntityAttrValue => compare_key_triple_eav(a, b),
         TripleAttrEntityValue => compare_key_triple_aev(a, b),
         TripleAttrValueEntity => compare_key_triple_ave(a, b),
@@ -108,6 +113,8 @@ fn compare_key_triple_vae(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_attr_by_id(a: &[u8], b: &[u8]) -> Ordering {
+    debug_assert_eq!(a[0], StorageTag::AttrById as u8);
+    debug_assert_eq!(b[0], StorageTag::AttrById as u8);
     let (a_a, a_t, a_o) = decode_attr_key_by_id(a).unwrap();
     let (b_a, b_t, b_o) = decode_attr_key_by_id(b).unwrap();
 
