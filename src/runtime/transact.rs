@@ -21,6 +21,8 @@ pub(crate) struct SessionTx {
 
 #[derive(Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
 pub(crate) struct TxLog {
+    #[serde(rename = "i")]
+    id: TxId,
     #[serde(rename = "c")]
     comment: String,
     #[serde(rename = "t")]
@@ -28,18 +30,19 @@ pub(crate) struct TxLog {
 }
 
 impl TxLog {
-    pub(crate) fn new(comment: &str) -> Self {
+    pub(crate) fn new(id: TxId, comment: &str) -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_millis() as i64;
         Self {
+            id,
             comment: comment.to_string(),
             timestamp,
         }
     }
-    pub(crate) fn encode(&self) -> EncodedVec<8> {
-        let mut store = SmallVec::<[u8; 8]>::new();
+    pub(crate) fn encode(&self) -> EncodedVec<64> {
+        let mut store = SmallVec::<[u8; 64]>::new();
         self.serialize(&mut Serializer::new(&mut store)).unwrap();
         EncodedVec { inner: store }
     }
@@ -84,7 +87,7 @@ impl SessionTx {
         let tx_id = self.get_write_tx_id()?;
         let encoded = encode_tx(tx_id);
 
-        let log = TxLog::new(comment);
+        let log = TxLog::new(tx_id, comment);
         self.tx.put(&encoded, &log.encode())?;
         self.tx.commit()?;
         if refresh {

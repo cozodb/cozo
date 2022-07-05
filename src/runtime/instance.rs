@@ -1,6 +1,6 @@
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::id::TxId;
-use crate::runtime::transact::SessionTx;
+use crate::runtime::transact::{SessionTx, TxLog};
 use anyhow::Result;
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 use std::fmt::{Debug, Formatter};
@@ -103,5 +103,8 @@ impl Db {
         let mut it = self.db.transact().start().iterator().start();
         it.seek_to_start();
         it
+    }
+    pub(crate) fn find_tx_before_timestamp_millis(&self, ts: i64) -> Result<Option<TxLog>> {
+        todo!()
     }
 }
