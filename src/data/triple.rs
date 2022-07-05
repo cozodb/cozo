@@ -1,4 +1,5 @@
 use serde_derive::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreOpError {
@@ -11,6 +12,15 @@ pub enum StoreOpError {
 pub enum StoreOp {
     Retract = 0,
     Assert = 1,
+}
+
+impl Display for StoreOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StoreOp::Retract => write!(f, "-"),
+            StoreOp::Assert => write!(f, "+"),
+        }
+    }
 }
 
 impl StoreOp {

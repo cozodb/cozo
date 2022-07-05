@@ -2,13 +2,13 @@ use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::id::TxId;
 use crate::runtime::transact::SessionTx;
 use anyhow::Result;
-use cozorocks::{DbBuilder, RocksDb};
+use cozorocks::{DbBuilder, DbIter, RocksDb};
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 pub struct Db {
-    pub(crate) db: RocksDb,
+    db: RocksDb,
     last_attr_id: Arc<AtomicU64>,
     last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,
@@ -98,5 +98,10 @@ impl Db {
             last_tx_id: self.last_tx_id.clone(),
         };
         Ok(ret)
+    }
+    pub(crate) fn total_iter(&self) -> DbIter {
+        let mut it = self.db.transact().start().iterator().start();
+        it.seek_to_start();
+        it
     }
 }

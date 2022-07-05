@@ -71,7 +71,7 @@ impl SessionTx {
     /// conflict if asserted attribute has name change, and the name change conflicts with an existing attr,
     /// or if the attr_id doesn't already exist (or retracted),
     /// or if changing immutable properties (cardinality, val_type, indexing)
-    pub(crate) fn assert_attr(&mut self, attr: Attribute) -> Result<()> {
+    pub(crate) fn ammend_attr(&mut self, attr: Attribute) -> Result<()> {
         let existing = self.attr_by_id(attr.id)?.ok_or_else(|| {
             TransactError::AttrConflict(attr.id, "expected attributed not found".to_string())
         })?;
@@ -84,9 +84,15 @@ impl SessionTx {
                 )
                 .into());
             }
-            let kw_encoded = encode_attr_by_kw(&attr.alias, tx_id, StoreOp::Retract);
+            if existing.val_type != attr.val_type
+                || existing.cardinality != attr.cardinality
+                || existing.indexing != attr.indexing
+            {
+                return Err(TransactError::ChangingImmutableProperty(attr.id).into());
+            }
+            let kw_encoded = encode_attr_by_kw(&existing.alias, tx_id, StoreOp::Retract);
             self.tx.put(&kw_encoded, &[])?;
-            let kw_signal = encode_unique_attr_by_kw(&attr.alias);
+            let kw_signal = encode_unique_attr_by_kw(&existing.alias);
             self.tx.put(&kw_signal, &tx_id.bytes())?;
         }
         self.put_attr(&attr)

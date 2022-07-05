@@ -1,5 +1,5 @@
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
-use crate::data::encode::Encoded;
+use crate::data::encode::EncodedVec;
 use crate::data::id::AttrId;
 use crate::data::keyword::Keyword;
 use crate::Db;
@@ -29,6 +29,7 @@ fn creation() {
             .unwrap()
             .len()
     );
+
     let mut tx = session.transact_write().unwrap();
     tx.new_attr(Attribute {
         id: AttrId(0),
@@ -40,21 +41,40 @@ fn creation() {
     })
     .unwrap();
     tx.commit_tx("", false).unwrap();
+
+    let mut tx = session.transact_write().unwrap();
+    tx.ammend_attr(Attribute {
+        id: AttrId(10000001),
+        alias: Keyword::try_from("hello/sucker").unwrap(),
+        cardinality: AttributeCardinality::One,
+        val_type: AttributeTyping::Ref,
+        indexing: AttributeIndex::None,
+        with_history: true,
+    })
+    .unwrap();
+    tx.commit_tx("oops", false).unwrap();
+
     let mut tx = session.transact(None).unwrap();
-    let found = tx
+    let world_found = tx
         .attr_by_kw(&Keyword::try_from("hello/world").unwrap())
         .unwrap();
-    dbg!(found);
+    dbg!(world_found);
+    let sucker_found = tx
+        .attr_by_kw(&Keyword::try_from("hello/sucker").unwrap())
+        .unwrap();
+    dbg!(sucker_found);
     for attr in tx.all_attrs() {
         dbg!(attr.unwrap());
     }
     dbg!(&session);
     dbg!(tx.r_tx_id);
 
-    let mut it = session.db.transact().start().iterator().start();
-    it.seek_to_start();
-    while let Some(k) = it.key().unwrap() {
-        dbg!(Encoded::new(k));
+    let mut it = session.total_iter();
+    while let Some((k, v)) = it.pair().unwrap() {
+        let key = EncodedVec::new(k);
+        let val = key.debug_value(v);
+        dbg!(key);
+        dbg!(val);
         it.next();
     }
 }
