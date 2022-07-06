@@ -22,6 +22,15 @@ pub(crate) enum AttributeCardinality {
     Many = 2,
 }
 
+impl AttributeCardinality {
+    pub(crate) fn is_one(&self) -> bool {
+        *self == AttributeCardinality::One
+    }
+    pub(crate) fn is_many(&self) -> bool {
+        *self == AttributeCardinality::Many
+    }
+}
+
 impl Display for AttributeCardinality {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -59,6 +68,12 @@ pub(crate) enum AttributeTyping {
     Timestamp = 9,
     Bytes = 10,
     Tuple = 11,
+}
+
+impl AttributeTyping {
+    pub(crate) fn is_ref_type(&self) -> bool {
+        matches!(self, AttributeTyping::Ref | AttributeTyping::Component)
+    }
 }
 
 impl Display for AttributeTyping {
@@ -190,6 +205,18 @@ pub(crate) enum AttributeIndex {
     Indexed = 1,
     Unique = 2,
     Identity = 3,
+}
+
+impl AttributeIndex {
+    pub(crate) fn is_unique_index(&self) -> bool {
+        matches!(self, AttributeIndex::Identity | AttributeIndex::Unique)
+    }
+    pub(crate) fn is_non_unique_index(&self) -> bool {
+        *self == AttributeIndex::Indexed
+    }
+    pub(crate) fn should_index(&self) -> bool {
+        *self != AttributeIndex::None
+    }
 }
 
 impl Display for AttributeIndex {

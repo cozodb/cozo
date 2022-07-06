@@ -93,7 +93,7 @@ impl SessionTx {
     /// conflict if asserted attribute has name change, and the name change conflicts with an existing attr,
     /// or if the attr_id doesn't already exist (or retracted),
     /// or if changing immutable properties (cardinality, val_type, indexing)
-    pub(crate) fn ammend_attr(&mut self, attr: Attribute) -> Result<()> {
+    pub(crate) fn amend_attr(&mut self, attr: Attribute) -> Result<()> {
         let existing = self.attr_by_id(attr.id)?.ok_or_else(|| {
             TransactError::AttrConflict(attr.id, "expected attributed not found".to_string())
         })?;

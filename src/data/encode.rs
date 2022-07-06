@@ -211,13 +211,6 @@ const VEC_SIZE_16: usize = 16;
 const VEC_SIZE_8: usize = 8;
 
 #[inline]
-pub(crate) fn encode_value(val: Value) -> EncodedVec<LARGE_VEC_SIZE> {
-    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
-    val.serialize(&mut Serializer::new(&mut ret)).unwrap();
-    ret.into()
-}
-
-#[inline]
 pub(crate) fn decode_value(src: &[u8]) -> Result<Value> {
     Ok(rmp_serde::from_slice(src)?)
 }
@@ -235,7 +228,7 @@ pub(crate) fn decode_value_from_key(src: &[u8]) -> Result<Value> {
 pub(crate) fn encode_eav_key(
     eid: EntityId,
     aid: AttrId,
-    val: Value,
+    val: &Value,
     tx: TxId,
     op: StoreOp,
 ) -> EncodedVec<LARGE_VEC_SIZE> {
@@ -273,7 +266,7 @@ pub(crate) fn decode_ea_key(src: &[u8]) -> Result<(EntityId, AttrId, TxId, Store
 pub(crate) fn encode_aev_key(
     aid: AttrId,
     eid: EntityId,
-    val: Value,
+    val: &Value,
     tx: TxId,
     op: StoreOp,
 ) -> EncodedVec<LARGE_VEC_SIZE> {
@@ -302,6 +295,16 @@ pub(crate) fn decode_ae_key(src: &[u8]) -> Result<(AttrId, EntityId, TxId, Store
     Ok((aid, eid, tx, op))
 }
 
+#[inline]
+pub(crate) fn encode_ave_key_for_unique_v(
+    aid: AttrId,
+    val: &Value,
+    tx: TxId,
+    op: StoreOp,
+) -> EncodedVec<LARGE_VEC_SIZE> {
+    encode_ave_key(aid, val, EntityId(0), tx, op)
+}
+
 /// aid: 8 bytes (incl. tag)
 /// val: variable
 /// eid: 8 bytes
@@ -309,7 +312,7 @@ pub(crate) fn decode_ae_key(src: &[u8]) -> Result<(AttrId, EntityId, TxId, Store
 #[inline]
 pub(crate) fn encode_ave_key(
     aid: AttrId,
-    val: Value,
+    val: &Value,
     eid: EntityId,
     tx: TxId,
     op: StoreOp,
@@ -442,7 +445,7 @@ pub(crate) fn encode_unique_entity(eid: EntityId) -> EncodedVec<VEC_SIZE_8> {
 }
 
 #[inline]
-pub(crate) fn encode_unique_attr_val(aid: AttrId, val: Value) -> EncodedVec<LARGE_VEC_SIZE> {
+pub(crate) fn encode_unique_attr_val(aid: AttrId, val: &Value) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     ret.extend(aid.0.to_be_bytes());
     ret[0] = StorageTag::UniqueAttrValue as u8;

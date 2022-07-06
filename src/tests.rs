@@ -43,7 +43,7 @@ fn creation() {
     tx.commit_tx("", false).unwrap();
 
     let mut tx = session.transact_write().unwrap();
-    tx.ammend_attr(Attribute {
+    tx.amend_attr(Attribute {
         id: AttrId(10000001),
         keyword: Keyword::try_from("hello/sucker").unwrap(),
         cardinality: AttributeCardinality::One,

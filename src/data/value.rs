@@ -5,7 +5,17 @@ use serde_derive::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::fmt::Debug;
+use rmp_serde::Serializer;
+use serde::Serialize;
+use smallvec::SmallVec;
 use uuid::Uuid;
+use crate::data::encode::EncodedVec;
+
+#[derive(Debug, thiserror::Error)]
+enum ValueError {
+    #[error("type mismatch: expected {0}, got {1}")]
+    TypeMismatch(String, String)
+}
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Deserialize, Serialize)]
 pub enum Value<'a> {
@@ -38,6 +48,23 @@ pub enum Value<'a> {
     DescVal(Reverse<Box<Value<'a>>>),
     #[serde(rename = "r")]
     Bottom,
+}
+
+pub(crate) const INLINE_VAL_SIZE_LIMIT: usize = 60;
+
+impl<'a> Value<'a> {
+    pub(crate) fn encode(&self) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
+        let mut ret = SmallVec::<[u8; INLINE_VAL_SIZE_LIMIT]>::new();
+        self.serialize(&mut Serializer::new(&mut ret)).unwrap();
+        ret.into()
+    }
+
+    pub(crate) fn get_entity_id(&self) -> Result<EntityId, ValueError> {
+        match self {
+            Value::EnId(id) => Ok(*id),
+            v => Err(ValueError::TypeMismatch("EntityId".to_string(), format!("{:?}", v)))
+        }
+    }
 }
 
 #[cfg(test)]
