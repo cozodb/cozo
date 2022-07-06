@@ -1,7 +1,7 @@
 use crate::data::attr::Attribute;
 use crate::data::encode::{
     decode_ae_key, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v, encode_eav_key,
-    encode_unique_entity, encode_vae_key,
+    encode_unique_attr_val, encode_unique_entity, encode_vae_key,
 };
 use crate::data::id::{EntityId, TxId};
 use crate::data::keyword::Keyword;

@@ -3,9 +3,8 @@ use crate::data::encode::{encode_tx, encode_unique_attr_by_id, encode_unique_ent
 use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::keyword::Keyword;
 use crate::data::value::StaticValue;
-use crate::Db;
 use anyhow::Result;
-use cozorocks::{DbIter, RocksDb, Tx};
+use cozorocks::{DbIter, Tx};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
@@ -33,11 +32,11 @@ pub(crate) struct SessionTx {
 #[derive(Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
 pub(crate) struct TxLog {
     #[serde(rename = "i")]
-    id: TxId,
+    pub(crate) id: TxId,
     #[serde(rename = "c")]
-    comment: String,
+    pub(crate) comment: String,
     #[serde(rename = "t")]
-    timestamp: i64,
+    pub(crate) timestamp: i64,
 }
 
 impl TxLog {

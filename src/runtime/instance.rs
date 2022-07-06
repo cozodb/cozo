@@ -1,4 +1,5 @@
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
+use crate::data::encode::encode_tx;
 use crate::data::id::TxId;
 use crate::runtime::transact::{SessionTx, TxLog};
 use anyhow::Result;
@@ -115,6 +116,43 @@ impl Db {
         it
     }
     pub(crate) fn find_tx_before_timestamp_millis(&self, ts: i64) -> Result<Option<TxLog>> {
-        todo!()
+        // binary search
+        let lower_bound = encode_tx(TxId::MAX_SYS);
+        let upper_bound = encode_tx(TxId::MAX_USER);
+
+        // both are inclusive bounds
+        let mut lower_found = TxId::MIN_USER;
+        let mut upper_found = TxId::MAX_USER;
+        let mut it = self
+            .transact_write()?
+            .tx
+            .iterator()
+            .lower_bound(&lower_bound)
+            .upper_bound(&upper_bound)
+            .start();
+
+        loop {
+            let needle = TxId((lower_found.0 + upper_found.0) / 2);
+            let current = encode_tx(needle);
+            it.seek(&current);
+            match it.val()? {
+                Some(v_slice) => {
+                    let log = TxLog::decode(v_slice)?;
+                    let found_ts = log.timestamp;
+                    if found_ts == ts || needle == upper_found || needle == lower_found {
+                        return Ok(Some(log));
+                    }
+                    if found_ts < ts {
+                        lower_found = log.id;
+                        continue;
+                    }
+                    if found_ts > ts {
+                        upper_found = TxId(log.id.0 - 1);
+                        continue;
+                    }
+                }
+                None => return Ok(None),
+            }
+        }
     }
 }
