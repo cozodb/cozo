@@ -14,6 +14,12 @@ pub enum StoreOp {
     Assert = 1,
 }
 
+impl StoreOp {
+    pub(crate) fn bytes(&self) -> [u8; 1] {
+        [*self as u8]
+    }
+}
+
 impl Display for StoreOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

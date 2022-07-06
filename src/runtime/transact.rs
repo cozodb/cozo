@@ -2,13 +2,14 @@ use crate::data::attr::Attribute;
 use crate::data::encode::{encode_tx, encode_unique_attr_by_id, encode_unique_entity, EncodedVec};
 use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::keyword::Keyword;
+use crate::Db;
 use anyhow::Result;
-use cozorocks::{DbIter, Tx};
+use cozorocks::{DbIter, RocksDb, Tx};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -22,6 +23,9 @@ pub(crate) struct SessionTx {
     pub(crate) last_tx_id: Arc<AtomicU64>,
     pub(crate) attr_by_id_cache: BTreeMap<AttrId, Option<Attribute>>,
     pub(crate) attr_by_kw_cache: BTreeMap<Keyword, Option<Attribute>>,
+    pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
+    // "touched" requires the id to exist prior to the transaction, and something related to it has changed
+    pub(crate) touched_eids: BTreeSet<EntityId>,
 }
 
 #[derive(Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
@@ -60,6 +64,8 @@ impl SessionTx {
     pub(crate) fn clear_cache(&mut self) {
         self.attr_by_id_cache.clear();
         self.attr_by_kw_cache.clear();
+        self.temp_entity_to_perm.clear();
+        self.touched_eids.clear();
     }
 
     pub(crate) fn load_last_entity_id(&mut self) -> Result<EntityId> {

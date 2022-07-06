@@ -65,10 +65,14 @@ impl EncodedVec<LARGE_VEC_SIZE> {
                 }
             }
             StorageTag::Tx => format!("{:?}", TxLog::decode(data).unwrap()),
-            StorageTag::UniqueEntity => "".to_string(),
-            StorageTag::UniqueAttrValue => "".to_string(),
-            StorageTag::UniqueAttrById => "".to_string(),
-            StorageTag::UniqueAttrByKeyword => "".to_string(),
+            StorageTag::UniqueEntity
+            | StorageTag::UniqueAttrValue
+            | StorageTag::UniqueAttrById
+            | StorageTag::UniqueAttrByKeyword => format!(
+                "{:?}{}",
+                TxId::from_bytes(data),
+                StoreOp::try_from(data[0]).unwrap()
+            ),
         }
     }
 }

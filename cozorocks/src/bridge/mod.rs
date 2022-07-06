@@ -131,6 +131,12 @@ pub(crate) mod ffi {
             for_update: bool,
             status: &mut RocksDbStatus,
         ) -> UniquePtr<PinnableSlice>;
+        fn exists(
+            self: Pin<&mut TxBridge>,
+            key: &[u8],
+            for_update: bool,
+            status: &mut RocksDbStatus,
+        );
         fn put(self: Pin<&mut TxBridge>, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
         fn del(self: Pin<&mut TxBridge>, key: &[u8], status: &mut RocksDbStatus);
         fn commit(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);

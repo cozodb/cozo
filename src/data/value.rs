@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::data::encode::EncodedVec;
 
 #[derive(Debug, thiserror::Error)]
-enum ValueError {
+pub enum ValueError {
     #[error("type mismatch: expected {0}, got {1}")]
     TypeMismatch(String, String)
 }

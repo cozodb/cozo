@@ -1,2 +1,2 @@
 pub(crate) mod attr;
-pub(crate) mod entity;
+pub(crate) mod triple;

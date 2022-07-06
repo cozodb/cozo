@@ -100,6 +100,18 @@ struct TxBridge {
         return ret;
     }
 
+    inline void exists(RustBytes key, bool for_update, RocksDbStatus &status) {
+        Slice key_ = convert_slice(key);
+        auto ret = PinnableSlice();
+        if (for_update) {
+            auto s = tx->GetForUpdate(*r_opts, get_db()->DefaultColumnFamily(), key_, &ret);
+            write_status(s, status);
+        } else {
+            auto s = tx->Get(*r_opts, key_, &ret);
+            write_status(s, status);
+        }
+    }
+
     inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) {
         write_status(tx->Put(convert_slice(key), convert_slice(val)), status);
     }

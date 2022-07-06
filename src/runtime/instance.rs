@@ -80,6 +80,8 @@ impl Db {
             last_tx_id: self.last_tx_id.clone(),
             attr_by_id_cache: Default::default(),
             attr_by_kw_cache: Default::default(),
+            temp_entity_to_perm: Default::default(),
+            touched_eids: Default::default(),
         };
         if at.is_none() {
             let tid = ret.load_last_tx_id()?;
@@ -100,6 +102,8 @@ impl Db {
             last_tx_id: self.last_tx_id.clone(),
             attr_by_id_cache: Default::default(),
             attr_by_kw_cache: Default::default(),
+            temp_entity_to_perm: Default::default(),
+            touched_eids: Default::default(),
         };
         Ok(ret)
     }

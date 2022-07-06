@@ -112,6 +112,16 @@ impl Tx {
         }
     }
     #[inline]
+    pub fn exists(&mut self, key: &[u8], for_update: bool) -> Result<bool, RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
+        self.inner.pin_mut().exists(key, for_update, &mut status);
+        match status.code {
+            StatusCode::kOk => Ok(true),
+            StatusCode::kNotFound => Ok(false),
+            _ => Err(status),
+        }
+    }
+    #[inline]
     pub fn commit(&mut self) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
         self.inner.pin_mut().commit(&mut status);

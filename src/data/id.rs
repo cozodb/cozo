@@ -1,3 +1,4 @@
+use crate::data::triple::StoreOp;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
 
@@ -17,6 +18,9 @@ impl EntityId {
     }
     pub(crate) fn bytes(&self) -> [u8; 8] {
         self.0.to_be_bytes()
+    }
+    pub(crate) fn is_perm(&self) -> bool {
+        *self >= Self::MIN_PERM
     }
 }
 
@@ -76,6 +80,11 @@ impl TxId {
 
     pub(crate) fn bytes(&self) -> [u8; 8] {
         self.0.to_be_bytes()
+    }
+    pub(crate) fn bytes_with_op(&self, op: StoreOp) -> [u8; 8] {
+        let mut bytes = self.0.to_be_bytes();
+        bytes[0] = op as u8;
+        bytes
     }
 }
 

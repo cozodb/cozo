@@ -127,7 +127,7 @@ impl SessionTx {
         self.tx.put(&id_encoded, &attr_data)?;
         let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id, StoreOp::Assert);
         self.tx.put(&kw_encoded, &attr_data)?;
-        self.put_attr_guard(attr)?;
+        self.put_attr_guard(attr, StoreOp::Assert)?;
         Ok(())
     }
 
@@ -145,15 +145,15 @@ impl SessionTx {
                 self.tx.put(&id_encoded, &[])?;
                 let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id, StoreOp::Retract);
                 self.tx.put(&kw_encoded, &[])?;
-                self.put_attr_guard(&attr)?;
+                self.put_attr_guard(&attr, StoreOp::Retract)?;
                 Ok(())
             }
         }
     }
 
-    fn put_attr_guard(&mut self, attr: &Attribute) -> Result<()> {
+    fn put_attr_guard(&mut self, attr: &Attribute, op: StoreOp) -> Result<()> {
         let tx_id = self.get_write_tx_id()?;
-        let tx_id_bytes = tx_id.bytes();
+        let tx_id_bytes = tx_id.bytes_with_op(op);
         let id_signal = encode_unique_attr_by_id(attr.id);
         self.tx.put(&id_signal, &tx_id_bytes)?;
         let kw_signal = encode_unique_attr_by_kw(&attr.keyword);
