@@ -1,6 +1,6 @@
 use crate::data::attr::Attribute;
 use crate::data::encode::{
-    decode_attr_key_by_id, decode_attr_key_by_kw, encode_aev_key, encode_attr_by_id,
+    decode_ae_key, decode_attr_key_by_id, decode_attr_key_by_kw, encode_aev_key, encode_attr_by_id,
     encode_attr_by_kw, encode_ave_key, encode_ave_key_for_unique_v, encode_eav_key, encode_tx,
     encode_unique_attr_by_id, encode_unique_attr_by_kw, encode_unique_attr_val,
     encode_unique_entity, encode_vae_key,
@@ -21,6 +21,8 @@ enum TripleError {
     TempEid(EntityId),
     #[error("use of non-existent entity: {0:?}")]
     EidNotFound(EntityId),
+    #[error("unique constraint violated: {0} {1}")]
+    UniqueConstraintViolated(Keyword, String),
 }
 
 impl SessionTx {
@@ -32,36 +34,72 @@ impl SessionTx {
         op: StoreOp,
     ) -> Result<()> {
         let tx_id = self.get_write_tx_id()?;
+        let tx_id_in_key = if attr.with_history {
+            tx_id
+        } else {
+            TxId::MIN_USER
+        };
+        // elide value in key for eav and aev if cardinality is one
         let (v_in_key, v_in_val) = if attr.cardinality.is_one() {
             (&Value::Bottom, v)
         } else {
             (v, &Value::Bottom)
         };
-        let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, tx_id, op);
+        let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, tx_id_in_key, op);
         let val_encoded = v_in_val.encode();
         self.tx.put(&eav_encoded, &val_encoded)?;
 
+        // elide value in data for aev if it is big
         let val_encoded = if val_encoded.len() > INLINE_VAL_SIZE_LIMIT {
             Value::Bottom.encode()
         } else {
             val_encoded
         };
 
-        let aev_encoded = encode_aev_key(attr.id, eid, v_in_key, tx_id, op);
+        let aev_encoded = encode_aev_key(attr.id, eid, v_in_key, tx_id_in_key, op);
         self.tx.put(&aev_encoded, &val_encoded)?;
 
+        // vae for ref types
         if attr.val_type.is_ref_type() {
-            let vae_encoded = encode_vae_key(v.get_entity_id()?, attr.id, eid, tx_id, op);
+            let vae_encoded = encode_vae_key(v.get_entity_id()?, attr.id, eid, tx_id_in_key, op);
             self.tx.put(&vae_encoded, &[])?;
         }
 
+        // ave for indexing
         if attr.indexing.should_index() {
+            // elide e for unique index
             let e_in_key = if attr.indexing.is_unique_index() {
                 EntityId(0)
             } else {
                 eid
             };
-            let ave_encoded = encode_ave_key(attr.id, v, e_in_key, tx_id, op);
+            let ave_encoded = encode_ave_key(attr.id, v, e_in_key, tx_id_in_key, op);
+            // checking of unique constraints
+            if attr.indexing.is_unique_index() {
+                let starting = if attr.with_history {
+                    ave_encoded.clone()
+                } else {
+                    encode_ave_key(attr.id, v, e_in_key, tx_id, op)
+                };
+                let ave_encoded_bound =
+                    encode_ave_key(attr.id, v, e_in_key, TxId::MAX_SYS, StoreOp::Retract);
+                if let Some((k_slice, v_slice)) = self
+                    .bounded_scan_first(&starting, &ave_encoded_bound)
+                    .pair()?
+                {
+                    let (_, _, _, op) = decode_ae_key(k_slice)?;
+                    if op.is_assert() {
+                        let existing_eid = EntityId::from_bytes(v_slice);
+                        if existing_eid != eid {
+                            return Err(TripleError::UniqueConstraintViolated(
+                                attr.keyword.clone(),
+                                format!("{:?}", v),
+                            )
+                            .into());
+                        }
+                    }
+                }
+            }
             let e_in_val_encoded = eid.bytes();
             self.tx.put(&ave_encoded, &e_in_val_encoded)?;
 

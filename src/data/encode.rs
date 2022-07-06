@@ -33,6 +33,7 @@ pub enum StorageTagError {
     UnexpectedValue(u8),
 }
 
+#[derive(Clone)]
 pub(crate) struct EncodedVec<const N: usize> {
     pub(crate) inner: SmallVec<[u8; N]>,
 }
