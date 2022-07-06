@@ -51,6 +51,14 @@ pub enum Value<'a> {
     Bottom,
 }
 
+impl<'a> Value<'a> {
+    pub(crate) fn to_static(&self) -> StaticValue {
+        todo!()
+    }
+}
+
+pub(crate) type StaticValue = Value<'static>;
+
 pub(crate) const INLINE_VAL_SIZE_LIMIT: usize = 60;
 
 impl<'a> Value<'a> {

@@ -1,19 +1,15 @@
 use crate::data::attr::Attribute;
 use crate::data::encode::{
-    decode_ae_key, decode_attr_key_by_id, decode_attr_key_by_kw, encode_aev_key, encode_attr_by_id,
-    encode_attr_by_kw, encode_ave_key, encode_ave_key_for_unique_v, encode_eav_key, encode_tx,
-    encode_unique_attr_by_id, encode_unique_attr_by_kw, encode_unique_attr_val,
+    decode_ae_key, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v, encode_eav_key,
     encode_unique_entity, encode_vae_key,
 };
-use crate::data::id::{AttrId, EntityId, TxId};
+use crate::data::id::{EntityId, TxId};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::data::value::{Value, INLINE_VAL_SIZE_LIMIT};
 use crate::runtime::transact::SessionTx;
 use anyhow::Result;
-use cozorocks::{DbIter, Tx};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 #[derive(Debug, thiserror::Error)]
 enum TripleError {
@@ -81,8 +77,7 @@ impl SessionTx {
                 } else {
                     encode_ave_key(attr.id, v, e_in_key, tx_id)
                 };
-                let ave_encoded_bound =
-                    encode_ave_key(attr.id, v, e_in_key, TxId::ZERO);
+                let ave_encoded_bound = encode_ave_key(attr.id, v, e_in_key, TxId::ZERO);
                 if let Some((k_slice, v_slice)) = self
                     .bounded_scan_first(&starting, &ave_encoded_bound)
                     .pair()?
@@ -166,6 +161,41 @@ impl SessionTx {
     pub(crate) fn entity_exists(&mut self, eid: EntityId, for_update: bool) -> Result<bool> {
         let encoded = encode_unique_entity(eid);
         Ok(self.tx.exists(&encoded, for_update)?)
+    }
+    pub(crate) fn eid_by_unique_av(
+        &mut self,
+        attr: &Attribute,
+        v: &Value,
+    ) -> Result<Option<EntityId>> {
+        if let Some(inner) = self.eid_by_attr_val_cache.get(v) {
+            if let Some(found) = inner.get(&attr.id) {
+                return Ok(*found);
+            }
+        }
+
+        let lower = encode_ave_key_for_unique_v(attr.id, v, self.r_tx_id);
+        let upper = encode_ave_key_for_unique_v(attr.id, v, TxId::ZERO);
+        Ok(
+            if let Some((k_slice, v_slice)) = self.bounded_scan_first(&lower, &upper).pair()? {
+                if StoreOp::try_from(v_slice[0])?.is_assert() {
+                    let (_, eid, _) = decode_ae_key(k_slice)?;
+                    let ret = Some(eid);
+                    self.eid_by_attr_val_cache
+                        .entry(v.to_static())
+                        .or_default()
+                        .insert(attr.id, ret);
+                    ret
+                } else {
+                    self.eid_by_attr_val_cache
+                        .entry(v.to_static())
+                        .or_default()
+                        .insert(attr.id, None);
+                    None
+                }
+            } else {
+                None
+            },
+        )
     }
     // pub(crate) fn triple_ea_scan(
     //     &mut self,
