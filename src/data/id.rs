@@ -68,6 +68,8 @@ impl Debug for AttrId {
 pub struct TxId(pub u64);
 
 impl TxId {
+    pub(crate) const ZERO: TxId = TxId(0);
+    pub(crate) const NO_HISTORY: TxId = TxId(1000);
     pub(crate) const MAX_SYS: TxId = TxId(10000);
     pub(crate) const MIN_USER: TxId = TxId(10001);
     pub(crate) const MAX_USER: TxId = TxId(0x00ff_ffff_ffff_ffff);

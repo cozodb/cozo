@@ -19,7 +19,7 @@ impl SessionTx {
         }
 
         let anchor = encode_attr_by_id(aid, self.r_tx_id);
-        let upper = encode_attr_by_id(aid, TxId::MAX_SYS);
+        let upper = encode_attr_by_id(aid, TxId::ZERO);
         let it = self.bounded_scan_first(&anchor, &upper);
         Ok(match it.pair()? {
             None => {
@@ -50,7 +50,7 @@ impl SessionTx {
         }
 
         let anchor = encode_attr_by_kw(kw, self.r_tx_id);
-        let upper = encode_attr_by_kw(kw, TxId::MAX_SYS);
+        let upper = encode_attr_by_kw(kw, TxId::ZERO);
         let it = self.bounded_scan_first(&anchor, &upper);
         Ok(match it.pair()? {
             None => {
@@ -113,6 +113,7 @@ impl SessionTx {
             if existing.val_type != attr.val_type
                 || existing.cardinality != attr.cardinality
                 || existing.indexing != attr.indexing
+                || existing.with_history != attr.with_history
             {
                 return Err(TransactError::ChangingImmutableProperty(attr.id).into());
             }
@@ -175,7 +176,7 @@ struct AttrIter {
 
 impl AttrIter {
     fn new(builder: IterBuilder, tx_bound: TxId) -> Self {
-        let upper_bound = encode_attr_by_id(AttrId::MAX_PERM, TxId::MAX_SYS);
+        let upper_bound = encode_attr_by_id(AttrId::MAX_PERM, TxId::ZERO);
         let it = builder.upper_bound(&upper_bound).start();
         Self {
             it,

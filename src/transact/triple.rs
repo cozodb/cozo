@@ -37,7 +37,7 @@ impl SessionTx {
         let tx_id_in_key = if attr.with_history {
             tx_id
         } else {
-            TxId::MIN_USER
+            TxId::NO_HISTORY
         };
         // elide value in key for eav and aev if cardinality is one
         let (v_in_key, v_in_val) = if attr.cardinality.is_one() {
@@ -82,7 +82,7 @@ impl SessionTx {
                     encode_ave_key(attr.id, v, e_in_key, tx_id)
                 };
                 let ave_encoded_bound =
-                    encode_ave_key(attr.id, v, e_in_key, TxId::MAX_SYS);
+                    encode_ave_key(attr.id, v, e_in_key, TxId::ZERO);
                 if let Some((k_slice, v_slice)) = self
                     .bounded_scan_first(&starting, &ave_encoded_bound)
                     .pair()?
