@@ -1,8 +1,6 @@
 use crate::*;
 
-#[allow(improper_ctypes_definitions)]
-#[no_mangle]
-extern "C" fn test_comparator(a: &[u8], b: &[u8]) -> i8 {
+fn test_comparator(a: &[u8], b: &[u8]) -> i8 {
     use std::cmp::Ordering::*;
     let res = a.cmp(b);
 
