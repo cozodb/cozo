@@ -45,8 +45,8 @@ impl SessionTx {
         } else {
             (v, &Value::Bottom)
         };
-        let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, tx_id_in_key, op);
-        let val_encoded = v_in_val.encode();
+        let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, tx_id_in_key);
+        let val_encoded = v_in_val.encode_with_op(op);
         self.tx.put(&eav_encoded, &val_encoded)?;
 
         // elide value in data for aev if it is big
@@ -56,13 +56,13 @@ impl SessionTx {
             val_encoded
         };
 
-        let aev_encoded = encode_aev_key(attr.id, eid, v_in_key, tx_id_in_key, op);
+        let aev_encoded = encode_aev_key(attr.id, eid, v_in_key, tx_id_in_key);
         self.tx.put(&aev_encoded, &val_encoded)?;
 
         // vae for ref types
         if attr.val_type.is_ref_type() {
-            let vae_encoded = encode_vae_key(v.get_entity_id()?, attr.id, eid, tx_id_in_key, op);
-            self.tx.put(&vae_encoded, &[])?;
+            let vae_encoded = encode_vae_key(v.get_entity_id()?, attr.id, eid, tx_id_in_key);
+            self.tx.put(&vae_encoded, &[op as u8])?;
         }
 
         // ave for indexing
@@ -73,23 +73,24 @@ impl SessionTx {
             } else {
                 eid
             };
-            let ave_encoded = encode_ave_key(attr.id, v, e_in_key, tx_id_in_key, op);
+            let ave_encoded = encode_ave_key(attr.id, v, e_in_key, tx_id_in_key);
             // checking of unique constraints
             if attr.indexing.is_unique_index() {
                 let starting = if attr.with_history {
                     ave_encoded.clone()
                 } else {
-                    encode_ave_key(attr.id, v, e_in_key, tx_id, op)
+                    encode_ave_key(attr.id, v, e_in_key, tx_id)
                 };
                 let ave_encoded_bound =
-                    encode_ave_key(attr.id, v, e_in_key, TxId::MAX_SYS, StoreOp::Retract);
+                    encode_ave_key(attr.id, v, e_in_key, TxId::MAX_SYS);
                 if let Some((k_slice, v_slice)) = self
                     .bounded_scan_first(&starting, &ave_encoded_bound)
                     .pair()?
                 {
-                    let (_, _, _, op) = decode_ae_key(k_slice)?;
-                    if op.is_assert() {
-                        let existing_eid = EntityId::from_bytes(v_slice);
+                    let (_, _, _) = decode_ae_key(k_slice)?;
+                    let found_op = StoreOp::try_from(v_slice[0])?;
+                    if found_op.is_assert() {
+                        let existing_eid = EntityId::from_bytes(&v_slice[1..]);
                         if existing_eid != eid {
                             return Err(TripleError::UniqueConstraintViolated(
                                 attr.keyword.clone(),

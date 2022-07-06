@@ -10,6 +10,7 @@ use serde::Serialize;
 use smallvec::SmallVec;
 use uuid::Uuid;
 use crate::data::encode::EncodedVec;
+use crate::data::triple::StoreOp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ValueError {
@@ -53,6 +54,13 @@ pub enum Value<'a> {
 pub(crate) const INLINE_VAL_SIZE_LIMIT: usize = 60;
 
 impl<'a> Value<'a> {
+    pub(crate) fn encode_with_op(&self, op: StoreOp) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
+        let mut ret = SmallVec::<[u8; INLINE_VAL_SIZE_LIMIT]>::new();
+        ret.push(op as u8);
+        self.serialize(&mut Serializer::new(&mut ret)).unwrap();
+        ret.into()
+    }
+
     pub(crate) fn encode(&self) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
         let mut ret = SmallVec::<[u8; INLINE_VAL_SIZE_LIMIT]>::new();
         self.serialize(&mut Serializer::new(&mut ret)).unwrap();

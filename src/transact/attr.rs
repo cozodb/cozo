@@ -18,24 +18,26 @@ impl SessionTx {
             return Ok(res.clone());
         }
 
-        let anchor = encode_attr_by_id(aid, self.r_tx_id, StoreOp::Retract);
-        let upper = encode_attr_by_id(aid, TxId::MAX_SYS, StoreOp::Assert);
+        let anchor = encode_attr_by_id(aid, self.r_tx_id);
+        let upper = encode_attr_by_id(aid, TxId::MAX_SYS);
         let it = self.bounded_scan_first(&anchor, &upper);
         Ok(match it.pair()? {
             None => {
                 self.attr_by_id_cache.insert(aid, None);
                 None
-            },
+            }
             Some((k, v)) => {
                 debug_assert_eq!(k[0], StorageTag::AttrById as u8);
-                let (_, _, op) = decode_attr_key_by_id(k)?;
+                let (_, _) = decode_attr_key_by_id(k)?;
+                let op = StoreOp::try_from(v[0])?;
                 if op.is_retract() {
                     self.attr_by_id_cache.insert(aid, None);
                     None
                 } else {
-                    let attr = Attribute::decode(v)?;
+                    let attr = Attribute::decode(&v[1..])?;
                     self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
-                    self.attr_by_kw_cache.insert(attr.keyword.clone(), Some(attr.clone()));
+                    self.attr_by_kw_cache
+                        .insert(attr.keyword.clone(), Some(attr.clone()));
                     Some(attr)
                 }
             }
@@ -47,8 +49,8 @@ impl SessionTx {
             return Ok(res.clone());
         }
 
-        let anchor = encode_attr_by_kw(kw, self.r_tx_id, StoreOp::Retract);
-        let upper = encode_attr_by_kw(kw, TxId::MAX_SYS, StoreOp::Assert);
+        let anchor = encode_attr_by_kw(kw, self.r_tx_id);
+        let upper = encode_attr_by_kw(kw, TxId::MAX_SYS);
         let it = self.bounded_scan_first(&anchor, &upper);
         Ok(match it.pair()? {
             None => {
@@ -56,14 +58,16 @@ impl SessionTx {
                 None
             }
             Some((k, v)) => {
-                let (_, _, op) = decode_attr_key_by_kw(k)?;
+                let (_, _) = decode_attr_key_by_kw(k)?;
+                let op = StoreOp::try_from(v[0])?;
                 if op.is_retract() {
                     self.attr_by_kw_cache.insert(kw.clone(), None);
                     None
                 } else {
-                    let attr = Attribute::decode(v)?;
+                    let attr = Attribute::decode(&v[1..])?;
                     self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
-                    self.attr_by_kw_cache.insert(attr.keyword.clone(), Some(attr.clone()));
+                    self.attr_by_kw_cache
+                        .insert(attr.keyword.clone(), Some(attr.clone()));
                     Some(attr)
                 }
             }
@@ -112,20 +116,21 @@ impl SessionTx {
             {
                 return Err(TransactError::ChangingImmutableProperty(attr.id).into());
             }
-            let kw_encoded = encode_attr_by_kw(&existing.keyword, tx_id, StoreOp::Retract);
-            self.tx.put(&kw_encoded, &[])?;
+            let kw_encoded = encode_attr_by_kw(&existing.keyword, tx_id);
+            self.tx.put(&kw_encoded, &[StoreOp::Retract as u8])?;
             let kw_signal = encode_unique_attr_by_kw(&existing.keyword);
-            self.tx.put(&kw_signal, &tx_id.bytes())?;
+            self.tx
+                .put(&kw_signal, &tx_id.bytes_with_op(StoreOp::Retract))?;
         }
         self.put_attr(&attr)
     }
 
     fn put_attr(&mut self, attr: &Attribute) -> Result<()> {
-        let attr_data = attr.encode();
+        let attr_data = attr.encode_with_op(StoreOp::Assert);
         let tx_id = self.get_write_tx_id()?;
-        let id_encoded = encode_attr_by_id(attr.id, tx_id, StoreOp::Assert);
+        let id_encoded = encode_attr_by_id(attr.id, tx_id);
         self.tx.put(&id_encoded, &attr_data)?;
-        let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id, StoreOp::Assert);
+        let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id);
         self.tx.put(&kw_encoded, &attr_data)?;
         self.put_attr_guard(attr, StoreOp::Assert)?;
         Ok(())
@@ -141,10 +146,10 @@ impl SessionTx {
             .into()),
             Some(attr) => {
                 let tx_id = self.get_write_tx_id()?;
-                let id_encoded = encode_attr_by_id(aid, tx_id, StoreOp::Retract);
+                let id_encoded = encode_attr_by_id(aid, tx_id);
                 self.tx.put(&id_encoded, &[])?;
-                let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id, StoreOp::Retract);
-                self.tx.put(&kw_encoded, &[])?;
+                let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id);
+                self.tx.put(&kw_encoded, &[StoreOp::Retract as u8])?;
                 self.put_attr_guard(&attr, StoreOp::Retract)?;
                 Ok(())
             }
@@ -170,7 +175,7 @@ struct AttrIter {
 
 impl AttrIter {
     fn new(builder: IterBuilder, tx_bound: TxId) -> Self {
-        let upper_bound = encode_attr_by_id(AttrId::MAX_PERM, TxId::MAX_SYS, StoreOp::Assert);
+        let upper_bound = encode_attr_by_id(AttrId::MAX_PERM, TxId::MAX_SYS);
         let it = builder.upper_bound(&upper_bound).start();
         Self {
             it,
@@ -185,13 +190,14 @@ impl AttrIter {
                 None => AttrId::MIN_PERM,
                 Some(id) => AttrId(id.0 + 1),
             };
-            let encoded = encode_attr_by_id(id_to_seek, self.tx_bound, StoreOp::Retract);
+            let encoded = encode_attr_by_id(id_to_seek, self.tx_bound);
             self.it.seek(&encoded);
             match self.it.pair()? {
                 None => return Ok(None),
                 Some((k, v)) => {
                     debug_assert_eq!(k[0], StorageTag::AttrById as u8);
-                    let (found_aid, found_tid, found_op) = decode_attr_key_by_id(k)?;
+                    let (found_aid, found_tid) = decode_attr_key_by_id(k)?;
+                    let found_op = StoreOp::try_from(v[0])?;
                     if found_tid > self.tx_bound {
                         self.last_found = Some(AttrId(found_aid.0 - 1));
                         continue;
@@ -200,7 +206,7 @@ impl AttrIter {
                     if found_op.is_retract() {
                         continue;
                     }
-                    return Ok(Some(Attribute::decode(v)?));
+                    return Ok(Some(Attribute::decode(&v[1..])?));
                 }
             }
         }

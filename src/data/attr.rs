@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::fmt::{Display, Formatter};
+use crate::data::triple::StoreOp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AttributeError {
@@ -268,6 +269,12 @@ pub(crate) struct Attribute {
 const ATTR_VEC_SIZE: usize = 80;
 
 impl Attribute {
+    pub(crate) fn encode_with_op(&self, op: StoreOp) -> EncodedVec<ATTR_VEC_SIZE> {
+        let mut inner = SmallVec::<[u8; ATTR_VEC_SIZE]>::new();
+        inner.push(op as u8);
+        self.serialize(&mut Serializer::new(&mut inner)).unwrap();
+        EncodedVec { inner }
+    }
     pub(crate) fn encode(&self) -> EncodedVec<ATTR_VEC_SIZE> {
         let mut inner = SmallVec::<[u8; ATTR_VEC_SIZE]>::new();
         self.serialize(&mut Serializer::new(&mut inner)).unwrap();

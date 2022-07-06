@@ -53,8 +53,8 @@ fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_triple_eav(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_e, a_a, a_t, a_o) = decode_ea_key(a).unwrap();
-    let (b_e, b_a, b_t, b_o) = decode_ea_key(b).unwrap();
+    let (a_e, a_a, a_t) = decode_ea_key(a).unwrap();
+    let (b_e, b_a, b_t) = decode_ea_key(b).unwrap();
 
     return_if_resolved!(a_e.cmp(&b_e));
     return_if_resolved!(a_a.cmp(&b_a));
@@ -63,14 +63,13 @@ fn compare_key_triple_eav(a: &[u8], b: &[u8]) -> Ordering {
     let b_v = decode_value_from_key(b).unwrap();
 
     return_if_resolved!(a_v.cmp(&b_v));
-    return_if_resolved!(a_t.cmp(&b_t).reverse());
-    a_o.cmp(&b_o)
+    a_t.cmp(&b_t).reverse()
 }
 
 #[inline]
 fn compare_key_triple_aev(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_a, a_e, a_t, a_o) = decode_ae_key(a).unwrap();
-    let (b_a, b_e, b_t, b_o) = decode_ae_key(b).unwrap();
+    let (a_a, a_e, a_t) = decode_ae_key(a).unwrap();
+    let (b_a, b_e, b_t) = decode_ae_key(b).unwrap();
 
     return_if_resolved!(a_a.cmp(&b_a));
     return_if_resolved!(a_e.cmp(&b_e));
@@ -79,14 +78,13 @@ fn compare_key_triple_aev(a: &[u8], b: &[u8]) -> Ordering {
     let b_v = decode_value_from_key(b).unwrap();
 
     return_if_resolved!(a_v.cmp(&b_v));
-    return_if_resolved!(a_t.cmp(&b_t).reverse());
-    a_o.cmp(&b_o)
+    a_t.cmp(&b_t).reverse()
 }
 
 #[inline]
 fn compare_key_triple_ave(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_a, a_e, a_t, a_o) = decode_ae_key(a).unwrap();
-    let (b_a, b_e, b_t, b_o) = decode_ae_key(b).unwrap();
+    let (a_a, a_e, a_t) = decode_ae_key(a).unwrap();
+    let (b_a, b_e, b_t) = decode_ae_key(b).unwrap();
 
     return_if_resolved!(a_a.cmp(&b_a));
 
@@ -95,42 +93,38 @@ fn compare_key_triple_ave(a: &[u8], b: &[u8]) -> Ordering {
 
     return_if_resolved!(a_v.cmp(&b_v));
     return_if_resolved!(a_e.cmp(&b_e));
-    return_if_resolved!(a_t.cmp(&b_t).reverse());
-    a_o.cmp(&b_o)
+    a_t.cmp(&b_t).reverse()
 }
 
 #[inline]
 fn compare_key_triple_vae(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_v, a_a, a_e, a_t, a_o) = decode_vae_key(a).unwrap();
-    let (b_v, b_a, b_e, b_t, b_o) = decode_vae_key(b).unwrap();
+    let (a_v, a_a, a_e, a_t) = decode_vae_key(a).unwrap();
+    let (b_v, b_a, b_e, b_t) = decode_vae_key(b).unwrap();
 
     return_if_resolved!(a_v.cmp(&b_v));
     return_if_resolved!(a_a.cmp(&b_a));
     return_if_resolved!(a_e.cmp(&b_e));
-    return_if_resolved!(a_t.cmp(&b_t).reverse());
-    a_o.cmp(&b_o)
+    a_t.cmp(&b_t).reverse()
 }
 
 #[inline]
 fn compare_key_attr_by_id(a: &[u8], b: &[u8]) -> Ordering {
     debug_assert_eq!(a[0], StorageTag::AttrById as u8);
     debug_assert_eq!(b[0], StorageTag::AttrById as u8);
-    let (a_a, a_t, a_o) = decode_attr_key_by_id(a).unwrap();
-    let (b_a, b_t, b_o) = decode_attr_key_by_id(b).unwrap();
+    let (a_a, a_t) = decode_attr_key_by_id(a).unwrap();
+    let (b_a, b_t) = decode_attr_key_by_id(b).unwrap();
 
     return_if_resolved!(a_a.cmp(&b_a));
-    return_if_resolved!(a_t.cmp(&b_t).reverse());
-    a_o.cmp(&b_o)
+    a_t.cmp(&b_t).reverse()
 }
 
 #[inline]
 fn compare_key_attr_by_kw(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_kw, a_t, a_o) = decode_attr_key_by_kw(a).unwrap();
-    let (b_kw, b_t, b_o) = decode_attr_key_by_kw(b).unwrap();
+    let (a_kw, a_t) = decode_attr_key_by_kw(a).unwrap();
+    let (b_kw, b_t) = decode_attr_key_by_kw(b).unwrap();
 
     return_if_resolved!(a_kw.cmp(&b_kw));
-    return_if_resolved!(a_t.cmp(&b_t).reverse());
-    a_o.cmp(&b_o)
+    a_t.cmp(&b_t).reverse()
 }
 
 #[inline]
