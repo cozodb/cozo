@@ -1,21 +1,23 @@
+use crate::data::encode::{decode_value, EncodedVec};
 use crate::data::id::EntityId;
 use crate::data::keyword::Keyword;
+use crate::data::triple::StoreOp;
+use anyhow::Result;
+use cozorocks::PinSlice;
 use ordered_float::OrderedFloat;
+use rmp_serde::Serializer;
+use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::cmp::Reverse;
 use std::fmt::Debug;
-use rmp_serde::Serializer;
-use serde::Serialize;
-use smallvec::SmallVec;
 use uuid::Uuid;
-use crate::data::encode::EncodedVec;
-use crate::data::triple::StoreOp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ValueError {
     #[error("type mismatch: expected {0}, got {1}")]
-    TypeMismatch(String, String)
+    TypeMismatch(String, String),
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Deserialize, Serialize)]
@@ -53,7 +55,21 @@ pub enum Value<'a> {
 
 impl<'a> Value<'a> {
     pub(crate) fn to_static(&self) -> StaticValue {
-        todo!()
+        match self {
+            Value::Null => Value::Null,
+            Value::Bool(b) => Value::Bool(*b),
+            Value::EnId(eid) => Value::EnId(*eid),
+            Value::Int(i) => Value::Int(*i),
+            Value::Float(f) => Value::Float(*f),
+            Value::Keyword(kw) => Value::Keyword(kw.clone()),
+            Value::String(s) => Value::String(s.clone().into_owned().into()),
+            Value::Uuid(u) => Value::Uuid(*u),
+            Value::Timestamp(ts) => Value::Timestamp(*ts),
+            Value::Bytes(b) => Value::Bytes(b.clone().into_owned().into()),
+            Value::Tuple(t) => Value::Tuple(t.iter().map(|v| v.to_static()).collect()),
+            Value::DescVal(desc) => Value::DescVal(Reverse(Box::new(desc.0.to_static()))),
+            Value::Bottom => Value::Bottom,
+        }
     }
 }
 
@@ -78,8 +94,21 @@ impl<'a> Value<'a> {
     pub(crate) fn get_entity_id(&self) -> Result<EntityId, ValueError> {
         match self {
             Value::EnId(id) => Ok(*id),
-            v => Err(ValueError::TypeMismatch("EntityId".to_string(), format!("{:?}", v)))
+            v => Err(ValueError::TypeMismatch(
+                "EntityId".to_string(),
+                format!("{:?}", v),
+            )),
         }
+    }
+}
+
+pub(crate) struct PinSliceValue {
+    inner: PinSlice,
+}
+
+impl PinSliceValue {
+    pub(crate) fn as_value(&self) -> Result<Value> {
+        decode_value(&self.inner.as_ref()[1..])
     }
 }
 

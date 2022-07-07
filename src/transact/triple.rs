@@ -1,14 +1,17 @@
-use crate::data::attr::Attribute;
+use crate::data::attr::{Attribute, AttributeTyping};
 use crate::data::encode::{
-    decode_ae_key, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v, encode_eav_key,
-    encode_unique_attr_val, encode_unique_entity, encode_vae_key,
+    decode_ae_key, decode_ea_key, decode_vae_key, decode_value, decode_value_from_key,
+    encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v, encode_eav_key,
+    encode_unique_attr_val, encode_unique_entity, encode_vae_key, EncodedVec, LARGE_VEC_SIZE,
 };
-use crate::data::id::{EntityId, TxId};
+use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
-use crate::data::value::{Value, INLINE_VAL_SIZE_LIMIT};
-use crate::runtime::transact::SessionTx;
+use crate::data::value::{StaticValue, Value, INLINE_VAL_SIZE_LIMIT};
+use crate::runtime::transact::{SessionTx, TransactError};
+use crate::utils::swap_option_result;
 use anyhow::Result;
+use cozorocks::{DbIter, IterBuilder};
 use std::sync::atomic::Ordering;
 
 #[derive(Debug, thiserror::Error)]
@@ -19,6 +22,8 @@ enum TripleError {
     EidNotFound(EntityId),
     #[error("unique constraint violated: {0} {1}")]
     UniqueConstraintViolated(Keyword, String),
+    #[error("triple not found for {0:?} {1:?} {2:?}")]
+    TripleEANotFound(EntityId, AttrId, TxId),
 }
 
 impl SessionTx {
@@ -112,6 +117,8 @@ impl SessionTx {
     }
 
     pub(crate) fn new_triple(&mut self, eid: EntityId, attr: &Attribute, v: &Value) -> Result<()> {
+        // invariant: in the preparation step, any identity attr should already be resolved to
+        // an existing eid, if there is one
         let eid = if eid.is_perm() {
             eid
         } else {
@@ -146,21 +153,73 @@ impl SessionTx {
         attr: &Attribute,
         v: &Value,
     ) -> Result<()> {
-        todo!()
+        self.put_triple(eid, attr, v, StoreOp::Retract)?;
+        if attr.val_type == AttributeTyping::Component {
+            let eid_v = v.get_entity_id()?;
+            self.retract_entity(eid_v)?;
+        }
+        Ok(())
     }
     pub(crate) fn retract_triples_for_attr(
         &mut self,
         eid: EntityId,
         attr: &Attribute,
     ) -> Result<()> {
-        todo!()
+        let lower_bound = encode_eav_key(eid, attr.id, &Value::Null, TxId::MAX_USER);
+        let upper_bound = encode_eav_key(eid, attr.id, &Value::Bottom, TxId::ZERO);
+        self.batch_retract_triple(lower_bound, upper_bound)
     }
     pub(crate) fn retract_entity(&mut self, eid: EntityId) -> Result<()> {
-        todo!()
+        match self.latest_entity_existence(eid, true)? {
+            LatestTripleExistence::Asserted => {}
+            LatestTripleExistence::Retracted => return Ok(()),
+            LatestTripleExistence::NotFound => return Err(TripleError::EidNotFound(eid).into()),
+        }
+        let lower_bound = encode_eav_key(eid, AttrId::MIN_PERM, &Value::Null, TxId::MAX_USER);
+        let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &Value::Bottom, TxId::ZERO);
+        self.batch_retract_triple(lower_bound, upper_bound)
     }
-    pub(crate) fn entity_exists(&mut self, eid: EntityId, for_update: bool) -> Result<bool> {
+    fn batch_retract_triple(
+        &mut self,
+        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
+        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
+    ) -> Result<()> {
+        let mut it = self.bounded_scan(&lower_bound, &upper_bound);
+        let mut current = lower_bound.clone();
+        loop {
+            it.seek(&current);
+            match it.pair()? {
+                None => return Ok(()),
+                Some((k_slice, v_slice)) => {
+                    let op = StoreOp::try_from(v_slice[0])?;
+                    let (cur_eid, cur_aid, _) = decode_ea_key(k_slice)?;
+                    let cur_v = decode_value_from_key(k_slice)?;
+                    if op.is_assert() {
+                        let cur_attr = self
+                            .attr_by_id(cur_aid)?
+                            .ok_or(TransactError::AttrNotFound(cur_aid))?;
+                        self.retract_triple(cur_eid, &cur_attr, &cur_v)?;
+                    }
+                    current = encode_eav_key(cur_eid, cur_aid, &cur_v, TxId::ZERO);
+                }
+            }
+        }
+    }
+    fn latest_entity_existence(
+        &mut self,
+        eid: EntityId,
+        for_update: bool,
+    ) -> Result<LatestTripleExistence> {
         let encoded = encode_unique_entity(eid);
-        Ok(self.tx.exists(&encoded, for_update)?)
+        Ok(if let Some(v_slice) = self.tx.get(&encoded, for_update)? {
+            let op = StoreOp::try_from(v_slice[0])?;
+            match op {
+                StoreOp::Retract => LatestTripleExistence::Retracted,
+                StoreOp::Assert => LatestTripleExistence::Asserted,
+            }
+        } else {
+            LatestTripleExistence::NotFound
+        })
     }
     pub(crate) fn eid_by_unique_av(
         &mut self,
@@ -197,53 +256,262 @@ impl SessionTx {
             },
         )
     }
-    // pub(crate) fn triple_ea_scan(
-    //     &mut self,
-    //     eid: EntityId,
-    //     aid: AttrId,
-    // ) -> impl Iterator<Item = Result<Value>> {
-    //     todo!()
-    // }
-    // pub(crate) fn triple_ae_scan(
-    //     &mut self,
-    //     aid: AttrId,
-    //     eid: EntityId,
-    // ) -> impl Iterator<Item = Result<Value>> {
-    //     todo!()
-    // }
-    // pub(crate) fn triple_av_scan(
-    //     &mut self,
-    //     aid: AttrId,
-    //     eid: EntityId,
-    // ) -> impl Iterator<Item = Result<Value>> {
-    //     todo!()
-    // }
-    // pub(crate) fn triple_va_scan(
-    //     &mut self,
-    //     aid: AttrId,
-    //     eid: EntityId,
-    // ) -> impl Iterator<Item = Result<Value>> {
-    //     todo!()
-    // }
-    // pub(crate) fn triple_e_scan(
-    //     &mut self,
-    //     eid: EntityId,
-    //     aid: AttrId,
-    // ) -> impl Iterator<Item = Result<Value>> {
-    //     todo!()
-    // }
-    // pub(crate) fn triple_a_scan(
-    //     &mut self,
-    //     aid: AttrId,
-    //     eid: EntityId,
-    // ) -> impl Iterator<Item = Result<Value>> {
-    //     todo!()
-    // }
-    // pub(crate) fn triple_v_scan(
-    //     &mut self,
-    //     aid: AttrId,
-    //     eid: EntityId,
-    // ) -> impl Iterator<Item = Result<Value>> {
-    //     todo!()
-    // }
+    pub(crate) fn restore_bottom_value(
+        &mut self,
+        eid: EntityId,
+        aid: AttrId,
+        txid: TxId,
+    ) -> Result<StaticValue> {
+        let encoded = encode_eav_key(eid, aid, &Value::Bottom, txid);
+        let res = self
+            .tx
+            .get(&encoded, false)?
+            .ok_or(TripleError::TripleEANotFound(eid, aid, txid))?;
+        Ok(decode_value(&res.as_ref()[1..])?.to_static())
+    }
+    pub(crate) fn triple_ea_scan(
+        &mut self,
+        eid: EntityId,
+        aid: AttrId,
+    ) -> impl Iterator<Item = Result<(EntityId, AttrId, StaticValue, TxId)>> {
+        let lower = encode_eav_key(eid, aid, &Value::Null, TxId::MAX_USER);
+        let upper = encode_eav_key(eid, aid, &Value::Bottom, TxId::ZERO);
+        TripleEntityAttrIter::new(self.tx.iterator(), lower, upper)
+    }
+    pub(crate) fn triple_ae_scan(
+        &mut self,
+        aid: AttrId,
+        eid: EntityId,
+    ) -> impl Iterator<Item = Result<(AttrId, EntityId, StaticValue, TxId)>> {
+        let lower = encode_aev_key(aid, eid, &Value::Null, TxId::MAX_USER);
+        let upper = encode_aev_key(aid, eid, &Value::Bottom, TxId::ZERO);
+        TripleAttrEntityIter::new(self.tx.iterator(), lower, upper)
+    }
+    pub(crate) fn triple_av_scan(
+        &mut self,
+        aid: AttrId,
+        v: &Value,
+    ) -> impl Iterator<Item = Result<(AttrId, StaticValue, EntityId, TxId)>> {
+        let lower = encode_ave_key(aid, v, EntityId::MIN_PERM, TxId::MAX_USER);
+        let upper = encode_ave_key(aid, v, EntityId::MAX_PERM, TxId::ZERO);
+        TripleAttrValueIter::new(self.tx.iterator(), lower, upper)
+    }
+    pub(crate) fn triple_vref_a_scan(
+        &mut self,
+        v_eid: EntityId,
+        aid: AttrId,
+    ) -> impl Iterator<Item = Result<(EntityId, AttrId, EntityId, TxId)>> {
+        let lower = encode_vae_key(v_eid, aid, EntityId::MIN_PERM, TxId::MAX_USER);
+        let upper = encode_vae_key(v_eid, aid, EntityId::MAX_PERM, TxId::ZERO);
+        TripleValueRefAttrIter::new(self.tx.iterator(), lower, upper)
+    }
+    pub(crate) fn triple_e_scan(
+        &mut self,
+        eid: EntityId,
+    ) -> impl Iterator<Item = Result<(EntityId, AttrId, StaticValue, TxId)>> {
+        let lower = encode_eav_key(eid, AttrId::MIN_PERM, &Value::Null, TxId::MAX_USER);
+        let upper = encode_eav_key(eid, AttrId::MAX_PERM, &Value::Bottom, TxId::ZERO);
+        TripleEntityAttrIter::new(self.tx.iterator(), lower, upper)
+    }
+    pub(crate) fn triple_a_scan(
+        &mut self,
+        aid: AttrId,
+    ) -> impl Iterator<Item = Result<(AttrId, EntityId, StaticValue, TxId)>> {
+        let lower = encode_aev_key(aid, EntityId::MIN_PERM, &Value::Null, TxId::MAX_USER);
+        let upper = encode_aev_key(aid, EntityId::MAX_PERM, &Value::Bottom, TxId::ZERO);
+        TripleAttrEntityIter::new(self.tx.iterator(), lower, upper)
+    }
+    pub(crate) fn triple_vref_scan(
+        &mut self,
+        v_eid: EntityId,
+    ) -> impl Iterator<Item = Result<(EntityId, AttrId, EntityId, TxId)>> {
+        let lower = encode_vae_key(v_eid, AttrId::MIN_PERM, EntityId::MIN_PERM, TxId::MAX_USER);
+        let upper = encode_vae_key(v_eid, AttrId::MAX_PERM, EntityId::MAX_PERM, TxId::ZERO);
+        TripleValueRefAttrIter::new(self.tx.iterator(), lower, upper)
+    }
+}
+
+enum LatestTripleExistence {
+    Asserted,
+    Retracted,
+    NotFound,
+}
+
+struct TripleEntityAttrIter {
+    it: DbIter,
+    current: EncodedVec<LARGE_VEC_SIZE>,
+}
+
+impl TripleEntityAttrIter {
+    fn new(
+        builder: IterBuilder,
+        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
+        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
+    ) -> Self {
+        let it = builder.upper_bound(&upper_bound).start();
+        Self {
+            it,
+            current: lower_bound,
+        }
+    }
+    fn next_inner(&mut self) -> Result<Option<(EntityId, AttrId, StaticValue, TxId)>> {
+        loop {
+            self.it.seek(&self.current);
+            match self.it.pair()? {
+                None => return Ok(None),
+                Some((k_slice, v_slice)) => {
+                    let (eid, aid, tid) = decode_ea_key(k_slice)?;
+                    let v = decode_value_from_key(k_slice)?;
+                    self.current.copy_from_slice(k_slice);
+                    self.current.encoded_entity_amend_tx_to_first();
+                    let op = StoreOp::try_from(v_slice[0])?;
+                    if op.is_assert() {
+                        return Ok(Some((eid, aid, v.to_static(), tid)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for TripleEntityAttrIter {
+    type Item = Result<(EntityId, AttrId, StaticValue, TxId)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
+    }
+}
+
+struct TripleAttrEntityIter {
+    it: DbIter,
+    current: EncodedVec<LARGE_VEC_SIZE>,
+}
+
+impl TripleAttrEntityIter {
+    fn new(
+        builder: IterBuilder,
+        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
+        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
+    ) -> Self {
+        let it = builder.upper_bound(&upper_bound).start();
+        Self {
+            it,
+            current: lower_bound,
+        }
+    }
+    fn next_inner(&mut self) -> Result<Option<(AttrId, EntityId, StaticValue, TxId)>> {
+        loop {
+            self.it.seek(&self.current);
+            match self.it.pair()? {
+                None => return Ok(None),
+                Some((k_slice, v_slice)) => {
+                    let (aid, eid, tid) = decode_ae_key(k_slice)?;
+                    let v = decode_value_from_key(k_slice)?;
+                    self.current.copy_from_slice(k_slice);
+                    self.current.encoded_entity_amend_tx_to_first();
+                    let op = StoreOp::try_from(v_slice[0])?;
+                    if op.is_assert() {
+                        return Ok(Some((aid, eid, v.to_static(), tid)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for TripleAttrEntityIter {
+    type Item = Result<(AttrId, EntityId, StaticValue, TxId)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
+    }
+}
+
+struct TripleAttrValueIter {
+    it: DbIter,
+    current: EncodedVec<LARGE_VEC_SIZE>,
+}
+
+impl TripleAttrValueIter {
+    fn new(
+        builder: IterBuilder,
+        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
+        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
+    ) -> Self {
+        let it = builder.upper_bound(&upper_bound).start();
+        Self {
+            it,
+            current: lower_bound,
+        }
+    }
+    fn next_inner(&mut self) -> Result<Option<(AttrId, StaticValue, EntityId, TxId)>> {
+        loop {
+            self.it.seek(&self.current);
+            match self.it.pair()? {
+                None => return Ok(None),
+                Some((k_slice, v_slice)) => {
+                    let (aid, eid, tid) = decode_ae_key(k_slice)?;
+                    let v = decode_value_from_key(k_slice)?;
+                    self.current.copy_from_slice(k_slice);
+                    self.current.encoded_entity_amend_tx_to_first();
+                    let op = StoreOp::try_from(v_slice[0])?;
+                    if op.is_assert() {
+                        return Ok(Some((aid, v.to_static(), eid, tid)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for TripleAttrValueIter {
+    type Item = Result<(AttrId, StaticValue, EntityId, TxId)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
+    }
+}
+
+struct TripleValueRefAttrIter {
+    it: DbIter,
+    current: EncodedVec<LARGE_VEC_SIZE>,
+}
+
+impl TripleValueRefAttrIter {
+    fn new(
+        builder: IterBuilder,
+        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
+        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
+    ) -> Self {
+        let it = builder.upper_bound(&upper_bound).start();
+        Self {
+            it,
+            current: lower_bound,
+        }
+    }
+    fn next_inner(&mut self) -> Result<Option<(EntityId, AttrId, EntityId, TxId)>> {
+        loop {
+            self.it.seek(&self.current);
+            match self.it.pair()? {
+                None => return Ok(None),
+                Some((k_slice, v_slice)) => {
+                    let (v_eid, aid, eid, tid) = decode_vae_key(k_slice)?;
+                    self.current.copy_from_slice(k_slice);
+                    self.current.encoded_entity_amend_tx_to_first();
+                    let op = StoreOp::try_from(v_slice[0])?;
+                    if op.is_assert() {
+                        return Ok(Some((v_eid, aid, eid, tid)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for TripleValueRefAttrIter {
+    type Item = Result<(EntityId, AttrId, EntityId, TxId)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
+    }
 }

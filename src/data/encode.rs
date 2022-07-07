@@ -38,6 +38,13 @@ pub(crate) struct EncodedVec<const N: usize> {
     pub(crate) inner: SmallVec<[u8; N]>,
 }
 
+impl<const N: usize> EncodedVec<N> {
+    pub(crate) fn copy_from_slice(&mut self, src: &[u8]) {
+        self.inner.clear();
+        self.inner.extend_from_slice(src)
+    }
+}
+
 impl EncodedVec<LARGE_VEC_SIZE> {
     pub(crate) fn new(data: &[u8]) -> Self {
         Self {
@@ -144,10 +151,10 @@ impl<const N: usize> EncodedVec<N> {
         }
     }
     pub(crate) fn encoded_entity_amend_tx_to_last(&mut self) {
-        self.encoded_entity_amend_tx(TxId(u64::MAX))
+        self.encoded_entity_amend_tx(TxId::MAX_USER)
     }
     pub(crate) fn encoded_entity_amend_tx_to_first(&mut self) {
-        self.encoded_entity_amend_tx(TxId(0))
+        self.encoded_entity_amend_tx(TxId::ZERO)
     }
 
     pub(crate) fn encoded_attr_amend_tx(&mut self, tx: TxId) {
@@ -158,10 +165,10 @@ impl<const N: usize> EncodedVec<N> {
         }
     }
     pub(crate) fn encoded_attr_amend_tx_to_last(&mut self) {
-        self.encoded_attr_amend_tx(TxId(u64::MAX))
+        self.encoded_attr_amend_tx(TxId::MAX_USER)
     }
     pub(crate) fn encoded_attr_amend_tx_to_first(&mut self) {
-        self.encoded_attr_amend_tx(TxId(0))
+        self.encoded_attr_amend_tx(TxId::ZERO)
     }
 }
 
@@ -206,11 +213,11 @@ impl TryFrom<u8> for StorageTag {
     }
 }
 
-const LARGE_VEC_SIZE: usize = 60;
-const VEC_SIZE_32: usize = 32;
-const VEC_SIZE_24: usize = 24;
-const VEC_SIZE_16: usize = 16;
-const VEC_SIZE_8: usize = 8;
+pub(crate) const LARGE_VEC_SIZE: usize = 60;
+pub(crate) const VEC_SIZE_32: usize = 32;
+pub(crate) const VEC_SIZE_24: usize = 24;
+pub(crate) const VEC_SIZE_16: usize = 16;
+pub(crate) const VEC_SIZE_8: usize = 8;
 
 #[inline]
 pub(crate) fn decode_value(src: &[u8]) -> Result<Value> {

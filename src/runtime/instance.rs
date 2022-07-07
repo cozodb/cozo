@@ -71,7 +71,7 @@ impl Db {
         Ok(())
     }
     pub(crate) fn transact(&self, at: Option<TxId>) -> Result<SessionTx> {
-        let tx_id = at.unwrap_or(TxId(0));
+        let tx_id = at.unwrap_or(TxId::ZERO);
         let mut ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
             r_tx_id: tx_id,
