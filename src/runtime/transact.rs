@@ -145,6 +145,8 @@ impl SessionTx {
 pub enum TransactError {
     #[error("attribute conflict for {0:?}: {1}")]
     AttrConflict(AttrId, String),
+    #[error("attribute consistency for {0:?}: {1}")]
+    AttrConsistency(AttrId, String),
     #[error("attribute not found {0:?}")]
     AttrNotFound(AttrId),
     #[error("attempt to write in read-only transaction")]

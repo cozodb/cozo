@@ -42,7 +42,10 @@ impl SessionTx {
         };
         // elide value in key for eav and aev if cardinality is one
         let (v_in_key, v_in_val) = if attr.cardinality.is_one() {
-            (&Value::Bottom, v)
+            (
+                &Value::Bottom,
+                if op.is_assert() { v } else { &Value::Bottom },
+            )
         } else {
             (v, &Value::Bottom)
         };
@@ -319,6 +322,12 @@ impl SessionTx {
     ) -> impl Iterator<Item = Result<(AttrId, EntityId, StaticValue, TxId)>> {
         let lower = encode_aev_key(aid, EntityId::MIN_PERM, &Value::Null, TxId::MAX_USER);
         let upper = encode_aev_key(aid, EntityId::MAX_PERM, &Value::Bottom, TxId::ZERO);
+        TripleAttrEntityIter::new(self.tx.iterator(), lower, upper)
+    }pub(crate) fn triple_a_scan_all(
+        &mut self,
+    ) -> impl Iterator<Item = Result<(AttrId, EntityId, StaticValue, TxId)>> {
+        let lower = encode_aev_key(AttrId::MIN_PERM, EntityId::MIN_PERM, &Value::Null, TxId::MAX_USER);
+        let upper = encode_aev_key(AttrId::MAX_PERM, EntityId::MAX_PERM, &Value::Bottom, TxId::ZERO);
         TripleAttrEntityIter::new(self.tx.iterator(), lower, upper)
     }
     pub(crate) fn triple_vref_scan(

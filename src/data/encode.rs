@@ -53,17 +53,17 @@ impl EncodedVec<LARGE_VEC_SIZE> {
     }
     pub(crate) fn debug_value(&self, data: &[u8]) -> String {
         match StorageTag::try_from(self.inner[0]).unwrap() {
-            StorageTag::TripleEntityAttrValue => {
-                todo!()
-            }
-            StorageTag::TripleAttrEntityValue => {
-                todo!()
-            }
-            StorageTag::TripleAttrValueEntity => {
-                todo!()
-            }
-            StorageTag::TripleValueAttrEntity => {
-                todo!()
+            StorageTag::TripleEntityAttrValue
+            | StorageTag::TripleAttrEntityValue
+            | StorageTag::TripleAttrValueEntity
+            | StorageTag::TripleValueAttrEntity => {
+                let op = StoreOp::try_from(data[0]).unwrap();
+                if data.len() > 1 {
+                    let v = decode_value(&data[1..]).unwrap();
+                    format!("{}{:?}", op, v)
+                } else {
+                    format!("{}", op)
+                }
             }
             StorageTag::AttrById | StorageTag::AttrByKeyword => {
                 let op = StoreOp::try_from(data[0]).unwrap();

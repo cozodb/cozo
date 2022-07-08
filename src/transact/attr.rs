@@ -80,6 +80,14 @@ impl SessionTx {
 
     /// conflict if new attribute has same name as existing one
     pub(crate) fn new_attr(&mut self, mut attr: Attribute) -> Result<()> {
+        if attr.cardinality.is_many() && attr.indexing.is_unique_index() {
+            return Err(TransactError::AttrConsistency(
+                attr.id,
+                "cardinality cannot be 'many' for unique or identity attributes".to_string(),
+            )
+            .into());
+        }
+
         if self.attr_by_kw(&attr.keyword)?.is_some() {
             return Err(TransactError::AttrConflict(
                 attr.id,

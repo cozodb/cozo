@@ -1,7 +1,8 @@
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::encode::EncodedVec;
-use crate::data::id::AttrId;
+use crate::data::id::{AttrId, EntityId};
 use crate::data::keyword::Keyword;
+use crate::data::value::Value;
 use crate::Db;
 use anyhow::Result;
 use cozorocks::DbBuilder;
@@ -34,8 +35,8 @@ fn creation() {
     tx.new_attr(Attribute {
         id: AttrId(0),
         keyword: Keyword::try_from("hello/world").unwrap(),
-        cardinality: AttributeCardinality::One,
-        val_type: AttributeTyping::Ref,
+        cardinality: AttributeCardinality::Many,
+        val_type: AttributeTyping::Int,
         indexing: AttributeIndex::None,
         with_history: true,
     })
@@ -43,11 +44,20 @@ fn creation() {
     tx.commit_tx("", false).unwrap();
 
     let mut tx = session.transact_write().unwrap();
+    let attr = tx
+        .attr_by_kw(&Keyword::try_from("hello/world").unwrap())
+        .unwrap()
+        .unwrap();
+    tx.new_triple(EntityId(1), &attr, &Value::Int(98765))
+        .unwrap();
+    tx.commit_tx("haah", false).unwrap();
+
+    let mut tx = session.transact_write().unwrap();
     tx.amend_attr(Attribute {
         id: AttrId(10000001),
         keyword: Keyword::try_from("hello/sucker").unwrap(),
-        cardinality: AttributeCardinality::One,
-        val_type: AttributeTyping::Ref,
+        cardinality: AttributeCardinality::Many,
+        val_type: AttributeTyping::Int,
         indexing: AttributeIndex::None,
         with_history: true,
     })
@@ -66,6 +76,11 @@ fn creation() {
     for attr in tx.all_attrs() {
         dbg!(attr.unwrap());
     }
+
+    for r in tx.triple_a_scan_all() {
+        dbg!(r.unwrap());
+    }
+
     dbg!(&session);
     dbg!(tx.r_tx_id);
 
