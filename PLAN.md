@@ -1,75 +1,124 @@
-# Operations on relations
+canonical form
 
-Operations
-
-* [x] `from(...rels)`, can use chain notation
-* [x] `left_join(left, right, ...conds)`, similarly for `right_join`, `outer_join`)
-* [x] `concat(...rels)`
-* [x] `intersect(...rels)`, similarly for `union`
-* [x] `diff(left, right)`, similarly for `sym_diff`
-* [x] `select(rel, binding: {..})`
-* [x] `where(rel, ..conds)`
-* [x] `take(rel, n)`
-* [x] `skip(rel, n)`
-* [x] `sort(rel, expr1, expr2: sort_dir)`
-* [x] `group(rel, binding: {*key1: expr1, val1: expr2}, *ordering)` may order elements within groups
-* [x] `walk(pattern, ...conds, ...bindings)`
-* [ ] `walk_repeat(pattern, ...conds, ...bindings)` every element contains additional `_iter` and `_visited` fields
-* [x] `values(data, ?Table)`
-* [x] `nested_values(data, ?Table).extract(Table)`
-* [x] `update(rel, Table)`
-* [x] `delete(rel, Table)`
-* [x] `insert(rel, Table)`
-* [x] `upsert(rel, Table)`
-
-Helpers
-
-* `print(rel)`
-* `print_schema(rel)`
-* `print_plan(rel)`
-* `print_optimized(rel)`
-
-Aggregation
-
-* Aggregation functions should implement `.step()` and `.result()`
-
-Differentiation
-
-* function calls use parentheses, names start with lowercase letters or "_"
-* aggregation calls are the same as function calls except that square brackets are used instead
-* query calls are the same as function calls except that query names start with upper case or "#"
-
-Others
-
-* [ ] assoc magic better work
-* [ ] language within query
-* [ ] constraints and indices
-* [ ] datetime and array types
-* [ ] GUI and TUI
-* [ ] query optimization
-* [ ] regex as a value type
-
-```
-Walk(a:A-[e:E]->b:B,
-     a => (a.id == 10),
-     e => (e.id < 20, count[] <= 1, rand() => asc),
-     b: {
-        ...b,
-        ...e,
-        ...a
-     })
-
-Chain(a:A-[p:Path]->b:B,
-      _next => _hops < 10)
+```json
+{
+  "asserts": [
+    [
+      "temp_id",
+      "Person/name",
+      "Alice"
+    ],
+    [
+      "temp_id",
+      "Person/email",
+      "alice@example.com"
+    ],
+    [
+      {
+        "Person/name": "Phillip"
+      },
+      "Person/friends",
+      [
+        {
+          "Person/name": "Maxwells"
+        },
+        123332212
+      ]
+    ],
+    {
+      "_id": "tempxxx",
+      "Person/name": "Bloopy",
+      "Person/email": "b@example.com"
+    }
+  ],
+  "retracts": [
+    [
+      1234567
+    ],
+    [
+      {
+        "Person/name": "Jack"
+      }
+    ]
+  ]
+}
 ```
 
-Walk, ChainWalk, MaxChainWalk, TreeWalk, ChainWalkSegments
+```json
+{
+  "add_attrs": [],
+  "amend_attrs": [],
+  "retract_attrs": [],
+  "commit_msg": "ZAODDK"
+}
+```
+
+```json
+{
+  "q": {
+    "ancestor": [
+      "?a",
+      "?c"
+    ]
+  },
+  "ancestor": [
+    {
+      "out": [
+        "?a",
+        "?b"
+      ],
+      "where": [
+        [
+          "?a",
+          "Person/parent",
+          "?b"
+        ]
+      ]
+    },
+    {
+      "out": [
+        "?a",
+        "?b"
+      ],
+      "where": [
+        [
+          "?a",
+          "Person/parent",
+          "?c"
+        ],
+        {
+          "ancestor": [
+            "?c",
+            "?b"
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
 
 ```
-Walk(p:Person - [:Follows> ~ :<Follows | :Likes>].. - p2:Person)
-```
+attr {
+    keyword: Person/parent,
+    cardinality: many,
+}.
 
+attr {
+    keyword: Person/name,
+    type: string,
+    index: identity
+}.
 
-```
-sum()(x.id)
+Person { name: "Alice", parent_of: "Bob" }.
+Person { name: "Bob" }.
+
+Person/name("eve", "Eve").
+Person/parent_of("eve", "Bob").
+
+Ancestor(?a, ?b) :- Person/parent_of(?a, ?b).
+Ancestor(?a, ?b) :- Person/parent_of(?a, ?c),
+                    Ancestor(?c, ?b).
+                    
+?- Ancestor(Person/name("bob"), ?ancestor).
 ```

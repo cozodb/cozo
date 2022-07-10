@@ -1,6 +1,36 @@
 use crate::data::triple::StoreOp;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Deserialize, Serialize, Hash)]
+pub struct Validity(pub i64);
+
+impl Validity {
+    pub(crate) const MAX: Validity = Validity(i64::MAX);
+    pub(crate) const MIN: Validity = Validity(i64::MIN);
+    pub(crate) fn current() -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as i64;
+        Self(timestamp)
+    }
+    pub(crate) fn from_bytes(b: &[u8]) -> Self {
+        Validity(i64::from_be_bytes([
+            b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+        ]))
+    }
+    pub(crate) fn bytes(&self) -> [u8; 8] {
+        self.0.to_be_bytes()
+    }
+}
+
+impl Debug for Validity {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "v{}", self.0)
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, Hash)]
 pub struct EntityId(pub u64);
@@ -44,6 +74,10 @@ impl AttrId {
     pub(crate) const MAX_TEMP: AttrId = AttrId(10_000_000);
     pub(crate) const MIN_PERM: AttrId = AttrId(10_000_001);
     pub(crate) const MAX_PERM: AttrId = AttrId(0x00ff_ffff_ff00_0000);
+
+    pub(crate) fn bytes(&self) -> [u8; 8] {
+        self.0.to_be_bytes()
+    }
 
     pub(crate) fn from_bytes(b: &[u8]) -> Self {
         AttrId(u64::from_be_bytes([
