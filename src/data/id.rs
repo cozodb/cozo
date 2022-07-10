@@ -1,4 +1,5 @@
 use crate::data::triple::StoreOp;
+use chrono::{DateTime, TimeZone, Utc};
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -28,7 +29,8 @@ impl Validity {
 
 impl Debug for Validity {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "v{}", self.0)
+        let dt = Utc.timestamp(self.0 / 1_000_000, (self.0 % 1_000_000) as u32 * 1000);
+        write!(f, "{}", dt.to_rfc3339())
     }
 }
 
