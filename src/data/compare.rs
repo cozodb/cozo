@@ -1,6 +1,6 @@
 use crate::data::encode::{
-    decode_ae_key, decode_attr_key_by_id, decode_attr_key_by_kw, decode_ea_key,
-    decode_unique_attr_val, decode_vae_key, decode_value_from_key, StorageTag,
+    decode_ae_key, decode_attr_key_by_id, decode_ea_key, decode_unique_attr_val, decode_vae_key,
+    decode_value_from_key, StorageTag,
 };
 use std::cmp::Ordering;
 
@@ -42,7 +42,6 @@ fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
         TripleAttrValueEntity => compare_key_triple_ave(a, b),
         TripleValueAttrEntity => compare_key_triple_vae(a, b),
         AttrById => compare_key_attr_by_id(a, b),
-        AttrByKeyword => compare_key_attr_by_kw(a, b),
         Tx => compare_key_tx(a, b),
         UniqueEntity => compare_key_unique_entity(a, b),
         UniqueAttrValue => compare_key_unique_attr_val(a, b),
@@ -115,15 +114,6 @@ fn compare_key_attr_by_id(a: &[u8], b: &[u8]) -> Ordering {
     let (b_a, b_t) = decode_attr_key_by_id(b).unwrap();
 
     return_if_resolved!(a_a.cmp(&b_a));
-    a_t.cmp(&b_t).reverse()
-}
-
-#[inline]
-fn compare_key_attr_by_kw(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_kw, a_t) = decode_attr_key_by_kw(a).unwrap();
-    let (b_kw, b_t) = decode_attr_key_by_kw(b).unwrap();
-
-    return_if_resolved!(a_kw.cmp(&b_kw));
     a_t.cmp(&b_t).reverse()
 }
 

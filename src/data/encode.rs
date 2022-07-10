@@ -19,12 +19,11 @@ pub(crate) enum StorageTag {
     TripleAttrValueEntity = 3,
     TripleValueAttrEntity = 4,
     AttrById = 5,
-    AttrByKeyword = 6,
-    Tx = 7,
-    UniqueEntity = 8,
-    UniqueAttrValue = 9,
-    UniqueAttrById = 10,
-    UniqueAttrByKeyword = 11,
+    Tx = 6,
+    UniqueEntity = 7,
+    UniqueAttrValue = 8,
+    UniqueAttrById = 9,
+    UniqueAttrByKeyword = 10,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -66,7 +65,7 @@ impl EncodedVec<LARGE_VEC_SIZE> {
                     format!("{:?}{}", tx, op)
                 }
             }
-            StorageTag::AttrById | StorageTag::AttrByKeyword => {
+            StorageTag::AttrById => {
                 let op = StoreOp::try_from(data[0]).unwrap();
                 if data.len() <= 1 {
                     op.to_string()
@@ -75,10 +74,12 @@ impl EncodedVec<LARGE_VEC_SIZE> {
                 }
             }
             StorageTag::Tx => format!("{:?}", TxLog::decode(data).unwrap()),
-            StorageTag::UniqueEntity
-            | StorageTag::UniqueAttrValue
-            | StorageTag::UniqueAttrById
-            | StorageTag::UniqueAttrByKeyword => format!("{:?}", TxId::from_bytes(data)),
+            StorageTag::UniqueEntity | StorageTag::UniqueAttrValue => {
+                format!("{:?}", TxId::from_bytes(data))
+            }
+            StorageTag::UniqueAttrById | StorageTag::UniqueAttrByKeyword => {
+                format!("{:?}", TxId::from_bytes(data))
+            }
         }
     }
 }
@@ -116,10 +117,10 @@ impl<const N: usize> Debug for EncodedVec<N> {
                         let (a, t) = decode_attr_key_by_id(self).unwrap();
                         write!(f, " {:?} @{:?}", a, t)
                     }
-                    StorageTag::AttrByKeyword => {
-                        let (a, t) = decode_attr_key_by_kw(self).unwrap();
-                        write!(f, " {:?} @{:?}", a, t)
-                    }
+                    // StorageTag::AttrByKeyword => {
+                    //     let (a, t) = decode_attr_key_by_kw(self).unwrap();
+                    //     write!(f, " {:?} @{:?}", a, t)
+                    // }
                     StorageTag::Tx => {
                         write!(f, " {:?}", TxId::from_bytes(self))
                     }
@@ -144,32 +145,18 @@ impl<const N: usize> Debug for EncodedVec<N> {
 }
 
 impl<const N: usize> EncodedVec<N> {
-    pub(crate) fn encoded_entity_amend_tx(&mut self, tx: TxId) {
-        let tx_bytes = tx.0.to_be_bytes();
+    pub(crate) fn encoded_entity_amend_validity(&mut self, vld: Validity) {
+        let tx_bytes = vld.bytes();
         #[allow(clippy::needless_range_loop)]
         for i in 1..8 {
             self.inner[VEC_SIZE_16 + i] = tx_bytes[i];
         }
     }
-    pub(crate) fn encoded_entity_amend_tx_to_last(&mut self) {
-        self.encoded_entity_amend_tx(TxId::MAX_USER)
+    pub(crate) fn encoded_entity_amend_validity_to_last(&mut self) {
+        self.encoded_entity_amend_validity(Validity::MAX)
     }
-    pub(crate) fn encoded_entity_amend_tx_to_first(&mut self) {
-        self.encoded_entity_amend_tx(TxId::ZERO)
-    }
-
-    pub(crate) fn encoded_attr_amend_tx(&mut self, tx: TxId) {
-        let tx_bytes = tx.0.to_be_bytes();
-        #[allow(clippy::needless_range_loop)]
-        for i in 1..8 {
-            self.inner[VEC_SIZE_8 + i] = tx_bytes[i];
-        }
-    }
-    pub(crate) fn encoded_attr_amend_tx_to_last(&mut self) {
-        self.encoded_attr_amend_tx(TxId::MAX_USER)
-    }
-    pub(crate) fn encoded_attr_amend_tx_to_first(&mut self) {
-        self.encoded_attr_amend_tx(TxId::ZERO)
+    pub(crate) fn encoded_entity_amend_validity_to_first(&mut self) {
+        self.encoded_entity_amend_validity(Validity::MIN)
     }
 }
 
@@ -203,12 +190,11 @@ impl TryFrom<u8> for StorageTag {
             3 => TripleAttrValueEntity,
             4 => TripleValueAttrEntity,
             5 => AttrById,
-            6 => AttrByKeyword,
-            7 => Tx,
-            8 => UniqueEntity,
-            9 => UniqueAttrValue,
-            10 => UniqueAttrById,
-            11 => UniqueAttrByKeyword,
+            6 => Tx,
+            7 => UniqueEntity,
+            8 => UniqueAttrValue,
+            9 => UniqueAttrById,
+            10 => UniqueAttrByKeyword,
             n => return Err(StorageTagError::UnexpectedValue(n)),
         })
     }
@@ -373,9 +359,9 @@ pub(crate) fn decode_vae_key(src: &[u8]) -> Result<(EntityId, AttrId, EntityId, 
 #[inline]
 pub(crate) fn encode_attr_by_id(aid: AttrId, tx: TxId) -> EncodedVec<VEC_SIZE_16> {
     let mut ret = SmallVec::<[u8; VEC_SIZE_16]>::new();
-    ret.extend(aid.0.to_be_bytes());
+    ret.extend(aid.bytes());
     ret[0] = StorageTag::AttrById as u8;
-    ret.extend(tx.0.to_be_bytes());
+    ret.extend(tx.bytes());
     debug_assert_eq!(ret.len(), VEC_SIZE_16);
     ret.into()
 }
@@ -388,40 +374,11 @@ pub(crate) fn decode_attr_key_by_id(src: &[u8]) -> Result<(AttrId, TxId)> {
     Ok((aid, tx))
 }
 
-/// tag: 8 bytes (with prefix)
-/// tx: 8 bytes
-/// attr as kw: variable (segmented by \0)
-#[inline]
-pub(crate) fn encode_attr_by_kw(attr_name: &Keyword, tx: TxId) -> EncodedVec<LARGE_VEC_SIZE> {
-    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
-    ret.push(StorageTag::AttrByKeyword as u8);
-    let ns_bytes = attr_name.ns.as_bytes();
-    ret.push(ns_bytes.get(0).cloned().unwrap_or(0));
-    ret.push(ns_bytes.get(1).cloned().unwrap_or(0));
-    ret.push(ns_bytes.get(2).cloned().unwrap_or(0));
-    ret.push(ns_bytes.get(3).cloned().unwrap_or(0));
-    ret.push(ns_bytes.get(4).cloned().unwrap_or(0));
-    ret.push(ns_bytes.get(5).cloned().unwrap_or(0));
-    ret.push(ns_bytes.get(6).cloned().unwrap_or(0));
-    ret.extend(tx.0.to_be_bytes());
-    ret.extend_from_slice(ns_bytes);
-    ret.push(b'/');
-    ret.extend_from_slice(attr_name.ident.as_bytes());
-    ret.into()
-}
-
-#[inline]
-pub(crate) fn decode_attr_key_by_kw(src: &[u8]) -> Result<(Keyword, TxId)> {
-    let tx = TxId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
-    let kw = Keyword::try_from(&src[VEC_SIZE_16..])?;
-    Ok((kw, tx))
-}
-
 /// tx: 8 bytes (incl. tag)
 #[inline]
 pub(crate) fn encode_tx(tx: TxId) -> EncodedVec<VEC_SIZE_8> {
     let mut ret = SmallVec::<[u8; VEC_SIZE_8]>::new();
-    ret.extend(tx.0.to_be_bytes());
+    ret.extend(tx.bytes());
     ret[0] = StorageTag::Tx as u8;
     ret.into()
 }
@@ -429,7 +386,7 @@ pub(crate) fn encode_tx(tx: TxId) -> EncodedVec<VEC_SIZE_8> {
 #[inline]
 pub(crate) fn encode_unique_entity(eid: EntityId) -> EncodedVec<VEC_SIZE_8> {
     let mut ret = SmallVec::<[u8; VEC_SIZE_8]>::new();
-    ret.extend(eid.0.to_be_bytes());
+    ret.extend(eid.bytes());
     ret[0] = StorageTag::UniqueEntity as u8;
     ret.into()
 }
@@ -437,7 +394,7 @@ pub(crate) fn encode_unique_entity(eid: EntityId) -> EncodedVec<VEC_SIZE_8> {
 #[inline]
 pub(crate) fn encode_unique_attr_val(aid: AttrId, val: &Value) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
-    ret.extend(aid.0.to_be_bytes());
+    ret.extend(aid.bytes());
     ret[0] = StorageTag::UniqueAttrValue as u8;
     val.serialize(&mut Serializer::new(&mut ret)).unwrap();
     ret.into()
@@ -453,7 +410,7 @@ pub(crate) fn decode_unique_attr_val(src: &[u8]) -> Result<(AttrId, Value)> {
 #[inline]
 pub(crate) fn encode_unique_attr_by_id(aid: AttrId) -> EncodedVec<VEC_SIZE_8> {
     let mut ret = SmallVec::<[u8; VEC_SIZE_8]>::new();
-    ret.extend(aid.0.to_be_bytes());
+    ret.extend(aid.bytes());
     ret[0] = StorageTag::UniqueAttrById as u8;
     debug_assert_eq!(ret.len(), VEC_SIZE_8);
     ret.into()

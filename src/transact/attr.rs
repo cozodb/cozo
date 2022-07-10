@@ -1,7 +1,6 @@
 use crate::data::attr::Attribute;
 use crate::data::encode::{
-    decode_attr_key_by_id, decode_attr_key_by_kw, encode_attr_by_id, encode_attr_by_kw,
-    encode_unique_attr_by_id, encode_unique_attr_by_kw, StorageTag,
+    encode_attr_by_id, encode_unique_attr_by_id, encode_unique_attr_by_kw, VEC_SIZE_8,
 };
 use crate::data::id::{AttrId, TxId};
 use crate::data::keyword::Keyword;
@@ -19,22 +18,20 @@ impl SessionTx {
         }
 
         let anchor = encode_attr_by_id(aid, TxId::MAX_USER);
-        let upper = encode_attr_by_id(aid, TxId::ZERO);
-        let it = self.bounded_scan_first(&anchor, &upper);
-        Ok(match it.pair()? {
+        Ok(match self.tx.get(&anchor, false)? {
             None => {
                 self.attr_by_id_cache.insert(aid, None);
                 None
             }
-            Some((k, v)) => {
-                debug_assert_eq!(k[0], StorageTag::AttrById as u8);
-                let (_, _) = decode_attr_key_by_id(k)?;
-                let op = StoreOp::try_from(v[0])?;
+            Some(v_slice) => {
+                let data = v_slice.as_ref();
+                let op = StoreOp::try_from(data[0])?;
+                let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
-                    self.attr_by_id_cache.insert(aid, None);
+                    self.attr_by_id_cache.insert(attr.id, None);
+                    self.attr_by_kw_cache.insert(attr.keyword.clone(), None);
                     None
                 } else {
-                    let attr = Attribute::decode(&v[1..])?;
                     self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
                         .insert(attr.keyword.clone(), Some(attr.clone()));
@@ -49,22 +46,21 @@ impl SessionTx {
             return Ok(res.clone());
         }
 
-        let anchor = encode_attr_by_kw(kw, TxId::MAX_USER);
-        let upper = encode_attr_by_kw(kw, TxId::ZERO);
-        let it = self.bounded_scan_first(&anchor, &upper);
-        Ok(match it.pair()? {
+        let anchor = encode_unique_attr_by_kw(kw);
+        Ok(match self.tx.get(&anchor, false)? {
             None => {
                 self.attr_by_kw_cache.insert(kw.clone(), None);
                 None
             }
-            Some((k, v)) => {
-                let (_, _) = decode_attr_key_by_kw(k)?;
-                let op = StoreOp::try_from(v[0])?;
+            Some(v_slice) => {
+                let data = v_slice.as_ref();
+                let op = StoreOp::try_from(data[0])?;
+                let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
+                    self.attr_by_id_cache.insert(attr.id, None);
                     self.attr_by_kw_cache.insert(kw.clone(), None);
                     None
                 } else {
-                    let attr = Attribute::decode(&v[1..])?;
                     self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
                         .insert(attr.keyword.clone(), Some(attr.clone()));
@@ -75,7 +71,7 @@ impl SessionTx {
     }
 
     pub(crate) fn all_attrs(&mut self) -> impl Iterator<Item = Result<Attribute>> {
-        AttrIter::new(self.tx.iterator(), TxId::MAX_USER)
+        AttrIter::new(self.tx.iterator())
     }
 
     /// conflict if new attribute has same name as existing one
@@ -99,7 +95,7 @@ impl SessionTx {
             .into());
         }
         attr.id = AttrId(self.last_attr_id.fetch_add(1, Ordering::AcqRel) + 1);
-        self.put_attr(&attr)
+        self.put_attr(&attr, StoreOp::Assert)
     }
 
     /// conflict if asserted attribute has name change, and the name change conflicts with an existing attr,
@@ -125,23 +121,22 @@ impl SessionTx {
             {
                 return Err(TransactError::ChangingImmutableProperty(attr.id).into());
             }
-            let kw_encoded = encode_attr_by_kw(&existing.keyword, tx_id);
-            self.tx.put(&kw_encoded, &[StoreOp::Retract as u8])?;
             let kw_signal = encode_unique_attr_by_kw(&existing.keyword);
             self.tx
                 .put(&kw_signal, &tx_id.bytes_with_op(StoreOp::Retract))?;
         }
-        self.put_attr(&attr)
+        self.put_attr(&attr, StoreOp::Assert)
     }
 
-    fn put_attr(&mut self, attr: &Attribute) -> Result<()> {
-        let attr_data = attr.encode_with_op(StoreOp::Assert);
+    fn put_attr(&mut self, attr: &Attribute, op: StoreOp) -> Result<()> {
         let tx_id = self.get_write_tx_id()?;
+        let attr_data = attr.encode_with_op_and_tx(op, tx_id);
         let id_encoded = encode_attr_by_id(attr.id, tx_id);
         self.tx.put(&id_encoded, &attr_data)?;
-        let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id);
-        self.tx.put(&kw_encoded, &attr_data)?;
-        self.put_attr_guard(attr, StoreOp::Assert)?;
+        let id_signal = encode_unique_attr_by_id(attr.id);
+        self.tx.put(&id_signal, &attr_data)?;
+        let kw_signal = encode_unique_attr_by_kw(&attr.keyword);
+        self.tx.put(&kw_signal, &attr_data)?;
         Ok(())
     }
 
@@ -154,68 +149,42 @@ impl SessionTx {
             )
             .into()),
             Some(attr) => {
-                let tx_id = self.get_write_tx_id()?;
-                let id_encoded = encode_attr_by_id(aid, tx_id);
-                self.tx.put(&id_encoded, &[])?;
-                let kw_encoded = encode_attr_by_kw(&attr.keyword, tx_id);
-                self.tx.put(&kw_encoded, &[StoreOp::Retract as u8])?;
-                self.put_attr_guard(&attr, StoreOp::Retract)?;
+                self.put_attr(&attr, StoreOp::Retract)?;
                 Ok(())
             }
         }
-    }
-
-    fn put_attr_guard(&mut self, attr: &Attribute, op: StoreOp) -> Result<()> {
-        let tx_id = self.get_write_tx_id()?;
-        let tx_id_bytes = tx_id.bytes_with_op(op);
-        let id_signal = encode_unique_attr_by_id(attr.id);
-        self.tx.put(&id_signal, &tx_id_bytes)?;
-        let kw_signal = encode_unique_attr_by_kw(&attr.keyword);
-        self.tx.put(&kw_signal, &tx_id_bytes)?;
-        Ok(())
     }
 }
 
 struct AttrIter {
     it: DbIter,
-    tx_bound: TxId,
-    last_found: Option<AttrId>,
+    started: bool,
 }
 
 impl AttrIter {
-    fn new(builder: IterBuilder, tx_bound: TxId) -> Self {
-        let upper_bound = encode_attr_by_id(AttrId::MAX_PERM, TxId::ZERO);
+    fn new(builder: IterBuilder) -> Self {
+        let upper_bound = encode_unique_attr_by_id(AttrId::MAX_PERM);
         let it = builder.upper_bound(&upper_bound).start();
-        Self {
-            it,
-            tx_bound,
-            last_found: None,
-        }
+        Self { it, started: false }
     }
 
     fn next_inner(&mut self) -> Result<Option<Attribute>> {
+        if !self.started {
+            self.it.seek_to_start();
+            self.started = true;
+        } else {
+            self.it.next();
+        }
         loop {
-            let id_to_seek = match self.last_found {
-                None => AttrId::MIN_PERM,
-                Some(id) => AttrId(id.0 + 1),
-            };
-            let encoded = encode_attr_by_id(id_to_seek, self.tx_bound);
-            self.it.seek(&encoded);
-            match self.it.pair()? {
+            match self.it.val()? {
                 None => return Ok(None),
-                Some((k, v)) => {
-                    debug_assert_eq!(k[0], StorageTag::AttrById as u8);
-                    let (found_aid, found_tid) = decode_attr_key_by_id(k)?;
+                Some(v) => {
                     let found_op = StoreOp::try_from(v[0])?;
-                    if found_tid > self.tx_bound {
-                        self.last_found = Some(AttrId(found_aid.0 - 1));
-                        continue;
-                    }
-                    self.last_found = Some(AttrId(found_aid.0));
                     if found_op.is_retract() {
+                        self.it.next();
                         continue;
                     }
-                    return Ok(Some(Attribute::decode(&v[1..])?));
+                    return Ok(Some(Attribute::decode(&v[VEC_SIZE_8..])?));
                 }
             }
         }
