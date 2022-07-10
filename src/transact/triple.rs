@@ -79,6 +79,7 @@ impl SessionTx {
             };
             let ave_encoded = encode_ave_key(attr.id, v, e_in_key, tx_id_in_key);
             // checking of unique constraints
+            // TODO include future-pointing checking
             if attr.indexing.is_unique_index() {
                 let starting = if attr.with_history {
                     ave_encoded.clone()
