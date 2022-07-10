@@ -80,31 +80,45 @@ impl SessionTx {
             };
             let ave_encoded = encode_ave_key(attr.id, v, e_in_key, vld_in_key);
             // checking of unique constraints
-            // TODO include future-pointing checking
-            // How: 1. get valid period
-            // 2. scan the index within this period
             if attr.indexing.is_unique_index() {
-                let starting = if attr.with_history {
+                let current_ave_encoded = if attr.with_history {
                     ave_encoded.clone()
                 } else {
-                    encode_ave_key(attr.id, v, e_in_key, vld)
+                    encode_ave_key(attr.id, v, e_in_key, Validity::MIN)
                 };
-                let ave_encoded_bound = encode_ave_key(attr.id, v, e_in_key, Validity::MIN);
-                if let Some((k_slice, v_slice)) = self
-                    .bounded_scan_first(&starting, &ave_encoded_bound)
-                    .pair()?
-                {
-                    let (_, _, _) = decode_ae_key(k_slice)?;
-                    let found_op = StoreOp::try_from(v_slice[0])?;
-                    if found_op.is_assert() {
-                        let existing_eid = EntityId::from_bytes(&v_slice[1..]);
-                        if existing_eid != eid {
+                // back scan
+                if attr.with_history {
+                    let ave_encoded_upper_bound =
+                        encode_ave_key(attr.id, v, e_in_key, Validity::MIN);
+                    if let Some((k_slice, v_slice)) = self
+                        .bounded_scan_first(&current_ave_encoded, &ave_encoded_upper_bound)
+                        .pair()?
+                    {
+                        let (_found_aid, found_eid, _found_vld) = decode_ae_key(k_slice)?;
+                        let found_op = StoreOp::try_from(v_slice[0])?;
+                        if found_eid != eid && found_op.is_assert() {
                             return Err(TripleError::UniqueConstraintViolated(
                                 attr.keyword.clone(),
                                 format!("{:?}", v),
                             )
                             .into());
                         }
+                    }
+                }
+
+                let ave_encoded_lower_bound = encode_ave_key(attr.id, v, e_in_key, Validity::MAX);
+                if let Some((k_slice, v_slice)) = self
+                    .bounded_scan_last(&ave_encoded_lower_bound, &current_ave_encoded)
+                    .pair()?
+                {
+                    let (_found_aid, found_eid, _found_vld) = decode_ae_key(k_slice)?;
+                    let found_op = StoreOp::try_from(v_slice[0])?;
+                    if found_eid != eid && found_op.is_assert() {
+                        return Err(TripleError::UniqueConstraintViolated(
+                            attr.keyword.clone(),
+                            format!("{:?}", v),
+                        )
+                        .into());
                     }
                 }
             }
@@ -455,8 +469,6 @@ impl SessionTx {
         TripleValueRefAttrBeforeIter::new(self.tx.iterator(), lower, upper, before)
     }
 }
-
-// FIXME iterators should iterate on current validity
 
 enum LatestTripleExistence {
     Asserted,
