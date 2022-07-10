@@ -65,19 +65,16 @@ impl EncodedVec<LARGE_VEC_SIZE> {
                     format!("{:?}{}", tx, op)
                 }
             }
-            StorageTag::AttrById => {
+            StorageTag::AttrById | StorageTag::UniqueAttrById | StorageTag::UniqueAttrByKeyword => {
                 let op = StoreOp::try_from(data[0]).unwrap();
                 if data.len() <= 1 {
                     op.to_string()
                 } else {
-                    format!("{}{:?}", op, Attribute::decode(&data[1..]).unwrap())
+                    format!("{}{:?}", op, Attribute::decode(&data[VEC_SIZE_8..]).unwrap())
                 }
             }
             StorageTag::Tx => format!("{:?}", TxLog::decode(data).unwrap()),
             StorageTag::UniqueEntity | StorageTag::UniqueAttrValue => {
-                format!("{:?}", TxId::from_bytes(data))
-            }
-            StorageTag::UniqueAttrById | StorageTag::UniqueAttrByKeyword => {
                 format!("{:?}", TxId::from_bytes(data))
             }
         }

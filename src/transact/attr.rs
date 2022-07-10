@@ -17,7 +17,7 @@ impl SessionTx {
             return Ok(res.clone());
         }
 
-        let anchor = encode_attr_by_id(aid, TxId::MAX_USER);
+        let anchor = encode_unique_attr_by_id(aid);
         Ok(match self.tx.get(&anchor, false)? {
             None => {
                 self.attr_by_id_cache.insert(aid, None);

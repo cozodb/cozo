@@ -170,5 +170,6 @@ impl Tx {
         IterBuilder {
             inner: self.inner.pin_mut().iterator(),
         }
+        .auto_prefix_mode(true)
     }
 }

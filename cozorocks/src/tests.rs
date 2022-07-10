@@ -44,7 +44,7 @@ fn creation() {
         );
         assert!(tx.get("bye".as_bytes(), false).unwrap().is_none());
 
-        let mut it = tx.iterator().total_order_seek(true).start();
+        let mut it = tx.iterator().start();
         it.seek_to_start();
         while let Some((k, v)) = it.pair().unwrap() {
             let mut res = String::from_utf8_lossy(k);

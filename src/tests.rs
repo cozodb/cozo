@@ -1,6 +1,6 @@
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::encode::EncodedVec;
-use crate::data::id::{AttrId, EntityId};
+use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::value::Value;
 use crate::Db;
@@ -21,8 +21,9 @@ fn test_send_sync<T: Send + Sync>(_: &T) {}
 fn creation() {
     let db = create_db("_test_db");
     test_send_sync(&db);
+    let current_validity = Validity::current();
     let session = db.new_session().unwrap();
-    let mut tx = session.transact(None).unwrap();
+    let mut tx = session.transact().unwrap();
     assert_eq!(
         0,
         tx.all_attrs()
@@ -48,7 +49,7 @@ fn creation() {
         .attr_by_kw(&Keyword::try_from("hello/world").unwrap())
         .unwrap()
         .unwrap();
-    tx.new_triple(EntityId(1), &attr, &Value::Int(98765))
+    tx.new_triple(EntityId(1), &attr, &Value::Int(98765), current_validity)
         .unwrap();
     tx.commit_tx("haah", false).unwrap();
 
@@ -64,7 +65,7 @@ fn creation() {
     .unwrap();
     tx.commit_tx("oops", false).unwrap();
 
-    let mut tx = session.transact(None).unwrap();
+    let mut tx = session.transact().unwrap();
     let world_found = tx
         .attr_by_kw(&Keyword::try_from("hello/world").unwrap())
         .unwrap();
@@ -82,7 +83,6 @@ fn creation() {
     }
 
     dbg!(&session);
-    dbg!(tx.r_tx_id);
 
     let mut it = session.total_iter();
     while let Some((k, v)) = it.pair().unwrap() {
