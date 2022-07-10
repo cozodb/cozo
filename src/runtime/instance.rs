@@ -1,7 +1,6 @@
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
-use crate::data::encode::encode_tx;
 use crate::data::id::TxId;
-use crate::runtime::transact::{SessionTx, TxLog};
+use crate::runtime::transact::SessionTx;
 use anyhow::Result;
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 use std::fmt::{Debug, Formatter};
@@ -62,19 +61,18 @@ impl Db {
     }
 
     fn load_last_ids(&self) -> Result<()> {
-        let mut tx = self.transact(None)?;
-        self.last_tx_id.store(tx.r_tx_id.0, Ordering::Release);
+        let mut tx = self.transact()?;
+        self.last_tx_id
+            .store(tx.load_last_tx_id()?.0, Ordering::Release);
         self.last_attr_id
             .store(tx.load_last_attr_id()?.0, Ordering::Release);
         self.last_ent_id
             .store(tx.load_last_entity_id()?.0, Ordering::Release);
         Ok(())
     }
-    pub(crate) fn transact(&self, at: Option<TxId>) -> Result<SessionTx> {
-        let tx_id = at.unwrap_or(TxId::ZERO);
-        let mut ret = SessionTx {
+    pub(crate) fn transact(&self) -> Result<SessionTx> {
+        let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
-            r_tx_id: tx_id,
             w_tx_id: None,
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
@@ -85,10 +83,6 @@ impl Db {
             eid_by_attr_val_cache: Default::default(),
             touched_eids: Default::default(),
         };
-        if at.is_none() {
-            let tid = ret.load_last_tx_id()?;
-            ret.r_tx_id = tid;
-        }
         Ok(ret)
     }
     pub(crate) fn transact_write(&self) -> Result<SessionTx> {
@@ -97,7 +91,6 @@ impl Db {
 
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
-            r_tx_id: cur_tx_id,
             w_tx_id: Some(cur_tx_id),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
@@ -114,45 +107,5 @@ impl Db {
         let mut it = self.db.transact().start().iterator().start();
         it.seek_to_start();
         it
-    }
-    pub(crate) fn find_tx_before_timestamp_millis(&self, ts: i64) -> Result<Option<TxLog>> {
-        // binary search
-        let lower_bound = encode_tx(TxId::MAX_SYS);
-        let upper_bound = encode_tx(TxId::MAX_USER);
-
-        // both are inclusive bounds
-        let mut lower_found = TxId::MIN_USER;
-        let mut upper_found = TxId::MAX_USER;
-        let mut it = self
-            .transact_write()?
-            .tx
-            .iterator()
-            .lower_bound(&lower_bound)
-            .upper_bound(&upper_bound)
-            .start();
-
-        loop {
-            let needle = TxId((lower_found.0 + upper_found.0) / 2);
-            let current = encode_tx(needle);
-            it.seek(&current);
-            match it.val()? {
-                Some(v_slice) => {
-                    let log = TxLog::decode(v_slice)?;
-                    let found_ts = log.timestamp;
-                    if found_ts == ts || needle == upper_found || needle == lower_found {
-                        return Ok(Some(log));
-                    }
-                    if found_ts < ts {
-                        lower_found = log.id;
-                        continue;
-                    }
-                    if found_ts > ts {
-                        upper_found = TxId(log.id.0 - 1);
-                        continue;
-                    }
-                }
-                None => return Ok(None),
-            }
-        }
     }
 }

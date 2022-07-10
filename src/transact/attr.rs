@@ -18,7 +18,7 @@ impl SessionTx {
             return Ok(res.clone());
         }
 
-        let anchor = encode_attr_by_id(aid, self.r_tx_id);
+        let anchor = encode_attr_by_id(aid, TxId::MAX_USER);
         let upper = encode_attr_by_id(aid, TxId::ZERO);
         let it = self.bounded_scan_first(&anchor, &upper);
         Ok(match it.pair()? {
@@ -49,7 +49,7 @@ impl SessionTx {
             return Ok(res.clone());
         }
 
-        let anchor = encode_attr_by_kw(kw, self.r_tx_id);
+        let anchor = encode_attr_by_kw(kw, TxId::MAX_USER);
         let upper = encode_attr_by_kw(kw, TxId::ZERO);
         let it = self.bounded_scan_first(&anchor, &upper);
         Ok(match it.pair()? {
@@ -75,7 +75,7 @@ impl SessionTx {
     }
 
     pub(crate) fn all_attrs(&mut self) -> impl Iterator<Item = Result<Attribute>> {
-        AttrIter::new(self.tx.iterator(), self.r_tx_id)
+        AttrIter::new(self.tx.iterator(), TxId::MAX_USER)
     }
 
     /// conflict if new attribute has same name as existing one

@@ -1,6 +1,6 @@
 use crate::data::attr::Attribute;
 use crate::data::encode::{encode_tx, encode_unique_attr_by_id, encode_unique_entity, EncodedVec};
-use crate::data::id::{AttrId, EntityId, TxId};
+use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::value::StaticValue;
 use anyhow::Result;
@@ -12,11 +12,9 @@ use smallvec::SmallVec;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) struct SessionTx {
     pub(crate) tx: Tx,
-    pub(crate) r_tx_id: TxId,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
     pub(crate) last_ent_id: Arc<AtomicU64>,
@@ -36,15 +34,12 @@ pub(crate) struct TxLog {
     #[serde(rename = "c")]
     pub(crate) comment: String,
     #[serde(rename = "t")]
-    pub(crate) timestamp: i64,
+    pub(crate) timestamp: Validity,
 }
 
 impl TxLog {
     pub(crate) fn new(id: TxId, comment: &str) -> Self {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as i64;
+        let timestamp = Validity::current();
         Self {
             id,
             comment: comment.to_string(),
@@ -111,7 +106,6 @@ impl SessionTx {
         if refresh {
             let new_tx_id = TxId(self.last_tx_id.fetch_add(1, Ordering::AcqRel) + 1);
             self.tx.set_snapshot();
-            self.r_tx_id = new_tx_id;
             self.w_tx_id = Some(new_tx_id);
             self.clear_cache();
         }

@@ -1,5 +1,5 @@
 use crate::data::encode::{decode_value, EncodedVec};
-use crate::data::id::EntityId;
+use crate::data::id::{EntityId, TxId};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use anyhow::Result;
@@ -78,9 +78,14 @@ pub(crate) type StaticValue = Value<'static>;
 pub(crate) const INLINE_VAL_SIZE_LIMIT: usize = 60;
 
 impl<'a> Value<'a> {
-    pub(crate) fn encode_with_op(&self, op: StoreOp) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
+    pub(crate) fn encode_with_op_and_tx(
+        &self,
+        op: StoreOp,
+        txid: TxId,
+    ) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
         let mut ret = SmallVec::<[u8; INLINE_VAL_SIZE_LIMIT]>::new();
-        ret.push(op as u8);
+        ret.extend(txid.bytes());
+        ret[0] = op as u8;
         self.serialize(&mut Serializer::new(&mut ret)).unwrap();
         ret.into()
     }
