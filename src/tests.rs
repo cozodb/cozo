@@ -51,6 +51,8 @@ fn creation() {
         .unwrap();
     tx.new_triple(EntityId(1), &attr, &Value::Int(98765), current_validity)
         .unwrap();
+    tx.new_triple(EntityId(2), &attr, &Value::Int(1111111), current_validity)
+        .unwrap();
     tx.commit_tx("haah", false).unwrap();
 
     let mut tx = session.transact_write().unwrap();

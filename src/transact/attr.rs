@@ -2,7 +2,7 @@ use crate::data::attr::Attribute;
 use crate::data::encode::{
     encode_attr_by_id, encode_unique_attr_by_id, encode_unique_attr_by_kw, VEC_SIZE_8,
 };
-use crate::data::id::{AttrId, TxId};
+use crate::data::id::AttrId;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::runtime::transact::{SessionTx, TransactError};
@@ -55,6 +55,7 @@ impl SessionTx {
             Some(v_slice) => {
                 let data = v_slice.as_ref();
                 let op = StoreOp::try_from(data[0])?;
+                debug_assert!(data.len() > 8);
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
                     self.attr_by_id_cache.insert(attr.id, None);
@@ -122,8 +123,8 @@ impl SessionTx {
                 return Err(TransactError::ChangingImmutableProperty(attr.id).into());
             }
             let kw_signal = encode_unique_attr_by_kw(&existing.keyword);
-            self.tx
-                .put(&kw_signal, &tx_id.bytes_with_op(StoreOp::Retract))?;
+            let attr_data = existing.encode_with_op_and_tx(StoreOp::Retract, tx_id);
+            self.tx.put(&kw_signal, &attr_data)?;
         }
         self.put_attr(&attr, StoreOp::Assert)
     }
@@ -170,7 +171,8 @@ impl AttrIter {
 
     fn next_inner(&mut self) -> Result<Option<Attribute>> {
         if !self.started {
-            self.it.seek_to_start();
+            let lower_bound = encode_unique_attr_by_id(AttrId::MIN_PERM);
+            self.it.seek(&lower_bound);
             self.started = true;
         } else {
             self.it.next();
