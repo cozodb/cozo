@@ -1,5 +1,4 @@
 use serde_derive::{Deserialize, Serialize};
-use serde_json::Value;
 use smartstring::{LazyCompact, SmartString};
 use std::fmt::{Debug, Display, Formatter};
 use std::str::Utf8Error;
