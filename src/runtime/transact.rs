@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-pub(crate) struct SessionTx {
+pub struct SessionTx {
     pub(crate) tx: Tx,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
@@ -96,7 +96,7 @@ impl SessionTx {
         })
     }
 
-    pub(crate) fn commit_tx(&mut self, comment: &str, refresh: bool) -> Result<()> {
+    pub fn commit_tx(&mut self, comment: &str, refresh: bool) -> Result<()> {
         let tx_id = self.get_write_tx_id()?;
         let encoded = encode_tx(tx_id);
 
@@ -143,6 +143,8 @@ pub enum TransactError {
     AttrConsistency(AttrId, String),
     #[error("attribute not found {0:?}")]
     AttrNotFound(AttrId),
+    #[error("attribute not found {0}")]
+    AttrNotFoundKw(Keyword),
     #[error("attempt to write in read-only transaction")]
     WriteInReadOnly,
     #[error("attempt to change immutable property for attr {0:?}")]

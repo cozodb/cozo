@@ -1,6 +1,6 @@
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, TxId};
-use crate::data::keyword::Keyword;
+use crate::data::keyword::{Keyword, KeywordError};
 use crate::data::value::Value;
 use serde_json::json;
 pub(crate) use serde_json::Value as JsonValue;
@@ -9,7 +9,7 @@ pub(crate) use serde_json::Value as JsonValue;
 pub enum JsonError {
     #[error("cannot convert JSON value {0} to {1}")]
     Conversion(JsonValue, String),
-    #[error("missing field {1} in value {0}")]
+    #[error("missing field '{1}' in value {0}")]
     MissingField(JsonValue, String),
 }
 
@@ -82,6 +82,9 @@ impl TryFrom<&'_ JsonValue> for Attribute {
             .get("keyword")
             .ok_or_else(|| JsonError::MissingField(value.clone(), "keyword".to_string()))?;
         let keyword = Keyword::try_from(keyword)?;
+        if keyword.is_reserved() {
+            return Err(KeywordError::ReservedKeyword(keyword.clone()).into());
+        }
         let cardinality = map
             .get("cardinality")
             .ok_or_else(|| JsonError::MissingField(value.clone(), "cardinality".to_string()))?
@@ -97,14 +100,14 @@ impl TryFrom<&'_ JsonValue> for Attribute {
             .ok_or_else(|| JsonError::Conversion(value.clone(), "AttributeTyping".to_string()))?;
         let val_type = AttributeTyping::try_from(val_type)?;
 
-        let indexing = match map.get("type") {
+        let indexing = match map.get("index") {
             None => AttributeIndex::None,
             Some(v) => AttributeIndex::try_from(v.as_str().ok_or_else(|| {
                 JsonError::Conversion(value.clone(), "AttributeIndexing".to_string())
             })?)?,
         };
 
-        let with_history = match map.get("with_history") {
+        let with_history = match map.get("history") {
             None => true,
             Some(v) => v.as_bool().ok_or_else(|| {
                 JsonError::Conversion(value.clone(), "AttributeWithHistory".to_string())
@@ -130,7 +133,7 @@ impl From<Attribute> for JsonValue {
             "cardinality": attr.cardinality.to_string(),
             "type": attr.val_type.to_string(),
             "index": attr.indexing.to_string(),
-            "with_history": attr.with_history
+            "history": attr.with_history
         })
     }
 }

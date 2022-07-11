@@ -7,11 +7,33 @@ use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::runtime::transact::{SessionTx, TransactError};
 use crate::utils::swap_option_result;
+use crate::AttrTxItem;
 use anyhow::Result;
 use cozorocks::{DbIter, IterBuilder};
 use std::sync::atomic::Ordering;
 
 impl SessionTx {
+    pub fn tx_attrs(&mut self, payloads: Vec<AttrTxItem>) -> Result<()> {
+        for item in payloads {
+            let id = item.attr.id;
+            let kw = item.attr.keyword.clone();
+            if item.op.is_retract() {
+                if item.attr.id.is_perm() {
+                    self.retract_attr(item.attr.id)?;
+                } else {
+                    self.retract_attr_by_kw(&item.attr.keyword)?;
+                }
+            } else if item.attr.id.is_perm() {
+                self.amend_attr(item.attr)?;
+            } else {
+                self.new_attr(item.attr)?;
+            }
+            self.attr_by_id_cache.remove(&id);
+            self.attr_by_kw_cache.remove(&kw);
+        }
+        Ok(())
+    }
+
     pub(crate) fn attr_by_id(&mut self, aid: AttrId) -> Result<Option<Attribute>> {
         if let Some(res) = self.attr_by_id_cache.get(&aid) {
             return Ok(res.clone());
@@ -154,6 +176,13 @@ impl SessionTx {
                 Ok(())
             }
         }
+    }
+
+    pub(crate) fn retract_attr_by_kw(&mut self, kw: &Keyword) -> Result<()> {
+        let attr = self
+            .attr_by_kw(kw)?
+            .ok_or_else(|| TransactError::AttrNotFoundKw(kw.clone()))?;
+        self.retract_attr(attr.id)
     }
 }
 

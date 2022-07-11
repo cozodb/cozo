@@ -70,7 +70,7 @@ impl Db {
             .store(tx.load_last_entity_id()?.0, Ordering::Release);
         Ok(())
     }
-    pub(crate) fn transact(&self) -> Result<SessionTx> {
+    pub fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
             w_tx_id: None,
@@ -85,7 +85,7 @@ impl Db {
         };
         Ok(ret)
     }
-    pub(crate) fn transact_write(&self) -> Result<SessionTx> {
+    pub fn transact_write(&self) -> Result<SessionTx> {
         let last_tx_id = self.last_tx_id.fetch_add(1, Ordering::AcqRel);
         let cur_tx_id = TxId(last_tx_id + 1);
 

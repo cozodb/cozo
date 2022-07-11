@@ -14,3 +14,4 @@ pub(crate) mod transact;
 pub(crate) mod utils;
 
 pub use runtime::instance::Db;
+pub use data::tx_attr::AttrTxItem;
