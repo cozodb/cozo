@@ -1,3 +1,4 @@
+use actix_cors::Cors;
 use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use clap::Parser;
 use cozo::{AttrTxItem, Db};
@@ -107,8 +108,11 @@ async fn main() -> std::io::Result<()> {
     eprintln!("Serving database at {}:{}", addr.0, addr.1);
 
     HttpServer::new(move || {
+        let cors = Cors::permissive();
+
         App::new()
             .app_data(app_state.clone())
+            .wrap(cors)
             .service(query)
             .service(transact)
             .service(transact_attr)

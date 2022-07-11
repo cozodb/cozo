@@ -27,6 +27,44 @@ impl Validity {
     }
 }
 
+impl From<i64> for Validity {
+    fn from(i: i64) -> Self {
+        Validity(i)
+    }
+}
+
+impl TryFrom<&str> for Validity {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let dt =
+            DateTime::parse_from_rfc2822(value).or_else(|_| DateTime::parse_from_rfc3339(value))?;
+        let sysdt: SystemTime = dt.into();
+        let timestamp = sysdt.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64;
+        Ok(Self(timestamp))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum IdError {
+    #[error("Cannot convert to validity: {0}")]
+    JsonValidityError(serde_json::Value),
+}
+
+impl TryFrom<&serde_json::Value> for Validity {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &serde_json::Value) -> Result<Self, Self::Error> {
+        if let Some(v) = value.as_i64() {
+            return Ok(v.into());
+        }
+        if let Some(s) = value.as_str() {
+            return s.try_into();
+        }
+        Err(IdError::JsonValidityError(value.clone()).into())
+    }
+}
+
 impl Debug for Validity {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let dt = Utc.timestamp(self.0 / 1_000_000, (self.0 % 1_000_000) as u32 * 1000);

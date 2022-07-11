@@ -1,7 +1,6 @@
-use lazy_static::lazy_static;
 use serde_derive::{Deserialize, Serialize};
+use serde_json::Value;
 use smartstring::{LazyCompact, SmartString};
-use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::str::Utf8Error;
 
@@ -15,6 +14,9 @@ pub enum KeywordError {
 
     #[error(transparent)]
     Utf8(#[from] Utf8Error),
+
+    #[error("unexpected json {0}")]
+    UnexpectedJson(serde_json::Value),
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Deserialize, Serialize)]
@@ -45,6 +47,7 @@ impl TryFrom<&str> for Keyword {
     type Error = KeywordError;
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let make_err = || KeywordError::InvalidKeyword(value.to_string());
+        let value = value.strip_prefix(':').unwrap_or(value);
         let mut kw_iter = value.split('/');
         let ns = kw_iter.next().ok_or_else(make_err)?;
         let ident = match kw_iter.next() {
