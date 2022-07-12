@@ -23,7 +23,7 @@ pub struct Quintuple<'a> {
 
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
-enum TxAction {
+pub enum TxAction {
     Put,
     RetractEAV,
     RetractEA,
@@ -175,11 +175,9 @@ impl SessionTx {
         &mut self,
         eid: EntityId,
         attr: &Attribute,
-        val: &'a serde_json::Value,
+        value: Value<'a>,
         action: TxAction,
         since: Validity,
-        cur_temp_eid: &mut u64,
-        str2tempid: &mut BTreeMap<String, EntityId>,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
         if !eid.is_perm() && action != TxAction::Put {
@@ -189,50 +187,18 @@ impl SessionTx {
             )
             .into());
         }
-        if val.is_object() && attr.val_type.is_ref_type() {
-            let ref_id = self.parse_tx_submap(
-                attr.val_type == AttributeTyping::Component,
-                val.as_object().unwrap(),
-                action,
-                since,
-                cur_temp_eid,
-                str2tempid,
-                collected,
-            )?;
-            collected.push(Quintuple {
-                triple: Triple {
-                    id: eid,
-                    attr: attr.id,
-                    value: Value::EnId(ref_id),
-                },
-                action,
-                validity: since,
-            });
-        } else {
-            collected.push(Quintuple {
-                triple: Triple {
-                    id: eid,
-                    attr: attr.id,
-                    value: attr.val_type.coerce_value(val.into())?,
-                },
-                action,
-                validity: since,
-            });
-        }
+
+        collected.push(Quintuple {
+            triple: Triple {
+                id: eid,
+                attr: attr.id,
+                value,
+            },
+            action,
+            validity: since,
+        });
 
         Ok(())
-    }
-    fn parse_tx_submap<'a>(
-        &mut self,
-        is_component: bool,
-        item: &'a Map<String, serde_json::Value>,
-        action: TxAction,
-        since: Validity,
-        cur_temp_eid: &mut u64,
-        str2tempid: &mut BTreeMap<String, EntityId>,
-        collected: &mut Vec<Quintuple<'a>>,
-    ) -> Result<EntityId> {
-        todo!()
     }
     fn parse_tx_request_arr<'a>(
         &mut self,
@@ -338,11 +304,9 @@ impl SessionTx {
                         self.parse_tx_request_inner(
                             id,
                             &attr,
-                            val,
+                            attr.val_type.coerce_value(val.into())?,
                             action,
                             since,
-                            cur_temp_eid,
-                            str2tempid,
                             collected,
                         )?;
                     }
@@ -351,11 +315,9 @@ impl SessionTx {
                     self.parse_tx_request_inner(
                         id,
                         &attr,
-                        val,
+                        attr.val_type.coerce_value(val.into())?,
                         action,
                         since,
-                        cur_temp_eid,
-                        str2tempid,
                         collected,
                     )
                 }
@@ -372,10 +334,103 @@ impl SessionTx {
         str2tempid: &mut BTreeMap<String, EntityId>,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
-        // let eid = match (item.get("_id"), item.get("_temp_id")) {
-        //     (None, None) =>
-        // }
-        todo!()
+        let mut pairs = Vec::with_capacity(item.len());
+        let mut eid = None;
+        for (k, v) in item {
+            if k != "_id" && k != "_tempid" {
+                let kw = (k as &str).try_into()?;
+                let attr = self
+                    .attr_by_kw(&kw)?
+                    .ok_or_else(|| TxError::AttrNotFound(kw.clone()))?;
+                let value = attr.val_type.coerce_value(v.into())?;
+                if attr.indexing == AttributeIndex::Identity {
+                    let existing_id = self.eid_by_unique_av(&attr, &value, since)?;
+                    match existing_id {
+                        None => {}
+                        Some(existing_eid) => {
+                            if let Some(prev_eid) = eid {
+                                if existing_eid != prev_eid {
+                                    return Err(TxError::EntityId(
+                                        existing_eid.0,
+                                        "conflicting entity id given".to_string(),
+                                    )
+                                    .into());
+                                }
+                            }
+                            eid = Some(existing_eid)
+                        }
+                    }
+                }
+                pairs.push((attr, value));
+            }
+        }
+        if let Some(given_id) = item.get("_id") {
+            let given_id = given_id.as_u64().ok_or_else(|| {
+                TxError::Decoding(
+                    given_id.clone(),
+                    "unable to interpret as entity id".to_string(),
+                )
+            })?;
+            let given_id = EntityId(given_id);
+            if !given_id.is_perm() {
+                return Err(TxError::EntityId(
+                    given_id.0,
+                    "temp id given where perm id is required".to_string(),
+                )
+                .into());
+            }
+            if let Some(prev_id) = eid {
+                if prev_id != given_id {
+                    return Err(TxError::EntityId(
+                        given_id.0,
+                        "conflicting entity id given".to_string(),
+                    )
+                    .into());
+                }
+            }
+            eid = Some(given_id);
+        }
+        if let Some(temp_id) = item.get("_tempid") {
+            if let Some(eid_inner) = eid {
+                return Err(TxError::EntityId(
+                    eid_inner.0,
+                    "conflicting entity id given".to_string(),
+                )
+                .into());
+            }
+            let temp_id_str = temp_id.as_str().ok_or_else(|| {
+                TxError::Decoding(
+                    temp_id.clone(),
+                    "unable to interpret as temp id".to_string(),
+                )
+            })?;
+            match str2tempid.entry(temp_id_str.to_string()) {
+                Entry::Vacant(e) => {
+                    let newid = EntityId(*cur_temp_eid);
+                    *cur_temp_eid += 1;
+                    e.insert(newid);
+                    eid = Some(newid);
+                }
+                Entry::Occupied(e) => {
+                    eid = Some(*e.get());
+                }
+            }
+        }
+        let eid = match eid {
+            Some(eid) => eid,
+            None => {
+                let newid = EntityId(*cur_temp_eid);
+                *cur_temp_eid += 1;
+                newid
+            }
+        };
+        if action != TxAction::Put && !eid.is_perm() {
+            return Err(TxError::InvalidAction(action, "temp id not allowed".to_string()).into());
+        }
+        for (attr, v) in pairs {
+            self.parse_tx_request_inner(eid, &attr, v, action, since, collected)?;
+        }
+        Ok(())
     }
 }
 
