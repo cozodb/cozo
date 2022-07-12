@@ -13,11 +13,11 @@ pub enum JsonError {
     MissingField(JsonValue, String),
 }
 
-impl From<JsonValue> for Value<'_> {
-    fn from(v: JsonValue) -> Self {
+impl<'a> From<&'a JsonValue> for Value<'a> {
+    fn from(v: &'a JsonValue) -> Self {
         match v {
             JsonValue::Null => Value::Null,
-            JsonValue::Bool(b) => Value::Bool(b),
+            JsonValue::Bool(b) => Value::Bool(*b),
             JsonValue::Number(n) => match n.as_i64() {
                 Some(i) => Value::Int(i),
                 None => match n.as_f64() {

@@ -264,7 +264,7 @@ impl SessionTx {
         vld: Validity,
     ) -> Result<Option<EntityId>> {
         if let Some(inner) = self.eid_by_attr_val_cache.get(v) {
-            if let Some(found) = inner.get(&attr.id) {
+            if let Some(found) = inner.get(&(attr.id, vld)) {
                 return Ok(*found);
             }
         }
@@ -279,13 +279,13 @@ impl SessionTx {
                     self.eid_by_attr_val_cache
                         .entry(v.to_static())
                         .or_default()
-                        .insert(attr.id, ret);
+                        .insert((attr.id, vld), ret);
                     ret
                 } else {
                     self.eid_by_attr_val_cache
                         .entry(v.to_static())
                         .or_default()
-                        .insert(attr.id, None);
+                        .insert((attr.id, vld), None);
                     None
                 }
             } else {
