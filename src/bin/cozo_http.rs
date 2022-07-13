@@ -61,7 +61,10 @@ async fn transact(
     body: web::Json<serde_json::Value>,
     data: web::Data<AppStateWithDb>,
 ) -> Result<impl Responder> {
-    dbg!(&body, &data.db);
+    let mut tx = data.db.transact_write()?;
+    let (payloads, comment) = tx.parse_tx_requests(&body)?;
+    tx.tx_triples(payloads)?;
+    tx.commit_tx(&comment, false)?;
     Ok(HttpResponse::Ok().body("transact"))
 }
 
