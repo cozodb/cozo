@@ -18,6 +18,12 @@ impl StoreOp {
     pub(crate) fn bytes(&self) -> [u8; 1] {
         [*self as u8]
     }
+    pub(crate) fn name(&self) -> &'static str {
+        match self {
+            Self::Retract => "retract",
+            Self::Assert => "put",
+        }
+    }
 }
 
 impl Display for StoreOp {

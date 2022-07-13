@@ -102,6 +102,8 @@ impl TryFrom<&'_ JsonValue> for Attribute {
 
         let indexing = match map.get("index") {
             None => AttributeIndex::None,
+            Some(serde_json::Value::Bool(true)) => AttributeIndex::Indexed,
+            Some(serde_json::Value::Bool(false)) => AttributeIndex::None,
             Some(v) => AttributeIndex::try_from(v.as_str().ok_or_else(|| {
                 JsonError::Conversion(value.clone(), "AttributeIndexing".to_string())
             })?)?,

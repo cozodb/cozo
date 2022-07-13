@@ -33,7 +33,7 @@ pub enum StorageTagError {
 }
 
 #[derive(Clone)]
-pub(crate) struct EncodedVec<const N: usize> {
+pub struct EncodedVec<const N: usize> {
     pub(crate) inner: SmallVec<[u8; N]>,
 }
 
@@ -45,12 +45,12 @@ impl<const N: usize> EncodedVec<N> {
 }
 
 impl EncodedVec<LARGE_VEC_SIZE> {
-    pub(crate) fn new(data: &[u8]) -> Self {
+    pub fn new(data: &[u8]) -> Self {
         Self {
             inner: SmallVec::from_slice(data),
         }
     }
-    pub(crate) fn debug_value(&self, data: &[u8]) -> String {
+    pub fn debug_value(&self, data: &[u8]) -> String {
         match StorageTag::try_from(self.inner[0]).unwrap() {
             StorageTag::TripleEntityAttrValue
             | StorageTag::TripleAttrEntityValue

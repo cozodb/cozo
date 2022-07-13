@@ -5,6 +5,7 @@ use crate::AttrTxItem;
 use anyhow::Result;
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 use itertools::Itertools;
+use serde_json::json;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -35,21 +36,19 @@ impl Db {
             .use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
             .use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
             .build()?;
-        Ok(Self {
+        let ret = Self {
             db,
             last_attr_id: Arc::new(Default::default()),
             last_ent_id: Arc::new(Default::default()),
             last_tx_id: Arc::new(Default::default()),
             n_sessions: Arc::new(Default::default()),
             session_id: Default::default(),
-        })
+        };
+        ret.load_last_ids()?;
+        Ok(ret)
     }
 
     pub fn new_session(&self) -> Result<Self> {
-        if self.session_id == 0 {
-            self.load_last_ids()?;
-        }
-
         let old_count = self.n_sessions.fetch_add(1, Ordering::AcqRel);
 
         Ok(Self {
@@ -110,19 +109,35 @@ impl Db {
         it.seek_to_start();
         it
     }
-    pub fn transact_triples(&self, payload: &serde_json::Value) -> Result<()> {
+    pub fn transact_triples(&self, payload: &serde_json::Value) -> Result<serde_json::Value> {
         let mut tx = self.transact_write()?;
         let (payloads, comment) = tx.parse_tx_requests(payload)?;
-        tx.tx_triples(payloads)?;
+        let res: serde_json::Value = tx
+            .tx_triples(payloads)?
+            .iter()
+            .map(|(eid, size)| json!([eid.0, size]))
+            .collect();
+        let tx_id = tx.get_write_tx_id()?;
         tx.commit_tx(&comment, false)?;
-        Ok(())
+        Ok(json!({
+            "tx_id": tx_id,
+            "results": res
+        }))
     }
-    pub fn transact_attributes(&self, payload: &serde_json::Value) -> Result<()> {
+    pub fn transact_attributes(&self, payload: &serde_json::Value) -> Result<serde_json::Value> {
         let (attrs, comment) = AttrTxItem::parse_request(payload)?;
         let mut tx = self.transact_write()?;
-        tx.tx_attrs(attrs)?;
+        let res: serde_json::Value = tx
+            .tx_attrs(attrs)?
+            .iter()
+            .map(|(op, aid)| json!([aid.0, op.to_string()]))
+            .collect();
+        let tx_id = tx.get_write_tx_id()?;
         tx.commit_tx(&comment, false)?;
-        Ok(())
+        Ok(json!({
+            "tx_id": tx_id,
+            "results": res
+        }))
     }
     pub fn current_schema(&self) -> Result<serde_json::Value> {
         let mut tx = self.transact()?;

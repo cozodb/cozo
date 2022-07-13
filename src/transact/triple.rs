@@ -29,42 +29,58 @@ enum TripleError {
 }
 
 impl SessionTx {
-    pub fn tx_triples(&mut self, payloads: Vec<Quintuple>) -> Result<()> {
+    pub fn tx_triples(&mut self, payloads: Vec<Quintuple>) -> Result<Vec<(EntityId, isize)>> {
+        let mut ret = Vec::with_capacity(payloads.len());
         for payload in payloads {
             match payload.action {
                 TxAction::Put => {
                     let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
                     if payload.triple.id.is_perm() {
-                        self.amend_triple(
-                            payload.triple.id,
-                            &attr,
-                            &payload.triple.value,
-                            payload.validity,
-                        )?;
+                        ret.push((
+                            self.amend_triple(
+                                payload.triple.id,
+                                &attr,
+                                &payload.triple.value,
+                                payload.validity,
+                            )?,
+                            1,
+                        ));
                     } else {
-                        self.new_triple(
-                            payload.triple.id,
-                            &attr,
-                            &payload.triple.value,
-                            payload.validity,
-                        )?;
+                        ret.push((
+                            self.new_triple(
+                                payload.triple.id,
+                                &attr,
+                                &payload.triple.value,
+                                payload.validity,
+                            )?,
+                            1,
+                        ));
                     }
                 }
                 TxAction::Retract => {
                     let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
-                    self.retract_triple(
-                        payload.triple.id,
-                        &attr,
-                        &payload.triple.value,
-                        payload.validity,
-                    )?;
+                    ret.push((
+                        self.retract_triple(
+                            payload.triple.id,
+                            &attr,
+                            &payload.triple.value,
+                            payload.validity,
+                        )?,
+                        -1,
+                    ));
                 }
                 TxAction::RetractAllEA => {
                     let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
-                    self.retract_triples_for_attr(payload.triple.id, &attr, payload.validity)?;
+                    ret.push((
+                        payload.triple.id,
+                        self.retract_triples_for_attr(payload.triple.id, &attr, payload.validity)?,
+                    ));
                 }
                 TxAction::RetractAllE => {
-                    self.retract_entity(payload.triple.id, payload.validity)?;
+                    ret.push((
+                        payload.triple.id,
+                        self.retract_entity(payload.triple.id, payload.validity)?,
+                    ));
                 }
                 TxAction::Ensure => {
                     let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
@@ -74,10 +90,11 @@ impl SessionTx {
                         &payload.triple.value,
                         payload.validity,
                     )?;
+                    ret.push((payload.triple.id, 0));
                 }
             }
         }
-        Ok(())
+        Ok(ret)
     }
     pub(crate) fn ensure_triple(
         &mut self,
@@ -125,7 +142,7 @@ impl SessionTx {
         v: &Value,
         vld: Validity,
         op: StoreOp,
-    ) -> Result<()> {
+    ) -> Result<EntityId> {
         let tx_id = self.get_write_tx_id()?;
         let vld_in_key = if attr.with_history {
             vld
@@ -230,7 +247,7 @@ impl SessionTx {
             &tx_id.bytes_with_op(op),
         )?;
 
-        Ok(())
+        Ok(eid)
     }
 
     pub(crate) fn new_triple(
@@ -239,7 +256,7 @@ impl SessionTx {
         attr: &Attribute,
         v: &Value,
         vld: Validity,
-    ) -> Result<()> {
+    ) -> Result<EntityId> {
         // invariant: in the preparation step, any identity attr should already be resolved to
         // an existing eid, if there is one
         let eid = if eid.is_perm() {
@@ -263,7 +280,7 @@ impl SessionTx {
         attr: &Attribute,
         v: &Value,
         vld: Validity,
-    ) -> Result<()> {
+    ) -> Result<EntityId> {
         if !eid.is_perm() {
             return Err(TripleError::TempEid(eid).into());
         }
@@ -277,25 +294,25 @@ impl SessionTx {
         attr: &Attribute,
         v: &Value,
         vld: Validity,
-    ) -> Result<()> {
+    ) -> Result<EntityId> {
         self.put_triple(eid, attr, v, vld, StoreOp::Retract)?;
         if attr.val_type == AttributeTyping::Component {
             let eid_v = v.get_entity_id()?;
             self.retract_entity(eid_v, vld)?;
         }
-        Ok(())
+        Ok(eid)
     }
     pub(crate) fn retract_triples_for_attr(
         &mut self,
         eid: EntityId,
         attr: &Attribute,
         vld: Validity,
-    ) -> Result<()> {
+    ) -> Result<isize> {
         let lower_bound = encode_eav_key(eid, attr.id, &Value::Null, Validity::MAX);
         let upper_bound = encode_eav_key(eid, attr.id, &Value::Bottom, Validity::MIN);
         self.batch_retract_triple(lower_bound, upper_bound, vld)
     }
-    pub(crate) fn retract_entity(&mut self, eid: EntityId, vld: Validity) -> Result<()> {
+    pub(crate) fn retract_entity(&mut self, eid: EntityId, vld: Validity) -> Result<isize> {
         let lower_bound = encode_eav_key(eid, AttrId::MIN_PERM, &Value::Null, Validity::MAX);
         let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &Value::Bottom, Validity::MAX);
         self.batch_retract_triple(lower_bound, upper_bound, vld)
@@ -305,14 +322,15 @@ impl SessionTx {
         lower_bound: EncodedVec<LARGE_VEC_SIZE>,
         upper_bound: EncodedVec<LARGE_VEC_SIZE>,
         vld: Validity,
-    ) -> Result<()> {
+    ) -> Result<isize> {
         let mut it = self.bounded_scan(&lower_bound, &upper_bound);
         let mut current = lower_bound.clone();
         current.encoded_entity_amend_validity(vld);
+        let mut counter = 0;
         loop {
             it.seek(&current);
             match it.pair()? {
-                None => return Ok(()),
+                None => return Ok(counter),
                 Some((k_slice, v_slice)) => {
                     let op = StoreOp::try_from(v_slice[0])?;
                     let (cur_eid, cur_aid, cur_vld) = decode_ea_key(k_slice)?;
@@ -326,6 +344,7 @@ impl SessionTx {
                             .attr_by_id(cur_aid)?
                             .ok_or(TransactError::AttrNotFound(cur_aid))?;
                         self.retract_triple(cur_eid, &cur_attr, &cur_v, vld)?;
+                        counter -= 1;
                     }
                     current = encode_eav_key(cur_eid, cur_aid, &cur_v, Validity::MIN);
                 }

@@ -13,25 +13,26 @@ use cozorocks::{DbIter, IterBuilder};
 use std::sync::atomic::Ordering;
 
 impl SessionTx {
-    pub fn tx_attrs(&mut self, payloads: Vec<AttrTxItem>) -> Result<()> {
+    pub fn tx_attrs(&mut self, payloads: Vec<AttrTxItem>) -> Result<Vec<(StoreOp, AttrId)>> {
+        let mut ret = Vec::with_capacity(payloads.len());
         for item in payloads {
             let id = item.attr.id;
             let kw = item.attr.keyword.clone();
             if item.op.is_retract() {
                 if item.attr.id.is_perm() {
-                    self.retract_attr(item.attr.id)?;
+                    ret.push((item.op, self.retract_attr(item.attr.id)?));
                 } else {
-                    self.retract_attr_by_kw(&item.attr.keyword)?;
+                    ret.push((item.op, self.retract_attr_by_kw(&item.attr.keyword)?));
                 }
             } else if item.attr.id.is_perm() {
-                self.amend_attr(item.attr)?;
+                ret.push((item.op, self.amend_attr(item.attr)?));
             } else {
-                self.new_attr(item.attr)?;
+                ret.push((item.op, self.new_attr(item.attr)?));
             }
             self.attr_by_id_cache.remove(&id);
             self.attr_by_kw_cache.remove(&kw);
         }
-        Ok(())
+        Ok(ret)
     }
 
     pub(crate) fn attr_by_id(&mut self, aid: AttrId) -> Result<Option<Attribute>> {
@@ -98,7 +99,7 @@ impl SessionTx {
     }
 
     /// conflict if new attribute has same name as existing one
-    pub(crate) fn new_attr(&mut self, mut attr: Attribute) -> Result<()> {
+    pub(crate) fn new_attr(&mut self, mut attr: Attribute) -> Result<AttrId> {
         if attr.cardinality.is_many() && attr.indexing.is_unique_index() {
             return Err(TransactError::AttrConsistency(
                 attr.id,
@@ -124,7 +125,7 @@ impl SessionTx {
     /// conflict if asserted attribute has name change, and the name change conflicts with an existing attr,
     /// or if the attr_id doesn't already exist (or retracted),
     /// or if changing immutable properties (cardinality, val_type, indexing)
-    pub(crate) fn amend_attr(&mut self, attr: Attribute) -> Result<()> {
+    pub(crate) fn amend_attr(&mut self, attr: Attribute) -> Result<AttrId> {
         let existing = self.attr_by_id(attr.id)?.ok_or_else(|| {
             TransactError::AttrConflict(attr.id, "expected attributed not found".to_string())
         })?;
@@ -151,7 +152,7 @@ impl SessionTx {
         self.put_attr(&attr, StoreOp::Assert)
     }
 
-    fn put_attr(&mut self, attr: &Attribute, op: StoreOp) -> Result<()> {
+    fn put_attr(&mut self, attr: &Attribute, op: StoreOp) -> Result<AttrId> {
         let tx_id = self.get_write_tx_id()?;
         let attr_data = attr.encode_with_op_and_tx(op, tx_id);
         let id_encoded = encode_attr_by_id(attr.id, tx_id);
@@ -160,11 +161,11 @@ impl SessionTx {
         self.tx.put(&id_signal, &attr_data)?;
         let kw_signal = encode_unique_attr_by_kw(&attr.keyword);
         self.tx.put(&kw_signal, &attr_data)?;
-        Ok(())
+        Ok(attr.id)
     }
 
     /// conflict if retracted attr_id doesn't already exist, or is already retracted
-    pub(crate) fn retract_attr(&mut self, aid: AttrId) -> Result<()> {
+    pub(crate) fn retract_attr(&mut self, aid: AttrId) -> Result<AttrId> {
         match self.attr_by_id(aid)? {
             None => Err(TransactError::AttrConflict(
                 aid,
@@ -173,12 +174,12 @@ impl SessionTx {
             .into()),
             Some(attr) => {
                 self.put_attr(&attr, StoreOp::Retract)?;
-                Ok(())
+                Ok(attr.id)
             }
         }
     }
 
-    pub(crate) fn retract_attr_by_kw(&mut self, kw: &Keyword) -> Result<()> {
+    pub(crate) fn retract_attr_by_kw(&mut self, kw: &Keyword) -> Result<AttrId> {
         let attr = self
             .attr_by_kw(kw)?
             .ok_or_else(|| TransactError::AttrNotFoundKw(kw.clone()))?;

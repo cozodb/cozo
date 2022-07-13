@@ -10,5 +10,6 @@ pub(crate) mod runtime;
 pub(crate) mod transact;
 pub(crate) mod utils;
 
+pub use data::encode::EncodedVec;
 pub use data::tx_attr::AttrTxItem;
 pub use runtime::db::Db;
