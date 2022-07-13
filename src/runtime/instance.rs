@@ -1,6 +1,7 @@
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::id::TxId;
 use crate::runtime::transact::SessionTx;
+use crate::AttrTxItem;
 use anyhow::Result;
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 use std::fmt::{Debug, Formatter};
@@ -103,9 +104,23 @@ impl Db {
         };
         Ok(ret)
     }
-    pub(crate) fn total_iter(&self) -> DbIter {
+    pub fn total_iter(&self) -> DbIter {
         let mut it = self.db.transact().start().iterator().start();
         it.seek_to_start();
         it
+    }
+    pub fn transact_triples(&self, payload: &serde_json::Value) -> Result<()> {
+        let mut tx = self.transact_write()?;
+        let (payloads, comment) = tx.parse_tx_requests(payload)?;
+        tx.tx_triples(payloads)?;
+        tx.commit_tx(&comment, false)?;
+        Ok(())
+    }
+    pub fn transact_attributes(&self, payload: &serde_json::Value) -> Result<()> {
+        let (attrs, comment) = AttrTxItem::parse_request(payload)?;
+        let mut tx = self.transact_write()?;
+        tx.tx_attrs(attrs)?;
+        tx.commit_tx(&comment, false)?;
+        Ok(())
     }
 }

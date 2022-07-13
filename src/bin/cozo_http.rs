@@ -1,7 +1,7 @@
 use actix_cors::Cors;
 use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use clap::Parser;
-use cozo::{AttrTxItem, Db};
+use cozo::Db;
 use cozorocks::DbBuilder;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
@@ -61,10 +61,7 @@ async fn transact(
     body: web::Json<serde_json::Value>,
     data: web::Data<AppStateWithDb>,
 ) -> Result<impl Responder> {
-    let mut tx = data.db.transact_write()?;
-    let (payloads, comment) = tx.parse_tx_requests(&body)?;
-    tx.tx_triples(payloads)?;
-    tx.commit_tx(&comment, false)?;
+    data.db.transact_triples(&body)?;
     Ok(HttpResponse::Ok().body("transact"))
 }
 
@@ -73,10 +70,7 @@ async fn transact_attr(
     body: web::Json<serde_json::Value>,
     data: web::Data<AppStateWithDb>,
 ) -> Result<impl Responder> {
-    let (attrs, comment) = AttrTxItem::parse_request(&body)?;
-    let mut tx = data.db.transact_write()?;
-    tx.tx_attrs(attrs)?;
-    tx.commit_tx(&comment, false)?;
+    data.db.transact_attributes(&body)?;
     Ok(HttpResponse::Ok().body("transact-attr success"))
 }
 

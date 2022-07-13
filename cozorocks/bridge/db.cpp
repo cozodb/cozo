@@ -76,7 +76,7 @@ shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, boo
 }
 
 PessimisticRocksDb::~PessimisticRocksDb() {
-    if (destroy_on_exit) {
+    if (destroy_on_exit && (db != nullptr)) {
         cerr << "destroying database on exit: " << db_path << endl;
         auto status = db->Close();
         if (!status.ok()) {
@@ -85,7 +85,7 @@ PessimisticRocksDb::~PessimisticRocksDb() {
         db.reset();
         auto status2 = DestroyDB(db_path, *options);
         if (!status2.ok()) {
-            cerr << status.ToString() << endl;
+            cerr << status2.ToString() << endl;
         }
     }
 }
