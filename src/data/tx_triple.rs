@@ -10,25 +10,24 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 pub(crate) struct Triple<'a> {
-    id: EntityId,
-    attr: AttrId,
-    value: Value<'a>,
+    pub(crate) id: EntityId,
+    pub(crate) attr: AttrId,
+    pub(crate) value: Value<'a>,
 }
 
 pub struct Quintuple<'a> {
-    triple: Triple<'a>,
-    action: TxAction,
-    validity: Validity,
+    pub(crate) triple: Triple<'a>,
+    pub(crate) action: TxAction,
+    pub(crate) validity: Validity,
 }
 
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum TxAction {
     Put,
-    RetractEAV,
-    RetractEA,
-    RetractE,
-    Erase,
+    Retract,
+    RetractAllEA,
+    RetractAllE,
     Ensure,
 }
 
@@ -57,7 +56,7 @@ impl SessionTx {
     /// ```json
     /// {"tx": [...], "comment": "a comment", "since": timestamp}
     /// ```
-    /// each line in `tx` is `{"put: ...}`, `{"retract": ...}`, `{"erase": ...}` or `{"ensure": ...}`
+    /// each line in `tx` is `{"put: ...}`, `{"retract": ...}` or `{"ensure": ...}`
     /// these can also have a `since` field, overriding the timestamp
     /// the dots can be triples
     /// ```json
@@ -130,9 +129,7 @@ impl SessionTx {
             if let Some(inner) = item.get("put") {
                 (inner, TxAction::Put)
             } else if let Some(inner) = item.get("retract") {
-                (inner, TxAction::RetractEAV)
-            } else if let Some(inner) = item.get("erase") {
-                (inner, TxAction::Erase)
+                (inner, TxAction::Retract)
             } else if let Some(inner) = item.get("ensure") {
                 (inner, TxAction::Ensure)
             } else {
@@ -210,6 +207,65 @@ impl SessionTx {
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
         match item {
+            [eid] => {
+                if action != TxAction::Retract {
+                    return Err(TxError::InvalidAction(
+                        action,
+                        "singlet only allowed for 'retract'".to_string(),
+                    )
+                    .into());
+                }
+                let eid = eid.as_u64().ok_or_else(|| {
+                    TxError::Decoding(eid.clone(), "cannot parse as entity id".to_string())
+                })?;
+                let eid = EntityId(eid);
+                if !eid.is_perm() {
+                    return Err(
+                        TxError::EntityId(eid.0, "expected perm entity id".to_string()).into(),
+                    );
+                }
+                collected.push(Quintuple {
+                    triple: Triple {
+                        id: eid,
+                        attr: AttrId(0),
+                        value: Value::Null,
+                    },
+                    action: TxAction::RetractAllE,
+                    validity: since,
+                });
+                Ok(())
+            }
+            [eid, attr] => {
+                if action != TxAction::Retract {
+                    return Err(TxError::InvalidAction(
+                        action,
+                        "doublet only allowed for 'retract'".to_string(),
+                    )
+                    .into());
+                }
+                let kw: Keyword = attr.try_into()?;
+                let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
+
+                let eid = eid.as_u64().ok_or_else(|| {
+                    TxError::Decoding(eid.clone(), "cannot parse as entity id".to_string())
+                })?;
+                let eid = EntityId(eid);
+                if !eid.is_perm() {
+                    return Err(
+                        TxError::EntityId(eid.0, "expected perm entity id".to_string()).into(),
+                    );
+                }
+                collected.push(Quintuple {
+                    triple: Triple {
+                        id: eid,
+                        attr: attr.id,
+                        value: Value::Null,
+                    },
+                    action: TxAction::RetractAllEA,
+                    validity: since,
+                });
+                Ok(())
+            }
             [eid, attr_kw, val] => {
                 let kw: Keyword = attr_kw.try_into()?;
                 let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;

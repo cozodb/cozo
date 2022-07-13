@@ -20,7 +20,7 @@ pub(crate) enum StorageTag {
     TripleValueAttrEntity = 4,
     AttrById = 5,
     Tx = 6,
-    UniqueEntity = 7,
+    UniqueEntityAttr = 7,
     UniqueAttrValue = 8,
     UniqueAttrById = 9,
     UniqueAttrByKeyword = 10,
@@ -70,11 +70,15 @@ impl EncodedVec<LARGE_VEC_SIZE> {
                 if data.len() <= 1 {
                     op.to_string()
                 } else {
-                    format!("{}{:?}", op, Attribute::decode(&data[VEC_SIZE_8..]).unwrap())
+                    format!(
+                        "{}{:?}",
+                        op,
+                        Attribute::decode(&data[VEC_SIZE_8..]).unwrap()
+                    )
                 }
             }
             StorageTag::Tx => format!("{:?}", TxLog::decode(data).unwrap()),
-            StorageTag::UniqueEntity | StorageTag::UniqueAttrValue => {
+            StorageTag::UniqueEntityAttr | StorageTag::UniqueAttrValue => {
                 format!("{:?}", TxId::from_bytes(data))
             }
         }
@@ -121,7 +125,7 @@ impl<const N: usize> Debug for EncodedVec<N> {
                     StorageTag::Tx => {
                         write!(f, " {:?}", TxId::from_bytes(self))
                     }
-                    StorageTag::UniqueEntity => {
+                    StorageTag::UniqueEntityAttr => {
                         write!(f, " {:?}", EntityId::from_bytes(self))
                     }
                     StorageTag::UniqueAttrValue => {
@@ -188,7 +192,7 @@ impl TryFrom<u8> for StorageTag {
             4 => TripleValueAttrEntity,
             5 => AttrById,
             6 => Tx,
-            7 => UniqueEntity,
+            7 => UniqueEntityAttr,
             8 => UniqueAttrValue,
             9 => UniqueAttrById,
             10 => UniqueAttrByKeyword,
@@ -211,6 +215,11 @@ pub(crate) fn decode_value(src: &[u8]) -> Result<Value> {
 #[inline]
 pub(crate) fn decode_value_from_key(src: &[u8]) -> Result<Value> {
     Ok(rmp_serde::from_slice(&src[VEC_SIZE_24..])?)
+}
+
+#[inline]
+pub(crate) fn decode_value_from_val(src: &[u8]) -> Result<Value> {
+    Ok(rmp_serde::from_slice(&src[VEC_SIZE_8..])?)
 }
 
 /// eid: 8 bytes (incl. tag)
@@ -381,11 +390,19 @@ pub(crate) fn encode_tx(tx: TxId) -> EncodedVec<VEC_SIZE_8> {
 }
 
 #[inline]
-pub(crate) fn encode_unique_entity(eid: EntityId) -> EncodedVec<VEC_SIZE_8> {
-    let mut ret = SmallVec::<[u8; VEC_SIZE_8]>::new();
+pub(crate) fn encode_unique_entity_attr(eid: EntityId, aid: AttrId) -> EncodedVec<VEC_SIZE_16> {
+    let mut ret = SmallVec::<[u8; VEC_SIZE_16]>::new();
     ret.extend(eid.bytes());
-    ret[0] = StorageTag::UniqueEntity as u8;
+    ret[0] = StorageTag::UniqueEntityAttr as u8;
+    ret.extend(aid.bytes());
     ret.into()
+}
+
+#[inline]
+pub(crate) fn decode_unique_entity_attr(src: &[u8]) -> Result<(EntityId, AttrId)> {
+    let eid = EntityId::from_bytes(&src[..VEC_SIZE_8]);
+    let aid = AttrId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
+    Ok((eid, aid))
 }
 
 #[inline]

@@ -9,6 +9,7 @@ pub struct Validity(pub i64);
 
 impl Validity {
     pub(crate) const MAX: Validity = Validity(i64::MAX);
+    pub(crate) const NO_HISTORY: Validity = Validity(i64::MIN + 1);
     pub(crate) const MIN: Validity = Validity(i64::MIN);
     pub(crate) fn current() -> Self {
         let timestamp = SystemTime::now()

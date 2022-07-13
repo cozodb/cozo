@@ -43,7 +43,7 @@ fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
         TripleValueAttrEntity => compare_key_triple_vae(a, b),
         AttrById => compare_key_attr_by_id(a, b),
         Tx => compare_key_tx(a, b),
-        UniqueEntity => compare_key_unique_entity(a, b),
+        UniqueEntityAttr => compare_key_unique_entity_attr(a, b),
         UniqueAttrValue => compare_key_unique_attr_val(a, b),
         UniqueAttrById => compare_key_unique_attr_by_id(a, b),
         UniqueAttrByKeyword => compare_key_unique_attr_by_kw(a, b),
@@ -123,7 +123,7 @@ fn compare_key_tx(a: &[u8], b: &[u8]) -> Ordering {
 }
 
 #[inline]
-fn compare_key_unique_entity(a: &[u8], b: &[u8]) -> Ordering {
+fn compare_key_unique_entity_attr(a: &[u8], b: &[u8]) -> Ordering {
     a.cmp(b)
 }
 

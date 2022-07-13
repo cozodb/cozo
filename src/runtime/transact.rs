@@ -1,5 +1,5 @@
 use crate::data::attr::Attribute;
-use crate::data::encode::{encode_tx, encode_unique_attr_by_id, encode_unique_entity, EncodedVec};
+use crate::data::encode::{encode_tx, encode_unique_attr_by_id, encode_unique_entity_attr, EncodedVec};
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::value::StaticValue;
@@ -66,8 +66,8 @@ impl SessionTx {
     }
 
     pub(crate) fn load_last_entity_id(&mut self) -> Result<EntityId> {
-        let e_lower = encode_unique_entity(EntityId::MIN_PERM);
-        let e_upper = encode_unique_entity(EntityId::MAX_PERM);
+        let e_lower = encode_unique_entity_attr(EntityId::MIN_PERM, AttrId::MIN_PERM);
+        let e_upper = encode_unique_entity_attr(EntityId::MAX_PERM, AttrId::MIN_PERM);
         let it = self.bounded_scan_last(&e_lower, &e_upper);
 
         Ok(match it.key()? {
@@ -149,4 +149,8 @@ pub enum TransactError {
     WriteInReadOnly,
     #[error("attempt to change immutable property for attr {0:?}")]
     ChangingImmutableProperty(AttrId),
+    #[error("required triple not found for {0:?}, {1:?}")]
+    RequiredTripleNotFound(EntityId, AttrId),
+    #[error("precondition failed for {0:?} {1:?}, expect {2}, got {3}")]
+    PreconditionFailed(EntityId, AttrId, String, String)
 }

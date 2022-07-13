@@ -1,12 +1,14 @@
 use crate::data::attr::{Attribute, AttributeTyping};
 use crate::data::encode::{
     decode_ae_key, decode_ea_key, decode_vae_key, decode_value, decode_value_from_key,
-    encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v, encode_eav_key,
-    encode_unique_attr_val, encode_unique_entity, encode_vae_key, EncodedVec, LARGE_VEC_SIZE,
+    decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v,
+    encode_eav_key, encode_unique_attr_val, encode_unique_entity_attr, encode_vae_key, EncodedVec,
+    LARGE_VEC_SIZE,
 };
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
+use crate::data::tx_triple::{Quintuple, TxAction};
 use crate::data::value::{StaticValue, Value, INLINE_VAL_SIZE_LIMIT};
 use crate::runtime::transact::{SessionTx, TransactError};
 use crate::utils::swap_option_result;
@@ -27,6 +29,95 @@ enum TripleError {
 }
 
 impl SessionTx {
+    pub fn tx_triples(&mut self, payloads: Vec<Quintuple>) -> Result<()> {
+        for payload in payloads {
+            match payload.action {
+                TxAction::Put => {
+                    let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
+                    if payload.triple.id.is_perm() {
+                        self.amend_triple(
+                            payload.triple.id,
+                            &attr,
+                            &payload.triple.value,
+                            payload.validity,
+                        )?;
+                    } else {
+                        self.new_triple(
+                            payload.triple.id,
+                            &attr,
+                            &payload.triple.value,
+                            payload.validity,
+                        )?;
+                    }
+                }
+                TxAction::Retract => {
+                    let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
+                    self.retract_triple(
+                        payload.triple.id,
+                        &attr,
+                        &payload.triple.value,
+                        payload.validity,
+                    )?;
+                }
+                TxAction::RetractAllEA => {
+                    let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
+                    self.retract_triples_for_attr(payload.triple.id, &attr, payload.validity)?;
+                }
+                TxAction::RetractAllE => {
+                    self.retract_entity(payload.triple.id, payload.validity)?;
+                }
+                TxAction::Ensure => {
+                    let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
+                    self.ensure_triple(
+                        payload.triple.id,
+                        &attr,
+                        &payload.triple.value,
+                        payload.validity,
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+    pub(crate) fn ensure_triple(
+        &mut self,
+        eid: EntityId,
+        attr: &Attribute,
+        v: &Value,
+        vld: Validity,
+    ) -> Result<()> {
+        let aid = attr.id;
+        let signal = encode_unique_entity_attr(eid, aid);
+        let gen_err = || TransactError::RequiredTripleNotFound(eid, aid);
+        self.tx.get(&signal, true)?.ok_or_else(gen_err)?;
+        let v_in_key = if attr.cardinality.is_one() {
+            &Value::Bottom
+        } else {
+            v
+        };
+        let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, vld);
+        let eav_encoded_upper = encode_eav_key(eid, attr.id, v_in_key, Validity::MIN);
+        let it = self.bounded_scan_first(&eav_encoded, &eav_encoded_upper);
+        let (k_slice, v_slice) = it.pair()?.ok_or_else(gen_err)?;
+        if StoreOp::try_from(v_slice[0])?.is_retract() {
+            return Err(gen_err().into());
+        }
+        let stored_v = if attr.cardinality.is_one() {
+            decode_value_from_val(v_slice)?
+        } else {
+            decode_value_from_key(k_slice)?
+        };
+        if stored_v != *v {
+            return Err(TransactError::PreconditionFailed(
+                eid,
+                aid,
+                format!("{:?}", v),
+                format!("{:?}", stored_v),
+            )
+            .into());
+        }
+        Ok(())
+    }
     pub(crate) fn put_triple(
         &mut self,
         eid: EntityId,
@@ -39,7 +130,7 @@ impl SessionTx {
         let vld_in_key = if attr.with_history {
             vld
         } else {
-            Validity::MIN
+            Validity::NO_HISTORY
         };
         // elide value in key for eav and aev if cardinality is one
         let (v_in_key, v_in_val) = if attr.cardinality.is_one() {
@@ -56,7 +147,7 @@ impl SessionTx {
 
         // elide value in data for aev if it is big
         let val_encoded = if val_encoded.len() > INLINE_VAL_SIZE_LIMIT {
-            Value::Bottom.encode()
+            Value::Bottom.encode_with_op_and_tx(op, tx_id)
         } else {
             val_encoded
         };
@@ -67,7 +158,10 @@ impl SessionTx {
         // vae for ref types
         if attr.val_type.is_ref_type() {
             let vae_encoded = encode_vae_key(v.get_entity_id()?, attr.id, eid, vld_in_key);
-            self.tx.put(&vae_encoded, &[op as u8])?;
+            self.tx.put(
+                &vae_encoded,
+                &Value::Bottom.encode_with_op_and_tx(op, tx_id),
+            )?;
         }
 
         // ave for indexing
@@ -122,7 +216,7 @@ impl SessionTx {
                     }
                 }
             }
-            let e_in_val_encoded = eid.bytes();
+            let e_in_val_encoded = Value::EnId(eid).encode_with_op_and_tx(op, tx_id);
             self.tx.put(&ave_encoded, &e_in_val_encoded)?;
 
             self.tx.put(
@@ -131,8 +225,10 @@ impl SessionTx {
             )?;
         }
 
-        self.tx
-            .put(&encode_unique_entity(eid), &tx_id.bytes_with_op(op))?;
+        self.tx.put(
+            &encode_unique_entity_attr(eid, attr.id),
+            &tx_id.bytes_with_op(op),
+        )?;
 
         Ok(())
     }
@@ -200,11 +296,6 @@ impl SessionTx {
         self.batch_retract_triple(lower_bound, upper_bound, vld)
     }
     pub(crate) fn retract_entity(&mut self, eid: EntityId, vld: Validity) -> Result<()> {
-        match self.latest_entity_existence(eid, true)? {
-            LatestTripleExistence::Asserted => {}
-            LatestTripleExistence::Retracted => return Ok(()),
-            LatestTripleExistence::NotFound => return Err(TripleError::EidNotFound(eid).into()),
-        }
         let lower_bound = encode_eav_key(eid, AttrId::MIN_PERM, &Value::Null, Validity::MAX);
         let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &Value::Bottom, Validity::MAX);
         self.batch_retract_triple(lower_bound, upper_bound, vld)
@@ -240,22 +331,6 @@ impl SessionTx {
                 }
             }
         }
-    }
-    fn latest_entity_existence(
-        &mut self,
-        eid: EntityId,
-        for_update: bool,
-    ) -> Result<LatestTripleExistence> {
-        let encoded = encode_unique_entity(eid);
-        Ok(if let Some(v_slice) = self.tx.get(&encoded, for_update)? {
-            let op = StoreOp::try_from(v_slice[0])?;
-            match op {
-                StoreOp::Retract => LatestTripleExistence::Retracted,
-                StoreOp::Assert => LatestTripleExistence::Asserted,
-            }
-        } else {
-            LatestTripleExistence::NotFound
-        })
     }
     pub(crate) fn eid_by_unique_av(
         &mut self,
