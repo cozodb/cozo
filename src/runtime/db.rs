@@ -4,6 +4,7 @@ use crate::runtime::transact::SessionTx;
 use crate::AttrTxItem;
 use anyhow::Result;
 use cozorocks::{DbBuilder, DbIter, RocksDb};
+use itertools::Itertools;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -122,5 +123,9 @@ impl Db {
         tx.tx_attrs(attrs)?;
         tx.commit_tx(&comment, false)?;
         Ok(())
+    }
+    pub fn current_schema(&self) -> Result<serde_json::Value> {
+        let mut tx = self.transact()?;
+        tx.all_attrs().map_ok(|v| v.to_json()).try_collect()
     }
 }

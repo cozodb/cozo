@@ -16,6 +16,7 @@ fn test_send_sync<T: Send + Sync>(_: &T) {}
 fn creation() {
     let db = create_db("_test_db");
     test_send_sync(&db);
+    dbg!(db.current_schema().unwrap().to_string());
     // let current_validity = Validity::current();
     // let session = db.new_session().unwrap();
     // let mut tx = session.transact().unwrap();

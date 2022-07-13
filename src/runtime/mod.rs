@@ -1,2 +1,2 @@
-pub(crate) mod instance;
+pub(crate) mod db;
 pub(crate) mod transact;

@@ -7,6 +7,7 @@ use anyhow::Result;
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
+use serde_json::json;
 use smallvec::SmallVec;
 use std::fmt::{Display, Formatter};
 
@@ -287,6 +288,16 @@ impl Attribute {
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
         Ok(rmp_serde::from_slice(data)?)
+    }
+    pub(crate) fn to_json(&self) -> serde_json::Value {
+        json!({
+            "id": self.id.0,
+            "keyword": self.keyword.to_string(),
+            "cardinality": self.cardinality.to_string(),
+            "type": self.val_type.to_string(),
+            "index": self.indexing.to_string(),
+            "history": self.with_history
+        })
     }
 }
 
