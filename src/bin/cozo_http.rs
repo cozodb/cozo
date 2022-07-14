@@ -36,7 +36,7 @@ impl From<anyhow::Error> for RespError {
 #[clap(version, about, long_about=None)]
 struct Args {
     /// Path to the directory to store the database
-    #[clap(value_parser, default_value_t = String::from("cozo_db"))]
+    #[clap(value_parser)]
     path: String,
 
     /// Address to bind the service to
@@ -102,7 +102,7 @@ async fn main() -> std::io::Result<()> {
     let app_state = web::Data::new(AppStateWithDb { db });
 
     let addr = (&args.bind as &str, args.port);
-    eprintln!("Serving database at {}:{}", addr.0, addr.1);
+    eprintln!("Serving database {} at {}:{}", args.path, addr.0, addr.1);
 
     HttpServer::new(move || {
         let cors = Cors::permissive();

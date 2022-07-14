@@ -20,16 +20,25 @@ fn creation() {
     assert!(db.current_schema().unwrap().as_array().unwrap().is_empty());
     let res = db.transact_attributes(&json!({
         "attrs": [
-            {"put": {"keyword": ":person/id", "cardinality": "one", "type": "string", "index": "identity"}},
+            {"put": {"keyword": ":person/idd", "cardinality": "one", "type": "string", "index": "identity"}},
             {"put": {"keyword": ":person/first_name", "cardinality": "one", "type": "string", "index": true}},
             {"put": {"keyword": ":person/last_name", "cardinality": "one", "type": "string", "index": true}},
             {"put": {"keyword": ":person/age", "cardinality": "one", "type": "int"}},
             {"put": {"keyword": ":person/friend", "cardinality": "many", "type": "ref"}},
             {"put": {"keyword": ":person/weight", "cardinality": "one", "type": "float"}},
+            {"put": {"keyword": ":person/covid", "cardinality": "one", "type": "bool"}},
         ]
     }))
     .unwrap();
     println!("{}", res);
+    let first_id = res["results"][0][0].as_u64().unwrap();
+    let last_id = res["results"][6][0].as_u64().unwrap();
+    db.transact_attributes(&json!({
+        "attrs": [
+            {"put": {"id": first_id, "keyword": ":person/id", "cardinality": "one", "type": "string", "index": "identity"}},
+            {"retract": {"id": last_id, "keyword": ":person/covid", "cardinality": "one", "type": "bool"}}
+        ]
+    })).unwrap();
     assert_eq!(db.current_schema().unwrap().as_array().unwrap().len(), 6);
     println!("{}", db.current_schema().unwrap());
     // let mut it = db.total_iter();
@@ -40,17 +49,6 @@ fn creation() {
     //     dbg!(val);
     //     it.next();
     // }
-    // let current_validity = Validity::current();
-    // let session = db.new_session().unwrap();
-    // let mut tx = session.transact().unwrap();
-    // assert_eq!(
-    //     0,
-    //     tx.all_attrs()
-    //         .collect::<Result<Vec<Attribute>>>()
-    //         .unwrap()
-    //         .len()
-    // );
-    //
     // let mut tx = session.transact_write().unwrap();
     // tx.new_attr(Attribute {
     //     id: AttrId(0),
