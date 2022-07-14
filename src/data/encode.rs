@@ -160,10 +160,10 @@ impl<const N: usize> EncodedVec<N> {
             self.inner[VEC_SIZE_16 + i] = tx_bytes[i];
         }
     }
-    pub(crate) fn encoded_entity_amend_validity_to_last(&mut self) {
+    pub(crate) fn encoded_entity_amend_validity_to_inf_future(&mut self) {
         self.encoded_entity_amend_validity(Validity::MAX)
     }
-    pub(crate) fn encoded_entity_amend_validity_to_first(&mut self) {
+    pub(crate) fn encoded_entity_amend_validity_to_inf_past(&mut self) {
         self.encoded_entity_amend_validity(Validity::MIN)
     }
 }

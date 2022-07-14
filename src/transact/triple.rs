@@ -612,7 +612,7 @@ impl TripleEntityAttrIter {
                 let (eid, aid, tid) = decode_ea_key(k_slice)?;
                 let v = decode_value_from_key(k_slice)?;
                 self.current.copy_from_slice(k_slice);
-                self.current.encoded_entity_amend_validity_to_first();
+                self.current.encoded_entity_amend_validity_to_inf_past();
                 let op = StoreOp::try_from(v_slice[0])?;
                 Ok(Some((eid, aid, v.to_static(), tid, op)))
             }
@@ -663,7 +663,7 @@ impl TripleEntityAttrBeforeIter {
                     }
                     let v = decode_value_from_key(k_slice)?;
                     self.current.copy_from_slice(k_slice);
-                    self.current.encoded_entity_amend_validity_to_first();
+                    self.current.encoded_entity_amend_validity_to_inf_past();
                     let op = StoreOp::try_from(v_slice[0])?;
                     if op.is_assert() {
                         return Ok(Some((eid, aid, v.to_static())));
@@ -710,7 +710,7 @@ impl TripleAttrEntityIter {
                     let (aid, eid, tid) = decode_ae_key(k_slice)?;
                     let v = decode_value_from_key(k_slice)?;
                     self.current.copy_from_slice(k_slice);
-                    self.current.encoded_entity_amend_validity_to_first();
+                    self.current.encoded_entity_amend_validity_to_inf_past();
                     let op = StoreOp::try_from(v_slice[0])?;
                     if op.is_assert() {
                         return Ok(Some((aid, eid, v.to_static(), tid, op)));
@@ -764,7 +764,7 @@ impl TripleAttrEntityBeforeIter {
                     }
                     let v = decode_value_from_key(k_slice)?;
                     self.current.copy_from_slice(k_slice);
-                    self.current.encoded_entity_amend_validity_to_first();
+                    self.current.encoded_entity_amend_validity_to_inf_past();
                     let op = StoreOp::try_from(v_slice[0])?;
                     if op.is_assert() {
                         return Ok(Some((aid, eid, v.to_static())));
@@ -810,7 +810,7 @@ impl TripleAttrValueIter {
                 let (aid, eid, tid) = decode_ae_key(k_slice)?;
                 let v = decode_value_from_key(k_slice)?;
                 self.current.copy_from_slice(k_slice);
-                self.current.encoded_entity_amend_validity_to_first();
+                self.current.encoded_entity_amend_validity_to_inf_past();
                 let op = StoreOp::try_from(v_slice[0])?;
                 Ok(Some((aid, v.to_static(), eid, tid, op)))
             }
@@ -861,7 +861,7 @@ impl TripleAttrValueBeforeIter {
                     }
                     let v = decode_value_from_key(k_slice)?;
                     self.current.copy_from_slice(k_slice);
-                    self.current.encoded_entity_amend_validity_to_first();
+                    self.current.encoded_entity_amend_validity_to_inf_past();
                     let op = StoreOp::try_from(v_slice[0])?;
                     if op.is_assert() {
                         return Ok(Some((aid, v.to_static(), eid)));
@@ -920,7 +920,7 @@ impl TripleAttrValueAfterIter {
                     }
                     let v = decode_value_from_key(k_slice)?;
                     self.current.copy_from_slice(k_slice);
-                    self.current.encoded_entity_amend_validity_to_last();
+                    self.current.encoded_entity_amend_validity_to_inf_future();
                     let op = StoreOp::try_from(v_slice[0])?;
                     if op.is_assert() {
                         return Ok(Some((aid, v.to_static(), eid)));
@@ -965,7 +965,7 @@ impl TripleValueRefAttrIter {
             Some((k_slice, v_slice)) => {
                 let (v_eid, aid, eid, tid) = decode_vae_key(k_slice)?;
                 self.current.copy_from_slice(k_slice);
-                self.current.encoded_entity_amend_validity_to_first();
+                self.current.encoded_entity_amend_validity_to_inf_past();
                 let op = StoreOp::try_from(v_slice[0])?;
                 Ok(Some((v_eid, aid, eid, tid, op)))
             }
@@ -1015,7 +1015,7 @@ impl TripleValueRefAttrBeforeIter {
                         continue;
                     }
                     self.current.copy_from_slice(k_slice);
-                    self.current.encoded_entity_amend_validity_to_first();
+                    self.current.encoded_entity_amend_validity_to_inf_past();
                     let op = StoreOp::try_from(v_slice[0])?;
                     if op.is_assert() {
                         return Ok(Some((v_eid, aid, eid)));

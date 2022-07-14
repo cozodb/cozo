@@ -80,4 +80,11 @@ impl Keyword {
     pub(crate) fn is_reserved(&self) -> bool {
         self.ns.is_empty() && self.ident.starts_with('_')
     }
+    pub(crate) fn to_string_no_prefix(&self) -> String {
+        if self.ns.is_empty() {
+            format!("{}", self.ident)
+        } else {
+            format!("{}/{}", self.ns, self.ident)
+        }
+    }
 }
