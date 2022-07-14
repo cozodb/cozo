@@ -19,20 +19,11 @@ pub enum KeywordError {
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Deserialize, Serialize)]
-pub struct Keyword {
-    #[serde(rename = "n")]
-    pub(crate) ns: SmartString<LazyCompact>,
-    #[serde(rename = "i")]
-    pub(crate) ident: SmartString<LazyCompact>,
-}
+pub struct Keyword(pub(crate) SmartString<LazyCompact>);
 
 impl Display for Keyword {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.ns.is_empty() {
-            write!(f, ":{}", self.ident)
-        } else {
-            write!(f, ":{}/{}", self.ns, self.ident)
-        }
+        write!(f, ":{}", self.0)
     }
 }
 
@@ -42,49 +33,25 @@ impl Debug for Keyword {
     }
 }
 
-impl TryFrom<&str> for Keyword {
-    type Error = KeywordError;
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let make_err = || KeywordError::InvalidKeyword(value.to_string());
+impl From<&str> for Keyword {
+    fn from(value: &str) -> Self {
         let value = value.strip_prefix(':').unwrap_or(value);
-        let mut kw_iter = value.split('/');
-        let ns = kw_iter.next().ok_or_else(make_err)?;
-        let ident = match kw_iter.next() {
-            None => {
-                return Ok(Keyword {
-                    ns: "".into(),
-                    ident: ns.into(),
-                })
-            }
-            Some(ident) => ident,
-        };
-        if kw_iter.next().is_none() {
-            Ok(Keyword {
-                ns: ns.into(),
-                ident: ident.into(),
-            })
-        } else {
-            Err(make_err())
-        }
+        Self(value.into())
     }
 }
 
 impl TryFrom<&[u8]> for Keyword {
     type Error = KeywordError;
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        std::str::from_utf8(value)?.try_into()
+        Ok(std::str::from_utf8(value)?.into())
     }
 }
 
 impl Keyword {
     pub(crate) fn is_reserved(&self) -> bool {
-        self.ns.is_empty() && self.ident.starts_with('_')
+        self.0.starts_with('_')
     }
     pub(crate) fn to_string_no_prefix(&self) -> String {
-        if self.ns.is_empty() {
-            format!("{}", self.ident)
-        } else {
-            format!("{}/{}", self.ns, self.ident)
-        }
+        format!("{}", self.0)
     }
 }

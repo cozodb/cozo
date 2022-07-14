@@ -63,7 +63,7 @@ impl TryFrom<&'_ JsonValue> for Keyword {
         let s = value
             .as_str()
             .ok_or_else(|| JsonError::Conversion(value.clone(), "Keyword".to_string()))?;
-        Ok(Keyword::try_from(s)?)
+        Ok(Keyword::from(s))
     }
 }
 

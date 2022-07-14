@@ -445,9 +445,7 @@ pub(crate) fn decode_sentinel_attr_by_id(src: &[u8]) -> Result<AttrId> {
 pub(crate) fn encode_sentinel_attr_by_kw(kw: &Keyword) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     ret.push(StorageTag::SentinelAttrByKeyword as u8);
-    ret.extend_from_slice(kw.ns.as_bytes());
-    ret.push(b'/');
-    ret.extend_from_slice(kw.ident.as_bytes());
+    ret.extend_from_slice(kw.0.as_bytes());
     ret.into()
 }
 

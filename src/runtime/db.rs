@@ -218,7 +218,7 @@ impl Db {
             current.encoded_entity_amend_validity_to_inf_past();
             it.seek(&current);
         }
-        let collected = collected.into_iter().map(|(k, v)| v).collect_vec();
+        let collected = collected.into_iter().map(|(_, v)| v).collect_vec();
         Ok(json!(collected))
     }
 }

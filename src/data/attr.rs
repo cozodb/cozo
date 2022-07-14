@@ -168,7 +168,7 @@ impl AttributeTyping {
             }
             AttributeTyping::Keyword => match val {
                 val @ Value::Keyword(_) => Ok(val),
-                Value::String(s) => Ok(Value::Keyword(Keyword::try_from(s.as_ref())?)),
+                Value::String(s) => Ok(Value::Keyword(Keyword::from(s.as_ref()))),
                 val => Err(self.type_err(val).into()),
             },
             AttributeTyping::Uuid => {
@@ -324,7 +324,7 @@ mod tests {
     fn show_sizes() {
         let attr = Attribute {
             id: AttrId(0),
-            keyword: Keyword::try_from("01234567890123456789012/01234567890123456789012").unwrap(),
+            keyword: Keyword::from("01234567890123456789012/01234567890123456789012"),
             cardinality: AttributeCardinality::One,
             val_type: AttributeTyping::Ref,
             indexing: AttributeIndex::None,

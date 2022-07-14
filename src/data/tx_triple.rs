@@ -447,7 +447,7 @@ impl SessionTx {
         let mut has_identity_attr = false;
         for (k, v) in item {
             if k != PERM_ID_FIELD && k != TEMP_ID_FIELD {
-                let kw = (k as &str).try_into()?;
+                let kw = (k as &str).into();
                 let attr = self
                     .attr_by_kw(&kw)?
                     .ok_or_else(|| TxError::AttrNotFound(kw.clone()))?;
