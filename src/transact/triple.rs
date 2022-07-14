@@ -136,7 +136,7 @@ impl SessionTx {
         }
         Ok(())
     }
-    pub(crate) fn put_triple(
+    pub(crate) fn write_triple(
         &mut self,
         eid: EntityId,
         attr: &Attribute,
@@ -150,6 +150,7 @@ impl SessionTx {
         } else {
             Validity::NO_HISTORY
         };
+        let real_delete = op.is_retract() && !attr.with_history;
         // elide value in key for eav and aev if cardinality is one
         let (v_in_key, v_in_val) = if attr.cardinality.is_one() {
             (
@@ -161,7 +162,11 @@ impl SessionTx {
         };
         let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, vld_in_key);
         let val_encoded = v_in_val.encode_with_op_and_tx(op, tx_id);
-        self.tx.put(&eav_encoded, &val_encoded)?;
+        if real_delete {
+            self.tx.del(&eav_encoded)?;
+        } else {
+            self.tx.put(&eav_encoded, &val_encoded)?;
+        }
 
         // elide value in data for aev if it is big
         let val_encoded = if val_encoded.len() > INLINE_VAL_SIZE_LIMIT {
@@ -171,15 +176,23 @@ impl SessionTx {
         };
 
         let aev_encoded = encode_aev_key(attr.id, eid, v_in_key, vld_in_key);
-        self.tx.put(&aev_encoded, &val_encoded)?;
+        if real_delete {
+            self.tx.del(&aev_encoded)?;
+        } else {
+            self.tx.put(&aev_encoded, &val_encoded)?;
+        }
 
         // vae for ref types
         if attr.val_type.is_ref_type() {
             let vae_encoded = encode_vae_key(v.get_entity_id()?, attr.id, eid, vld_in_key);
-            self.tx.put(
-                &vae_encoded,
-                &Value::Bottom.encode_with_op_and_tx(op, tx_id),
-            )?;
+            if real_delete {
+                self.tx.del(&vae_encoded)?;
+            } else {
+                self.tx.put(
+                    &vae_encoded,
+                    &Value::Bottom.encode_with_op_and_tx(op, tx_id),
+                )?;
+            }
         }
 
         // ave for indexing
@@ -224,7 +237,11 @@ impl SessionTx {
                 }
             }
             let e_in_val_encoded = Value::EnId(eid).encode_with_op_and_tx(op, tx_id);
-            self.tx.put(&ave_encoded, &e_in_val_encoded)?;
+            if real_delete {
+                self.tx.del(&ave_encoded)?;
+            } else {
+                self.tx.put(&ave_encoded, &e_in_val_encoded)?;
+            }
 
             self.tx.put(
                 &encode_sentinel_attr_val(attr.id, v),
@@ -273,10 +290,10 @@ impl SessionTx {
                     }
                 };
                 let new_v = Value::EnId(perm_v_eid);
-                return self.put_triple(eid, attr, &new_v, vld, StoreOp::Assert);
+                return self.write_triple(eid, attr, &new_v, vld, StoreOp::Assert);
             }
         }
-        self.put_triple(eid, attr, v, vld, StoreOp::Assert)
+        self.write_triple(eid, attr, v, vld, StoreOp::Assert)
     }
 
     pub(crate) fn amend_triple(
@@ -290,7 +307,7 @@ impl SessionTx {
             return Err(TripleError::TempEid(eid).into());
         }
         // checking that the eid actually exists should be done in the preprocessing step
-        self.put_triple(eid, attr, v, vld, StoreOp::Retract)
+        self.write_triple(eid, attr, v, vld, StoreOp::Retract)
     }
 
     pub(crate) fn retract_triple(
@@ -300,7 +317,7 @@ impl SessionTx {
         v: &Value,
         vld: Validity,
     ) -> Result<EntityId> {
-        self.put_triple(eid, attr, v, vld, StoreOp::Retract)?;
+        self.write_triple(eid, attr, v, vld, StoreOp::Retract)?;
         if attr.val_type == AttributeTyping::Component {
             let eid_v = v.get_entity_id()?;
             self.retract_entity(eid_v, vld)?;
