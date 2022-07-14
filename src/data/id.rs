@@ -1,4 +1,5 @@
 use crate::data::triple::StoreOp;
+use crate::data::value::Value;
 use chrono::{DateTime, TimeZone, Utc};
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
@@ -68,8 +69,16 @@ impl TryFrom<&serde_json::Value> for Validity {
 
 impl Debug for Validity {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let dt = Utc.timestamp(self.0 / 1_000_000, (self.0 % 1_000_000) as u32 * 1000);
-        write!(f, "{}", dt.to_rfc3339())
+        if *self == Validity::MIN {
+            write!(f, "MIN")
+        } else if *self == Validity::NO_HISTORY{
+            write!(f, "NO_HISTORY")
+        } else if *self == Validity::MAX {
+            write!(f, "MAX")
+        } else {
+            let dt = Utc.timestamp(self.0 / 1_000_000, (self.0 % 1_000_000) as u32 * 1000);
+            write!(f, "{}", dt.to_rfc3339())
+        }
     }
 }
 

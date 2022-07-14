@@ -9,12 +9,14 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
+#[derive(Debug)]
 pub(crate) struct Triple<'a> {
     pub(crate) id: EntityId,
     pub(crate) attr: AttrId,
     pub(crate) value: Value<'a>,
 }
 
+#[derive(Debug)]
 pub struct Quintuple<'a> {
     pub(crate) triple: Triple<'a>,
     pub(crate) action: TxAction,
@@ -62,15 +64,15 @@ impl SessionTx {
     /// ```json
     /// [12345, ":x/y", 12345]
     /// ```
-    /// triples with tempid
+    /// triples with temp_id
     /// ```json
-    /// ["tempid1", ":x/y", 12345]
+    /// ["temp_id1", ":x/y", 12345]
     /// ```
     /// objects format
     /// ```json
     /// {
     ///     "_id": 12345,
-    ///     "_tempid": "xyzwf",
+    ///     "_temp_id": "xyzwf",
     ///     "ns/fieldname": 111
     /// }
     /// ```
@@ -102,13 +104,13 @@ impl SessionTx {
         };
         let mut collected = Vec::with_capacity(items.len());
         let mut cur_temp_eid = 1;
-        let mut str2tempid = BTreeMap::default();
+        let mut str2temp_id = BTreeMap::default();
         for item in items {
             self.parse_tx_request_item(
                 item,
                 default_since,
                 &mut cur_temp_eid,
-                &mut str2tempid,
+                &mut str2temp_id,
                 &mut collected,
             )?;
         }
@@ -119,7 +121,7 @@ impl SessionTx {
         item: &'a serde_json::Value,
         default_since: Validity,
         cur_temp_eid: &mut u64,
-        str2tempid: &mut BTreeMap<String, EntityId>,
+        str2temp_id: &mut BTreeMap<String, EntityId>,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
         let item = item
@@ -150,7 +152,7 @@ impl SessionTx {
                 action,
                 since,
                 cur_temp_eid,
-                str2tempid,
+                str2temp_id,
                 collected,
             );
         }
@@ -161,7 +163,7 @@ impl SessionTx {
                 action,
                 since,
                 cur_temp_eid,
-                str2tempid,
+                str2temp_id,
                 collected,
             );
         }
@@ -203,7 +205,7 @@ impl SessionTx {
         action: TxAction,
         since: Validity,
         cur_temp_eid: &mut u64,
-        str2tempid: &mut BTreeMap<String, EntityId>,
+        str2temp_id: &mut BTreeMap<String, EntityId>,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
         match item {
@@ -287,7 +289,7 @@ impl SessionTx {
                                 }
                                 id
                             } else if let Some(s) = eid.as_str() {
-                                match str2tempid.entry(s.to_string()) {
+                                match str2temp_id.entry(s.to_string()) {
                                     Entry::Vacant(e) => {
                                         let id = EntityId(*cur_temp_eid);
                                         *cur_temp_eid += 1;
@@ -323,7 +325,7 @@ impl SessionTx {
                             } else if let Some(_) = eid.as_str() {
                                 return Err(TxError::EntityId(
                                     existing_id.0,
-                                    "specifying tempid string together with unique constraint"
+                                    "specifying temp_id string together with unique constraint"
                                         .into(),
                                 )
                                 .into());
@@ -339,7 +341,7 @@ impl SessionTx {
                     }
                     id
                 } else if let Some(s) = eid.as_str() {
-                    match str2tempid.entry(s.to_string()) {
+                    match str2temp_id.entry(s.to_string()) {
                         Entry::Vacant(e) => {
                             let id = EntityId(*cur_temp_eid);
                             *cur_temp_eid += 1;
@@ -387,13 +389,13 @@ impl SessionTx {
         action: TxAction,
         since: Validity,
         cur_temp_eid: &mut u64,
-        str2tempid: &mut BTreeMap<String, EntityId>,
+        str2temp_id: &mut BTreeMap<String, EntityId>,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
         let mut pairs = Vec::with_capacity(item.len());
         let mut eid = None;
         for (k, v) in item {
-            if k != "_id" && k != "_tempid" {
+            if k != "_id" && k != "_temp_id" {
                 let kw = (k as &str).try_into()?;
                 let attr = self
                     .attr_by_kw(&kw)?
@@ -446,7 +448,7 @@ impl SessionTx {
             }
             eid = Some(given_id);
         }
-        if let Some(temp_id) = item.get("_tempid") {
+        if let Some(temp_id) = item.get("_temp_id") {
             if let Some(eid_inner) = eid {
                 return Err(TxError::EntityId(
                     eid_inner.0,
@@ -460,7 +462,7 @@ impl SessionTx {
                     "unable to interpret as temp id".to_string(),
                 )
             })?;
-            match str2tempid.entry(temp_id_str.to_string()) {
+            match str2temp_id.entry(temp_id_str.to_string()) {
                 Entry::Vacant(e) => {
                     let newid = EntityId(*cur_temp_eid);
                     *cur_temp_eid += 1;

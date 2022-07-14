@@ -1,7 +1,7 @@
 use anyhow::Result;
 use cozo::{Db, EncodedVec};
 use cozorocks::DbBuilder;
-use serde_json::json;
+use serde_json::{json, to_string_pretty};
 
 fn create_db(name: &str) -> Db {
     let builder = DbBuilder::default()
@@ -20,13 +20,13 @@ fn creation() {
     assert!(db.current_schema().unwrap().as_array().unwrap().is_empty());
     let res = db.transact_attributes(&json!({
         "attrs": [
-            {"put": {"keyword": ":person/idd", "cardinality": "one", "type": "string", "index": "identity"}},
-            {"put": {"keyword": ":person/first_name", "cardinality": "one", "type": "string", "index": true}},
-            {"put": {"keyword": ":person/last_name", "cardinality": "one", "type": "string", "index": true}},
-            {"put": {"keyword": ":person/age", "cardinality": "one", "type": "int"}},
-            {"put": {"keyword": ":person/friend", "cardinality": "many", "type": "ref"}},
-            {"put": {"keyword": ":person/weight", "cardinality": "one", "type": "float"}},
-            {"put": {"keyword": ":person/covid", "cardinality": "one", "type": "bool"}},
+            {"put": {"keyword": "person/idd", "cardinality": "one", "type": "string", "index": "identity"}},
+            {"put": {"keyword": "person/first_name", "cardinality": "one", "type": "string", "index": true}},
+            {"put": {"keyword": "person/last_name", "cardinality": "one", "type": "string", "index": true}},
+            {"put": {"keyword": "person/age", "cardinality": "one", "type": "int"}},
+            {"put": {"keyword": "person/friend", "cardinality": "many", "type": "ref"}},
+            {"put": {"keyword": "person/weight", "cardinality": "one", "type": "float"}},
+            {"put": {"keyword": "person/covid", "cardinality": "one", "type": "bool"}},
         ]
     }))
     .unwrap();
@@ -40,7 +40,30 @@ fn creation() {
         ]
     })).unwrap();
     assert_eq!(db.current_schema().unwrap().as_array().unwrap().len(), 6);
-    println!("{}", db.current_schema().unwrap());
+    println!(
+        "{}",
+        to_string_pretty(&db.current_schema().unwrap()).unwrap()
+    );
+    db.transact_triples(&json!({
+        "tx": [
+            {"put": {
+                "_temp_id": "alice",
+                "person/first_name": "Alice",
+                "person/age": 7,
+                "person/last_name": "Amorist",
+                "person/id": "alice_amorist",
+                "person/weight": 25}},
+            {"put": {
+                "_temp_id": "bob",
+                "person/first_name": "Bob",
+                "person/age": 70,
+                "person/last_name": "Wonderland",
+                "person/id": "bob_wonderland",
+                "person/weight": 100,
+                "person/friend": "alice"}}
+        ]
+    }))
+    .unwrap();
     // let mut it = db.total_iter();
     // while let Some((k_slice, v_slice)) = it.pair().unwrap() {
     //     let key = EncodedVec::new(k_slice);

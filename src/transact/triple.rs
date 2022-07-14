@@ -1,4 +1,5 @@
 use crate::data::attr::{Attribute, AttributeTyping};
+use crate::data::compare::rusty_cmp;
 use crate::data::encode::{
     decode_ae_key, decode_ea_key, decode_vae_key, decode_value, decode_value_from_key,
     decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v,
@@ -195,7 +196,7 @@ impl SessionTx {
                 let current_ave_encoded = if attr.with_history {
                     ave_encoded.clone()
                 } else {
-                    encode_ave_key(attr.id, v, e_in_key, Validity::MIN)
+                    encode_ave_key(attr.id, v, e_in_key, Validity::NO_HISTORY)
                 };
                 // back scan
                 if attr.with_history {
@@ -207,10 +208,11 @@ impl SessionTx {
                     {
                         let (_found_aid, found_eid, _found_vld) = decode_ae_key(k_slice)?;
                         let found_op = StoreOp::try_from(v_slice[0])?;
+                        let found_v = decode_value_from_key(k_slice)?;
                         if found_eid != eid && found_op.is_assert() {
                             return Err(TripleError::UniqueConstraintViolated(
                                 attr.keyword.clone(),
-                                format!("{:?}", v),
+                                format!("back scan found: {:?} vs {:?}", v, found_v),
                             )
                             .into());
                         }
@@ -224,10 +226,11 @@ impl SessionTx {
                 {
                     let (_found_aid, found_eid, _found_vld) = decode_ae_key(k_slice)?;
                     let found_op = StoreOp::try_from(v_slice[0])?;
+                    let found_v = decode_value_from_key(k_slice)?;
                     if found_eid != eid && found_op.is_assert() {
                         return Err(TripleError::UniqueConstraintViolated(
                             attr.keyword.clone(),
-                            format!("{:?}", v),
+                            format!("forward scan found: {:?} vs {:?}", v, found_v),
                         )
                         .into());
                     }

@@ -1,5 +1,7 @@
 use crate::data::attr::Attribute;
-use crate::data::encode::{encode_tx, encode_unique_attr_by_id, encode_unique_entity_attr, EncodedVec};
+use crate::data::encode::{
+    encode_tx, encode_unique_attr_by_id, encode_unique_entity_attr, EncodedVec,
+};
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::value::StaticValue;
@@ -22,7 +24,8 @@ pub struct SessionTx {
     pub(crate) attr_by_id_cache: BTreeMap<AttrId, Option<Attribute>>,
     pub(crate) attr_by_kw_cache: BTreeMap<Keyword, Option<Attribute>>,
     pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
-    pub(crate) eid_by_attr_val_cache: BTreeMap<StaticValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
+    pub(crate) eid_by_attr_val_cache:
+        BTreeMap<StaticValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
     // "touched" requires the id to exist prior to the transaction, and something related to it has changed
     pub(crate) touched_eids: BTreeSet<EntityId>,
 }
@@ -123,14 +126,25 @@ impl SessionTx {
             .start()
     }
     pub(crate) fn bounded_scan_first(&mut self, lower: &[u8], upper: &[u8]) -> DbIter {
-        let mut it = self.tx.iterator().upper_bound(upper).start();
+        // this is tricky, must be written like this!
+        let mut it = self
+            .tx
+            .iterator()
+            .upper_bound(upper)
+            .start();
         it.seek(lower);
         it
     }
 
     pub(crate) fn bounded_scan_last(&mut self, lower: &[u8], upper: &[u8]) -> DbIter {
-        let mut it = self.tx.iterator().lower_bound(lower).start();
-        it.seek_back(upper);
+        // this is tricky, must be written like this!
+        let mut it = self
+            .tx
+            .iterator()
+            .lower_bound(lower)
+            .upper_bound(upper)
+            .start();
+        it.seek_to_end();
         it
     }
 }
@@ -152,5 +166,5 @@ pub enum TransactError {
     #[error("required triple not found for {0:?}, {1:?}")]
     RequiredTripleNotFound(EntityId, AttrId),
     #[error("precondition failed for {0:?} {1:?}, expect {2}, got {3}")]
-    PreconditionFailed(EntityId, AttrId, String, String)
+    PreconditionFailed(EntityId, AttrId, String, String),
 }
