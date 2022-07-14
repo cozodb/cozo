@@ -83,7 +83,7 @@ impl TryFrom<&'_ JsonValue> for Attribute {
             .ok_or_else(|| JsonError::MissingField(value.clone(), "keyword".to_string()))?;
         let keyword = Keyword::try_from(keyword)?;
         if keyword.is_reserved() {
-            return Err(KeywordError::ReservedKeyword(keyword.clone()).into());
+            return Err(KeywordError::ReservedKeyword(keyword).into());
         }
         let cardinality = map
             .get("cardinality")

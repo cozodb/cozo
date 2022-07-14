@@ -49,9 +49,21 @@ impl TryFrom<&[u8]> for Keyword {
 
 impl Keyword {
     pub(crate) fn is_reserved(&self) -> bool {
-        self.0.starts_with('_')
+        self.0.is_empty() || self.0.starts_with(['_', ':'])
     }
     pub(crate) fn to_string_no_prefix(&self) -> String {
         format!("{}", self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::data::keyword::Keyword;
+
+    #[test]
+    fn reserved_kw() {
+        assert!(Keyword("_a".into()).is_reserved());
+        assert!(Keyword(":a".into()).is_reserved());
+        assert!(Keyword("".into()).is_reserved());
     }
 }
