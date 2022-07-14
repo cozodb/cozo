@@ -1,8 +1,9 @@
+use std::cmp::Ordering;
+
 use crate::data::encode::{
     decode_ae_key, decode_attr_key_by_id, decode_ea_key, decode_sentinel_attr_val, decode_vae_key,
     decode_value_from_key, StorageTag,
 };
-use std::cmp::Ordering;
 
 pub(crate) fn rusty_cmp(a: &[u8], b: &[u8]) -> i8 {
     match compare_key(a, b) {

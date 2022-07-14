@@ -1,15 +1,17 @@
+use std::fmt::{Debug, Formatter};
+use std::ops::{Deref, DerefMut};
+
+use anyhow::Result;
+use rmp_serde::Serializer;
+use serde::Serialize;
+use smallvec::SmallVec;
+
 use crate::data::attr::Attribute;
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::data::value::Value;
 use crate::runtime::transact::TxLog;
-use anyhow::Result;
-use rmp_serde::Serializer;
-use serde::Serialize;
-use smallvec::SmallVec;
-use std::fmt::{Debug, Formatter};
-use std::ops::{Deref, DerefMut};
 
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]

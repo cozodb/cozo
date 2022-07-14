@@ -1,3 +1,10 @@
+use std::sync::atomic::Ordering;
+
+use anyhow::Result;
+
+use cozorocks::{DbIter, IterBuilder};
+
+use crate::AttrTxItem;
 use crate::data::attr::Attribute;
 use crate::data::encode::{
     encode_attr_by_id, encode_sentinel_attr_by_id, encode_sentinel_attr_by_kw, VEC_SIZE_8,
@@ -7,10 +14,6 @@ use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::runtime::transact::{SessionTx, TransactError};
 use crate::utils::swap_option_result;
-use crate::AttrTxItem;
-use anyhow::Result;
-use cozorocks::{DbIter, IterBuilder};
-use std::sync::atomic::Ordering;
 
 impl SessionTx {
     pub fn tx_attrs(&mut self, payloads: Vec<AttrTxItem>) -> Result<Vec<(StoreOp, AttrId)>> {
@@ -94,7 +97,7 @@ impl SessionTx {
         })
     }
 
-    pub(crate) fn all_attrs(&mut self) -> impl Iterator<Item = Result<Attribute>> {
+    pub(crate) fn all_attrs(&mut self) -> impl Iterator<Item=Result<Attribute>> {
         AttrIter::new(self.tx.iterator())
     }
 
@@ -105,7 +108,7 @@ impl SessionTx {
                 attr.id,
                 "cardinality cannot be 'many' for unique or identity attributes".to_string(),
             )
-            .into());
+                .into());
         }
 
         if self.attr_by_kw(&attr.keyword)?.is_some() {
@@ -116,7 +119,7 @@ impl SessionTx {
                     attr.keyword
                 ),
             )
-            .into());
+                .into());
         }
         attr.id = AttrId(self.last_attr_id.fetch_add(1, Ordering::AcqRel) + 1);
         self.put_attr(&attr, StoreOp::Assert)
@@ -136,7 +139,7 @@ impl SessionTx {
                     attr.id,
                     format!("alias conflict: {}", attr.keyword),
                 )
-                .into());
+                    .into());
             }
             if existing.val_type != attr.val_type
                 || existing.cardinality != attr.cardinality
@@ -171,7 +174,7 @@ impl SessionTx {
                 aid,
                 "attempting to retract non-existing attribute".to_string(),
             )
-            .into()),
+                .into()),
             Some(attr) => {
                 self.put_attr(&attr, StoreOp::Retract)?;
                 Ok(attr.id)

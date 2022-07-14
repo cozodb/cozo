@@ -1,9 +1,10 @@
+use serde_json::json;
+pub(crate) use serde_json::Value as JsonValue;
+
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::keyword::{Keyword, KeywordError};
 use crate::data::value::Value;
-use serde_json::json;
-pub(crate) use serde_json::Value as JsonValue;
 
 #[derive(Debug, thiserror::Error)]
 pub enum JsonError {
@@ -35,6 +36,7 @@ impl<'a> From<&'a JsonValue> for Value<'a> {
         }
     }
 }
+
 impl From<Value<'_>> for JsonValue {
     fn from(v: Value<'_>) -> Self {
         match v {

@@ -1,7 +1,8 @@
-use serde_derive::{Deserialize, Serialize};
-use smartstring::{LazyCompact, SmartString};
 use std::fmt::{Debug, Display, Formatter};
 use std::str::Utf8Error;
+
+use serde_derive::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
 
 #[derive(Debug, thiserror::Error)]
 pub enum KeywordError {

@@ -1,16 +1,18 @@
-use crate::data::encode::EncodedVec;
-use crate::data::id::{AttrId, EntityId, TxId};
-use crate::data::keyword::Keyword;
-use crate::data::triple::StoreOp;
-use crate::data::tx_triple::TempIdCtx;
-use crate::data::value::Value;
+use std::fmt::{Display, Formatter};
+
 use anyhow::Result;
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
 use smallvec::SmallVec;
-use std::fmt::{Display, Formatter};
+
+use crate::data::encode::EncodedVec;
+use crate::data::id::{AttrId, EntityId, TxId};
+use crate::data::keyword::Keyword;
+use crate::data::triple::StoreOp;
+use crate::data::value::Value;
+use crate::preprocess::triple::TempIdCtx;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AttributeError {
@@ -117,7 +119,7 @@ impl TryFrom<&'_ str> for AttributeTyping {
                 return Err(AttributeError::Conversion(
                     s.to_string(),
                     "AttributeTyping".to_string(),
-                ))
+                ));
             }
         })
     }
@@ -246,7 +248,7 @@ impl TryFrom<&'_ str> for AttributeIndex {
                 return Err(AttributeError::Conversion(
                     s.to_string(),
                     "AttributeIndex".to_string(),
-                ))
+                ));
             }
         })
     }
@@ -307,7 +309,7 @@ impl Attribute {
     ) -> Result<Value<'a>> {
         if self.val_type.is_ref_type() {
             if let Value::String(s) = value {
-                return Ok(Value::EnId(ctx.str2tempid(&s, false)))
+                return Ok(Value::EnId(ctx.str2tempid(&s, false)));
             }
         }
         self.val_type.coerce_value(value)

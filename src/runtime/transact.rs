@@ -1,19 +1,22 @@
-use crate::data::attr::Attribute;
-use crate::data::encode::{
-    encode_tx, encode_sentinel_attr_by_id, encode_sentinel_entity_attr, EncodedVec,
-};
-use crate::data::id::{AttrId, EntityId, TxId, Validity};
-use crate::data::keyword::Keyword;
-use crate::data::value::StaticValue;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use anyhow::Result;
-use cozorocks::{DbIter, Tx};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+
+use cozorocks::{DbIter, Tx};
+
+use crate::data::attr::Attribute;
+use crate::data::encode::{
+    encode_sentinel_attr_by_id, encode_sentinel_entity_attr, encode_tx, EncodedVec,
+};
+use crate::data::id::{AttrId, EntityId, TxId, Validity};
+use crate::data::keyword::Keyword;
+use crate::data::value::StaticValue;
 
 pub struct SessionTx {
     pub(crate) tx: Tx,
@@ -25,7 +28,7 @@ pub struct SessionTx {
     pub(crate) attr_by_kw_cache: BTreeMap<Keyword, Option<Attribute>>,
     pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
     pub(crate) eid_by_attr_val_cache:
-        BTreeMap<StaticValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
+    BTreeMap<StaticValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
     // "touched" requires the id to exist prior to the transaction, and something related to it has changed
     pub(crate) touched_eids: BTreeSet<EntityId>,
 }

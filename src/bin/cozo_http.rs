@@ -1,10 +1,12 @@
-use actix_cors::Cors;
-use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
-use clap::Parser;
-use cozo::Db;
-use cozorocks::DbBuilder;
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
+
+use actix_cors::Cors;
+use actix_web::{App, HttpResponse, HttpServer, post, Responder, web};
+use clap::Parser;
+
+use cozo::Db;
+use cozorocks::DbBuilder;
 
 type Result<T> = std::result::Result<T, RespError>;
 
@@ -33,7 +35,7 @@ impl From<anyhow::Error> for RespError {
 }
 
 #[derive(Parser, Debug)]
-#[clap(version, about, long_about=None)]
+#[clap(version, about, long_about = None)]
 struct Args {
     /// Path to the directory to store the database
     #[clap(value_parser)]
@@ -114,7 +116,7 @@ async fn main() -> std::io::Result<()> {
             .service(transact)
             .service(transact_attr)
     })
-    .bind(addr)?
-    .run()
-    .await
+        .bind(addr)?
+        .run()
+        .await
 }

@@ -1,8 +1,10 @@
-use crate::data::triple::StoreOp;
-use chrono::{DateTime, TimeZone, Utc};
-use serde_derive::{Deserialize, Serialize};
 use std::fmt::{Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use chrono::{DateTime, TimeZone, Utc};
+use serde_derive::{Deserialize, Serialize};
+
+use crate::data::triple::StoreOp;
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Deserialize, Serialize, Hash)]
 pub struct Validity(pub i64);
@@ -70,7 +72,7 @@ impl Debug for Validity {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if *self == Validity::MIN {
             write!(f, "MIN")
-        } else if *self == Validity::NO_HISTORY{
+        } else if *self == Validity::NO_HISTORY {
             write!(f, "NO_HISTORY")
         } else if *self == Validity::MAX {
             write!(f, "MAX")

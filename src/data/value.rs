@@ -1,18 +1,21 @@
-use crate::data::encode::{decode_value, EncodedVec};
-use crate::data::id::{EntityId, TxId};
-use crate::data::keyword::Keyword;
-use crate::data::triple::StoreOp;
+use std::borrow::Cow;
+use std::cmp::Reverse;
+use std::fmt::Debug;
+
 use anyhow::Result;
-use cozorocks::PinSlice;
 use ordered_float::OrderedFloat;
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::borrow::Cow;
-use std::cmp::Reverse;
-use std::fmt::Debug;
 use uuid::Uuid;
+
+use cozorocks::PinSlice;
+
+use crate::data::encode::{decode_value, EncodedVec};
+use crate::data::id::{EntityId, TxId};
+use crate::data::keyword::Keyword;
+use crate::data::triple::StoreOp;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ValueError {
@@ -119,10 +122,11 @@ impl PinSliceValue {
 
 #[cfg(test)]
 mod tests {
-    use crate::data::keyword::Keyword;
-    use crate::data::value::Value;
     use std::collections::{BTreeMap, HashMap};
     use std::mem::size_of;
+
+    use crate::data::keyword::Keyword;
+    use crate::data::value::Value;
 
     #[test]
     fn show_size() {

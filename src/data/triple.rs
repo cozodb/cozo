@@ -1,5 +1,6 @@
-use serde_derive::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+
+use serde_derive::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreOpError {
