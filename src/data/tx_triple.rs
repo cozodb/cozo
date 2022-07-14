@@ -546,6 +546,10 @@ impl SessionTx {
             for (attr, v) in pairs {
                 self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
             }
+        } else if !eid.is_perm() {
+            for (attr, v) in pairs {
+                self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
+            }
         }
         Ok((eid, has_unique_attr))
     }
