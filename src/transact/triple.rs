@@ -1,5 +1,5 @@
 use crate::data::attr::{Attribute, AttributeTyping};
-use crate::data::compare::{compare_key, rusty_cmp};
+use crate::data::compare::compare_key;
 use crate::data::encode::{
     decode_ae_key, decode_ea_key, decode_vae_key, decode_value, decode_value_from_key,
     decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v,
@@ -193,13 +193,10 @@ impl SessionTx {
             let ave_encoded = encode_ave_key(attr.id, v, e_in_key, vld_in_key);
             // checking of unique constraints
             if attr.indexing.is_unique_index() {
-                let (current_ave_encoded, vld_in_key) = if attr.with_history {
-                    (ave_encoded.clone(), vld)
+                let vld_in_key = if attr.with_history {
+                    vld
                 } else {
-                    (
-                        encode_ave_key(attr.id, v, e_in_key, Validity::NO_HISTORY),
-                        Validity::NO_HISTORY,
-                    )
+                    Validity::NO_HISTORY
                 };
                 // back scan
                 if attr.with_history {

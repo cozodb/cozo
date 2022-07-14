@@ -70,7 +70,18 @@ fn creation() {
                 "person/last_name": "Faking",
                 "person/id": "eve_faking",
                 "person/weight": 50,
-                "person/friend": ["alice", "bob"]
+                "person/friend": [
+                    "alice",
+                    "bob",
+                    {
+                        "person/first_name": "Charlie",
+                        "person/age": 22,
+                        "person/last_name": "Goodman",
+                        "person/id": "charlie_goodman",
+                        "person/weight": 120,
+                        "person/friend": "eve"
+                    }
+                ]
             }},
         ]
     }))

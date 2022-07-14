@@ -185,7 +185,9 @@ impl SessionTx {
         }
 
         if let Some(obj) = inner.as_object() {
-            return self.parse_tx_request_obj(obj, action, since, temp_id_ctx, collected);
+            return self
+                .parse_tx_request_obj(obj, action, since, temp_id_ctx, collected)
+                .map(|_| ());
         }
 
         Err(TxError::Decoding(inner.clone(), "expected object or array".to_string()).into())
@@ -200,9 +202,18 @@ impl SessionTx {
         temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
-        if attr.cardinality.is_many() && attr.val_type != AttributeTyping::Tuple && value.is_array() {
+        if attr.cardinality.is_many() && attr.val_type != AttributeTyping::Tuple && value.is_array()
+        {
             for cur_val in value.as_array().unwrap() {
-                self.parse_tx_request_inner(eid, attr, cur_val, action, since, temp_id_ctx, collected)?;
+                self.parse_tx_request_inner(
+                    eid,
+                    attr,
+                    cur_val,
+                    action,
+                    since,
+                    temp_id_ctx,
+                    collected,
+                )?;
             }
             return Ok(());
         }
@@ -215,7 +226,11 @@ impl SessionTx {
             .into());
         }
 
-        let v = attr.coerce_value(Value::from(value), temp_id_ctx)?;
+        let v = if let serde_json::Value::Object(inner) = value {
+            self.parse_tx_component(&attr, inner, action, since, temp_id_ctx, collected)?
+        } else {
+            attr.coerce_value(Value::from(value), temp_id_ctx)?
+        };
 
         collected.push(Quintuple {
             triple: Triple {
@@ -228,6 +243,37 @@ impl SessionTx {
         });
 
         Ok(())
+    }
+    fn parse_tx_component<'a>(
+        &mut self,
+        parent_attr: &Attribute,
+        comp: &'a Map<String, serde_json::Value>,
+        action: TxAction,
+        since: Validity,
+        temp_id_ctx: &mut TempIdCtx,
+        collected: &mut Vec<Quintuple<'a>>,
+    ) -> Result<Value<'a>> {
+        if action != TxAction::Put {
+            return Err(TxError::InvalidAction(
+                action,
+                "component shorthand cannot be used".to_string(),
+            )
+            .into());
+        }
+        let (eid, has_unique_attr) =
+            self.parse_tx_request_obj(comp, action, since, temp_id_ctx, collected)?;
+        if eid.is_perm() {
+            return Err(TxError::InvalidAction(
+                action,
+                "component shorthand cannot be used to refer to existing entity".to_string(),
+            )
+            .into());
+        }
+        if !has_unique_attr && parent_attr.val_type != AttributeTyping::Component {
+            return Err(TxError::InvalidAction(action,
+            "component shorthand must contain at least one unique/identity field for non-component refs".to_string()).into());
+        }
+        Ok(Value::EnId(eid))
     }
     fn parse_tx_request_arr<'a>(
         &mut self,
@@ -323,7 +369,11 @@ impl SessionTx {
         }
 
         let id = if attr.indexing == AttributeIndex::Identity {
-            let value = attr.coerce_value(val.into(), temp_id_ctx)?;
+            let value = if let serde_json::Value::Object(inner) = val {
+                self.parse_tx_component(&attr, inner, action, since, temp_id_ctx, collected)?
+            } else {
+                attr.coerce_value(val.into(), temp_id_ctx)?
+            };
             let existing = self.eid_by_unique_av(&attr, &value, since)?;
             match existing {
                 None => {
@@ -393,17 +443,30 @@ impl SessionTx {
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple<'a>>,
-    ) -> Result<()> {
+    ) -> Result<(EntityId, bool)> {
         let mut pairs = Vec::with_capacity(item.len());
         let mut eid = None;
+        let mut has_unique_attr = false;
         for (k, v) in item {
             if k != "_id" && k != "_temp_id" {
                 let kw = (k as &str).try_into()?;
                 let attr = self
                     .attr_by_kw(&kw)?
                     .ok_or_else(|| TxError::AttrNotFound(kw.clone()))?;
+                has_unique_attr = has_unique_attr || attr.indexing.is_unique_index();
                 if attr.indexing == AttributeIndex::Identity {
-                    let value = attr.coerce_value(v.into(), temp_id_ctx)?;
+                    let value = if let serde_json::Value::Object(inner) = v {
+                        self.parse_tx_component(
+                            &attr,
+                            inner,
+                            action,
+                            since,
+                            temp_id_ctx,
+                            collected,
+                        )?
+                    } else {
+                        attr.coerce_value(v.into(), temp_id_ctx)?
+                    };
                     let existing_id = self.eid_by_unique_av(&attr, &value, since)?;
                     match existing_id {
                         None => {}
@@ -476,7 +539,7 @@ impl SessionTx {
         for (attr, v) in pairs {
             self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
         }
-        Ok(())
+        Ok((eid, has_unique_attr))
     }
 }
 
