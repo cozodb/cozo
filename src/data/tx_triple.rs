@@ -47,10 +47,51 @@ pub enum TxError {
     TripleLength,
     #[error("attribute not found: {0}")]
     AttrNotFound(Keyword),
-    #[error("wrong specification of entity id {0}: {}")]
+    #[error("wrong specification of entity id {0}: {1}")]
     EntityId(u64, String),
-    #[error("invalid action {0:?}: {}")]
+    #[error("invalid action {0:?}: {1}")]
     InvalidAction(TxAction, String),
+    #[error("temp id does not occur in head position: {0}")]
+    TempIdNoHead(String),
+}
+
+#[derive(Default)]
+pub(crate) struct TempIdCtx {
+    store: BTreeMap<String, (EntityId, bool)>,
+    prev_id: u64,
+}
+
+impl TempIdCtx {
+    fn validate_usage(&self) -> Result<()> {
+        for (k, (_, b)) in self.store.iter() {
+            if !*b {
+                return Err(TxError::TempIdNoHead(k.to_string()).into());
+            }
+        }
+        Ok(())
+    }
+    pub(crate) fn str2tempid(&mut self, key: &str, in_head: bool) -> EntityId {
+        match self.store.entry(key.to_string()) {
+            Entry::Vacant(e) => {
+                self.prev_id += 1;
+                let eid = EntityId(self.prev_id);
+                e.insert((eid, in_head));
+                eid
+            }
+            Entry::Occupied(mut e) => {
+                let (eid, prev_in_head) = e.get();
+                let (eid, prev_in_head) = (*eid, *prev_in_head);
+                if !prev_in_head && in_head {
+                    e.insert((eid, true));
+                }
+                eid
+            }
+        }
+    }
+    fn unnamed_tempid(&mut self) -> EntityId {
+        self.prev_id += 1;
+        EntityId(self.prev_id)
+    }
 }
 
 impl SessionTx {
@@ -103,25 +144,18 @@ impl SessionTx {
             Some(v) => v.to_string(),
         };
         let mut collected = Vec::with_capacity(items.len());
-        let mut cur_temp_eid = 1;
-        let mut str2temp_id = BTreeMap::default();
+        let mut temp_id_ctx = TempIdCtx::default();
         for item in items {
-            self.parse_tx_request_item(
-                item,
-                default_since,
-                &mut cur_temp_eid,
-                &mut str2temp_id,
-                &mut collected,
-            )?;
+            self.parse_tx_request_item(item, default_since, &mut temp_id_ctx, &mut collected)?;
         }
+        temp_id_ctx.validate_usage()?;
         Ok((collected, comment))
     }
     fn parse_tx_request_item<'a>(
         &mut self,
         item: &'a serde_json::Value,
         default_since: Validity,
-        cur_temp_eid: &mut u64,
-        str2temp_id: &mut BTreeMap<String, EntityId>,
+        temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
         let item = item
@@ -147,25 +181,11 @@ impl SessionTx {
             Some(v) => v.try_into()?,
         };
         if let Some(arr) = inner.as_array() {
-            return self.parse_tx_request_arr(
-                arr,
-                action,
-                since,
-                cur_temp_eid,
-                str2temp_id,
-                collected,
-            );
+            return self.parse_tx_request_arr(arr, action, since, temp_id_ctx, collected);
         }
 
         if let Some(obj) = inner.as_object() {
-            return self.parse_tx_request_obj(
-                obj,
-                action,
-                since,
-                cur_temp_eid,
-                str2temp_id,
-                collected,
-            );
+            return self.parse_tx_request_obj(obj, action, since, temp_id_ctx, collected);
         }
 
         Err(TxError::Decoding(inner.clone(), "expected object or array".to_string()).into())
@@ -174,9 +194,10 @@ impl SessionTx {
         &mut self,
         eid: EntityId,
         attr: &Attribute,
-        value: Value<'a>,
+        value: &'a serde_json::Value,
         action: TxAction,
         since: Validity,
+        temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
         if !eid.is_perm() && action != TxAction::Put {
@@ -187,11 +208,13 @@ impl SessionTx {
             .into());
         }
 
+        let v = attr.coerce_value(Value::from(value), temp_id_ctx)?;
+
         collected.push(Quintuple {
             triple: Triple {
                 id: eid,
                 attr: attr.id,
-                value,
+                value: v,
             },
             action,
             validity: since,
@@ -204,8 +227,7 @@ impl SessionTx {
         item: &'a [serde_json::Value],
         action: TxAction,
         since: Validity,
-        cur_temp_eid: &mut u64,
-        str2temp_id: &mut BTreeMap<String, EntityId>,
+        temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
         match item {
@@ -273,8 +295,7 @@ impl SessionTx {
                 let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
 
                 let id = if attr.indexing == AttributeIndex::Identity {
-                    let value: Value = val.into();
-                    let value = attr.val_type.coerce_value(value)?;
+                    let value = attr.coerce_value(val.into(), temp_id_ctx)?;
                     let existing = self.eid_by_unique_av(&attr, &value, since)?;
                     match existing {
                         None => {
@@ -289,19 +310,9 @@ impl SessionTx {
                                 }
                                 id
                             } else if let Some(s) = eid.as_str() {
-                                match str2temp_id.entry(s.to_string()) {
-                                    Entry::Vacant(e) => {
-                                        let id = EntityId(*cur_temp_eid);
-                                        *cur_temp_eid += 1;
-                                        e.insert(id);
-                                        id
-                                    }
-                                    Entry::Occupied(e) => *e.get(),
-                                }
+                                temp_id_ctx.str2tempid(s, true)
                             } else {
-                                let id = EntityId(*cur_temp_eid);
-                                *cur_temp_eid += 1;
-                                id
+                                temp_id_ctx.unnamed_tempid()
                             }
                         }
                         Some(existing_id) => {
@@ -341,19 +352,9 @@ impl SessionTx {
                     }
                     id
                 } else if let Some(s) = eid.as_str() {
-                    match str2temp_id.entry(s.to_string()) {
-                        Entry::Vacant(e) => {
-                            let id = EntityId(*cur_temp_eid);
-                            *cur_temp_eid += 1;
-                            e.insert(id);
-                            id
-                        }
-                        Entry::Occupied(e) => *e.get(),
-                    }
+                    temp_id_ctx.str2tempid(s, true)
                 } else {
-                    let id = EntityId(*cur_temp_eid);
-                    *cur_temp_eid += 1;
-                    id
+                    temp_id_ctx.unnamed_tempid()
                 };
 
                 if attr.val_type != AttributeTyping::Tuple && val.is_array() {
@@ -362,9 +363,10 @@ impl SessionTx {
                         self.parse_tx_request_inner(
                             id,
                             &attr,
-                            attr.val_type.coerce_value(val.into())?,
+                            val,
                             action,
                             since,
+                            temp_id_ctx,
                             collected,
                         )?;
                     }
@@ -373,9 +375,10 @@ impl SessionTx {
                     self.parse_tx_request_inner(
                         id,
                         &attr,
-                        attr.val_type.coerce_value(val.into())?,
+                        val,
                         action,
                         since,
+                        temp_id_ctx,
                         collected,
                     )
                 }
@@ -388,8 +391,7 @@ impl SessionTx {
         item: &'a Map<String, serde_json::Value>,
         action: TxAction,
         since: Validity,
-        cur_temp_eid: &mut u64,
-        str2temp_id: &mut BTreeMap<String, EntityId>,
+        temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
         let mut pairs = Vec::with_capacity(item.len());
@@ -400,7 +402,7 @@ impl SessionTx {
                 let attr = self
                     .attr_by_kw(&kw)?
                     .ok_or_else(|| TxError::AttrNotFound(kw.clone()))?;
-                let value = attr.val_type.coerce_value(v.into())?;
+                let value = attr.coerce_value(v.into(), temp_id_ctx)?;
                 if attr.indexing == AttributeIndex::Identity {
                     let existing_id = self.eid_by_unique_av(&attr, &value, since)?;
                     match existing_id {
@@ -419,7 +421,7 @@ impl SessionTx {
                         }
                     }
                 }
-                pairs.push((attr, value));
+                pairs.push((attr, v));
             }
         }
         if let Some(given_id) = item.get("_id") {
@@ -462,31 +464,17 @@ impl SessionTx {
                     "unable to interpret as temp id".to_string(),
                 )
             })?;
-            match str2temp_id.entry(temp_id_str.to_string()) {
-                Entry::Vacant(e) => {
-                    let newid = EntityId(*cur_temp_eid);
-                    *cur_temp_eid += 1;
-                    e.insert(newid);
-                    eid = Some(newid);
-                }
-                Entry::Occupied(e) => {
-                    eid = Some(*e.get());
-                }
-            }
+            eid = Some(temp_id_ctx.str2tempid(temp_id_str, true));
         }
         let eid = match eid {
             Some(eid) => eid,
-            None => {
-                let newid = EntityId(*cur_temp_eid);
-                *cur_temp_eid += 1;
-                newid
-            }
+            None => temp_id_ctx.unnamed_tempid(),
         };
         if action != TxAction::Put && !eid.is_perm() {
             return Err(TxError::InvalidAction(action, "temp id not allowed".to_string()).into());
         }
         for (attr, v) in pairs {
-            self.parse_tx_request_inner(eid, &attr, v, action, since, collected)?;
+            self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
         }
         Ok(())
     }

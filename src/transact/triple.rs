@@ -274,6 +274,21 @@ impl SessionTx {
                 }
             }
         };
+        if attr.val_type.is_ref_type() {
+            let v_eid = v.get_entity_id()?;
+            if !v_eid.is_perm() {
+                let perm_v_eid = match self.temp_entity_to_perm.get(&v_eid) {
+                    Some(id) => *id,
+                    None => {
+                        let new_eid = EntityId(self.last_ent_id.fetch_add(1, Ordering::AcqRel) + 1);
+                        self.temp_entity_to_perm.insert(v_eid, new_eid);
+                        new_eid
+                    }
+                };
+                let new_v = Value::EnId(perm_v_eid);
+                return self.put_triple(eid, attr, &new_v, vld, StoreOp::Assert);
+            }
+        }
         self.put_triple(eid, attr, v, vld, StoreOp::Assert)
     }
 

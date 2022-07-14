@@ -60,18 +60,30 @@ fn creation() {
                 "person/last_name": "Wonderland",
                 "person/id": "bob_wonderland",
                 "person/weight": 100,
-                "person/friend": "alice"}}
+                "person/friend": "alice"
+            }},
+            {"put": {
+                "_temp_id": "eve",
+                "person/first_name": "Eve",
+                "person/age": 18,
+                "person/last_name": "Faking",
+                "person/id": "eve_faking",
+                "person/weight": 50,
+                // "person/friend": ["alice", "bob"]
+            }},
         ]
     }))
     .unwrap();
-    // let mut it = db.total_iter();
-    // while let Some((k_slice, v_slice)) = it.pair().unwrap() {
-    //     let key = EncodedVec::new(k_slice);
-    //     let val = key.debug_value(v_slice);
-    //     dbg!(key);
-    //     dbg!(val);
-    //     it.next();
-    // }
+
+    // iteration
+    let mut it = db.total_iter();
+    while let Some((k_slice, v_slice)) = it.pair().unwrap() {
+        let key = EncodedVec::new(k_slice);
+        let val = key.debug_value(v_slice);
+        dbg!(key);
+        dbg!(val);
+        it.next();
+    }
     // let mut tx = session.transact_write().unwrap();
     // tx.new_attr(Attribute {
     //     id: AttrId(0),

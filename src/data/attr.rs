@@ -2,6 +2,7 @@ use crate::data::encode::EncodedVec;
 use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
+use crate::data::tx_triple::TempIdCtx;
 use crate::data::value::Value;
 use anyhow::Result;
 use rmp_serde::Serializer;
@@ -132,7 +133,7 @@ impl AttributeTyping {
     fn type_err(&self, val: Value) -> TypeError {
         TypeError::Typing(*self, format!("{:?}", val))
     }
-    pub(crate) fn coerce_value<'a>(&self, val: Value<'a>) -> Result<Value<'a>> {
+    fn coerce_value<'a>(&self, val: Value<'a>) -> Result<Value<'a>> {
         match self {
             AttributeTyping::Ref | AttributeTyping::Component => match val {
                 val @ Value::EnId(_) => Ok(val),
@@ -298,6 +299,18 @@ impl Attribute {
             "index": self.indexing.to_string(),
             "history": self.with_history
         })
+    }
+    pub(crate) fn coerce_value<'a>(
+        &self,
+        value: Value<'a>,
+        ctx: &mut TempIdCtx,
+    ) -> Result<Value<'a>> {
+        if self.val_type.is_ref_type() {
+            if let Value::String(s) = value {
+                return Ok(Value::EnId(ctx.str2tempid(&s, false)))
+            }
+        }
+        self.val_type.coerce_value(value)
     }
 }
 
