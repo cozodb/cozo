@@ -550,6 +550,16 @@ impl SessionTx {
             for (attr, v) in pairs {
                 self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
             }
+        } else {
+            for (attr, _v) in pairs {
+                if !attr.indexing.is_unique_index() {
+                    return Err(TxError::InvalidAction(
+                        action,
+                        "cannot use non-unique fields to specify entity".to_string(),
+                    )
+                    .into());
+                }
+            }
         }
         Ok((eid, has_unique_attr))
     }
