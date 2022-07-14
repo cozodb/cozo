@@ -24,7 +24,7 @@ macro_rules! return_if_resolved {
 }
 
 #[inline]
-fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
+pub(crate) fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
     use StorageTag::*;
 
     return_if_resolved!(a[0].cmp(&b[0]));
