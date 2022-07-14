@@ -94,6 +94,9 @@ impl TempIdCtx {
     }
 }
 
+const TEMP_ID_FIELD: &str = "_temp_id";
+const PERM_ID_FIELD: &str = "_id";
+
 impl SessionTx {
     /// Requests are like these
     /// ```json
@@ -186,7 +189,7 @@ impl SessionTx {
 
         if let Some(obj) = inner.as_object() {
             return self
-                .parse_tx_request_obj(obj, action, since, temp_id_ctx, collected)
+                .parse_tx_request_obj(obj, false, action, since, temp_id_ctx, collected)
                 .map(|_| ());
         }
 
@@ -261,14 +264,7 @@ impl SessionTx {
             .into());
         }
         let (eid, has_unique_attr) =
-            self.parse_tx_request_obj(comp, action, since, temp_id_ctx, collected)?;
-        if eid.is_perm() {
-            return Err(TxError::InvalidAction(
-                action,
-                "component shorthand cannot be used to refer to existing entity".to_string(),
-            )
-            .into());
-        }
+            self.parse_tx_request_obj(comp, true, action, since, temp_id_ctx, collected)?;
         if !has_unique_attr && parent_attr.val_type != AttributeTyping::Component {
             return Err(TxError::InvalidAction(action,
             "component shorthand must contain at least one unique/identity field for non-component refs".to_string()).into());
@@ -439,6 +435,7 @@ impl SessionTx {
     fn parse_tx_request_obj<'a>(
         &mut self,
         item: &'a Map<String, serde_json::Value>,
+        is_sub_component: bool,
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
@@ -448,7 +445,7 @@ impl SessionTx {
         let mut eid = None;
         let mut has_unique_attr = false;
         for (k, v) in item {
-            if k != "_id" && k != "_temp_id" {
+            if k != PERM_ID_FIELD && k != TEMP_ID_FIELD {
                 let kw = (k as &str).try_into()?;
                 let attr = self
                     .attr_by_kw(&kw)?
@@ -487,7 +484,7 @@ impl SessionTx {
                 pairs.push((attr, v));
             }
         }
-        if let Some(given_id) = item.get("_id") {
+        if let Some(given_id) = item.get(PERM_ID_FIELD) {
             let given_id = given_id.as_u64().ok_or_else(|| {
                 TxError::Decoding(
                     given_id.clone(),
@@ -513,7 +510,7 @@ impl SessionTx {
             }
             eid = Some(given_id);
         }
-        if let Some(temp_id) = item.get("_temp_id") {
+        if let Some(temp_id) = item.get(TEMP_ID_FIELD) {
             if let Some(eid_inner) = eid {
                 return Err(TxError::EntityId(
                     eid_inner.0,
@@ -536,8 +533,10 @@ impl SessionTx {
         if action != TxAction::Put && !eid.is_perm() {
             return Err(TxError::InvalidAction(action, "temp id not allowed".to_string()).into());
         }
-        for (attr, v) in pairs {
-            self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
+        if !is_sub_component {
+            for (attr, v) in pairs {
+                self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
+            }
         }
         Ok((eid, has_unique_attr))
     }
