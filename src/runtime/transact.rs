@@ -1,6 +1,6 @@
 use crate::data::attr::Attribute;
 use crate::data::encode::{
-    encode_tx, encode_unique_attr_by_id, encode_unique_entity_attr, EncodedVec,
+    encode_tx, encode_sentinel_attr_by_id, encode_sentinel_entity_attr, EncodedVec,
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
@@ -69,8 +69,8 @@ impl SessionTx {
     }
 
     pub(crate) fn load_last_entity_id(&mut self) -> Result<EntityId> {
-        let e_lower = encode_unique_entity_attr(EntityId::MIN_PERM, AttrId::MIN_PERM);
-        let e_upper = encode_unique_entity_attr(EntityId::MAX_PERM, AttrId::MIN_PERM);
+        let e_lower = encode_sentinel_entity_attr(EntityId::MIN_PERM, AttrId::MIN_PERM);
+        let e_upper = encode_sentinel_entity_attr(EntityId::MAX_PERM, AttrId::MIN_PERM);
         let it = self.bounded_scan_last(&e_lower, &e_upper);
 
         Ok(match it.key()? {
@@ -80,8 +80,8 @@ impl SessionTx {
     }
 
     pub(crate) fn load_last_attr_id(&mut self) -> Result<AttrId> {
-        let e_lower = encode_unique_attr_by_id(AttrId::MIN_PERM);
-        let e_upper = encode_unique_attr_by_id(AttrId::MAX_PERM);
+        let e_lower = encode_sentinel_attr_by_id(AttrId::MIN_PERM);
+        let e_upper = encode_sentinel_attr_by_id(AttrId::MAX_PERM);
         let it = self.bounded_scan_last(&e_lower, &e_upper);
         Ok(match it.key()? {
             None => AttrId::MAX_TEMP,

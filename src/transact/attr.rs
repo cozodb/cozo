@@ -1,6 +1,6 @@
 use crate::data::attr::Attribute;
 use crate::data::encode::{
-    encode_attr_by_id, encode_unique_attr_by_id, encode_unique_attr_by_kw, VEC_SIZE_8,
+    encode_attr_by_id, encode_sentinel_attr_by_id, encode_sentinel_attr_by_kw, VEC_SIZE_8,
 };
 use crate::data::id::AttrId;
 use crate::data::keyword::Keyword;
@@ -40,7 +40,7 @@ impl SessionTx {
             return Ok(res.clone());
         }
 
-        let anchor = encode_unique_attr_by_id(aid);
+        let anchor = encode_sentinel_attr_by_id(aid);
         Ok(match self.tx.get(&anchor, false)? {
             None => {
                 self.attr_by_id_cache.insert(aid, None);
@@ -69,7 +69,7 @@ impl SessionTx {
             return Ok(res.clone());
         }
 
-        let anchor = encode_unique_attr_by_kw(kw);
+        let anchor = encode_sentinel_attr_by_kw(kw);
         Ok(match self.tx.get(&anchor, false)? {
             None => {
                 self.attr_by_kw_cache.insert(kw.clone(), None);
@@ -145,9 +145,9 @@ impl SessionTx {
             {
                 return Err(TransactError::ChangingImmutableProperty(attr.id).into());
             }
-            let kw_signal = encode_unique_attr_by_kw(&existing.keyword);
+            let kw_sentinel = encode_sentinel_attr_by_kw(&existing.keyword);
             let attr_data = existing.encode_with_op_and_tx(StoreOp::Retract, tx_id);
-            self.tx.put(&kw_signal, &attr_data)?;
+            self.tx.put(&kw_sentinel, &attr_data)?;
         }
         self.put_attr(&attr, StoreOp::Assert)
     }
@@ -157,10 +157,10 @@ impl SessionTx {
         let attr_data = attr.encode_with_op_and_tx(op, tx_id);
         let id_encoded = encode_attr_by_id(attr.id, tx_id);
         self.tx.put(&id_encoded, &attr_data)?;
-        let id_signal = encode_unique_attr_by_id(attr.id);
-        self.tx.put(&id_signal, &attr_data)?;
-        let kw_signal = encode_unique_attr_by_kw(&attr.keyword);
-        self.tx.put(&kw_signal, &attr_data)?;
+        let id_sentinel = encode_sentinel_attr_by_id(attr.id);
+        self.tx.put(&id_sentinel, &attr_data)?;
+        let kw_sentinel = encode_sentinel_attr_by_kw(&attr.keyword);
+        self.tx.put(&kw_sentinel, &attr_data)?;
         Ok(attr.id)
     }
 
@@ -194,14 +194,14 @@ struct AttrIter {
 
 impl AttrIter {
     fn new(builder: IterBuilder) -> Self {
-        let upper_bound = encode_unique_attr_by_id(AttrId::MAX_PERM);
+        let upper_bound = encode_sentinel_attr_by_id(AttrId::MAX_PERM);
         let it = builder.upper_bound(&upper_bound).start();
         Self { it, started: false }
     }
 
     fn next_inner(&mut self) -> Result<Option<Attribute>> {
         if !self.started {
-            let lower_bound = encode_unique_attr_by_id(AttrId::MIN_PERM);
+            let lower_bound = encode_sentinel_attr_by_id(AttrId::MIN_PERM);
             self.it.seek(&lower_bound);
             self.started = true;
         } else {

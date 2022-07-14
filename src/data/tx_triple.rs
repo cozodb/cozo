@@ -364,7 +364,7 @@ impl SessionTx {
             return Ok(());
         }
 
-        let id = if attr.indexing == AttributeIndex::Identity {
+        let id = if attr.indexing.is_unique_index() {
             let value = if let serde_json::Value::Object(inner) = val {
                 self.parse_tx_component(&attr, inner, action, since, temp_id_ctx, collected)?
             } else {
@@ -399,7 +399,7 @@ impl SessionTx {
                             .into());
                         }
                         id
-                    } else if let Some(_) = eid.as_str() {
+                    } else if eid.is_string() {
                         return Err(TxError::EntityId(
                             existing_id.0,
                             "specifying temp_id string together with unique constraint".into(),
@@ -444,6 +444,7 @@ impl SessionTx {
         let mut pairs = Vec::with_capacity(item.len());
         let mut eid = None;
         let mut has_unique_attr = false;
+        let mut has_identity_attr = false;
         for (k, v) in item {
             if k != PERM_ID_FIELD && k != TEMP_ID_FIELD {
                 let kw = (k as &str).try_into()?;
@@ -451,6 +452,7 @@ impl SessionTx {
                     .attr_by_kw(&kw)?
                     .ok_or_else(|| TxError::AttrNotFound(kw.clone()))?;
                 has_unique_attr = has_unique_attr || attr.indexing.is_unique_index();
+                has_identity_attr = has_identity_attr || attr.indexing == AttributeIndex::Identity;
                 if attr.indexing == AttributeIndex::Identity {
                     let value = if let serde_json::Value::Object(inner) = v {
                         self.parse_tx_component(
@@ -534,6 +536,13 @@ impl SessionTx {
             return Err(TxError::InvalidAction(action, "temp id not allowed".to_string()).into());
         }
         if !is_sub_component {
+            if action == TxAction::Put && eid.is_perm() && !has_identity_attr {
+                return Err(TxError::InvalidAction(
+                    action,
+                    "upsert requires identity attribute present".to_string(),
+                )
+                .into());
+            }
             for (attr, v) in pairs {
                 self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
             }

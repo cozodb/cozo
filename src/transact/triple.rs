@@ -3,8 +3,8 @@ use crate::data::compare::compare_key;
 use crate::data::encode::{
     decode_ae_key, decode_ea_key, decode_vae_key, decode_value, decode_value_from_key,
     decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v,
-    encode_eav_key, encode_unique_attr_val, encode_unique_entity_attr, encode_vae_key, EncodedVec,
-    LARGE_VEC_SIZE,
+    encode_eav_key, encode_sentinel_attr_val, encode_sentinel_entity_attr, encode_vae_key,
+    EncodedVec, LARGE_VEC_SIZE,
 };
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::keyword::Keyword;
@@ -105,9 +105,9 @@ impl SessionTx {
         vld: Validity,
     ) -> Result<()> {
         let aid = attr.id;
-        let signal = encode_unique_entity_attr(eid, aid);
+        let sentinel = encode_sentinel_entity_attr(eid, aid);
         let gen_err = || TransactError::RequiredTripleNotFound(eid, aid);
-        self.tx.get(&signal, true)?.ok_or_else(gen_err)?;
+        self.tx.get(&sentinel, true)?.ok_or_else(gen_err)?;
         let v_in_key = if attr.cardinality.is_one() {
             &Value::Bottom
         } else {
@@ -227,13 +227,13 @@ impl SessionTx {
             self.tx.put(&ave_encoded, &e_in_val_encoded)?;
 
             self.tx.put(
-                &encode_unique_attr_val(attr.id, v),
+                &encode_sentinel_attr_val(attr.id, v),
                 &tx_id.bytes_with_op(op),
             )?;
         }
 
         self.tx.put(
-            &encode_unique_entity_attr(eid, attr.id),
+            &encode_sentinel_entity_attr(eid, attr.id),
             &tx_id.bytes_with_op(op),
         )?;
 

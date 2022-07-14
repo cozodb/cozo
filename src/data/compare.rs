@@ -1,5 +1,5 @@
 use crate::data::encode::{
-    decode_ae_key, decode_attr_key_by_id, decode_ea_key, decode_unique_attr_val, decode_vae_key,
+    decode_ae_key, decode_attr_key_by_id, decode_ea_key, decode_sentinel_attr_val, decode_vae_key,
     decode_value_from_key, StorageTag,
 };
 use std::cmp::Ordering;
@@ -43,10 +43,10 @@ pub(crate) fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
         TripleValueAttrEntity => compare_key_triple_vae(a, b),
         AttrById => compare_key_attr_by_id(a, b),
         Tx => compare_key_tx(a, b),
-        UniqueEntityAttr => compare_key_unique_entity_attr(a, b),
-        UniqueAttrValue => compare_key_unique_attr_val(a, b),
-        UniqueAttrById => compare_key_unique_attr_by_id(a, b),
-        UniqueAttrByKeyword => compare_key_unique_attr_by_kw(a, b),
+        SentinelEntityAttr => compare_key_unique_entity_attr(a, b),
+        SentinelAttrValue => compare_key_unique_attr_val(a, b),
+        SentinelAttrById => compare_key_unique_attr_by_id(a, b),
+        SentinelAttrByKeyword => compare_key_unique_attr_by_kw(a, b),
     }
 }
 
@@ -129,8 +129,8 @@ fn compare_key_unique_entity_attr(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_unique_attr_val(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_a, a_v) = decode_unique_attr_val(a).unwrap();
-    let (b_a, b_v) = decode_unique_attr_val(b).unwrap();
+    let (a_a, a_v) = decode_sentinel_attr_val(a).unwrap();
+    let (b_a, b_v) = decode_sentinel_attr_val(b).unwrap();
     return_if_resolved!(a_a.cmp(&b_a));
     a_v.cmp(&b_v)
 }
