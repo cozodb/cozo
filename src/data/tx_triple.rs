@@ -200,6 +200,13 @@ impl SessionTx {
         temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple<'a>>,
     ) -> Result<()> {
+        if attr.cardinality.is_many() && attr.val_type != AttributeTyping::Tuple && value.is_array() {
+            for cur_val in value.as_array().unwrap() {
+                self.parse_tx_request_inner(eid, attr, cur_val, action, since, temp_id_ctx, collected)?;
+            }
+            return Ok(());
+        }
+
         if !eid.is_perm() && action != TxAction::Put {
             return Err(TxError::InvalidAction(
                 action,
@@ -291,99 +298,92 @@ impl SessionTx {
                 Ok(())
             }
             [eid, attr_kw, val] => {
-                let kw: Keyword = attr_kw.try_into()?;
-                let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
-
-                let id = if attr.indexing == AttributeIndex::Identity {
-                    let value = attr.coerce_value(val.into(), temp_id_ctx)?;
-                    let existing = self.eid_by_unique_av(&attr, &value, since)?;
-                    match existing {
-                        None => {
-                            if let Some(i) = eid.as_u64() {
-                                let id = EntityId(i);
-                                if !id.is_perm() {
-                                    return Err(TxError::EntityId(
-                                        id.0,
-                                        "temp id specified".into(),
-                                    )
-                                    .into());
-                                }
-                                id
-                            } else if let Some(s) = eid.as_str() {
-                                temp_id_ctx.str2tempid(s, true)
-                            } else {
-                                temp_id_ctx.unnamed_tempid()
-                            }
-                        }
-                        Some(existing_id) => {
-                            if let Some(i) = eid.as_u64() {
-                                let id = EntityId(i);
-                                if !id.is_perm() {
-                                    return Err(TxError::EntityId(
-                                        id.0,
-                                        "temp id specified".into(),
-                                    )
-                                    .into());
-                                }
-                                if existing_id != id {
-                                    return Err(TxError::EntityId(
-                                        id.0,
-                                        "conflicting id for identity value".into(),
-                                    )
-                                    .into());
-                                }
-                                id
-                            } else if let Some(_) = eid.as_str() {
-                                return Err(TxError::EntityId(
-                                    existing_id.0,
-                                    "specifying temp_id string together with unique constraint"
-                                        .into(),
-                                )
-                                .into());
-                            } else {
-                                existing_id
-                            }
-                        }
-                    }
-                } else if let Some(i) = eid.as_u64() {
-                    let id = EntityId(i);
-                    if !id.is_perm() {
-                        return Err(TxError::EntityId(id.0, "temp id specified".into()).into());
-                    }
-                    id
-                } else if let Some(s) = eid.as_str() {
-                    temp_id_ctx.str2tempid(s, true)
-                } else {
-                    temp_id_ctx.unnamed_tempid()
-                };
-
-                if attr.val_type != AttributeTyping::Tuple && val.is_array() {
-                    let vals = val.as_array().unwrap();
-                    for val in vals {
-                        self.parse_tx_request_inner(
-                            id,
-                            &attr,
-                            val,
-                            action,
-                            since,
-                            temp_id_ctx,
-                            collected,
-                        )?;
-                    }
-                    Ok(())
-                } else {
-                    self.parse_tx_request_inner(
-                        id,
-                        &attr,
-                        val,
-                        action,
-                        since,
-                        temp_id_ctx,
-                        collected,
-                    )
-                }
+                self.parse_tx_triple(eid, attr_kw, val, action, since, temp_id_ctx, collected)
             }
             _ => Err(TxError::TripleLength.into()),
+        }
+    }
+    fn parse_tx_triple<'a>(
+        &mut self,
+        eid: &serde_json::Value,
+        attr_kw: &serde_json::Value,
+        val: &'a serde_json::Value,
+        action: TxAction,
+        since: Validity,
+        temp_id_ctx: &mut TempIdCtx,
+        collected: &mut Vec<Quintuple<'a>>,
+    ) -> Result<()> {
+        let kw: Keyword = attr_kw.try_into()?;
+        let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
+        if attr.cardinality.is_many() && attr.val_type != AttributeTyping::Tuple && val.is_array() {
+            for cur_val in val.as_array().unwrap() {
+                self.parse_tx_triple(eid, attr_kw, cur_val, action, since, temp_id_ctx, collected)?;
+            }
+            return Ok(());
+        }
+
+        let id = if attr.indexing == AttributeIndex::Identity {
+            let value = attr.coerce_value(val.into(), temp_id_ctx)?;
+            let existing = self.eid_by_unique_av(&attr, &value, since)?;
+            match existing {
+                None => {
+                    if let Some(i) = eid.as_u64() {
+                        let id = EntityId(i);
+                        if !id.is_perm() {
+                            return Err(TxError::EntityId(id.0, "temp id specified".into()).into());
+                        }
+                        id
+                    } else if let Some(s) = eid.as_str() {
+                        temp_id_ctx.str2tempid(s, true)
+                    } else {
+                        temp_id_ctx.unnamed_tempid()
+                    }
+                }
+                Some(existing_id) => {
+                    if let Some(i) = eid.as_u64() {
+                        let id = EntityId(i);
+                        if !id.is_perm() {
+                            return Err(TxError::EntityId(id.0, "temp id specified".into()).into());
+                        }
+                        if existing_id != id {
+                            return Err(TxError::EntityId(
+                                id.0,
+                                "conflicting id for identity value".into(),
+                            )
+                            .into());
+                        }
+                        id
+                    } else if let Some(_) = eid.as_str() {
+                        return Err(TxError::EntityId(
+                            existing_id.0,
+                            "specifying temp_id string together with unique constraint".into(),
+                        )
+                        .into());
+                    } else {
+                        existing_id
+                    }
+                }
+            }
+        } else if let Some(i) = eid.as_u64() {
+            let id = EntityId(i);
+            if !id.is_perm() {
+                return Err(TxError::EntityId(id.0, "temp id specified".into()).into());
+            }
+            id
+        } else if let Some(s) = eid.as_str() {
+            temp_id_ctx.str2tempid(s, true)
+        } else {
+            temp_id_ctx.unnamed_tempid()
+        };
+
+        if attr.val_type != AttributeTyping::Tuple && val.is_array() {
+            let vals = val.as_array().unwrap();
+            for val in vals {
+                self.parse_tx_request_inner(id, &attr, val, action, since, temp_id_ctx, collected)?;
+            }
+            Ok(())
+        } else {
+            self.parse_tx_request_inner(id, &attr, val, action, since, temp_id_ctx, collected)
         }
     }
     fn parse_tx_request_obj<'a>(
@@ -402,8 +402,8 @@ impl SessionTx {
                 let attr = self
                     .attr_by_kw(&kw)?
                     .ok_or_else(|| TxError::AttrNotFound(kw.clone()))?;
-                let value = attr.coerce_value(v.into(), temp_id_ctx)?;
                 if attr.indexing == AttributeIndex::Identity {
+                    let value = attr.coerce_value(v.into(), temp_id_ctx)?;
                     let existing_id = self.eid_by_unique_av(&attr, &value, since)?;
                     match existing_id {
                         None => {}

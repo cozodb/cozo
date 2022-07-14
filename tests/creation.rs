@@ -52,7 +52,8 @@ fn creation() {
                 "person/age": 7,
                 "person/last_name": "Amorist",
                 "person/id": "alice_amorist",
-                "person/weight": 25}},
+                "person/weight": 25,
+                "person/friend": "eve"}},
             {"put": {
                 "_temp_id": "bob",
                 "person/first_name": "Bob",
@@ -69,7 +70,7 @@ fn creation() {
                 "person/last_name": "Faking",
                 "person/id": "eve_faking",
                 "person/weight": 50,
-                // "person/friend": ["alice", "bob"]
+                "person/friend": ["alice", "bob"]
             }},
         ]
     }))
