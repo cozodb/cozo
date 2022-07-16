@@ -1,5 +1,5 @@
 use anyhow::Result;
-use cozo::{Db, EncodedVec};
+use cozo::{Db, EncodedVec, EntityId, Validity};
 use cozorocks::DbBuilder;
 use serde_json::{json, to_string_pretty};
 
@@ -91,6 +91,14 @@ fn creation() {
         "{}",
         to_string_pretty(&db.entities_at(None).unwrap()).unwrap()
     );
+
+    let first_entity = db
+        .transact()
+        .unwrap()
+        .pull_all(EntityId::MIN_PERM, Validity::current())
+        .unwrap();
+
+    println!("{}", to_string_pretty(&first_entity).unwrap());
 
     // iteration
     // let mut it = db.total_iter();

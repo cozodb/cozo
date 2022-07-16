@@ -13,7 +13,7 @@ impl Validity {
     pub(crate) const MAX: Validity = Validity(i64::MAX);
     pub(crate) const NO_HISTORY: Validity = Validity(i64::MIN + 1);
     pub(crate) const MIN: Validity = Validity(i64::MIN);
-    pub(crate) fn current() -> Self {
+    pub fn current() -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -89,8 +89,8 @@ pub struct EntityId(pub u64);
 impl EntityId {
     pub(crate) const MAX_SYS: EntityId = EntityId(1000);
     pub(crate) const MAX_TEMP: EntityId = EntityId(10_000_000);
-    pub(crate) const MIN_PERM: EntityId = EntityId(10_000_001);
-    pub(crate) const MAX_PERM: EntityId = EntityId(0x00ff_ffff_ff00_0000);
+    pub const MIN_PERM: EntityId = EntityId(10_000_001);
+    pub const MAX_PERM: EntityId = EntityId(0x00ff_ffff_ff00_0000);
 
     pub(crate) fn from_bytes(b: &[u8]) -> Self {
         EntityId(u64::from_be_bytes([
