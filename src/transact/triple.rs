@@ -690,7 +690,10 @@ impl TripleEntityAttrBeforeIter {
                         self.current.encoded_entity_amend_validity(self.before);
                         continue;
                     }
-                    let v = decode_value_from_key(k_slice)?;
+                    let mut v = decode_value_from_key(k_slice)?;
+                    if v == Value::Bottom {
+                        v = decode_value_from_val(v_slice)?;
+                    }
                     self.current.copy_from_slice(k_slice);
                     self.current.encoded_entity_amend_validity_to_inf_past();
                     let op = StoreOp::try_from(v_slice[0])?;
