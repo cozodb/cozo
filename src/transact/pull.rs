@@ -1,3 +1,8 @@
+use std::collections::HashSet;
+
+use anyhow::Result;
+use serde_json::{json, Map};
+
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeTyping};
 use crate::data::encode::{
     decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, StorageTag,
@@ -8,9 +13,6 @@ use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::data::value::{StaticValue, Value};
 use crate::runtime::transact::SessionTx;
-use anyhow::Result;
-use serde_json::{json, Map};
-use std::collections::HashSet;
 
 pub(crate) type PullSpecs = Vec<PullSpec>;
 
@@ -247,7 +249,7 @@ impl SessionTx {
         }
         Ok(())
     }
-    pub(crate) fn pull_all(
+    pub fn pull_all(
         &mut self,
         eid: EntityId,
         vld: Validity,

@@ -1,7 +1,8 @@
 use anyhow::Result;
+use serde_json::{json, to_string_pretty};
+
 use cozo::{Db, EncodedVec, EntityId, Validity};
 use cozorocks::DbBuilder;
-use serde_json::{json, to_string_pretty};
 
 fn create_db(name: &str) -> Db {
     let builder = DbBuilder::default()
@@ -92,13 +93,19 @@ fn creation() {
         to_string_pretty(&db.entities_at(None).unwrap()).unwrap()
     );
 
-    let first_entity = db
-        .transact()
+    let mut coll = Default::default();
+    db.transact()
         .unwrap()
-        .pull_all(EntityId::MIN_PERM, Validity::current())
+        .pull_all(
+            EntityId::MIN_PERM,
+            Validity::current(),
+            &mut coll,
+            &mut Default::default(),
+        )
         .unwrap();
+    let coll: serde_json::Value = coll.into();
 
-    println!("{}", to_string_pretty(&first_entity).unwrap());
+    println!("{}", to_string_pretty(&coll).unwrap());
 
     // iteration
     // let mut it = db.total_iter();
