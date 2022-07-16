@@ -42,7 +42,10 @@ impl SessionTx {
         recursive_seen: &mut Option<HashSet<EntityId>>,
     ) -> Result<()> {
         match spec {
-            PullSpec::PullAll => self.pull_all(eid, vld, collector),
+            PullSpec::PullAll => {
+                let mut seen = HashSet::default();
+                self.pull_all(eid, vld, collector, &mut seen)
+            }
             PullSpec::Attr(a_spec) => {
                 if a_spec.reverse {
                     self.pull_attr_rev(eid, vld, a_spec, collector, recursive_seen)
@@ -249,6 +252,7 @@ impl SessionTx {
         eid: EntityId,
         vld: Validity,
         collector: &mut Map<String, JsonValue>,
+        pull_all_seen: &mut HashSet<EntityId>,
     ) -> Result<()> {
         let mut current = encode_eav_key(eid, AttrId::MIN_PERM, &Value::Null, Validity::MAX);
         let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &Value::Bottom, Validity::MIN);
@@ -287,17 +291,26 @@ impl SessionTx {
                 decode_value_from_key(k_slice)?
             };
             collector.insert("_id".to_string(), eid.0.into());
+            pull_all_seen.insert(eid);
             if attr.cardinality.is_many() {
                 if attr.val_type == AttributeTyping::Component {
                     let val_id = value.get_entity_id()?;
-                    let mut subcollector = Map::default();
-                    self.pull_all(val_id, vld, &mut subcollector)?;
+                    if pull_all_seen.contains(&val_id) {
+                        let arr = collector
+                            .entry(attr.keyword.to_string_no_prefix())
+                            .or_insert_with(|| json!([]));
+                        let arr = arr.as_array_mut().unwrap();
+                        arr.push(value.into());
+                    } else {
+                        let mut subcollector = Map::default();
+                        self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
 
-                    let arr = collector
-                        .entry(attr.keyword.to_string_no_prefix())
-                        .or_insert_with(|| json!([]));
-                    let arr = arr.as_array_mut().unwrap();
-                    arr.push(subcollector.into());
+                        let arr = collector
+                            .entry(attr.keyword.to_string_no_prefix())
+                            .or_insert_with(|| json!([]));
+                        let arr = arr.as_array_mut().unwrap();
+                        arr.push(subcollector.into());
+                    }
                 } else {
                     let arr = collector
                         .entry(attr.keyword.to_string_no_prefix())
@@ -308,9 +321,13 @@ impl SessionTx {
             } else {
                 if attr.val_type == AttributeTyping::Component {
                     let val_id = value.get_entity_id()?;
-                    let mut subcollector = Map::default();
-                    self.pull_all(val_id, vld, &mut subcollector)?;
-                    collector.insert(attr.keyword.to_string_no_prefix(), subcollector.into());
+                    if pull_all_seen.contains(&val_id) {
+                        collector.insert(attr.keyword.to_string_no_prefix(), value.into());
+                    } else {
+                        let mut subcollector = Map::default();
+                        self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
+                        collector.insert(attr.keyword.to_string_no_prefix(), subcollector.into());
+                    }
                 } else {
                     collector.insert(attr.keyword.to_string_no_prefix(), value.into());
                 }
