@@ -1,6 +1,8 @@
+use std::cmp::max;
+
 use anyhow::Result;
 use itertools::Itertools;
-use serde_json::{json, Map};
+use serde_json::Map;
 
 use crate::data::attr::AttributeCardinality;
 use crate::data::json::JsonValue;
@@ -17,11 +19,11 @@ pub enum PullError {
 }
 
 impl SessionTx {
-    pub(crate) fn parse_pull(&mut self, desc: &JsonValue, no_parent: bool) -> Result<PullSpecs> {
+    pub(crate) fn parse_pull(&mut self, desc: &JsonValue, depth: usize) -> Result<PullSpecs> {
         if let Some(inner) = desc.as_array() {
             inner
                 .iter()
-                .map(|v| self.parse_pull_element(v, if no_parent { None } else { Some(inner) }))
+                .map(|v| self.parse_pull_element(v, depth))
                 .try_collect()
         } else {
             Err(PullError::InvalidFormat(desc.clone(), "expect array".to_string()).into())
@@ -30,7 +32,7 @@ impl SessionTx {
     pub(crate) fn parse_pull_element(
         &mut self,
         desc: &JsonValue,
-        parent: Option<&Vec<JsonValue>>,
+        depth: usize,
     ) -> Result<PullSpec> {
         match desc {
             JsonValue::String(s) if s == "*" => Ok(PullSpec::PullAll),
@@ -55,9 +57,10 @@ impl SessionTx {
                     nested: vec![],
                     recursive: false,
                     recursion_limit: None,
+                    recursion_depth: 0,
                 }))
             }
-            JsonValue::Object(m) => self.parse_pull_obj(m, parent),
+            JsonValue::Object(m) => self.parse_pull_obj(m, depth),
             v => Err(
                 PullError::InvalidFormat(v.clone(), "expect string or object".to_string()).into(),
             ),
@@ -66,7 +69,7 @@ impl SessionTx {
     pub(crate) fn parse_pull_obj(
         &mut self,
         desc: &Map<String, JsonValue>,
-        parent: Option<&Vec<JsonValue>>,
+        depth: usize,
     ) -> Result<PullSpec> {
         let mut default_val = Value::Null;
         let mut as_override = None;
@@ -77,6 +80,7 @@ impl SessionTx {
         let mut recursive = false;
         let mut recursion_limit = None;
         let mut pull_id = false;
+        let mut recursion_depth = 0;
 
         for (k, v) in desc {
             match k as &str {
@@ -121,13 +125,12 @@ impl SessionTx {
                         )
                         .into());
                     }
-                    let parent = parent.ok_or_else(|| {
-                        PullError::InvalidFormat(
-                            JsonValue::Object(desc.clone()),
-                            "cannot recurse at top level".to_string(),
-                        )
-                    })?;
                     recursive = true;
+                }
+                "depth" => {
+                    recursion_depth = v.as_u64().ok_or_else(|| {
+                        PullError::InvalidFormat(v.clone(), "expect depth".to_string())
+                    })? as usize
                 }
                 "spec" => {
                     sub_target = {
@@ -176,7 +179,11 @@ impl SessionTx {
         };
         let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
         let cardinality = cardinality_override.unwrap_or(attr.cardinality);
-        let nested = self.parse_pull(&JsonValue::Array(sub_target), recursive)?;
+        let nested = self.parse_pull(&JsonValue::Array(sub_target), depth + 1)?;
+
+        if recursive {
+            recursion_depth = max(recursion_depth, 1);
+        }
 
         Ok(PullSpec::Attr(AttrPullSpec {
             attr,
@@ -188,6 +195,7 @@ impl SessionTx {
             nested,
             recursive,
             recursion_limit,
+            recursion_depth,
         }))
     }
 }

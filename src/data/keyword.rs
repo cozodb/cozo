@@ -21,7 +21,7 @@ pub enum KeywordError {
     UnexpectedJson(JsonValue),
 }
 
-#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Deserialize, Serialize, Hash)]
 pub struct Keyword(pub(crate) SmartString<LazyCompact>);
 
 impl Display for Keyword {

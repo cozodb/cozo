@@ -1,7 +1,8 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use anyhow::Result;
 use serde_json::{json, Map};
+use smallvec::{smallvec, SmallVec, ToSmallVec};
 
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeTyping};
 use crate::data::encode::{
@@ -23,6 +24,15 @@ pub(crate) enum PullSpec {
     Attr(AttrPullSpec),
 }
 
+impl PullSpec {
+    fn as_attr_spec(&self) -> Option<&AttrPullSpec> {
+        match self {
+            PullSpec::Attr(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct AttrPullSpec {
     pub(crate) attr: Attribute,
@@ -34,6 +44,36 @@ pub(crate) struct AttrPullSpec {
     pub(crate) nested: PullSpecs,
     pub(crate) recursive: bool,
     pub(crate) recursion_limit: Option<usize>,
+    pub(crate) recursion_depth: usize,
+}
+
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub(crate) struct CurrentPath(SmallVec<[usize; 8]>);
+
+impl CurrentPath {
+    pub(crate) fn new(idx: usize) -> Self {
+        Self(smallvec![idx])
+    }
+    fn get_from_root<'a>(&self, depth: usize, root: &'a PullSpecs) -> &'a PullSpecs {
+        let mut current = root;
+        let indices = &self.0[..self.0.len() - depth];
+        for i in indices {
+            current = &current[*i].as_attr_spec().unwrap().nested;
+        }
+        current
+    }
+    fn push(&self, idx: usize) -> Self {
+        let mut ret = CurrentPath(Default::default());
+        ret.0.clone_from(&self.0);
+        ret.0.push(idx);
+        ret
+    }
+    fn recurse_pop(&self, depth: usize) -> Self {
+        Self(self.0[..self.0.len() + 1 - depth].to_smallvec())
+    }
+    fn pop_to_last(&self) -> Self {
+        self.recurse_pop(2)
+    }
 }
 
 impl SessionTx {
@@ -43,9 +83,10 @@ impl SessionTx {
         vld: Validity,
         spec: &PullSpec,
         depth: usize,
-        parent: &PullSpecs,
+        root: &PullSpecs,
+        path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
-        recursive_seen: &mut Option<HashSet<EntityId>>,
+        recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
     ) -> Result<()> {
         match spec {
             PullSpec::PullAll => {
@@ -53,11 +94,33 @@ impl SessionTx {
                 self.pull_all(eid, vld, collector, &mut seen)
             }
             PullSpec::Attr(a_spec) => {
-                if a_spec.reverse {
-                    self.pull_attr_rev(eid, vld, a_spec, depth, parent, collector, recursive_seen)
-                } else {
-                    self.pull_attr(eid, vld, a_spec, depth, parent, collector, recursive_seen)
+                if !a_spec.recursive {
+                    recursive_seen.insert((path.pop_to_last(), eid));
                 }
+                let ret = if a_spec.reverse {
+                    self.pull_attr_rev(
+                        eid,
+                        vld,
+                        a_spec,
+                        depth,
+                        root,
+                        path.clone(),
+                        collector,
+                        recursive_seen,
+                    )
+                } else {
+                    self.pull_attr(
+                        eid,
+                        vld,
+                        a_spec,
+                        depth,
+                        root,
+                        path.clone(),
+                        collector,
+                        recursive_seen,
+                    )
+                };
+                ret
             }
             PullSpec::PullId(kw) => {
                 collector.insert(kw.to_string_no_prefix(), eid.into());
@@ -71,21 +134,32 @@ impl SessionTx {
         vld: Validity,
         spec: &AttrPullSpec,
         depth: usize,
-        parent: &PullSpecs,
+        root: &PullSpecs,
+        path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
-        recursive_seen: &mut Option<HashSet<EntityId>>,
+        recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
     ) -> Result<()> {
         if spec.cardinality.is_one() {
             if let Some(found) = self.triple_ea_before_scan(eid, spec.attr.id, vld).next() {
                 let (_, _, value) = found?;
-                self.pull_attr_collect(spec, value, vld, depth, parent, collector, recursive_seen)?;
+                self.pull_attr_collect(
+                    spec,
+                    value,
+                    vld,
+                    depth,
+                    root,
+                    path,
+                    collector,
+                    recursive_seen,
+                )?;
             } else {
                 self.pull_attr_collect(
                     spec,
                     spec.default_val.clone(),
                     vld,
                     depth,
-                    parent,
+                    root,
+                    path,
                     collector,
                     recursive_seen,
                 )?;
@@ -107,7 +181,8 @@ impl SessionTx {
                 collection,
                 vld,
                 depth,
-                parent,
+                root,
+                path,
                 collector,
                 recursive_seen,
             )?;
@@ -120,9 +195,10 @@ impl SessionTx {
         value: StaticValue,
         vld: Validity,
         depth: usize,
-        parent: &PullSpecs,
+        root: &PullSpecs,
+        path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
-        recursive_seen: &mut Option<HashSet<EntityId>>,
+        recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
     ) -> Result<()> {
         if spec.recursive {
             if let Some(limit) = spec.recursion_limit {
@@ -130,76 +206,56 @@ impl SessionTx {
                     return Ok(());
                 }
             }
+            let recursion_path = path.recurse_pop(spec.recursion_depth);
             let eid = value.get_entity_id()?;
-
-            if let Some(inner) = recursive_seen {
-                if !inner.insert(eid) {
-                    let mut submap = Map::new();
-                    submap.insert("_id".to_string(), value.into());
-
-                    collector.insert(spec.name.to_string_no_prefix(), submap.into());
-                    return Ok(());
-                }
-            }
-
             let mut sub_collector = Map::default();
-            if recursive_seen.is_some() {
-                for sub_spec in parent {
-                    let next_depth = if let PullSpec::Attr(sub) = sub_spec {
-                        if sub.name == spec.name {
-                            depth + 1
-                        } else {
-                            0
-                        }
-                    } else {
-                        0
-                    };
-                    self.pull(
-                        eid,
-                        vld,
-                        sub_spec,
-                        next_depth,
-                        parent,
-                        &mut sub_collector,
-                        recursive_seen,
-                    )?;
-                }
-            } else {
-                let mut recursive_seen_inner = Some(Default::default());
-                for sub_spec in parent {
-                    let next_depth = if let PullSpec::Attr(sub) = sub_spec {
-                        if sub.name == spec.name {
-                            depth + 1
-                        } else {
-                            0
-                        }
-                    } else {
-                        0
-                    };
-                    self.pull(
-                        eid,
-                        vld,
-                        sub_spec,
-                        next_depth,
-                        parent,
-                        &mut sub_collector,
-                        &mut recursive_seen_inner,
-                    )?;
-                }
+            let sentinel = (recursion_path.pop_to_last(), eid);
+            if !recursive_seen.insert(sentinel) {
+                sub_collector.insert("_id".to_string(), eid.into());
+                collector.insert(spec.name.to_string_no_prefix(), sub_collector.into());
+                return Ok(());
             }
+
+            let recurse_target = path.get_from_root(spec.recursion_depth, root);
+            for sub_spec in recurse_target {
+                let next_depth = if let PullSpec::Attr(sub) = sub_spec {
+                    if sub.name == spec.name {
+                        depth + 1
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+                self.pull(
+                    eid,
+                    vld,
+                    sub_spec,
+                    next_depth,
+                    root,
+                    recursion_path.clone(),
+                    &mut sub_collector,
+                    recursive_seen,
+                )?;
+            }
+
             collector.insert(spec.name.to_string_no_prefix(), sub_collector.into());
         } else if spec.nested.is_empty() {
             collector.insert(spec.name.to_string_no_prefix(), value.into());
         } else {
             let eid = value.get_entity_id()?;
+            let sentinel = (path.clone(), eid);
+            recursive_seen.insert(sentinel);
+
             let mut sub_collector = Map::default();
-            for sub_spec in &spec.nested {
+            for (idx, sub_spec) in spec.nested.iter().enumerate() {
                 self.pull(
                     eid,
                     vld,
                     sub_spec,
                     depth,
-                    &spec.nested,
+                    root,
+                    path.push(idx),
                     &mut sub_collector,
                     recursive_seen,
                 )?;
@@ -214,9 +270,10 @@ impl SessionTx {
         values: Vec<StaticValue>,
         vld: Validity,
         depth: usize,
-        parent: &PullSpecs,
+        root: &PullSpecs,
+        path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
-        recursive_seen: &mut Option<HashSet<EntityId>>,
+        recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
     ) -> Result<()> {
         if spec.recursive {
             if let Some(limit) = spec.recursion_limit {
@@ -225,35 +282,20 @@ impl SessionTx {
                 }
             }
 
-            if recursive_seen.is_none() {
-                let mut new_recursive_seen = Some(Default::default());
-                return self.pull_attr_collect_many(
-                    spec,
-                    values,
-                    vld,
-                    depth,
-                    parent,
-                    collector,
-                    &mut new_recursive_seen,
-                );
-            }
-
             let mut sub_collectors = vec![];
-
+            let recursion_path = path.recurse_pop(spec.recursion_depth);
             for value in values {
                 let eid = value.get_entity_id()?;
-
-                if let Some(inner) = recursive_seen {
-                    if !inner.insert(eid) {
-                        let mut submap = Map::new();
-                        submap.insert("_id".to_string(), value.into());
-                        sub_collectors.push(Map::from(submap));
-                        continue;
-                    }
+                let mut sub_collector = Map::default();
+                let sentinel = (recursion_path.pop_to_last(), eid);
+                if !recursive_seen.insert(sentinel) {
+                    sub_collector.insert("_id".to_string(), eid.into());
+                    sub_collectors.push(sub_collector);
+                    continue;
                 }
 
-                let mut sub_collector = Map::default();
-                for sub_spec in parent {
+                let recurse_target = path.get_from_root(spec.recursion_depth, root);
+                for sub_spec in recurse_target {
                     let next_depth = if let PullSpec::Attr(sub) = sub_spec {
                         if sub.name == spec.name {
                             depth + 1
@@ -269,7 +311,8 @@ impl SessionTx {
                         vld,
                         sub_spec,
                         next_depth,
-                        parent,
+                        root,
+                        recursion_path.clone(),
                         &mut sub_collector,
                         recursive_seen,
                     )?;
@@ -284,13 +327,14 @@ impl SessionTx {
             for value in values {
                 let eid = value.get_entity_id()?;
                 let mut sub_collector = Map::default();
-                for sub_spec in &spec.nested {
+                for (idx, sub_spec) in spec.nested.iter().enumerate() {
                     self.pull(
                         eid,
                         vld,
                         sub_spec,
                         depth,
-                        &spec.nested,
+                        root,
+                        path.push(idx),
                         &mut sub_collector,
                         recursive_seen,
                     )?;
@@ -307,9 +351,10 @@ impl SessionTx {
         vld: Validity,
         spec: &AttrPullSpec,
         depth: usize,
-        parent: &PullSpecs,
+        root: &PullSpecs,
+        path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
-        recursive_seen: &mut Option<HashSet<EntityId>>,
+        recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
     ) -> Result<()> {
         if spec.cardinality.is_one() {
             if let Some(found) = self
@@ -322,7 +367,8 @@ impl SessionTx {
                     Value::EnId(value),
                     vld,
                     depth,
-                    parent,
+                    root,
+                    path,
                     collector,
                     recursive_seen,
                 )?;
@@ -332,7 +378,8 @@ impl SessionTx {
                     spec.default_val.clone(),
                     vld,
                     depth,
-                    parent,
+                    root,
+                    path,
                     collector,
                     recursive_seen,
                 )?;
@@ -354,7 +401,8 @@ impl SessionTx {
                 collection,
                 vld,
                 depth,
-                parent,
+                root,
+                path,
                 collector,
                 recursive_seen,
             )?;
@@ -432,19 +480,17 @@ impl SessionTx {
                     let arr = arr.as_array_mut().unwrap();
                     arr.push(value.into());
                 }
-            } else {
-                if attr.val_type == AttributeTyping::Component {
-                    let val_id = value.get_entity_id()?;
-                    if pull_all_seen.contains(&val_id) {
-                        collector.insert(attr.keyword.to_string_no_prefix(), value.into());
-                    } else {
-                        let mut subcollector = Map::default();
-                        self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
-                        collector.insert(attr.keyword.to_string_no_prefix(), subcollector.into());
-                    }
-                } else {
+            } else if attr.val_type == AttributeTyping::Component {
+                let val_id = value.get_entity_id()?;
+                if pull_all_seen.contains(&val_id) {
                     collector.insert(attr.keyword.to_string_no_prefix(), value.into());
+                } else {
+                    let mut subcollector = Map::default();
+                    self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
+                    collector.insert(attr.keyword.to_string_no_prefix(), subcollector.into());
                 }
+            } else {
+                collector.insert(attr.keyword.to_string_no_prefix(), value.into());
             }
             current.encoded_entity_amend_validity_to_inf_past();
             it.seek(&current);

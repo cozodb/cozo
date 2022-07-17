@@ -18,6 +18,7 @@ use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
 use crate::data::value::Value;
 use crate::runtime::transact::SessionTx;
+use crate::transact::pull::CurrentPath;
 use crate::AttrTxItem;
 
 pub struct Db {
@@ -121,10 +122,20 @@ impl Db {
     }
     pub fn pull(&self, eid: EntityId, payload: &JsonValue, vld: Validity) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let specs = tx.parse_pull(payload, false)?;
+        let specs = tx.parse_pull(payload, 0)?;
         let mut collected = Default::default();
-        for spec in &specs {
-            tx.pull(eid, vld, spec, 0, &specs, &mut collected, &mut None)?;
+        let mut recursive_seen = Default::default();
+        for (idx, spec) in specs.iter().enumerate() {
+            tx.pull(
+                eid,
+                vld,
+                spec,
+                0,
+                &specs,
+                CurrentPath::new(idx),
+                &mut collected,
+                &mut recursive_seen,
+            )?;
         }
         Ok(JsonValue::Object(collected))
     }
