@@ -119,6 +119,15 @@ impl Db {
         it.seek_to_start();
         it
     }
+    pub fn pull(&self, eid: EntityId, payload: &JsonValue, vld: Validity) -> Result<JsonValue> {
+        let mut tx = self.transact()?;
+        let specs = tx.parse_pull(payload, false)?;
+        let mut collected = Default::default();
+        for spec in &specs {
+            tx.pull(eid, vld, spec, &specs,&mut collected, &mut None)?;
+        }
+        Ok(JsonValue::Object(collected))
+    }
     pub fn transact_triples(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
         let (payloads, comment) = tx.parse_tx_requests(payload)?;

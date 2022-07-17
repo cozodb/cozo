@@ -34,6 +34,7 @@ impl SessionTx {
     ) -> Result<PullSpec> {
         match desc {
             JsonValue::String(s) if s == "*" => Ok(PullSpec::PullAll),
+            JsonValue::String(s) if s == "_id" => Ok(PullSpec::PullId("_id".into())),
             JsonValue::String(s) => {
                 let input_kw = Keyword::from(s.as_ref());
                 let reverse = input_kw.0.starts_with('<');
@@ -75,75 +76,69 @@ impl SessionTx {
         let mut sub_target = vec![];
         let mut recursive = false;
         let mut recursion_limit = None;
+        let mut pull_id = false;
 
         for (k, v) in desc {
             match k as &str {
-                "_as" => {
+                "as" => {
                     as_override = Some(Keyword::from(v.as_str().ok_or_else(|| {
                         PullError::InvalidFormat(v.clone(), "expect string".to_string())
                     })?))
                 }
-                "_limit" => {
+                "limit" => {
                     take = Some(v.as_u64().ok_or_else(|| {
                         PullError::InvalidFormat(v.clone(), "expect limit".to_string())
                     })? as usize)
                 }
-                "_cardinality" => {
+                "cardinality" => {
                     cardinality_override =
                         Some(AttributeCardinality::try_from(v.as_str().ok_or_else(
                             || PullError::InvalidFormat(v.clone(), "expect string".to_string()),
                         )?)?)
                 }
-                "_default" => default_val = Value::from(v).to_static(),
-                k if !k.starts_with('_') => {
-                    if input_kw.is_some() {
+                "default" => default_val = Value::from(v).to_static(),
+                "pull" => {
+                    let v = v.as_str().ok_or_else(|| {
+                        PullError::InvalidFormat(v.clone(), "expect string".to_string())
+                    })?;
+                    if v == "_id" {
+                        pull_id = true
+                    } else {
+                        input_kw = Some(Keyword::from(v));
+                    }
+                }
+                "recurse" => {
+                    if let Some(u) = v.as_u64() {
+                        recursion_limit = Some(u as usize);
+                    } else if let Some(b) = v.as_bool() {
+                        if !b {
+                            continue;
+                        }
+                    } else {
                         return Err(PullError::InvalidFormat(
                             JsonValue::Object(desc.clone()),
-                            "only one sublevel target expected".to_string(),
+                            "expect boolean or number".to_string(),
                         )
                         .into());
                     }
-                    input_kw = Some(Keyword::from(k));
+                    let parent = parent.ok_or_else(|| {
+                        PullError::InvalidFormat(
+                            JsonValue::Object(desc.clone()),
+                            "cannot recurse at top level".to_string(),
+                        )
+                    })?;
+                    recursive = true;
+                }
+                "spec" => {
                     sub_target = {
                         if let Some(arr) = v.as_array() {
                             arr.clone()
                         } else {
-                            if let Some(u) = v.as_u64() {
-                                recursion_limit = Some(u as usize);
-                            } else if *v != json!("...") {
-                                return Err(PullError::InvalidFormat(
-                                    v.clone(),
-                                    "expect array".to_string(),
-                                )
-                                .into());
-                            }
-                            let parent = parent.ok_or_else(|| {
-                                PullError::InvalidFormat(
-                                    JsonValue::Object(desc.clone()),
-                                    "cannot recurse at top level".to_string(),
-                                )
-                            })?;
-                            // not clear what two recursions would do
-                            if recursive {
-                                return Err(PullError::InvalidFormat(
-                                    JsonValue::Object(desc.clone()),
-                                    "cannot have two recursions".to_string(),
-                                )
-                                .into());
-                            }
-                            recursive = true;
-                            // remove self to prevent infinite recursion
-                            parent
-                                .iter()
-                                .filter(|p| {
-                                    if let Some(o) = p.as_object() {
-                                        o != desc
-                                    } else {
-                                        true
-                                    }
-                                })
-                                .cloned()
-                                .collect_vec()
+                            return Err(PullError::InvalidFormat(
+                                JsonValue::Object(desc.clone()),
+                                "expect array".to_string(),
+                            )
+                            .into());
                         }
                     };
                 }
@@ -157,6 +152,12 @@ impl SessionTx {
             }
         }
 
+        if pull_id {
+            return Ok(PullSpec::PullId(
+                as_override.unwrap_or_else(|| "_id".into()),
+            ));
+        }
+
         if input_kw.is_none() {
             return Err(PullError::InvalidFormat(
                 JsonValue::Object(desc.clone()),
@@ -166,7 +167,6 @@ impl SessionTx {
         }
 
         let input_kw = input_kw.unwrap();
-        // let recurse_target = sub_target.unwrap();
 
         let reverse = input_kw.0.starts_with('<');
         let kw = if reverse {

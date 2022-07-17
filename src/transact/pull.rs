@@ -19,6 +19,7 @@ pub(crate) type PullSpecs = Vec<PullSpec>;
 #[derive(Debug, Clone)]
 pub(crate) enum PullSpec {
     PullAll,
+    PullId(Keyword),
     Attr(AttrPullSpec),
 }
 
@@ -41,6 +42,7 @@ impl SessionTx {
         eid: EntityId,
         vld: Validity,
         spec: &PullSpec,
+        parent: &PullSpecs,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut Option<HashSet<EntityId>>,
     ) -> Result<()> {
@@ -51,10 +53,14 @@ impl SessionTx {
             }
             PullSpec::Attr(a_spec) => {
                 if a_spec.reverse {
-                    self.pull_attr_rev(eid, vld, a_spec, collector, recursive_seen)
+                    self.pull_attr_rev(eid, vld, a_spec, parent, collector, recursive_seen)
                 } else {
-                    self.pull_attr(eid, vld, a_spec, collector, recursive_seen)
+                    self.pull_attr(eid, vld, a_spec, parent, collector, recursive_seen)
                 }
+            }
+            PullSpec::PullId(kw) => {
+                collector.insert(kw.to_string_no_prefix(), eid.into());
+                Ok(())
             }
         }
     }
@@ -63,15 +69,23 @@ impl SessionTx {
         eid: EntityId,
         vld: Validity,
         spec: &AttrPullSpec,
+        parent: &PullSpecs,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut Option<HashSet<EntityId>>,
     ) -> Result<()> {
         if spec.cardinality.is_one() {
             if let Some(found) = self.triple_ea_before_scan(eid, spec.attr.id, vld).next() {
                 let (_, _, value) = found?;
-                self.pull_attr_collect(spec, value, vld, collector, recursive_seen)?;
+                self.pull_attr_collect(spec, value, vld, parent, collector, recursive_seen)?;
             } else {
-                self.pull_attr_collect(spec, spec.default_val.clone(), vld, collector, recursive_seen)?;
+                self.pull_attr_collect(
+                    spec,
+                    spec.default_val.clone(),
+                    vld,
+                    parent,
+                    collector,
+                    recursive_seen,
+                )?;
             }
         } else {
             let mut collection: Vec<StaticValue> = vec![];
@@ -85,7 +99,7 @@ impl SessionTx {
                     }
                 }
             }
-            self.pull_attr_collect_many(spec, collection, vld, collector, recursive_seen)?;
+            self.pull_attr_collect_many(spec, collection, vld, parent, collector, recursive_seen)?;
         }
         Ok(())
     }
@@ -94,11 +108,11 @@ impl SessionTx {
         spec: &AttrPullSpec,
         value: StaticValue,
         vld: Validity,
+        parent: &PullSpecs,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut Option<HashSet<EntityId>>,
     ) -> Result<()> {
         if spec.recursive {
-            let mut nested = spec.nested.clone();
             let mut to_add = spec.clone();
             if let Some(n) = to_add.recursion_limit {
                 if n == 0 {
@@ -117,20 +131,26 @@ impl SessionTx {
                 }
             }
 
-            nested.push(PullSpec::Attr(to_add));
-
             let mut sub_collector = Map::default();
             if recursive_seen.is_some() {
-                for sub_spec in &spec.nested {
-                    self.pull(eid, vld, sub_spec, &mut sub_collector, recursive_seen)?;
-                }
-            } else {
-                let mut recursive_seen_inner = Some(Default::default());
-                for sub_spec in &spec.nested {
+                for sub_spec in parent {
                     self.pull(
                         eid,
                         vld,
                         sub_spec,
+                        parent,
+                        &mut sub_collector,
+                        recursive_seen,
+                    )?;
+                }
+            } else {
+                let mut recursive_seen_inner = Some(Default::default());
+                for sub_spec in parent {
+                    self.pull(
+                        eid,
+                        vld,
+                        sub_spec,
+                        parent,
                         &mut sub_collector,
                         &mut recursive_seen_inner,
                     )?;
@@ -143,7 +163,14 @@ impl SessionTx {
             let eid = value.get_entity_id()?;
             let mut sub_collector = Map::default();
             for sub_spec in &spec.nested {
-                self.pull(eid, vld, sub_spec, &mut sub_collector, recursive_seen)?;
+                self.pull(
+                    eid,
+                    vld,
+                    sub_spec,
+                    &spec.nested,
+                    &mut sub_collector,
+                    recursive_seen,
+                )?;
             }
             collector.insert(spec.name.to_string_no_prefix(), sub_collector.into());
         }
@@ -154,6 +181,7 @@ impl SessionTx {
         spec: &AttrPullSpec,
         values: Vec<StaticValue>,
         vld: Validity,
+        parent: &PullSpecs,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut Option<HashSet<EntityId>>,
     ) -> Result<()> {
@@ -164,13 +192,13 @@ impl SessionTx {
                     spec,
                     values,
                     vld,
+                    parent,
                     collector,
                     &mut new_recursive_seen,
                 );
             }
 
-            let mut nested = spec.nested.clone();
-            let mut to_add = spec.clone();
+                        let mut to_add = spec.clone();
             if let Some(n) = to_add.recursion_limit {
                 if n == 0 {
                     return Ok(());
@@ -178,8 +206,6 @@ impl SessionTx {
                     to_add.recursion_limit = Some(n - 1);
                 }
             }
-
-            nested.push(PullSpec::Attr(to_add));
 
             let mut sub_collectors = vec![];
 
@@ -194,8 +220,15 @@ impl SessionTx {
                 }
 
                 let mut sub_collector = Map::default();
-                for sub_spec in &spec.nested {
-                    self.pull(eid, vld, sub_spec, &mut sub_collector, recursive_seen)?;
+                for sub_spec in parent {
+                    self.pull(
+                        eid,
+                        vld,
+                        sub_spec,
+                        parent,
+                        &mut sub_collector,
+                        recursive_seen,
+                    )?;
                 }
                 sub_collectors.push(sub_collector);
             }
@@ -208,7 +241,14 @@ impl SessionTx {
                 let eid = value.get_entity_id()?;
                 let mut sub_collector = Map::default();
                 for sub_spec in &spec.nested {
-                    self.pull(eid, vld, sub_spec, &mut sub_collector, recursive_seen)?;
+                    self.pull(
+                        eid,
+                        vld,
+                        sub_spec,
+                        &spec.nested,
+                        &mut sub_collector,
+                        recursive_seen,
+                    )?;
                 }
                 sub_collectors.push(sub_collector);
             }
@@ -221,6 +261,7 @@ impl SessionTx {
         eid: EntityId,
         vld: Validity,
         spec: &AttrPullSpec,
+        parent: &PullSpecs,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut Option<HashSet<EntityId>>,
     ) -> Result<()> {
@@ -230,9 +271,23 @@ impl SessionTx {
                 .next()
             {
                 let (_, _, value) = found?;
-                self.pull_attr_collect(spec, Value::EnId(value), vld, collector, recursive_seen)?;
+                self.pull_attr_collect(
+                    spec,
+                    Value::EnId(value),
+                    vld,
+                    parent,
+                    collector,
+                    recursive_seen,
+                )?;
             } else {
-                self.pull_attr_collect(spec, spec.default_val.clone(), vld, collector, recursive_seen)?;
+                self.pull_attr_collect(
+                    spec,
+                    spec.default_val.clone(),
+                    vld,
+                    parent,
+                    collector,
+                    recursive_seen,
+                )?;
             }
         } else {
             let mut collection: Vec<StaticValue> = vec![];
@@ -246,11 +301,11 @@ impl SessionTx {
                     }
                 }
             }
-            self.pull_attr_collect_many(spec, collection.into(), vld, collector, recursive_seen)?;
+            self.pull_attr_collect_many(spec, collection, vld, parent, collector, recursive_seen)?;
         }
         Ok(())
     }
-    pub fn pull_all(
+    pub(crate) fn pull_all(
         &mut self,
         eid: EntityId,
         vld: Validity,

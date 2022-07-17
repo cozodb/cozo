@@ -93,19 +93,20 @@ fn creation() {
         to_string_pretty(&db.entities_at(None).unwrap()).unwrap()
     );
 
-    let mut coll = Default::default();
-    db.transact()
-        .unwrap()
-        .pull_all(
+    let pulled = db
+        .pull(
             EntityId::MIN_PERM,
+            &json!([
+                {"pull": "_id", "as": "person_id" },
+                {"pull":"person/friend", "as": "friends", "recurse": 3},
+                {"pull":"person/first_name", "as": "first_name"},
+                {"pull":"person/last_name", "as": "last_name"}
+            ]),
             Validity::current(),
-            &mut coll,
-            &mut Default::default(),
         )
         .unwrap();
-    let coll: serde_json::Value = coll.into();
 
-    println!("{}", to_string_pretty(&coll).unwrap());
+    println!("{}", to_string_pretty(&pulled).unwrap());
 
     // iteration
     // let mut it = db.total_iter();
