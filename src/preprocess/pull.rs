@@ -126,7 +126,7 @@ impl SessionTx {
                             JsonValue::Object(desc.clone()),
                             "expect boolean or number".to_string(),
                         )
-                            .into());
+                        .into());
                     }
                     recursive = true;
                 }
@@ -144,7 +144,7 @@ impl SessionTx {
                                 JsonValue::Object(desc.clone()),
                                 "expect array".to_string(),
                             )
-                                .into());
+                            .into());
                         }
                     };
                 }
@@ -153,7 +153,7 @@ impl SessionTx {
                         v.into(),
                         "unexpected spec key".to_string(),
                     )
-                        .into());
+                    .into());
                 }
             }
         }
@@ -169,7 +169,7 @@ impl SessionTx {
                 JsonValue::Object(desc.clone()),
                 "expect target key".to_string(),
             )
-                .into());
+            .into());
         }
 
         let input_kw = input_kw.unwrap();
@@ -187,6 +187,12 @@ impl SessionTx {
         if recursive {
             recursion_depth = max(recursion_depth, 1);
         }
+
+        let default_val = if default_val == Value::Null {
+            default_val
+        } else {
+            attr.val_type.coerce_value(default_val)?
+        };
 
         Ok(PullSpec::Attr(AttrPullSpec {
             attr,

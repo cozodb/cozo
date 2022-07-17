@@ -136,7 +136,7 @@ impl AttributeTyping {
     fn type_err(&self, val: Value) -> TypeError {
         TypeError::Typing(*self, format!("{:?}", val))
     }
-    fn coerce_value<'a>(&self, val: Value<'a>) -> Result<Value<'a>> {
+    pub(crate) fn coerce_value<'a>(&self, val: Value<'a>) -> Result<Value<'a>> {
         match self {
             AttributeTyping::Ref | AttributeTyping::Component => match val {
                 val @ Value::EnId(_) => Ok(val),

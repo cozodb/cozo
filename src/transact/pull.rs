@@ -152,7 +152,7 @@ impl SessionTx {
                     collector,
                     recursive_seen,
                 )?;
-            } else {
+            } else if spec.default_val != Value::Null {
                 self.pull_attr_collect(
                     spec,
                     spec.default_val.clone(),
@@ -372,7 +372,7 @@ impl SessionTx {
                     collector,
                     recursive_seen,
                 )?;
-            } else {
+            } else if spec.default_val != Value::Null {
                 self.pull_attr_collect(
                     spec,
                     spec.default_val.clone(),
