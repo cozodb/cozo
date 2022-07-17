@@ -97,10 +97,10 @@ fn creation() {
         .pull(
             EntityId::MIN_PERM,
             &json!([
-                {"pull": "_id", "as": "person_id" },
-                {"pull":"person/friend", "as": "friends", "recurse": 3},
-                {"pull":"person/first_name", "as": "first_name"},
-                {"pull":"person/last_name", "as": "last_name"}
+                {"pull":"person/friend", "as": "friends", "recurse": true},
+                "_id",
+                "person/first_name",
+                "person/last_name"
             ]),
             Validity::current(),
         )

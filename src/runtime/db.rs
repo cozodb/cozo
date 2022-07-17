@@ -124,7 +124,7 @@ impl Db {
         let specs = tx.parse_pull(payload, false)?;
         let mut collected = Default::default();
         for spec in &specs {
-            tx.pull(eid, vld, spec, &specs,&mut collected, &mut None)?;
+            tx.pull(eid, vld, spec, 0, &specs, &mut collected, &mut None)?;
         }
         Ok(JsonValue::Object(collected))
     }
