@@ -217,9 +217,6 @@ impl AttributeIndex {
     pub(crate) fn is_unique_index(&self) -> bool {
         matches!(self, AttributeIndex::Identity | AttributeIndex::Unique)
     }
-    pub(crate) fn is_non_unique_index(&self) -> bool {
-        *self == AttributeIndex::Indexed
-    }
     pub(crate) fn should_index(&self) -> bool {
         *self != AttributeIndex::None
     }
@@ -282,11 +279,6 @@ impl Attribute {
         let mut inner = SmallVec::<[u8; ATTR_VEC_SIZE]>::new();
         inner.extend(tx_id.bytes());
         inner[0] = op as u8;
-        self.serialize(&mut Serializer::new(&mut inner)).unwrap();
-        EncodedVec { inner }
-    }
-    pub(crate) fn encode(&self) -> EncodedVec<ATTR_VEC_SIZE> {
-        let mut inner = SmallVec::<[u8; ATTR_VEC_SIZE]>::new();
         self.serialize(&mut Serializer::new(&mut inner)).unwrap();
         EncodedVec { inner }
     }

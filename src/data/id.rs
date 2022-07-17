@@ -3,8 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde_derive::{Deserialize, Serialize};
-use crate::data::json::JsonValue;
 
+use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Deserialize, Serialize, Hash)]
@@ -88,7 +88,6 @@ impl Debug for Validity {
 pub struct EntityId(pub u64);
 
 impl EntityId {
-    pub(crate) const MAX_SYS: EntityId = EntityId(1000);
     pub(crate) const MAX_TEMP: EntityId = EntityId(10_000_000);
     pub const MIN_PERM: EntityId = EntityId(10_000_001);
     pub const MAX_PERM: EntityId = EntityId(0x00ff_ffff_ff00_0000);
@@ -122,7 +121,6 @@ impl Debug for EntityId {
 pub struct AttrId(pub u64);
 
 impl AttrId {
-    pub(crate) const MAX_SYS: AttrId = AttrId(1000);
     pub(crate) const MAX_TEMP: AttrId = AttrId(10_000_000);
     pub(crate) const MIN_PERM: AttrId = AttrId(10_000_001);
     pub(crate) const MAX_PERM: AttrId = AttrId(0x00ff_ffff_ff00_0000);
@@ -157,10 +155,7 @@ impl Debug for AttrId {
 pub struct TxId(pub u64);
 
 impl TxId {
-    pub(crate) const ZERO: TxId = TxId(0);
-    pub(crate) const NO_HISTORY: TxId = TxId(1000);
     pub(crate) const MAX_SYS: TxId = TxId(10000);
-    pub(crate) const MIN_USER: TxId = TxId(10001);
     pub(crate) const MAX_USER: TxId = TxId(0x00ff_ffff_ffff_ffff);
 
     pub(crate) fn from_bytes(b: &[u8]) -> Self {

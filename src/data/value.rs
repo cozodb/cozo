@@ -93,12 +93,6 @@ impl<'a> Value<'a> {
         ret.into()
     }
 
-    pub(crate) fn encode(&self) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
-        let mut ret = SmallVec::<[u8; INLINE_VAL_SIZE_LIMIT]>::new();
-        self.serialize(&mut Serializer::new(&mut ret)).unwrap();
-        ret.into()
-    }
-
     pub(crate) fn get_entity_id(&self) -> Result<EntityId, ValueError> {
         match self {
             Value::EnId(id) => Ok(*id),

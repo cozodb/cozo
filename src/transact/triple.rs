@@ -24,8 +24,6 @@ use crate::utils::swap_option_result;
 enum TripleError {
     #[error("use of temp entity id: {0:?}")]
     TempEid(EntityId),
-    #[error("use of non-existent entity: {0:?}")]
-    EidNotFound(EntityId),
     #[error("unique constraint violated: {0} {1}")]
     UniqueConstraintViolated(Keyword, String),
     #[error("triple not found for {0:?} {1:?} {2:?}")]

@@ -31,7 +31,7 @@ impl AttrTxItem {
                 req.clone(),
                 "'attrs' cannot be empty".to_string(),
             )
-            .into());
+                .into());
         }
         let res = items.iter().map(AttrTxItem::try_from).try_collect()?;
         Ok((res, comment))
@@ -56,7 +56,7 @@ impl TryFrom<&'_ JsonValue> for AttrTxItem {
                 value.clone(),
                 "object must have exactly one field".to_string(),
             )
-            .into());
+                .into());
         }
         let (k, v) = map.into_iter().next().unwrap();
         let op = match k as &str {

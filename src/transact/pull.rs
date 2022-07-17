@@ -17,7 +17,7 @@ use crate::runtime::transact::SessionTx;
 
 pub(crate) type PullSpecs = Vec<PullSpec>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) enum PullSpec {
     PullAll,
     PullId(Keyword),
@@ -33,40 +33,40 @@ impl PullSpec {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) struct AttrPullSpec {
+    pub(crate) recursive: bool,
+    pub(crate) reverse: bool,
     pub(crate) attr: Attribute,
     pub(crate) default_val: StaticValue,
-    pub(crate) reverse: bool,
     pub(crate) name: Keyword,
     pub(crate) cardinality: AttributeCardinality,
     pub(crate) take: Option<usize>,
     pub(crate) nested: PullSpecs,
-    pub(crate) recursive: bool,
     pub(crate) recursion_limit: Option<usize>,
     pub(crate) recursion_depth: usize,
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
-pub(crate) struct CurrentPath(SmallVec<[usize; 8]>);
+pub(crate) struct CurrentPath(SmallVec<[u16; 8]>);
 
 impl CurrentPath {
-    pub(crate) fn new(idx: usize) -> Self {
-        Self(smallvec![idx])
+    pub(crate) fn new(idx: usize) -> Result<Self> {
+        Ok(Self(smallvec![idx.try_into()?]))
     }
     fn get_from_root<'a>(&self, depth: usize, root: &'a PullSpecs) -> &'a PullSpecs {
         let mut current = root;
         let indices = &self.0[..self.0.len() - depth];
         for i in indices {
-            current = &current[*i].as_attr_spec().unwrap().nested;
+            current = &current[*i as usize].as_attr_spec().unwrap().nested;
         }
         current
     }
-    fn push(&self, idx: usize) -> Self {
+    fn push(&self, idx: usize) -> Result<Self> {
         let mut ret = CurrentPath(Default::default());
         ret.0.clone_from(&self.0);
-        ret.0.push(idx);
-        ret
+        ret.0.push(idx.try_into()?);
+        Ok(ret)
     }
     fn recurse_pop(&self, depth: usize) -> Self {
         Self(self.0[..self.0.len() + 1 - depth].to_smallvec())
@@ -255,7 +255,7 @@ impl SessionTx {
                     sub_spec,
                     depth,
                     root,
-                    path.push(idx),
+                    path.push(idx)?,
                     &mut sub_collector,
                     recursive_seen,
                 )?;
@@ -334,7 +334,7 @@ impl SessionTx {
                         sub_spec,
                         depth,
                         root,
-                        path.push(idx),
+                        path.push(idx)?,
                         &mut sub_collector,
                         recursive_seen,
                     )?;

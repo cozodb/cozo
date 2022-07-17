@@ -21,10 +21,13 @@ pub enum PullError {
 impl SessionTx {
     pub(crate) fn parse_pull(&mut self, desc: &JsonValue, depth: usize) -> Result<PullSpecs> {
         if let Some(inner) = desc.as_array() {
-            inner
+            let mut ret: PullSpecs = inner
                 .iter()
                 .map(|v| self.parse_pull_element(v, depth))
-                .try_collect()
+                .try_collect()?;
+            // the sort is necessary to put recursive queries last
+            ret.sort();
+            Ok(ret)
         } else {
             Err(PullError::InvalidFormat(desc.clone(), "expect array".to_string()).into())
         }
@@ -123,7 +126,7 @@ impl SessionTx {
                             JsonValue::Object(desc.clone()),
                             "expect boolean or number".to_string(),
                         )
-                        .into());
+                            .into());
                     }
                     recursive = true;
                 }
@@ -141,7 +144,7 @@ impl SessionTx {
                                 JsonValue::Object(desc.clone()),
                                 "expect array".to_string(),
                             )
-                            .into());
+                                .into());
                         }
                     };
                 }
@@ -150,7 +153,7 @@ impl SessionTx {
                         v.into(),
                         "unexpected spec key".to_string(),
                     )
-                    .into())
+                        .into());
                 }
             }
         }
@@ -166,7 +169,7 @@ impl SessionTx {
                 JsonValue::Object(desc.clone()),
                 "expect target key".to_string(),
             )
-            .into());
+                .into());
         }
 
         let input_kw = input_kw.unwrap();

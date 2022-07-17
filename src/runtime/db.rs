@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -9,7 +9,8 @@ use serde_json::json;
 
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 
-use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
+use crate::AttrTxItem;
+use crate::data::compare::{DB_KEY_PREFIX_LEN, rusty_cmp};
 use crate::data::encode::{
     decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, StorageTag,
 };
@@ -19,7 +20,6 @@ use crate::data::triple::StoreOp;
 use crate::data::value::Value;
 use crate::runtime::transact::SessionTx;
 use crate::transact::pull::CurrentPath;
-use crate::AttrTxItem;
 
 pub struct Db {
     db: RocksDb,
@@ -132,7 +132,7 @@ impl Db {
                 spec,
                 0,
                 &specs,
-                CurrentPath::new(idx),
+                CurrentPath::new(idx)?,
                 &mut collected,
                 &mut recursive_seen,
             )?;

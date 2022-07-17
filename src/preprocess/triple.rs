@@ -179,7 +179,7 @@ impl SessionTx {
                     JsonValue::Object(item.clone()),
                     "expect any of the keys 'put', 'retract', 'erase', 'ensure'".to_string(),
                 )
-                .into());
+                    .into());
             }
         };
         let since = match item.get("since") {
@@ -229,7 +229,7 @@ impl SessionTx {
                 action,
                 "using temp id instead of perm id".to_string(),
             )
-            .into());
+                .into());
         }
 
         let v = if let JsonValue::Object(inner) = value {
@@ -264,7 +264,7 @@ impl SessionTx {
                 action,
                 "component shorthand cannot be used".to_string(),
             )
-            .into());
+                .into());
         }
         let (eid, has_unique_attr) =
             self.parse_tx_request_obj(comp, true, action, since, temp_id_ctx, collected)?;
@@ -289,7 +289,7 @@ impl SessionTx {
                         action,
                         "singlet only allowed for 'retract'".to_string(),
                     )
-                    .into());
+                        .into());
                 }
                 let eid = eid.as_u64().ok_or_else(|| {
                     TxError::Decoding(eid.clone(), "cannot parse as entity id".to_string())
@@ -317,7 +317,7 @@ impl SessionTx {
                         action,
                         "doublet only allowed for 'retract'".to_string(),
                     )
-                    .into());
+                        .into());
                 }
                 let kw: Keyword = attr.try_into()?;
                 let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
@@ -399,7 +399,7 @@ impl SessionTx {
                                 id.0,
                                 "conflicting id for identity value".into(),
                             )
-                            .into());
+                                .into());
                         }
                         id
                     } else if eid.is_string() {
@@ -407,7 +407,7 @@ impl SessionTx {
                             existing_id.0,
                             "specifying temp_id string together with unique constraint".into(),
                         )
-                        .into());
+                            .into());
                     } else {
                         existing_id
                     }
@@ -479,7 +479,7 @@ impl SessionTx {
                                         existing_eid.0,
                                         "conflicting entity id given".to_string(),
                                     )
-                                    .into());
+                                        .into());
                                 }
                             }
                             eid = Some(existing_eid)
@@ -502,7 +502,7 @@ impl SessionTx {
                     given_id.0,
                     "temp id given where perm id is required".to_string(),
                 )
-                .into());
+                    .into());
             }
             if let Some(prev_id) = eid {
                 if prev_id != given_id {
@@ -510,7 +510,7 @@ impl SessionTx {
                         given_id.0,
                         "conflicting entity id given".to_string(),
                     )
-                    .into());
+                        .into());
                 }
             }
             eid = Some(given_id);
@@ -521,7 +521,7 @@ impl SessionTx {
                     eid_inner.0,
                     "conflicting entity id given".to_string(),
                 )
-                .into());
+                    .into());
             }
             let temp_id_str = temp_id.as_str().ok_or_else(|| {
                 TxError::Decoding(
@@ -544,7 +544,7 @@ impl SessionTx {
                     action,
                     "upsert requires identity attribute present".to_string(),
                 )
-                .into());
+                    .into());
             }
             for (attr, v) in pairs {
                 self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
@@ -560,23 +560,10 @@ impl SessionTx {
                         action,
                         "cannot use non-unique fields to specify entity".to_string(),
                     )
-                    .into());
+                        .into());
                 }
             }
         }
         Ok((eid, has_unique_attr))
     }
-}
-
-fn assert_absence_of_keys(m: &Map<String, JsonValue>, keys: &[&str]) -> Result<()> {
-    for k in keys {
-        if m.contains_key(*k) {
-            return Err(TxError::Decoding(
-                JsonValue::Object(m.clone()),
-                format!("object must not contain key {}", k),
-            )
-            .into());
-        }
-    }
-    Ok(())
 }
