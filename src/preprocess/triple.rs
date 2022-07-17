@@ -7,6 +7,7 @@ use serde_json::Map;
 
 use crate::data::attr::{Attribute, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, Validity};
+use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::value::Value;
 use crate::runtime::transact::SessionTx;
@@ -44,7 +45,7 @@ impl Display for TxAction {
 #[derive(Debug, thiserror::Error)]
 pub enum TxError {
     #[error("Error decoding {0}: {1}")]
-    Decoding(serde_json::Value, String),
+    Decoding(JsonValue, String),
     #[error("triple length error")]
     TripleLength,
     #[error("attribute not found: {0}")]
@@ -125,7 +126,7 @@ impl SessionTx {
     /// nesting is allowed for values of type `ref` and `component`
     pub fn parse_tx_requests<'a>(
         &mut self,
-        req: &'a serde_json::Value,
+        req: &'a JsonValue,
     ) -> Result<(Vec<Quintuple<'a>>, String)> {
         let map = req
             .as_object()
@@ -158,7 +159,7 @@ impl SessionTx {
     }
     fn parse_tx_request_item<'a>(
         &mut self,
-        item: &'a serde_json::Value,
+        item: &'a JsonValue,
         default_since: Validity,
         temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple<'a>>,
@@ -175,10 +176,10 @@ impl SessionTx {
                 (inner, TxAction::Ensure)
             } else {
                 return Err(TxError::Decoding(
-                    serde_json::Value::Object(item.clone()),
+                    JsonValue::Object(item.clone()),
                     "expect any of the keys 'put', 'retract', 'erase', 'ensure'".to_string(),
                 )
-                    .into());
+                .into());
             }
         };
         let since = match item.get("since") {
@@ -201,7 +202,7 @@ impl SessionTx {
         &mut self,
         eid: EntityId,
         attr: &Attribute,
-        value: &'a serde_json::Value,
+        value: &'a JsonValue,
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
@@ -228,10 +229,10 @@ impl SessionTx {
                 action,
                 "using temp id instead of perm id".to_string(),
             )
-                .into());
+            .into());
         }
 
-        let v = if let serde_json::Value::Object(inner) = value {
+        let v = if let JsonValue::Object(inner) = value {
             self.parse_tx_component(&attr, inner, action, since, temp_id_ctx, collected)?
         } else {
             attr.coerce_value(Value::from(value), temp_id_ctx)?
@@ -252,7 +253,7 @@ impl SessionTx {
     fn parse_tx_component<'a>(
         &mut self,
         parent_attr: &Attribute,
-        comp: &'a Map<String, serde_json::Value>,
+        comp: &'a Map<String, JsonValue>,
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
@@ -263,7 +264,7 @@ impl SessionTx {
                 action,
                 "component shorthand cannot be used".to_string(),
             )
-                .into());
+            .into());
         }
         let (eid, has_unique_attr) =
             self.parse_tx_request_obj(comp, true, action, since, temp_id_ctx, collected)?;
@@ -275,7 +276,7 @@ impl SessionTx {
     }
     fn parse_tx_request_arr<'a>(
         &mut self,
-        item: &'a [serde_json::Value],
+        item: &'a [JsonValue],
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
@@ -288,7 +289,7 @@ impl SessionTx {
                         action,
                         "singlet only allowed for 'retract'".to_string(),
                     )
-                        .into());
+                    .into());
                 }
                 let eid = eid.as_u64().ok_or_else(|| {
                     TxError::Decoding(eid.clone(), "cannot parse as entity id".to_string())
@@ -316,7 +317,7 @@ impl SessionTx {
                         action,
                         "doublet only allowed for 'retract'".to_string(),
                     )
-                        .into());
+                    .into());
                 }
                 let kw: Keyword = attr.try_into()?;
                 let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
@@ -349,9 +350,9 @@ impl SessionTx {
     }
     fn parse_tx_triple<'a>(
         &mut self,
-        eid: &serde_json::Value,
-        attr_kw: &serde_json::Value,
-        val: &'a serde_json::Value,
+        eid: &JsonValue,
+        attr_kw: &JsonValue,
+        val: &'a JsonValue,
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
@@ -367,7 +368,7 @@ impl SessionTx {
         }
 
         let id = if attr.indexing.is_unique_index() {
-            let value = if let serde_json::Value::Object(inner) = val {
+            let value = if let JsonValue::Object(inner) = val {
                 self.parse_tx_component(&attr, inner, action, since, temp_id_ctx, collected)?
             } else {
                 attr.coerce_value(val.into(), temp_id_ctx)?
@@ -398,7 +399,7 @@ impl SessionTx {
                                 id.0,
                                 "conflicting id for identity value".into(),
                             )
-                                .into());
+                            .into());
                         }
                         id
                     } else if eid.is_string() {
@@ -406,7 +407,7 @@ impl SessionTx {
                             existing_id.0,
                             "specifying temp_id string together with unique constraint".into(),
                         )
-                            .into());
+                        .into());
                     } else {
                         existing_id
                     }
@@ -436,7 +437,7 @@ impl SessionTx {
     }
     fn parse_tx_request_obj<'a>(
         &mut self,
-        item: &'a Map<String, serde_json::Value>,
+        item: &'a Map<String, JsonValue>,
         is_sub_component: bool,
         action: TxAction,
         since: Validity,
@@ -456,7 +457,7 @@ impl SessionTx {
                 has_unique_attr = has_unique_attr || attr.indexing.is_unique_index();
                 has_identity_attr = has_identity_attr || attr.indexing == AttributeIndex::Identity;
                 if attr.indexing == AttributeIndex::Identity {
-                    let value = if let serde_json::Value::Object(inner) = v {
+                    let value = if let JsonValue::Object(inner) = v {
                         self.parse_tx_component(
                             &attr,
                             inner,
@@ -478,7 +479,7 @@ impl SessionTx {
                                         existing_eid.0,
                                         "conflicting entity id given".to_string(),
                                     )
-                                        .into());
+                                    .into());
                                 }
                             }
                             eid = Some(existing_eid)
@@ -501,7 +502,7 @@ impl SessionTx {
                     given_id.0,
                     "temp id given where perm id is required".to_string(),
                 )
-                    .into());
+                .into());
             }
             if let Some(prev_id) = eid {
                 if prev_id != given_id {
@@ -509,7 +510,7 @@ impl SessionTx {
                         given_id.0,
                         "conflicting entity id given".to_string(),
                     )
-                        .into());
+                    .into());
                 }
             }
             eid = Some(given_id);
@@ -520,7 +521,7 @@ impl SessionTx {
                     eid_inner.0,
                     "conflicting entity id given".to_string(),
                 )
-                    .into());
+                .into());
             }
             let temp_id_str = temp_id.as_str().ok_or_else(|| {
                 TxError::Decoding(
@@ -543,7 +544,7 @@ impl SessionTx {
                     action,
                     "upsert requires identity attribute present".to_string(),
                 )
-                    .into());
+                .into());
             }
             for (attr, v) in pairs {
                 self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
@@ -559,7 +560,7 @@ impl SessionTx {
                         action,
                         "cannot use non-unique fields to specify entity".to_string(),
                     )
-                        .into());
+                    .into());
                 }
             }
         }
@@ -567,14 +568,14 @@ impl SessionTx {
     }
 }
 
-fn assert_absence_of_keys(m: &Map<String, serde_json::Value>, keys: &[&str]) -> Result<()> {
+fn assert_absence_of_keys(m: &Map<String, JsonValue>, keys: &[&str]) -> Result<()> {
     for k in keys {
         if m.contains_key(*k) {
             return Err(TxError::Decoding(
-                serde_json::Value::Object(m.clone()),
+                JsonValue::Object(m.clone()),
                 format!("object must not contain key {}", k),
             )
-                .into());
+            .into());
         }
     }
     Ok(())

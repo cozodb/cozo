@@ -2,6 +2,7 @@ use anyhow::Result;
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
+use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
 
 #[derive(Debug)]
@@ -11,7 +12,7 @@ pub struct AttrTxItem {
 }
 
 impl AttrTxItem {
-    pub fn parse_request(req: &serde_json::Value) -> Result<(Vec<AttrTxItem>, String)> {
+    pub fn parse_request(req: &JsonValue) -> Result<(Vec<AttrTxItem>, String)> {
         let map = req
             .as_object()
             .ok_or_else(|| AttrTxItemError::Decoding(req.clone(), "expected object".to_string()))?;
@@ -30,7 +31,7 @@ impl AttrTxItem {
                 req.clone(),
                 "'attrs' cannot be empty".to_string(),
             )
-                .into());
+            .into());
         }
         let res = items.iter().map(AttrTxItem::try_from).try_collect()?;
         Ok((res, comment))
@@ -40,13 +41,13 @@ impl AttrTxItem {
 #[derive(Debug, thiserror::Error)]
 pub enum AttrTxItemError {
     #[error("Error decoding {0}: {1}")]
-    Decoding(serde_json::Value, String),
+    Decoding(JsonValue, String),
 }
 
-impl TryFrom<&'_ serde_json::Value> for AttrTxItem {
+impl TryFrom<&'_ JsonValue> for AttrTxItem {
     type Error = anyhow::Error;
 
-    fn try_from(value: &'_ serde_json::Value) -> Result<Self, Self::Error> {
+    fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let map = value.as_object().ok_or_else(|| {
             AttrTxItemError::Decoding(value.clone(), "expected object".to_string())
         })?;
@@ -55,7 +56,7 @@ impl TryFrom<&'_ serde_json::Value> for AttrTxItem {
                 value.clone(),
                 "object must have exactly one field".to_string(),
             )
-                .into());
+            .into());
         }
         let (k, v) = map.into_iter().next().unwrap();
         let op = match k as &str {

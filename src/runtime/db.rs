@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -9,15 +9,16 @@ use serde_json::json;
 
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 
-use crate::AttrTxItem;
-use crate::data::compare::{DB_KEY_PREFIX_LEN, rusty_cmp};
+use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::encode::{
     decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, StorageTag,
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
+use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
 use crate::data::value::Value;
 use crate::runtime::transact::SessionTx;
+use crate::AttrTxItem;
 
 pub struct Db {
     db: RocksDb,
@@ -118,10 +119,10 @@ impl Db {
         it.seek_to_start();
         it
     }
-    pub fn transact_triples(&self, payload: &serde_json::Value) -> Result<serde_json::Value> {
+    pub fn transact_triples(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
         let (payloads, comment) = tx.parse_tx_requests(payload)?;
-        let res: serde_json::Value = tx
+        let res: JsonValue = tx
             .tx_triples(payloads)?
             .iter()
             .map(|(eid, size)| json!([eid.0, size]))
@@ -133,10 +134,10 @@ impl Db {
             "results": res
         }))
     }
-    pub fn transact_attributes(&self, payload: &serde_json::Value) -> Result<serde_json::Value> {
+    pub fn transact_attributes(&self, payload: &JsonValue) -> Result<JsonValue> {
         let (attrs, comment) = AttrTxItem::parse_request(payload)?;
         let mut tx = self.transact_write()?;
-        let res: serde_json::Value = tx
+        let res: JsonValue = tx
             .tx_attrs(attrs)?
             .iter()
             .map(|(op, aid)| json!([aid.0, op.to_string()]))
@@ -148,11 +149,11 @@ impl Db {
             "results": res
         }))
     }
-    pub fn current_schema(&self) -> Result<serde_json::Value> {
+    pub fn current_schema(&self) -> Result<JsonValue> {
         let mut tx = self.transact()?;
         tx.all_attrs().map_ok(|v| v.to_json()).try_collect()
     }
-    pub fn entities_at(&self, vld: Option<Validity>) -> Result<serde_json::Value> {
+    pub fn entities_at(&self, vld: Option<Validity>) -> Result<JsonValue> {
         let vld = vld.unwrap_or_else(Validity::current);
         let mut tx = self.transact()?;
         let mut current = encode_eav_key(
@@ -173,7 +174,7 @@ impl Db {
             .upper_bound(&upper_bound)
             .total_order_seek(true)
             .start();
-        let mut collected: BTreeMap<EntityId, serde_json::Value> = BTreeMap::default();
+        let mut collected: BTreeMap<EntityId, JsonValue> = BTreeMap::default();
         it.seek(&current);
         while let Some((k_slice, v_slice)) = it.pair()? {
             debug_assert_eq!(

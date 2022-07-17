@@ -9,6 +9,7 @@ use smallvec::SmallVec;
 
 use crate::data::encode::EncodedVec;
 use crate::data::id::{AttrId, EntityId, TxId};
+use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::data::value::Value;
@@ -21,7 +22,7 @@ pub enum AttributeError {
 }
 
 #[repr(u8)]
-#[derive(Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
 pub(crate) enum AttributeCardinality {
     One = 1,
     Many = 2,
@@ -292,7 +293,7 @@ impl Attribute {
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
         Ok(rmp_serde::from_slice(data)?)
     }
-    pub(crate) fn to_json(&self) -> serde_json::Value {
+    pub(crate) fn to_json(&self) -> JsonValue {
         json!({
             "id": self.id.0,
             "keyword": self.keyword.to_string(),

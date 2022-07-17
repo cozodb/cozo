@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, TimeZone, Utc};
 use serde_derive::{Deserialize, Serialize};
+use crate::data::json::JsonValue;
 
 use crate::data::triple::StoreOp;
 
@@ -51,13 +52,13 @@ impl TryFrom<&str> for Validity {
 #[derive(Debug, thiserror::Error)]
 pub enum IdError {
     #[error("Cannot convert to validity: {0}")]
-    JsonValidityError(serde_json::Value),
+    JsonValidityError(JsonValue),
 }
 
-impl TryFrom<&serde_json::Value> for Validity {
+impl TryFrom<&JsonValue> for Validity {
     type Error = anyhow::Error;
 
-    fn try_from(value: &serde_json::Value) -> Result<Self, Self::Error> {
+    fn try_from(value: &JsonValue) -> Result<Self, Self::Error> {
         if let Some(v) = value.as_i64() {
             return Ok(v.into());
         }

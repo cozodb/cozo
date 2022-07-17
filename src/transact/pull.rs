@@ -25,6 +25,7 @@ pub(crate) enum PullSpec {
 #[derive(Debug, Clone)]
 pub(crate) struct AttrPullSpec {
     pub(crate) attr: Attribute,
+    pub(crate) default_val: StaticValue,
     pub(crate) reverse: bool,
     pub(crate) name: Keyword,
     pub(crate) cardinality: AttributeCardinality,
@@ -70,7 +71,7 @@ impl SessionTx {
                 let (_, _, value) = found?;
                 self.pull_attr_collect(spec, value, vld, collector, recursive_seen)?;
             } else {
-                self.pull_attr_collect(spec, Value::Null, vld, collector, recursive_seen)?;
+                self.pull_attr_collect(spec, spec.default_val.clone(), vld, collector, recursive_seen)?;
             }
         } else {
             let mut collection: Vec<StaticValue> = vec![];
@@ -231,7 +232,7 @@ impl SessionTx {
                 let (_, _, value) = found?;
                 self.pull_attr_collect(spec, Value::EnId(value), vld, collector, recursive_seen)?;
             } else {
-                self.pull_attr_collect(spec, Value::Null, vld, collector, recursive_seen)?;
+                self.pull_attr_collect(spec, spec.default_val.clone(), vld, collector, recursive_seen)?;
             }
         } else {
             let mut collection: Vec<StaticValue> = vec![];

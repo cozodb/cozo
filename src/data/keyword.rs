@@ -4,6 +4,8 @@ use std::str::Utf8Error;
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 
+use crate::data::json::JsonValue;
+
 #[derive(Debug, thiserror::Error)]
 pub enum KeywordError {
     #[error("cannot convert to keyword: {0}")]
@@ -16,7 +18,7 @@ pub enum KeywordError {
     Utf8(#[from] Utf8Error),
 
     #[error("unexpected json {0}")]
-    UnexpectedJson(serde_json::Value),
+    UnexpectedJson(JsonValue),
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Deserialize, Serialize)]
