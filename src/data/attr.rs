@@ -12,7 +12,7 @@ use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
-use crate::data::value::{Value, INLINE_VAL_SIZE_LIMIT};
+use crate::data::value::{DataValue, INLINE_VAL_SIZE_LIMIT};
 use crate::preprocess::triple::TempIdCtx;
 
 #[derive(Debug, thiserror::Error)]
@@ -133,68 +133,68 @@ pub(crate) enum TypeError {
 }
 
 impl AttributeTyping {
-    fn type_err(&self, val: Value) -> TypeError {
+    fn type_err(&self, val: DataValue) -> TypeError {
         TypeError::Typing(*self, format!("{:?}", val))
     }
-    pub(crate) fn coerce_value<'a>(&self, val: Value<'a>) -> Result<Value<'a>> {
+    pub(crate) fn coerce_value(&self, val: DataValue) -> Result<DataValue> {
         match self {
             AttributeTyping::Ref | AttributeTyping::Component => match val {
-                val @ Value::EnId(_) => Ok(val),
-                Value::Int(s) if s > 0 => Ok(Value::EnId(EntityId(s as u64))),
+                val @ DataValue::EnId(_) => Ok(val),
+                DataValue::Int(s) if s > 0 => Ok(DataValue::EnId(EntityId(s as u64))),
                 val => Err(self.type_err(val).into()),
             },
             AttributeTyping::Bool => {
-                if matches!(val, Value::Bool(_)) {
+                if matches!(val, DataValue::Bool(_)) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val).into())
                 }
             }
             AttributeTyping::Int => {
-                if matches!(val, Value::Int(_)) {
+                if matches!(val, DataValue::Int(_)) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val).into())
                 }
             }
             AttributeTyping::Float => match val {
-                v @ Value::Float(_) => Ok(v),
-                Value::Int(i) => Ok(Value::Float((i as f64).into())),
+                v @ DataValue::Float(_) => Ok(v),
+                DataValue::Int(i) => Ok(DataValue::Float((i as f64).into())),
                 val => Err(self.type_err(val).into()),
             },
             AttributeTyping::String => {
-                if matches!(val, Value::String(_)) {
+                if matches!(val, DataValue::String(_)) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val).into())
                 }
             }
             AttributeTyping::Keyword => match val {
-                val @ Value::Keyword(_) => Ok(val),
-                Value::String(s) => Ok(Value::Keyword(Keyword::from(s.as_ref()))),
+                val @ DataValue::Keyword(_) => Ok(val),
+                DataValue::String(s) => Ok(DataValue::Keyword(Keyword::from(s.as_ref()))),
                 val => Err(self.type_err(val).into()),
             },
             AttributeTyping::Uuid => {
-                if matches!(val, Value::Uuid(_)) {
+                if matches!(val, DataValue::Uuid(_)) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val).into())
                 }
             }
             AttributeTyping::Timestamp => match val {
-                val @ Value::Timestamp(_) => Ok(val),
-                Value::Int(i) => Ok(Value::Timestamp(i)),
+                val @ DataValue::Timestamp(_) => Ok(val),
+                DataValue::Int(i) => Ok(DataValue::Timestamp(i)),
                 val => Err(self.type_err(val).into()),
             },
             AttributeTyping::Bytes => {
-                if matches!(val, Value::Bytes(_)) {
+                if matches!(val, DataValue::Bytes(_)) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val).into())
                 }
             }
             AttributeTyping::Tuple => {
-                if matches!(val, Value::Tuple(_)) {
+                if matches!(val, DataValue::Tuple(_)) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val).into())
@@ -295,14 +295,14 @@ impl Attribute {
             "history": self.with_history
         })
     }
-    pub(crate) fn coerce_value<'a>(
+    pub(crate) fn coerce_value(
         &self,
-        value: Value<'a>,
+        value: DataValue,
         ctx: &mut TempIdCtx,
-    ) -> Result<Value<'a>> {
+    ) -> Result<DataValue> {
         if self.val_type.is_ref_type() {
-            if let Value::String(s) = value {
-                return Ok(Value::EnId(ctx.str2tempid(&s, false)));
+            if let DataValue::String(s) = value {
+                return Ok(DataValue::EnId(ctx.str2tempid(&s, false)));
             }
         }
         self.val_type.coerce_value(value)

@@ -7,7 +7,7 @@ use serde_json::Map;
 use crate::data::attr::AttributeCardinality;
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
-use crate::data::value::Value;
+use crate::data::value::DataValue;
 use crate::preprocess::triple::TxError;
 use crate::runtime::transact::SessionTx;
 use crate::transact::pull::{AttrPullSpec, PullSpec, PullSpecs};
@@ -52,7 +52,7 @@ impl SessionTx {
                 let cardinality = attr.cardinality;
                 Ok(PullSpec::Attr(AttrPullSpec {
                     attr,
-                    default_val: Value::Null,
+                    default_val: DataValue::Null,
                     reverse,
                     name: input_kw,
                     cardinality,
@@ -74,7 +74,7 @@ impl SessionTx {
         desc: &Map<String, JsonValue>,
         depth: usize,
     ) -> Result<PullSpec> {
-        let mut default_val = Value::Null;
+        let mut default_val = DataValue::Null;
         let mut as_override = None;
         let mut take = None;
         let mut cardinality_override = None;
@@ -103,7 +103,7 @@ impl SessionTx {
                             || PullError::InvalidFormat(v.clone(), "expect string".to_string()),
                         )?)?)
                 }
-                "default" => default_val = Value::from(v).to_static(),
+                "default" => default_val = DataValue::from(v),
                 "pull" => {
                     let v = v.as_str().ok_or_else(|| {
                         PullError::InvalidFormat(v.clone(), "expect string".to_string())
@@ -126,7 +126,7 @@ impl SessionTx {
                             JsonValue::Object(desc.clone()),
                             "expect boolean or number".to_string(),
                         )
-                        .into());
+                            .into());
                     }
                     recursive = true;
                 }
@@ -144,7 +144,7 @@ impl SessionTx {
                                 JsonValue::Object(desc.clone()),
                                 "expect array".to_string(),
                             )
-                            .into());
+                                .into());
                         }
                     };
                 }
@@ -153,7 +153,7 @@ impl SessionTx {
                         v.into(),
                         "unexpected spec key".to_string(),
                     )
-                    .into());
+                        .into());
                 }
             }
         }
@@ -169,7 +169,7 @@ impl SessionTx {
                 JsonValue::Object(desc.clone()),
                 "expect target key".to_string(),
             )
-            .into());
+                .into());
         }
 
         let input_kw = input_kw.unwrap();
@@ -188,7 +188,7 @@ impl SessionTx {
             recursion_depth = max(recursion_depth, 1);
         }
 
-        let default_val = if default_val == Value::Null {
+        let default_val = if default_val == DataValue::Null {
             default_val
         } else {
             attr.val_type.coerce_value(default_val)?

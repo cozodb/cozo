@@ -1,7 +1,6 @@
-use anyhow::Result;
 use serde_json::{json, to_string_pretty};
 
-use cozo::{Db, EncodedVec, EntityId, Validity};
+use cozo::{Db, EntityId, Validity};
 use cozorocks::DbBuilder;
 
 fn create_db(name: &str) -> Db {

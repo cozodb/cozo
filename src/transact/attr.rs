@@ -55,7 +55,7 @@ impl SessionTx {
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
                     self.attr_by_id_cache.insert(attr.id, None);
-                    self.attr_by_kw_cache.insert(attr.keyword.clone(), None);
+                    self.attr_by_kw_cache.insert(attr.keyword, None);
                     None
                 } else {
                     self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));

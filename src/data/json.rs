@@ -4,7 +4,7 @@ pub(crate) use serde_json::Value as JsonValue;
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::keyword::{Keyword, KeywordError};
-use crate::data::value::Value;
+use crate::data::value::DataValue;
 
 #[derive(Debug, thiserror::Error)]
 pub enum JsonError {
@@ -14,47 +14,47 @@ pub enum JsonError {
     MissingField(JsonValue, String),
 }
 
-impl<'a> From<&'a JsonValue> for Value<'a> {
+impl<'a> From<&'a JsonValue> for DataValue {
     fn from(v: &'a JsonValue) -> Self {
         match v {
-            JsonValue::Null => Value::Null,
-            JsonValue::Bool(b) => Value::Bool(*b),
+            JsonValue::Null => DataValue::Null,
+            JsonValue::Bool(b) => DataValue::Bool(*b),
             JsonValue::Number(n) => match n.as_i64() {
-                Some(i) => Value::Int(i),
+                Some(i) => DataValue::Int(i),
                 None => match n.as_f64() {
-                    Some(f) => Value::Float(f.into()),
-                    None => Value::String(n.to_string().into()),
+                    Some(f) => DataValue::Float(f.into()),
+                    None => DataValue::String(n.to_string().into()),
                 },
             },
-            JsonValue::String(s) => Value::String(s.into()),
-            JsonValue::Array(arr) => Value::Tuple(arr.into_iter().map(Value::from).collect()),
-            JsonValue::Object(d) => Value::Tuple(
+            JsonValue::String(s) => DataValue::String(s.into()),
+            JsonValue::Array(arr) => DataValue::Tuple(arr.iter().map(DataValue::from).collect()),
+            JsonValue::Object(d) => DataValue::Tuple(
                 d.into_iter()
-                    .map(|(k, v)| Value::Tuple([Value::String(k.into()), Value::from(v)].into()))
+                    .map(|(k, v)| DataValue::Tuple([DataValue::String(k.into()), DataValue::from(v)].into()))
                     .collect(),
             ),
         }
     }
 }
 
-impl From<Value<'_>> for JsonValue {
-    fn from(v: Value<'_>) -> Self {
+impl From<DataValue> for JsonValue {
+    fn from(v: DataValue) -> Self {
         match v {
-            Value::Null => JsonValue::Null,
-            Value::Bool(b) => JsonValue::Bool(b),
-            Value::Int(i) => JsonValue::Number(i.into()),
-            Value::Float(f) => json!(f.0),
-            Value::String(t) => JsonValue::String(t.into_owned()),
-            Value::Uuid(uuid) => JsonValue::String(uuid.to_string()),
-            Value::Bytes(bytes) => JsonValue::String(base64::encode(bytes)),
-            Value::Tuple(l) => {
+            DataValue::Null => JsonValue::Null,
+            DataValue::Bool(b) => JsonValue::Bool(b),
+            DataValue::Int(i) => JsonValue::Number(i.into()),
+            DataValue::Float(f) => json!(f.0),
+            DataValue::String(t) => JsonValue::String(t.into()),
+            DataValue::Uuid(uuid) => JsonValue::String(uuid.to_string()),
+            DataValue::Bytes(bytes) => JsonValue::String(base64::encode(bytes)),
+            DataValue::Tuple(l) => {
                 JsonValue::Array(l.iter().map(|v| JsonValue::from(v.clone())).collect())
             }
-            Value::DescVal(v) => JsonValue::from(*v.0),
-            Value::Bottom => JsonValue::Null,
-            Value::EnId(i) => JsonValue::Number(i.0.into()),
-            Value::Keyword(t) => JsonValue::String(t.to_string()),
-            Value::Timestamp(i) => JsonValue::Number(i.into()),
+            DataValue::DescVal(v) => JsonValue::from(*v.0),
+            DataValue::Bottom => JsonValue::Null,
+            DataValue::EnId(i) => JsonValue::Number(i.0.into()),
+            DataValue::Keyword(t) => JsonValue::String(t.to_string()),
+            DataValue::Timestamp(i) => JsonValue::Number(i.into()),
         }
     }
 }

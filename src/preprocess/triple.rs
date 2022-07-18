@@ -9,19 +9,19 @@ use crate::data::attr::{Attribute, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
-use crate::data::value::Value;
+use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 
 #[derive(Debug)]
-pub(crate) struct Triple<'a> {
+pub(crate) struct Triple {
     pub(crate) id: EntityId,
     pub(crate) attr: AttrId,
-    pub(crate) value: Value<'a>,
+    pub(crate) value: DataValue,
 }
 
 #[derive(Debug)]
-pub struct Quintuple<'a> {
-    pub(crate) triple: Triple<'a>,
+pub struct Quintuple {
+    pub(crate) triple: Triple,
     pub(crate) action: TxAction,
     pub(crate) validity: Validity,
 }
@@ -124,10 +124,10 @@ impl SessionTx {
     /// }
     /// ```
     /// nesting is allowed for values of type `ref` and `component`
-    pub fn parse_tx_requests<'a>(
+    pub fn parse_tx_requests(
         &mut self,
-        req: &'a JsonValue,
-    ) -> Result<(Vec<Quintuple<'a>>, String)> {
+        req: &JsonValue,
+    ) -> Result<(Vec<Quintuple>, String)> {
         let map = req
             .as_object()
             .ok_or_else(|| TxError::Decoding(req.clone(), "expected object".to_string()))?;
@@ -162,7 +162,7 @@ impl SessionTx {
         item: &'a JsonValue,
         default_since: Validity,
         temp_id_ctx: &mut TempIdCtx,
-        collected: &mut Vec<Quintuple<'a>>,
+        collected: &mut Vec<Quintuple>,
     ) -> Result<()> {
         let item = item
             .as_object()
@@ -206,7 +206,7 @@ impl SessionTx {
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
-        collected: &mut Vec<Quintuple<'a>>,
+        collected: &mut Vec<Quintuple>,
     ) -> Result<()> {
         if attr.cardinality.is_many() && attr.val_type != AttributeTyping::Tuple && value.is_array()
         {
@@ -233,9 +233,9 @@ impl SessionTx {
         }
 
         let v = if let JsonValue::Object(inner) = value {
-            self.parse_tx_component(&attr, inner, action, since, temp_id_ctx, collected)?
+            self.parse_tx_component(attr, inner, action, since, temp_id_ctx, collected)?
         } else {
-            attr.coerce_value(Value::from(value), temp_id_ctx)?
+            attr.coerce_value(DataValue::from(value), temp_id_ctx)?
         };
 
         collected.push(Quintuple {
@@ -257,8 +257,8 @@ impl SessionTx {
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
-        collected: &mut Vec<Quintuple<'a>>,
-    ) -> Result<Value<'a>> {
+        collected: &mut Vec<Quintuple>,
+    ) -> Result<DataValue> {
         if action != TxAction::Put {
             return Err(TxError::InvalidAction(
                 action,
@@ -272,7 +272,7 @@ impl SessionTx {
             return Err(TxError::InvalidAction(action,
                                               "component shorthand must contain at least one unique/identity field for non-component refs".to_string()).into());
         }
-        Ok(Value::EnId(eid))
+        Ok(DataValue::EnId(eid))
     }
     fn parse_tx_request_arr<'a>(
         &mut self,
@@ -280,7 +280,7 @@ impl SessionTx {
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
-        collected: &mut Vec<Quintuple<'a>>,
+        collected: &mut Vec<Quintuple>,
     ) -> Result<()> {
         match item {
             [eid] => {
@@ -304,7 +304,7 @@ impl SessionTx {
                     triple: Triple {
                         id: eid,
                         attr: AttrId(0),
-                        value: Value::Null,
+                        value: DataValue::Null,
                     },
                     action: TxAction::RetractAllE,
                     validity: since,
@@ -335,7 +335,7 @@ impl SessionTx {
                     triple: Triple {
                         id: eid,
                         attr: attr.id,
-                        value: Value::Null,
+                        value: DataValue::Null,
                     },
                     action: TxAction::RetractAllEA,
                     validity: since,
@@ -356,7 +356,7 @@ impl SessionTx {
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
-        collected: &mut Vec<Quintuple<'a>>,
+        collected: &mut Vec<Quintuple>,
     ) -> Result<()> {
         let kw: Keyword = attr_kw.try_into()?;
         let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
@@ -442,7 +442,7 @@ impl SessionTx {
         action: TxAction,
         since: Validity,
         temp_id_ctx: &mut TempIdCtx,
-        collected: &mut Vec<Quintuple<'a>>,
+        collected: &mut Vec<Quintuple>,
     ) -> Result<(EntityId, bool)> {
         let mut pairs = Vec::with_capacity(item.len());
         let mut eid = None;

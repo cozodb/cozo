@@ -6,4 +6,5 @@ pub(crate) mod json;
 pub(crate) mod keyword;
 pub(crate) mod triple;
 pub(crate) mod value;
+pub(crate) mod tuple;
 

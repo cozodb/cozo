@@ -12,7 +12,7 @@ use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
-use crate::data::value::{StaticValue, Value};
+use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type PullSpecs = Vec<PullSpec>;
@@ -38,7 +38,7 @@ pub(crate) struct AttrPullSpec {
     pub(crate) recursive: bool,
     pub(crate) reverse: bool,
     pub(crate) attr: Attribute,
-    pub(crate) default_val: StaticValue,
+    pub(crate) default_val: DataValue,
     pub(crate) name: Keyword,
     pub(crate) cardinality: AttributeCardinality,
     pub(crate) take: Option<usize>,
@@ -97,14 +97,14 @@ impl SessionTx {
                 if !a_spec.recursive {
                     recursive_seen.insert((path.pop_to_last(), eid));
                 }
-                let ret = if a_spec.reverse {
+                if a_spec.reverse {
                     self.pull_attr_rev(
                         eid,
                         vld,
                         a_spec,
                         depth,
                         root,
-                        path.clone(),
+                        path,
                         collector,
                         recursive_seen,
                     )
@@ -115,12 +115,11 @@ impl SessionTx {
                         a_spec,
                         depth,
                         root,
-                        path.clone(),
+                        path,
                         collector,
                         recursive_seen,
                     )
-                };
-                ret
+                }
             }
             PullSpec::PullId(kw) => {
                 collector.insert(kw.to_string_no_prefix(), eid.into());
@@ -152,7 +151,7 @@ impl SessionTx {
                     collector,
                     recursive_seen,
                 )?;
-            } else if spec.default_val != Value::Null {
+            } else if spec.default_val != DataValue::Null {
                 self.pull_attr_collect(
                     spec,
                     spec.default_val.clone(),
@@ -165,7 +164,7 @@ impl SessionTx {
                 )?;
             }
         } else {
-            let mut collection: Vec<StaticValue> = vec![];
+            let mut collection: Vec<DataValue> = vec![];
             let iter = self.triple_ea_before_scan(eid, spec.attr.id, vld);
             for found in iter {
                 let (_, _, value) = found?;
@@ -192,7 +191,7 @@ impl SessionTx {
     fn pull_attr_collect(
         &mut self,
         spec: &AttrPullSpec,
-        value: StaticValue,
+        value: DataValue,
         vld: Validity,
         depth: usize,
         root: &PullSpecs,
@@ -267,7 +266,7 @@ impl SessionTx {
     fn pull_attr_collect_many(
         &mut self,
         spec: &AttrPullSpec,
-        values: Vec<StaticValue>,
+        values: Vec<DataValue>,
         vld: Validity,
         depth: usize,
         root: &PullSpecs,
@@ -364,7 +363,7 @@ impl SessionTx {
                 let (_, _, value) = found?;
                 self.pull_attr_collect(
                     spec,
-                    Value::EnId(value),
+                    DataValue::EnId(value),
                     vld,
                     depth,
                     root,
@@ -372,7 +371,7 @@ impl SessionTx {
                     collector,
                     recursive_seen,
                 )?;
-            } else if spec.default_val != Value::Null {
+            } else if spec.default_val != DataValue::Null {
                 self.pull_attr_collect(
                     spec,
                     spec.default_val.clone(),
@@ -385,11 +384,11 @@ impl SessionTx {
                 )?;
             }
         } else {
-            let mut collection: Vec<StaticValue> = vec![];
+            let mut collection: Vec<DataValue> = vec![];
             let iter = self.triple_vref_a_before_scan(eid, spec.attr.id, vld);
             for found in iter {
                 let (_, _, value) = found?;
-                collection.push(Value::EnId(value));
+                collection.push(DataValue::EnId(value));
                 if let Some(n) = spec.take {
                     if n <= collection.len() {
                         break;
@@ -416,8 +415,8 @@ impl SessionTx {
         collector: &mut Map<String, JsonValue>,
         pull_all_seen: &mut HashSet<EntityId>,
     ) -> Result<()> {
-        let mut current = encode_eav_key(eid, AttrId::MIN_PERM, &Value::Null, Validity::MAX);
-        let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &Value::Bottom, Validity::MIN);
+        let mut current = encode_eav_key(eid, AttrId::MIN_PERM, &DataValue::Null, Validity::MAX);
+        let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &DataValue::Bottom, Validity::MIN);
 
         let mut it = self.tx.iterator().upper_bound(&upper_bound).start();
         it.seek(&current);

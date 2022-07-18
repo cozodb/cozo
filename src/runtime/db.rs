@@ -17,7 +17,7 @@ use crate::data::encode::{
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
-use crate::data::value::Value;
+use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 use crate::transact::pull::CurrentPath;
 
@@ -179,13 +179,13 @@ impl Db {
         let mut current = encode_eav_key(
             EntityId::MIN_PERM,
             AttrId::MIN_PERM,
-            &Value::Null,
+            &DataValue::Null,
             Validity::MAX,
         );
         let upper_bound = encode_eav_key(
             EntityId::MAX_PERM,
             AttrId::MAX_PERM,
-            &Value::Bottom,
+            &DataValue::Bottom,
             Validity::MIN,
         );
         let mut it = tx

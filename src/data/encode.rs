@@ -10,7 +10,7 @@ use crate::data::attr::Attribute;
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
-use crate::data::value::Value;
+use crate::data::value::DataValue;
 use crate::runtime::transact::TxLog;
 
 #[repr(u8)]
@@ -217,17 +217,17 @@ pub(crate) const VEC_SIZE_16: usize = 16;
 pub(crate) const VEC_SIZE_8: usize = 8;
 
 #[inline]
-pub(crate) fn decode_value(src: &[u8]) -> Result<Value> {
+pub(crate) fn decode_value(src: &[u8]) -> Result<DataValue> {
     Ok(rmp_serde::from_slice(src)?)
 }
 
 #[inline]
-pub(crate) fn decode_value_from_key(src: &[u8]) -> Result<Value> {
+pub(crate) fn decode_value_from_key(src: &[u8]) -> Result<DataValue> {
     Ok(rmp_serde::from_slice(&src[VEC_SIZE_24..])?)
 }
 
 #[inline]
-pub(crate) fn decode_value_from_val(src: &[u8]) -> Result<Value> {
+pub(crate) fn decode_value_from_val(src: &[u8]) -> Result<DataValue> {
     Ok(rmp_serde::from_slice(&src[VEC_SIZE_8..])?)
 }
 
@@ -239,7 +239,7 @@ pub(crate) fn decode_value_from_val(src: &[u8]) -> Result<Value> {
 pub(crate) fn encode_eav_key(
     eid: EntityId,
     aid: AttrId,
-    val: &Value,
+    val: &DataValue,
     vld: Validity,
 ) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
@@ -274,7 +274,7 @@ pub(crate) fn decode_ea_key(src: &[u8]) -> Result<(EntityId, AttrId, Validity)> 
 pub(crate) fn encode_aev_key(
     aid: AttrId,
     eid: EntityId,
-    val: &Value,
+    val: &DataValue,
     vld: Validity,
 ) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
@@ -303,7 +303,7 @@ pub(crate) fn decode_ae_key(src: &[u8]) -> Result<(AttrId, EntityId, Validity)> 
 #[inline]
 pub(crate) fn encode_ave_key_for_unique_v(
     aid: AttrId,
-    val: &Value,
+    val: &DataValue,
     vld: Validity,
 ) -> EncodedVec<LARGE_VEC_SIZE> {
     encode_ave_key(aid, val, EntityId(0), vld)
@@ -316,7 +316,7 @@ pub(crate) fn encode_ave_key_for_unique_v(
 #[inline]
 pub(crate) fn encode_ave_key(
     aid: AttrId,
-    val: &Value,
+    val: &DataValue,
     eid: EntityId,
     vld: Validity,
 ) -> EncodedVec<LARGE_VEC_SIZE> {
@@ -415,7 +415,7 @@ pub(crate) fn decode_sentinel_entity_attr(src: &[u8]) -> Result<(EntityId, AttrI
 }
 
 #[inline]
-pub(crate) fn encode_sentinel_attr_val(aid: AttrId, val: &Value) -> EncodedVec<LARGE_VEC_SIZE> {
+pub(crate) fn encode_sentinel_attr_val(aid: AttrId, val: &DataValue) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     ret.extend(aid.bytes());
     ret[0] = StorageTag::SentinelAttrValue as u8;
@@ -424,7 +424,7 @@ pub(crate) fn encode_sentinel_attr_val(aid: AttrId, val: &Value) -> EncodedVec<L
 }
 
 #[inline]
-pub(crate) fn decode_sentinel_attr_val(src: &[u8]) -> Result<(AttrId, Value)> {
+pub(crate) fn decode_sentinel_attr_val(src: &[u8]) -> Result<(AttrId, DataValue)> {
     let a_id = AttrId::from_bytes(&src[..VEC_SIZE_8]);
     let val = rmp_serde::from_slice(&src[VEC_SIZE_8..])?;
     Ok((a_id, val))

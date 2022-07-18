@@ -16,7 +16,7 @@ use crate::data::encode::{
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
-use crate::data::value::StaticValue;
+use crate::data::value::DataValue;
 
 pub struct SessionTx {
     pub(crate) tx: Tx,
@@ -28,7 +28,7 @@ pub struct SessionTx {
     pub(crate) attr_by_kw_cache: BTreeMap<Keyword, Option<Attribute>>,
     pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
     pub(crate) eid_by_attr_val_cache:
-    BTreeMap<StaticValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
+    BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
     // "touched" requires the id to exist prior to the transaction, and something related to it has changed
     pub(crate) touched_eids: BTreeSet<EntityId>,
 }
