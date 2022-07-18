@@ -12,7 +12,7 @@ use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
-use crate::data::value::Value;
+use crate::data::value::{Value, INLINE_VAL_SIZE_LIMIT};
 use crate::preprocess::triple::TempIdCtx;
 
 #[derive(Debug, thiserror::Error)]
@@ -306,6 +306,11 @@ impl Attribute {
             }
         }
         self.val_type.coerce_value(value)
+    }
+    pub(crate) fn encode(&self) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
+        let mut ret = SmallVec::<[u8; INLINE_VAL_SIZE_LIMIT]>::new();
+        self.serialize(&mut Serializer::new(&mut ret)).unwrap();
+        ret.into()
     }
 }
 
