@@ -1,3 +1,5 @@
+use std::cmp::{min, Ordering};
+
 use rmp_serde::Serializer;
 use serde::Serialize;
 
@@ -66,6 +68,21 @@ impl<'a> EncodedTuple<'a> {
             Ok(u32::from_be_bytes([self.0[4], self.0[5], self.0[6], self.0[7]]) as usize)
         }
     }
+    fn force_get(&self, idx: usize) -> DataValue {
+        let pos = if idx == 0 {
+            let arity = u32::from_be_bytes([self.0[4], self.0[5], self.0[6], self.0[7]]) as usize;
+            4 * (arity + 1)
+        } else {
+            let len_pos = (idx + 1) * 4;
+            u32::from_be_bytes([
+                self.0[len_pos],
+                self.0[len_pos + 1],
+                self.0[len_pos + 2],
+                self.0[len_pos + 3],
+            ]) as usize
+        };
+        rmp_serde::from_slice(&self.0[pos..]).unwrap()
+    }
     pub(crate) fn get(&self, idx: usize) -> anyhow::Result<DataValue> {
         let pos = if idx == 0 {
             4 * (self.arity()? + 1)
@@ -122,6 +139,32 @@ impl<'a> Iterator for EncodedTupleIter<'a> {
             self.pos += 1;
             Some(self.tuple.get(pos))
         }
+    }
+}
+
+pub(crate) fn rusty_temp_cmp(a: &[u8], b: &[u8]) -> i8 {
+    let a = EncodedTuple(a);
+    let b = EncodedTuple(b);
+    match a.prefix().unwrap().cmp(&b.prefix().unwrap()) {
+        Ordering::Greater => return 1,
+        Ordering::Equal => {}
+        Ordering::Less => return -1,
+    }
+    let a_len = a.arity().unwrap();
+    let b_len = b.arity().unwrap();
+    for idx in 0..min(a_len, b_len) {
+        let av = a.force_get(idx);
+        let bv = b.force_get(idx);
+        match av.cmp(&bv) {
+            Ordering::Greater => return 1,
+            Ordering::Equal => {}
+            Ordering::Less => return -1,
+        }
+    }
+    match a_len.cmp(&b_len) {
+        Ordering::Greater => 1,
+        Ordering::Equal => 0,
+        Ordering::Less => -1,
     }
 }
 
