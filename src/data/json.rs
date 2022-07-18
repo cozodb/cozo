@@ -14,6 +14,31 @@ pub enum JsonError {
     MissingField(JsonValue, String),
 }
 
+impl From<JsonValue> for DataValue {
+    fn from(v: JsonValue) -> Self {
+        match v {
+            JsonValue::Null => DataValue::Null,
+            JsonValue::Bool(b) => DataValue::Bool(b),
+            JsonValue::Number(n) => match n.as_i64() {
+                Some(i) => DataValue::Int(i),
+                None => match n.as_f64() {
+                    Some(f) => DataValue::Float(f.into()),
+                    None => DataValue::String(n.to_string().into()),
+                },
+            },
+            JsonValue::String(s) => DataValue::String(s.into()),
+            JsonValue::Array(arr) => DataValue::Tuple(arr.iter().map(DataValue::from).collect()),
+            JsonValue::Object(d) => DataValue::Tuple(
+                d.into_iter()
+                    .map(|(k, v)| {
+                        DataValue::Tuple([DataValue::String(k.into()), DataValue::from(v)].into())
+                    })
+                    .collect(),
+            ),
+        }
+    }
+}
+
 impl<'a> From<&'a JsonValue> for DataValue {
     fn from(v: &'a JsonValue) -> Self {
         match v {
@@ -30,7 +55,9 @@ impl<'a> From<&'a JsonValue> for DataValue {
             JsonValue::Array(arr) => DataValue::Tuple(arr.iter().map(DataValue::from).collect()),
             JsonValue::Object(d) => DataValue::Tuple(
                 d.into_iter()
-                    .map(|(k, v)| DataValue::Tuple([DataValue::String(k.into()), DataValue::from(v)].into()))
+                    .map(|(k, v)| {
+                        DataValue::Tuple([DataValue::String(k.into()), DataValue::from(v)].into())
+                    })
                     .collect(),
             ),
         }
