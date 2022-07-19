@@ -1,31 +1,36 @@
 use std::collections::BTreeMap;
+use std::env::temp_dir;
 use std::fmt::{Debug, Formatter};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::Result;
 use itertools::Itertools;
 use serde_json::json;
+use uuid::Uuid;
 
-use cozorocks::{DbBuilder, DbIter, RocksDb};
+use cozorocks::{DbBuilder, DbIter, RawRocksDb, RocksDb};
 
-use crate::AttrTxItem;
-use crate::data::compare::{DB_KEY_PREFIX_LEN, rusty_cmp};
+use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::encode::{
     decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, StorageTag,
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
+use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 use crate::transact::pull::CurrentPath;
+use crate::AttrTxItem;
 
 pub struct Db {
     db: RocksDb,
+    scratch: RawRocksDb,
     last_attr_id: Arc<AtomicU64>,
     last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,
+    last_scratch_id: Arc<AtomicU32>,
     n_sessions: Arc<AtomicUsize>,
     session_id: usize,
 }
@@ -47,11 +52,25 @@ impl Db {
             .use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
             .use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
             .build()?;
+        let mut temp_db_location = temp_dir();
+        temp_db_location.push(format!("{}.cozo", Uuid::new_v4()));
+
+        let scratch = DbBuilder::default()
+            .path(temp_db_location.to_str().unwrap())
+            .create_if_missing(true)
+            .destroy_on_exit(true)
+            .use_bloom_filter(true, 10., true)
+            .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
+            .use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false)
+            .build_raw(true)?
+            .ignore_range_deletions(true);
         let ret = Self {
             db,
+            scratch,
             last_attr_id: Arc::new(Default::default()),
             last_ent_id: Arc::new(Default::default()),
             last_tx_id: Arc::new(Default::default()),
+            last_scratch_id: Arc::new(Default::default()),
             n_sessions: Arc::new(Default::default()),
             session_id: Default::default(),
         };
@@ -64,9 +83,11 @@ impl Db {
 
         Ok(Self {
             db: self.db.clone(),
+            scratch: self.scratch.clone(),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
+            last_scratch_id: self.last_scratch_id.clone(),
             n_sessions: self.n_sessions.clone(),
             session_id: old_count + 1,
         })

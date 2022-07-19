@@ -116,6 +116,7 @@ pub(crate) mod ffi {
             cmp_impl: fn(&[u8], &[u8]) -> i8,
             no_wal: bool,
         ) -> SharedPtr<RawRocksDbBridge>;
+        fn set_ignore_range_deletions(self: &RawRocksDbBridge, val: bool);
         fn iterator(self: &RawRocksDbBridge) -> UniquePtr<IterBridge>;
         fn get(
             self: &RawRocksDbBridge,
@@ -123,15 +124,10 @@ pub(crate) mod ffi {
             status: &mut RocksDbStatus,
         ) -> UniquePtr<PinnableSlice>;
         fn exists(self: &RawRocksDbBridge, key: &[u8], status: &mut RocksDbStatus);
-        fn put(
-            self: Pin<&mut RawRocksDbBridge>,
-            key: &[u8],
-            val: &[u8],
-            status: &mut RocksDbStatus,
-        );
-        fn del(self: Pin<&mut RawRocksDbBridge>, key: &[u8], status: &mut RocksDbStatus);
+        fn put(self: &RawRocksDbBridge, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
+        fn del(self: &RawRocksDbBridge, key: &[u8], status: &mut RocksDbStatus);
         fn del_range(
-            self: Pin<&mut RawRocksDbBridge>,
+            self: &RawRocksDbBridge,
             lower: &[u8],
             upper: &[u8],
             status: &mut RocksDbStatus,

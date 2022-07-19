@@ -1,10 +1,12 @@
 use std::cmp::{min, Ordering};
 
+use anyhow::Result;
 use rmp_serde::Serializer;
 use serde::Serialize;
-use anyhow::Result;
 
 use crate::data::value::DataValue;
+
+pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 4;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TupleError {
@@ -145,7 +147,7 @@ impl<'a> Iterator for EncodedTupleIter<'a> {
     }
 }
 
-pub(crate) fn rusty_temp_cmp(a: &[u8], b: &[u8]) -> i8 {
+pub(crate) fn rusty_scratch_cmp(a: &[u8], b: &[u8]) -> i8 {
     let a = EncodedTuple(a);
     let b = EncodedTuple(b);
     match a.prefix().unwrap().cmp(&b.prefix().unwrap()) {

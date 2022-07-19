@@ -23,7 +23,6 @@ struct RawRocksDbBridge {
 
     inline ~RawRocksDbBridge() {
         if (destroy_on_exit) {
-            cerr << "destroying database on exit: " << db_path << endl;
             auto status = db->Close();
             if (!status.ok()) {
                 cerr << status.ToString() << endl;
@@ -34,6 +33,10 @@ struct RawRocksDbBridge {
                 cerr << status.ToString() << endl;
             }
         }
+    }
+
+    inline void set_ignore_range_deletions(bool v) const {
+        r_opts->ignore_range_deletions = v;
     }
 
     [[nodiscard]] inline const string &get_db_path() const {
@@ -59,15 +62,15 @@ struct RawRocksDbBridge {
         write_status(s, status);
     }
 
-    inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) {
+    inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) const {
         write_status(db->Put(*w_opts, convert_slice(key), convert_slice(val)), status);
     }
 
-    inline void del(RustBytes key, RocksDbStatus &status) {
+    inline void del(RustBytes key, RocksDbStatus &status) const {
         write_status(db->Delete(*w_opts, convert_slice(key)), status);
     }
 
-    inline void del_range(RustBytes start, RustBytes end, RocksDbStatus &status) {
+    inline void del_range(RustBytes start, RustBytes end, RocksDbStatus &status) const {
         write_status(db->DeleteRange(*w_opts, db->DefaultColumnFamily(), convert_slice(start), convert_slice(end)),
                      status);
     }

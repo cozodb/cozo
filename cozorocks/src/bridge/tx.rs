@@ -11,7 +11,7 @@ pub struct TxBuilder {
 }
 
 pub struct PinSlice {
-    inner: UniquePtr<PinnableSlice>,
+    pub(crate) inner: UniquePtr<PinnableSlice>,
 }
 
 impl Deref for PinSlice {
@@ -172,6 +172,6 @@ impl Tx {
         IterBuilder {
             inner: self.inner.iterator(),
         }
-        .auto_prefix_mode(true)
+            .auto_prefix_mode(true)
     }
 }
