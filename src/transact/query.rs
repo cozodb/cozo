@@ -89,6 +89,70 @@ pub(crate) struct TripleRelation {
     bindings: [Keyword; 2],
 }
 
+impl TripleRelation {
+    pub(crate) fn join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
+    ) -> TupleIter<'a> {
+        match right_join_indices.len() {
+            0 => self.cartesian_join(left_iter),
+            2 => {
+                let right_first = *right_join_indices.first().unwrap();
+                let right_second = *right_join_indices.last().unwrap();
+                let left_first = *left_join_indices.first().unwrap();
+                let left_second = *left_join_indices.last().unwrap();
+                match (right_first, right_second) {
+                    (0, 1) => self.ev_join(left_iter, left_first, left_second),
+                    (1, 0) => self.ev_join(left_iter, left_second, left_first),
+                    _ => panic!("should not happen"),
+                }
+            }
+            1 => {
+                if right_join_indices[0] == 0 {
+                    self.e_join(left_iter, left_join_indices[0])
+                } else if self.attr.val_type.is_ref_type() {
+                    self.v_ref_join(left_iter, left_join_indices[0])
+                } else if self.attr.indexing.should_index() {
+                    self.v_index_join(left_iter, left_join_indices[0])
+                } else {
+                    self.v_no_index_join(left_iter, left_join_indices[0])
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
+    fn cartesian_join<'a>(&'a self, left_iter: TupleIter<'a>) -> TupleIter<'a> {
+        // [f, f] not really a join
+        todo!()
+    }
+    fn ev_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_e_idx: usize,
+        left_v_idx: usize,
+    ) -> TupleIter<'a> {
+        // [b, b] actually a filter
+        todo!()
+    }
+    fn e_join<'a>(&'a self, left_iter: TupleIter<'a>, left_idx: usize) -> TupleIter<'a> {
+        // [b, f]
+        todo!()
+    }
+    fn v_ref_join<'a>(&'a self, left_iter: TupleIter<'a>, left_idx: usize) -> TupleIter<'a> {
+        // [f, b] where b is a ref
+        todo!()
+    }
+    fn v_index_join<'a>(&'a self, left_iter: TupleIter<'a>, left_idx: usize) -> TupleIter<'a> {
+        // [f, b] where b is indexed
+        todo!()
+    }
+    fn v_no_index_join<'a>(&'a self, left_iter: TupleIter<'a>, left_idx: usize) -> TupleIter<'a> {
+        // [f, b] where b is not indexed
+        todo!()
+    }
+}
+
 pub(crate) struct ProjectedRelation {
     relation: Relation,
     eliminate: Vec<Keyword>,
