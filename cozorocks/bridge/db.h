@@ -12,6 +12,67 @@
 #include "tx.h"
 #include "slice.h"
 
+struct RawRocksDbBridge {
+    unique_ptr<DB> db;
+    unique_ptr<Comparator> comparator;
+    unique_ptr<Options> options;
+    unique_ptr<ReadOptions> r_opts;
+    unique_ptr<WriteOptions> w_opts;
+    bool destroy_on_exit;
+    string db_path;
+
+    inline ~RawRocksDbBridge() {
+        if (destroy_on_exit) {
+            cerr << "destroying database on exit: " << db_path << endl;
+            auto status = db->Close();
+            if (!status.ok()) {
+                cerr << status.ToString() << endl;
+            }
+            db.reset();
+            auto status2 = DestroyDB(db_path, *options);
+            if (!status2.ok()) {
+                cerr << status.ToString() << endl;
+            }
+        }
+    }
+
+    [[nodiscard]] inline const string &get_db_path() const {
+        return db_path;
+    }
+
+    inline unique_ptr<IterBridge> iterator() const {
+        return make_unique<IterBridge>(&*db);
+    };
+
+    inline unique_ptr<PinnableSlice> get(RustBytes key, RocksDbStatus &status) const {
+        Slice key_ = convert_slice(key);
+        auto ret = make_unique<PinnableSlice>();
+        auto s = db->Get(*r_opts, db->DefaultColumnFamily(), key_, &*ret);
+        write_status(s, status);
+        return ret;
+    }
+
+    inline void exists(RustBytes key, RocksDbStatus &status) const {
+        Slice key_ = convert_slice(key);
+        auto ret = PinnableSlice();
+        auto s = db->Get(*r_opts, db->DefaultColumnFamily(), key_, &ret);
+        write_status(s, status);
+    }
+
+    inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) {
+        write_status(db->Put(*w_opts, convert_slice(key), convert_slice(val)), status);
+    }
+
+    inline void del(RustBytes key, RocksDbStatus &status) {
+        write_status(db->Delete(*w_opts, convert_slice(key)), status);
+    }
+
+    inline void del_range(RustBytes start, RustBytes end, RocksDbStatus &status) {
+        write_status(db->DeleteRange(*w_opts, db->DefaultColumnFamily(), convert_slice(start), convert_slice(end)),
+                     status);
+    }
+};
+
 struct RocksDbBridge {
     unique_ptr<Comparator> comparator;
     unique_ptr<Options> options;
@@ -80,6 +141,9 @@ public:
     RustComparatorFn ext_cmp;
     bool can_different_bytes_be_equal;
 };
+
+shared_ptr<RawRocksDbBridge>
+open_raw_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl, bool no_wal);
 
 shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl);
 

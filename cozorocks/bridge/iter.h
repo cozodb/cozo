@@ -10,6 +10,7 @@
 #include "status.h"
 
 struct IterBridge {
+    DB *db;
     Transaction *tx;
     unique_ptr<Iterator> iter;
     string lower_storage;
@@ -20,6 +21,12 @@ struct IterBridge {
 
     explicit IterBridge(Transaction *tx_) : tx(tx_), iter(nullptr), lower_bound(), upper_bound(),
                                             r_opts(new ReadOptions) {
+        r_opts->ignore_range_deletions = true;
+        r_opts->auto_prefix_mode = true;
+    }
+
+    explicit IterBridge(DB *db_) : db(db_), iter(nullptr), lower_bound(), upper_bound(),
+                                   r_opts(new ReadOptions) {
         r_opts->ignore_range_deletions = true;
         r_opts->auto_prefix_mode = true;
     }
@@ -76,7 +83,11 @@ struct IterBridge {
     }
 
     inline void start() {
-        iter.reset(tx->GetIterator(*r_opts));
+        if (db == nullptr) {
+            iter.reset(tx->GetIterator(*r_opts));
+        } else {
+            iter.reset(db->NewIterator(*r_opts));
+        }
     }
 
     inline void reset() {

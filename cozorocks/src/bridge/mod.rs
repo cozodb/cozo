@@ -107,6 +107,36 @@ pub(crate) mod ffi {
 
         // type ReadOptions;
 
+        type RawRocksDbBridge;
+        fn get_db_path(self: &RawRocksDbBridge) -> &CxxString;
+        fn open_raw_db(
+            builder: &DbOpts,
+            status: &mut RocksDbStatus,
+            use_cmp: bool,
+            cmp_impl: fn(&[u8], &[u8]) -> i8,
+            no_wal: bool,
+        ) -> SharedPtr<RawRocksDbBridge>;
+        fn iterator(self: &RawRocksDbBridge) -> UniquePtr<IterBridge>;
+        fn get(
+            self: &RawRocksDbBridge,
+            key: &[u8],
+            status: &mut RocksDbStatus,
+        ) -> UniquePtr<PinnableSlice>;
+        fn exists(self: &RawRocksDbBridge, key: &[u8], status: &mut RocksDbStatus);
+        fn put(
+            self: Pin<&mut RawRocksDbBridge>,
+            key: &[u8],
+            val: &[u8],
+            status: &mut RocksDbStatus,
+        );
+        fn del(self: Pin<&mut RawRocksDbBridge>, key: &[u8], status: &mut RocksDbStatus);
+        fn del_range(
+            self: Pin<&mut RawRocksDbBridge>,
+            lower: &[u8],
+            upper: &[u8],
+            status: &mut RocksDbStatus,
+        );
+
         type RocksDbBridge;
         fn get_db_path(self: &RocksDbBridge) -> &CxxString;
         fn open_db(
