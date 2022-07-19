@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use anyhow::Result;
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
@@ -124,6 +123,7 @@ impl TripleRelation {
     }
     fn cartesian_join<'a>(&'a self, left_iter: TupleIter<'a>) -> TupleIter<'a> {
         // [f, f] not really a join
+        left_iter.map_ok(|tuple| {});
         todo!()
     }
     fn ev_join<'a>(

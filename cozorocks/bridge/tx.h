@@ -57,7 +57,7 @@ struct TxBridge {
         r_opts->fill_cache = val;
     }
 
-    inline unique_ptr<IterBridge> iterator() {
+    inline unique_ptr<IterBridge> iterator() const {
         return make_unique<IterBridge>(&*tx);
     };
 
@@ -87,7 +87,7 @@ struct TxBridge {
 
     void start();
 
-    inline unique_ptr<PinnableSlice> get(RustBytes key, bool for_update, RocksDbStatus &status) {
+    inline unique_ptr<PinnableSlice> get(RustBytes key, bool for_update, RocksDbStatus &status) const {
         Slice key_ = convert_slice(key);
         auto ret = make_unique<PinnableSlice>();
         if (for_update) {
@@ -100,7 +100,7 @@ struct TxBridge {
         return ret;
     }
 
-    inline void exists(RustBytes key, bool for_update, RocksDbStatus &status) {
+    inline void exists(RustBytes key, bool for_update, RocksDbStatus &status) const {
         Slice key_ = convert_slice(key);
         auto ret = PinnableSlice();
         if (for_update) {

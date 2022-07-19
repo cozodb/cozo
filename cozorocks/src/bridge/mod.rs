@@ -126,17 +126,12 @@ pub(crate) mod ffi {
         fn set_snapshot(self: Pin<&mut TxBridge>, val: bool);
         fn clear_snapshot(self: Pin<&mut TxBridge>);
         fn get(
-            self: Pin<&mut TxBridge>,
+            self: &TxBridge,
             key: &[u8],
             for_update: bool,
             status: &mut RocksDbStatus,
         ) -> UniquePtr<PinnableSlice>;
-        fn exists(
-            self: Pin<&mut TxBridge>,
-            key: &[u8],
-            for_update: bool,
-            status: &mut RocksDbStatus,
-        );
+        fn exists(self: &TxBridge, key: &[u8], for_update: bool, status: &mut RocksDbStatus);
         fn put(self: Pin<&mut TxBridge>, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
         fn del(self: Pin<&mut TxBridge>, key: &[u8], status: &mut RocksDbStatus);
         fn commit(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
@@ -144,7 +139,7 @@ pub(crate) mod ffi {
         fn rollback_to_savepoint(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn pop_savepoint(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn set_savepoint(self: Pin<&mut TxBridge>);
-        fn iterator(self: Pin<&mut TxBridge>) -> UniquePtr<IterBridge>;
+        fn iterator(self: &TxBridge) -> UniquePtr<IterBridge>;
 
         type IterBridge;
         fn start(self: Pin<&mut IterBridge>);

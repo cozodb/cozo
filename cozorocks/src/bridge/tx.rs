@@ -1,8 +1,10 @@
-use crate::bridge::ffi::*;
-use crate::bridge::iter::IterBuilder;
-use cxx::*;
 use std::fmt::{Debug, Formatter};
 use std::ops::Deref;
+
+use cxx::*;
+
+use crate::bridge::ffi::*;
+use crate::bridge::iter::IterBuilder;
 
 pub struct TxBuilder {
     pub(crate) inner: UniquePtr<TxBridge>,
@@ -102,9 +104,9 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn get(&mut self, key: &[u8], for_update: bool) -> Result<Option<PinSlice>, RocksDbStatus> {
+    pub fn get(&self, key: &[u8], for_update: bool) -> Result<Option<PinSlice>, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        let ret = self.inner.pin_mut().get(key, for_update, &mut status);
+        let ret = self.inner.get(key, for_update, &mut status);
         match status.code {
             StatusCode::kOk => Ok(Some(PinSlice { inner: ret })),
             StatusCode::kNotFound => Ok(None),
@@ -112,9 +114,9 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn exists(&mut self, key: &[u8], for_update: bool) -> Result<bool, RocksDbStatus> {
+    pub fn exists(&self, key: &[u8], for_update: bool) -> Result<bool, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.pin_mut().exists(key, for_update, &mut status);
+        self.inner.exists(key, for_update, &mut status);
         match status.code {
             StatusCode::kOk => Ok(true),
             StatusCode::kNotFound => Ok(false),
@@ -166,9 +168,9 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn iterator(&mut self) -> IterBuilder {
+    pub fn iterator(&self) -> IterBuilder {
         IterBuilder {
-            inner: self.inner.pin_mut().iterator(),
+            inner: self.inner.iterator(),
         }
         .auto_prefix_mode(true)
     }
