@@ -54,6 +54,12 @@ impl Keyword {
     pub(crate) fn is_reserved(&self) -> bool {
         self.0.is_empty() || self.0.starts_with(['_', ':', '<', '.', '*', '?', '!'])
     }
+    pub(crate) fn is_user_binding(&self) -> bool {
+        self.0.starts_with('?')
+    }
+    pub(crate) fn is_anon_binding(&self) -> bool {
+        self.0.starts_with('_')
+    }
     pub(crate) fn to_string_no_prefix(&self) -> String {
         format!("{}", self.0)
     }

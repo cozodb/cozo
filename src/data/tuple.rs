@@ -2,6 +2,7 @@ use std::cmp::{min, Ordering};
 
 use rmp_serde::Serializer;
 use serde::Serialize;
+use anyhow::Result;
 
 use crate::data::value::DataValue;
 
@@ -11,7 +12,9 @@ pub enum TupleError {
     BadData(String, Vec<u8>),
 }
 
-pub(crate) struct Tuple(Vec<DataValue>);
+pub(crate) struct Tuple(pub(crate) Vec<DataValue>);
+
+pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
 
 impl Tuple {
     pub(crate) fn arity(&self) -> usize {
