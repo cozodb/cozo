@@ -249,16 +249,30 @@ impl TripleRelation {
     fn v_index_join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
-        left_idx: usize,
+        left_v_idx: usize,
         tx: &'a SessionTx,
     ) -> TupleIter<'a> {
         // [f, b] where b is indexed
-        todo!()
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| {
+                    let val = tuple.0.get(left_v_idx).unwrap();
+                    tx.triple_av_before_scan(self.attr.id, val, self.vld)
+                        .map_ok(move |(_, val, eid)| {
+                            let mut ret = tuple.0.clone();
+                            ret.push(DataValue::EnId(eid));
+                            ret.push(val);
+                            Tuple(ret)
+                        })
+                })
+                .flatten_ok()
+                .map(flatten_err),
+        )
     }
     fn v_no_index_join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
-        left_idx: usize,
+        left_v_idx: usize,
         tx: &'a SessionTx,
     ) -> TupleIter<'a> {
         // [f, b] where b is not indexed

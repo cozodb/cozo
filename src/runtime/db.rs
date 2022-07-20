@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::env::temp_dir;
 use std::fmt::{Debug, Formatter};
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -11,7 +11,8 @@ use uuid::Uuid;
 
 use cozorocks::{DbBuilder, DbIter, RawRocksDb, RocksDb};
 
-use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
+use crate::AttrTxItem;
+use crate::data::compare::{DB_KEY_PREFIX_LEN, rusty_cmp};
 use crate::data::encode::{
     decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, StorageTag,
 };
@@ -22,15 +23,15 @@ use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 use crate::transact::pull::CurrentPath;
-use crate::AttrTxItem;
+use crate::transact::throwaway::ThrowawayArea;
 
 pub struct Db {
     db: RocksDb,
-    scratch: RawRocksDb,
+    throwaway_db: RawRocksDb,
     last_attr_id: Arc<AtomicU64>,
     last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,
-    last_scratch_id: Arc<AtomicU32>,
+    throwaway_count: Arc<AtomicU32>,
     n_sessions: Arc<AtomicUsize>,
     session_id: usize,
 }
@@ -66,11 +67,11 @@ impl Db {
             .ignore_range_deletions(true);
         let ret = Self {
             db,
-            scratch,
+            throwaway_db: scratch,
             last_attr_id: Arc::new(Default::default()),
             last_ent_id: Arc::new(Default::default()),
             last_tx_id: Arc::new(Default::default()),
-            last_scratch_id: Arc::new(Default::default()),
+            throwaway_count: Arc::new(Default::default()),
             n_sessions: Arc::new(Default::default()),
             session_id: Default::default(),
         };
@@ -83,14 +84,22 @@ impl Db {
 
         Ok(Self {
             db: self.db.clone(),
-            scratch: self.scratch.clone(),
+            throwaway_db: self.throwaway_db.clone(),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
-            last_scratch_id: self.last_scratch_id.clone(),
+            throwaway_count: self.throwaway_count.clone(),
             n_sessions: self.n_sessions.clone(),
             session_id: old_count + 1,
         })
+    }
+
+    pub(crate) fn new_throwaway(&self) -> ThrowawayArea {
+        let old_count = self.throwaway_count.fetch_add(1, Ordering::AcqRel);
+        ThrowawayArea {
+            db: self.throwaway_db.clone(),
+            prefix: old_count
+        }
     }
 
     fn load_last_ids(&self) -> Result<()> {

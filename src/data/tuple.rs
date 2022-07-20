@@ -1,6 +1,7 @@
 use std::cmp::{min, Ordering};
 
 use anyhow::Result;
+use itertools::Itertools;
 use rmp_serde::Serializer;
 use serde::Serialize;
 
@@ -42,7 +43,7 @@ impl Tuple {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct EncodedTuple<'a>(&'a [u8]);
+pub(crate) struct EncodedTuple<'a>(pub(crate) &'a [u8]);
 
 impl<'a> From<&'a [u8]> for EncodedTuple<'a> {
     fn from(s: &'a [u8]) -> Self {
@@ -51,6 +52,9 @@ impl<'a> From<&'a [u8]> for EncodedTuple<'a> {
 }
 
 impl<'a> EncodedTuple<'a> {
+    pub(crate) fn bounds_for_prefix(bound: u32) -> ([u8; 4], [u8; 4]) {
+        (bound.to_be_bytes(), (bound + 1).to_be_bytes())
+    }
     pub(crate) fn prefix(&self) -> Result<u32, TupleError> {
         if self.0.len() < 4 {
             Err(TupleError::BadData(
@@ -117,6 +121,10 @@ impl<'a> EncodedTuple<'a> {
             size: 0,
             pos: 0,
         }
+    }
+    pub(crate) fn decode(&self) -> Result<Tuple> {
+        let v = self.iter().try_collect()?;
+        Ok(Tuple(v))
     }
 }
 
