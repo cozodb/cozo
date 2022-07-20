@@ -315,6 +315,13 @@ pub(crate) struct ProjectedRelation {
 }
 
 impl ProjectedRelation {
+    fn bindings(&self) -> Vec<Keyword> {
+        self.relation
+            .bindings()
+            .into_iter()
+            .filter(|v| !self.eliminate.contains(v))
+            .collect()
+    }
     fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
         let bindings = self.relation.bindings();
         let eliminate_indices = bindings
@@ -364,6 +371,42 @@ pub(crate) struct StoredDerivedRelation {
 impl StoredDerivedRelation {
     fn iter(&self) -> TupleIter {
         Box::new(self.storage.scan_all().map_ok(|(t, _)| t))
+    }
+    fn join_is_prefix(&self, right_join_indices: &[usize]) -> bool {
+        let mut indices = right_join_indices.to_vec();
+        indices.sort();
+        let l = indices.len();
+        indices.into_iter().eq(0..l)
+    }
+    fn prefix_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
+    ) -> TupleIter<'a> {
+        let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
+        right_invert_indices.sort_by_key(|(_, b)| **b);
+        let left_to_prefix_indices = right_invert_indices
+            .into_iter()
+            .map(|(a, _)| left_join_indices[a])
+            .collect_vec();
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| {
+                    let prefix = Tuple(
+                        left_to_prefix_indices
+                            .iter()
+                            .map(|i| tuple.0[*i].clone())
+                            .collect_vec(),
+                    );
+                    self.storage.scan_prefix(&prefix).map_ok(move |(found, _)| {
+                        let mut ret = tuple.0.clone();
+                        ret.extend(found.0);
+                        Tuple(ret)
+                    })
+                })
+                .flatten_ok()
+                .map(flatten_err),
+        )
     }
 }
 
@@ -421,13 +464,13 @@ pub(crate) struct InnerJoin {
 }
 
 impl Relation {
-    pub(crate) fn bindings(&self) -> &[Keyword] {
+    pub(crate) fn bindings(&self) -> Vec<Keyword> {
         match self {
-            Relation::Fixed(f) => &f.bindings,
-            Relation::Triple(t) => &t.bindings,
-            Relation::Derived(d) => todo!(),
-            Relation::Join(j) => todo!(),
-            Relation::Project(p) => todo!(),
+            Relation::Fixed(f) => f.bindings.clone(),
+            Relation::Triple(t) => t.bindings.to_vec(),
+            Relation::Derived(d) => d.bindings.clone(),
+            Relation::Join(j) => j.bindings(),
+            Relation::Project(p) => p.bindings(),
         }
     }
     pub(crate) fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
@@ -437,38 +480,47 @@ impl Relation {
                 tx.triple_a_before_scan(r.attr.id, r.vld)
                     .map_ok(|(_, e_id, y)| Tuple(vec![DataValue::EnId(e_id), y])),
             ),
-            Relation::Derived(r) => {
-                todo!()
-            }
+            Relation::Derived(r) => r.iter(),
             Relation::Join(j) => j.iter(tx),
-            Relation::Project(_) => {
-                todo!()
-            }
+            Relation::Project(r) => r.iter(tx),
         }
     }
 }
 
 impl InnerJoin {
+    pub(crate) fn bindings(&self) -> Vec<Keyword> {
+        let mut ret = self.left.bindings();
+        ret.extend(self.right.bindings());
+        ret
+    }
     pub(crate) fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
-        let left_iter = self.left.iter(tx);
         match &self.right {
             Relation::Fixed(f) => {
                 let join_indices = self
                     .joiner
-                    .join_indices(self.left.bindings(), self.right.bindings());
-                f.join(left_iter, join_indices)
+                    .join_indices(&self.left.bindings(), &self.right.bindings());
+                f.join(self.left.iter(tx), join_indices)
             }
             Relation::Triple(r) => {
                 let join_indices = self
                     .joiner
-                    .join_indices(self.left.bindings(), self.right.bindings());
-                r.join(left_iter, join_indices, tx)
+                    .join_indices(&self.left.bindings(), &self.right.bindings());
+                r.join(self.left.iter(tx), join_indices, tx)
             }
-            Relation::Derived(r) => r.iter(),
-            Relation::Join(_) => {
-                todo!()
+            Relation::Derived(r) => {
+                let join_indices = self
+                    .joiner
+                    .join_indices(&self.left.bindings(), &self.right.bindings());
+                if r.join_is_prefix(&join_indices.1) {
+                    r.prefix_join(self.left.iter(tx), join_indices)
+                } else {
+                    self.materialized_join()
+                }
             }
-            Relation::Project(r) => r.iter(tx),
+            Relation::Join(_) | Relation::Project(_) => self.materialized_join(),
         }
+    }
+    fn materialized_join(&self) -> TupleIter {
+        todo!()
     }
 }
