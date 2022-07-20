@@ -455,6 +455,21 @@ impl SessionTx {
         let upper = encode_eav_key(eid, aid, &DataValue::Bottom, Validity::MIN);
         TripleEntityAttrBeforeIter::new(self.tx.iterator(), lower, upper, before)
     }
+    pub(crate) fn eav_exists(
+        &self,
+        eid: EntityId,
+        aid: AttrId,
+        val: &DataValue,
+        vld: Validity,
+    ) -> Result<bool> {
+        for result in self.triple_ea_before_scan(eid, aid, vld) {
+            let (_, _, found_val) = result?;
+            if found_val == *val {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
     pub(crate) fn triple_ae_scan(
         &self,
         aid: AttrId,

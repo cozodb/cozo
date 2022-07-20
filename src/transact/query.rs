@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use anyhow::Result;
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
@@ -88,22 +89,39 @@ pub(crate) struct TripleRelation {
     bindings: [Keyword; 2],
 }
 
+fn flatten_err<T>(v: Result<Result<T>>) -> Result<T> {
+    match v {
+        Err(e) => Err(e),
+        Ok(Err(e)) => Err(e),
+        Ok(Ok(v)) => Ok(v),
+    }
+}
+
+fn invert_option_err<T>(v: Result<Option<T>>) -> Option<Result<T>> {
+    match v {
+        Err(e) => Some(Err(e)),
+        Ok(None) => None,
+        Ok(Some(v)) => Some(Ok(v)),
+    }
+}
+
 impl TripleRelation {
     pub(crate) fn join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
+        tx: &'a SessionTx,
     ) -> TupleIter<'a> {
         match right_join_indices.len() {
-            0 => self.cartesian_join(left_iter),
+            0 => self.cartesian_join(left_iter, tx),
             2 => {
                 let right_first = *right_join_indices.first().unwrap();
                 let right_second = *right_join_indices.last().unwrap();
                 let left_first = *left_join_indices.first().unwrap();
                 let left_second = *left_join_indices.last().unwrap();
                 match (right_first, right_second) {
-                    (0, 1) => self.ev_join(left_iter, left_first, left_second),
-                    (1, 0) => self.ev_join(left_iter, left_second, left_first),
+                    (0, 1) => self.ev_join(left_iter, left_first, left_second, tx),
+                    (1, 0) => self.ev_join(left_iter, left_second, left_first, tx),
                     _ => panic!("should not happen"),
                 }
             }
@@ -121,19 +139,50 @@ impl TripleRelation {
             _ => unreachable!(),
         }
     }
-    fn cartesian_join<'a>(&'a self, left_iter: TupleIter<'a>) -> TupleIter<'a> {
+    fn cartesian_join<'a>(&'a self, left_iter: TupleIter<'a>, tx: &'a SessionTx) -> TupleIter<'a> {
         // [f, f] not really a join
-        left_iter.map_ok(|tuple| {});
-        todo!()
+        Box::new(
+            left_iter
+                .map_ok(|tuple| {
+                    tx.triple_a_before_scan_all(self.vld)
+                        .map_ok(move |(_, e_id, val)| {
+                            let mut ret = tuple.0.clone();
+                            ret.push(DataValue::EnId(e_id));
+                            ret.push(val);
+                            Tuple(ret)
+                        })
+                })
+                .flatten_ok()
+                .map(flatten_err),
+        )
     }
     fn ev_join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
         left_e_idx: usize,
         left_v_idx: usize,
+        tx: &'a SessionTx,
     ) -> TupleIter<'a> {
         // [b, b] actually a filter
-        todo!()
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                    let eid = tuple.0.get(left_e_idx).unwrap().get_entity_id()?;
+                    let v = tuple.0.get(left_v_idx).unwrap();
+                    let exists = tx.eav_exists(eid, self.attr.id, v, self.vld)?;
+                    if exists {
+                        let v = v.clone();
+                        let mut ret = tuple.0;
+                        ret.push(DataValue::EnId(eid));
+                        ret.push(v);
+                        Ok(Some(Tuple(ret)))
+                    } else {
+                        Ok(None)
+                    }
+                })
+                .map(flatten_err)
+                .filter_map(invert_option_err),
+        )
     }
     fn e_join<'a>(&'a self, left_iter: TupleIter<'a>, left_idx: usize) -> TupleIter<'a> {
         // [b, f]
@@ -235,7 +284,7 @@ impl Relation {
             Relation::Project(p) => todo!(),
         }
     }
-    pub(crate) fn iter(&self, tx: &mut SessionTx) -> TupleIter {
+    pub(crate) fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
         match self {
             Relation::Fixed(f) => Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone())))),
             Relation::Triple(r) => Box::new(
@@ -254,7 +303,7 @@ impl Relation {
 }
 
 impl InnerJoin {
-    pub(crate) fn iter(&self, tx: &mut SessionTx) -> TupleIter {
+    pub(crate) fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
         let left_iter = self.left.iter(tx);
         match &self.right {
             Relation::Fixed(f) => {
@@ -263,8 +312,11 @@ impl InnerJoin {
                     .join_indices(self.left.bindings(), self.right.bindings());
                 f.join(left_iter, join_indices)
             }
-            Relation::Triple(_) => {
-                todo!()
+            Relation::Triple(r) => {
+                let join_indices = self
+                    .joiner
+                    .join_indices(self.left.bindings(), self.right.bindings());
+                r.join(left_iter, join_indices, tx)
             }
             Relation::Derived(_) => {
                 todo!()
