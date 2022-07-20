@@ -276,7 +276,35 @@ impl TripleRelation {
         tx: &'a SessionTx,
     ) -> TupleIter<'a> {
         // [f, b] where b is not indexed
-        todo!()
+        let mut throwaway = tx.new_throwaway();
+        for item in tx.triple_a_before_scan(self.attr.id, self.vld) {
+            match item {
+                Err(e) => return Box::new([Err(e)].into_iter()),
+                Ok((_, eid, val)) => {
+                    let t = Tuple(vec![val, DataValue::EnId(eid)]);
+                    if let Err(e) = throwaway.put(&t, &[]) {
+                        return Box::new([Err(e.into())].into_iter());
+                    }
+                }
+            }
+        }
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| {
+                    let val = tuple.0.get(left_v_idx).unwrap();
+                    let prefix = Tuple(vec![val.clone()]);
+                    throwaway
+                        .scan_prefix(&prefix)
+                        .map_ok(move |(Tuple(mut found), _)| {
+                            let v_eid = found.pop().unwrap();
+                            let mut ret = tuple.0.clone();
+                            ret.push(v_eid);
+                            Tuple(ret)
+                        })
+                })
+                .flatten_ok()
+                .map(flatten_err),
+        )
     }
 }
 

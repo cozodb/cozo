@@ -1,6 +1,7 @@
 use cozorocks::{DbIter, PinSlice, RawRocksDb, RocksDbStatus};
 
 use crate::data::tuple::{EncodedTuple, Tuple};
+use crate::data::value::DataValue;
 
 pub(crate) struct ThrowawayArea {
     pub(crate) db: RawRocksDb,
@@ -22,6 +23,24 @@ impl ThrowawayArea {
     }
     pub(crate) fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<(Tuple, Vec<u8>)>> {
         let (lower, upper) = EncodedTuple::bounds_for_prefix(self.prefix);
+        let mut it = self
+            .db
+            .iterator()
+            .upper_bound(&upper)
+            .prefix_same_as_start(true)
+            .start();
+        it.seek(&lower);
+        ThrowawayIter { it, started: false }
+    }
+    pub(crate) fn scan_prefix(
+        &self,
+        prefix: &Tuple,
+    ) -> impl Iterator<Item = anyhow::Result<(Tuple, Vec<u8>)>> {
+        let mut upper = prefix.0.clone();
+        upper.push(DataValue::Null);
+        let upper = Tuple(upper);
+        let upper = upper.encode_as_key(self.prefix);
+        let lower = prefix.encode_as_key(self.prefix);
         let mut it = self
             .db
             .iterator()

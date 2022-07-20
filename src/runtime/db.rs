@@ -94,14 +94,6 @@ impl Db {
         })
     }
 
-    pub(crate) fn new_throwaway(&self) -> ThrowawayArea {
-        let old_count = self.throwaway_count.fetch_add(1, Ordering::AcqRel);
-        ThrowawayArea {
-            db: self.throwaway_db.clone(),
-            prefix: old_count
-        }
-    }
-
     fn load_last_ids(&self) -> Result<()> {
         let mut tx = self.transact()?;
         self.last_tx_id
@@ -115,6 +107,8 @@ impl Db {
     pub fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
+            throwaway: self.throwaway_db.clone(),
+            throwaway_count: self.throwaway_count.clone(),
             w_tx_id: None,
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
@@ -133,6 +127,8 @@ impl Db {
 
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
+            throwaway: self.throwaway_db.clone(),
+            throwaway_count: self.throwaway_count.clone(),
             w_tx_id: Some(cur_tx_id),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),

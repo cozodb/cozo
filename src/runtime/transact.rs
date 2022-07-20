@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
 use rmp_serde::Serializer;
@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
-use cozorocks::{DbIter, Tx};
+use cozorocks::{DbIter, RawRocksDb, Tx};
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
@@ -17,9 +17,12 @@ use crate::data::encode::{
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
+use crate::transact::throwaway::ThrowawayArea;
 
 pub struct SessionTx {
     pub(crate) tx: Tx,
+    pub(crate) throwaway: RawRocksDb,
+    pub(crate) throwaway_count: Arc<AtomicU32>,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
     pub(crate) last_ent_id: Arc<AtomicU64>,
@@ -28,7 +31,7 @@ pub struct SessionTx {
     pub(crate) attr_by_kw_cache: BTreeMap<Keyword, Option<Attribute>>,
     pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
     pub(crate) eid_by_attr_val_cache:
-    BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
+        BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
     // "touched" requires the id to exist prior to the transaction, and something related to it has changed
     pub(crate) touched_eids: BTreeSet<EntityId>,
 }
@@ -63,6 +66,14 @@ impl TxLog {
 }
 
 impl SessionTx {
+    pub(crate) fn new_throwaway(&self) -> ThrowawayArea {
+        let old_count = self.throwaway_count.fetch_add(1, Ordering::AcqRel);
+        ThrowawayArea {
+            db: self.throwaway.clone(),
+            prefix: old_count,
+        }
+    }
+
     pub(crate) fn clear_cache(&mut self) {
         self.attr_by_id_cache.clear();
         self.attr_by_kw_cache.clear();
@@ -130,11 +141,7 @@ impl SessionTx {
     }
     pub(crate) fn bounded_scan_first(&mut self, lower: &[u8], upper: &[u8]) -> DbIter {
         // this is tricky, must be written like this!
-        let mut it = self
-            .tx
-            .iterator()
-            .upper_bound(upper)
-            .start();
+        let mut it = self.tx.iterator().upper_bound(upper).start();
         it.seek(lower);
         it
     }
