@@ -89,10 +89,12 @@ pub(crate) struct TripleRelation {
     bindings: [Keyword; 2],
 }
 
-fn flatten_err<T>(v: Result<Result<T>>) -> Result<T> {
+fn flatten_err<T, E1: Into<anyhow::Error>, E2: Into<anyhow::Error>>(
+    v: std::result::Result<std::result::Result<T, E2>, E1>,
+) -> Result<T> {
     match v {
-        Err(e) => Err(e),
-        Ok(Err(e)) => Err(e),
+        Err(e) => Err(e.into()),
+        Ok(Err(e)) => Err(e.into()),
         Ok(Ok(v)) => Ok(v),
     }
 }
@@ -127,13 +129,13 @@ impl TripleRelation {
             }
             1 => {
                 if right_join_indices[0] == 0 {
-                    self.e_join(left_iter, left_join_indices[0])
+                    self.e_join(left_iter, left_join_indices[0], tx)
                 } else if self.attr.val_type.is_ref_type() {
-                    self.v_ref_join(left_iter, left_join_indices[0])
+                    self.v_ref_join(left_iter, left_join_indices[0], tx)
                 } else if self.attr.indexing.should_index() {
-                    self.v_index_join(left_iter, left_join_indices[0])
+                    self.v_index_join(left_iter, left_join_indices[0], tx)
                 } else {
-                    self.v_no_index_join(left_iter, left_join_indices[0])
+                    self.v_no_index_join(left_iter, left_join_indices[0], tx)
                 }
             }
             _ => unreachable!(),
@@ -144,7 +146,7 @@ impl TripleRelation {
         Box::new(
             left_iter
                 .map_ok(|tuple| {
-                    tx.triple_a_before_scan_all(self.vld)
+                    tx.triple_a_before_scan(self.attr.id, self.vld)
                         .map_ok(move |(_, e_id, val)| {
                             let mut ret = tuple.0.clone();
                             ret.push(DataValue::EnId(e_id));
@@ -184,19 +186,81 @@ impl TripleRelation {
                 .filter_map(invert_option_err),
         )
     }
-    fn e_join<'a>(&'a self, left_iter: TupleIter<'a>, left_idx: usize) -> TupleIter<'a> {
+    fn e_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_e_idx: usize,
+        tx: &'a SessionTx,
+    ) -> TupleIter<'a> {
         // [b, f]
-        todo!()
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| {
+                    tuple
+                        .0
+                        .get(left_e_idx)
+                        .unwrap()
+                        .get_entity_id()
+                        .map(move |eid| {
+                            tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
+                                .map_ok(move |(eid, _, val)| {
+                                    let mut ret = tuple.0.clone();
+                                    ret.push(DataValue::EnId(eid));
+                                    ret.push(val);
+                                    Tuple(ret)
+                                })
+                        })
+                })
+                .map(flatten_err)
+                .flatten_ok()
+                .map(flatten_err),
+        )
     }
-    fn v_ref_join<'a>(&'a self, left_iter: TupleIter<'a>, left_idx: usize) -> TupleIter<'a> {
+    fn v_ref_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_v_idx: usize,
+        tx: &'a SessionTx,
+    ) -> TupleIter<'a> {
         // [f, b] where b is a ref
-        todo!()
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| {
+                    tuple
+                        .0
+                        .get(left_v_idx)
+                        .unwrap()
+                        .get_entity_id()
+                        .map(move |v_eid| {
+                            tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
+                                .map_ok(move |(_, _, e_id)| {
+                                    let mut ret = tuple.0.clone();
+                                    ret.push(DataValue::EnId(e_id));
+                                    ret.push(DataValue::EnId(v_eid));
+                                    Tuple(ret)
+                                })
+                        })
+                })
+                .map(flatten_err)
+                .flatten_ok()
+                .map(flatten_err),
+        )
     }
-    fn v_index_join<'a>(&'a self, left_iter: TupleIter<'a>, left_idx: usize) -> TupleIter<'a> {
+    fn v_index_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_idx: usize,
+        tx: &'a SessionTx,
+    ) -> TupleIter<'a> {
         // [f, b] where b is indexed
         todo!()
     }
-    fn v_no_index_join<'a>(&'a self, left_iter: TupleIter<'a>, left_idx: usize) -> TupleIter<'a> {
+    fn v_no_index_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_idx: usize,
+        tx: &'a SessionTx,
+    ) -> TupleIter<'a> {
         // [f, b] where b is not indexed
         todo!()
     }
