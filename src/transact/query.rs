@@ -514,13 +514,68 @@ impl InnerJoin {
                 if r.join_is_prefix(&join_indices.1) {
                     r.prefix_join(self.left.iter(tx), join_indices)
                 } else {
-                    self.materialized_join()
+                    self.materialized_join(tx)
                 }
             }
-            Relation::Join(_) | Relation::Project(_) => self.materialized_join(),
+            Relation::Join(_) | Relation::Project(_) => self.materialized_join(tx),
         }
     }
-    fn materialized_join(&self) -> TupleIter {
-        todo!()
+    fn materialized_join<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
+        let right_bindings = self.right.bindings();
+        let (left_join_indices, right_join_indices) = self
+            .joiner
+            .join_indices(&self.left.bindings(), &right_bindings);
+        let right_join_indices_set = BTreeSet::from_iter(right_join_indices.iter().cloned());
+        let mut right_store_indices = right_join_indices;
+        for i in 0..right_bindings.len() {
+            if !right_join_indices_set.contains(&i) {
+                right_store_indices.push(i)
+            }
+        }
+        let right_invert_indices = right_store_indices
+            .iter()
+            .enumerate()
+            .sorted_by_key(|(_, b)| **b)
+            .map(|(a, _)| a)
+            .collect_vec();
+        let mut throwaway = tx.new_throwaway();
+        for item in self.right.iter(tx) {
+            match item {
+                Ok(tuple) => {
+                    let stored_tuple = Tuple(
+                        right_store_indices
+                            .iter()
+                            .map(|i| tuple.0[*i].clone())
+                            .collect_vec(),
+                    );
+                    if let Err(e) = throwaway.put(&stored_tuple, &[]) {
+                        return Box::new([Err(e.into())].into_iter());
+                    }
+                }
+                Err(e) => return Box::new([Err(e)].into_iter()),
+            }
+        }
+        Box::new(
+            self.left
+                .iter(tx)
+                .map_ok(move |tuple| {
+                    let prefix = Tuple(
+                        left_join_indices
+                            .iter()
+                            .map(|i| tuple.0[*i].clone())
+                            .collect_vec(),
+                    );
+                    let restore_indices = right_invert_indices.clone();
+                    throwaway.scan_prefix(&prefix).map_ok(move |(found, _)| {
+                        let mut ret = tuple.0.clone();
+                        for i in restore_indices.iter() {
+                            ret.push(found.0[*i].clone());
+                        }
+                        Tuple(ret)
+                    })
+                })
+                .flatten_ok()
+                .map(flatten_err),
+        )
     }
 }
