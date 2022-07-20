@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -9,6 +9,7 @@ use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 use crate::transact::pull::PullSpec;
+use crate::transact::throwaway::ThrowawayArea;
 use crate::Validity;
 
 pub(crate) struct QuerySpec {
@@ -310,7 +311,40 @@ impl TripleRelation {
 
 pub(crate) struct ProjectedRelation {
     relation: Relation,
-    eliminate: Vec<Keyword>,
+    eliminate: BTreeSet<Keyword>,
+}
+
+impl ProjectedRelation {
+    fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
+        let bindings = self.relation.bindings();
+        let eliminate_indices = bindings
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, kw)| {
+                if self.eliminate.contains(kw) {
+                    None
+                } else {
+                    Some(idx)
+                }
+            })
+            .collect::<BTreeSet<_>>();
+        Box::new(self.relation.iter(tx).map_ok(move |tuple| {
+            Tuple(
+                tuple
+                    .0
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(idx, val)| {
+                        if eliminate_indices.contains(&idx) {
+                            None
+                        } else {
+                            Some(val)
+                        }
+                    })
+                    .collect_vec(),
+            )
+        }))
+    }
 }
 
 pub(crate) enum Relation {
@@ -322,9 +356,15 @@ pub(crate) enum Relation {
 }
 
 pub(crate) struct StoredDerivedRelation {
-    name: Keyword,
     arity: usize,
     bindings: Vec<Keyword>,
+    storage: ThrowawayArea,
+}
+
+impl StoredDerivedRelation {
+    fn iter(&self) -> TupleIter {
+        Box::new(self.storage.scan_all().map_ok(|(t, _)| t))
+    }
 }
 
 pub(crate) struct Joiner {
@@ -424,15 +464,11 @@ impl InnerJoin {
                     .join_indices(self.left.bindings(), self.right.bindings());
                 r.join(left_iter, join_indices, tx)
             }
-            Relation::Derived(_) => {
-                todo!()
-            }
+            Relation::Derived(r) => r.iter(),
             Relation::Join(_) => {
                 todo!()
             }
-            Relation::Project(_) => {
-                todo!()
-            }
+            Relation::Project(r) => r.iter(tx),
         }
     }
 }

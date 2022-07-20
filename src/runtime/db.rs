@@ -23,7 +23,6 @@ use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 use crate::transact::pull::CurrentPath;
-use crate::transact::throwaway::ThrowawayArea;
 
 pub struct Db {
     db: RocksDb,

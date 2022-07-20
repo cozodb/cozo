@@ -1,5 +1,4 @@
 use std::cmp::{min, Ordering};
-use std::ops::Deref;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -129,7 +128,7 @@ impl<'a> EncodedTuple<'a> {
     }
 }
 
-struct EncodedTupleIter<'a> {
+pub(crate) struct EncodedTupleIter<'a> {
     tuple: EncodedTuple<'a>,
     size: usize,
     pos: usize,
