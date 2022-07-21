@@ -110,7 +110,7 @@ fn creation() {
     let query = json!([
         ["_id", "person/first_name", "Eve"],
         ["_id", "person/friend", "?friend"],
-        ["?friend", "person/first_name", "?friend_name"]
+        ["?friend", "person/first_name", "?friend_name"],
     ]);
     let mut tx = db.transact().unwrap();
     let vld = Validity::current();
@@ -118,6 +118,7 @@ fn creation() {
     dbg!(&query);
     let compiled = tx.compile_clauses(query, vld).unwrap();
     dbg!(&compiled);
+    dbg!(compiled.bindings());
     for x in compiled.iter(&tx) {
         dbg!(x.unwrap());
     }

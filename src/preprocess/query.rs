@@ -109,7 +109,6 @@ impl SessionTx {
                             attr: a_triple.attr,
                             vld,
                             bindings: [temp_join_key_right, v_kw],
-                            to_eliminate: Default::default(),
                         });
                         ret = Relation::Join(Box::new(InnerJoin {
                             left: ret,
@@ -161,7 +160,6 @@ impl SessionTx {
                             attr: a_triple.attr,
                             vld,
                             bindings: [e_kw, temp_join_key_right],
-                            to_eliminate: Default::default(),
                         });
                         ret = Relation::Join(Box::new(InnerJoin {
                             left: ret,
@@ -205,7 +203,6 @@ impl SessionTx {
                             attr: a_triple.attr,
                             vld,
                             bindings: [e_kw, v_kw],
-                            to_eliminate: Default::default(),
                         });
                         if ret.is_unit() {
                             ret = right;
@@ -249,7 +246,6 @@ impl SessionTx {
                             attr: a_triple.attr,
                             vld,
                             bindings: [right_var_1.clone(), right_var_2.clone()],
-                            to_eliminate: Default::default(),
                         });
                         ret = Relation::Join(Box::new(InnerJoin {
                             left: ret,
@@ -266,6 +262,18 @@ impl SessionTx {
         }
 
         ret.eliminate_temp_vars()?;
+        if ret.bindings().iter().any(|b| b.is_ignored_binding()) {
+            ret = Relation::Join(Box::new(InnerJoin {
+                left: ret,
+                right: Relation::unit(),
+                joiner: Joiner {
+                    left_keys: vec![],
+                    right_keys: vec![],
+                },
+                to_eliminate: Default::default(),
+            }));
+            ret.eliminate_temp_vars()?;
+        }
 
         Ok(ret)
     }

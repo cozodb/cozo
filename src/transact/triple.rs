@@ -165,14 +165,14 @@ impl SessionTx {
         } else {
             (v, &DataValue::Bottom)
         };
-        let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, vld_in_key);
         let val_encoded = v_in_val.encode_with_op_and_tx(op, tx_id);
-        if real_delete {
-            self.tx.del(&eav_encoded)?;
-        } else {
-            self.tx.put(&eav_encoded, &val_encoded)?;
-        }
 
+        let aev_encoded = encode_aev_key(attr.id, eid, v_in_key, vld_in_key);
+        if real_delete {
+            self.tx.del(&aev_encoded)?;
+        } else {
+            self.tx.put(&aev_encoded, &val_encoded)?;
+        }
         // elide value in data for aev if it is big
         let val_encoded = if val_encoded.len() > INLINE_VAL_SIZE_LIMIT {
             DataValue::Bottom.encode_with_op_and_tx(op, tx_id)
@@ -180,11 +180,11 @@ impl SessionTx {
             val_encoded
         };
 
-        let aev_encoded = encode_aev_key(attr.id, eid, v_in_key, vld_in_key);
+        let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, vld_in_key);
         if real_delete {
-            self.tx.del(&aev_encoded)?;
+            self.tx.del(&eav_encoded)?;
         } else {
-            self.tx.put(&aev_encoded, &val_encoded)?;
+            self.tx.put(&eav_encoded, &val_encoded)?;
         }
 
         // vae for ref types
@@ -811,7 +811,10 @@ impl TripleAttrEntityBeforeIter {
                         self.current.encoded_entity_amend_validity(self.before);
                         continue;
                     }
-                    let v = decode_value_from_key(k_slice)?;
+                    let mut v = decode_value_from_key(k_slice)?;
+                    if v == DataValue::Bottom {
+                        v = decode_value_from_val(v_slice)?;
+                    }
                     self.current.copy_from_slice(k_slice);
                     self.current.encoded_entity_amend_validity_to_inf_past();
                     let op = StoreOp::try_from(v_slice[0])?;

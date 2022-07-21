@@ -135,7 +135,6 @@ pub struct TripleRelation {
     pub(crate) attr: Attribute,
     pub(crate) vld: Validity,
     pub(crate) bindings: [Keyword; 2],
-    pub(crate) to_eliminate: BTreeSet<Keyword>,
 }
 
 fn flatten_err<T, E1: Into<anyhow::Error>, E2: Into<anyhow::Error>>(
@@ -157,14 +156,6 @@ fn invert_option_err<T>(v: Result<Option<T>>) -> Option<Result<T>> {
 }
 
 impl TripleRelation {
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: BTreeSet<Keyword>) -> Result<()> {
-        for binding in &self.bindings {
-            if binding.is_ignored_binding() && !used.contains(binding) {
-                self.to_eliminate.insert(binding.clone());
-            }
-        }
-        Ok(())
-    }
     pub(crate) fn join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
@@ -467,18 +458,9 @@ fn get_eliminate_indices(bindings: &[Keyword], eliminate: &BTreeSet<Keyword>) ->
 pub struct StoredDerivedRelation {
     bindings: Vec<Keyword>,
     storage: ThrowawayArea,
-    to_eliminate: BTreeSet<Keyword>,
 }
 
 impl StoredDerivedRelation {
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: BTreeSet<Keyword>) -> Result<()> {
-        for binding in &self.bindings {
-            if binding.is_ignored_binding() && !used.contains(binding) {
-                self.to_eliminate.insert(binding.clone());
-            }
-        }
-        Ok(())
-    }
     fn iter(&self) -> TupleIter {
         Box::new(self.storage.scan_all().map_ok(|(t, _)| t))
     }
@@ -591,27 +573,30 @@ impl Relation {
     pub(crate) fn do_eliminate_temp_vars(&mut self, used: BTreeSet<Keyword>) -> Result<()> {
         match self {
             Relation::Fixed(r) => r.do_eliminate_temp_vars(used),
-            Relation::Triple(r) => r.do_eliminate_temp_vars(used),
-            Relation::Derived(r) => r.do_eliminate_temp_vars(used),
+            Relation::Triple(r) => Ok(()),
+            Relation::Derived(r) => Ok(()),
             Relation::Join(r) => r.do_eliminate_temp_vars(used),
         }
     }
 
-    fn eliminate_set(&self) -> &BTreeSet<Keyword> {
+    fn eliminate_set(&self) -> Option<&BTreeSet<Keyword>> {
         match self {
-            Relation::Fixed(r) => &r.to_eliminate,
-            Relation::Triple(r) => &r.to_eliminate,
-            Relation::Derived(r) => &r.to_eliminate,
-            Relation::Join(r) => &r.to_eliminate,
+            Relation::Fixed(r) => Some(&r.to_eliminate),
+            Relation::Triple(r) => None,
+            Relation::Derived(r) => None,
+            Relation::Join(r) => Some(&r.to_eliminate),
         }
     }
 
     pub fn bindings(&self) -> Vec<Keyword> {
         let ret = self.bindings_before_eliminate();
-        let to_eliminate = self.eliminate_set();
-        ret.into_iter()
-            .filter(|kw| !to_eliminate.contains(kw))
-            .collect()
+        if let Some(to_eliminate) = self.eliminate_set() {
+            ret.into_iter()
+                .filter(|kw| !to_eliminate.contains(kw))
+                .collect()
+        } else {
+            ret
+        }
     }
 
     fn bindings_before_eliminate(&self) -> Vec<Keyword> {
