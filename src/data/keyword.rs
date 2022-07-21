@@ -52,9 +52,9 @@ impl TryFrom<&[u8]> for Keyword {
 }
 
 impl Keyword {
-    pub(crate) fn rand() -> Self {
+    pub(crate) fn rand_ignored() -> Self {
         let id = nanoid!();
-        Keyword::from(&id as &str)
+        Keyword::from(&format!("_{}", id) as &str)
     }
     pub(crate) fn is_reserved(&self) -> bool {
         self.0.is_empty() || self.0.starts_with(['_', ':', '<', '.', '*', '?', '!'])

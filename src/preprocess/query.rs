@@ -9,9 +9,7 @@ use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
 use crate::preprocess::triple::TxError;
 use crate::runtime::transact::SessionTx;
-use crate::transact::query::{
-    InlineFixedRelation, InnerJoin, Joiner, ProjectedRelation, Relation, TripleRelation,
-};
+use crate::transact::query::{InlineFixedRelation, InnerJoin, Joiner, Relation, TripleRelation};
 use crate::{EntityId, Validity};
 
 #[derive(Debug, thiserror::Error)]
@@ -71,32 +69,34 @@ impl SessionTx {
             match clause {
                 Clause::AttrTriple(a_triple) => match (a_triple.entity, a_triple.value) {
                     (MaybeVariable::Const(eid), MaybeVariable::Variable(v_kw)) => {
-                        let mut to_eliminate = BTreeSet::new();
-
-                        let temp_join_key_left = Keyword::rand();
-                        let temp_join_key_right = Keyword::rand();
-                        to_eliminate.insert(temp_join_key_left.clone());
-                        to_eliminate.insert(temp_join_key_right.clone());
+                        let temp_join_key_left = Keyword::rand_ignored();
+                        let temp_join_key_right = Keyword::rand_ignored();
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![temp_join_key_left.clone()],
                             data: vec![vec![DataValue::EnId(eid)]],
+                            to_eliminate: Default::default(),
                         });
-                        ret = Relation::Join(Box::new(InnerJoin {
-                            left: ret,
-                            right: const_rel,
-                            joiner: Joiner {
-                                left_keys: vec![],
-                                right_keys: vec![],
-                            },
-                        }));
+                        if ret.is_unit() {
+                            ret = const_rel;
+                        } else {
+                            ret = Relation::Join(Box::new(InnerJoin {
+                                left: ret,
+                                right: const_rel,
+                                joiner: Joiner {
+                                    left_keys: vec![],
+                                    right_keys: vec![],
+                                },
+                                to_eliminate: Default::default(),
+                            }));
+                        }
 
                         let mut join_left_keys = vec![temp_join_key_left];
                         let mut join_right_keys = vec![temp_join_key_right.clone()];
 
                         let v_kw = {
                             if seen_variables.contains(&v_kw) {
-                                let ret = Keyword::rand();
-                                to_eliminate.insert(ret.clone());
+                                let ret = Keyword::rand_ignored();
+                                // to_eliminate.insert(ret.clone());
                                 join_left_keys.push(v_kw);
                                 join_right_keys.push(ret.clone());
                                 ret
@@ -109,6 +109,7 @@ impl SessionTx {
                             attr: a_triple.attr,
                             vld,
                             bindings: [temp_join_key_right, v_kw],
+                            to_eliminate: Default::default(),
                         });
                         ret = Relation::Join(Box::new(InnerJoin {
                             left: ret,
@@ -117,39 +118,37 @@ impl SessionTx {
                                 left_keys: join_left_keys,
                                 right_keys: join_right_keys,
                             },
+                            to_eliminate: Default::default(),
                         }));
-                        ret = Relation::Project(Box::new(ProjectedRelation {
-                            relation: ret,
-                            eliminate: to_eliminate,
-                        }))
                     }
                     (MaybeVariable::Variable(e_kw), MaybeVariable::Const(val)) => {
-                        let mut to_eliminate = BTreeSet::new();
-
-                        let temp_join_key_left = Keyword::rand();
-                        let temp_join_key_right = Keyword::rand();
-                        to_eliminate.insert(temp_join_key_left.clone());
-                        to_eliminate.insert(temp_join_key_right.clone());
+                        let temp_join_key_left = Keyword::rand_ignored();
+                        let temp_join_key_right = Keyword::rand_ignored();
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![temp_join_key_left.clone()],
                             data: vec![vec![val]],
+                            to_eliminate: Default::default(),
                         });
-                        ret = Relation::Join(Box::new(InnerJoin {
-                            left: ret,
-                            right: const_rel,
-                            joiner: Joiner {
-                                left_keys: vec![],
-                                right_keys: vec![],
-                            },
-                        }));
+                        if ret.is_unit() {
+                            ret = const_rel;
+                        } else {
+                            ret = Relation::Join(Box::new(InnerJoin {
+                                left: ret,
+                                right: const_rel,
+                                joiner: Joiner {
+                                    left_keys: vec![],
+                                    right_keys: vec![],
+                                },
+                                to_eliminate: Default::default(),
+                            }));
+                        }
 
                         let mut join_left_keys = vec![temp_join_key_left];
                         let mut join_right_keys = vec![temp_join_key_right.clone()];
 
                         let e_kw = {
                             if seen_variables.contains(&e_kw) {
-                                let ret = Keyword::rand();
-                                to_eliminate.insert(ret.clone());
+                                let ret = Keyword::rand_ignored();
                                 join_left_keys.push(e_kw);
                                 join_right_keys.push(ret.clone());
                                 ret
@@ -162,6 +161,7 @@ impl SessionTx {
                             attr: a_triple.attr,
                             vld,
                             bindings: [e_kw, temp_join_key_right],
+                            to_eliminate: Default::default(),
                         });
                         ret = Relation::Join(Box::new(InnerJoin {
                             left: ret,
@@ -170,14 +170,10 @@ impl SessionTx {
                                 left_keys: join_left_keys,
                                 right_keys: join_right_keys,
                             },
+                            to_eliminate: Default::default(),
                         }));
-                        ret = Relation::Project(Box::new(ProjectedRelation {
-                            relation: ret,
-                            eliminate: to_eliminate,
-                        }))
                     }
                     (MaybeVariable::Variable(e_kw), MaybeVariable::Variable(v_kw)) => {
-                        let mut to_eliminate = BTreeSet::new();
                         let mut join_left_keys = vec![];
                         let mut join_right_keys = vec![];
                         if e_kw == v_kw {
@@ -185,8 +181,7 @@ impl SessionTx {
                         }
                         let e_kw = {
                             if seen_variables.contains(&e_kw) {
-                                let ret = Keyword::rand();
-                                to_eliminate.insert(ret.clone());
+                                let ret = Keyword::rand_ignored();
                                 join_left_keys.push(e_kw);
                                 join_right_keys.push(ret.clone());
                                 ret
@@ -197,8 +192,7 @@ impl SessionTx {
                         };
                         let v_kw = {
                             if seen_variables.contains(&v_kw) {
-                                let ret = Keyword::rand();
-                                to_eliminate.insert(ret.clone());
+                                let ret = Keyword::rand_ignored();
                                 join_left_keys.push(v_kw);
                                 join_right_keys.push(ret.clone());
                                 ret
@@ -211,42 +205,51 @@ impl SessionTx {
                             attr: a_triple.attr,
                             vld,
                             bindings: [e_kw, v_kw],
+                            to_eliminate: Default::default(),
                         });
-                        ret = Relation::Join(Box::new(InnerJoin {
-                            left: ret,
-                            right,
-                            joiner: Joiner {
-                                left_keys: join_left_keys,
-                                right_keys: join_right_keys,
-                            },
-                        }));
-                        if !to_eliminate.is_empty() {
-                            ret = Relation::Project(Box::new(ProjectedRelation {
-                                relation: ret,
-                                eliminate: to_eliminate,
-                            }))
+                        if ret.is_unit() {
+                            ret = right;
+                        } else {
+                            ret = Relation::Join(Box::new(InnerJoin {
+                                left: ret,
+                                right,
+                                joiner: Joiner {
+                                    left_keys: join_left_keys,
+                                    right_keys: join_right_keys,
+                                },
+                                to_eliminate: Default::default(),
+                            }));
                         }
                     }
                     (MaybeVariable::Const(eid), MaybeVariable::Const(val)) => {
-                        let (left_var_1, left_var_2) = (Keyword::rand(), Keyword::rand());
+                        let (left_var_1, left_var_2) =
+                            (Keyword::rand_ignored(), Keyword::rand_ignored());
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![left_var_1.clone(), left_var_2.clone()],
                             data: vec![vec![DataValue::EnId(eid), val]],
+                            to_eliminate: Default::default(),
                         });
-                        ret = Relation::Join(Box::new(InnerJoin {
-                            left: ret,
-                            right: const_rel,
-                            joiner: Joiner {
-                                left_keys: vec![],
-                                right_keys: vec![],
-                            },
-                        }));
-                        let (right_var_1, right_var_2) = (Keyword::rand(), Keyword::rand());
+                        if ret.is_unit() {
+                            ret = const_rel;
+                        } else {
+                            ret = Relation::Join(Box::new(InnerJoin {
+                                left: ret,
+                                right: const_rel,
+                                joiner: Joiner {
+                                    left_keys: vec![],
+                                    right_keys: vec![],
+                                },
+                                to_eliminate: Default::default(),
+                            }));
+                        }
+                        let (right_var_1, right_var_2) =
+                            (Keyword::rand_ignored(), Keyword::rand_ignored());
 
                         let right = Relation::Triple(TripleRelation {
                             attr: a_triple.attr,
                             vld,
                             bindings: [right_var_1.clone(), right_var_2.clone()],
+                            to_eliminate: Default::default(),
                         });
                         ret = Relation::Join(Box::new(InnerJoin {
                             left: ret,
@@ -255,30 +258,14 @@ impl SessionTx {
                                 left_keys: vec![left_var_1.clone(), left_var_2.clone()],
                                 right_keys: vec![right_var_1.clone(), right_var_2.clone()],
                             },
+                            to_eliminate: Default::default(),
                         }));
-                        ret = Relation::Project(Box::new(ProjectedRelation {
-                            relation: ret,
-                            eliminate: BTreeSet::from([
-                                left_var_1,
-                                left_var_2,
-                                right_var_1,
-                                right_var_2,
-                            ]),
-                        }))
                     }
                 },
             }
         }
-        let eliminate: BTreeSet<Keyword> = seen_variables
-            .into_iter()
-            .filter(|kw| !kw.is_query_binding())
-            .collect();
-        if !eliminate.is_empty() {
-            ret = Relation::Project(Box::new(ProjectedRelation {
-                relation: ret,
-                eliminate,
-            }))
-        }
+
+        ret.eliminate_temp_vars()?;
 
         Ok(ret)
     }
