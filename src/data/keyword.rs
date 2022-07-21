@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::str::Utf8Error;
 
+use nanoid::nanoid;
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 
@@ -51,14 +52,24 @@ impl TryFrom<&[u8]> for Keyword {
 }
 
 impl Keyword {
+    pub(crate) fn rand() -> Self {
+        let id = nanoid!();
+        Keyword::from(&id as &str)
+    }
     pub(crate) fn is_reserved(&self) -> bool {
         self.0.is_empty() || self.0.starts_with(['_', ':', '<', '.', '*', '?', '!'])
     }
-    pub(crate) fn is_user_binding(&self) -> bool {
+    pub(crate) fn is_query_binding(&self) -> bool {
         self.0.starts_with('?')
     }
-    pub(crate) fn is_anon_binding(&self) -> bool {
+    pub(crate) fn is_ignored_binding(&self) -> bool {
         self.0.starts_with('_')
+    }
+    pub(crate) fn is_ignored_wildcard(&self) -> bool {
+        self.0 == "_"
+    }
+    pub(crate) fn is_binding(&self) -> bool {
+        self.is_query_binding() || self.is_ignored_binding()
     }
     pub(crate) fn to_string_no_prefix(&self) -> String {
         format!("{}", self.0)

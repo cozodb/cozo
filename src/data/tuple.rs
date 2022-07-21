@@ -1,10 +1,12 @@
 use std::cmp::{min, Ordering};
+use std::fmt::{Debug, Formatter};
 
 use anyhow::Result;
 use itertools::Itertools;
 use rmp_serde::Serializer;
 use serde::Serialize;
 
+use crate::data::json::JsonValue;
 use crate::data::value::DataValue;
 
 pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 4;
@@ -15,7 +17,21 @@ pub enum TupleError {
     BadData(String, Vec<u8>),
 }
 
-pub(crate) struct Tuple(pub(crate) Vec<DataValue>);
+pub struct Tuple(pub(crate) Vec<DataValue>);
+
+impl Debug for Tuple {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        for (i, v) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            let j = JsonValue::from(v.clone());
+            write!(f, "{}", j)?;
+        }
+        write!(f, "]")
+    }
+}
 
 pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
 

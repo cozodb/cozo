@@ -12,18 +12,34 @@ use crate::transact::pull::PullSpec;
 use crate::transact::throwaway::ThrowawayArea;
 use crate::Validity;
 
-pub(crate) struct QuerySpec {
-    find: Vec<(Keyword, PullSpec)>,
-    rules: (),
-    input: (),
-    order: (),
-    limit: Option<usize>,
-    offset: Option<usize>,
+#[derive(Debug)]
+pub enum Relation {
+    Fixed(InlineFixedRelation),
+    Triple(TripleRelation),
+    Derived(StoredDerivedRelation),
+    Join(Box<InnerJoin>),
+    Project(Box<ProjectedRelation>),
 }
 
-pub(crate) struct InlineFixedRelation {
-    bindings: Vec<Keyword>,
-    data: Vec<Vec<DataValue>>,
+impl Relation {
+    pub(crate) fn unit() -> Self {
+        Self::Fixed(InlineFixedRelation::unit())
+    }
+}
+
+#[derive(Debug)]
+pub struct InlineFixedRelation {
+    pub(crate) bindings: Vec<Keyword>,
+    pub(crate) data: Vec<Vec<DataValue>>,
+}
+
+impl InlineFixedRelation {
+    pub(crate) fn unit() -> Self {
+        Self {
+            bindings: vec![],
+            data: vec![vec![]],
+        }
+    }
 }
 
 impl InlineFixedRelation {
@@ -84,10 +100,11 @@ impl InlineFixedRelation {
     }
 }
 
-pub(crate) struct TripleRelation {
-    attr: Attribute,
-    vld: Validity,
-    bindings: [Keyword; 2],
+#[derive(Debug)]
+pub struct TripleRelation {
+    pub(crate) attr: Attribute,
+    pub(crate) vld: Validity,
+    pub(crate) bindings: [Keyword; 2],
 }
 
 fn flatten_err<T, E1: Into<anyhow::Error>, E2: Into<anyhow::Error>>(
@@ -309,9 +326,10 @@ impl TripleRelation {
     }
 }
 
-pub(crate) struct ProjectedRelation {
-    relation: Relation,
-    eliminate: BTreeSet<Keyword>,
+#[derive(Debug)]
+pub struct ProjectedRelation {
+    pub(crate) relation: Relation,
+    pub(crate) eliminate: BTreeSet<Keyword>,
 }
 
 impl ProjectedRelation {
@@ -329,9 +347,9 @@ impl ProjectedRelation {
             .enumerate()
             .filter_map(|(idx, kw)| {
                 if self.eliminate.contains(kw) {
-                    None
-                } else {
                     Some(idx)
+                } else {
+                    None
                 }
             })
             .collect::<BTreeSet<_>>();
@@ -354,15 +372,8 @@ impl ProjectedRelation {
     }
 }
 
-pub(crate) enum Relation {
-    Fixed(InlineFixedRelation),
-    Triple(TripleRelation),
-    Derived(StoredDerivedRelation),
-    Join(Box<InnerJoin>),
-    Project(Box<ProjectedRelation>),
-}
-
-pub(crate) struct StoredDerivedRelation {
+#[derive(Debug)]
+pub struct StoredDerivedRelation {
     arity: usize,
     bindings: Vec<Keyword>,
     storage: ThrowawayArea,
@@ -410,10 +421,11 @@ impl StoredDerivedRelation {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Joiner {
     // invariant: these are of the same lengths
-    left_keys: Vec<Keyword>,
-    right_keys: Vec<Keyword>,
+    pub(crate) left_keys: Vec<Keyword>,
+    pub(crate) right_keys: Vec<Keyword>,
 }
 
 impl Joiner {
@@ -457,14 +469,15 @@ impl Joiner {
     }
 }
 
-pub(crate) struct InnerJoin {
-    left: Relation,
-    right: Relation,
-    joiner: Joiner,
+#[derive(Debug)]
+pub struct InnerJoin {
+    pub(crate) left: Relation,
+    pub(crate) right: Relation,
+    pub(crate) joiner: Joiner,
 }
 
 impl Relation {
-    pub(crate) fn bindings(&self) -> Vec<Keyword> {
+    pub fn bindings(&self) -> Vec<Keyword> {
         match self {
             Relation::Fixed(f) => f.bindings.clone(),
             Relation::Triple(t) => t.bindings.to_vec(),
@@ -473,7 +486,7 @@ impl Relation {
             Relation::Project(p) => p.bindings(),
         }
     }
-    pub(crate) fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
+    pub fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
         match self {
             Relation::Fixed(f) => Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone())))),
             Relation::Triple(r) => Box::new(

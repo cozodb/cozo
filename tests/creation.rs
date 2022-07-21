@@ -107,6 +107,21 @@ fn creation() {
 
     println!("{}", to_string_pretty(&pulled).unwrap());
 
+    let query = json!([
+        ["_id", "person/first_name", "Eve"],
+        ["_id", "person/friend", "?friend"],
+        ["?friend", "person/first_name", "?friend_name"]
+    ]);
+    let mut tx = db.transact().unwrap();
+    let vld = Validity::current();
+    let query = tx.parse_clauses(&query, vld).unwrap();
+    dbg!(&query);
+    let compiled = tx.compile_clauses(query, vld).unwrap();
+    dbg!(&compiled);
+    for x in compiled.iter(&tx) {
+        dbg!(x.unwrap());
+    }
+
     // iteration
     // let mut it = db.total_iter();
     // while let Some((k_slice, v_slice)) = it.pair().unwrap() {

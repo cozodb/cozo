@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter};
 use cozorocks::{DbIter, PinSlice, RawRocksDb, RocksDbStatus};
 
 use crate::data::tuple::{EncodedTuple, Tuple};
@@ -6,6 +7,12 @@ use crate::data::value::DataValue;
 pub(crate) struct ThrowawayArea {
     pub(crate) db: RawRocksDb,
     pub(crate) prefix: u32,
+}
+
+impl Debug for ThrowawayArea {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Throwaway<{}>", self.prefix)
+    }
 }
 
 impl ThrowawayArea {
