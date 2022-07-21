@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use anyhow::Result;
 use itertools::Itertools;
+use serde_json::Map;
 
 use crate::data::attr::Attribute;
 use crate::data::json::JsonValue;
@@ -295,7 +296,7 @@ impl SessionTx {
         value_rep: &JsonValue,
         vld: Validity,
     ) -> Result<Clause> {
-        let entity = self.parse_triple_clause_entity(entity_rep)?;
+        let entity = self.parse_triple_clause_entity(entity_rep, vld)?;
         let attr = self.parse_triple_clause_attr(attr_rep)?;
         let value = self.parse_triple_clause_value(value_rep, &attr, vld)?;
         Ok(Clause::AttrTriple(AttrTripleClause {
@@ -303,6 +304,34 @@ impl SessionTx {
             entity,
             value,
         }))
+    }
+    fn parse_eid_from_map(
+        &mut self,
+        m: &Map<String, JsonValue>,
+        vld: Validity,
+    ) -> Result<EntityId> {
+        if m.len() != 1 {
+            return Err(QueryClauseError::UnexpectedForm(
+                JsonValue::Object(m.clone()),
+                "expect object with exactly one field".to_string(),
+            )
+            .into());
+        }
+        let (k, v) = m.iter().next().unwrap();
+        let kw = Keyword::from(k as &str);
+        let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
+        if !attr.indexing.is_unique_index() {
+            return Err(QueryClauseError::UnexpectedForm(
+                JsonValue::Object(m.clone()),
+                "attribute is not a unique index".to_string(),
+            )
+            .into());
+        }
+        let value = attr.val_type.coerce_value(v.into())?;
+        let eid = self
+            .eid_by_unique_av(&attr, &value, vld)?
+            .unwrap_or(EntityId(0));
+        Ok(eid)
     }
     fn parse_triple_clause_value(
         &mut self,
@@ -317,7 +346,8 @@ impl SessionTx {
         }
         if let Some(o) = value_rep.as_object() {
             if attr.val_type.is_ref_type() {
-                unimplemented!()
+                let eid = self.parse_eid_from_map(o, vld)?;
+                return Ok(MaybeVariable::Const(DataValue::EnId(eid)));
             }
         }
         Ok(MaybeVariable::Const(
@@ -327,6 +357,7 @@ impl SessionTx {
     fn parse_triple_clause_entity(
         &mut self,
         entity_rep: &JsonValue,
+        vld: Validity,
     ) -> Result<MaybeVariable<EntityId>> {
         if let Some(s) = entity_rep.as_str() {
             if s.starts_with(['?', '_']) {
@@ -335,6 +366,10 @@ impl SessionTx {
         }
         if let Some(u) = entity_rep.as_u64() {
             return Ok(MaybeVariable::Const(EntityId(u)));
+        }
+        if let Some(o) = entity_rep.as_object() {
+            let eid = self.parse_eid_from_map(o, vld)?;
+            return Ok(MaybeVariable::Const(eid));
         }
         todo!()
     }

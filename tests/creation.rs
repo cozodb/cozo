@@ -1,6 +1,6 @@
 use serde_json::{json, to_string_pretty};
 
-use cozo::{Db, EntityId, Validity};
+use cozo::{Db, EncodedVec, EntityId, Validity};
 use cozorocks::DbBuilder;
 
 fn create_db(name: &str) -> Db {
@@ -108,8 +108,7 @@ fn creation() {
     println!("{}", to_string_pretty(&pulled).unwrap());
 
     let query = json!([
-        ["_id", "person/first_name", "Eve"],
-        ["_id", "person/friend", "?friend"],
+        [{"person/id": "eve_faking"}, "person/friend", "?friend"],
         ["?friend", "person/first_name", "?friend_name"],
     ]);
     let mut tx = db.transact().unwrap();
@@ -123,7 +122,7 @@ fn creation() {
         dbg!(x.unwrap());
     }
 
-    // iteration
+    // // iteration
     // let mut it = db.total_iter();
     // while let Some((k_slice, v_slice)) = it.pair().unwrap() {
     //     let key = EncodedVec::new(k_slice);

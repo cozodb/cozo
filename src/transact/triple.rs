@@ -402,9 +402,12 @@ impl SessionTx {
         let lower = encode_ave_key_for_unique_v(attr.id, v, vld);
         let upper = encode_ave_key_for_unique_v(attr.id, v, Validity::MIN);
         Ok(
-            if let Some((k_slice, v_slice)) = self.bounded_scan_first(&lower, &upper).pair()? {
+            if let Some(v_slice) = self.bounded_scan_first(&lower, &upper).val()? {
                 if StoreOp::try_from(v_slice[0])?.is_assert() {
-                    let (_, eid, _) = decode_ae_key(k_slice)?;
+                    // let (_, mut eid, _) = decode_ae_key(k_slice)?;
+                    // if eid.is_zero() {
+                    let eid = decode_value(&v_slice[8..])?.get_entity_id()?;
+                    // }
                     let ret = Some(eid);
                     self.eid_by_attr_val_cache
                         .entry(v.clone())
