@@ -63,7 +63,7 @@ impl Keyword {
         self.0.starts_with('?')
     }
     pub(crate) fn is_ignored_binding(&self) -> bool {
-        self.0.starts_with('_')
+        self.0.starts_with(['_', '*'])
     }
     pub(crate) fn is_ignored_wildcard(&self) -> bool {
         self.0 == "_"

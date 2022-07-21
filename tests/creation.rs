@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use serde_json::{json, to_string_pretty};
 
 use cozo::{Db, EncodedVec, EntityId, Validity};
@@ -108,7 +109,7 @@ fn creation() {
     println!("{}", to_string_pretty(&pulled).unwrap());
 
     let query = json!([
-        [{"person/id": "eve_faking"}, "person/friend", "?friend"],
+        [{"person/id": "charlie_goodman"}, "person/friend", "?friend"],
         ["?friend", "person/first_name", "?friend_name"],
     ]);
     let mut tx = db.transact().unwrap();
@@ -118,9 +119,8 @@ fn creation() {
     let compiled = tx.compile_clauses(query, vld).unwrap();
     dbg!(&compiled);
     dbg!(compiled.bindings());
-    for x in compiled.iter(&tx) {
-        dbg!(x.unwrap());
-    }
+    let result: Vec<_> = compiled.iter(&tx).try_collect().unwrap();
+    dbg!(result);
 
     // // iteration
     // let mut it = db.total_iter();

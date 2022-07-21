@@ -66,12 +66,19 @@ impl SessionTx {
     pub fn compile_clauses(&mut self, clauses: Vec<Clause>, vld: Validity) -> Result<Relation> {
         let mut ret = Relation::unit();
         let mut seen_variables = BTreeSet::new();
+        let mut id_serial = 0;
+        let mut next_ignored_kw = || -> Keyword {
+            let s = format!("*{}", id_serial);
+            let kw = Keyword::from(&s as &str);
+            id_serial += 1;
+            kw
+        };
         for clause in clauses {
             match clause {
                 Clause::AttrTriple(a_triple) => match (a_triple.entity, a_triple.value) {
                     (MaybeVariable::Const(eid), MaybeVariable::Variable(v_kw)) => {
-                        let temp_join_key_left = Keyword::rand_ignored();
-                        let temp_join_key_right = Keyword::rand_ignored();
+                        let temp_join_key_left = next_ignored_kw();
+                        let temp_join_key_right = next_ignored_kw();
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![temp_join_key_left.clone()],
                             data: vec![vec![DataValue::EnId(eid)]],
@@ -96,7 +103,7 @@ impl SessionTx {
 
                         let v_kw = {
                             if seen_variables.contains(&v_kw) {
-                                let ret = Keyword::rand_ignored();
+                                let ret = next_ignored_kw();
                                 // to_eliminate.insert(ret.clone());
                                 join_left_keys.push(v_kw);
                                 join_right_keys.push(ret.clone());
@@ -122,8 +129,8 @@ impl SessionTx {
                         }));
                     }
                     (MaybeVariable::Variable(e_kw), MaybeVariable::Const(val)) => {
-                        let temp_join_key_left = Keyword::rand_ignored();
-                        let temp_join_key_right = Keyword::rand_ignored();
+                        let temp_join_key_left = next_ignored_kw();
+                        let temp_join_key_right = next_ignored_kw();
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![temp_join_key_left.clone()],
                             data: vec![vec![val]],
@@ -148,7 +155,7 @@ impl SessionTx {
 
                         let e_kw = {
                             if seen_variables.contains(&e_kw) {
-                                let ret = Keyword::rand_ignored();
+                                let ret = next_ignored_kw();
                                 join_left_keys.push(e_kw);
                                 join_right_keys.push(ret.clone());
                                 ret
@@ -180,7 +187,7 @@ impl SessionTx {
                         }
                         let e_kw = {
                             if seen_variables.contains(&e_kw) {
-                                let ret = Keyword::rand_ignored();
+                                let ret = next_ignored_kw();
                                 join_left_keys.push(e_kw);
                                 join_right_keys.push(ret.clone());
                                 ret
@@ -191,7 +198,7 @@ impl SessionTx {
                         };
                         let v_kw = {
                             if seen_variables.contains(&v_kw) {
-                                let ret = Keyword::rand_ignored();
+                                let ret = next_ignored_kw();
                                 join_left_keys.push(v_kw);
                                 join_right_keys.push(ret.clone());
                                 ret
@@ -220,8 +227,7 @@ impl SessionTx {
                         }
                     }
                     (MaybeVariable::Const(eid), MaybeVariable::Const(val)) => {
-                        let (left_var_1, left_var_2) =
-                            (Keyword::rand_ignored(), Keyword::rand_ignored());
+                        let (left_var_1, left_var_2) = (next_ignored_kw(), next_ignored_kw());
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![left_var_1.clone(), left_var_2.clone()],
                             data: vec![vec![DataValue::EnId(eid), val]],
@@ -240,8 +246,7 @@ impl SessionTx {
                                 to_eliminate: Default::default(),
                             }));
                         }
-                        let (right_var_1, right_var_2) =
-                            (Keyword::rand_ignored(), Keyword::rand_ignored());
+                        let (right_var_1, right_var_2) = (next_ignored_kw(), next_ignored_kw());
 
                         let right = Relation::Triple(TripleRelation {
                             attr: a_triple.attr,
@@ -333,6 +338,29 @@ impl SessionTx {
             .unwrap_or(EntityId(0));
         Ok(eid)
     }
+    fn parse_value_from_map(
+        &mut self,
+        m: &Map<String, JsonValue>,
+        attr: &Attribute,
+    ) -> Result<DataValue> {
+        if m.len() != 1 {
+            return Err(QueryClauseError::UnexpectedForm(
+                JsonValue::Object(m.clone()),
+                "expect object with exactly one field".to_string(),
+            )
+            .into());
+        }
+        let (k, v) = m.iter().next().unwrap();
+        if k != "const" {
+            return Err(QueryClauseError::UnexpectedForm(
+                JsonValue::Object(m.clone()),
+                "expect object with exactly one field named 'const'".to_string(),
+            )
+            .into());
+        }
+        let value = attr.val_type.coerce_value(v.into())?;
+        Ok(value)
+    }
     fn parse_triple_clause_value(
         &mut self,
         value_rep: &JsonValue,
@@ -340,15 +368,24 @@ impl SessionTx {
         vld: Validity,
     ) -> Result<MaybeVariable<DataValue>> {
         if let Some(s) = value_rep.as_str() {
+            let var = Keyword::from(s);
             if s.starts_with(['?', '_']) {
-                return Ok(MaybeVariable::Variable(Keyword::from(s)));
+                return Ok(MaybeVariable::Variable(var));
+            } else if var.is_reserved() {
+                return Err(QueryClauseError::UnexpectedForm(
+                    value_rep.clone(),
+                    "reserved string values must be quoted".to_string(),
+                )
+                .into());
             }
         }
         if let Some(o) = value_rep.as_object() {
-            if attr.val_type.is_ref_type() {
+            return if attr.val_type.is_ref_type() {
                 let eid = self.parse_eid_from_map(o, vld)?;
-                return Ok(MaybeVariable::Const(DataValue::EnId(eid)));
-            }
+                Ok(MaybeVariable::Const(DataValue::EnId(eid)))
+            } else {
+                Ok(MaybeVariable::Const(self.parse_value_from_map(o, attr)?))
+            };
         }
         Ok(MaybeVariable::Const(
             attr.val_type.coerce_value(value_rep.into())?,
@@ -360,8 +397,15 @@ impl SessionTx {
         vld: Validity,
     ) -> Result<MaybeVariable<EntityId>> {
         if let Some(s) = entity_rep.as_str() {
+            let var = Keyword::from(s);
             if s.starts_with(['?', '_']) {
-                return Ok(MaybeVariable::Variable(Keyword::from(s)));
+                return Ok(MaybeVariable::Variable(var));
+            } else if var.is_reserved() {
+                return Err(QueryClauseError::UnexpectedForm(
+                    entity_rep.clone(),
+                    "reserved string values must be quoted".to_string(),
+                )
+                .into());
             }
         }
         if let Some(u) = entity_rep.as_u64() {
