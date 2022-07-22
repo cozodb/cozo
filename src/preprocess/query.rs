@@ -35,61 +35,61 @@ use crate::{EntityId, Validity};
 /// ```
 
 #[derive(Debug, thiserror::Error)]
-pub enum QueryClauseError {
+pub enum QueryProcError {
     #[error("error parsing query clause {0}: {1}")]
     UnexpectedForm(JsonValue, String),
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum MaybeVariable<T> {
-    Variable(Keyword),
+pub(crate) enum Term<T> {
+    Var(Keyword),
     Const(T),
 }
 
-impl<T> MaybeVariable<T> {
+impl<T> Term<T> {
     pub(crate) fn get_var(&self) -> Option<&Keyword> {
         match self {
-            Self::Variable(k) => Some(k),
+            Self::Var(k) => Some(k),
             Self::Const(_) => None,
         }
     }
     pub(crate) fn get_const(&self) -> Option<&T> {
         match self {
             Self::Const(v) => Some(v),
-            Self::Variable(_) => None,
+            Self::Var(_) => None,
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct AttrTripleClause {
+pub struct AttrTripleAtom {
     pub(crate) attr: Attribute,
-    pub(crate) entity: MaybeVariable<EntityId>,
-    pub(crate) value: MaybeVariable<DataValue>,
+    pub(crate) entity: Term<EntityId>,
+    pub(crate) value: Term<DataValue>,
 }
 
 #[derive(Clone, Debug)]
-pub struct RuleApplyClause {
+pub struct RuleApplyAtom {
     pub(crate) rule: Keyword,
-    pub(crate) args: Vec<MaybeVariable<DataValue>>,
+    pub(crate) args: Vec<Term<DataValue>>,
 }
 
 #[derive(Clone, Debug)]
-pub struct UnificationClause {
-    pub(crate) left: MaybeVariable<DataValue>,
-    pub(crate) right: MaybeVariable<DataValue>,
+pub struct UnificationAtom {
+    pub(crate) left: Term<DataValue>,
+    pub(crate) right: Term<DataValue>,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) enum Expr {
-    Const(MaybeVariable<DataValue>)
+    Const(Term<DataValue>),
 }
 
 #[derive(Clone, Debug)]
-pub enum Clause {
-    AttrTriple(AttrTripleClause),
-    Rule(RuleApplyClause),
-    Unification(UnificationClause),
+pub enum Atom {
+    AttrTriple(AttrTripleAtom),
+    Rule(RuleApplyAtom),
+    Unification(UnificationAtom),
 }
 
 #[derive(Clone, Debug)]
@@ -102,30 +102,31 @@ pub struct RuleSet {
 
 #[derive(Clone, Debug, Default)]
 pub enum Aggregation {
+    #[default]
     None,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct Rule {
     pub(crate) head: Vec<(Keyword, Aggregation)>,
-    pub(crate) body: Vec<Clause>,
+    pub(crate) body: Vec<Atom>,
 }
 
 impl SessionTx {
     pub fn parse_rule_sets(&mut self, payload: &JsonValue) -> Result<Vec<RuleSet>> {
         todo!()
     }
-    pub fn parse_clauses(&mut self, payload: &JsonValue, vld: Validity) -> Result<Vec<Clause>> {
+    pub fn parse_rule_body(&mut self, payload: &JsonValue, vld: Validity) -> Result<Vec<Atom>> {
         payload
             .as_array()
             .ok_or_else(|| {
-                QueryClauseError::UnexpectedForm(payload.clone(), "expect array".to_string())
+                QueryProcError::UnexpectedForm(payload.clone(), "expect array".to_string())
             })?
             .iter()
-            .map(|el| self.parse_clause(el, vld))
+            .map(|el| self.parse_atom(el, vld))
             .try_collect()
     }
-    pub fn compile_clauses(&mut self, clauses: Vec<Clause>, vld: Validity) -> Result<Relation> {
+    pub fn compile_rule_body(&mut self, clauses: Vec<Atom>, vld: Validity) -> Result<Relation> {
         let mut ret = Relation::unit();
         let mut seen_variables = BTreeSet::new();
         let mut id_serial = 0;
@@ -137,8 +138,8 @@ impl SessionTx {
         };
         for clause in clauses {
             match clause {
-                Clause::AttrTriple(a_triple) => match (a_triple.entity, a_triple.value) {
-                    (MaybeVariable::Const(eid), MaybeVariable::Variable(v_kw)) => {
+                Atom::AttrTriple(a_triple) => match (a_triple.entity, a_triple.value) {
+                    (Term::Const(eid), Term::Var(v_kw)) => {
                         let temp_join_key_left = next_ignored_kw();
                         let temp_join_key_right = next_ignored_kw();
                         let const_rel = Relation::Fixed(InlineFixedRelation {
@@ -190,7 +191,7 @@ impl SessionTx {
                             to_eliminate: Default::default(),
                         }));
                     }
-                    (MaybeVariable::Variable(e_kw), MaybeVariable::Const(val)) => {
+                    (Term::Var(e_kw), Term::Const(val)) => {
                         let temp_join_key_left = next_ignored_kw();
                         let temp_join_key_right = next_ignored_kw();
                         let const_rel = Relation::Fixed(InlineFixedRelation {
@@ -241,7 +242,7 @@ impl SessionTx {
                             to_eliminate: Default::default(),
                         }));
                     }
-                    (MaybeVariable::Variable(e_kw), MaybeVariable::Variable(v_kw)) => {
+                    (Term::Var(e_kw), Term::Var(v_kw)) => {
                         let mut join_left_keys = vec![];
                         let mut join_right_keys = vec![];
                         if e_kw == v_kw {
@@ -288,7 +289,7 @@ impl SessionTx {
                             }));
                         }
                     }
-                    (MaybeVariable::Const(eid), MaybeVariable::Const(val)) => {
+                    (Term::Const(eid), Term::Const(val)) => {
                         let (left_var_1, left_var_2) = (next_ignored_kw(), next_ignored_kw());
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![left_var_1.clone(), left_var_2.clone()],
@@ -326,10 +327,10 @@ impl SessionTx {
                         }));
                     }
                 },
-                Clause::Rule(rule_app) => {
+                Atom::Rule(rule_app) => {
                     todo!()
                 }
-                Clause::Unification(_) => {
+                Atom::Unification(_) => {
                     todo!()
                 }
             }
@@ -351,11 +352,11 @@ impl SessionTx {
 
         Ok(ret)
     }
-    fn parse_clause(&mut self, payload: &JsonValue, vld: Validity) -> Result<Clause> {
+    fn parse_atom(&mut self, payload: &JsonValue, vld: Validity) -> Result<Atom> {
         match payload {
             JsonValue::Array(arr) => match arr as &[JsonValue] {
                 [entity_rep, attr_rep, value_rep] => {
-                    self.parse_triple_clause(entity_rep, attr_rep, value_rep, vld)
+                    self.parse_triple_atom(entity_rep, attr_rep, value_rep, vld)
                 }
                 _ => unimplemented!(),
             },
@@ -367,17 +368,17 @@ impl SessionTx {
             _ => unimplemented!(),
         }
     }
-    fn parse_triple_clause(
+    fn parse_triple_atom(
         &mut self,
         entity_rep: &JsonValue,
         attr_rep: &JsonValue,
         value_rep: &JsonValue,
         vld: Validity,
-    ) -> Result<Clause> {
-        let entity = self.parse_triple_clause_entity(entity_rep, vld)?;
-        let attr = self.parse_triple_clause_attr(attr_rep)?;
+    ) -> Result<Atom> {
+        let entity = self.parse_triple_atom_entity(entity_rep, vld)?;
+        let attr = self.parse_triple_atom_attr(attr_rep)?;
         let value = self.parse_triple_clause_value(value_rep, &attr, vld)?;
-        Ok(Clause::AttrTriple(AttrTripleClause {
+        Ok(Atom::AttrTriple(AttrTripleAtom {
             attr,
             entity,
             value,
@@ -389,7 +390,7 @@ impl SessionTx {
         vld: Validity,
     ) -> Result<EntityId> {
         if m.len() != 1 {
-            return Err(QueryClauseError::UnexpectedForm(
+            return Err(QueryProcError::UnexpectedForm(
                 JsonValue::Object(m.clone()),
                 "expect object with exactly one field".to_string(),
             )
@@ -399,7 +400,7 @@ impl SessionTx {
         let kw = Keyword::from(k as &str);
         let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
         if !attr.indexing.is_unique_index() {
-            return Err(QueryClauseError::UnexpectedForm(
+            return Err(QueryProcError::UnexpectedForm(
                 JsonValue::Object(m.clone()),
                 "attribute is not a unique index".to_string(),
             )
@@ -417,7 +418,7 @@ impl SessionTx {
         attr: &Attribute,
     ) -> Result<DataValue> {
         if m.len() != 1 {
-            return Err(QueryClauseError::UnexpectedForm(
+            return Err(QueryProcError::UnexpectedForm(
                 JsonValue::Object(m.clone()),
                 "expect object with exactly one field".to_string(),
             )
@@ -425,7 +426,7 @@ impl SessionTx {
         }
         let (k, v) = m.iter().next().unwrap();
         if k != "const" {
-            return Err(QueryClauseError::UnexpectedForm(
+            return Err(QueryProcError::UnexpectedForm(
                 JsonValue::Object(m.clone()),
                 "expect object with exactly one field named 'const'".to_string(),
             )
@@ -439,13 +440,13 @@ impl SessionTx {
         value_rep: &JsonValue,
         attr: &Attribute,
         vld: Validity,
-    ) -> Result<MaybeVariable<DataValue>> {
+    ) -> Result<Term<DataValue>> {
         if let Some(s) = value_rep.as_str() {
             let var = Keyword::from(s);
             if s.starts_with(['?', '_']) {
-                return Ok(MaybeVariable::Variable(var));
+                return Ok(Term::Var(var));
             } else if var.is_reserved() {
-                return Err(QueryClauseError::UnexpectedForm(
+                return Err(QueryProcError::UnexpectedForm(
                     value_rep.clone(),
                     "reserved string values must be quoted".to_string(),
                 )
@@ -455,26 +456,24 @@ impl SessionTx {
         if let Some(o) = value_rep.as_object() {
             return if attr.val_type.is_ref_type() {
                 let eid = self.parse_eid_from_map(o, vld)?;
-                Ok(MaybeVariable::Const(DataValue::EnId(eid)))
+                Ok(Term::Const(DataValue::EnId(eid)))
             } else {
-                Ok(MaybeVariable::Const(self.parse_value_from_map(o, attr)?))
+                Ok(Term::Const(self.parse_value_from_map(o, attr)?))
             };
         }
-        Ok(MaybeVariable::Const(
-            attr.val_type.coerce_value(value_rep.into())?,
-        ))
+        Ok(Term::Const(attr.val_type.coerce_value(value_rep.into())?))
     }
-    fn parse_triple_clause_entity(
+    fn parse_triple_atom_entity(
         &mut self,
         entity_rep: &JsonValue,
         vld: Validity,
-    ) -> Result<MaybeVariable<EntityId>> {
+    ) -> Result<Term<EntityId>> {
         if let Some(s) = entity_rep.as_str() {
             let var = Keyword::from(s);
             if s.starts_with(['?', '_']) {
-                return Ok(MaybeVariable::Variable(var));
+                return Ok(Term::Var(var));
             } else if var.is_reserved() {
-                return Err(QueryClauseError::UnexpectedForm(
+                return Err(QueryProcError::UnexpectedForm(
                     entity_rep.clone(),
                     "reserved string values must be quoted".to_string(),
                 )
@@ -482,22 +481,22 @@ impl SessionTx {
             }
         }
         if let Some(u) = entity_rep.as_u64() {
-            return Ok(MaybeVariable::Const(EntityId(u)));
+            return Ok(Term::Const(EntityId(u)));
         }
         if let Some(o) = entity_rep.as_object() {
             let eid = self.parse_eid_from_map(o, vld)?;
-            return Ok(MaybeVariable::Const(eid));
+            return Ok(Term::Const(eid));
         }
         todo!()
     }
-    fn parse_triple_clause_attr(&mut self, attr_rep: &JsonValue) -> Result<Attribute> {
+    fn parse_triple_atom_attr(&mut self, attr_rep: &JsonValue) -> Result<Attribute> {
         match attr_rep {
             JsonValue::String(s) => {
                 let kw = Keyword::from(s as &str);
                 let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
                 Ok(attr)
             }
-            v => Err(QueryClauseError::UnexpectedForm(
+            v => Err(QueryProcError::UnexpectedForm(
                 v.clone(),
                 "expect attribute keyword".to_string(),
             )

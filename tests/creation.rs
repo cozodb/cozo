@@ -114,9 +114,9 @@ fn creation() {
     ]);
     let mut tx = db.transact().unwrap();
     let vld = Validity::current();
-    let query = tx.parse_clauses(&query, vld).unwrap();
+    let query = tx.parse_rule_body(&query, vld).unwrap();
     dbg!(&query);
-    let compiled = tx.compile_clauses(query, vld).unwrap();
+    let compiled = tx.compile_rule_body(query, vld).unwrap();
     dbg!(&compiled);
     dbg!(compiled.bindings());
     let result: Vec<_> = compiled.iter(&tx).try_collect().unwrap();

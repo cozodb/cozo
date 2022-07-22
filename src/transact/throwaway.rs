@@ -4,6 +4,7 @@ use cozorocks::{DbIter, PinSlice, RawRocksDb, RocksDbStatus};
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 
+#[derive(Clone)]
 pub(crate) struct ThrowawayArea {
     pub(crate) db: RawRocksDb,
     pub(crate) prefix: u32,
