@@ -11,7 +11,28 @@ use crate::data::value::DataValue;
 use crate::preprocess::triple::TxError;
 use crate::runtime::transact::SessionTx;
 use crate::transact::query::{InlineFixedRelation, InnerJoin, Joiner, Relation, TripleRelation};
+use crate::transact::throwaway::ThrowawayArea;
 use crate::{EntityId, Validity};
+
+/// example ruleset in python and javascript
+/// ```python
+/// [
+///     R.ancestor(["?a", "?b],
+///         T.parent("?a", "?b")),
+///     R.ancestor(["?a", "?b"],
+///         T.parent("?a", "?c"),
+///         R.ancestor("?c", "?b")),
+///     Q(["?a"],
+///         R.ancestor("?a", {"name": "Anne"}))
+/// ]
+///
+/// [
+///     Q(["?old_than_anne"],
+///         T.age({"name": "Anne"}, "?anne_age"),
+///         T.age("?older_than_anne", "?age"),
+///         Gt("?age", "?anne_age")).at("1990-01-01")
+/// ]
+/// ```
 
 #[derive(Debug, thiserror::Error)]
 pub enum QueryClauseError {
@@ -48,11 +69,52 @@ pub struct AttrTripleClause {
 }
 
 #[derive(Clone, Debug)]
+pub struct RuleApplyClause {
+    pub(crate) rule: Keyword,
+    pub(crate) args: Vec<MaybeVariable<DataValue>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct UnificationClause {
+    pub(crate) left: MaybeVariable<DataValue>,
+    pub(crate) right: MaybeVariable<DataValue>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum Expr {
+    Const(MaybeVariable<DataValue>)
+}
+
+#[derive(Clone, Debug)]
 pub enum Clause {
     AttrTriple(AttrTripleClause),
+    Rule(RuleApplyClause),
+    Unification(UnificationClause),
+}
+
+#[derive(Clone, Debug)]
+pub struct RuleSet {
+    pub(crate) name: Keyword,
+    pub(crate) storage: Option<ThrowawayArea>,
+    pub(crate) sets: Vec<Rule>,
+    pub(crate) arity: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+pub enum Aggregation {
+    None,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct Rule {
+    pub(crate) head: Vec<(Keyword, Aggregation)>,
+    pub(crate) body: Vec<Clause>,
 }
 
 impl SessionTx {
+    pub fn parse_rule_sets(&mut self, payload: &JsonValue) -> Result<Vec<RuleSet>> {
+        todo!()
+    }
     pub fn parse_clauses(&mut self, payload: &JsonValue, vld: Validity) -> Result<Vec<Clause>> {
         payload
             .as_array()
@@ -264,6 +326,12 @@ impl SessionTx {
                         }));
                     }
                 },
+                Clause::Rule(rule_app) => {
+                    todo!()
+                }
+                Clause::Unification(_) => {
+                    todo!()
+                }
             }
         }
 
@@ -291,6 +359,11 @@ impl SessionTx {
                 }
                 _ => unimplemented!(),
             },
+            JsonValue::Object(map) => {
+                // rule application, or built-in predicates,
+                // or disjunction/negation (convert to disjunctive normal forms)
+                todo!()
+            }
             _ => unimplemented!(),
         }
     }
