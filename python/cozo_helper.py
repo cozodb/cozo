@@ -71,7 +71,12 @@ Le = PredicateClass('Le')
 Eq = PredicateClass('Eq')
 Neq = PredicateClass('Neq')
 
-__all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Q', 'T', 'R']
+
+def Const(item):
+    return {'const': item}
+
+
+__all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Q', 'T', 'R', 'Const']
 
 if __name__ == '__main__':
     import json

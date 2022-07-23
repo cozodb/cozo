@@ -1,4 +1,5 @@
-use std::collections::BTreeSet;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -39,6 +40,8 @@ use crate::{EntityId, Validity};
 pub enum QueryProcError {
     #[error("error parsing query clause {0}: {1}")]
     UnexpectedForm(JsonValue, String),
+    #[error("arity mismatch for rule {0}: all definitions must have the same arity")]
+    ArityMismatch(Keyword),
 }
 
 #[derive(Clone, Debug)]
@@ -111,21 +114,113 @@ pub enum Aggregation {
 pub(crate) struct Rule {
     pub(crate) head: Vec<(Keyword, Aggregation)>,
     pub(crate) body: Vec<Atom>,
+    pub(crate) vld: Validity,
 }
 
 impl SessionTx {
-    pub fn parse_rule_sets(&mut self, payload: &JsonValue) -> Result<Vec<RuleSet>> {
-        todo!()
-    }
-    pub fn parse_rule_body(&mut self, payload: &JsonValue, vld: Validity) -> Result<Vec<Atom>> {
-        payload
+    pub fn parse_rule_sets(
+        &mut self,
+        payload: &JsonValue,
+        default_vld: Validity,
+    ) -> Result<Vec<RuleSet>> {
+        let rules = payload
             .as_array()
             .ok_or_else(|| {
-                QueryProcError::UnexpectedForm(payload.clone(), "expect array".to_string())
+                QueryProcError::UnexpectedForm(payload.clone(), "expected array".to_string())
             })?
             .iter()
-            .map(|el| self.parse_atom(el, vld))
+            .map(|o| self.parse_rule(o, default_vld));
+        let mut collected: BTreeMap<Keyword, Vec<Rule>> = BTreeMap::new();
+        for res in rules {
+            let (name, rule) = res?;
+            match collected.entry(name) {
+                Entry::Vacant(e) => {
+                    e.insert(vec![rule]);
+                }
+                Entry::Occupied(mut e) => {
+                    e.get_mut().push(rule);
+                }
+            }
+        }
+        collected
+            .into_iter()
+            .map(|(name, rules)| -> Result<RuleSet> {
+                let mut arities = rules.iter().map(|r| r.head.len());
+                let arity = arities.next().unwrap();
+                for other in arities {
+                    if other != arity {
+                        return Err(QueryProcError::ArityMismatch(name).into());
+                    }
+                }
+                Ok(RuleSet {
+                    name,
+                    storage: None,
+                    sets: rules,
+                    arity,
+                })
+            })
             .try_collect()
+    }
+    fn parse_rule(
+        &mut self,
+        payload: &JsonValue,
+        default_vld: Validity,
+    ) -> Result<(Keyword, Rule)> {
+        let rule_name = payload.get("rule").ok_or_else(|| {
+            QueryProcError::UnexpectedForm(payload.clone(), "expected key 'rule'".to_string())
+        })?;
+        let rule_name = Keyword::try_from(rule_name)?;
+        let vld = payload
+            .get("at")
+            .map(Validity::try_from)
+            .unwrap_or(Ok(default_vld))?;
+        let args = payload
+            .get("args")
+            .ok_or_else(|| {
+                QueryProcError::UnexpectedForm(payload.clone(), "expected key 'args'".to_string())
+            })?
+            .as_array()
+            .ok_or_else(|| {
+                QueryProcError::UnexpectedForm(
+                    payload.clone(),
+                    "expected key 'args' to be an array".to_string(),
+                )
+            })?;
+        let mut args = args.iter();
+        let rule_head = args.next().ok_or_else(|| {
+            QueryProcError::UnexpectedForm(
+                payload.clone(),
+                "expected key 'args' to be an array containing at least one element".to_string(),
+            )
+        })?;
+        let rule_head = rule_head.as_array().ok_or_else(|| {
+            QueryProcError::UnexpectedForm(
+                rule_head.clone(),
+                "expect rule head to be an array".to_string(),
+            )
+        })?;
+        let rule_head = rule_head
+            .iter()
+            .map(|el| -> Result<(Keyword, Aggregation)> {
+                if let Some(s) = el.as_str() {
+                    Ok((Keyword::from(s), Default::default()))
+                } else {
+                    todo!()
+                }
+            })
+            .try_collect()?;
+        let rule_body: Vec<_> = args
+            .map(|el| self.parse_atom(el, default_vld))
+            .try_collect()?;
+
+        Ok((
+            rule_name,
+            Rule {
+                head: rule_head,
+                body: rule_body,
+                vld,
+            },
+        ))
     }
     pub fn compile_rule_body(&mut self, clauses: Vec<Atom>, vld: Validity) -> Result<Relation> {
         let mut ret = Relation::unit();
