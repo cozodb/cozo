@@ -17,7 +17,7 @@ use crate::{EntityId, Validity};
 /// example ruleset in python and javascript
 /// ```python
 /// [
-///     R.ancestor(["?a", "?b],
+///     R.ancestor(["?a", "?b"],
 ///         T.parent("?a", "?b")),
 ///     R.ancestor(["?a", "?b"],
 ///         T.parent("?a", "?c"),
@@ -27,12 +27,13 @@ use crate::{EntityId, Validity};
 /// ]
 ///
 /// [
-///     Q(["?old_than_anne"],
+///     Q.at("1990-01-01")(["?old_than_anne"],
 ///         T.age({"name": "Anne"}, "?anne_age"),
 ///         T.age("?older_than_anne", "?age"),
-///         Gt("?age", "?anne_age")).at("1990-01-01")
+///         Gt("?age", "?anne_age"))
 /// ]
 /// ```
+/// we also have `F.is_married(["anne", "brutus"], ["constantine", "delphi"])` for ad-hoc fact rules
 
 #[derive(Debug, thiserror::Error)]
 pub enum QueryProcError {
@@ -75,7 +76,7 @@ pub struct RuleApplyAtom {
 }
 
 #[derive(Clone, Debug)]
-pub struct UnificationAtom {
+pub struct PredicateAtom {
     pub(crate) left: Term<DataValue>,
     pub(crate) right: Term<DataValue>,
 }
@@ -89,7 +90,7 @@ pub(crate) enum Expr {
 pub enum Atom {
     AttrTriple(AttrTripleAtom),
     Rule(RuleApplyAtom),
-    Unification(UnificationAtom),
+    Predicate(PredicateAtom),
 }
 
 #[derive(Clone, Debug)]
@@ -330,7 +331,7 @@ impl SessionTx {
                 Atom::Rule(rule_app) => {
                     todo!()
                 }
-                Atom::Unification(_) => {
+                Atom::Predicate(_) => {
                     todo!()
                 }
             }
