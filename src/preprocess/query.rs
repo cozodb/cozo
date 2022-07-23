@@ -74,7 +74,7 @@ pub struct AttrTripleAtom {
 
 #[derive(Clone, Debug)]
 pub struct RuleApplyAtom {
-    pub(crate) rule: Keyword,
+    pub(crate) name: Keyword,
     pub(crate) args: Vec<Term<DataValue>>,
 }
 
@@ -98,10 +98,23 @@ pub enum Atom {
 
 #[derive(Clone, Debug)]
 pub struct RuleSet {
-    pub(crate) name: Keyword,
     pub(crate) storage: Option<ThrowawayArea>,
     pub(crate) sets: Vec<Rule>,
     pub(crate) arity: usize,
+}
+
+impl RuleSet {
+    fn contained_rules(&self) -> BTreeSet<Keyword> {
+        let mut collected = BTreeSet::new();
+        for rule in &self.sets {
+            for clause in &rule.body {
+                if let Atom::Rule(rule) = clause {
+                    collected.insert(rule.name.clone());
+                }
+            }
+        }
+        collected
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -122,7 +135,7 @@ impl SessionTx {
         &mut self,
         payload: &JsonValue,
         default_vld: Validity,
-    ) -> Result<Vec<RuleSet>> {
+    ) -> Result<BTreeMap<Keyword, RuleSet>> {
         let rules = payload
             .as_array()
             .ok_or_else(|| {
@@ -144,7 +157,7 @@ impl SessionTx {
         }
         collected
             .into_iter()
-            .map(|(name, rules)| -> Result<RuleSet> {
+            .map(|(name, rules)| -> Result<(Keyword, RuleSet)> {
                 let mut arities = rules.iter().map(|r| r.head.len());
                 let arity = arities.next().unwrap();
                 for other in arities {
@@ -152,12 +165,14 @@ impl SessionTx {
                         return Err(QueryProcError::ArityMismatch(name).into());
                     }
                 }
-                Ok(RuleSet {
+                Ok((
                     name,
-                    storage: None,
-                    sets: rules,
-                    arity,
-                })
+                    RuleSet {
+                        storage: None,
+                        sets: rules,
+                        arity,
+                    },
+                ))
             })
             .try_collect()
     }
@@ -219,7 +234,7 @@ impl SessionTx {
             })
             .try_collect()?;
         Ok(Atom::Rule(RuleApplyAtom {
-            rule: rule_name,
+            name: rule_name,
             args,
         }))
     }
