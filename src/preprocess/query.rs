@@ -129,7 +129,7 @@ impl SessionTx {
                 QueryProcError::UnexpectedForm(payload.clone(), "expected array".to_string())
             })?
             .iter()
-            .map(|o| self.parse_rule(o, default_vld));
+            .map(|o| self.parse_rule_definition(o, default_vld));
         let mut collected: BTreeMap<Keyword, Vec<Rule>> = BTreeMap::new();
         for res in rules {
             let (name, rule) = res?;
@@ -161,7 +161,69 @@ impl SessionTx {
             })
             .try_collect()
     }
-    fn parse_rule(
+    fn parse_rule_atom(&mut self, payload: &Map<String, JsonValue>, vld: Validity) -> Result<Atom> {
+        let rule_name = payload
+            .get("rule")
+            .ok_or_else(|| {
+                QueryProcError::UnexpectedForm(
+                    JsonValue::Object(payload.clone()),
+                    "expect key 'rule'".to_string(),
+                )
+            })?
+            .as_str()
+            .ok_or_else(|| {
+                QueryProcError::UnexpectedForm(
+                    JsonValue::Object(payload.clone()),
+                    "expect key 'rule' to be string".to_string(),
+                )
+            })?
+            .into();
+        let args = payload
+            .get("args")
+            .ok_or_else(|| {
+                QueryProcError::UnexpectedForm(
+                    JsonValue::Object(payload.clone()),
+                    "expect key 'args'".to_string(),
+                )
+            })?
+            .as_array()
+            .ok_or_else(|| {
+                QueryProcError::UnexpectedForm(
+                    JsonValue::Object(payload.clone()),
+                    "expect key 'args' to be an array".to_string(),
+                )
+            })?
+            .iter()
+            .map(|value_rep| -> Result<Term<DataValue>> {
+                if let Some(s) = value_rep.as_str() {
+                    let var = Keyword::from(s);
+                    if s.starts_with(['?', '_']) {
+                        return Ok(Term::Var(var));
+                    } else if var.is_reserved() {
+                        return Err(QueryProcError::UnexpectedForm(
+                            value_rep.clone(),
+                            "reserved string values must be quoted".to_string(),
+                        )
+                        .into());
+                    }
+                }
+                if let Some(o) = value_rep.as_object() {
+                    return if let Some(c) = o.get("const") {
+                        Ok(Term::Const(c.into()))
+                    } else {
+                        let eid = self.parse_eid_from_map(o, vld)?;
+                        Ok(Term::Const(DataValue::EnId(eid)))
+                    };
+                }
+                Ok(Term::Const(value_rep.into()))
+            })
+            .try_collect()?;
+        Ok(Atom::Rule(RuleApplyAtom {
+            rule: rule_name,
+            args,
+        }))
+    }
+    fn parse_rule_definition(
         &mut self,
         payload: &JsonValue,
         default_vld: Validity,
@@ -459,7 +521,14 @@ impl SessionTx {
             JsonValue::Object(map) => {
                 // rule application, or built-in predicates,
                 // or disjunction/negation (convert to disjunctive normal forms)
-                todo!()
+                if map.contains_key("rule") {
+                    self.parse_rule_atom(map, vld)
+                } else if map.contains_key("pred") {
+                    dbg!(map);
+                    todo!()
+                } else {
+                    todo!()
+                }
             }
             _ => unimplemented!(),
         }

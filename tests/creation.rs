@@ -109,18 +109,63 @@ fn creation() {
     println!("{}", to_string_pretty(&pulled).unwrap());
 
     let query = json!([
-        [{"person/id": "charlie_goodman"}, "person/friend", "?friend"],
-        ["?friend", "person/first_name", "?friend_name"],
+      {
+        "rule": "ff",
+        "args": [
+          [
+            "?a",
+            "?b"
+          ],
+          [
+            "?a",
+            "person/friend",
+            "?b"
+          ]
+        ]
+      },
+      {
+        "rule": "ff",
+        "args": [
+          [
+            "?a",
+            "?b"
+          ],
+          [
+            "?a",
+            "person/friend",
+            "?c"
+          ],
+          {
+            "rule": "ff",
+            "args": [
+              "?c",
+              "?b"
+            ]
+          }
+        ]
+      },
+      {
+        "rule": "?",
+        "args": [
+          [
+            "?a"
+          ],
+          {
+            "rule": "ff",
+            "args": [
+              "?a",
+              {
+                "person/id": "alice_amorist"
+              }
+            ]
+          }
+        ]
+      }
     ]);
     let mut tx = db.transact().unwrap();
     let vld = Validity::current();
-    let query = tx.parse_rule_body(&query, vld).unwrap();
+    let query = tx.parse_rule_sets(&query, vld).unwrap();
     dbg!(&query);
-    let compiled = tx.compile_rule_body(query, vld).unwrap();
-    dbg!(&compiled);
-    dbg!(compiled.bindings());
-    let result: Vec<_> = compiled.iter(&tx).try_collect().unwrap();
-    dbg!(result);
 
     // // iteration
     // let mut it = db.total_iter();
