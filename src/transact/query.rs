@@ -562,10 +562,11 @@ impl StoredDerivedRelation {
                             .scan_prefix(&prefix)
                             .filter_map_ok(move |(found, meta)| {
                                 if let Some(stored_epoch) = meta {
-                                    if epoch > stored_epoch + 1 {
+                                    if epoch != stored_epoch + 1 {
                                         return None;
                                     }
                                 }
+                                // dbg!("filter", &tuple, &prefix, &found);
                                 let mut ret = tuple.0.clone();
                                 ret.extend(found.0);
 
@@ -599,25 +600,34 @@ impl StoredDerivedRelation {
                                 .map(|i| tuple.0[*i].clone())
                                 .collect_vec(),
                         );
-                        self.storage.scan_prefix(&prefix).map_ok(move |(found, _)| {
-                            let mut ret = tuple.0.clone();
-                            ret.extend(found.0);
+                        self.storage
+                            .scan_prefix(&prefix)
+                            .filter_map_ok(move |(found, meta)| {
+                                if let Some(stored_epoch) = meta {
+                                    if epoch == stored_epoch {
+                                        return None;
+                                    }
+                                }
 
-                            if !eliminate_indices.is_empty() {
-                                ret = ret
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec();
-                            }
-                            Tuple(ret)
-                        })
+                                // dbg!("no-filter", &tuple, &prefix, &found);
+                                let mut ret = tuple.0.clone();
+                                ret.extend(found.0);
+
+                                if !eliminate_indices.is_empty() {
+                                    ret = ret
+                                        .into_iter()
+                                        .enumerate()
+                                        .filter_map(|(i, v)| {
+                                            if eliminate_indices.contains(&i) {
+                                                None
+                                            } else {
+                                                Some(v)
+                                            }
+                                        })
+                                        .collect_vec();
+                                }
+                                Some(Tuple(ret))
+                            })
                     })
                     .flatten_ok()
                     .map(flatten_err),
@@ -638,7 +648,7 @@ impl Joiner {
         &self,
         left_bindings: &[Keyword],
         right_bindings: &[Keyword],
-    ) -> (Vec<usize>, Vec<usize>) {
+    ) -> Result<(Vec<usize>, Vec<usize>)> {
         let left_binding_map = left_bindings
             .iter()
             .enumerate()
@@ -652,16 +662,28 @@ impl Joiner {
         let mut ret_l = Vec::with_capacity(self.left_keys.len());
         let mut ret_r = Vec::with_capacity(self.left_keys.len());
         for (l, r) in self.left_keys.iter().zip(self.right_keys.iter()) {
-            let l_pos = left_binding_map
-                .get(l)
-                .expect("program logic error: join key is wrong");
-            let r_pos = right_binding_map
-                .get(r)
-                .expect("program logic error: join key is wrong");
+            let l_pos = match left_binding_map.get(l) {
+                None => {
+                    return Err(QueryProcError::LogicError(format!(
+                        "join key is wrong: left binding for {} not found: left {:?} vs right {:?}, {:?}",
+                        l, left_bindings, right_bindings, self
+                    )).into());
+                }
+                Some(p) => p,
+            };
+            let r_pos = match right_binding_map.get(r) {
+                None => {
+                    return Err(QueryProcError::LogicError(format!(
+                        "join key is wrong: right binding for {} not found: left {:?} vs right {:?}, {:?}",
+                        r, left_bindings, right_bindings, self
+                    )).into());
+                }
+                Some(p) => p,
+            };
             ret_l.push(*l_pos);
             ret_r.push(*r_pos)
         }
-        (ret_l, ret_r)
+        Ok((ret_l, ret_r))
     }
 }
 
@@ -752,6 +774,7 @@ impl InnerJoin {
     pub(crate) fn bindings(&self) -> Vec<Keyword> {
         let mut ret = self.left.bindings();
         ret.extend(self.right.bindings());
+        debug_assert_eq!(ret.len(), ret.iter().collect::<BTreeSet<_>>().len());
         ret
     }
     pub(crate) fn iter<'a>(
@@ -766,7 +789,8 @@ impl InnerJoin {
             Relation::Fixed(f) => {
                 let join_indices = self
                     .joiner
-                    .join_indices(&self.left.bindings(), &self.right.bindings());
+                    .join_indices(&self.left.bindings(), &self.right.bindings())
+                    .unwrap();
                 f.join(
                     self.left.iter(tx, epoch, use_delta),
                     join_indices,
@@ -776,7 +800,8 @@ impl InnerJoin {
             Relation::Triple(r) => {
                 let join_indices = self
                     .joiner
-                    .join_indices(&self.left.bindings(), &self.right.bindings());
+                    .join_indices(&self.left.bindings(), &self.right.bindings())
+                    .unwrap();
                 r.join(
                     self.left.iter(tx, epoch, use_delta),
                     join_indices,
@@ -787,7 +812,8 @@ impl InnerJoin {
             Relation::Derived(r) => {
                 let join_indices = self
                     .joiner
-                    .join_indices(&self.left.bindings(), &self.right.bindings());
+                    .join_indices(&self.left.bindings(), &self.right.bindings())
+                    .unwrap();
                 if r.join_is_prefix(&join_indices.1) {
                     r.prefix_join(
                         self.left.iter(tx, epoch, use_delta),
@@ -816,7 +842,8 @@ impl InnerJoin {
         let right_bindings = self.right.bindings();
         let (left_join_indices, right_join_indices) = self
             .joiner
-            .join_indices(&self.left.bindings(), &right_bindings);
+            .join_indices(&self.left.bindings(), &right_bindings)
+            .unwrap();
         let right_join_indices_set = BTreeSet::from_iter(right_join_indices.iter().cloned());
         let mut right_store_indices = right_join_indices;
         for i in 0..right_bindings.len() {
@@ -830,7 +857,7 @@ impl InnerJoin {
             .sorted_by_key(|(_, b)| **b)
             .map(|(a, _)| a)
             .collect_vec();
-        let mut throwaway = tx.new_throwaway();
+        let throwaway = tx.new_throwaway();
         for item in self.right.iter(tx, epoch, use_delta) {
             match item {
                 Ok(tuple) => {

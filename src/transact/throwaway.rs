@@ -9,7 +9,7 @@ use crate::data::value::DataValue;
 pub struct ThrowawayId(pub(crate) u32);
 
 #[derive(Clone)]
-pub(crate) struct ThrowawayArea {
+pub struct ThrowawayArea {
     pub(crate) db: RawRocksDb,
     pub(crate) id: ThrowawayId,
 }
@@ -46,7 +46,7 @@ impl ThrowawayArea {
         let key_encoded = tuple.encode_as_key(self.id);
         self.db.del(&key_encoded)
     }
-    pub(crate) fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
+    pub fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
         let (lower, upper) = EncodedTuple::bounds_for_prefix(self.id.0);
         let mut it = self
             .db
@@ -62,7 +62,7 @@ impl ThrowawayArea {
         prefix: &Tuple,
     ) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
         let mut upper = prefix.0.clone();
-        upper.push(DataValue::Null);
+        upper.push(DataValue::Bottom);
         let upper = Tuple(upper);
         let upper = upper.encode_as_key(self.id);
         let lower = prefix.encode_as_key(self.id);

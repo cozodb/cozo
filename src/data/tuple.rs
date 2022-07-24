@@ -85,6 +85,9 @@ impl<'a> EncodedTuple<'a> {
         }
     }
     pub(crate) fn arity(&self) -> Result<usize, TupleError> {
+        if self.0.len() == 4 {
+            return Ok(0);
+        }
         if self.0.len() < 8 {
             Err(TupleError::BadData(
                 "bad data length".to_string(),

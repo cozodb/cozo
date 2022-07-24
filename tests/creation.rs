@@ -84,6 +84,21 @@ fn creation() {
                     }
                 ]
             }},
+            {"put": {
+                "_temp_id": "david",
+                "person/first_name": "David",
+                "person/age": 7,
+                "person/last_name": "Dull",
+                "person/id": "david_dull",
+                "person/weight": 25,
+                "person/friend": {
+                    "_temp_id": "george",
+                    "person/first_name": "George",
+                    "person/age": 7,
+                    "person/last_name": "Geomancer",
+                    "person/id": "george_geomancer",
+                    "person/weight": 25,
+                    "person/friend": "george"}}},
         ]
     }))
     .unwrap();
@@ -111,61 +126,23 @@ fn creation() {
     let query = json!([
       {
         "rule": "ff",
-        "args": [
-          [
-            "?a",
-            "?b"
-          ],
-          [
-            "?a",
-            "person/friend",
-            "?b"
-          ]
-        ]
+        "args": [["?a", "?b"], ["?a", "person/friend", "?b"]]
       },
       {
         "rule": "ff",
-        "args": [
-          [
-            "?a",
-            "?b"
-          ],
-          [
-            "?a",
-            "person/friend",
-            "?c"
-          ],
-          {
-            "rule": "ff",
-            "args": [
-              "?c",
-              "?b"
-            ]
-          }
-        ]
+        "args": [["?a", "?b"], ["?a", "person/friend", "?c"], {"rule": "ff", "args": ["?c", "?b"]}]
       },
       {
         "rule": "?",
-        "args": [
-          [
-            "?a"
-          ],
-          {
-            "rule": "ff",
-            "args": [
-              "?a",
-              {
-                "person/id": "alice_amorist"
-              }
-            ]
-          }
-        ]
+        "args": [["?n"], {"rule": "ff", "args": [{"person/id": "alice_amorist"}, "?a"]}, ["?a", "person/first_name", "?n"]]
       }
     ]);
     let mut tx = db.transact().unwrap();
     let vld = Validity::current();
     let query = tx.parse_rule_sets(&query, vld).unwrap();
-    dbg!(&query);
+    let ret = tx.semi_naive_evaluate(&query).unwrap();
+    let res: Vec<_> = ret.scan_all().map_ok(|(a, b)| a).try_collect().unwrap();
+    dbg!(res);
 
     // // iteration
     // let mut it = db.total_iter();

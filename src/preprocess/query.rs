@@ -40,7 +40,6 @@ use crate::{EntityId, Validity};
 /// ]
 /// ```
 /// we also have `F.is_married(["anne", "brutus"], ["constantine", "delphi"])` for ad-hoc fact rules
-
 #[derive(Debug, thiserror::Error)]
 pub enum QueryProcError {
     #[error("error parsing query clause {0}: {1}")]
@@ -145,7 +144,7 @@ pub(crate) struct Rule {
 }
 
 impl SessionTx {
-    fn semi_naive_evaluate(&mut self, prog: &DatalogProgram) -> Result<ThrowawayArea> {
+    pub fn semi_naive_evaluate(&mut self, prog: &DatalogProgram) -> Result<ThrowawayArea> {
         let stores = prog
             .iter()
             .map(|(k, s)| (k.clone(), (self.new_throwaway(), s.arity)))
@@ -171,16 +170,20 @@ impl SessionTx {
             )
             .try_collect()?;
 
-        for epoch in 0u32.. {
+        // dbg!(&compiled);
+
+        for epoch in 1u32.. {
+            // eprintln!("epoch {}", epoch);
             let mut new_derived = false;
-            if epoch == 0 {
+            if epoch == 1 {
                 let epoch_encoded = epoch.to_be_bytes();
                 for (k, rules) in compiled.iter() {
                     let (store, _arity) = stores.get(k).unwrap();
                     let use_delta = BTreeSet::default();
-                    for (_head, relation) in rules {
+                    for (rule_n, (_head, relation)) in rules.iter().enumerate() {
                         for item_res in relation.iter(self, epoch, &use_delta) {
                             let item = item_res?;
+                            // eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
                             store.put(&item, &epoch_encoded)?;
                             new_derived = true;
                         }
@@ -190,13 +193,15 @@ impl SessionTx {
                 let epoch_encoded = epoch.to_be_bytes();
                 for (k, rules) in compiled.iter() {
                     let (store, _arity) = stores.get(k).unwrap();
-                    for (_head, relation) in rules {
+                    for (rule_n, (_head, relation)) in rules.iter().enumerate() {
                         for (delta_store, _) in stores.values() {
                             let use_delta = BTreeSet::from([delta_store.id]);
                             for item_res in relation.iter(self, epoch, &use_delta) {
+                                // todo: if the relation does not depend on the delta, skip
                                 let item = item_res?;
                                 // improvement: the clauses can actually be evaluated in parallel
                                 if store.put_if_absent(&item, &epoch_encoded)? {
+                                    // eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
                                     new_derived = true;
                                 }
                             }
@@ -432,6 +437,7 @@ impl SessionTx {
                             vld,
                             bindings: [temp_join_key_right, v_kw],
                         });
+                        debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
                         ret = Relation::Join(Box::new(InnerJoin {
                             left: ret,
                             right,
@@ -483,6 +489,7 @@ impl SessionTx {
                             vld,
                             bindings: [e_kw, temp_join_key_right],
                         });
+                        debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
                         ret = Relation::Join(Box::new(InnerJoin {
                             left: ret,
                             right,
@@ -529,6 +536,7 @@ impl SessionTx {
                         if ret.is_unit() {
                             ret = right;
                         } else {
+                            debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
                             ret = Relation::Join(Box::new(InnerJoin {
                                 left: ret,
                                 right,
@@ -587,29 +595,41 @@ impl SessionTx {
                         return Err(QueryProcError::ArityMismatch(rule_app.name.clone()).into());
                     }
 
-                    let mut left_joiner_vals = vec![];
-                    let mut left_joiner_vars = vec![];
+                    let mut prev_joiner_vars = vec![];
+                    let mut temp_left_bindings = vec![];
+                    let mut temp_left_joiner_vals = vec![];
                     let mut right_joiner_vars = vec![];
                     let mut right_vars = vec![];
 
                     for term in &rule_app.args {
                         match term {
                             Term::Var(var) => {
-                                right_vars.push(var.clone());
+                                if seen_variables.contains(var) {
+                                    prev_joiner_vars.push(var.clone());
+                                    let rk = next_ignored_kw();
+                                    right_vars.push(rk.clone());
+                                    right_joiner_vars.push(rk);
+                                } else {
+                                    seen_variables.insert(var.clone());
+                                    right_vars.push(var.clone());
+                                }
                             }
                             Term::Const(constant) => {
-                                left_joiner_vals.push(constant.clone());
-                                left_joiner_vars.push(next_ignored_kw());
-                                right_joiner_vars.push(next_ignored_kw());
-                                right_vars.push(next_ignored_kw());
+                                temp_left_joiner_vals.push(constant.clone());
+                                let left_kw = next_ignored_kw();
+                                prev_joiner_vars.push(left_kw.clone());
+                                temp_left_bindings.push(left_kw);
+                                let right_kw = next_ignored_kw();
+                                right_joiner_vars.push(right_kw.clone());
+                                right_vars.push(right_kw);
                             }
                         }
                     }
 
-                    if !left_joiner_vars.is_empty() {
+                    if !temp_left_joiner_vals.is_empty() {
                         let const_joiner = Relation::Fixed(InlineFixedRelation {
-                            bindings: left_joiner_vars.clone(),
-                            data: vec![left_joiner_vals],
+                            bindings: temp_left_bindings,
+                            data: vec![temp_left_joiner_vals],
                             to_eliminate: Default::default(),
                         });
                         ret = Relation::Join(Box::new(InnerJoin {
@@ -627,11 +647,12 @@ impl SessionTx {
                         bindings: right_vars,
                         storage: store,
                     });
+                    debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = Relation::Join(Box::new(InnerJoin {
                         left: ret,
                         right,
                         joiner: Joiner {
-                            left_keys: left_joiner_vars,
+                            left_keys: prev_joiner_vars,
                             right_keys: right_joiner_vars,
                         },
                         to_eliminate: Default::default(),
