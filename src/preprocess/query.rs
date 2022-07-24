@@ -9,10 +9,14 @@ use serde_json::Map;
 use crate::data::attr::Attribute;
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
+use crate::data::tuple::TupleIter;
 use crate::data::value::DataValue;
 use crate::preprocess::triple::TxError;
 use crate::runtime::transact::SessionTx;
-use crate::transact::query::{InlineFixedRelation, InnerJoin, Joiner, Relation, ReorderRelation, StoredDerivedRelation, TripleRelation};
+use crate::transact::query::{
+    InlineFixedRelation, InnerJoin, Joiner, Relation, ReorderRelation, StoredDerivedRelation,
+    TripleRelation,
+};
 use crate::transact::throwaway::ThrowawayArea;
 use crate::{EntityId, Validity};
 
@@ -49,6 +53,8 @@ pub enum QueryProcError {
     UnsafeUnboundVars(BTreeSet<Keyword>),
     #[error("program logic error: {0}")]
     LogicError(String),
+    #[error("entry not found: expect a rule named '?'")]
+    EntryNotFound,
 }
 
 #[derive(Clone, Debug)]
@@ -139,11 +145,16 @@ pub(crate) struct Rule {
 }
 
 impl SessionTx {
-    fn semi_naive_evaluate(&mut self, prog: &DatalogProgram) -> Result<()> {
+    fn semi_naive_evaluate(&mut self, prog: &DatalogProgram) -> Result<ThrowawayArea> {
         let stores = prog
             .iter()
             .map(|(k, s)| (k.clone(), (self.new_throwaway(), s.arity)))
             .collect::<BTreeMap<_, _>>();
+        let ret_area = stores
+            .get(&Keyword::from("?"))
+            .ok_or(QueryProcError::EntryNotFound)?
+            .0
+            .clone();
         let compiled: BTreeMap<_, _> = prog
             .iter()
             .map(
@@ -162,16 +173,17 @@ impl SessionTx {
 
         for epoch in 0u32.. {
             let mut changed = false;
+            let epoch_encoded = epoch.to_be_bytes();
             for (k, rules) in compiled.iter() {
-                let store = stores.get(k).unwrap();
-                let use_delta = BTreeSet::from([stores.get(k).unwrap().0.get_id()]);
-                for (head, relation) in rules {
+                let (store, _arity) = stores.get(k).unwrap();
+                let use_delta = BTreeSet::from([stores.get(k).unwrap().0.id]);
+                for (_head, relation) in rules {
                     for item_res in relation.iter(self, epoch, &use_delta) {
                         let item = item_res?;
-                        // check if item exists, if no, update changed
-                        // store item
-                        // todo: reorder items at the end
                         // improvement: the clauses can actually be evaluated in parallel
+                        if store.put_if_absent(&item, &epoch_encoded)? {
+                            changed = true;
+                        }
                     }
                 }
             }
@@ -179,8 +191,7 @@ impl SessionTx {
                 break;
             }
         }
-        // todo: return the throwaway for query!
-        Ok(())
+        Ok(ret_area)
     }
     pub fn parse_rule_sets(
         &mut self,
@@ -641,7 +652,7 @@ impl SessionTx {
         if ret_vars != cur_ret_bindings {
             ret = Relation::Reorder(ReorderRelation {
                 relation: Box::new(ret),
-                new_order: ret_vars.to_vec()
+                new_order: ret_vars.to_vec(),
             })
         }
 

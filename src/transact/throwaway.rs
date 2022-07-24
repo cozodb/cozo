@@ -21,19 +21,29 @@ impl Debug for ThrowawayArea {
 }
 
 impl ThrowawayArea {
-    pub(crate) fn get_id(&self) -> ThrowawayId {
-        todo!()
-    }
-    pub(crate) fn put(&mut self, tuple: &Tuple, value: &[u8]) -> Result<(), RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key(self.id.0);
+    pub(crate) fn put(&self, tuple: &Tuple, value: &[u8]) -> Result<(), RocksDbStatus> {
+        let key_encoded = tuple.encode_as_key(self.id);
         self.db.put(&key_encoded, value)
     }
+    pub(crate) fn put_if_absent(&self, tuple: &Tuple, value: &[u8]) -> Result<bool, RocksDbStatus> {
+        let key_encoded = tuple.encode_as_key(self.id);
+        Ok(if !self.db.exists(&key_encoded)? {
+            self.db.put(&key_encoded, value)?;
+            true
+        } else {
+            false
+        })
+    }
     pub(crate) fn get(&self, tuple: &Tuple) -> Result<Option<PinSlice>, RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key(self.id.0);
+        let key_encoded = tuple.encode_as_key(self.id);
         self.db.get(&key_encoded)
     }
-    pub(crate) fn del(&mut self, tuple: &Tuple) -> Result<(), RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key(self.id.0);
+    pub(crate) fn exists(&self, tuple: &Tuple) -> Result<bool, RocksDbStatus> {
+        let key_encoded = tuple.encode_as_key(self.id);
+        self.db.exists(&key_encoded)
+    }
+    pub(crate) fn del(&self, tuple: &Tuple) -> Result<(), RocksDbStatus> {
+        let key_encoded = tuple.encode_as_key(self.id);
         self.db.del(&key_encoded)
     }
     pub(crate) fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
@@ -54,8 +64,8 @@ impl ThrowawayArea {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Null);
         let upper = Tuple(upper);
-        let upper = upper.encode_as_key(self.id.0);
-        let lower = prefix.encode_as_key(self.id.0);
+        let upper = upper.encode_as_key(self.id);
+        let lower = prefix.encode_as_key(self.id);
         let mut it = self
             .db
             .iterator()

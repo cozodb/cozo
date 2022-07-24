@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use crate::data::json::JsonValue;
 use crate::data::value::DataValue;
+use crate::transact::throwaway::ThrowawayId;
 
 pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 4;
 
@@ -39,10 +40,10 @@ impl Tuple {
     pub(crate) fn arity(&self) -> usize {
         self.0.len()
     }
-    pub(crate) fn encode_as_key(&self, prefix: u32) -> Vec<u8> {
+    pub(crate) fn encode_as_key(&self, prefix: ThrowawayId) -> Vec<u8> {
         let len = self.arity();
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
-        ret.extend(prefix.to_be_bytes());
+        ret.extend(prefix.0.to_be_bytes());
         ret.extend((len as u32).to_be_bytes());
         ret.resize(4 * (len + 1), 0);
         for (idx, val) in self.0.iter().enumerate() {
@@ -203,6 +204,7 @@ mod tests {
 
     use crate::data::tuple::{EncodedTuple, Tuple};
     use crate::data::value::DataValue;
+    use crate::transact::throwaway::ThrowawayId;
 
     #[test]
     fn test_serde() {
@@ -212,7 +214,7 @@ mod tests {
             json!("my_name_is").into(),
         ];
         let val = Tuple(val);
-        let encoded = val.encode_as_key(123);
+        let encoded = val.encode_as_key(ThrowawayId(123));
         println!("{:x?}", encoded);
         let encoded_tuple: EncodedTuple = (&encoded as &[u8]).into();
         println!("{:?}", encoded_tuple.prefix());

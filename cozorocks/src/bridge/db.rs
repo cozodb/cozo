@@ -180,7 +180,7 @@ impl RawRocksDb {
         .auto_prefix_mode(true)
     }
     #[inline]
-    pub fn put(&mut self, key: &[u8], val: &[u8]) -> Result<(), RocksDbStatus> {
+    pub fn put(&self, key: &[u8], val: &[u8]) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
         self.inner.put(key, val, &mut status);
         if status.is_ok() {
@@ -190,7 +190,7 @@ impl RawRocksDb {
         }
     }
     #[inline]
-    pub fn del(&mut self, key: &[u8]) -> Result<(), RocksDbStatus> {
+    pub fn del(&self, key: &[u8]) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
         self.inner.del(key, &mut status);
         if status.is_ok() {

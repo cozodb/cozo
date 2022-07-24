@@ -510,7 +510,7 @@ pub struct StoredDerivedRelation {
 
 impl StoredDerivedRelation {
     fn iter(&self, epoch: u32, use_delta: &BTreeSet<ThrowawayId>) -> TupleIter {
-        if use_delta.contains(&self.storage.get_id()) {
+        if use_delta.contains(&self.storage.id) {
             Box::new(
                 self.storage
                     .scan_all()
@@ -547,7 +547,7 @@ impl StoredDerivedRelation {
             .into_iter()
             .map(|(a, _)| left_join_indices[a])
             .collect_vec();
-        if use_delta.contains(&self.storage.get_id()) {
+        if use_delta.contains(&self.storage.id) {
             Box::new(
                 left_iter
                     .map_ok(move |tuple| {
