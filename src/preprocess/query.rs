@@ -172,22 +172,39 @@ impl SessionTx {
             .try_collect()?;
 
         for epoch in 0u32.. {
-            let mut changed = false;
-            let epoch_encoded = epoch.to_be_bytes();
-            for (k, rules) in compiled.iter() {
-                let (store, _arity) = stores.get(k).unwrap();
-                let use_delta = BTreeSet::from([stores.get(k).unwrap().0.id]);
-                for (_head, relation) in rules {
-                    for item_res in relation.iter(self, epoch, &use_delta) {
-                        let item = item_res?;
-                        // improvement: the clauses can actually be evaluated in parallel
-                        if store.put_if_absent(&item, &epoch_encoded)? {
-                            changed = true;
+            let mut new_derived = false;
+            if epoch == 0 {
+                let epoch_encoded = epoch.to_be_bytes();
+                for (k, rules) in compiled.iter() {
+                    let (store, _arity) = stores.get(k).unwrap();
+                    let use_delta = BTreeSet::default();
+                    for (_head, relation) in rules {
+                        for item_res in relation.iter(self, epoch, &use_delta) {
+                            let item = item_res?;
+                            store.put(&item, &epoch_encoded)?;
+                            new_derived = true;
+                        }
+                    }
+                }
+            } else {
+                let epoch_encoded = epoch.to_be_bytes();
+                for (k, rules) in compiled.iter() {
+                    let (store, _arity) = stores.get(k).unwrap();
+                    for (_head, relation) in rules {
+                        for (delta_store, _) in stores.values() {
+                            let use_delta = BTreeSet::from([delta_store.id]);
+                            for item_res in relation.iter(self, epoch, &use_delta) {
+                                let item = item_res?;
+                                // improvement: the clauses can actually be evaluated in parallel
+                                if store.put_if_absent(&item, &epoch_encoded)? {
+                                    new_derived = true;
+                                }
+                            }
                         }
                     }
                 }
             }
-            if !changed {
+            if !new_derived {
                 break;
             }
         }
