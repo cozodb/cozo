@@ -2,9 +2,9 @@ use std::borrow::Cow;
 
 use cxx::*;
 
+use crate::{IterBuilder, PinSlice};
 use crate::bridge::ffi::*;
 use crate::bridge::tx::TxBuilder;
-use crate::{IterBuilder, PinSlice};
 
 #[derive(Default)]
 pub struct DbBuilder<'a> {
@@ -173,11 +173,22 @@ impl RawRocksDb {
         self
     }
     #[inline]
+    pub fn make_snapshot(&self) -> SharedPtr<SnapshotBridge> {
+        self.inner.make_snapshot()
+    }
+    #[inline]
     pub fn iterator(&self) -> IterBuilder {
         IterBuilder {
             inner: self.inner.iterator(),
         }
         .auto_prefix_mode(true)
+    }
+    #[inline]
+    pub fn iterator_with_snapshot(&self, snapshot: &SnapshotBridge) -> IterBuilder {
+        IterBuilder {
+            inner: self.inner.iterator_with_snapshot(snapshot),
+        }
+            .auto_prefix_mode(true)
     }
     #[inline]
     pub fn put(&self, key: &[u8], val: &[u8]) -> Result<(), RocksDbStatus> {

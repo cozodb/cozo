@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use cozorocks::{DbIter, PinSlice, RawRocksDb, RocksDbStatus};
+use cozorocks::{DbIter, PinSlice, RawRocksDb, RocksDbStatus, SnapshotBridge};
 
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
@@ -57,6 +57,17 @@ impl ThrowawayArea {
         it.seek(&lower);
         ThrowawayIter { it, started: false }
     }
+    pub fn scan_all_with_snapshot(&self, snapshot: &SnapshotBridge) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
+        let (lower, upper) = EncodedTuple::bounds_for_prefix(self.id.0);
+        let mut it = self
+            .db
+            .iterator_with_snapshot(snapshot)
+            .upper_bound(&upper)
+            .prefix_same_as_start(true)
+            .start();
+        it.seek(&lower);
+        ThrowawayIter { it, started: false }
+    }
     pub(crate) fn scan_prefix(
         &self,
         prefix: &Tuple,
@@ -69,6 +80,25 @@ impl ThrowawayArea {
         let mut it = self
             .db
             .iterator()
+            .upper_bound(&upper)
+            .prefix_same_as_start(true)
+            .start();
+        it.seek(&lower);
+        ThrowawayIter { it, started: false }
+    }
+    pub(crate) fn scan_prefix_with_snapshot(
+        &self,
+        prefix: &Tuple,
+        snapshot: &SnapshotBridge
+    ) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
+        let mut upper = prefix.0.clone();
+        upper.push(DataValue::Bottom);
+        let upper = Tuple(upper);
+        let upper = upper.encode_as_key(self.id);
+        let lower = prefix.encode_as_key(self.id);
+        let mut it = self
+            .db
+            .iterator_with_snapshot(snapshot)
             .upper_bound(&upper)
             .prefix_same_as_start(true)
             .start();

@@ -173,17 +173,18 @@ impl SessionTx {
         // dbg!(&compiled);
 
         for epoch in 1u32.. {
-            // eprintln!("epoch {}", epoch);
+            eprintln!("epoch {}", epoch);
             let mut new_derived = false;
+            let snapshot = self.throwaway.make_snapshot();
             if epoch == 1 {
                 let epoch_encoded = epoch.to_be_bytes();
                 for (k, rules) in compiled.iter() {
                     let (store, _arity) = stores.get(k).unwrap();
                     let use_delta = BTreeSet::default();
                     for (rule_n, (_head, relation)) in rules.iter().enumerate() {
-                        for item_res in relation.iter(self, epoch, &use_delta) {
+                        for item_res in relation.iter(self, epoch, &use_delta, &snapshot) {
                             let item = item_res?;
-                            // eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
+                            eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
                             store.put(&item, &epoch_encoded)?;
                             new_derived = true;
                         }
@@ -196,13 +197,15 @@ impl SessionTx {
                     for (rule_n, (_head, relation)) in rules.iter().enumerate() {
                         for (delta_store, _) in stores.values() {
                             let use_delta = BTreeSet::from([delta_store.id]);
-                            for item_res in relation.iter(self, epoch, &use_delta) {
+                            for item_res in relation.iter(self, epoch, &use_delta, &snapshot) {
                                 // todo: if the relation does not depend on the delta, skip
                                 let item = item_res?;
                                 // improvement: the clauses can actually be evaluated in parallel
                                 if store.put_if_absent(&item, &epoch_encoded)? {
-                                    // eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
+                                    eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
                                     new_derived = true;
+                                } else {
+                                    eprintln!("item for {}.{}: {:?} at {}, rederived", k, rule_n, item, epoch);
                                 }
                             }
                         }

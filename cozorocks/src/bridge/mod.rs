@@ -108,6 +108,7 @@ pub(crate) mod ffi {
         // type ReadOptions;
 
         type RawRocksDbBridge;
+        pub type SnapshotBridge;
         fn get_db_path(self: &RawRocksDbBridge) -> &CxxString;
         fn open_raw_db(
             builder: &DbOpts,
@@ -117,7 +118,9 @@ pub(crate) mod ffi {
             no_wal: bool,
         ) -> SharedPtr<RawRocksDbBridge>;
         fn set_ignore_range_deletions(self: &RawRocksDbBridge, val: bool);
+        fn make_snapshot(self: &RawRocksDbBridge) -> SharedPtr<SnapshotBridge>;
         fn iterator(self: &RawRocksDbBridge) -> UniquePtr<IterBridge>;
+        fn iterator_with_snapshot(self: &RawRocksDbBridge, snapshot: &SnapshotBridge) -> UniquePtr<IterBridge>;
         fn get(
             self: &RawRocksDbBridge,
             key: &[u8],

@@ -2,6 +2,7 @@ pub use bridge::db::DbBuilder;
 pub use bridge::db::RawRocksDb;
 pub use bridge::db::RocksDb;
 pub use bridge::ffi::RocksDbStatus;
+pub use bridge::ffi::SnapshotBridge;
 pub use bridge::ffi::StatusCode;
 pub use bridge::ffi::StatusSeverity;
 pub use bridge::ffi::StatusSubCode;

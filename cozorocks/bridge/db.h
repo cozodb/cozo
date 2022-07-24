@@ -12,6 +12,17 @@
 #include "tx.h"
 #include "slice.h"
 
+struct SnapshotBridge {
+    const Snapshot *snapshot;
+    DB *db;
+
+    explicit SnapshotBridge(const Snapshot *snapshot_, DB *db_) : snapshot(snapshot_), db(db_) {}
+
+    ~SnapshotBridge() {
+        db->ReleaseSnapshot(snapshot);
+    }
+};
+
 struct RawRocksDbBridge {
     unique_ptr<DB> db;
     unique_ptr<Comparator> comparator;
@@ -35,6 +46,11 @@ struct RawRocksDbBridge {
         }
     }
 
+    shared_ptr<SnapshotBridge> make_snapshot() const {
+        const Snapshot *snapshot = db->GetSnapshot();
+        return make_shared<SnapshotBridge>(snapshot, &*db);
+    }
+
     inline void set_ignore_range_deletions(bool v) const {
         r_opts->ignore_range_deletions = v;
     }
@@ -45,6 +61,12 @@ struct RawRocksDbBridge {
 
     inline unique_ptr<IterBridge> iterator() const {
         return make_unique<IterBridge>(&*db);
+    };
+
+    inline unique_ptr<IterBridge> iterator_with_snapshot(const SnapshotBridge &sb) const {
+        auto ret = make_unique<IterBridge>(&*db);
+        ret->set_snapshot(sb.snapshot);
+        return ret;
     };
 
     inline unique_ptr<PinnableSlice> get(RustBytes key, RocksDbStatus &status) const {

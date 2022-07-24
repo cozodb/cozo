@@ -31,6 +31,10 @@ struct IterBridge {
         r_opts->auto_prefix_mode = true;
     }
 
+    inline void set_snapshot(const Snapshot *snapshot) {
+        r_opts->snapshot = snapshot;
+    }
+
 //    inline ReadOptions &get_r_opts() {
 //        return *r_opts;
 //    }
