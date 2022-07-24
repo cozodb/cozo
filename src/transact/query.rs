@@ -7,6 +7,7 @@ use crate::data::attr::Attribute;
 use crate::data::keyword::Keyword;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
+use crate::preprocess::query::QueryProcError;
 use crate::runtime::transact::SessionTx;
 use crate::transact::throwaway::{ThrowawayArea, ThrowawayId};
 use crate::Validity;
@@ -17,6 +18,7 @@ pub enum Relation {
     Triple(TripleRelation),
     Derived(StoredDerivedRelation),
     Join(Box<InnerJoin>),
+    Reorder(ReorderRelation),
 }
 
 impl Relation {
@@ -29,6 +31,52 @@ impl Relation {
         } else {
             false
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct ReorderRelation {
+    pub(crate) relation: Box<Relation>,
+    pub(crate) new_order: Vec<Keyword>,
+}
+
+impl ReorderRelation {
+    fn bindings(&self) -> Vec<Keyword> {
+        self.new_order.clone()
+    }
+    fn iter<'a>(
+        &'a self,
+        tx: &'a SessionTx,
+        epoch: u32,
+        use_delta: &BTreeSet<ThrowawayId>,
+    ) -> TupleIter<'a> {
+        let old_order = self.relation.bindings();
+        let old_order_indices: BTreeMap<_, _> = old_order
+            .into_iter()
+            .enumerate()
+            .map(|(k, v)| (v, k))
+            .collect();
+        let reorder_indices = self
+            .new_order
+            .iter()
+            .map(|k| {
+                *old_order_indices
+                    .get(k)
+                    .expect("program logic error: reorder indices mismatch")
+            })
+            .collect_vec();
+        Box::new(
+            self.relation
+                .iter(tx, epoch, use_delta)
+                .map_ok(move |tuple| {
+                    let old = tuple.0;
+                    let new = reorder_indices
+                        .iter()
+                        .map(|i| old[*i].clone())
+                        .collect_vec();
+                    Tuple(new)
+                }),
+        )
     }
 }
 
@@ -47,9 +95,9 @@ impl InlineFixedRelation {
             to_eliminate: Default::default(),
         }
     }
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: BTreeSet<Keyword>) -> Result<()> {
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
         for binding in &self.bindings {
-            if binding.is_ignored_binding() && !used.contains(binding) {
+            if !used.contains(binding) {
                 self.to_eliminate.insert(binding.clone());
             }
         }
@@ -626,25 +674,23 @@ pub struct InnerJoin {
 }
 
 impl Relation {
-    pub(crate) fn eliminate_temp_vars(&mut self) -> Result<()> {
-        self.do_eliminate_temp_vars(Default::default())
-    }
-
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: BTreeSet<Keyword>) -> Result<()> {
+    pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
         match self {
             Relation::Fixed(r) => r.do_eliminate_temp_vars(used),
             Relation::Triple(r) => Ok(()),
             Relation::Derived(r) => Ok(()),
             Relation::Join(r) => r.do_eliminate_temp_vars(used),
+            Relation::Reorder(r) => r.relation.eliminate_temp_vars(used),
         }
     }
 
     fn eliminate_set(&self) -> Option<&BTreeSet<Keyword>> {
         match self {
             Relation::Fixed(r) => Some(&r.to_eliminate),
-            Relation::Triple(r) => None,
-            Relation::Derived(r) => None,
+            Relation::Triple(_) => None,
+            Relation::Derived(_) => None,
             Relation::Join(r) => Some(&r.to_eliminate),
+            Relation::Reorder(_) => None,
         }
     }
 
@@ -665,6 +711,7 @@ impl Relation {
             Relation::Triple(t) => t.bindings.to_vec(),
             Relation::Derived(d) => d.bindings.clone(),
             Relation::Join(j) => j.bindings(),
+            Relation::Reorder(r) => r.bindings(),
         }
     }
     pub fn iter<'a>(
@@ -681,23 +728,24 @@ impl Relation {
             ),
             Relation::Derived(r) => r.iter(epoch, use_delta),
             Relation::Join(j) => j.iter(tx, epoch, use_delta),
+            Relation::Reorder(r) => r.iter(tx, epoch, use_delta),
         }
     }
 }
 
 impl InnerJoin {
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: BTreeSet<Keyword>) -> Result<()> {
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
         for binding in self.bindings() {
-            if binding.is_ignored_binding() && !used.contains(&binding) {
+            if !used.contains(&binding) {
                 self.to_eliminate.insert(binding.clone());
             }
         }
         let mut left = used.clone();
         left.extend(self.joiner.left_keys.clone());
-        self.left.do_eliminate_temp_vars(left)?;
-        let mut right = used;
+        self.left.eliminate_temp_vars(&left)?;
+        let mut right = used.clone();
         right.extend(self.joiner.right_keys.clone());
-        self.right.do_eliminate_temp_vars(right)?;
+        self.right.eliminate_temp_vars(&right)?;
         Ok(())
     }
 
@@ -753,6 +801,9 @@ impl InnerJoin {
                 }
             }
             Relation::Join(_) => self.materialized_join(tx, eliminate_indices, epoch, use_delta),
+            Relation::Reorder(_) => {
+                panic!("joining on reordered")
+            }
         }
     }
     fn materialized_join<'a>(

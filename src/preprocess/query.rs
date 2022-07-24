@@ -1,5 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Sub;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -11,9 +12,7 @@ use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
 use crate::preprocess::triple::TxError;
 use crate::runtime::transact::SessionTx;
-use crate::transact::query::{
-    InlineFixedRelation, InnerJoin, Joiner, Relation, StoredDerivedRelation, TripleRelation,
-};
+use crate::transact::query::{InlineFixedRelation, InnerJoin, Joiner, Relation, ReorderRelation, StoredDerivedRelation, TripleRelation};
 use crate::transact::throwaway::ThrowawayArea;
 use crate::{EntityId, Validity};
 
@@ -46,6 +45,10 @@ pub enum QueryProcError {
     ArityMismatch(Keyword),
     #[error("encountered undefined rule {0}")]
     UndefinedRule(Keyword),
+    #[error("safety: unbound variables {0:?}")]
+    UnsafeUnboundVars(BTreeSet<Keyword>),
+    #[error("program logic error: {0}")]
+    LogicError(String),
 }
 
 #[derive(Clone, Debug)]
@@ -147,7 +150,9 @@ impl SessionTx {
                 |(k, body)| -> Result<(Keyword, Vec<(Vec<(Keyword, Aggregation)>, Relation)>)> {
                     let mut collected = Vec::with_capacity(body.sets.len());
                     for rule in &body.sets {
-                        let relation = self.compile_rule_body(&rule.body, rule.vld, &stores)?;
+                        let header = rule.head.iter().map(|(k, v)| k).cloned().collect_vec();
+                        let relation =
+                            self.compile_rule_body(&rule.body, rule.vld, &stores, &header)?;
                         collected.push((rule.head.clone(), relation));
                     }
                     Ok((k.clone(), collected))
@@ -165,7 +170,6 @@ impl SessionTx {
                         let item = item_res?;
                         // check if item exists, if no, update changed
                         // store item
-                        // todo: variables elimination should be more aggressive
                         // todo: reorder items at the end
                         // improvement: the clauses can actually be evaluated in parallel
                     }
@@ -344,6 +348,7 @@ impl SessionTx {
         clauses: &[Atom],
         vld: Validity,
         stores: &BTreeMap<Keyword, (ThrowawayArea, usize)>,
+        ret_vars: &[Keyword],
     ) -> Result<Relation> {
         let mut ret = Relation::unit();
         let mut seen_variables = BTreeSet::new();
@@ -610,8 +615,11 @@ impl SessionTx {
             }
         }
 
-        ret.eliminate_temp_vars()?;
-        if ret.bindings().iter().any(|b| b.is_ignored_binding()) {
+        let ret_vars_set = ret_vars.iter().cloned().collect();
+
+        ret.eliminate_temp_vars(&ret_vars_set)?;
+        let cur_ret_set: BTreeSet<_> = ret.bindings().into_iter().collect();
+        if cur_ret_set != ret_vars_set {
             ret = Relation::Join(Box::new(InnerJoin {
                 left: ret,
                 right: Relation::unit(),
@@ -621,7 +629,20 @@ impl SessionTx {
                 },
                 to_eliminate: Default::default(),
             }));
-            ret.eliminate_temp_vars()?;
+            ret.eliminate_temp_vars(&ret_vars_set)?;
+        }
+
+        let cur_ret_set: BTreeSet<_> = ret.bindings().into_iter().collect();
+        if cur_ret_set != ret_vars_set {
+            let diff = cur_ret_set.sub(&cur_ret_set);
+            return Err(QueryProcError::UnsafeUnboundVars(diff).into());
+        }
+        let cur_ret_bindings = ret.bindings();
+        if ret_vars != cur_ret_bindings {
+            ret = Relation::Reorder(ReorderRelation {
+                relation: Box::new(ret),
+                new_order: ret_vars.to_vec()
+            })
         }
 
         Ok(ret)
