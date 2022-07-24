@@ -20,6 +20,7 @@ struct SnapshotBridge {
 
     ~SnapshotBridge() {
         db->ReleaseSnapshot(snapshot);
+//        printf("released snapshot\n");
     }
 };
 

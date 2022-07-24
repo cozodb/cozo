@@ -114,15 +114,14 @@ pub struct RuleSet {
     pub(crate) arity: usize,
 }
 
-impl RuleSet {
+impl Rule {
     fn contained_rules(&self) -> BTreeSet<Keyword> {
         let mut collected = BTreeSet::new();
-        for rule in &self.sets {
-            for clause in &rule.body {
-                if let Atom::Rule(rule) = clause {
-                    collected.insert(rule.name.clone());
-                }
+        for clause in &self.body {
+            if let Atom::Rule(rule) = clause {
+                collected.insert(rule.name.clone());
             }
+            // todo: negation, etc
         }
         collected
     }
@@ -157,13 +156,16 @@ impl SessionTx {
         let compiled: BTreeMap<_, _> = prog
             .iter()
             .map(
-                |(k, body)| -> Result<(Keyword, Vec<(Vec<(Keyword, Aggregation)>, Relation)>)> {
+                |(k, body)| -> Result<(
+                    Keyword,
+                    Vec<(Vec<(Keyword, Aggregation)>, BTreeSet<Keyword>, Relation)>,
+                )> {
                     let mut collected = Vec::with_capacity(body.sets.len());
                     for rule in &body.sets {
                         let header = rule.head.iter().map(|(k, v)| k).cloned().collect_vec();
                         let relation =
                             self.compile_rule_body(&rule.body, rule.vld, &stores, &header)?;
-                        collected.push((rule.head.clone(), relation));
+                        collected.push((rule.head.clone(), rule.contained_rules(), relation));
                     }
                     Ok((k.clone(), collected))
                 },
@@ -181,7 +183,8 @@ impl SessionTx {
                 for (k, rules) in compiled.iter() {
                     let (store, _arity) = stores.get(k).unwrap();
                     let use_delta = BTreeSet::default();
-                    for (rule_n, (_head, relation)) in rules.iter().enumerate() {
+                    for (rule_n, (_head, _deriving_rules, relation)) in rules.iter().enumerate() {
+                        eprintln!("initial calculation for rule {}.{}", k, rule_n);
                         for item_res in relation.iter(self, epoch, &use_delta, &snapshot) {
                             let item = item_res?;
                             eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
@@ -194,8 +197,12 @@ impl SessionTx {
                 let epoch_encoded = epoch.to_be_bytes();
                 for (k, rules) in compiled.iter() {
                     let (store, _arity) = stores.get(k).unwrap();
-                    for (rule_n, (_head, relation)) in rules.iter().enumerate() {
-                        for (delta_store, _) in stores.values() {
+                    for (rule_n, (_head, deriving_rules, relation)) in rules.iter().enumerate() {
+                        for (delta_key, (delta_store, _)) in stores.iter() {
+                            if !deriving_rules.contains(delta_key) {
+                                continue;
+                            }
+                            eprintln!("with delta {} for rule {}.{}", delta_key, k, rule_n);
                             let use_delta = BTreeSet::from([delta_store.id]);
                             for item_res in relation.iter(self, epoch, &use_delta, &snapshot) {
                                 // todo: if the relation does not depend on the delta, skip
@@ -205,7 +212,10 @@ impl SessionTx {
                                     eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
                                     new_derived = true;
                                 } else {
-                                    eprintln!("item for {}.{}: {:?} at {}, rederived", k, rule_n, item, epoch);
+                                    eprintln!(
+                                        "item for {}.{}: {:?} at {}, rederived",
+                                        k, rule_n, item, epoch
+                                    );
                                 }
                             }
                         }
