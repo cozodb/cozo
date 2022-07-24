@@ -11,7 +11,9 @@ use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
 use crate::preprocess::triple::TxError;
 use crate::runtime::transact::SessionTx;
-use crate::transact::query::{InlineFixedRelation, InnerJoin, Joiner, Relation, TripleRelation};
+use crate::transact::query::{
+    InlineFixedRelation, InnerJoin, Joiner, Relation, StoredDerivedRelation, TripleRelation,
+};
 use crate::transact::throwaway::ThrowawayArea;
 use crate::{EntityId, Validity};
 
@@ -42,6 +44,8 @@ pub enum QueryProcError {
     UnexpectedForm(JsonValue, String),
     #[error("arity mismatch for rule {0}: all definitions must have the same arity")]
     ArityMismatch(Keyword),
+    #[error("encountered undefined rule {0}")]
+    UndefinedRule(Keyword),
 }
 
 #[derive(Clone, Debug)]
@@ -98,7 +102,6 @@ pub enum Atom {
 
 #[derive(Clone, Debug)]
 pub struct RuleSet {
-    pub(crate) storage: Option<ThrowawayArea>,
     pub(crate) sets: Vec<Rule>,
     pub(crate) arity: usize,
 }
@@ -117,6 +120,8 @@ impl RuleSet {
     }
 }
 
+pub(crate) type DatalogProgram = BTreeMap<Keyword, RuleSet>;
+
 #[derive(Clone, Debug, Default)]
 pub enum Aggregation {
     #[default]
@@ -131,11 +136,53 @@ pub(crate) struct Rule {
 }
 
 impl SessionTx {
+    fn semi_naive_evaluate(&mut self, prog: &DatalogProgram) -> Result<()> {
+        let stores = prog
+            .iter()
+            .map(|(k, s)| (k.clone(), (self.new_throwaway(), s.arity)))
+            .collect::<BTreeMap<_, _>>();
+        let compiled: BTreeMap<_, _> = prog
+            .iter()
+            .map(
+                |(k, body)| -> Result<(Keyword, Vec<(Vec<(Keyword, Aggregation)>, Relation)>)> {
+                    let mut collected = Vec::with_capacity(body.sets.len());
+                    for rule in &body.sets {
+                        let relation = self.compile_rule_body(&rule.body, rule.vld, &stores)?;
+                        collected.push((rule.head.clone(), relation));
+                    }
+                    Ok((k.clone(), collected))
+                },
+            )
+            .try_collect()?;
+
+        for epoch in 0u32.. {
+            let mut changed = false;
+            for (k, rules) in compiled.iter() {
+                let store = stores.get(k).unwrap();
+                let use_delta = BTreeSet::from([stores.get(k).unwrap().0.get_id()]);
+                for (head, relation) in rules {
+                    for item_res in relation.iter(self, epoch, &use_delta) {
+                        let item = item_res?;
+                        // check if item exists, if no, update changed
+                        // store item
+                        // todo: variables elimination should be more aggressive
+                        // todo: reorder items at the end
+                        // improvement: the clauses can actually be evaluated in parallel
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        // todo: return the throwaway for query!
+        Ok(())
+    }
     pub fn parse_rule_sets(
         &mut self,
         payload: &JsonValue,
         default_vld: Validity,
-    ) -> Result<BTreeMap<Keyword, RuleSet>> {
+    ) -> Result<DatalogProgram> {
         let rules = payload
             .as_array()
             .ok_or_else(|| {
@@ -165,14 +212,7 @@ impl SessionTx {
                         return Err(QueryProcError::ArityMismatch(name).into());
                     }
                 }
-                Ok((
-                    name,
-                    RuleSet {
-                        storage: None,
-                        sets: rules,
-                        arity,
-                    },
-                ))
+                Ok((name, RuleSet { sets: rules, arity }))
             })
             .try_collect()
     }
@@ -299,7 +339,12 @@ impl SessionTx {
             },
         ))
     }
-    pub fn compile_rule_body(&mut self, clauses: Vec<Atom>, vld: Validity) -> Result<Relation> {
+    fn compile_rule_body(
+        &mut self,
+        clauses: &[Atom],
+        vld: Validity,
+        stores: &BTreeMap<Keyword, (ThrowawayArea, usize)>,
+    ) -> Result<Relation> {
         let mut ret = Relation::unit();
         let mut seen_variables = BTreeSet::new();
         let mut id_serial = 0;
@@ -311,13 +356,13 @@ impl SessionTx {
         };
         for clause in clauses {
             match clause {
-                Atom::AttrTriple(a_triple) => match (a_triple.entity, a_triple.value) {
+                Atom::AttrTriple(a_triple) => match (&a_triple.entity, &a_triple.value) {
                     (Term::Const(eid), Term::Var(v_kw)) => {
                         let temp_join_key_left = next_ignored_kw();
                         let temp_join_key_right = next_ignored_kw();
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![temp_join_key_left.clone()],
-                            data: vec![vec![DataValue::EnId(eid)]],
+                            data: vec![vec![DataValue::EnId(*eid)]],
                             to_eliminate: Default::default(),
                         });
                         if ret.is_unit() {
@@ -338,19 +383,19 @@ impl SessionTx {
                         let mut join_right_keys = vec![temp_join_key_right.clone()];
 
                         let v_kw = {
-                            if seen_variables.contains(&v_kw) {
+                            if seen_variables.contains(v_kw) {
                                 let ret = next_ignored_kw();
                                 // to_eliminate.insert(ret.clone());
-                                join_left_keys.push(v_kw);
+                                join_left_keys.push(v_kw.clone());
                                 join_right_keys.push(ret.clone());
                                 ret
                             } else {
                                 seen_variables.insert(v_kw.clone());
-                                v_kw
+                                v_kw.clone()
                             }
                         };
                         let right = Relation::Triple(TripleRelation {
-                            attr: a_triple.attr,
+                            attr: a_triple.attr.clone(),
                             vld,
                             bindings: [temp_join_key_right, v_kw],
                         });
@@ -369,7 +414,7 @@ impl SessionTx {
                         let temp_join_key_right = next_ignored_kw();
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![temp_join_key_left.clone()],
-                            data: vec![vec![val]],
+                            data: vec![vec![val.clone()]],
                             to_eliminate: Default::default(),
                         });
                         if ret.is_unit() {
@@ -392,16 +437,16 @@ impl SessionTx {
                         let e_kw = {
                             if seen_variables.contains(&e_kw) {
                                 let ret = next_ignored_kw();
-                                join_left_keys.push(e_kw);
+                                join_left_keys.push(e_kw.clone());
                                 join_right_keys.push(ret.clone());
                                 ret
                             } else {
                                 seen_variables.insert(e_kw.clone());
-                                e_kw
+                                e_kw.clone()
                             }
                         };
                         let right = Relation::Triple(TripleRelation {
-                            attr: a_triple.attr,
+                            attr: a_triple.attr.clone(),
                             vld,
                             bindings: [e_kw, temp_join_key_right],
                         });
@@ -424,27 +469,27 @@ impl SessionTx {
                         let e_kw = {
                             if seen_variables.contains(&e_kw) {
                                 let ret = next_ignored_kw();
-                                join_left_keys.push(e_kw);
+                                join_left_keys.push(e_kw.clone());
                                 join_right_keys.push(ret.clone());
                                 ret
                             } else {
                                 seen_variables.insert(e_kw.clone());
-                                e_kw
+                                e_kw.clone()
                             }
                         };
                         let v_kw = {
-                            if seen_variables.contains(&v_kw) {
+                            if seen_variables.contains(v_kw) {
                                 let ret = next_ignored_kw();
-                                join_left_keys.push(v_kw);
+                                join_left_keys.push(v_kw.clone());
                                 join_right_keys.push(ret.clone());
                                 ret
                             } else {
                                 seen_variables.insert(v_kw.clone());
-                                v_kw
+                                v_kw.clone()
                             }
                         };
                         let right = Relation::Triple(TripleRelation {
-                            attr: a_triple.attr,
+                            attr: a_triple.attr.clone(),
                             vld,
                             bindings: [e_kw, v_kw],
                         });
@@ -466,7 +511,7 @@ impl SessionTx {
                         let (left_var_1, left_var_2) = (next_ignored_kw(), next_ignored_kw());
                         let const_rel = Relation::Fixed(InlineFixedRelation {
                             bindings: vec![left_var_1.clone(), left_var_2.clone()],
-                            data: vec![vec![DataValue::EnId(eid), val]],
+                            data: vec![vec![DataValue::EnId(*eid), val.clone()]],
                             to_eliminate: Default::default(),
                         });
                         if ret.is_unit() {
@@ -485,7 +530,7 @@ impl SessionTx {
                         let (right_var_1, right_var_2) = (next_ignored_kw(), next_ignored_kw());
 
                         let right = Relation::Triple(TripleRelation {
-                            attr: a_triple.attr,
+                            attr: a_triple.attr.clone(),
                             vld,
                             bindings: [right_var_1.clone(), right_var_2.clone()],
                         });
@@ -501,7 +546,63 @@ impl SessionTx {
                     }
                 },
                 Atom::Rule(rule_app) => {
-                    todo!()
+                    let (store, arity) = stores
+                        .get(&rule_app.name)
+                        .ok_or_else(|| QueryProcError::UndefinedRule(rule_app.name.clone()))?
+                        .clone();
+                    if arity != rule_app.args.len() {
+                        return Err(QueryProcError::ArityMismatch(rule_app.name.clone()).into());
+                    }
+
+                    let mut left_joiner_vals = vec![];
+                    let mut left_joiner_vars = vec![];
+                    let mut right_joiner_vars = vec![];
+                    let mut right_vars = vec![];
+
+                    for term in &rule_app.args {
+                        match term {
+                            Term::Var(var) => {
+                                right_vars.push(var.clone());
+                            }
+                            Term::Const(constant) => {
+                                left_joiner_vals.push(constant.clone());
+                                left_joiner_vars.push(next_ignored_kw());
+                                right_joiner_vars.push(next_ignored_kw());
+                                right_vars.push(next_ignored_kw());
+                            }
+                        }
+                    }
+
+                    if !left_joiner_vars.is_empty() {
+                        let const_joiner = Relation::Fixed(InlineFixedRelation {
+                            bindings: left_joiner_vars.clone(),
+                            data: vec![left_joiner_vals],
+                            to_eliminate: Default::default(),
+                        });
+                        ret = Relation::Join(Box::new(InnerJoin {
+                            left: ret,
+                            right: const_joiner,
+                            joiner: Joiner {
+                                left_keys: vec![],
+                                right_keys: vec![],
+                            },
+                            to_eliminate: Default::default(),
+                        }))
+                    }
+
+                    let right = Relation::Derived(StoredDerivedRelation {
+                        bindings: right_vars,
+                        storage: store,
+                    });
+                    ret = Relation::Join(Box::new(InnerJoin {
+                        left: ret,
+                        right,
+                        joiner: Joiner {
+                            left_keys: left_joiner_vars,
+                            right_keys: right_joiner_vars,
+                        },
+                        to_eliminate: Default::default(),
+                    }))
                 }
                 Atom::Predicate(_) => {
                     todo!()

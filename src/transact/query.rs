@@ -8,7 +8,7 @@ use crate::data::keyword::Keyword;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
-use crate::transact::throwaway::ThrowawayArea;
+use crate::transact::throwaway::{ThrowawayArea, ThrowawayId};
 use crate::Validity;
 
 #[derive(Debug)]
@@ -456,13 +456,28 @@ fn get_eliminate_indices(bindings: &[Keyword], eliminate: &BTreeSet<Keyword>) ->
 
 #[derive(Debug)]
 pub struct StoredDerivedRelation {
-    bindings: Vec<Keyword>,
-    storage: ThrowawayArea,
+    pub(crate) bindings: Vec<Keyword>,
+    pub(crate) storage: ThrowawayArea,
 }
 
 impl StoredDerivedRelation {
-    fn iter(&self) -> TupleIter {
-        Box::new(self.storage.scan_all().map_ok(|(t, _)| t))
+    fn iter(&self, epoch: u32, use_delta: &BTreeSet<ThrowawayId>) -> TupleIter {
+        if use_delta.contains(&self.storage.get_id()) {
+            Box::new(
+                self.storage
+                    .scan_all()
+                    .filter_map_ok(move |(t, stored_epoch)| {
+                        if let Some(stored_epoch) = stored_epoch {
+                            if epoch > stored_epoch + 1 {
+                                return None;
+                            }
+                        }
+                        Some(t)
+                    }),
+            )
+        } else {
+            Box::new(self.storage.scan_all().map_ok(|(t, _)| t))
+        }
     }
     fn join_is_prefix(&self, right_join_indices: &[usize]) -> bool {
         let mut indices = right_join_indices.to_vec();
@@ -475,6 +490,8 @@ impl StoredDerivedRelation {
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
+        epoch: u32,
+        use_delta: &BTreeSet<ThrowawayId>,
     ) -> TupleIter<'a> {
         let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
         right_invert_indices.sort_by_key(|(_, b)| **b);
@@ -482,39 +499,82 @@ impl StoredDerivedRelation {
             .into_iter()
             .map(|(a, _)| left_join_indices[a])
             .collect_vec();
-        Box::new(
-            left_iter
-                .map_ok(move |tuple| {
-                    let eliminate_indices = eliminate_indices.clone();
-                    let prefix = Tuple(
-                        left_to_prefix_indices
-                            .iter()
-                            .map(|i| tuple.0[*i].clone())
-                            .collect_vec(),
-                    );
-                    self.storage.scan_prefix(&prefix).map_ok(move |(found, _)| {
-                        let mut ret = tuple.0.clone();
-                        ret.extend(found.0);
-
-                        if !eliminate_indices.is_empty() {
-                            ret = ret
-                                .into_iter()
-                                .enumerate()
-                                .filter_map(|(i, v)| {
-                                    if eliminate_indices.contains(&i) {
-                                        None
-                                    } else {
-                                        Some(v)
+        if use_delta.contains(&self.storage.get_id()) {
+            Box::new(
+                left_iter
+                    .map_ok(move |tuple| {
+                        let eliminate_indices = eliminate_indices.clone();
+                        let prefix = Tuple(
+                            left_to_prefix_indices
+                                .iter()
+                                .map(|i| tuple.0[*i].clone())
+                                .collect_vec(),
+                        );
+                        self.storage
+                            .scan_prefix(&prefix)
+                            .filter_map_ok(move |(found, meta)| {
+                                if let Some(stored_epoch) = meta {
+                                    if epoch > stored_epoch + 1 {
+                                        return None;
                                     }
-                                })
-                                .collect_vec();
-                        }
-                        Tuple(ret)
+                                }
+                                let mut ret = tuple.0.clone();
+                                ret.extend(found.0);
+
+                                if !eliminate_indices.is_empty() {
+                                    ret = ret
+                                        .into_iter()
+                                        .enumerate()
+                                        .filter_map(|(i, v)| {
+                                            if eliminate_indices.contains(&i) {
+                                                None
+                                            } else {
+                                                Some(v)
+                                            }
+                                        })
+                                        .collect_vec();
+                                }
+                                Some(Tuple(ret))
+                            })
                     })
-                })
-                .flatten_ok()
-                .map(flatten_err),
-        )
+                    .flatten_ok()
+                    .map(flatten_err),
+            )
+        } else {
+            Box::new(
+                left_iter
+                    .map_ok(move |tuple| {
+                        let eliminate_indices = eliminate_indices.clone();
+                        let prefix = Tuple(
+                            left_to_prefix_indices
+                                .iter()
+                                .map(|i| tuple.0[*i].clone())
+                                .collect_vec(),
+                        );
+                        self.storage.scan_prefix(&prefix).map_ok(move |(found, _)| {
+                            let mut ret = tuple.0.clone();
+                            ret.extend(found.0);
+
+                            if !eliminate_indices.is_empty() {
+                                ret = ret
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter_map(|(i, v)| {
+                                        if eliminate_indices.contains(&i) {
+                                            None
+                                        } else {
+                                            Some(v)
+                                        }
+                                    })
+                                    .collect_vec();
+                            }
+                            Tuple(ret)
+                        })
+                    })
+                    .flatten_ok()
+                    .map(flatten_err),
+            )
+        }
     }
 }
 
@@ -607,15 +667,20 @@ impl Relation {
             Relation::Join(j) => j.bindings(),
         }
     }
-    pub fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
+    pub fn iter<'a>(
+        &'a self,
+        tx: &'a SessionTx,
+        epoch: u32,
+        use_delta: &BTreeSet<ThrowawayId>,
+    ) -> TupleIter<'a> {
         match self {
             Relation::Fixed(f) => Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone())))),
             Relation::Triple(r) => Box::new(
                 tx.triple_a_before_scan(r.attr.id, r.vld)
                     .map_ok(|(_, e_id, y)| Tuple(vec![DataValue::EnId(e_id), y])),
             ),
-            Relation::Derived(r) => r.iter(),
-            Relation::Join(j) => j.iter(tx),
+            Relation::Derived(r) => r.iter(epoch, use_delta),
+            Relation::Join(j) => j.iter(tx, epoch, use_delta),
         }
     }
 }
@@ -641,7 +706,12 @@ impl InnerJoin {
         ret.extend(self.right.bindings());
         ret
     }
-    pub(crate) fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
+    pub(crate) fn iter<'a>(
+        &'a self,
+        tx: &'a SessionTx,
+        epoch: u32,
+        use_delta: &BTreeSet<ThrowawayId>,
+    ) -> TupleIter<'a> {
         let bindings = self.bindings();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         match &self.right {
@@ -649,31 +719,48 @@ impl InnerJoin {
                 let join_indices = self
                     .joiner
                     .join_indices(&self.left.bindings(), &self.right.bindings());
-                f.join(self.left.iter(tx), join_indices, eliminate_indices)
+                f.join(
+                    self.left.iter(tx, epoch, use_delta),
+                    join_indices,
+                    eliminate_indices,
+                )
             }
             Relation::Triple(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(&self.left.bindings(), &self.right.bindings());
-                r.join(self.left.iter(tx), join_indices, tx, eliminate_indices)
+                r.join(
+                    self.left.iter(tx, epoch, use_delta),
+                    join_indices,
+                    tx,
+                    eliminate_indices,
+                )
             }
             Relation::Derived(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(&self.left.bindings(), &self.right.bindings());
                 if r.join_is_prefix(&join_indices.1) {
-                    r.prefix_join(self.left.iter(tx), join_indices, eliminate_indices)
+                    r.prefix_join(
+                        self.left.iter(tx, epoch, use_delta),
+                        join_indices,
+                        eliminate_indices,
+                        epoch,
+                        use_delta,
+                    )
                 } else {
-                    self.materialized_join(tx, eliminate_indices)
+                    self.materialized_join(tx, eliminate_indices, epoch, use_delta)
                 }
             }
-            Relation::Join(_) => self.materialized_join(tx, eliminate_indices),
+            Relation::Join(_) => self.materialized_join(tx, eliminate_indices, epoch, use_delta),
         }
     }
     fn materialized_join<'a>(
         &'a self,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
+        epoch: u32,
+        use_delta: &BTreeSet<ThrowawayId>,
     ) -> TupleIter<'a> {
         let right_bindings = self.right.bindings();
         let (left_join_indices, right_join_indices) = self
@@ -693,7 +780,7 @@ impl InnerJoin {
             .map(|(a, _)| a)
             .collect_vec();
         let mut throwaway = tx.new_throwaway();
-        for item in self.right.iter(tx) {
+        for item in self.right.iter(tx, epoch, use_delta) {
             match item {
                 Ok(tuple) => {
                     let stored_tuple = Tuple(
@@ -711,7 +798,7 @@ impl InnerJoin {
         }
         Box::new(
             self.left
-                .iter(tx)
+                .iter(tx, epoch, use_delta)
                 .map_ok(move |tuple| {
                     let eliminate_indices = eliminate_indices.clone();
                     let prefix = Tuple(

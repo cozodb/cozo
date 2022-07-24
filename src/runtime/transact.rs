@@ -17,7 +17,7 @@ use crate::data::encode::{
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
-use crate::transact::throwaway::ThrowawayArea;
+use crate::transact::throwaway::{ThrowawayArea, ThrowawayId};
 
 pub struct SessionTx {
     pub(crate) tx: Tx,
@@ -70,7 +70,7 @@ impl SessionTx {
         let old_count = self.throwaway_count.fetch_add(1, Ordering::AcqRel);
         ThrowawayArea {
             db: self.throwaway.clone(),
-            prefix: old_count,
+            id: ThrowawayId(old_count),
         }
     }
 
