@@ -435,15 +435,7 @@ impl SessionTx {
                         if ret.is_unit() {
                             ret = const_rel;
                         } else {
-                            ret = Relation::Join(Box::new(InnerJoin {
-                                left: ret,
-                                right: const_rel,
-                                joiner: Joiner {
-                                    left_keys: vec![],
-                                    right_keys: vec![],
-                                },
-                                to_eliminate: Default::default(),
-                            }));
+                            ret = ret.cartesian_join(const_rel);
                         }
 
                         let mut join_left_keys = vec![temp_join_key_left];
@@ -467,15 +459,7 @@ impl SessionTx {
                             bindings: [temp_join_key_right, v_kw],
                         });
                         debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
-                        ret = Relation::Join(Box::new(InnerJoin {
-                            left: ret,
-                            right,
-                            joiner: Joiner {
-                                left_keys: join_left_keys,
-                                right_keys: join_right_keys,
-                            },
-                            to_eliminate: Default::default(),
-                        }));
+                        ret = ret.join(right, join_left_keys, join_right_keys);
                     }
                     (Term::Var(e_kw), Term::Const(val)) => {
                         let temp_join_key_left = next_ignored_kw();
@@ -488,15 +472,7 @@ impl SessionTx {
                         if ret.is_unit() {
                             ret = const_rel;
                         } else {
-                            ret = Relation::Join(Box::new(InnerJoin {
-                                left: ret,
-                                right: const_rel,
-                                joiner: Joiner {
-                                    left_keys: vec![],
-                                    right_keys: vec![],
-                                },
-                                to_eliminate: Default::default(),
-                            }));
+                            ret = ret.cartesian_join(const_rel);
                         }
 
                         let mut join_left_keys = vec![temp_join_key_left];
@@ -519,15 +495,7 @@ impl SessionTx {
                             bindings: [e_kw, temp_join_key_right],
                         });
                         debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
-                        ret = Relation::Join(Box::new(InnerJoin {
-                            left: ret,
-                            right,
-                            joiner: Joiner {
-                                left_keys: join_left_keys,
-                                right_keys: join_right_keys,
-                            },
-                            to_eliminate: Default::default(),
-                        }));
+                        ret = ret.join(right, join_left_keys, join_right_keys);
                     }
                     (Term::Var(e_kw), Term::Var(v_kw)) => {
                         let mut join_left_keys = vec![];
@@ -566,15 +534,7 @@ impl SessionTx {
                             ret = right;
                         } else {
                             debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
-                            ret = Relation::Join(Box::new(InnerJoin {
-                                left: ret,
-                                right,
-                                joiner: Joiner {
-                                    left_keys: join_left_keys,
-                                    right_keys: join_right_keys,
-                                },
-                                to_eliminate: Default::default(),
-                            }));
+                            ret = ret.join(right, join_left_keys, join_right_keys);
                         }
                     }
                     (Term::Const(eid), Term::Const(val)) => {
@@ -587,15 +547,7 @@ impl SessionTx {
                         if ret.is_unit() {
                             ret = const_rel;
                         } else {
-                            ret = Relation::Join(Box::new(InnerJoin {
-                                left: ret,
-                                right: const_rel,
-                                joiner: Joiner {
-                                    left_keys: vec![],
-                                    right_keys: vec![],
-                                },
-                                to_eliminate: Default::default(),
-                            }));
+                            ret = ret.cartesian_join(const_rel);
                         }
                         let (right_var_1, right_var_2) = (next_ignored_kw(), next_ignored_kw());
 
@@ -604,15 +556,11 @@ impl SessionTx {
                             vld,
                             bindings: [right_var_1.clone(), right_var_2.clone()],
                         });
-                        ret = Relation::Join(Box::new(InnerJoin {
-                            left: ret,
+                        ret = ret.join(
                             right,
-                            joiner: Joiner {
-                                left_keys: vec![left_var_1.clone(), left_var_2.clone()],
-                                right_keys: vec![right_var_1.clone(), right_var_2.clone()],
-                            },
-                            to_eliminate: Default::default(),
-                        }));
+                            vec![left_var_1.clone(), left_var_2.clone()],
+                            vec![right_var_1.clone(), right_var_2.clone()],
+                        );
                     }
                 },
                 Atom::Rule(rule_app) => {
@@ -661,15 +609,7 @@ impl SessionTx {
                             data: vec![temp_left_joiner_vals],
                             to_eliminate: Default::default(),
                         });
-                        ret = Relation::Join(Box::new(InnerJoin {
-                            left: ret,
-                            right: const_joiner,
-                            joiner: Joiner {
-                                left_keys: vec![],
-                                right_keys: vec![],
-                            },
-                            to_eliminate: Default::default(),
-                        }))
+                        ret = ret.cartesian_join(const_joiner);
                     }
 
                     let right = Relation::Derived(StoredDerivedRelation {
@@ -677,15 +617,7 @@ impl SessionTx {
                         storage: store,
                     });
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    ret = Relation::Join(Box::new(InnerJoin {
-                        left: ret,
-                        right,
-                        joiner: Joiner {
-                            left_keys: prev_joiner_vars,
-                            right_keys: right_joiner_vars,
-                        },
-                        to_eliminate: Default::default(),
-                    }))
+                    ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 Atom::Predicate(_) => {
                     todo!()
@@ -698,15 +630,7 @@ impl SessionTx {
         ret.eliminate_temp_vars(&ret_vars_set)?;
         let cur_ret_set: BTreeSet<_> = ret.bindings().into_iter().collect();
         if cur_ret_set != ret_vars_set {
-            ret = Relation::Join(Box::new(InnerJoin {
-                left: ret,
-                right: Relation::unit(),
-                joiner: Joiner {
-                    left_keys: vec![],
-                    right_keys: vec![],
-                },
-                to_eliminate: Default::default(),
-            }));
+            ret = ret.cartesian_join(Relation::unit());
             ret.eliminate_temp_vars(&ret_vars_set)?;
         }
 

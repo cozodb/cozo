@@ -33,6 +33,25 @@ impl Relation {
             false
         }
     }
+    pub(crate) fn cartesian_join(self, right: Relation) -> Self {
+        self.join(right, vec![], vec![])
+    }
+    pub(crate) fn join(
+        self,
+        right: Relation,
+        left_keys: Vec<Keyword>,
+        right_keys: Vec<Keyword>,
+    ) -> Self {
+        Relation::Join(Box::new(InnerJoin {
+            left: self,
+            right,
+            joiner: Joiner {
+                left_keys,
+                right_keys,
+            },
+            to_eliminate: Default::default(),
+        }))
+    }
 }
 
 #[derive(Debug)]
@@ -526,10 +545,7 @@ impl StoredDerivedRelation {
             }
         };
 
-        Box::new(
-            self.storage
-                .scan_all_for_epoch(scan_epoch),
-        )
+        Box::new(self.storage.scan_all_for_epoch(scan_epoch))
     }
     fn join_is_prefix(&self, right_join_indices: &[usize]) -> bool {
         let mut indices = right_join_indices.to_vec();
