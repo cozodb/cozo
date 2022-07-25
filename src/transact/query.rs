@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Debug, Formatter};
 use std::iter;
 
 use anyhow::Result;
@@ -13,13 +14,71 @@ use crate::runtime::transact::SessionTx;
 use crate::transact::throwaway::{ThrowawayArea, ThrowawayId};
 use crate::Validity;
 
-#[derive(Debug)]
 pub enum Relation {
     Fixed(InlineFixedRelation),
     Triple(TripleRelation),
     Derived(StoredDerivedRelation),
     Join(Box<InnerJoin>),
     Reorder(ReorderRelation),
+}
+
+struct BindingFormatter<'a>(&'a [Keyword]);
+
+impl Debug for BindingFormatter<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = self.0.iter().map(|f| f.to_string_no_prefix()).join(", ");
+        write!(f, "[{}]", s)
+    }
+}
+
+impl Debug for Relation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Relation::Fixed(r) => {
+                if r.bindings.is_empty() && r.data.len() == 1 {
+                    f.write_str("Unit")
+                } else if r.data.len() == 1 {
+                    f.debug_tuple("Singlet")
+                        .field(&BindingFormatter(&r.bindings))
+                        .field(r.data.get(0).unwrap())
+                        .finish()
+                } else {
+                    f.debug_tuple("Fixed")
+                        .field(&BindingFormatter(&r.bindings))
+                        .field(&["..."])
+                        .finish()
+                }
+            }
+            Relation::Triple(r) => f
+                .debug_tuple("Triple")
+                .field(&BindingFormatter(&r.bindings))
+                .field(&r.attr.keyword)
+                .finish(),
+            Relation::Derived(r) => f
+                .debug_tuple("Derived")
+                .field(&BindingFormatter(&r.bindings))
+                .field(&r.storage.id)
+                .finish(),
+            Relation::Join(r) => {
+                if r.left.is_unit() {
+                    r.right.fmt(f)
+                } else {
+                    f
+                        .debug_tuple("Join")
+                        .field(&BindingFormatter(&r.bindings()))
+                        .field(&r.joiner)
+                        .field(&r.left)
+                        .field(&r.right)
+                        .finish()
+                }
+            },
+            Relation::Reorder(r) => f
+                .debug_tuple("Reorder")
+                .field(&r.new_order)
+                .field(&r.relation)
+                .finish(),
+        }
+    }
 }
 
 impl Relation {
@@ -37,10 +96,7 @@ impl Relation {
         self.join(right, vec![], vec![])
     }
     pub(crate) fn derived(bindings: Vec<Keyword>, storage: ThrowawayArea) -> Self {
-        Self::Derived(StoredDerivedRelation {
-            bindings,
-            storage
-        })
+        Self::Derived(StoredDerivedRelation { bindings, storage })
     }
     pub(crate) fn triple(
         attr: Attribute,
@@ -653,11 +709,21 @@ impl StoredDerivedRelation {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct Joiner {
     // invariant: these are of the same lengths
     pub(crate) left_keys: Vec<Keyword>,
     pub(crate) right_keys: Vec<Keyword>,
+}
+
+impl Debug for Joiner {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?}<->{:?}",
+            BindingFormatter(&self.left_keys),
+            BindingFormatter(&self.right_keys)
+        )
+    }
 }
 
 impl Joiner {

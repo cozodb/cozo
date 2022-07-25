@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::fmt::Debug;
+use std::fmt::{Binary, Debug, Display, Formatter, Pointer};
 
 use anyhow::Result;
 use ordered_float::OrderedFloat;
@@ -23,7 +23,7 @@ pub enum ValueError {
     TypeMismatch(String, String),
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub enum DataValue {
     #[serde(rename = "n")]
     Null,
@@ -52,6 +52,54 @@ pub enum DataValue {
     DescVal(Reverse<Box<DataValue>>),
     #[serde(rename = "r")]
     Bottom,
+}
+
+impl Debug for DataValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DataValue::Null => {
+                write!(f, "null")
+            }
+            DataValue::Bool(b) => {
+                write!(f, "{}", b)
+            }
+            DataValue::EnId(id) => {
+                id.fmt(f)
+            }
+            DataValue::Int(i) => {
+                write!(f, "{}", i)
+            }
+            DataValue::Float(n) => {
+                write!(f, "{}", n.0)
+            }
+            DataValue::Keyword(k) => {
+                write!(f, "{:?}", k)
+            }
+            DataValue::String(s) => {
+                write!(f, "{:?}", s)
+            }
+            DataValue::Uuid(u) => {
+                write!(f, "{}", u)
+            }
+            DataValue::Timestamp(ts) => {
+                write!(f, "ts@{}", ts)
+            }
+            DataValue::Bytes(b) => {
+                write!(f, "bytes(len={})", b.len())
+            }
+            DataValue::Tuple(t) => {
+                f.debug_list()
+                    .entries(t.iter())
+                    .finish()
+            }
+            DataValue::DescVal(v) => {
+                write!(f, "desc<{:?}>", v)
+            }
+            DataValue::Bottom => {
+                write!(f, "bottom")
+            }
+        }
+    }
 }
 
 pub(crate) const INLINE_VAL_SIZE_LIMIT: usize = 60;

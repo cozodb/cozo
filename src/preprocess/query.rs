@@ -1,5 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Debug, Formatter};
 use std::mem;
 use std::ops::Sub;
 
@@ -137,9 +138,24 @@ pub enum Aggregation {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Rule {
-    pub(crate) head: Vec<(Keyword, Aggregation)>,
+    pub(crate) head: Vec<BindingHeadTerm>,
     pub(crate) body: Vec<Atom>,
     pub(crate) vld: Validity,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct BindingHeadTerm {
+    name: Keyword,
+    aggr: Aggregation
+}
+
+struct BindingHeadFormatter<'a>(&'a [BindingHeadTerm]);
+
+impl Debug for BindingHeadFormatter<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let s = self.0.iter().map(|h| h.name.to_string_no_prefix()).join(", ");
+        write!(f, "[{}]", s)
+    }
 }
 
 impl SessionTx {
@@ -158,11 +174,11 @@ impl SessionTx {
             .map(
                 |(k, body)| -> Result<(
                     Keyword,
-                    Vec<(Vec<(Keyword, Aggregation)>, BTreeSet<Keyword>, Relation)>,
+                    Vec<(Vec<BindingHeadTerm>, BTreeSet<Keyword>, Relation)>,
                 )> {
                     let mut collected = Vec::with_capacity(body.sets.len());
                     for rule in &body.sets {
-                        let header = rule.head.iter().map(|(k, v)| k).cloned().collect_vec();
+                        let header = rule.head.iter().map(|t| &t.name).cloned().collect_vec();
                         let relation =
                             self.compile_rule_body(&rule.body, rule.vld, &stores, &header)?;
                         collected.push((rule.head.clone(), rule.contained_rules(), relation));
@@ -172,7 +188,11 @@ impl SessionTx {
             )
             .try_collect()?;
 
-        // dbg!(&compiled);
+        for (k, vs) in compiled.iter() {
+            for (i, (binding, _, rel)) in vs.iter().enumerate() {
+                eprintln!("{}.{} {:?}: {:#?}", k, i, BindingHeadFormatter(binding), rel)
+            }
+        }
 
         let mut changed: BTreeMap<_, _> = compiled.keys().map(|k| (k, false)).collect();
         let mut prev_changed = changed.clone();
@@ -384,9 +404,12 @@ impl SessionTx {
         })?;
         let rule_head = rule_head
             .iter()
-            .map(|el| -> Result<(Keyword, Aggregation)> {
+            .map(|el| -> Result<BindingHeadTerm> {
                 if let Some(s) = el.as_str() {
-                    Ok((Keyword::from(s), Default::default()))
+                    Ok(BindingHeadTerm {
+                        name: Keyword::from(s),
+                        aggr: Default::default()
+                    })
                 } else {
                     todo!()
                 }

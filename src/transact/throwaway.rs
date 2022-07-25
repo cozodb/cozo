@@ -5,8 +5,14 @@ use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct ThrowawayId(pub(crate) u32);
+
+impl Debug for ThrowawayId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "t{}", self.0)
+    }
+}
 
 #[derive(Clone)]
 pub struct ThrowawayArea {
