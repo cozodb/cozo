@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::fmt::{Binary, Debug, Display, Formatter, Pointer};
+use std::fmt::{ Debug, Formatter};
 
 use anyhow::Result;
 use ordered_float::OrderedFloat;

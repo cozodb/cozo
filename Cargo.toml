@@ -9,7 +9,6 @@ authors = ["Ziyang Hu"]
 
 [dependencies]
 uuid = { version = "0.8", features = ["v1", "v4", "serde"] }
-nanoid = { version = "0.4.0", features = [] }
 rand = "0.8.5"
 anyhow = "1.0"
 lazy_static = "1.4.0"

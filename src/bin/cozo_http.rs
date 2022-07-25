@@ -4,6 +4,7 @@ use std::path::Path;
 use actix_cors::Cors;
 use actix_web::{App, HttpResponse, HttpServer, post, Responder, web};
 use clap::Parser;
+use log::info;
 
 use cozo::Db;
 use cozorocks::DbBuilder;
@@ -104,7 +105,7 @@ async fn main() -> std::io::Result<()> {
     let app_state = web::Data::new(AppStateWithDb { db });
 
     let addr = (&args.bind as &str, args.port);
-    eprintln!("Serving database {} at {}:{}", args.path, addr.0, addr.1);
+    info!("Serving database {} at {}:{}", args.path, addr.0, addr.1);
 
     HttpServer::new(move || {
         let cors = Cors::permissive();

@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Formatter};
+use log::error;
 
 use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
 
@@ -31,26 +32,9 @@ impl ThrowawayArea {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.put(&key_encoded, &[])
     }
-    pub(crate) fn put_if_absent(&self, tuple: &Tuple, epoch: u32) -> Result<bool, RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
-        Ok(if !self.db.exists(&key_encoded)? {
-            self.db.put(&key_encoded, &[])?;
-            true
-        } else {
-            false
-        })
-    }
-    // pub(crate) fn get(&self, tuple: &Tuple, epoch: u32) -> Result<Option<PinSlice>, RocksDbStatus> {
-    //     let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
-    //     self.db.get(&key_encoded)
-    // }
     pub(crate) fn exists(&self, tuple: &Tuple, epoch: u32) -> Result<bool, RocksDbStatus> {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.exists(&key_encoded)
-    }
-    pub(crate) fn del(&self, tuple: &Tuple, epoch: u32) -> Result<(), RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
-        self.db.del(&key_encoded)
     }
     pub fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<Tuple>> {
         self.scan_all_for_epoch(0)
@@ -113,7 +97,7 @@ impl Iterator for ThrowawayIter {
         match self.it.pair() {
             Err(e) => Some(Err(e.into())),
             Ok(None) => None,
-            Ok(Some((k_slice, v_slice))) => match EncodedTuple(k_slice).decode() {
+            Ok(Some((k_slice, _v_slice))) => match EncodedTuple(k_slice).decode() {
                 Err(e) => Some(Err(e)),
                 Ok(t) => Some(Ok(t)),
             },
@@ -125,7 +109,7 @@ impl Drop for ThrowawayArea {
     fn drop(&mut self) {
         let (lower, upper) = EncodedTuple::bounds_for_prefix(self.id);
         if let Err(e) = self.db.range_del(&lower, &upper) {
-            eprintln!("{}", e);
+            error!("{}", e);
         }
     }
 }

@@ -223,7 +223,7 @@ impl InlineFixedRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         if self.data.is_empty() {
-            Box::new([].into_iter())
+            Box::new(iter::empty())
         } else if self.data.len() == 1 {
             let data = self.data[0].clone();
             let right_join_values = right_join_indices
@@ -552,7 +552,7 @@ impl TripleRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         // [f, b] where b is not indexed
-        let mut throwaway = tx.new_throwaway();
+        let throwaway = tx.new_throwaway();
         for item in tx.triple_a_before_scan(self.attr.id, self.vld) {
             match item {
                 Err(e) => return Box::new([Err(e)].into_iter()),
@@ -782,8 +782,8 @@ impl Relation {
     pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
         match self {
             Relation::Fixed(r) => r.do_eliminate_temp_vars(used),
-            Relation::Triple(r) => Ok(()),
-            Relation::Derived(r) => Ok(()),
+            Relation::Triple(_r) => Ok(()),
+            Relation::Derived(_r) => Ok(()),
             Relation::Join(r) => r.do_eliminate_temp_vars(used),
             Relation::Reorder(r) => r.relation.eliminate_temp_vars(used),
         }

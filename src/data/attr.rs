@@ -307,7 +307,7 @@ impl Attribute {
         }
         self.val_type.coerce_value(value)
     }
-    pub(crate) fn encode(&self) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
+    pub fn encode(&self) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
         let mut ret = SmallVec::<[u8; INLINE_VAL_SIZE_LIMIT]>::new();
         self.serialize(&mut Serializer::new(&mut ret)).unwrap();
         ret.into()

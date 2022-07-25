@@ -12,10 +12,16 @@ fn create_db(name: &str) -> Db {
     Db::build(builder).unwrap()
 }
 
+
+fn init_logger() {
+    let _ = env_logger::builder().is_test(true).try_init();
+}
+
 fn test_send_sync<T: Send + Sync>(_: &T) {}
 
 #[test]
 fn creation() {
+    init_logger();
     let db = create_db("_test_db");
     test_send_sync(&db);
     assert!(db.current_schema().unwrap().as_array().unwrap().is_empty());
