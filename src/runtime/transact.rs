@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use anyhow::Result;
 use rmp_serde::Serializer;
@@ -17,12 +17,12 @@ use crate::data::encode::{
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
-use crate::transact::throwaway::{ThrowawayArea, ThrowawayId};
+use crate::runtime::temp_store::{TempStore, TempStoreId};
 
 pub struct SessionTx {
     pub(crate) tx: Tx,
-    pub(crate) throwaway: RawRocksDb,
-    pub(crate) throwaway_idx: Arc<AtomicU32>,
+    pub(crate) temp_store: RawRocksDb,
+    pub(crate) temp_store_id: Arc<AtomicU32>,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
     pub(crate) last_ent_id: Arc<AtomicU64>,
@@ -31,7 +31,7 @@ pub struct SessionTx {
     pub(crate) attr_by_kw_cache: BTreeMap<Keyword, Option<Attribute>>,
     pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
     pub(crate) eid_by_attr_val_cache:
-        BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
+    BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
     // "touched" requires the id to exist prior to the transaction, and something related to it has changed
     pub(crate) touched_eids: BTreeSet<EntityId>,
 }
@@ -66,12 +66,12 @@ impl TxLog {
 }
 
 impl SessionTx {
-    pub(crate) fn new_throwaway(&self) -> ThrowawayArea {
-        let old_count = self.throwaway_idx.fetch_add(1, Ordering::AcqRel);
+    pub(crate) fn new_throwaway(&self) -> TempStore {
+        let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        ThrowawayArea {
-            db: self.throwaway.clone(),
-            id: ThrowawayId(old_count),
+        TempStore {
+            db: self.temp_store.clone(),
+            id: TempStoreId(old_count),
         }
     }
 

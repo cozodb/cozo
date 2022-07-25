@@ -9,9 +9,9 @@ use crate::data::attr::Attribute;
 use crate::data::keyword::Keyword;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
-use crate::preprocess::query::QueryProcError;
+use crate::query::compile::QueryCompilationError;
+use crate::runtime::temp_store::{TempStore, TempStoreId};
 use crate::runtime::transact::SessionTx;
-use crate::transact::throwaway::{ThrowawayArea, ThrowawayId};
 use crate::Validity;
 
 pub enum Relation {
@@ -71,7 +71,7 @@ impl Debug for Relation {
                         .field(&r.right)
                         .finish()
                 }
-            },
+            }
             Relation::Reorder(r) => f
                 .debug_tuple("Reorder")
                 .field(&r.new_order)
@@ -95,7 +95,7 @@ impl Relation {
     pub(crate) fn cartesian_join(self, right: Relation) -> Self {
         self.join(right, vec![], vec![])
     }
-    pub(crate) fn derived(bindings: Vec<Keyword>, storage: ThrowawayArea) -> Self {
+    pub(crate) fn derived(bindings: Vec<Keyword>, storage: TempStore) -> Self {
         Self::Derived(StoredDerivedRelation { bindings, storage })
     }
     pub(crate) fn triple(
@@ -158,7 +158,7 @@ impl ReorderRelation {
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<ThrowawayId>,
+        use_delta: &BTreeSet<TempStoreId>,
     ) -> TupleIter<'a> {
         let old_order = self.relation.bindings();
         let old_order_indices: BTreeMap<_, _> = old_order
@@ -615,11 +615,11 @@ fn get_eliminate_indices(bindings: &[Keyword], eliminate: &BTreeSet<Keyword>) ->
 #[derive(Debug)]
 pub struct StoredDerivedRelation {
     pub(crate) bindings: Vec<Keyword>,
-    pub(crate) storage: ThrowawayArea,
+    pub(crate) storage: TempStore,
 }
 
 impl StoredDerivedRelation {
-    fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<ThrowawayId>) -> TupleIter {
+    fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<TempStoreId>) -> TupleIter {
         if epoch == Some(0) {
             return Box::new(iter::empty());
         }
@@ -649,7 +649,7 @@ impl StoredDerivedRelation {
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<ThrowawayId>,
+        use_delta: &BTreeSet<TempStoreId>,
     ) -> TupleIter<'a> {
         if epoch == Some(0) {
             return Box::new(iter::empty());
@@ -747,7 +747,7 @@ impl Joiner {
         for (l, r) in self.left_keys.iter().zip(self.right_keys.iter()) {
             let l_pos = match left_binding_map.get(l) {
                 None => {
-                    return Err(QueryProcError::LogicError(format!(
+                    return Err(QueryCompilationError::LogicError(format!(
                         "join key is wrong: left binding for {} not found: left {:?} vs right {:?}, {:?}",
                         l, left_bindings, right_bindings, self
                     )).into());
@@ -756,7 +756,7 @@ impl Joiner {
             };
             let r_pos = match right_binding_map.get(r) {
                 None => {
-                    return Err(QueryProcError::LogicError(format!(
+                    return Err(QueryCompilationError::LogicError(format!(
                         "join key is wrong: right binding for {} not found: left {:?} vs right {:?}, {:?}",
                         r, left_bindings, right_bindings, self
                     )).into());
@@ -823,7 +823,7 @@ impl Relation {
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<ThrowawayId>,
+        use_delta: &BTreeSet<TempStoreId>,
     ) -> TupleIter<'a> {
         match self {
             Relation::Fixed(f) => Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone())))),
@@ -864,7 +864,7 @@ impl InnerJoin {
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<ThrowawayId>,
+        use_delta: &BTreeSet<TempStoreId>,
     ) -> TupleIter<'a> {
         let bindings = self.bindings();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
@@ -920,7 +920,7 @@ impl InnerJoin {
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<ThrowawayId>,
+        use_delta: &BTreeSet<TempStoreId>,
     ) -> TupleIter<'a> {
         let right_bindings = self.right.bindings();
         let (left_join_indices, right_join_indices) = self

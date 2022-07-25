@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::env::temp_dir;
 use std::fmt::{Debug, Formatter};
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -11,7 +11,8 @@ use uuid::Uuid;
 
 use cozorocks::{DbBuilder, DbIter, RawRocksDb, RocksDb};
 
-use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
+use crate::AttrTxItem;
+use crate::data::compare::{DB_KEY_PREFIX_LEN, rusty_cmp};
 use crate::data::encode::{
     decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, StorageTag,
 };
@@ -22,15 +23,14 @@ use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 use crate::transact::pull::CurrentPath;
-use crate::AttrTxItem;
 
 pub struct Db {
     db: RocksDb,
-    throwaway_db: RawRocksDb,
+    temp_db: RawRocksDb,
     last_attr_id: Arc<AtomicU64>,
     last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,
-    throwaway_idx: Arc<AtomicU32>,
+    temp_store_id: Arc<AtomicU32>,
     n_sessions: Arc<AtomicUsize>,
     session_id: usize,
 }
@@ -66,11 +66,11 @@ impl Db {
             .ignore_range_deletions(true);
         let ret = Self {
             db,
-            throwaway_db: scratch,
+            temp_db: scratch,
             last_attr_id: Arc::new(Default::default()),
             last_ent_id: Arc::new(Default::default()),
             last_tx_id: Arc::new(Default::default()),
-            throwaway_idx: Arc::new(Default::default()),
+            temp_store_id: Arc::new(Default::default()),
             n_sessions: Arc::new(Default::default()),
             session_id: Default::default(),
         };
@@ -83,11 +83,11 @@ impl Db {
 
         Ok(Self {
             db: self.db.clone(),
-            throwaway_db: self.throwaway_db.clone(),
+            temp_db: self.temp_db.clone(),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
-            throwaway_idx: self.throwaway_idx.clone(),
+            temp_store_id: self.temp_store_id.clone(),
             n_sessions: self.n_sessions.clone(),
             session_id: old_count + 1,
         })
@@ -106,8 +106,8 @@ impl Db {
     pub fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
-            throwaway: self.throwaway_db.clone(),
-            throwaway_idx: self.throwaway_idx.clone(),
+            temp_store: self.temp_db.clone(),
+            temp_store_id: self.temp_store_id.clone(),
             w_tx_id: None,
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
@@ -126,8 +126,8 @@ impl Db {
 
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
-            throwaway: self.throwaway_db.clone(),
-            throwaway_idx: self.throwaway_idx.clone(),
+            temp_store: self.temp_db.clone(),
+            temp_store_id: self.temp_store_id.clone(),
             w_tx_id: Some(cur_tx_id),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),

@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use crate::data::json::JsonValue;
 use crate::data::value::DataValue;
-use crate::transact::throwaway::ThrowawayId;
+use crate::runtime::temp_store::TempStoreId;
 
 pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 6;
 
@@ -34,16 +34,16 @@ impl Debug for Tuple {
     }
 }
 
-pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
+pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item=Result<Tuple>> + 'a>;
 
 impl Tuple {
     pub(crate) fn arity(&self) -> usize {
         self.0.len()
     }
-    pub(crate) fn encode_as_key(&self, prefix: ThrowawayId) -> Vec<u8> {
+    pub(crate) fn encode_as_key(&self, prefix: TempStoreId) -> Vec<u8> {
         self.encode_as_key_for_epoch(prefix, 0)
     }
-    pub(crate) fn encode_as_key_for_epoch(&self, prefix: ThrowawayId, epoch: u32) -> Vec<u8> {
+    pub(crate) fn encode_as_key_for_epoch(&self, prefix: TempStoreId, epoch: u32) -> Vec<u8> {
         let len = self.arity();
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
         let prefix_bytes = prefix.0.to_be_bytes();
@@ -81,9 +81,9 @@ impl<'a> From<&'a [u8]> for EncodedTuple<'a> {
 }
 
 impl<'a> EncodedTuple<'a> {
-    pub(crate) fn bounds_for_prefix(prefix: ThrowawayId) -> ([u8; 6], [u8; 6]) {
+    pub(crate) fn bounds_for_prefix(prefix: TempStoreId) -> ([u8; 6], [u8; 6]) {
         let prefix_bytes = prefix.0.to_be_bytes();
-        let next_prefix_bytes = (prefix.0+1).to_be_bytes();
+        let next_prefix_bytes = (prefix.0 + 1).to_be_bytes();
         (
             [
                 prefix_bytes[1],
@@ -103,7 +103,7 @@ impl<'a> EncodedTuple<'a> {
             ],
         )
     }
-    pub(crate) fn bounds_for_prefix_and_epoch(prefix: ThrowawayId, epoch: u32) -> ([u8; 6], [u8; 6]) {
+    pub(crate) fn bounds_for_prefix_and_epoch(prefix: TempStoreId, epoch: u32) -> ([u8; 6], [u8; 6]) {
         let prefix_bytes = prefix.0.to_be_bytes();
         let epoch_bytes = epoch.to_be_bytes();
         let epoch_bytes_upper = (epoch + 1).to_be_bytes();
@@ -126,7 +126,7 @@ impl<'a> EncodedTuple<'a> {
             ],
         )
     }
-    pub(crate) fn prefix(&self) -> Result<(ThrowawayId, u32), TupleError> {
+    pub(crate) fn prefix(&self) -> Result<(TempStoreId, u32), TupleError> {
         if self.0.len() < 6 {
             Err(TupleError::BadData(
                 "bad data length".to_string(),
@@ -135,7 +135,7 @@ impl<'a> EncodedTuple<'a> {
         } else {
             let id = u32::from_be_bytes([0, self.0[0], self.0[1], self.0[2]]);
             let epoch = u32::from_be_bytes([0, self.0[3], self.0[4], self.0[5]]);
-            Ok((ThrowawayId(id), epoch))
+            Ok((TempStoreId(id), epoch))
         }
     }
     pub(crate) fn arity(&self) -> Result<usize, TupleError> {
@@ -261,7 +261,7 @@ mod tests {
 
     use crate::data::tuple::{EncodedTuple, Tuple};
     use crate::data::value::DataValue;
-    use crate::transact::throwaway::ThrowawayId;
+    use crate::runtime::temp_store::TempStoreId;
 
     #[test]
     fn test_serde() {
@@ -271,7 +271,7 @@ mod tests {
             json!("my_name_is").into(),
         ];
         let val = Tuple(val);
-        let encoded = val.encode_as_key(ThrowawayId(123));
+        let encoded = val.encode_as_key(TempStoreId(123));
         println!("{:x?}", encoded);
         let encoded_tuple: EncodedTuple = (&encoded as &[u8]).into();
         println!("{:?}", encoded_tuple.prefix());

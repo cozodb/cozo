@@ -1,4 +1,5 @@
 use std::fmt::{Debug, Formatter};
+
 use log::error;
 
 use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
@@ -7,27 +8,27 @@ use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub struct ThrowawayId(pub(crate) u32);
+pub struct TempStoreId(pub(crate) u32);
 
-impl Debug for ThrowawayId {
+impl Debug for TempStoreId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "t{}", self.0)
     }
 }
 
 #[derive(Clone)]
-pub struct ThrowawayArea {
+pub struct TempStore {
     pub(crate) db: RawRocksDb,
-    pub(crate) id: ThrowawayId,
+    pub(crate) id: TempStoreId,
 }
 
-impl Debug for ThrowawayArea {
+impl Debug for TempStore {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Throwaway<{}>", self.id.0)
     }
 }
 
-impl ThrowawayArea {
+impl TempStore {
     pub(crate) fn put(&self, tuple: &Tuple, epoch: u32) -> Result<(), RocksDbStatus> {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.put(&key_encoded, &[])
@@ -36,13 +37,13 @@ impl ThrowawayArea {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.exists(&key_encoded)
     }
-    pub fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<Tuple>> {
+    pub fn scan_all(&self) -> impl Iterator<Item=anyhow::Result<Tuple>> {
         self.scan_all_for_epoch(0)
     }
     pub fn scan_all_for_epoch(
         &self,
         epoch: u32,
-    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
+    ) -> impl Iterator<Item=anyhow::Result<Tuple>> {
         let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, epoch);
         let mut it = self
             .db
@@ -56,14 +57,14 @@ impl ThrowawayArea {
     pub(crate) fn scan_prefix(
         &self,
         prefix: &Tuple,
-    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
+    ) -> impl Iterator<Item=anyhow::Result<Tuple>> {
         self.scan_prefix_for_epoch(prefix, 0)
     }
     pub(crate) fn scan_prefix_for_epoch(
         &self,
         prefix: &Tuple,
         epoch: u32,
-    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
+    ) -> impl Iterator<Item=anyhow::Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bottom);
         let upper = Tuple(upper);
@@ -105,7 +106,7 @@ impl Iterator for ThrowawayIter {
     }
 }
 
-impl Drop for ThrowawayArea {
+impl Drop for TempStore {
     fn drop(&mut self) {
         let (lower, upper) = EncodedTuple::bounds_for_prefix(self.id);
         if let Err(e) = self.db.range_del(&lower, &upper) {

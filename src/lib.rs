@@ -15,3 +15,4 @@ pub(crate) mod preprocess;
 pub(crate) mod runtime;
 pub(crate) mod transact;
 pub(crate) mod utils;
+pub(crate) mod query;

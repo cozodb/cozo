@@ -1,7 +1,8 @@
 use itertools::Itertools;
+use log::info;
 use serde_json::{json, to_string_pretty};
 
-use cozo::{Db, EncodedVec, EntityId, Validity};
+use cozo::{Db, EntityId, Validity};
 use cozorocks::DbBuilder;
 
 fn create_db(name: &str) -> Db {
@@ -11,7 +12,6 @@ fn create_db(name: &str) -> Db {
         .destroy_on_exit(true);
     Db::build(builder).unwrap()
 }
-
 
 fn init_logger() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -37,7 +37,7 @@ fn creation() {
         ]
     }))
     .unwrap();
-    println!("{}", res);
+    info!("{}", res);
     let first_id = res["results"][0][0].as_u64().unwrap();
     let last_id = res["results"][6][0].as_u64().unwrap();
     db.transact_attributes(&json!({
@@ -47,7 +47,7 @@ fn creation() {
         ]
     })).unwrap();
     assert_eq!(db.current_schema().unwrap().as_array().unwrap().len(), 6);
-    println!(
+    info!(
         "{}",
         to_string_pretty(&db.current_schema().unwrap()).unwrap()
     );
@@ -109,7 +109,7 @@ fn creation() {
     }))
     .unwrap();
 
-    println!(
+    info!(
         "{}",
         to_string_pretty(&db.entities_at(None).unwrap()).unwrap()
     );
@@ -127,7 +127,7 @@ fn creation() {
         )
         .unwrap();
 
-    println!("{}", to_string_pretty(&pulled).unwrap());
+    info!("{}", to_string_pretty(&pulled).unwrap());
 
     let query = json!([
       {
@@ -148,7 +148,7 @@ fn creation() {
     let query = tx.parse_rule_sets(&query, vld).unwrap();
     let ret = tx.semi_naive_evaluate(&query).unwrap();
     let res: Vec<_> = ret.scan_all().try_collect().unwrap();
-    dbg!(res);
+    info!("{:?}", res);
 
     // // iteration
     // let mut it = db.total_iter();
