@@ -10,7 +10,7 @@ use crate::data::attr::Attribute;
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
-use crate::preprocess::triple::TxError;
+use crate::parse::triple::TxError;
 use crate::query::compile::{
     Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, QueryCompilationError, Rule,
     RuleApplyAtom, RuleSet, Term,

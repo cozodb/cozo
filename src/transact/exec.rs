@@ -16,12 +16,12 @@ use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, INLINE_VAL_SIZE_LIMIT};
-use crate::preprocess::triple::{Quintuple, TxAction};
+use crate::parse::triple::{Quintuple, TxAction};
 use crate::runtime::transact::{SessionTx, TransactError};
 use crate::utils::swap_option_result;
 
 #[derive(Debug, thiserror::Error)]
-enum TripleError {
+enum ExecError {
     #[error("use of temp entity id: {0:?}")]
     TempEid(EntityId),
     #[error("unique constraint violated: {0} {1}")]
@@ -221,7 +221,7 @@ impl SessionTx {
                     for item in self.triple_av_before_scan(attr.id, v, vld_in_key) {
                         let (_, _, found_eid) = item?;
                         if found_eid != eid {
-                            return Err(TripleError::UniqueConstraintViolated(
+                            return Err(ExecError::UniqueConstraintViolated(
                                 attr.keyword.clone(),
                                 format!("{:?}", v),
                             )
@@ -232,7 +232,7 @@ impl SessionTx {
                     for item in self.triple_av_after_scan(attr.id, v, vld_in_key) {
                         let (_, _, found_eid) = item?;
                         if found_eid != eid {
-                            return Err(TripleError::UniqueConstraintViolated(
+                            return Err(ExecError::UniqueConstraintViolated(
                                 attr.keyword.clone(),
                                 format!("{:?}", v),
                             )
@@ -242,7 +242,7 @@ impl SessionTx {
                 } else if let Some(v_slice) = self.tx.get(&ave_encoded, false)? {
                     let (_, found_eid, _) = decode_ae_key(&v_slice)?;
                     if found_eid != eid {
-                        return Err(TripleError::UniqueConstraintViolated(
+                        return Err(ExecError::UniqueConstraintViolated(
                             attr.keyword.clone(),
                             format!("{:?}", v),
                         )
@@ -318,7 +318,7 @@ impl SessionTx {
         vld: Validity,
     ) -> Result<EntityId> {
         if !eid.is_perm() {
-            return Err(TripleError::TempEid(eid).into());
+            return Err(ExecError::TempEid(eid).into());
         }
         // checking that the eid actually exists should be done in the preprocessing step
         self.write_triple(eid, attr, v, vld, StoreOp::Retract)
@@ -436,7 +436,7 @@ impl SessionTx {
         let res = self
             .tx
             .get(&encoded, false)?
-            .ok_or(TripleError::TripleEANotFound(eid, aid, vld))?;
+            .ok_or(ExecError::TripleEANotFound(eid, aid, vld))?;
         decode_value(&res.as_ref()[1..])
     }
     pub(crate) fn triple_ea_scan(

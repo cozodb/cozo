@@ -8,9 +8,9 @@ use crate::data::attr::AttributeCardinality;
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
-use crate::preprocess::triple::TxError;
+use crate::parse::triple::TxError;
 use crate::runtime::transact::SessionTx;
-use crate::transact::pull::{AttrPullSpec, PullSpec, PullSpecs};
+use crate::query::pull::{AttrPullSpec, PullSpec, PullSpecs};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PullError {

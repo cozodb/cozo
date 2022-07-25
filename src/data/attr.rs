@@ -13,7 +13,7 @@ use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, INLINE_VAL_SIZE_LIMIT};
-use crate::preprocess::triple::TempIdCtx;
+use crate::parse::triple::TempIdCtx;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AttributeError {
