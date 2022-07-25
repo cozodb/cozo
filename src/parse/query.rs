@@ -1,14 +1,13 @@
 use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 use itertools::Itertools;
 use serde_json::Map;
 
-use crate::{EntityId, Validity};
 use crate::data::attr::Attribute;
 use crate::data::json::JsonValue;
-use crate::data::keyword::Keyword;
+use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::value::DataValue;
 use crate::parse::triple::TxError;
 use crate::query::compile::{
@@ -16,6 +15,7 @@ use crate::query::compile::{
     RuleApplyAtom, RuleSet, Term,
 };
 use crate::runtime::transact::SessionTx;
+use crate::{EntityId, Validity};
 
 impl SessionTx {
     pub fn parse_rule_sets(
@@ -42,7 +42,7 @@ impl SessionTx {
                 }
             }
         }
-        collected
+        let ret: DatalogProgram = collected
             .into_iter()
             .map(|(name, rules)| -> Result<(Keyword, RuleSet)> {
                 let mut arities = rules.iter().map(|r| r.head.len());
@@ -52,15 +52,25 @@ impl SessionTx {
                         return Err(QueryCompilationError::ArityMismatch(name).into());
                     }
                 }
-                Ok((
-                    name,
-                    RuleSet {
-                        rules: rules,
-                        arity,
-                    },
-                ))
+                Ok((name, RuleSet { rules, arity }))
             })
-            .try_collect()
+            .try_collect()?;
+
+        match ret.get(&PROG_ENTRY) {
+            None => Err(QueryCompilationError::NoEntryToProgram.into()),
+            Some(ruleset) => {
+                if !ruleset
+                    .rules
+                    .iter()
+                    .map(|r| r.head.iter().map(|b| &b.name).collect_vec())
+                    .all_equal()
+                {
+                    Err(QueryCompilationError::EntryHeadsNotIdentical.into())
+                } else {
+                    Ok(ret)
+                }
+            }
+        }
     }
     fn parse_rule_atom(&mut self, payload: &Map<String, JsonValue>, vld: Validity) -> Result<Atom> {
         let rule_name = payload
@@ -105,7 +115,7 @@ impl SessionTx {
                             value_rep.clone(),
                             "reserved string values must be quoted".to_string(),
                         )
-                            .into());
+                        .into());
                     }
                 }
                 if let Some(o) = value_rep.as_object() {
@@ -168,7 +178,7 @@ impl SessionTx {
                 "expect rule head to be an array".to_string(),
             )
         })?;
-        let rule_head = rule_head
+        let rule_head: Vec<_> = rule_head
             .iter()
             .map(|el| -> Result<BindingHeadTerm> {
                 if let Some(s) = el.as_str() {
@@ -184,6 +194,19 @@ impl SessionTx {
         let rule_body: Vec<_> = args
             .map(|el| self.parse_atom(el, default_vld))
             .try_collect()?;
+
+        if rule_head.len()
+            != rule_head
+                .iter()
+                .map(|h| &h.name)
+                .collect::<BTreeSet<_>>()
+                .len()
+        {
+            return Err(QueryCompilationError::DuplicateVariables(
+                rule_head.into_iter().map(|h| h.name).collect_vec(),
+            )
+            .into());
+        }
 
         Ok((
             rule_name,
@@ -244,7 +267,7 @@ impl SessionTx {
                 JsonValue::Object(m.clone()),
                 "expect object with exactly one field".to_string(),
             )
-                .into());
+            .into());
         }
         let (k, v) = m.iter().next().unwrap();
         let kw = Keyword::from(k as &str);
@@ -254,7 +277,7 @@ impl SessionTx {
                 JsonValue::Object(m.clone()),
                 "attribute is not a unique index".to_string(),
             )
-                .into());
+            .into());
         }
         let value = attr.val_type.coerce_value(v.into())?;
         let eid = self
@@ -272,7 +295,7 @@ impl SessionTx {
                 JsonValue::Object(m.clone()),
                 "expect object with exactly one field".to_string(),
             )
-                .into());
+            .into());
         }
         let (k, v) = m.iter().next().unwrap();
         if k != "const" {
@@ -280,7 +303,7 @@ impl SessionTx {
                 JsonValue::Object(m.clone()),
                 "expect object with exactly one field named 'const'".to_string(),
             )
-                .into());
+            .into());
         }
         let value = attr.val_type.coerce_value(v.into())?;
         Ok(value)
@@ -300,7 +323,7 @@ impl SessionTx {
                     value_rep.clone(),
                     "reserved string values must be quoted".to_string(),
                 )
-                    .into());
+                .into());
             }
         }
         if let Some(o) = value_rep.as_object() {
@@ -327,7 +350,7 @@ impl SessionTx {
                     entity_rep.clone(),
                     "reserved string values must be quoted".to_string(),
                 )
-                    .into());
+                .into());
             }
         }
         if let Some(u) = entity_rep.as_u64() {
@@ -350,7 +373,7 @@ impl SessionTx {
                 v.clone(),
                 "expect attribute keyword".to_string(),
             )
-                .into()),
+            .into()),
         }
     }
 }

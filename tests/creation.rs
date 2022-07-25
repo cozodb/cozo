@@ -129,24 +129,29 @@ fn creation() {
 
     info!("{}", to_string_pretty(&pulled).unwrap());
 
-    let query = json!({"q": [
-      {
-        "rule": "ff",
-        "args": [["?a", "?b"], ["?a", "person/friend", "?b"]]
-      },
-      {
-        "rule": "ff",
-        "args": [["?a", "?b"], ["?a", "person/friend", "?c"], {"rule": "ff", "args": ["?c", "?b"]}]
-      },
-      {
-        "rule": "?",
-        "args": [["?n"], {"rule": "ff", "args": [{"person/id": "alice_amorist"}, "?a"]}, ["?a", "person/first_name", "?n"]]
-      }
-    ]});
+    let query = json!({
+        "q": [
+            {
+                "rule": "ff",
+                "args": [["?a", "?b"], ["?a", "person/friend", "?b"]]
+            },
+            {
+                "rule": "ff",
+                "args": [["?a", "?b"], ["?a", "person/friend", "?c"], {"rule": "ff", "args": ["?c", "?b"]}]
+            },
+            {
+                "rule": "?",
+                "args": [["?n", "?a"], {"rule": "ff", "args": [{"person/id": "alice_amorist"}, "?a"]}, ["?a", "person/first_name", "?n"]]
+            }
+        ],
+        "out": {"friend": {"pull": "?a", "spec": ["*"]}}
+    });
     let mut tx = db.transact().unwrap();
     let ret = tx.run_query(&query).unwrap();
-    let res: Vec<_> = ret.scan_all().try_collect().unwrap();
-    info!("{:?}", res);
+    let res: Vec<_> = ret.try_collect().unwrap();
+    let res = json!(res);
+    let res = to_string_pretty(&res).unwrap();
+    info!("{}", res);
 
     // // iteration
     // let mut it = db.total_iter();

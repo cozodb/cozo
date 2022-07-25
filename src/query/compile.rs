@@ -48,6 +48,14 @@ pub enum QueryCompilationError {
     LogicError(String),
     #[error("entry not found: expect a rule named '?'")]
     EntryNotFound,
+    #[error("duplicate variables: {0:?}")]
+    DuplicateVariables(Vec<Keyword>),
+    #[error("no entry to program: you must define a rule named '?'")]
+    NoEntryToProgram,
+    #[error("heads for entry must be identical")]
+    EntryHeadsNotIdentical,
+    #[error("required binding not found: {0}")]
+    BindingNotFound(Keyword),
 }
 
 #[derive(Clone, Debug)]

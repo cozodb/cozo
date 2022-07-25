@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::str::Utf8Error;
+use lazy_static::lazy_static;
 
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
@@ -57,6 +58,10 @@ impl Keyword {
     pub(crate) fn to_string_no_prefix(&self) -> String {
         format!("{}", self.0)
     }
+}
+
+lazy_static! {
+    pub(crate) static ref PROG_ENTRY: Keyword = Keyword::from("?");
 }
 
 #[cfg(test)]

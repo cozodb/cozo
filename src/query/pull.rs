@@ -54,7 +54,7 @@ impl CurrentPath {
     pub(crate) fn new(idx: usize) -> Result<Self> {
         Ok(Self(smallvec![idx.try_into()?]))
     }
-    fn get_from_root<'a>(&self, depth: usize, root: &'a PullSpecs) -> &'a PullSpecs {
+    fn get_from_root<'a>(&self, depth: usize, root: &'a [PullSpec]) -> &'a [PullSpec] {
         let mut current = root;
         let indices = &self.0[..self.0.len() - depth];
         for i in indices {
@@ -83,7 +83,7 @@ impl SessionTx {
         vld: Validity,
         spec: &PullSpec,
         depth: usize,
-        root: &PullSpecs,
+        root: &[PullSpec],
         path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
@@ -133,7 +133,7 @@ impl SessionTx {
         vld: Validity,
         spec: &AttrPullSpec,
         depth: usize,
-        root: &PullSpecs,
+        root: &[PullSpec],
         path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
@@ -194,7 +194,7 @@ impl SessionTx {
         value: DataValue,
         vld: Validity,
         depth: usize,
-        root: &PullSpecs,
+        root: &[PullSpec],
         path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
@@ -269,7 +269,7 @@ impl SessionTx {
         values: Vec<DataValue>,
         vld: Validity,
         depth: usize,
-        root: &PullSpecs,
+        root: &[PullSpec],
         path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
@@ -350,7 +350,7 @@ impl SessionTx {
         vld: Validity,
         spec: &AttrPullSpec,
         depth: usize,
-        root: &PullSpecs,
+        root: &[PullSpec],
         path: CurrentPath,
         collector: &mut Map<String, JsonValue>,
         recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,

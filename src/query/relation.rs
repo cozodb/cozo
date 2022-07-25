@@ -295,7 +295,7 @@ pub struct TripleRelation {
     pub(crate) bindings: [Keyword; 2],
 }
 
-fn flatten_err<T, E1: Into<anyhow::Error>, E2: Into<anyhow::Error>>(
+pub(crate) fn flatten_err<T, E1: Into<anyhow::Error>, E2: Into<anyhow::Error>>(
     v: std::result::Result<std::result::Result<T, E2>, E1>,
 ) -> Result<T> {
     match v {
