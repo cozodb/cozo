@@ -427,11 +427,10 @@ impl SessionTx {
                     (Term::Const(eid), Term::Var(v_kw)) => {
                         let temp_join_key_left = next_ignored_kw();
                         let temp_join_key_right = next_ignored_kw();
-                        let const_rel = Relation::Fixed(InlineFixedRelation {
-                            bindings: vec![temp_join_key_left.clone()],
-                            data: vec![vec![DataValue::EnId(*eid)]],
-                            to_eliminate: Default::default(),
-                        });
+                        let const_rel = Relation::singlet(
+                            vec![temp_join_key_left.clone()],
+                            vec![DataValue::EnId(*eid)],
+                        );
                         if ret.is_unit() {
                             ret = const_rel;
                         } else {
@@ -453,22 +452,16 @@ impl SessionTx {
                                 v_kw.clone()
                             }
                         };
-                        let right = Relation::Triple(TripleRelation {
-                            attr: a_triple.attr.clone(),
-                            vld,
-                            bindings: [temp_join_key_right, v_kw],
-                        });
+                        let right =
+                            Relation::triple(a_triple.attr.clone(), vld, temp_join_key_right, v_kw);
                         debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
                         ret = ret.join(right, join_left_keys, join_right_keys);
                     }
                     (Term::Var(e_kw), Term::Const(val)) => {
                         let temp_join_key_left = next_ignored_kw();
                         let temp_join_key_right = next_ignored_kw();
-                        let const_rel = Relation::Fixed(InlineFixedRelation {
-                            bindings: vec![temp_join_key_left.clone()],
-                            data: vec![vec![val.clone()]],
-                            to_eliminate: Default::default(),
-                        });
+                        let const_rel =
+                            Relation::singlet(vec![temp_join_key_left.clone()], vec![val.clone()]);
                         if ret.is_unit() {
                             ret = const_rel;
                         } else {
@@ -489,11 +482,8 @@ impl SessionTx {
                                 e_kw.clone()
                             }
                         };
-                        let right = Relation::Triple(TripleRelation {
-                            attr: a_triple.attr.clone(),
-                            vld,
-                            bindings: [e_kw, temp_join_key_right],
-                        });
+                        let right =
+                            Relation::triple(a_triple.attr.clone(), vld, e_kw, temp_join_key_right);
                         debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
                         ret = ret.join(right, join_left_keys, join_right_keys);
                     }
@@ -525,11 +515,7 @@ impl SessionTx {
                                 v_kw.clone()
                             }
                         };
-                        let right = Relation::Triple(TripleRelation {
-                            attr: a_triple.attr.clone(),
-                            vld,
-                            bindings: [e_kw, v_kw],
-                        });
+                        let right = Relation::triple(a_triple.attr.clone(), vld, e_kw, v_kw);
                         if ret.is_unit() {
                             ret = right;
                         } else {
@@ -539,11 +525,10 @@ impl SessionTx {
                     }
                     (Term::Const(eid), Term::Const(val)) => {
                         let (left_var_1, left_var_2) = (next_ignored_kw(), next_ignored_kw());
-                        let const_rel = Relation::Fixed(InlineFixedRelation {
-                            bindings: vec![left_var_1.clone(), left_var_2.clone()],
-                            data: vec![vec![DataValue::EnId(*eid), val.clone()]],
-                            to_eliminate: Default::default(),
-                        });
+                        let const_rel = Relation::singlet(
+                            vec![left_var_1.clone(), left_var_2.clone()],
+                            vec![DataValue::EnId(*eid), val.clone()],
+                        );
                         if ret.is_unit() {
                             ret = const_rel;
                         } else {
@@ -551,11 +536,12 @@ impl SessionTx {
                         }
                         let (right_var_1, right_var_2) = (next_ignored_kw(), next_ignored_kw());
 
-                        let right = Relation::Triple(TripleRelation {
-                            attr: a_triple.attr.clone(),
+                        let right = Relation::triple(
+                            a_triple.attr.clone(),
                             vld,
-                            bindings: [right_var_1.clone(), right_var_2.clone()],
-                        });
+                            right_var_1.clone(),
+                            right_var_2.clone(),
+                        );
                         ret = ret.join(
                             right,
                             vec![left_var_1.clone(), left_var_2.clone()],
@@ -604,18 +590,12 @@ impl SessionTx {
                     }
 
                     if !temp_left_joiner_vals.is_empty() {
-                        let const_joiner = Relation::Fixed(InlineFixedRelation {
-                            bindings: temp_left_bindings,
-                            data: vec![temp_left_joiner_vals],
-                            to_eliminate: Default::default(),
-                        });
+                        let const_joiner =
+                            Relation::singlet(temp_left_bindings, temp_left_joiner_vals);
                         ret = ret.cartesian_join(const_joiner);
                     }
 
-                    let right = Relation::Derived(StoredDerivedRelation {
-                        bindings: right_vars,
-                        storage: store,
-                    });
+                    let right = Relation::derived(right_vars, store);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
@@ -641,10 +621,7 @@ impl SessionTx {
         }
         let cur_ret_bindings = ret.bindings();
         if ret_vars != cur_ret_bindings {
-            ret = Relation::Reorder(ReorderRelation {
-                relation: Box::new(ret),
-                new_order: ret_vars.to_vec(),
-            })
+            ret = ret.reorder(ret_vars.to_vec());
         }
 
         Ok(ret)

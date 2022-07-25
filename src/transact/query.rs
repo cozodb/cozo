@@ -36,6 +36,40 @@ impl Relation {
     pub(crate) fn cartesian_join(self, right: Relation) -> Self {
         self.join(right, vec![], vec![])
     }
+    pub(crate) fn derived(bindings: Vec<Keyword>, storage: ThrowawayArea) -> Self {
+        Self::Derived(StoredDerivedRelation {
+            bindings,
+            storage
+        })
+    }
+    pub(crate) fn triple(
+        attr: Attribute,
+        vld: Validity,
+        e_binding: Keyword,
+        v_binding: Keyword,
+    ) -> Self {
+        Self::Triple(TripleRelation {
+            attr,
+            vld,
+            bindings: [e_binding, v_binding],
+        })
+    }
+    pub(crate) fn singlet(bindings: Vec<Keyword>, data: Vec<DataValue>) -> Self {
+        Self::fixed(bindings, vec![data])
+    }
+    pub(crate) fn fixed(bindings: Vec<Keyword>, data: Vec<Vec<DataValue>>) -> Self {
+        Self::Fixed(InlineFixedRelation {
+            bindings,
+            data,
+            to_eliminate: Default::default(),
+        })
+    }
+    pub(crate) fn reorder(self, new_order: Vec<Keyword>) -> Self {
+        Self::Reorder(ReorderRelation {
+            relation: Box::new(self),
+            new_order,
+        })
+    }
     pub(crate) fn join(
         self,
         right: Relation,
