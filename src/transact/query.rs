@@ -1,9 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::iter;
 
 use anyhow::Result;
 use itertools::Itertools;
-
-use cozorocks::SnapshotBridge;
 
 use crate::data::attr::Attribute;
 use crate::data::keyword::Keyword;
@@ -49,9 +48,8 @@ impl ReorderRelation {
     fn iter<'a>(
         &'a self,
         tx: &'a SessionTx,
-        epoch: u32,
+        epoch: Option<u32>,
         use_delta: &BTreeSet<ThrowawayId>,
-        snapshot: &'a SnapshotBridge
     ) -> TupleIter<'a> {
         let old_order = self.relation.bindings();
         let old_order_indices: BTreeMap<_, _> = old_order
@@ -70,7 +68,7 @@ impl ReorderRelation {
             .collect_vec();
         Box::new(
             self.relation
-                .iter(tx, epoch, use_delta, snapshot)
+                .iter(tx, epoch, use_delta)
                 .map_ok(move |tuple| {
                     let old = tuple.0;
                     let new = reorder_indices
@@ -451,7 +449,7 @@ impl TripleRelation {
                 Err(e) => return Box::new([Err(e)].into_iter()),
                 Ok((_, eid, val)) => {
                     let t = Tuple(vec![val, DataValue::EnId(eid)]);
-                    if let Err(e) = throwaway.put(&t, &[]) {
+                    if let Err(e) = throwaway.put(&t, 0) {
                         return Box::new([Err(e.into())].into_iter());
                     }
                 }
@@ -512,23 +510,27 @@ pub struct StoredDerivedRelation {
 }
 
 impl StoredDerivedRelation {
-    fn iter(&self, epoch: u32, use_delta: &BTreeSet<ThrowawayId>, snapshot: &SnapshotBridge) -> TupleIter {
-        if use_delta.contains(&self.storage.id) {
-            Box::new(
-                self.storage
-                    .scan_all_with_snapshot(snapshot)
-                    .filter_map_ok(move |(t, stored_epoch)| {
-                        if let Some(stored_epoch) = stored_epoch {
-                            if epoch > stored_epoch + 1 {
-                                return None;
-                            }
-                        }
-                        Some(t)
-                    }),
-            )
-        } else {
-            Box::new(self.storage.scan_all_with_snapshot(snapshot).map_ok(|(t, _)| t))
+    fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<ThrowawayId>) -> TupleIter {
+        if epoch == Some(0) {
+            return Box::new(iter::empty());
         }
+
+        let scan_epoch = match epoch {
+            None => 0,
+            Some(ep) => {
+                if use_delta.contains(&self.storage.id) {
+                    ep - 1
+                } else {
+                    0
+                }
+            }
+        };
+
+        Box::new(
+            self.storage
+                .scan_all_for_epoch(scan_epoch)
+                .map_ok(|(t, _)| t),
+        )
     }
     fn join_is_prefix(&self, right_join_indices: &[usize]) -> bool {
         let mut indices = right_join_indices.to_vec();
@@ -541,103 +543,64 @@ impl StoredDerivedRelation {
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
-        epoch: u32,
+        epoch: Option<u32>,
         use_delta: &BTreeSet<ThrowawayId>,
-        snapshot: &'a SnapshotBridge,
     ) -> TupleIter<'a> {
+        if epoch == Some(0) {
+            return Box::new(iter::empty());
+        }
         let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
         right_invert_indices.sort_by_key(|(_, b)| **b);
         let left_to_prefix_indices = right_invert_indices
             .into_iter()
             .map(|(a, _)| left_join_indices[a])
             .collect_vec();
-        if use_delta.contains(&self.storage.id) {
-            Box::new(
-                left_iter
-                    .map_ok(move |tuple| {
-                        let eliminate_indices = eliminate_indices.clone();
-                        let prefix = Tuple(
-                            left_to_prefix_indices
-                                .iter()
-                                .map(|i| tuple.0[*i].clone())
-                                .collect_vec(),
-                        );
-                        self.storage
-                            .scan_prefix_with_snapshot(&prefix, snapshot)
-                            .filter_map_ok(move |(found, meta)| {
-                                if let Some(stored_epoch) = meta {
-                                    if epoch != stored_epoch + 1 {
-                                        return None;
-                                    }
-                                }
-                                // dbg!("filter", &tuple, &prefix, &found);
-                                let mut ret = tuple.0.clone();
-                                ret.extend(found.0);
+        let scan_epoch = match epoch {
+            None => 0,
+            Some(ep) => {
+                if use_delta.contains(&self.storage.id) {
+                    ep - 1
+                } else {
+                    0
+                }
+            }
+        };
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| {
+                    let eliminate_indices = eliminate_indices.clone();
+                    let prefix = Tuple(
+                        left_to_prefix_indices
+                            .iter()
+                            .map(|i| tuple.0[*i].clone())
+                            .collect_vec(),
+                    );
+                    self.storage
+                        .scan_prefix_for_epoch(&prefix, scan_epoch)
+                        .filter_map_ok(move |(found, meta)| {
+                            // dbg!("filter", &tuple, &prefix, &found);
+                            let mut ret = tuple.0.clone();
+                            ret.extend(found.0);
 
-                                if !eliminate_indices.is_empty() {
-                                    ret = ret
-                                        .into_iter()
-                                        .enumerate()
-                                        .filter_map(|(i, v)| {
-                                            if eliminate_indices.contains(&i) {
-                                                None
-                                            } else {
-                                                Some(v)
-                                            }
-                                        })
-                                        .collect_vec();
-                                }
-                                Some(Tuple(ret))
-                            })
-                    })
-                    .flatten_ok()
-                    .map(flatten_err),
-            )
-        } else {
-            Box::new(
-                left_iter
-                    .map_ok(move |tuple| {
-                        let eliminate_indices = eliminate_indices.clone();
-                        let prefix = Tuple(
-                            left_to_prefix_indices
-                                .iter()
-                                .map(|i| tuple.0[*i].clone())
-                                .collect_vec(),
-                        );
-                        self.storage
-                            .scan_prefix_with_snapshot(&prefix, snapshot)
-                            .filter_map_ok(move |(found, meta)| {
-                                if let Some(stored_epoch) = meta {
-                                    if epoch == stored_epoch {
-                                        eprintln!("warning: read fresh data");
-                                        return None;
-                                    }
-                                }
-
-                                // dbg!("no-filter", &tuple, &prefix, &found);
-                                let mut ret = tuple.0.clone();
-                                ret.extend(found.0);
-
-                                if !eliminate_indices.is_empty() {
-                                    ret = ret
-                                        .into_iter()
-                                        .enumerate()
-                                        .filter_map(|(i, v)| {
-                                            if eliminate_indices.contains(&i) {
-                                                None
-                                            } else {
-                                                Some(v)
-                                            }
-                                        })
-                                        .collect_vec();
-                                }
-                                Some(Tuple(ret))
-                            })
-                    })
-                    .flatten_ok()
-                    .map(flatten_err),
-            )
-        }
+                            if !eliminate_indices.is_empty() {
+                                ret = ret
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter_map(|(i, v)| {
+                                        if eliminate_indices.contains(&i) {
+                                            None
+                                        } else {
+                                            Some(v)
+                                        }
+                                    })
+                                    .collect_vec();
+                            }
+                            Some(Tuple(ret))
+                        })
+                })
+                .flatten_ok()
+                .map(flatten_err),
+        )
     }
 }
 
@@ -744,9 +707,8 @@ impl Relation {
     pub fn iter<'a>(
         &'a self,
         tx: &'a SessionTx,
-        epoch: u32,
+        epoch: Option<u32>,
         use_delta: &BTreeSet<ThrowawayId>,
-        snapshot: &'a SnapshotBridge,
     ) -> TupleIter<'a> {
         match self {
             Relation::Fixed(f) => Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone())))),
@@ -754,9 +716,9 @@ impl Relation {
                 tx.triple_a_before_scan(r.attr.id, r.vld)
                     .map_ok(|(_, e_id, y)| Tuple(vec![DataValue::EnId(e_id), y])),
             ),
-            Relation::Derived(r) => r.iter(epoch, use_delta, snapshot),
-            Relation::Join(j) => j.iter(tx, epoch, use_delta, snapshot),
-            Relation::Reorder(r) => r.iter(tx, epoch, use_delta, snapshot),
+            Relation::Derived(r) => r.iter(epoch, use_delta),
+            Relation::Join(j) => j.iter(tx, epoch, use_delta),
+            Relation::Reorder(r) => r.iter(tx, epoch, use_delta),
         }
     }
 }
@@ -786,9 +748,8 @@ impl InnerJoin {
     pub(crate) fn iter<'a>(
         &'a self,
         tx: &'a SessionTx,
-        epoch: u32,
+        epoch: Option<u32>,
         use_delta: &BTreeSet<ThrowawayId>,
-        snapshot: &'a SnapshotBridge,
     ) -> TupleIter<'a> {
         let bindings = self.bindings();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
@@ -799,7 +760,7 @@ impl InnerJoin {
                     .join_indices(&self.left.bindings(), &self.right.bindings())
                     .unwrap();
                 f.join(
-                    self.left.iter(tx, epoch, use_delta, snapshot),
+                    self.left.iter(tx, epoch, use_delta),
                     join_indices,
                     eliminate_indices,
                 )
@@ -810,7 +771,7 @@ impl InnerJoin {
                     .join_indices(&self.left.bindings(), &self.right.bindings())
                     .unwrap();
                 r.join(
-                    self.left.iter(tx, epoch, use_delta, snapshot),
+                    self.left.iter(tx, epoch, use_delta),
                     join_indices,
                     tx,
                     eliminate_indices,
@@ -823,20 +784,17 @@ impl InnerJoin {
                     .unwrap();
                 if r.join_is_prefix(&join_indices.1) {
                     r.prefix_join(
-                        self.left.iter(tx, epoch, use_delta, snapshot),
+                        self.left.iter(tx, epoch, use_delta),
                         join_indices,
                         eliminate_indices,
                         epoch,
                         use_delta,
-                        snapshot
                     )
                 } else {
-                    self.materialized_join(tx, eliminate_indices, epoch, use_delta, snapshot)
+                    self.materialized_join(tx, eliminate_indices, epoch, use_delta)
                 }
             }
-            Relation::Join(_) => {
-                self.materialized_join(tx, eliminate_indices, epoch, use_delta, snapshot)
-            }
+            Relation::Join(_) => self.materialized_join(tx, eliminate_indices, epoch, use_delta),
             Relation::Reorder(_) => {
                 panic!("joining on reordered")
             }
@@ -846,9 +804,8 @@ impl InnerJoin {
         &'a self,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-        epoch: u32,
+        epoch: Option<u32>,
         use_delta: &BTreeSet<ThrowawayId>,
-        snapshot: &'a SnapshotBridge,
     ) -> TupleIter<'a> {
         let right_bindings = self.right.bindings();
         let (left_join_indices, right_join_indices) = self
@@ -869,7 +826,7 @@ impl InnerJoin {
             .map(|(a, _)| a)
             .collect_vec();
         let throwaway = tx.new_throwaway();
-        for item in self.right.iter(tx, epoch, use_delta, snapshot) {
+        for item in self.right.iter(tx, epoch, use_delta) {
             match item {
                 Ok(tuple) => {
                     let stored_tuple = Tuple(
@@ -878,7 +835,7 @@ impl InnerJoin {
                             .map(|i| tuple.0[*i].clone())
                             .collect_vec(),
                     );
-                    if let Err(e) = throwaway.put(&stored_tuple, &[]) {
+                    if let Err(e) = throwaway.put(&stored_tuple, 0) {
                         return Box::new([Err(e.into())].into_iter());
                     }
                 }
@@ -887,7 +844,7 @@ impl InnerJoin {
         }
         Box::new(
             self.left
-                .iter(tx, epoch, use_delta, snapshot)
+                .iter(tx, epoch, use_delta)
                 .map_ok(move |tuple| {
                     let eliminate_indices = eliminate_indices.clone();
                     let prefix = Tuple(

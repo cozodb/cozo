@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use cozorocks::{DbIter, PinSlice, RawRocksDb, RocksDbStatus, SnapshotBridge};
+use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
 
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
@@ -21,47 +21,46 @@ impl Debug for ThrowawayArea {
 }
 
 impl ThrowawayArea {
-    pub(crate) fn put(&self, tuple: &Tuple, value: &[u8]) -> Result<(), RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key(self.id);
-        self.db.put(&key_encoded, value)
+    pub(crate) fn put(&self, tuple: &Tuple, epoch: u32) -> Result<(), RocksDbStatus> {
+        let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
+        self.db.put(&key_encoded, &[])
     }
-    pub(crate) fn put_if_absent(&self, tuple: &Tuple, value: &[u8]) -> Result<bool, RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key(self.id);
+    pub(crate) fn put_if_absent(
+        &self,
+        tuple: &Tuple,
+        epoch: u32,
+    ) -> Result<bool, RocksDbStatus> {
+        let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         Ok(if !self.db.exists(&key_encoded)? {
-            self.db.put(&key_encoded, value)?;
+            self.db.put(&key_encoded, &[])?;
             true
         } else {
             false
         })
     }
-    pub(crate) fn get(&self, tuple: &Tuple) -> Result<Option<PinSlice>, RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key(self.id);
-        self.db.get(&key_encoded)
-    }
-    pub(crate) fn exists(&self, tuple: &Tuple) -> Result<bool, RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key(self.id);
+    // pub(crate) fn get(&self, tuple: &Tuple, epoch: u32) -> Result<Option<PinSlice>, RocksDbStatus> {
+    //     let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
+    //     self.db.get(&key_encoded)
+    // }
+    pub(crate) fn exists(&self, tuple: &Tuple, epoch: u32) -> Result<bool, RocksDbStatus> {
+        let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.exists(&key_encoded)
     }
-    pub(crate) fn del(&self, tuple: &Tuple) -> Result<(), RocksDbStatus> {
-        let key_encoded = tuple.encode_as_key(self.id);
+    pub(crate) fn del(&self, tuple: &Tuple, epoch: u32) -> Result<(), RocksDbStatus> {
+        let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.del(&key_encoded)
     }
     pub fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
-        let (lower, upper) = EncodedTuple::bounds_for_prefix(self.id.0);
+        self.scan_all_for_epoch(0)
+    }
+    pub fn scan_all_for_epoch(
+        &self,
+        epoch: u32,
+    ) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
+        let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, epoch);
         let mut it = self
             .db
             .iterator()
-            .upper_bound(&upper)
-            .prefix_same_as_start(true)
-            .start();
-        it.seek(&lower);
-        ThrowawayIter { it, started: false }
-    }
-    pub fn scan_all_with_snapshot(&self, snapshot: &SnapshotBridge) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
-        let (lower, upper) = EncodedTuple::bounds_for_prefix(self.id.0);
-        let mut it = self
-            .db
-            .iterator_with_snapshot(snapshot)
             .upper_bound(&upper)
             .prefix_same_as_start(true)
             .start();
@@ -72,33 +71,21 @@ impl ThrowawayArea {
         &self,
         prefix: &Tuple,
     ) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
-        let mut upper = prefix.0.clone();
-        upper.push(DataValue::Bottom);
-        let upper = Tuple(upper);
-        let upper = upper.encode_as_key(self.id);
-        let lower = prefix.encode_as_key(self.id);
-        let mut it = self
-            .db
-            .iterator()
-            .upper_bound(&upper)
-            .prefix_same_as_start(true)
-            .start();
-        it.seek(&lower);
-        ThrowawayIter { it, started: false }
+        self.scan_prefix_for_epoch(prefix, 0)
     }
-    pub(crate) fn scan_prefix_with_snapshot(
+    pub(crate) fn scan_prefix_for_epoch(
         &self,
         prefix: &Tuple,
-        snapshot: &SnapshotBridge
+        epoch: u32,
     ) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bottom);
         let upper = Tuple(upper);
-        let upper = upper.encode_as_key(self.id);
-        let lower = prefix.encode_as_key(self.id);
+        let upper = upper.encode_as_key_for_epoch(self.id, epoch);
+        let lower = prefix.encode_as_key_for_epoch(self.id, epoch);
         let mut it = self
             .db
-            .iterator_with_snapshot(snapshot)
+            .iterator()
             .upper_bound(&upper)
             .prefix_same_as_start(true)
             .start();
@@ -143,7 +130,7 @@ impl Iterator for ThrowawayIter {
 
 impl Drop for ThrowawayArea {
     fn drop(&mut self) {
-        let (lower, upper) = EncodedTuple::bounds_for_prefix(self.id.0);
+        let (lower, upper) = EncodedTuple::bounds_for_prefix(self.id);
         if let Err(e) = self.db.range_del(&lower, &upper) {
             eprintln!("{}", e);
         }

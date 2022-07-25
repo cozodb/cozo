@@ -22,7 +22,7 @@ use crate::transact::throwaway::{ThrowawayArea, ThrowawayId};
 pub struct SessionTx {
     pub(crate) tx: Tx,
     pub(crate) throwaway: RawRocksDb,
-    pub(crate) throwaway_count: Arc<AtomicU32>,
+    pub(crate) throwaway_idx: Arc<AtomicU32>,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
     pub(crate) last_ent_id: Arc<AtomicU64>,
@@ -67,7 +67,8 @@ impl TxLog {
 
 impl SessionTx {
     pub(crate) fn new_throwaway(&self) -> ThrowawayArea {
-        let old_count = self.throwaway_count.fetch_add(1, Ordering::AcqRel);
+        let old_count = self.throwaway_idx.fetch_add(1, Ordering::AcqRel);
+        let old_count = old_count & 0x00ff_ffffu32;
         ThrowawayArea {
             db: self.throwaway.clone(),
             id: ThrowawayId(old_count),

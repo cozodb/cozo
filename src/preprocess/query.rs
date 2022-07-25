@@ -1,5 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::mem;
 use std::ops::Sub;
 
 use anyhow::Result;
@@ -9,7 +10,6 @@ use serde_json::Map;
 use crate::data::attr::Attribute;
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
-use crate::data::tuple::TupleIter;
 use crate::data::value::DataValue;
 use crate::preprocess::triple::TxError;
 use crate::runtime::transact::SessionTx;
@@ -174,55 +174,71 @@ impl SessionTx {
 
         // dbg!(&compiled);
 
-        for epoch in 1u32.. {
+        let mut changed: BTreeMap<_, _> = compiled.keys().map(|k| (k, false)).collect();
+        let mut prev_changed = changed.clone();
+
+        for epoch in 0u32.. {
             eprintln!("epoch {}", epoch);
-            let mut new_derived = false;
-            let snapshot = self.throwaway.make_snapshot();
-            if epoch == 1 {
-                let epoch_encoded = epoch.to_be_bytes();
+            if epoch == 0 {
                 for (k, rules) in compiled.iter() {
                     let (store, _arity) = stores.get(k).unwrap();
                     let use_delta = BTreeSet::default();
                     for (rule_n, (_head, _deriving_rules, relation)) in rules.iter().enumerate() {
                         eprintln!("initial calculation for rule {}.{}", k, rule_n);
-                        for item_res in relation.iter(self, epoch, &use_delta, &snapshot) {
+                        for item_res in relation.iter(self, Some(0), &use_delta) {
                             let item = item_res?;
                             eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
-                            store.put(&item, &epoch_encoded)?;
-                            new_derived = true;
+                            store.put(&item, 0)?;
+                            *changed.get_mut(k).unwrap() = true;
                         }
                     }
                 }
             } else {
-                let epoch_encoded = epoch.to_be_bytes();
+                mem::swap(&mut changed, &mut prev_changed);
+                for (_k, v) in changed.iter_mut() {
+                    *v = false;
+                }
+
                 for (k, rules) in compiled.iter() {
                     let (store, _arity) = stores.get(k).unwrap();
                     for (rule_n, (_head, deriving_rules, relation)) in rules.iter().enumerate() {
+                        let mut should_do_calculation = false;
+                        for drule in deriving_rules {
+                            if *prev_changed.get(drule).unwrap() {
+                                should_do_calculation = true;
+                                break;
+                            }
+                        }
+                        if !should_do_calculation {
+                            eprintln!("skipping rule {}.{} as none of its dependencies changed in the last iteration", k, rule_n);
+                            continue;
+                        }
                         for (delta_key, (delta_store, _)) in stores.iter() {
                             if !deriving_rules.contains(delta_key) {
                                 continue;
                             }
                             eprintln!("with delta {} for rule {}.{}", delta_key, k, rule_n);
                             let use_delta = BTreeSet::from([delta_store.id]);
-                            for item_res in relation.iter(self, epoch, &use_delta, &snapshot) {
-                                // todo: if the relation does not depend on the delta, skip
+                            for item_res in relation.iter(self, Some(epoch), &use_delta) {
                                 let item = item_res?;
                                 // improvement: the clauses can actually be evaluated in parallel
-                                if store.put_if_absent(&item, &epoch_encoded)? {
-                                    eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
-                                    new_derived = true;
-                                } else {
+                                if store.exists(&item, 0)? {
                                     eprintln!(
                                         "item for {}.{}: {:?} at {}, rederived",
                                         k, rule_n, item, epoch
                                     );
+                                } else {
+                                    eprintln!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
+                                    *changed.get_mut(k).unwrap() = true;
+                                    store.put(&item, epoch)?;
+                                    store.put(&item, 0)?;
                                 }
                             }
                         }
                     }
                 }
             }
-            if !new_derived {
+            if changed.values().all(|rule_changed| !*rule_changed) {
                 break;
             }
         }

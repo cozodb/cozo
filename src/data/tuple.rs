@@ -10,7 +10,7 @@ use crate::data::json::JsonValue;
 use crate::data::value::DataValue;
 use crate::transact::throwaway::ThrowawayId;
 
-pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 4;
+pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 6;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TupleError {
@@ -41,10 +41,22 @@ impl Tuple {
         self.0.len()
     }
     pub(crate) fn encode_as_key(&self, prefix: ThrowawayId) -> Vec<u8> {
+        self.encode_as_key_for_epoch(prefix, 0)
+    }
+    pub(crate) fn encode_as_key_for_epoch(&self, prefix: ThrowawayId, epoch: u32) -> Vec<u8> {
         let len = self.arity();
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
-        ret.extend(prefix.0.to_be_bytes());
-        ret.extend((len as u32).to_be_bytes());
+        let prefix_bytes = prefix.0.to_be_bytes();
+        let epoch_bytes = epoch.to_be_bytes();
+        ret.extend([
+            prefix_bytes[1],
+            prefix_bytes[2],
+            prefix_bytes[3],
+            epoch_bytes[1],
+            epoch_bytes[2],
+            epoch_bytes[3],
+        ]);
+        ret.extend((len as u16).to_be_bytes());
         ret.resize(4 * (len + 1), 0);
         for (idx, val) in self.0.iter().enumerate() {
             if idx > 0 {
@@ -69,23 +81,65 @@ impl<'a> From<&'a [u8]> for EncodedTuple<'a> {
 }
 
 impl<'a> EncodedTuple<'a> {
-    pub(crate) fn bounds_for_prefix(bound: u32) -> ([u8; 4], [u8; 4]) {
-        (bound.to_be_bytes(), (bound + 1).to_be_bytes())
+    pub(crate) fn bounds_for_prefix(prefix: ThrowawayId) -> ([u8; 6], [u8; 6]) {
+        let prefix_bytes = prefix.0.to_be_bytes();
+        let next_prefix_bytes = (prefix.0+1).to_be_bytes();
+        (
+            [
+                prefix_bytes[1],
+                prefix_bytes[2],
+                prefix_bytes[3],
+                0,
+                0,
+                0,
+            ],
+            [
+                next_prefix_bytes[1],
+                next_prefix_bytes[2],
+                next_prefix_bytes[3],
+                0,
+                0,
+                0,
+            ],
+        )
     }
-    pub(crate) fn prefix(&self) -> Result<u32, TupleError> {
-        if self.0.len() < 4 {
+    pub(crate) fn bounds_for_prefix_and_epoch(prefix: ThrowawayId, epoch: u32) -> ([u8; 6], [u8; 6]) {
+        let prefix_bytes = prefix.0.to_be_bytes();
+        let epoch_bytes = epoch.to_be_bytes();
+        let epoch_bytes_upper = (epoch + 1).to_be_bytes();
+        (
+            [
+                prefix_bytes[1],
+                prefix_bytes[2],
+                prefix_bytes[3],
+                epoch_bytes[1],
+                epoch_bytes[2],
+                epoch_bytes[3],
+            ],
+            [
+                prefix_bytes[1],
+                prefix_bytes[2],
+                prefix_bytes[3],
+                epoch_bytes_upper[1],
+                epoch_bytes_upper[2],
+                epoch_bytes_upper[3],
+            ],
+        )
+    }
+    pub(crate) fn prefix(&self) -> Result<(ThrowawayId, u32), TupleError> {
+        if self.0.len() < 6 {
             Err(TupleError::BadData(
                 "bad data length".to_string(),
                 self.0.to_vec(),
             ))
         } else {
-            Ok(u32::from_be_bytes([
-                self.0[0], self.0[1], self.0[2], self.0[3],
-            ]))
+            let id = u32::from_be_bytes([0, self.0[0], self.0[1], self.0[2]]);
+            let epoch = u32::from_be_bytes([0, self.0[3], self.0[4], self.0[5]]);
+            Ok((ThrowawayId(id), epoch))
         }
     }
     pub(crate) fn arity(&self) -> Result<usize, TupleError> {
-        if self.0.len() == 4 {
+        if self.0.len() == 6 {
             return Ok(0);
         }
         if self.0.len() < 8 {
@@ -94,12 +148,12 @@ impl<'a> EncodedTuple<'a> {
                 self.0.to_vec(),
             ))
         } else {
-            Ok(u32::from_be_bytes([self.0[4], self.0[5], self.0[6], self.0[7]]) as usize)
+            Ok(u16::from_be_bytes([self.0[6], self.0[7]]) as usize)
         }
     }
     fn force_get(&self, idx: usize) -> DataValue {
         let pos = if idx == 0 {
-            let arity = u32::from_be_bytes([self.0[4], self.0[5], self.0[6], self.0[7]]) as usize;
+            let arity = u16::from_be_bytes([self.0[6], self.0[7]]) as usize;
             4 * (arity + 1)
         } else {
             let len_pos = (idx + 1) * 4;
