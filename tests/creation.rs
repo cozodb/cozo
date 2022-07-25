@@ -129,7 +129,7 @@ fn creation() {
 
     info!("{}", to_string_pretty(&pulled).unwrap());
 
-    let query = json!([
+    let query = json!({"q": [
       {
         "rule": "ff",
         "args": [["?a", "?b"], ["?a", "person/friend", "?b"]]
@@ -142,11 +142,9 @@ fn creation() {
         "rule": "?",
         "args": [["?n"], {"rule": "ff", "args": [{"person/id": "alice_amorist"}, "?a"]}, ["?a", "person/first_name", "?n"]]
       }
-    ]);
+    ]});
     let mut tx = db.transact().unwrap();
-    let vld = Validity::current();
-    let query = tx.parse_rule_sets(&query, vld).unwrap();
-    let ret = tx.semi_naive_evaluate(&query).unwrap();
+    let ret = tx.run_query(&query).unwrap();
     let res: Vec<_> = ret.scan_all().try_collect().unwrap();
     info!("{:?}", res);
 

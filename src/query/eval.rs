@@ -3,16 +3,18 @@ use std::mem;
 
 use anyhow::Result;
 use itertools::Itertools;
-use log::{debug, Level, log_enabled, trace};
+use log::{debug, log_enabled, trace, Level};
 
 use crate::data::keyword::Keyword;
-use crate::query::compile::{BindingHeadFormatter, BindingHeadTerm, DatalogProgram, QueryCompilationError};
+use crate::query::compile::{
+    BindingHeadFormatter, BindingHeadTerm, DatalogProgram, QueryCompilationError,
+};
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 
 impl SessionTx {
-    pub fn semi_naive_evaluate(&mut self, prog: &DatalogProgram) -> Result<TempStore> {
+    pub(crate) fn semi_naive_evaluate(&mut self, prog: &DatalogProgram) -> Result<TempStore> {
         let stores = prog
             .iter()
             .map(|(k, s)| (k.clone(), (self.new_throwaway(), s.arity)))
@@ -44,7 +46,13 @@ impl SessionTx {
         if log_enabled!(Level::Debug) {
             for (k, vs) in compiled.iter() {
                 for (i, (binding, _, rel)) in vs.iter().enumerate() {
-                    debug!("{}.{} {:?}: {:#?}", k, i, BindingHeadFormatter(binding), rel)
+                    debug!(
+                        "{}.{} {:?}: {:#?}",
+                        k,
+                        i,
+                        BindingHeadFormatter(binding),
+                        rel
+                    )
                 }
             }
         }
@@ -100,7 +108,10 @@ impl SessionTx {
                                 if store.exists(&item, 0)? {
                                     trace!(
                                         "item for {}.{}: {:?} at {}, rederived",
-                                        k, rule_n, item, epoch
+                                        k,
+                                        rule_n,
+                                        item,
+                                        epoch
                                     );
                                 } else {
                                     trace!("item for {}.{}: {:?} at {}", k, rule_n, item, epoch);
