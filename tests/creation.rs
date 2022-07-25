@@ -141,7 +141,7 @@ fn creation() {
     let vld = Validity::current();
     let query = tx.parse_rule_sets(&query, vld).unwrap();
     let ret = tx.semi_naive_evaluate(&query).unwrap();
-    let res: Vec<_> = ret.scan_all().map_ok(|(a, b)| a).try_collect().unwrap();
+    let res: Vec<_> = ret.scan_all().try_collect().unwrap();
     dbg!(res);
 
     // // iteration

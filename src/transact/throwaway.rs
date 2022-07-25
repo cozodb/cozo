@@ -25,11 +25,7 @@ impl ThrowawayArea {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.put(&key_encoded, &[])
     }
-    pub(crate) fn put_if_absent(
-        &self,
-        tuple: &Tuple,
-        epoch: u32,
-    ) -> Result<bool, RocksDbStatus> {
+    pub(crate) fn put_if_absent(&self, tuple: &Tuple, epoch: u32) -> Result<bool, RocksDbStatus> {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         Ok(if !self.db.exists(&key_encoded)? {
             self.db.put(&key_encoded, &[])?;
@@ -50,13 +46,13 @@ impl ThrowawayArea {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.del(&key_encoded)
     }
-    pub fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
+    pub fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<Tuple>> {
         self.scan_all_for_epoch(0)
     }
     pub fn scan_all_for_epoch(
         &self,
         epoch: u32,
-    ) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
+    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
         let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, epoch);
         let mut it = self
             .db
@@ -70,14 +66,14 @@ impl ThrowawayArea {
     pub(crate) fn scan_prefix(
         &self,
         prefix: &Tuple,
-    ) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
+    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
         self.scan_prefix_for_epoch(prefix, 0)
     }
     pub(crate) fn scan_prefix_for_epoch(
         &self,
         prefix: &Tuple,
         epoch: u32,
-    ) -> impl Iterator<Item = anyhow::Result<(Tuple, Option<u32>)>> {
+    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bottom);
         let upper = Tuple(upper);
@@ -100,7 +96,7 @@ struct ThrowawayIter {
 }
 
 impl Iterator for ThrowawayIter {
-    type Item = anyhow::Result<(Tuple, Option<u32>)>;
+    type Item = anyhow::Result<Tuple>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if !self.started {
@@ -113,16 +109,7 @@ impl Iterator for ThrowawayIter {
             Ok(None) => None,
             Ok(Some((k_slice, v_slice))) => match EncodedTuple(k_slice).decode() {
                 Err(e) => Some(Err(e)),
-                Ok(t) => {
-                    let epoch = if v_slice.is_empty() {
-                        None
-                    } else {
-                        Some(u32::from_be_bytes([
-                            v_slice[0], v_slice[1], v_slice[2], v_slice[3],
-                        ]))
-                    };
-                    Some(Ok((t, epoch)))
-                }
+                Ok(t) => Some(Ok(t)),
             },
         }
     }

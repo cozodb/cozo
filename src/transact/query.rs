@@ -463,7 +463,7 @@ impl TripleRelation {
                     let eliminate_indices = eliminate_indices.clone();
                     throwaway
                         .scan_prefix(&prefix)
-                        .map_ok(move |(Tuple(mut found), _)| {
+                        .map_ok(move |Tuple(mut found)| {
                             let v_eid = found.pop().unwrap();
                             let mut ret = tuple.0.clone();
                             ret.push(v_eid);
@@ -528,8 +528,7 @@ impl StoredDerivedRelation {
 
         Box::new(
             self.storage
-                .scan_all_for_epoch(scan_epoch)
-                .map_ok(|(t, _)| t),
+                .scan_all_for_epoch(scan_epoch),
         )
     }
     fn join_is_prefix(&self, right_join_indices: &[usize]) -> bool {
@@ -577,7 +576,7 @@ impl StoredDerivedRelation {
                     );
                     self.storage
                         .scan_prefix_for_epoch(&prefix, scan_epoch)
-                        .filter_map_ok(move |(found, meta)| {
+                        .filter_map_ok(move |found| {
                             // dbg!("filter", &tuple, &prefix, &found);
                             let mut ret = tuple.0.clone();
                             ret.extend(found.0);
@@ -854,7 +853,7 @@ impl InnerJoin {
                             .collect_vec(),
                     );
                     let restore_indices = right_invert_indices.clone();
-                    throwaway.scan_prefix(&prefix).map_ok(move |(found, _)| {
+                    throwaway.scan_prefix(&prefix).map_ok(move |found| {
                         let mut ret = tuple.0.clone();
                         for i in restore_indices.iter() {
                             ret.push(found.0[*i].clone());
