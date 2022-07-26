@@ -163,7 +163,7 @@ impl SessionTx {
             JsonValue::String(s) => {
                 let kw = Keyword::from(s as &str);
                 if kw.is_reserved() {
-                    Ok(Expr::Binding(kw))
+                    Ok(Expr::Binding(kw, None))
                 } else {
                     Ok(Expr::Const(DataValue::String(s.into())))
                 }

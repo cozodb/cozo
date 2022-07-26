@@ -64,7 +64,7 @@ pub enum QueryCompilationError {
     #[error("op {0} is not a predicate")]
     NotAPredicate(&'static str),
     #[error("unsafe bindings in expression {0:?}: {1:?}")]
-    UnsafeBindingInPredicate(Expr, BTreeSet<Keyword>)
+    UnsafeBindingInPredicate(Expr, BTreeSet<Keyword>),
 }
 
 #[derive(Clone, Debug)]
@@ -140,7 +140,7 @@ impl Atom {
     pub(crate) fn into_predicate(self) -> Option<Expr> {
         match self {
             Atom::Predicate(e) => Some(e),
-            _ => None
+            _ => None,
         }
     }
     pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Keyword>) {
@@ -417,9 +417,7 @@ impl SessionTx {
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
-                Atom::Predicate(_) => {
-                    todo!()
-                }
+                Atom::Predicate(p) => ret = ret.filter(p.clone()),
                 Atom::Logical(_) => {
                     todo!()
                 }

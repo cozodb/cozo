@@ -141,10 +141,10 @@ fn creation() {
             },
             {
                 "rule": "?",
-                "args": [["?n", "?a"], {"rule": "ff", "args": [{"person/id": "alice_amorist"}, "?a"]}, ["?a", "person/first_name", "?n"]]
+                "args": [["?n", "?a"], {"pred": "Neq", "args": ["?n", "Alice"]}, {"rule": "ff", "args": [{"person/id": "alice_amorist"}, "?a"]}, ["?a", "person/first_name", "?n"]]
             }
         ],
-        "out": {"friend": {"pull": "?a", "spec": ["*"]}}
+        // "out": {"friend": {"pull": "?a", "spec": ["*"]}}
     });
     let mut tx = db.transact().unwrap();
     let ret = tx.run_query(&query).unwrap();

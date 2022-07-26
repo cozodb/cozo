@@ -6,6 +6,7 @@ use anyhow::Result;
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
+use crate::data::expr::Expr;
 use crate::data::keyword::Keyword;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
@@ -20,6 +21,44 @@ pub enum Relation {
     Derived(StoredDerivedRelation),
     Join(Box<InnerJoin>),
     Reorder(ReorderRelation),
+    Filter(FilteredRelation),
+}
+
+pub struct FilteredRelation {
+    parent: Box<Relation>,
+    pred: Expr,
+}
+
+impl FilteredRelation {
+    fn fill_binding_indices(&mut self) {
+        let parent_bindings: BTreeMap<_, _> = self
+            .parent
+            .bindings()
+            .into_iter()
+            .enumerate()
+            .map(|(a, b)| (b, a))
+            .collect();
+        self.pred.fill_binding_indices(&parent_bindings);
+    }
+    fn iter<'a>(
+        &'a self,
+        tx: &'a SessionTx,
+        epoch: Option<u32>,
+        use_delta: &BTreeSet<TempStoreId>,
+    ) -> TupleIter {
+        Box::new(
+            self.parent
+                .iter(tx, epoch, use_delta)
+                .filter_map(|tuple| match tuple {
+                    Ok(t) => match self.pred.eval_pred(&t) {
+                        Ok(true) => Some(Ok(t)),
+                        Ok(false) => None,
+                        Err(e) => Some(Err(e)),
+                    },
+                    Err(e) => Some(Err(e)),
+                }),
+        )
+    }
 }
 
 struct BindingFormatter<'a>(&'a [Keyword]);
@@ -63,8 +102,7 @@ impl Debug for Relation {
                 if r.left.is_unit() {
                     r.right.fmt(f)
                 } else {
-                    f
-                        .debug_tuple("Join")
+                    f.debug_tuple("Join")
                         .field(&BindingFormatter(&r.bindings()))
                         .field(&r.joiner)
                         .field(&r.left)
@@ -77,11 +115,34 @@ impl Debug for Relation {
                 .field(&r.new_order)
                 .field(&r.relation)
                 .finish(),
+            Relation::Filter(r) => f
+                .debug_tuple("Filter")
+                .field(&r.pred)
+                .field(&r.parent)
+                .finish(),
         }
     }
 }
 
 impl Relation {
+    pub(crate) fn fill_predicate_binding_indices(&mut self) {
+        match self {
+            Relation::Fixed(_) => {}
+            Relation::Triple(_) => {}
+            Relation::Derived(_) => {}
+            Relation::Join(r) => {
+                r.left.fill_predicate_binding_indices();
+                r.right.fill_predicate_binding_indices();
+            }
+            Relation::Reorder(r) => {
+                r.relation.fill_predicate_binding_indices();
+            }
+            Relation::Filter(f) => {
+                f.parent.fill_predicate_binding_indices();
+                f.fill_binding_indices()
+            }
+        }
+    }
     pub(crate) fn unit() -> Self {
         Self::Fixed(InlineFixedRelation::unit())
     }
@@ -124,6 +185,12 @@ impl Relation {
         Self::Reorder(ReorderRelation {
             relation: Box::new(self),
             new_order,
+        })
+    }
+    pub(crate) fn filter(self, filter: Expr) -> Self {
+        Relation::Filter(FilteredRelation {
+            parent: Box::new(self),
+            pred: filter,
         })
     }
     pub(crate) fn join(
@@ -786,6 +853,7 @@ impl Relation {
             Relation::Derived(_r) => Ok(()),
             Relation::Join(r) => r.do_eliminate_temp_vars(used),
             Relation::Reorder(r) => r.relation.eliminate_temp_vars(used),
+            Relation::Filter(_) => Ok(()),
         }
     }
 
@@ -796,6 +864,7 @@ impl Relation {
             Relation::Derived(_) => None,
             Relation::Join(r) => Some(&r.to_eliminate),
             Relation::Reorder(_) => None,
+            Relation::Filter(_) => None,
         }
     }
 
@@ -817,6 +886,7 @@ impl Relation {
             Relation::Derived(d) => d.bindings.clone(),
             Relation::Join(j) => j.bindings(),
             Relation::Reorder(r) => r.bindings(),
+            Relation::Filter(r) => r.parent.bindings(),
         }
     }
     pub fn iter<'a>(
@@ -834,6 +904,7 @@ impl Relation {
             Relation::Derived(r) => r.iter(epoch, use_delta),
             Relation::Join(j) => j.iter(tx, epoch, use_delta),
             Relation::Reorder(r) => r.iter(tx, epoch, use_delta),
+            Relation::Filter(r) => r.iter(tx, epoch, use_delta),
         }
     }
 }
@@ -909,7 +980,9 @@ impl InnerJoin {
                     self.materialized_join(tx, eliminate_indices, epoch, use_delta)
                 }
             }
-            Relation::Join(_) => self.materialized_join(tx, eliminate_indices, epoch, use_delta),
+            Relation::Join(_) | Relation::Filter(_) => {
+                self.materialized_join(tx, eliminate_indices, epoch, use_delta)
+            }
             Relation::Reorder(_) => {
                 panic!("joining on reordered")
             }

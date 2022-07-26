@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
 use anyhow::Result;
@@ -19,13 +19,26 @@ pub enum ExprError {
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Binding(Keyword),
-    BoundIdx(usize),
+    Binding(Keyword, Option<usize>),
     Const(DataValue),
     Apply(&'static Op, Box<[Expr]>),
 }
 
 impl Expr {
+    pub(crate) fn fill_binding_indices(&mut self, binding_map: &BTreeMap<Keyword, usize>) {
+        match self {
+            Expr::Binding(k, idx) => {
+                let found_idx = *binding_map.get(k).unwrap();
+                *idx = Some(found_idx)
+            }
+            Expr::Const(_) => {}
+            Expr::Apply(_, args) => {
+                for arg in args.iter_mut() {
+                    arg.fill_binding_indices(binding_map);
+                }
+            }
+        }
+    }
     pub(crate) fn bindings(&self) -> BTreeSet<Keyword> {
         let mut ret = BTreeSet::new();
         self.collect_bindings(&mut ret);
@@ -33,10 +46,9 @@ impl Expr {
     }
     pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Keyword>) {
         match self {
-            Expr::Binding(b) => {
+            Expr::Binding(b, _) => {
                 coll.insert(b.clone());
             }
-            Expr::BoundIdx(_) => {}
             Expr::Const(_) => {}
             Expr::Apply(_, args) => {
                 for arg in args.iter() {
@@ -47,10 +59,7 @@ impl Expr {
     }
     pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
         match self {
-            Expr::Binding(_) => {
-                unreachable!()
-            }
-            Expr::BoundIdx(i) => Ok(bindings.0[*i].clone()),
+            Expr::Binding(_, i) => Ok(bindings.0[i.unwrap()].clone()),
             Expr::Const(d) => Ok(d.clone()),
             Expr::Apply(op, args) => {
                 let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings)).try_collect()?;
@@ -77,7 +86,7 @@ pub struct Op {
 
 impl Debug for Op {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple(self.name).field(&self.min_arity).finish()
+        write!(f, "{}", self.name)
     }
 }
 

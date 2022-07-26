@@ -34,8 +34,9 @@ impl SessionTx {
                     let mut collected = Vec::with_capacity(body.rules.len());
                     for rule in &body.rules {
                         let header = rule.head.iter().map(|t| &t.name).cloned().collect_vec();
-                        let relation =
+                        let mut relation =
                             self.compile_rule_body(&rule.body, rule.vld, &stores, &header)?;
+                        relation.fill_predicate_binding_indices();
                         collected.push((rule.head.clone(), rule.contained_rules(), relation));
                     }
                     Ok((k.clone(), collected))

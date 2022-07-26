@@ -1,6 +1,6 @@
 ## TODO
 
-* [ ] predicates
+* [x] predicates
 * [ ] negation
 * [ ] aggregation
 * [ ] stratum
