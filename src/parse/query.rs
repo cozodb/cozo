@@ -6,6 +6,9 @@ use itertools::Itertools;
 use serde_json::Map;
 
 use crate::data::attr::Attribute;
+use crate::data::expr::{
+    Expr, OP_ADD, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LT, OP_MUL, OP_NEQ, OP_SUB,
+};
 use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::value::DataValue;
@@ -70,6 +73,111 @@ impl SessionTx {
                     Ok(ret)
                 }
             }
+        }
+    }
+    fn parse_predicate_atom(payload: &Map<String, JsonValue>) -> Result<Atom> {
+        let pred = Self::parse_expr(payload)?;
+        if let Expr::Apply(op, _) = &pred {
+            if !op.is_predicate {
+                return Err(QueryCompilationError::NotAPredicate(op.name).into());
+            }
+        }
+        Ok(Atom::Predicate(pred))
+    }
+    fn parse_expr(payload: &Map<String, JsonValue>) -> Result<Expr> {
+        let name = payload
+            .get("pred")
+            .ok_or_else(|| {
+                QueryCompilationError::UnexpectedForm(
+                    JsonValue::Object(payload.clone()),
+                    "expect key 'pred'".to_string(),
+                )
+            })?
+            .as_str()
+            .ok_or_else(|| {
+                QueryCompilationError::UnexpectedForm(
+                    JsonValue::Object(payload.clone()),
+                    "expect key 'pred' to be the name of a predicate".to_string(),
+                )
+            })?;
+
+        let op = match name {
+            "Add" => &OP_ADD,
+            "Sub" => &OP_SUB,
+            "Mul" => &OP_MUL,
+            "Div" => &OP_DIV,
+            "Eq" => &OP_EQ,
+            "Neq" => &OP_NEQ,
+            "Gt" => &OP_GT,
+            "Ge" => &OP_GE,
+            "Lt" => &OP_LT,
+            "Le" => &OP_LE,
+            s => return Err(QueryCompilationError::UnknownOperator(s.to_string()).into()),
+        };
+
+        let args: Box<[Expr]> = payload
+            .get("args")
+            .ok_or_else(|| {
+                QueryCompilationError::UnexpectedForm(
+                    JsonValue::Object(payload.clone()),
+                    "expect key 'args'".to_string(),
+                )
+            })?
+            .as_array()
+            .ok_or_else(|| {
+                QueryCompilationError::UnexpectedForm(
+                    JsonValue::Object(payload.clone()),
+                    "expect key 'args' to be an array".to_string(),
+                )
+            })?
+            .iter()
+            .map(Self::parse_expr_arg)
+            .try_collect()?;
+
+        if op.vararg {
+            if args.len() < op.min_arity {
+                return Err(QueryCompilationError::PredicateArityMismatch(
+                    op.name,
+                    op.min_arity,
+                    args.len(),
+                )
+                .into());
+            }
+        } else if args.len() != op.min_arity {
+            return Err(QueryCompilationError::PredicateArityMismatch(
+                op.name,
+                op.min_arity,
+                args.len(),
+            )
+            .into());
+        }
+
+        Ok(Expr::Apply(op, args))
+    }
+    fn parse_expr_arg(payload: &JsonValue) -> Result<Expr> {
+        match payload {
+            JsonValue::String(s) => {
+                let kw = Keyword::from(s as &str);
+                if kw.is_reserved() {
+                    Ok(Expr::Const(Term::Var(kw)))
+                } else {
+                    Ok(Expr::Const(Term::Const(DataValue::String(s.into()))))
+                }
+            }
+            JsonValue::Object(map) => {
+                if let Some(v) = map.get("const") {
+                    Ok(Expr::Const(Term::Const(v.into())))
+                } else if map.contains_key("pred") {
+                    Self::parse_expr(map)
+                } else {
+                    Err(QueryCompilationError::UnexpectedForm(
+                        JsonValue::Object(map.clone()),
+                        "must contain either 'const' or 'pred' key".to_string(),
+                    )
+                    .into())
+                }
+            }
+            v => Ok(Expr::Const(Term::Const(v.into()))),
         }
     }
     fn parse_rule_atom(&mut self, payload: &Map<String, JsonValue>, vld: Validity) -> Result<Atom> {
@@ -232,7 +340,9 @@ impl SessionTx {
                 if map.contains_key("rule") {
                     self.parse_rule_atom(map, vld)
                 } else if map.contains_key("pred") {
-                    dbg!(map);
+                    Self::parse_predicate_atom(map)
+                } else if map.contains_key("logical") {
+                    dbg!("x");
                     todo!()
                 } else {
                     todo!()

@@ -14,18 +14,18 @@ pub enum ExprError {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum Expr {
+pub enum Expr {
     Const(Term<DataValue>),
     Apply(&'static Op, Box<[Expr]>),
 }
 
 #[derive(Clone)]
-pub(crate) struct Op {
-    name: &'static str,
-    min_arity: usize,
-    vararg: bool,
-    is_predicate: bool,
-    inner: fn(&[DataValue]) -> Result<DataValue>,
+pub struct Op {
+    pub(crate) name: &'static str,
+    pub(crate) min_arity: usize,
+    pub(crate) vararg: bool,
+    pub(crate) is_predicate: bool,
+    pub(crate) inner: fn(&[DataValue]) -> Result<DataValue>,
 }
 
 impl Debug for Op {
@@ -54,6 +54,26 @@ pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_NEQ, 0, true, true);
 fn op_neq(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(!args.iter().all_equal()))
+}
+
+define_op!(OP_GT, 2, false, true);
+fn op_gt(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(args[0] > args[1]))
+}
+
+define_op!(OP_GE, 2, false, true);
+fn op_ge(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(args[0] >= args[1]))
+}
+
+define_op!(OP_LT, 2, false, true);
+fn op_lt(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(args[0] < args[1]))
+}
+
+define_op!(OP_LE, 2, false, true);
+fn op_le(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(args[0] <= args[1]))
 }
 
 define_op!(OP_ADD, 0, true, false);

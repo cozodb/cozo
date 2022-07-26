@@ -5,7 +5,6 @@ use std::ops::Sub;
 use anyhow::Result;
 use itertools::Itertools;
 
-use crate::{EntityId, Validity};
 use crate::data::attr::Attribute;
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
@@ -13,6 +12,8 @@ use crate::data::value::DataValue;
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
+use crate::{EntityId, Validity};
+use crate::data::expr::Expr;
 
 /// example ruleset in python and javascript
 /// ```python
@@ -56,10 +57,16 @@ pub enum QueryCompilationError {
     EntryHeadsNotIdentical,
     #[error("required binding not found: {0}")]
     BindingNotFound(Keyword),
+    #[error("unknown operator '{0}'")]
+    UnknownOperator(String),
+    #[error("op {0} arity mismatch: expected {1} arguments, found {2}")]
+    PredicateArityMismatch(&'static str, usize, usize),
+    #[error("op {0} is not a predicate")]
+    NotAPredicate(&'static str),
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum Term<T> {
+pub enum Term<T> {
     Var(Keyword),
     Const(T),
 }
@@ -93,16 +100,27 @@ pub struct RuleApplyAtom {
 }
 
 #[derive(Clone, Debug)]
-pub struct PredicateAtom {
-    pub(crate) left: Term<DataValue>,
-    pub(crate) right: Term<DataValue>,
+pub enum LogicalAtom {
+    AttrTriple(AttrTripleAtom),
+    Rule(RuleApplyAtom),
+    Negation(Box<LogicalAtom>),
+    Conjunction(Vec<LogicalAtom>),
+    Disjunction(Vec<LogicalAtom>),
+}
+
+#[derive(Clone, Debug)]
+pub struct BindUnification {
+    left: Term<DataValue>,
+    right: Expr,
 }
 
 #[derive(Clone, Debug)]
 pub enum Atom {
     AttrTriple(AttrTripleAtom),
     Rule(RuleApplyAtom),
-    Predicate(PredicateAtom),
+    Predicate(Expr),
+    Logical(LogicalAtom),
+    BindUnify(BindUnification),
 }
 
 #[derive(Clone, Debug)]
@@ -356,6 +374,12 @@ impl SessionTx {
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 Atom::Predicate(_) => {
+                    todo!()
+                }
+                Atom::Logical(_) => {
+                    todo!()
+                }
+                Atom::BindUnify(_) => {
                     todo!()
                 }
             }

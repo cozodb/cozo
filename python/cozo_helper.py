@@ -70,13 +70,17 @@ Ge = PredicateClass('Ge')
 Le = PredicateClass('Le')
 Eq = PredicateClass('Eq')
 Neq = PredicateClass('Neq')
+Add = PredicateClass('Add')
+Sub = PredicateClass('Sub')
+Mul = PredicateClass('Mul')
+Div = PredicateClass('Div')
 
 
 def Const(item):
     return {'const': item}
 
 
-__all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Q', 'T', 'R', 'Const']
+__all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Add', 'Sub', 'Mul', 'Div', 'Q', 'T', 'R', 'Const']
 
 if __name__ == '__main__':
     import json
