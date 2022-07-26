@@ -5,8 +5,7 @@ use std::ops::Rem;
 
 use anyhow::Result;
 use itertools::Itertools;
-use ordered_float::Float;
-use smartstring::{LazyCompact, SmartString};
+use ordered_float::{Float, OrderedFloat};
 
 use crate::data::expr::ExprError::UnexpectedArgs;
 use crate::data::keyword::Keyword;
@@ -132,22 +131,38 @@ fn op_neq(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_GT, 2, false, true);
 fn op_gt(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(args[0] > args[1]))
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Int(a), DataValue::Float(b)) => OrderedFloat(*a as f64) > *b,
+        (DataValue::Float(a), DataValue::Int(b)) => *a > OrderedFloat(*b as f64),
+        (_, _) => args[0] > args[1],
+    }))
 }
 
 define_op!(OP_GE, 2, false, true);
 fn op_ge(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(args[0] >= args[1]))
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Int(a), DataValue::Float(b)) => OrderedFloat(*a as f64) >= *b,
+        (DataValue::Float(a), DataValue::Int(b)) => *a >= OrderedFloat(*b as f64),
+        (_, _) => args[0] >= args[1],
+    }))
 }
 
 define_op!(OP_LT, 2, false, true);
 fn op_lt(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(args[0] < args[1]))
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Int(a), DataValue::Float(b)) => OrderedFloat(*a as f64) < *b,
+        (DataValue::Float(a), DataValue::Int(b)) => *a < OrderedFloat(*b as f64),
+        (_, _) => args[0] < args[1],
+    }))
 }
 
 define_op!(OP_LE, 2, false, true);
 fn op_le(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(args[0] <= args[1]))
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Int(a), DataValue::Float(b)) => OrderedFloat(*a as f64) <= *b,
+        (DataValue::Float(a), DataValue::Int(b)) => *a <= OrderedFloat(*b as f64),
+        (_, _) => args[0] <= args[1],
+    }))
 }
 
 define_op!(OP_ADD, 0, true, false);
@@ -570,7 +585,7 @@ fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
         if let DataValue::String(s) = arg {
             ret += s;
         } else {
-            return Err(UnexpectedArgs("strcat", args.to_vec()).into());
+            return Err(UnexpectedArgs("str_cat", args.to_vec()).into());
         }
     }
     Ok(DataValue::String(ret.into()))
