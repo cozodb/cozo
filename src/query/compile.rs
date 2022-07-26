@@ -99,11 +99,6 @@ pub struct PredicateAtom {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum Expr {
-    Const(Term<DataValue>),
-}
-
-#[derive(Clone, Debug)]
 pub enum Atom {
     AttrTriple(AttrTripleAtom),
     Rule(RuleApplyAtom),

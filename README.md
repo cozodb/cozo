@@ -1,3 +1,12 @@
 ## TODO
 
-* Use extension traits to simplify stuff!
+* [ ] predicates
+* [ ] negation
+* [ ] aggregation
+* [ ] stratum
+* [ ] disjunction
+* [ ] magic sets
+* [ ] function symbol
+* [ ] arithmetic
+* [ ] range scan
+* [ ] public API

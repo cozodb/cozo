@@ -8,6 +8,7 @@ authors = ["Ziyang Hu"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+casey = "0.3.3"
 uuid = { version = "0.8", features = ["v1", "v4", "serde"] }
 rand = "0.8.5"
 anyhow = "1.0"
