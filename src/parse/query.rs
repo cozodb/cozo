@@ -7,7 +7,8 @@ use serde_json::Map;
 
 use crate::data::attr::Attribute;
 use crate::data::expr::{
-    Expr, OP_ADD, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LT, OP_MUL, OP_NEQ, OP_SUB,
+    Expr, OP_ADD, OP_AND, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LT, OP_MUL, OP_NEQ, OP_NOT, OP_OR,
+    OP_SUB,
 };
 use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
@@ -112,6 +113,9 @@ impl SessionTx {
             "Ge" => &OP_GE,
             "Lt" => &OP_LT,
             "Le" => &OP_LE,
+            "Or" => &OP_OR,
+            "And" => &OP_AND,
+            "Not" => &OP_NOT,
             s => return Err(QueryCompilationError::UnknownOperator(s.to_string()).into()),
         };
 
@@ -159,14 +163,14 @@ impl SessionTx {
             JsonValue::String(s) => {
                 let kw = Keyword::from(s as &str);
                 if kw.is_reserved() {
-                    Ok(Expr::Const(Term::Var(kw)))
+                    Ok(Expr::Binding(kw))
                 } else {
-                    Ok(Expr::Const(Term::Const(DataValue::String(s.into()))))
+                    Ok(Expr::Const(DataValue::String(s.into())))
                 }
             }
             JsonValue::Object(map) => {
                 if let Some(v) = map.get("const") {
-                    Ok(Expr::Const(Term::Const(v.into())))
+                    Ok(Expr::Const(v.into()))
                 } else if map.contains_key("pred") {
                     Self::parse_expr(map)
                 } else {
@@ -177,7 +181,7 @@ impl SessionTx {
                     .into())
                 }
             }
-            v => Ok(Expr::Const(Term::Const(v.into()))),
+            v => Ok(Expr::Const(v.into())),
         }
     }
     fn parse_rule_atom(&mut self, payload: &Map<String, JsonValue>, vld: Validity) -> Result<Atom> {

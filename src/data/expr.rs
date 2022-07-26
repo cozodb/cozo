@@ -4,19 +4,46 @@ use anyhow::Result;
 use itertools::Itertools;
 
 use crate::data::expr::ExprError::UnexpectedArgs;
+use crate::data::keyword::Keyword;
+use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::query::compile::Term;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExprError {
     #[error("unexpected args for {0}: {1:?}")]
     UnexpectedArgs(&'static str, Vec<DataValue>),
+    #[error("unexpected return type: expected {0}, got {1:?}")]
+    UnexpectedReturnType(String, DataValue),
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Const(Term<DataValue>),
+    Binding(Keyword),
+    BoundIdx(usize),
+    Const(DataValue),
     Apply(&'static Op, Box<[Expr]>),
+}
+
+impl Expr {
+    pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
+        match self {
+            Expr::Binding(_) => {
+                unreachable!()
+            }
+            Expr::BoundIdx(i) => Ok(bindings.0[*i].clone()),
+            Expr::Const(d) => Ok(d.clone()),
+            Expr::Apply(op, args) => {
+                let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings)).try_collect()?;
+                (op.inner)(&args)
+            }
+        }
+    }
+    pub(crate) fn eval_pred(&self, bindings: &Tuple) -> Result<bool> {
+        match self.eval(bindings)? {
+            DataValue::Bool(b) => Ok(b),
+            v => Err(ExprError::UnexpectedReturnType("bool".to_string(), v).into()),
+        }
+    }
 }
 
 #[derive(Clone)]
