@@ -430,18 +430,18 @@ impl SessionTx {
         let ret_vars_set = ret_vars.iter().cloned().collect();
 
         ret.eliminate_temp_vars(&ret_vars_set)?;
-        let cur_ret_set: BTreeSet<_> = ret.bindings().into_iter().collect();
+        let cur_ret_set: BTreeSet<_> = ret.bindings_after_eliminate().into_iter().collect();
         if cur_ret_set != ret_vars_set {
             ret = ret.cartesian_join(Relation::unit());
             ret.eliminate_temp_vars(&ret_vars_set)?;
         }
 
-        let cur_ret_set: BTreeSet<_> = ret.bindings().into_iter().collect();
+        let cur_ret_set: BTreeSet<_> = ret.bindings_after_eliminate().into_iter().collect();
         if cur_ret_set != ret_vars_set {
             let diff = cur_ret_set.sub(&cur_ret_set);
             return Err(QueryCompilationError::UnsafeUnboundVars(diff).into());
         }
-        let cur_ret_bindings = ret.bindings();
+        let cur_ret_bindings = ret.bindings_after_eliminate();
         if ret_vars != cur_ret_bindings {
             ret = ret.reorder(ret_vars.to_vec());
         }

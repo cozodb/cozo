@@ -10,3 +10,5 @@
 * [ ] arithmetic
 * [ ] range scan
 * [ ] public API
+* [ ] sorting
+* [ ] limit, offset

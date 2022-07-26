@@ -27,13 +27,26 @@ pub enum Relation {
 pub struct FilteredRelation {
     parent: Box<Relation>,
     pred: Expr,
+    pub(crate) to_eliminate: BTreeSet<Keyword>,
 }
 
 impl FilteredRelation {
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
+        for binding in self.parent.bindings_before_eliminate() {
+            if !used.contains(&binding) {
+                self.to_eliminate.insert(binding.clone());
+            }
+        }
+        let mut nxt = used.clone();
+        nxt.extend(self.pred.bindings());
+        self.parent.eliminate_temp_vars(&nxt)?;
+        Ok(())
+    }
+
     fn fill_binding_indices(&mut self) {
         let parent_bindings: BTreeMap<_, _> = self
             .parent
-            .bindings()
+            .bindings_after_eliminate()
             .into_iter()
             .enumerate()
             .map(|(a, b)| (b, a))
@@ -61,9 +74,9 @@ impl FilteredRelation {
     }
 }
 
-struct BindingFormatter<'a>(&'a [Keyword]);
+struct BindingFormatter(Vec<Keyword>);
 
-impl Debug for BindingFormatter<'_> {
+impl Debug for BindingFormatter {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s = self.0.iter().map(|f| f.to_string_no_prefix()).join(", ");
         write!(f, "[{}]", s)
@@ -72,30 +85,31 @@ impl Debug for BindingFormatter<'_> {
 
 impl Debug for Relation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let bindings = BindingFormatter(self.bindings_after_eliminate());
         match self {
             Relation::Fixed(r) => {
                 if r.bindings.is_empty() && r.data.len() == 1 {
                     f.write_str("Unit")
                 } else if r.data.len() == 1 {
                     f.debug_tuple("Singlet")
-                        .field(&BindingFormatter(&r.bindings))
+                        .field(&bindings)
                         .field(r.data.get(0).unwrap())
                         .finish()
                 } else {
                     f.debug_tuple("Fixed")
-                        .field(&BindingFormatter(&r.bindings))
+                        .field(&bindings)
                         .field(&["..."])
                         .finish()
                 }
             }
             Relation::Triple(r) => f
                 .debug_tuple("Triple")
-                .field(&BindingFormatter(&r.bindings))
+                .field(&bindings)
                 .field(&r.attr.keyword)
                 .finish(),
             Relation::Derived(r) => f
                 .debug_tuple("Derived")
-                .field(&BindingFormatter(&r.bindings))
+                .field(&bindings)
                 .field(&r.storage.id)
                 .finish(),
             Relation::Join(r) => {
@@ -103,7 +117,7 @@ impl Debug for Relation {
                     r.right.fmt(f)
                 } else {
                     f.debug_tuple("Join")
-                        .field(&BindingFormatter(&r.bindings()))
+                        .field(&bindings)
                         .field(&r.joiner)
                         .field(&r.left)
                         .field(&r.right)
@@ -117,6 +131,7 @@ impl Debug for Relation {
                 .finish(),
             Relation::Filter(r) => f
                 .debug_tuple("Filter")
+                .field(&bindings)
                 .field(&r.pred)
                 .field(&r.parent)
                 .finish(),
@@ -191,6 +206,7 @@ impl Relation {
         Relation::Filter(FilteredRelation {
             parent: Box::new(self),
             pred: filter,
+            to_eliminate: Default::default(),
         })
     }
     pub(crate) fn join(
@@ -227,7 +243,7 @@ impl ReorderRelation {
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
     ) -> TupleIter<'a> {
-        let old_order = self.relation.bindings();
+        let old_order = self.relation.bindings_after_eliminate();
         let old_order_indices: BTreeMap<_, _> = old_order
             .into_iter()
             .enumerate()
@@ -784,12 +800,9 @@ pub(crate) struct Joiner {
 
 impl Debug for Joiner {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{:?}<->{:?}",
-            BindingFormatter(&self.left_keys),
-            BindingFormatter(&self.right_keys)
-        )
+        let left_bindings = BindingFormatter(self.left_keys.clone());
+        let right_bindings = BindingFormatter(self.right_keys.clone());
+        write!(f, "{:?}<->{:?}", left_bindings, right_bindings,)
     }
 }
 
@@ -853,7 +866,7 @@ impl Relation {
             Relation::Derived(_r) => Ok(()),
             Relation::Join(r) => r.do_eliminate_temp_vars(used),
             Relation::Reorder(r) => r.relation.eliminate_temp_vars(used),
-            Relation::Filter(_) => Ok(()),
+            Relation::Filter(r) => r.do_eliminate_temp_vars(used),
         }
     }
 
@@ -864,11 +877,11 @@ impl Relation {
             Relation::Derived(_) => None,
             Relation::Join(r) => Some(&r.to_eliminate),
             Relation::Reorder(_) => None,
-            Relation::Filter(_) => None,
+            Relation::Filter(r) => Some(&r.to_eliminate),
         }
     }
 
-    pub fn bindings(&self) -> Vec<Keyword> {
+    pub fn bindings_after_eliminate(&self) -> Vec<Keyword> {
         let ret = self.bindings_before_eliminate();
         if let Some(to_eliminate) = self.eliminate_set() {
             ret.into_iter()
@@ -886,7 +899,7 @@ impl Relation {
             Relation::Derived(d) => d.bindings.clone(),
             Relation::Join(j) => j.bindings(),
             Relation::Reorder(r) => r.bindings(),
-            Relation::Filter(r) => r.parent.bindings(),
+            Relation::Filter(r) => r.parent.bindings_after_eliminate(),
         }
     }
     pub fn iter<'a>(
@@ -926,8 +939,8 @@ impl InnerJoin {
     }
 
     pub(crate) fn bindings(&self) -> Vec<Keyword> {
-        let mut ret = self.left.bindings();
-        ret.extend(self.right.bindings());
+        let mut ret = self.left.bindings_after_eliminate();
+        ret.extend(self.right.bindings_after_eliminate());
         debug_assert_eq!(ret.len(), ret.iter().collect::<BTreeSet<_>>().len());
         ret
     }
@@ -943,7 +956,10 @@ impl InnerJoin {
             Relation::Fixed(f) => {
                 let join_indices = self
                     .joiner
-                    .join_indices(&self.left.bindings(), &self.right.bindings())
+                    .join_indices(
+                        &self.left.bindings_after_eliminate(),
+                        &self.right.bindings_after_eliminate(),
+                    )
                     .unwrap();
                 f.join(
                     self.left.iter(tx, epoch, use_delta),
@@ -954,7 +970,10 @@ impl InnerJoin {
             Relation::Triple(r) => {
                 let join_indices = self
                     .joiner
-                    .join_indices(&self.left.bindings(), &self.right.bindings())
+                    .join_indices(
+                        &self.left.bindings_after_eliminate(),
+                        &self.right.bindings_after_eliminate(),
+                    )
                     .unwrap();
                 r.join(
                     self.left.iter(tx, epoch, use_delta),
@@ -966,7 +985,10 @@ impl InnerJoin {
             Relation::Derived(r) => {
                 let join_indices = self
                     .joiner
-                    .join_indices(&self.left.bindings(), &self.right.bindings())
+                    .join_indices(
+                        &self.left.bindings_after_eliminate(),
+                        &self.right.bindings_after_eliminate(),
+                    )
                     .unwrap();
                 if r.join_is_prefix(&join_indices.1) {
                     r.prefix_join(
@@ -995,10 +1017,10 @@ impl InnerJoin {
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
     ) -> TupleIter<'a> {
-        let right_bindings = self.right.bindings();
+        let right_bindings = self.right.bindings_after_eliminate();
         let (left_join_indices, right_join_indices) = self
             .joiner
-            .join_indices(&self.left.bindings(), &right_bindings)
+            .join_indices(&self.left.bindings_after_eliminate(), &right_bindings)
             .unwrap();
         let right_join_indices_set = BTreeSet::from_iter(right_join_indices.iter().cloned());
         let mut right_store_indices = right_join_indices;
