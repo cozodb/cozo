@@ -59,12 +59,31 @@ impl FilteredRelation {
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
     ) -> TupleIter {
+        let bindings = self.parent.bindings_after_eliminate();
+        let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         Box::new(
             self.parent
                 .iter(tx, epoch, use_delta)
-                .filter_map(|tuple| match tuple {
+                .filter_map(move |tuple| match tuple {
                     Ok(t) => match self.pred.eval_pred(&t) {
-                        Ok(true) => Some(Ok(t)),
+                        Ok(true) => {
+                            if !eliminate_indices.is_empty() {
+                                let ret =
+                                    t.0.into_iter()
+                                        .enumerate()
+                                        .filter_map(|(i, v)| {
+                                            if eliminate_indices.contains(&i) {
+                                                None
+                                            } else {
+                                                Some(v)
+                                            }
+                                        })
+                                        .collect_vec();
+                                Some(Ok(Tuple(ret)))
+                            } else {
+                                Some(Ok(t))
+                            }
+                        }
                         Ok(false) => None,
                         Err(e) => Some(Err(e)),
                     },
