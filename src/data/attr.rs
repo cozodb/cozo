@@ -194,7 +194,7 @@ impl AttributeTyping {
                 }
             }
             AttributeTyping::Tuple => {
-                if matches!(val, DataValue::Tuple(_)) {
+                if matches!(val, DataValue::List(_)) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val).into())

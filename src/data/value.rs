@@ -47,7 +47,7 @@ pub enum DataValue {
     Bytes(Box<[u8]>),
 
     #[serde(rename = "z")]
-    Tuple(Box<[DataValue]>),
+    List(Box<[DataValue]>),
     #[serde(rename = "o")]
     DescVal(Reverse<Box<DataValue>>),
     #[serde(rename = "r")]
@@ -87,7 +87,7 @@ impl Debug for DataValue {
             DataValue::Bytes(b) => {
                 write!(f, "bytes(len={})", b.len())
             }
-            DataValue::Tuple(t) => {
+            DataValue::List(t) => {
                 f.debug_list()
                     .entries(t.iter())
                     .finish()

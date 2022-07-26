@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::mem;
+use std::ops::Rem;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -109,7 +110,7 @@ impl Debug for Op {
 
 macro_rules! define_op {
     ($name:ident, $min_arity:expr, $vararg:expr, $is_pred:expr) => {
-        pub(crate) const $name: Op = Op {
+        const $name: Op = Op {
             name: stringify!($name),
             min_arity: $min_arity,
             vararg: $vararg,
@@ -169,40 +170,51 @@ fn op_add(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_MAX, 0, true, false);
 fn op_max(args: &[DataValue]) -> Result<DataValue> {
-    let res = args.iter().try_fold(None, |accum, nxt| {
-        match (accum, nxt) {
-            (None, d@DataValue::Int(_)) => Ok(Some(d.clone())),
-            (None, d@DataValue::Float(_)) => Ok(Some(d.clone())),
+    let res = args
+        .iter()
+        .try_fold(None, |accum, nxt| match (accum, nxt) {
+            (None, d @ DataValue::Int(_)) => Ok(Some(d.clone())),
+            (None, d @ DataValue::Float(_)) => Ok(Some(d.clone())),
             (Some(DataValue::Int(a)), DataValue::Int(b)) => Ok(Some(DataValue::Int(a.max(*b)))),
-            (Some(DataValue::Int(a)), DataValue::Float(b)) => Ok(Some(DataValue::Float(b.0.max(a as f64).into()))),
-            (Some(DataValue::Float(a)), DataValue::Int(b)) => Ok(Some(DataValue::Float(a.0.max(*b as f64).into()))),
-            (Some(DataValue::Float(a)), DataValue::Float(b)) => Ok(Some(DataValue::Float(a.0.max(b.0).into()))),
+            (Some(DataValue::Int(a)), DataValue::Float(b)) => {
+                Ok(Some(DataValue::Float(b.0.max(a as f64).into())))
+            }
+            (Some(DataValue::Float(a)), DataValue::Int(b)) => {
+                Ok(Some(DataValue::Float(a.0.max(*b as f64).into())))
+            }
+            (Some(DataValue::Float(a)), DataValue::Float(b)) => {
+                Ok(Some(DataValue::Float(a.0.max(b.0).into())))
+            }
             _ => Err(UnexpectedArgs("max", args.to_vec())),
-        }
-    })?;
+        })?;
     match res {
         None => Ok(DataValue::Float(f64::neg_infinity().into())),
-        Some(v) => Ok(v)
+        Some(v) => Ok(v),
     }
 }
 
-
 define_op!(OP_MIN, 0, true, false);
 fn op_min(args: &[DataValue]) -> Result<DataValue> {
-    let res = args.iter().try_fold(None, |accum, nxt| {
-        match (accum, nxt) {
-            (None, d@DataValue::Int(_)) => Ok(Some(d.clone())),
-            (None, d@DataValue::Float(_)) => Ok(Some(d.clone())),
+    let res = args
+        .iter()
+        .try_fold(None, |accum, nxt| match (accum, nxt) {
+            (None, d @ DataValue::Int(_)) => Ok(Some(d.clone())),
+            (None, d @ DataValue::Float(_)) => Ok(Some(d.clone())),
             (Some(DataValue::Int(a)), DataValue::Int(b)) => Ok(Some(DataValue::Int(a.min(*b)))),
-            (Some(DataValue::Int(a)), DataValue::Float(b)) => Ok(Some(DataValue::Float(b.0.min(a as f64).into()))),
-            (Some(DataValue::Float(a)), DataValue::Int(b)) => Ok(Some(DataValue::Float(a.0.min(*b as f64).into()))),
-            (Some(DataValue::Float(a)), DataValue::Float(b)) => Ok(Some(DataValue::Float(a.0.min(b.0).into()))),
+            (Some(DataValue::Int(a)), DataValue::Float(b)) => {
+                Ok(Some(DataValue::Float(b.0.min(a as f64).into())))
+            }
+            (Some(DataValue::Float(a)), DataValue::Int(b)) => {
+                Ok(Some(DataValue::Float(a.0.min(*b as f64).into())))
+            }
+            (Some(DataValue::Float(a)), DataValue::Float(b)) => {
+                Ok(Some(DataValue::Float(a.0.min(b.0).into())))
+            }
             _ => Err(UnexpectedArgs("min", args.to_vec())),
-        }
-    })?;
+        })?;
     match res {
         None => Ok(DataValue::Float(f64::infinity().into())),
-        Some(v) => Ok(v)
+        Some(v) => Ok(v),
     }
 }
 
@@ -272,6 +284,33 @@ fn op_signum(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Int(i) => DataValue::Int(i.signum()),
         DataValue::Float(f) => DataValue::Float(f.signum()),
         _ => return Err(UnexpectedArgs("signum", args.to_vec()).into()),
+    })
+}
+
+define_op!(OP_FLOOR, 1, false, false);
+fn op_floor(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Int(i) => DataValue::Int(*i),
+        DataValue::Float(f) => DataValue::Float(f.floor()),
+        _ => return Err(UnexpectedArgs("floor", args.to_vec()).into()),
+    })
+}
+
+define_op!(OP_CEIL, 1, false, false);
+fn op_ceil(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Int(i) => DataValue::Int(*i),
+        DataValue::Float(f) => DataValue::Float(f.ceil()),
+        _ => return Err(UnexpectedArgs("ceil", args.to_vec()).into()),
+    })
+}
+
+define_op!(OP_ROUND, 1, false, false);
+fn op_round(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Int(i) => DataValue::Int(*i),
+        DataValue::Float(f) => DataValue::Float(f.round()),
+        _ => return Err(UnexpectedArgs("round", args.to_vec()).into()),
     })
 }
 
@@ -476,6 +515,17 @@ fn op_pow(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Float(a.powf(b).into()))
 }
 
+define_op!(OP_MOD, 2, false, false);
+fn op_mod(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match (&args[0], &args[1]) {
+        (DataValue::Int(a), DataValue::Int(b)) => DataValue::Int(a.rem(b)),
+        (DataValue::Float(a), DataValue::Float(b)) => DataValue::Float(a.rem(*b)),
+        (DataValue::Int(a), DataValue::Float(b)) => DataValue::Float(((*a as f64).rem(b.0)).into()),
+        (DataValue::Float(a), DataValue::Int(b)) => DataValue::Float((a.0.rem(*b as f64)).into()),
+        _ => return Err(UnexpectedArgs("mod", args.to_vec()).into()),
+    })
+}
+
 define_op!(OP_AND, 0, true, true);
 fn op_and(args: &[DataValue]) -> Result<DataValue> {
     for arg in args {
@@ -524,4 +574,143 @@ fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
         }
     }
     Ok(DataValue::String(ret.into()))
+}
+
+define_op!(OP_STARTS_WITH, 2, false, true);
+fn op_starts_with(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::String(s) => s,
+        _ => return Err(UnexpectedArgs("start_with", args.to_vec()).into()),
+    };
+    let b = match &args[0] {
+        DataValue::String(s) => s,
+        _ => return Err(UnexpectedArgs("start_with", args.to_vec()).into()),
+    };
+    Ok(DataValue::Bool(a.starts_with(b as &str)))
+}
+
+define_op!(OP_ENDS_WITH, 2, false, true);
+fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::String(s) => s,
+        _ => return Err(UnexpectedArgs("start_with", args.to_vec()).into()),
+    };
+    let b = match &args[0] {
+        DataValue::String(s) => s,
+        _ => return Err(UnexpectedArgs("start_with", args.to_vec()).into()),
+    };
+    Ok(DataValue::Bool(a.ends_with(b as &str)))
+}
+
+define_op!(OP_IS_NULL, 1, false, true);
+fn op_is_null(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::Null)))
+}
+
+define_op!(OP_IS_INT, 1, false, true);
+fn op_is_int(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::Int(_))))
+}
+
+define_op!(OP_IS_FLOAT, 1, false, true);
+fn op_is_float(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::Float(_))))
+}
+
+define_op!(OP_IS_NUM, 1, false, true);
+fn op_is_num(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(
+        args[0],
+        DataValue::Int(_) | DataValue::Float(_)
+    )))
+}
+
+define_op!(OP_IS_ID, 1, false, true);
+fn op_is_id(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::EnId(_))))
+}
+
+define_op!(OP_IS_STRING, 1, false, true);
+fn op_is_string(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::String(_))))
+}
+
+define_op!(OP_IS_LIST, 1, false, true);
+fn op_is_list(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::List(_))))
+}
+
+define_op!(OP_IS_BYTES, 1, false, true);
+fn op_is_bytes(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::Bytes(_))))
+}
+
+define_op!(OP_IS_UUID, 1, false, true);
+fn op_is_uuid(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::Uuid(_))))
+}
+
+define_op!(OP_IS_TIMESTAMP, 1, false, true);
+fn op_is_timestamp(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::Timestamp(_))))
+}
+
+pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
+    Some(match name {
+        "Add" => &OP_ADD,
+        "Sub" => &OP_SUB,
+        "Mul" => &OP_MUL,
+        "Div" => &OP_DIV,
+        "Minus" => &OP_MINUS,
+        "Abs" => &OP_ABS,
+        "Signum" => &OP_SIGNUM,
+        "Floor" => &OP_FLOOR,
+        "Ceil" => &OP_CEIL,
+        "Round" => &OP_ROUND,
+        "Mod" => &OP_MOD,
+        "Max" => &OP_MAX,
+        "Min" => &OP_MIN,
+        "Pow" => &OP_POW,
+        "Exp" => &OP_EXP,
+        "Exp2" => &OP_EXP2,
+        "Ln" => &OP_LN,
+        "Log2" => &OP_LOG2,
+        "Log10" => &OP_LOG10,
+        "Sin" => &OP_SIN,
+        "Cos" => &OP_COS,
+        "Tan" => &OP_TAN,
+        "Asin" => &OP_ASIN,
+        "Acos" => &OP_ACOS,
+        "Atan" => &OP_ATAN,
+        "Atan2" => &OP_ATAN2,
+        "Sinh" => &OP_SINH,
+        "Cosh" => &OP_COSH,
+        "Tanh" => &OP_TANH,
+        "Asinh" => &OP_ASINH,
+        "Acosh" => &OP_ACOSH,
+        "Atanh" => &OP_ATANH,
+        "Eq" => &OP_EQ,
+        "Neq" => &OP_NEQ,
+        "Gt" => &OP_GT,
+        "Ge" => &OP_GE,
+        "Lt" => &OP_LT,
+        "Le" => &OP_LE,
+        "Or" => &OP_OR,
+        "And" => &OP_AND,
+        "Not" => &OP_NOT,
+        "StrCat" => &OP_STR_CAT,
+        "StartsWith" => &OP_STARTS_WITH,
+        "EndsWith" => &OP_ENDS_WITH,
+        "IsNull" => &OP_IS_NULL,
+        "IsInt" => &OP_IS_INT,
+        "IsFloat" => &OP_IS_FLOAT,
+        "IsNum" => &OP_IS_NUM,
+        "IsId" => &OP_IS_ID,
+        "IsString" => &OP_IS_STRING,
+        "IsList" => &OP_IS_LIST,
+        "IsBytes" => &OP_IS_BYTES,
+        "IsUuid" => &OP_IS_UUID,
+        "IsTimestamp" => &OP_IS_TIMESTAMP,
+        _ => return None,
+    })
 }

@@ -27,11 +27,11 @@ impl From<JsonValue> for DataValue {
                 },
             },
             JsonValue::String(s) => DataValue::String(s.into()),
-            JsonValue::Array(arr) => DataValue::Tuple(arr.iter().map(DataValue::from).collect()),
-            JsonValue::Object(d) => DataValue::Tuple(
+            JsonValue::Array(arr) => DataValue::List(arr.iter().map(DataValue::from).collect()),
+            JsonValue::Object(d) => DataValue::List(
                 d.into_iter()
                     .map(|(k, v)| {
-                        DataValue::Tuple([DataValue::String(k.into()), DataValue::from(v)].into())
+                        DataValue::List([DataValue::String(k.into()), DataValue::from(v)].into())
                     })
                     .collect(),
             ),
@@ -52,11 +52,11 @@ impl<'a> From<&'a JsonValue> for DataValue {
                 },
             },
             JsonValue::String(s) => DataValue::String(s.into()),
-            JsonValue::Array(arr) => DataValue::Tuple(arr.iter().map(DataValue::from).collect()),
-            JsonValue::Object(d) => DataValue::Tuple(
+            JsonValue::Array(arr) => DataValue::List(arr.iter().map(DataValue::from).collect()),
+            JsonValue::Object(d) => DataValue::List(
                 d.into_iter()
                     .map(|(k, v)| {
-                        DataValue::Tuple([DataValue::String(k.into()), DataValue::from(v)].into())
+                        DataValue::List([DataValue::String(k.into()), DataValue::from(v)].into())
                     })
                     .collect(),
             ),
@@ -74,7 +74,7 @@ impl From<DataValue> for JsonValue {
             DataValue::String(t) => JsonValue::String(t.into()),
             DataValue::Uuid(uuid) => JsonValue::String(uuid.to_string()),
             DataValue::Bytes(bytes) => JsonValue::String(base64::encode(bytes)),
-            DataValue::Tuple(l) => {
+            DataValue::List(l) => {
                 JsonValue::Array(l.iter().map(|v| JsonValue::from(v.clone())).collect())
             }
             DataValue::DescVal(v) => JsonValue::from(*v.0),
