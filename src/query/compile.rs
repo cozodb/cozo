@@ -6,6 +6,7 @@ use anyhow::Result;
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
+use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
@@ -13,7 +14,6 @@ use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 use crate::{EntityId, Validity};
-use crate::data::expr::Expr;
 
 /// example ruleset in python and javascript
 /// ```python
@@ -63,6 +63,8 @@ pub enum QueryCompilationError {
     PredicateArityMismatch(&'static str, usize, usize),
     #[error("op {0} is not a predicate")]
     NotAPredicate(&'static str),
+    #[error("unsafe bindings in expression {0:?}: {1:?}")]
+    UnsafeBindingInPredicate(Expr, BTreeSet<Keyword>)
 }
 
 #[derive(Clone, Debug)]
@@ -72,6 +74,14 @@ pub enum Term<T> {
 }
 
 impl<T> Term<T> {
+    pub(crate) fn collect_binding(&self, coll: &mut BTreeSet<Keyword>) {
+        match self {
+            Term::Var(k) => {
+                coll.insert(k.clone());
+            }
+            Term::Const(_) => {}
+        }
+    }
     pub(crate) fn get_var(&self) -> Option<&Keyword> {
         match self {
             Self::Var(k) => Some(k),
@@ -121,6 +131,40 @@ pub enum Atom {
     Predicate(Expr),
     Logical(LogicalAtom),
     BindUnify(BindUnification),
+}
+
+impl Atom {
+    pub(crate) fn is_predicate(&self) -> bool {
+        matches!(self, Atom::Predicate(_))
+    }
+    pub(crate) fn into_predicate(self) -> Option<Expr> {
+        match self {
+            Atom::Predicate(e) => Some(e),
+            _ => None
+        }
+    }
+    pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Keyword>) {
+        match self {
+            Atom::AttrTriple(a) => {
+                a.entity.collect_binding(coll);
+                a.value.collect_binding(coll);
+            }
+            Atom::Rule(rule) => {
+                for r in &rule.args {
+                    r.collect_binding(coll);
+                }
+            }
+            Atom::Predicate(p) => {
+                p.collect_bindings(coll);
+            }
+            Atom::Logical(_) => {
+                todo!()
+            }
+            Atom::BindUnify(_) => {
+                todo!()
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

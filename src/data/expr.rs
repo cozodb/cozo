@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt::{Debug, Formatter};
 
 use anyhow::Result;
@@ -25,6 +26,25 @@ pub enum Expr {
 }
 
 impl Expr {
+    pub(crate) fn bindings(&self) -> BTreeSet<Keyword> {
+        let mut ret = BTreeSet::new();
+        self.collect_bindings(&mut ret);
+        ret
+    }
+    pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Keyword>) {
+        match self {
+            Expr::Binding(b) => {
+                coll.insert(b.clone());
+            }
+            Expr::BoundIdx(_) => {}
+            Expr::Const(_) => {}
+            Expr::Apply(_, args) => {
+                for arg in args.iter() {
+                    arg.collect_bindings(coll)
+                }
+            }
+        }
+    }
     pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
         match self {
             Expr::Binding(_) => {

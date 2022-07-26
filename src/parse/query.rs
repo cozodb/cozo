@@ -307,6 +307,8 @@ impl SessionTx {
             .map(|el| self.parse_atom(el, default_vld))
             .try_collect()?;
 
+        let rule_body = Self::reorder_rule_body_for_predicates(rule_body)?;
+
         if rule_head.len()
             != rule_head
                 .iter()
@@ -328,6 +330,40 @@ impl SessionTx {
                 vld,
             },
         ))
+    }
+
+    fn reorder_rule_body_for_predicates(clauses: Vec<Atom>) -> Result<Vec<Atom>> {
+        let (predicates, others): (Vec<_>, _) = clauses.into_iter().partition(|a| a.is_predicate());
+        let mut predicates_with_meta = predicates
+            .into_iter()
+            .map(|p| {
+                let p = p.into_predicate().unwrap();
+                let bindings = p.bindings();
+                (Some(p), bindings)
+            })
+            .collect_vec();
+        let mut seen_bindings = BTreeSet::new();
+        let mut ret = vec![];
+        for a in others {
+            a.collect_bindings(&mut seen_bindings);
+            ret.push(a);
+            for (pred, pred_bindings) in predicates_with_meta.iter_mut() {
+                if pred.is_none() {
+                    continue;
+                }
+                if seen_bindings.is_superset(pred_bindings) {
+                    let pred = pred.take().unwrap();
+                    ret.push(Atom::Predicate(pred));
+                }
+            }
+        }
+        for (p, bindings) in predicates_with_meta {
+            if let Some(p) = p {
+                let diff = bindings.difference(&seen_bindings).cloned().collect();
+                return Err(QueryCompilationError::UnsafeBindingInPredicate(p, diff).into());
+            }
+        }
+        Ok(ret)
     }
 
     fn parse_atom(&mut self, payload: &JsonValue, vld: Validity) -> Result<Atom> {
