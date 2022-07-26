@@ -7,8 +7,10 @@ use serde_json::Map;
 
 use crate::data::attr::Attribute;
 use crate::data::expr::{
-    Expr, OP_ADD, OP_AND, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LT, OP_MUL, OP_NEQ, OP_NOT, OP_OR,
-    OP_SUB,
+    Expr, OP_ABS, OP_ACOS, OP_ACOSH, OP_ADD, OP_AND, OP_ASIN, OP_ASINH, OP_ATAN, OP_ATAN2,
+    OP_ATANH, OP_COS, OP_COSH, OP_DIV, OP_EQ, OP_EXP, OP_EXP2, OP_GE, OP_GT, OP_LE, OP_LN,
+    OP_LOG10, OP_LOG2, OP_LT, OP_MAX, OP_MIN, OP_MINUS, OP_MUL, OP_NEQ, OP_NOT, OP_OR, OP_POW,
+    OP_SIGNUM, OP_SIN, OP_SINH, OP_STR_CAT, OP_SUB, OP_TAN, OP_TANH,
 };
 use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
@@ -77,12 +79,13 @@ impl SessionTx {
         }
     }
     fn parse_predicate_atom(payload: &Map<String, JsonValue>) -> Result<Atom> {
-        let pred = Self::parse_expr(payload)?;
+        let mut pred = Self::parse_expr(payload)?;
         if let Expr::Apply(op, _) = &pred {
             if !op.is_predicate {
                 return Err(QueryCompilationError::NotAPredicate(op.name).into());
             }
         }
+        pred.partial_eval()?;
         Ok(Atom::Predicate(pred))
     }
     fn parse_expr(payload: &Map<String, JsonValue>) -> Result<Expr> {
@@ -107,6 +110,30 @@ impl SessionTx {
             "Sub" => &OP_SUB,
             "Mul" => &OP_MUL,
             "Div" => &OP_DIV,
+            "Minus" => &OP_MINUS,
+            "Abs" => &OP_ABS,
+            "Signum" => &OP_SIGNUM,
+            "Max" => &OP_MAX,
+            "Min" => &OP_MIN,
+            "Pow" => &OP_POW,
+            "Exp" => &OP_EXP,
+            "Exp2" => &OP_EXP2,
+            "Ln" => &OP_LN,
+            "Log2" => &OP_LOG2,
+            "Log10" => &OP_LOG10,
+            "Sin" => &OP_SIN,
+            "Cos" => &OP_COS,
+            "Tan" => &OP_TAN,
+            "Asin" => &OP_ASIN,
+            "Acos" => &OP_ACOS,
+            "Atan" => &OP_ATAN,
+            "Atan2" => &OP_ATAN2,
+            "Sinh" => &OP_SINH,
+            "Cosh" => &OP_COSH,
+            "Tanh" => &OP_TANH,
+            "Asinh" => &OP_ASINH,
+            "Acosh" => &OP_ACOSH,
+            "Atanh" => &OP_ATANH,
             "Eq" => &OP_EQ,
             "Neq" => &OP_NEQ,
             "Gt" => &OP_GT,
@@ -116,6 +143,7 @@ impl SessionTx {
             "Or" => &OP_OR,
             "And" => &OP_AND,
             "Not" => &OP_NOT,
+            "StrCat" => &OP_STR_CAT,
             s => return Err(QueryCompilationError::UnknownOperator(s.to_string()).into()),
         };
 

@@ -1,8 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
+use std::mem;
 
 use anyhow::Result;
 use itertools::Itertools;
+use ordered_float::Float;
+use smartstring::{LazyCompact, SmartString};
 
 use crate::data::expr::ExprError::UnexpectedArgs;
 use crate::data::keyword::Keyword;
@@ -38,6 +41,20 @@ impl Expr {
                 }
             }
         }
+    }
+    pub(crate) fn partial_eval(&mut self) -> Result<()> {
+        if let Expr::Apply(_, args) = self {
+            let mut all_evaluated = true;
+            for arg in args.iter_mut() {
+                arg.partial_eval()?;
+                all_evaluated = all_evaluated && matches!(arg, Expr::Const(_));
+            }
+            if all_evaluated {
+                let result = self.eval(&Tuple(vec![]))?;
+                mem::swap(self, &mut Expr::Const(result));
+            }
+        }
+        Ok(())
     }
     pub(crate) fn bindings(&self) -> BTreeSet<Keyword> {
         let mut ret = BTreeSet::new();
@@ -150,6 +167,45 @@ fn op_add(args: &[DataValue]) -> Result<DataValue> {
     }
 }
 
+define_op!(OP_MAX, 0, true, false);
+fn op_max(args: &[DataValue]) -> Result<DataValue> {
+    let res = args.iter().try_fold(None, |accum, nxt| {
+        match (accum, nxt) {
+            (None, d@DataValue::Int(_)) => Ok(Some(d.clone())),
+            (None, d@DataValue::Float(_)) => Ok(Some(d.clone())),
+            (Some(DataValue::Int(a)), DataValue::Int(b)) => Ok(Some(DataValue::Int(a.max(*b)))),
+            (Some(DataValue::Int(a)), DataValue::Float(b)) => Ok(Some(DataValue::Float(b.0.max(a as f64).into()))),
+            (Some(DataValue::Float(a)), DataValue::Int(b)) => Ok(Some(DataValue::Float(a.0.max(*b as f64).into()))),
+            (Some(DataValue::Float(a)), DataValue::Float(b)) => Ok(Some(DataValue::Float(a.0.max(b.0).into()))),
+            _ => Err(UnexpectedArgs("max", args.to_vec())),
+        }
+    })?;
+    match res {
+        None => Ok(DataValue::Float(f64::neg_infinity().into())),
+        Some(v) => Ok(v)
+    }
+}
+
+
+define_op!(OP_MIN, 0, true, false);
+fn op_min(args: &[DataValue]) -> Result<DataValue> {
+    let res = args.iter().try_fold(None, |accum, nxt| {
+        match (accum, nxt) {
+            (None, d@DataValue::Int(_)) => Ok(Some(d.clone())),
+            (None, d@DataValue::Float(_)) => Ok(Some(d.clone())),
+            (Some(DataValue::Int(a)), DataValue::Int(b)) => Ok(Some(DataValue::Int(a.min(*b)))),
+            (Some(DataValue::Int(a)), DataValue::Float(b)) => Ok(Some(DataValue::Float(b.0.min(a as f64).into()))),
+            (Some(DataValue::Float(a)), DataValue::Int(b)) => Ok(Some(DataValue::Float(a.0.min(*b as f64).into()))),
+            (Some(DataValue::Float(a)), DataValue::Float(b)) => Ok(Some(DataValue::Float(a.0.min(b.0).into()))),
+            _ => Err(UnexpectedArgs("min", args.to_vec())),
+        }
+    })?;
+    match res {
+        None => Ok(DataValue::Float(f64::infinity().into())),
+        Some(v) => Ok(v)
+    }
+}
+
 define_op!(OP_SUB, 2, false, false);
 fn op_sub(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
@@ -192,6 +248,234 @@ fn op_div(args: &[DataValue]) -> Result<DataValue> {
     })
 }
 
+define_op!(OP_MINUS, 1, false, false);
+fn op_minus(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Int(i) => DataValue::Int(-(*i)),
+        DataValue::Float(f) => DataValue::Float(-(*f)),
+        _ => return Err(UnexpectedArgs("minus", args.to_vec()).into()),
+    })
+}
+
+define_op!(OP_ABS, 1, false, false);
+fn op_abs(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Int(i) => DataValue::Int(i.abs()),
+        DataValue::Float(f) => DataValue::Float(f.abs()),
+        _ => return Err(UnexpectedArgs("abs", args.to_vec()).into()),
+    })
+}
+
+define_op!(OP_SIGNUM, 1, false, false);
+fn op_signum(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Int(i) => DataValue::Int(i.signum()),
+        DataValue::Float(f) => DataValue::Float(f.signum()),
+        _ => return Err(UnexpectedArgs("signum", args.to_vec()).into()),
+    })
+}
+
+define_op!(OP_EXP, 1, false, false);
+fn op_exp(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("exp", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.exp().into()))
+}
+
+define_op!(OP_EXP2, 1, false, false);
+fn op_exp2(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("exp2", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.exp2().into()))
+}
+
+define_op!(OP_LN, 1, false, false);
+fn op_ln(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("ln", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.ln().into()))
+}
+
+define_op!(OP_LOG2, 1, false, false);
+fn op_log2(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("log2", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.log2().into()))
+}
+
+define_op!(OP_LOG10, 1, false, false);
+fn op_log10(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("log10", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.log10().into()))
+}
+
+define_op!(OP_SIN, 1, false, false);
+fn op_sin(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("sin", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.sin().into()))
+}
+
+define_op!(OP_COS, 1, false, false);
+fn op_cos(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("cos", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.cos().into()))
+}
+
+define_op!(OP_TAN, 1, false, false);
+fn op_tan(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("tan", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.tan().into()))
+}
+
+define_op!(OP_ASIN, 1, false, false);
+fn op_asin(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("asin", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.asin().into()))
+}
+
+define_op!(OP_ACOS, 1, false, false);
+fn op_acos(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("acos", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.acos().into()))
+}
+
+define_op!(OP_ATAN, 1, false, false);
+fn op_atan(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("atan", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.atan().into()))
+}
+
+define_op!(OP_ATAN2, 2, false, false);
+fn op_atan2(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("atan2", args.to_vec()).into()),
+    };
+    let b = match &args[1] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("atan2", args.to_vec()).into()),
+    };
+
+    Ok(DataValue::Float(a.atan2(b).into()))
+}
+
+define_op!(OP_SINH, 1, false, false);
+fn op_sinh(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("sinh", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.sinh().into()))
+}
+
+define_op!(OP_COSH, 1, false, false);
+fn op_cosh(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("cosh", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.cosh().into()))
+}
+
+define_op!(OP_TANH, 1, false, false);
+fn op_tanh(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("tanh", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.tanh().into()))
+}
+
+define_op!(OP_ASINH, 1, false, false);
+fn op_asinh(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("asinh", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.asinh().into()))
+}
+
+define_op!(OP_ACOSH, 1, false, false);
+fn op_acosh(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("acosh", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.acosh().into()))
+}
+
+define_op!(OP_ATANH, 1, false, false);
+fn op_atanh(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("atanh", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.atanh().into()))
+}
+
+define_op!(OP_POW, 2, false, false);
+fn op_pow(args: &[DataValue]) -> Result<DataValue> {
+    let a = match &args[0] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("pow", args.to_vec()).into()),
+    };
+    let b = match &args[1] {
+        DataValue::Int(i) => *i as f64,
+        DataValue::Float(f) => f.0,
+        _ => return Err(UnexpectedArgs("pow", args.to_vec()).into()),
+    };
+    Ok(DataValue::Float(a.powf(b).into()))
+}
+
 define_op!(OP_AND, 0, true, true);
 fn op_and(args: &[DataValue]) -> Result<DataValue> {
     for arg in args {
@@ -227,4 +511,17 @@ fn op_not(args: &[DataValue]) -> Result<DataValue> {
     } else {
         Err(UnexpectedArgs("not", args.to_vec()).into())
     }
+}
+
+define_op!(OP_STR_CAT, 0, true, false);
+fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
+    let mut ret: String = Default::default();
+    for arg in args {
+        if let DataValue::String(s) = arg {
+            ret += s;
+        } else {
+            return Err(UnexpectedArgs("strcat", args.to_vec()).into());
+        }
+    }
+    Ok(DataValue::String(ret.into()))
 }
