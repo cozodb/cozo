@@ -112,25 +112,13 @@ pub struct RuleApplyAtom {
 }
 
 #[derive(Clone, Debug)]
-pub enum LogicalAtom {
-    Negation(Box<Atom>),
-    Conjunction(Vec<Atom>),
-    Disjunction(Vec<Atom>),
-}
-
-#[derive(Clone, Debug)]
-pub struct BindUnification {
-    left: Term<DataValue>,
-    right: Expr,
-}
-
-#[derive(Clone, Debug)]
 pub enum Atom {
     AttrTriple(AttrTripleAtom),
     Rule(RuleApplyAtom),
     Predicate(Expr),
-    Logical(LogicalAtom),
-    BindUnify(BindUnification),
+    Negation(Box<Atom>),
+    Conjunction(Vec<Atom>),
+    Disjunction(Vec<Atom>),
 }
 
 impl Atom {
@@ -138,7 +126,7 @@ impl Atom {
         matches!(self, Atom::Predicate(_))
     }
     pub(crate) fn is_negation(&self) -> bool {
-        matches!(self, Atom::Logical(LogicalAtom::Negation(_)))
+        matches!(self, Atom::Negation(_))
     }
     pub(crate) fn into_predicate(self) -> Option<Expr> {
         match self {
@@ -146,10 +134,10 @@ impl Atom {
             _ => None,
         }
     }
-    pub(crate) fn into_negation(self) -> Option<Atom> {
+    pub(crate) fn into_negated(self) -> Option<Atom> {
         match self {
-            Atom::Logical(LogicalAtom::Negation(a)) => Some(*a),
-            _ => None
+            Atom::Negation(a) => Some(*a),
+            _ => None,
         }
     }
     pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Keyword>) {
@@ -166,12 +154,14 @@ impl Atom {
             Atom::Predicate(p) => {
                 p.collect_bindings(coll);
             }
-            Atom::Logical(_) => {
-                // logical operators introduce no new bindings
+            // negations introduce no new bindings
+            Atom::Negation(_) => {}
+            Atom::Conjunction(args) => {
+                for a in args {
+                    a.collect_bindings(coll);
+                }
             }
-            Atom::BindUnify(_) => {
-                todo!()
-            }
+            Atom::Disjunction(_) => unreachable!(),
         }
     }
 }
@@ -427,198 +417,212 @@ impl SessionTx {
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 Atom::Predicate(p) => ret = ret.filter(p.clone()),
-                Atom::Logical(l) => match l {
-                    LogicalAtom::Negation(r) => match r as &Atom {
-                        Atom::AttrTriple(a_triple) => {
-                            match (&a_triple.entity, &a_triple.value) {
-                                (Term::Const(eid), Term::Var(v_kw)) => {
-                                    let temp_join_key_left = gen_temp_kw();
-                                    let temp_join_key_right = gen_temp_kw();
-                                    let const_rel = Relation::singlet(
-                                        vec![temp_join_key_left.clone()],
-                                        vec![DataValue::EnId(*eid)],
-                                    );
-                                    if ret.is_unit() {
-                                        ret = const_rel;
+                Atom::Negation(r) => match r as &Atom {
+                    Atom::AttrTriple(a_triple) => {
+                        match (&a_triple.entity, &a_triple.value) {
+                            (Term::Const(eid), Term::Var(v_kw)) => {
+                                let temp_join_key_left = gen_temp_kw();
+                                let temp_join_key_right = gen_temp_kw();
+                                let const_rel = Relation::singlet(
+                                    vec![temp_join_key_left.clone()],
+                                    vec![DataValue::EnId(*eid)],
+                                );
+                                if ret.is_unit() {
+                                    ret = const_rel;
+                                } else {
+                                    ret = ret.cartesian_join(const_rel);
+                                }
+
+                                let mut join_left_keys = vec![temp_join_key_left];
+                                let mut join_right_keys = vec![temp_join_key_right.clone()];
+
+                                let v_kw = {
+                                    if seen_variables.contains(v_kw) {
+                                        let ret = gen_temp_kw();
+                                        // to_eliminate.insert(ret.clone());
+                                        join_left_keys.push(v_kw.clone());
+                                        join_right_keys.push(ret.clone());
+                                        ret
                                     } else {
-                                        ret = ret.cartesian_join(const_rel);
+                                        seen_variables.insert(v_kw.clone());
+                                        v_kw.clone()
                                     }
+                                };
+                                let right = Relation::triple(
+                                    a_triple.attr.clone(),
+                                    vld,
+                                    temp_join_key_right,
+                                    v_kw,
+                                );
+                                debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
+                                ret = ret.neg_join(right, join_left_keys, join_right_keys);
+                            }
+                            (Term::Var(e_kw), Term::Const(val)) => {
+                                let temp_join_key_left = gen_temp_kw();
+                                let temp_join_key_right = gen_temp_kw();
+                                let const_rel = Relation::singlet(
+                                    vec![temp_join_key_left.clone()],
+                                    vec![val.clone()],
+                                );
+                                if ret.is_unit() {
+                                    ret = const_rel;
+                                } else {
+                                    ret = ret.cartesian_join(const_rel);
+                                }
 
-                                    let mut join_left_keys = vec![temp_join_key_left];
-                                    let mut join_right_keys = vec![temp_join_key_right.clone()];
+                                let mut join_left_keys = vec![temp_join_key_left];
+                                let mut join_right_keys = vec![temp_join_key_right.clone()];
 
-                                    let v_kw = {
-                                        if seen_variables.contains(v_kw) {
-                                            let ret = gen_temp_kw();
-                                            // to_eliminate.insert(ret.clone());
-                                            join_left_keys.push(v_kw.clone());
-                                            join_right_keys.push(ret.clone());
-                                            ret
-                                        } else {
-                                            seen_variables.insert(v_kw.clone());
-                                            v_kw.clone()
-                                        }
-                                    };
-                                    let right =
-                                        Relation::triple(a_triple.attr.clone(), vld, temp_join_key_right, v_kw);
+                                let e_kw = {
+                                    if seen_variables.contains(&e_kw) {
+                                        let ret = gen_temp_kw();
+                                        join_left_keys.push(e_kw.clone());
+                                        join_right_keys.push(ret.clone());
+                                        ret
+                                    } else {
+                                        seen_variables.insert(e_kw.clone());
+                                        e_kw.clone()
+                                    }
+                                };
+                                let right = Relation::triple(
+                                    a_triple.attr.clone(),
+                                    vld,
+                                    e_kw,
+                                    temp_join_key_right,
+                                );
+                                debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
+                                ret = ret.neg_join(right, join_left_keys, join_right_keys);
+                            }
+                            (Term::Var(e_kw), Term::Var(v_kw)) => {
+                                let mut join_left_keys = vec![];
+                                let mut join_right_keys = vec![];
+                                if e_kw == v_kw {
+                                    unimplemented!();
+                                }
+                                let e_kw = {
+                                    if seen_variables.contains(&e_kw) {
+                                        let ret = gen_temp_kw();
+                                        join_left_keys.push(e_kw.clone());
+                                        join_right_keys.push(ret.clone());
+                                        ret
+                                    } else {
+                                        seen_variables.insert(e_kw.clone());
+                                        e_kw.clone()
+                                    }
+                                };
+                                let v_kw = {
+                                    if seen_variables.contains(v_kw) {
+                                        let ret = gen_temp_kw();
+                                        join_left_keys.push(v_kw.clone());
+                                        join_right_keys.push(ret.clone());
+                                        ret
+                                    } else {
+                                        seen_variables.insert(v_kw.clone());
+                                        v_kw.clone()
+                                    }
+                                };
+                                if join_right_keys.is_empty() {
+                                    return Err(QueryCompilationError::NegationSafety(vec![
+                                        e_kw.clone(),
+                                        v_kw.clone(),
+                                    ])
+                                    .into());
+                                }
+                                let right =
+                                    Relation::triple(a_triple.attr.clone(), vld, e_kw, v_kw);
+                                if ret.is_unit() {
+                                    ret = right;
+                                } else {
                                     debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
                                     ret = ret.neg_join(right, join_left_keys, join_right_keys);
-                                }
-                                (Term::Var(e_kw), Term::Const(val)) => {
-                                    let temp_join_key_left = gen_temp_kw();
-                                    let temp_join_key_right = gen_temp_kw();
-                                    let const_rel =
-                                        Relation::singlet(vec![temp_join_key_left.clone()], vec![val.clone()]);
-                                    if ret.is_unit() {
-                                        ret = const_rel;
-                                    } else {
-                                        ret = ret.cartesian_join(const_rel);
-                                    }
-
-                                    let mut join_left_keys = vec![temp_join_key_left];
-                                    let mut join_right_keys = vec![temp_join_key_right.clone()];
-
-                                    let e_kw = {
-                                        if seen_variables.contains(&e_kw) {
-                                            let ret = gen_temp_kw();
-                                            join_left_keys.push(e_kw.clone());
-                                            join_right_keys.push(ret.clone());
-                                            ret
-                                        } else {
-                                            seen_variables.insert(e_kw.clone());
-                                            e_kw.clone()
-                                        }
-                                    };
-                                    let right =
-                                        Relation::triple(a_triple.attr.clone(), vld, e_kw, temp_join_key_right);
-                                    debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
-                                    ret = ret.neg_join(right, join_left_keys, join_right_keys);
-                                }
-                                (Term::Var(e_kw), Term::Var(v_kw)) => {
-                                    let mut join_left_keys = vec![];
-                                    let mut join_right_keys = vec![];
-                                    if e_kw == v_kw {
-                                        unimplemented!();
-                                    }
-                                    let e_kw = {
-                                        if seen_variables.contains(&e_kw) {
-                                            let ret = gen_temp_kw();
-                                            join_left_keys.push(e_kw.clone());
-                                            join_right_keys.push(ret.clone());
-                                            ret
-                                        } else {
-                                            seen_variables.insert(e_kw.clone());
-                                            e_kw.clone()
-                                        }
-                                    };
-                                    let v_kw = {
-                                        if seen_variables.contains(v_kw) {
-                                            let ret = gen_temp_kw();
-                                            join_left_keys.push(v_kw.clone());
-                                            join_right_keys.push(ret.clone());
-                                            ret
-                                        } else {
-                                            seen_variables.insert(v_kw.clone());
-                                            v_kw.clone()
-                                        }
-                                    };
-                                    if join_right_keys.is_empty() {
-                                        return Err(QueryCompilationError::NegationSafety(vec![e_kw.clone(), v_kw.clone()]).into());
-                                    }
-                                    let right = Relation::triple(a_triple.attr.clone(), vld, e_kw, v_kw);
-                                    if ret.is_unit() {
-                                        ret = right;
-                                    } else {
-                                        debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
-                                        ret = ret.neg_join(right, join_left_keys, join_right_keys);
-                                    }
-                                }
-                                (Term::Const(eid), Term::Const(val)) => {
-                                    let (left_var_1, left_var_2) = (gen_temp_kw(), gen_temp_kw());
-                                    let const_rel = Relation::singlet(
-                                        vec![left_var_1.clone(), left_var_2.clone()],
-                                        vec![DataValue::EnId(*eid), val.clone()],
-                                    );
-                                    if ret.is_unit() {
-                                        ret = const_rel;
-                                    } else {
-                                        ret = ret.cartesian_join(const_rel);
-                                    }
-                                    let (right_var_1, right_var_2) = (gen_temp_kw(), gen_temp_kw());
-
-                                    let right = Relation::triple(
-                                        a_triple.attr.clone(),
-                                        vld,
-                                        right_var_1.clone(),
-                                        right_var_2.clone(),
-                                    );
-                                    ret = ret.neg_join(
-                                        right,
-                                        vec![left_var_1.clone(), left_var_2.clone()],
-                                        vec![right_var_1.clone(), right_var_2.clone()],
-                                    );
                                 }
                             }
-                        }
-                        Atom::Rule(rule_app) => {
-                            let (store, arity) = stores
-                                .get(&rule_app.name)
-                                .ok_or_else(|| QueryCompilationError::UndefinedRule(rule_app.name.clone()))?
-                                .clone();
-                            if arity != rule_app.args.len() {
-                                return Err(
-                                    QueryCompilationError::ArityMismatch(rule_app.name.clone()).into()
+                            (Term::Const(eid), Term::Const(val)) => {
+                                let (left_var_1, left_var_2) = (gen_temp_kw(), gen_temp_kw());
+                                let const_rel = Relation::singlet(
+                                    vec![left_var_1.clone(), left_var_2.clone()],
+                                    vec![DataValue::EnId(*eid), val.clone()],
+                                );
+                                if ret.is_unit() {
+                                    ret = const_rel;
+                                } else {
+                                    ret = ret.cartesian_join(const_rel);
+                                }
+                                let (right_var_1, right_var_2) = (gen_temp_kw(), gen_temp_kw());
+
+                                let right = Relation::triple(
+                                    a_triple.attr.clone(),
+                                    vld,
+                                    right_var_1.clone(),
+                                    right_var_2.clone(),
+                                );
+                                ret = ret.neg_join(
+                                    right,
+                                    vec![left_var_1.clone(), left_var_2.clone()],
+                                    vec![right_var_1.clone(), right_var_2.clone()],
                                 );
                             }
+                        }
+                    }
+                    Atom::Rule(rule_app) => {
+                        let (store, arity) = stores
+                            .get(&rule_app.name)
+                            .ok_or_else(|| {
+                                QueryCompilationError::UndefinedRule(rule_app.name.clone())
+                            })?
+                            .clone();
+                        if arity != rule_app.args.len() {
+                            return Err(QueryCompilationError::ArityMismatch(
+                                rule_app.name.clone(),
+                            )
+                            .into());
+                        }
 
-                            let mut prev_joiner_vars = vec![];
-                            let mut temp_left_bindings = vec![];
-                            let mut temp_left_joiner_vals = vec![];
-                            let mut right_joiner_vars = vec![];
-                            let mut right_vars = vec![];
+                        let mut prev_joiner_vars = vec![];
+                        let mut temp_left_bindings = vec![];
+                        let mut temp_left_joiner_vals = vec![];
+                        let mut right_joiner_vars = vec![];
+                        let mut right_vars = vec![];
 
-                            for term in &rule_app.args {
-                                match term {
-                                    Term::Var(var) => {
-                                        if seen_variables.contains(var) {
-                                            prev_joiner_vars.push(var.clone());
-                                            let rk = gen_temp_kw();
-                                            right_vars.push(rk.clone());
-                                            right_joiner_vars.push(rk);
-                                        } else {
-                                            seen_variables.insert(var.clone());
-                                            right_vars.push(var.clone());
-                                        }
-                                    }
-                                    Term::Const(constant) => {
-                                        temp_left_joiner_vals.push(constant.clone());
-                                        let left_kw = gen_temp_kw();
-                                        prev_joiner_vars.push(left_kw.clone());
-                                        temp_left_bindings.push(left_kw);
-                                        let right_kw = gen_temp_kw();
-                                        right_joiner_vars.push(right_kw.clone());
-                                        right_vars.push(right_kw);
+                        for term in &rule_app.args {
+                            match term {
+                                Term::Var(var) => {
+                                    if seen_variables.contains(var) {
+                                        prev_joiner_vars.push(var.clone());
+                                        let rk = gen_temp_kw();
+                                        right_vars.push(rk.clone());
+                                        right_joiner_vars.push(rk);
+                                    } else {
+                                        seen_variables.insert(var.clone());
+                                        right_vars.push(var.clone());
                                     }
                                 }
+                                Term::Const(constant) => {
+                                    temp_left_joiner_vals.push(constant.clone());
+                                    let left_kw = gen_temp_kw();
+                                    prev_joiner_vars.push(left_kw.clone());
+                                    temp_left_bindings.push(left_kw);
+                                    let right_kw = gen_temp_kw();
+                                    right_joiner_vars.push(right_kw.clone());
+                                    right_vars.push(right_kw);
+                                }
                             }
-
-                            if !temp_left_joiner_vals.is_empty() {
-                                let const_joiner =
-                                    Relation::singlet(temp_left_bindings, temp_left_joiner_vals);
-                                ret = ret.cartesian_join(const_joiner);
-                            }
-
-                            let right = Relation::derived(right_vars, store);
-                            debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                            ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
                         }
-                        _ => unreachable!(),
-                    },
+
+                        if !temp_left_joiner_vals.is_empty() {
+                            let const_joiner =
+                                Relation::singlet(temp_left_bindings, temp_left_joiner_vals);
+                            ret = ret.cartesian_join(const_joiner);
+                        }
+
+                        let right = Relation::derived(right_vars, store);
+                        debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                        ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
+                    }
                     _ => unreachable!(),
                 },
-                Atom::BindUnify(_) => {
-                    todo!()
-                }
+                Atom::Conjunction(_) => unreachable!(),
+                Atom::Disjunction(_) => unreachable!()
             }
         }
 

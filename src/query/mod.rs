@@ -17,6 +17,7 @@ pub(crate) mod compile;
 pub(crate) mod eval;
 pub(crate) mod pull;
 pub(crate) mod relation;
+pub(crate) mod logical;
 
 impl SessionTx {
     pub fn run_query(&mut self, payload: &JsonValue) -> Result<QueryResult> {

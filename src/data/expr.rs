@@ -28,6 +28,9 @@ pub enum Expr {
 }
 
 impl Expr {
+    pub(crate) fn negate(self) -> Self {
+        Expr::Apply(&OP_NOT, Box::new([self]))
+    }
     pub(crate) fn fill_binding_indices(&mut self, binding_map: &BTreeMap<Keyword, usize>) {
         match self {
             Expr::Binding(k, idx) => {
@@ -55,9 +58,9 @@ impl Expr {
             }
             // nested not's can accumulate during conversion to normal form
             if let Expr::Apply(op1, arg1) = self {
-                if op1.name == "OP_NOT" {
+                if op1.name == OP_NOT.name {
                     if let Some(Expr::Apply(op2, arg2)) = arg1.first() {
-                        if op2.name == "OP_NOT" {
+                        if op2.name == OP_NOT.name {
                             let mut new_self = arg2[0].clone();
                             mem::swap(self, &mut new_self);
                         }

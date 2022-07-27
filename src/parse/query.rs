@@ -13,8 +13,8 @@ use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::value::DataValue;
 use crate::parse::triple::TxError;
 use crate::query::compile::{
-    Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, LogicalAtom, QueryCompilationError,
-    Rule, RuleApplyAtom, RuleSet, Term,
+    Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, QueryCompilationError, Rule,
+    RuleApplyAtom, RuleSet, Term,
 };
 use crate::runtime::transact::SessionTx;
 use crate::{EntityId, Validity};
@@ -308,15 +308,19 @@ impl SessionTx {
             )
             .into());
         }
-
-        Ok(iter::once((
-            rule_name,
-            Rule {
-                head: rule_head,
-                body: rule_body,
-                vld,
-            },
-        )))
+        Ok(Atom::Conjunction(rule_body)
+            .disjunctive_normal_form()
+            .into_iter()
+            .map(move |rule_body| {
+                (
+                    rule_name.clone(),
+                    Rule {
+                        head: rule_head.clone(),
+                        body: rule_body,
+                        vld,
+                    },
+                )
+            }))
     }
 
     fn reorder_rule_body_for_negations(clauses: Vec<Atom>) -> Result<Vec<Atom>> {
@@ -328,10 +332,11 @@ impl SessionTx {
         let mut negations_with_meta = negations
             .into_iter()
             .map(|p| {
-                let p = p.into_negation().unwrap();
+                let p = p.into_negated().unwrap();
                 let mut bindings = Default::default();
                 p.collect_bindings(&mut bindings);
-                let valid_bindings: BTreeSet<_> = bindings.intersection(&seen_bindings).cloned().collect();
+                let valid_bindings: BTreeSet<_> =
+                    bindings.intersection(&seen_bindings).cloned().collect();
                 (Some(p), valid_bindings)
             })
             .collect_vec();
@@ -346,7 +351,7 @@ impl SessionTx {
                 }
                 if seen_bindings.is_superset(pred_bindings) {
                     let negated = negated.take().unwrap();
-                    ret.push(Atom::Logical(LogicalAtom::Negation(Box::new(negated))));
+                    ret.push(Atom::Negation(Box::new(negated)));
                 }
             }
         }
@@ -432,7 +437,7 @@ impl SessionTx {
         Ok(match k as &str {
             "not_exists" => {
                 let arg = self.parse_atom(v, vld)?;
-                Atom::Logical(LogicalAtom::Negation(Box::new(arg)))
+                Atom::Negation(Box::new(arg))
             }
             "conj" | "disj" => {
                 let args = v
@@ -444,9 +449,9 @@ impl SessionTx {
                     .map(|a| self.parse_atom(a, vld))
                     .try_collect()?;
                 if k == "conj" {
-                    Atom::Logical(LogicalAtom::Conjunction(args))
+                    Atom::Conjunction(args)
                 } else {
-                    Atom::Logical(LogicalAtom::Disjunction(args))
+                    Atom::Disjunction(args)
                 }
             }
             _ => unreachable!(),

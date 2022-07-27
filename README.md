@@ -2,7 +2,7 @@
 
 * [x] predicates
 * [x] negation
-* [ ] disjunction
+* [x] disjunction
 * [ ] aggregation
 * [ ] stratum
 * [ ] magic sets
