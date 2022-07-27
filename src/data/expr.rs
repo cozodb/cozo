@@ -53,6 +53,17 @@ impl Expr {
                 let result = self.eval(&Tuple(vec![]))?;
                 mem::swap(self, &mut Expr::Const(result));
             }
+            // nested not's can accumulate during conversion to normal form
+            if let Expr::Apply(op1, arg1) = self {
+                if op1.name == "OP_NOT" {
+                    if let Some(Expr::Apply(op2, arg2)) = arg1.first() {
+                        if op2.name == "OP_NOT" {
+                            let mut new_self = arg2[0].clone();
+                            mem::swap(self, &mut new_self);
+                        }
+                    }
+                }
+            }
         }
         Ok(())
     }

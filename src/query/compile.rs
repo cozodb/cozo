@@ -137,10 +137,19 @@ impl Atom {
     pub(crate) fn is_predicate(&self) -> bool {
         matches!(self, Atom::Predicate(_))
     }
+    pub(crate) fn is_negation(&self) -> bool {
+        matches!(self, Atom::Logical(LogicalAtom::Negation(_)))
+    }
     pub(crate) fn into_predicate(self) -> Option<Expr> {
         match self {
             Atom::Predicate(e) => Some(e),
             _ => None,
+        }
+    }
+    pub(crate) fn into_negation(self) -> Option<Atom> {
+        match self {
+            Atom::Logical(LogicalAtom::Negation(a)) => Some(*a),
+            _ => None
         }
     }
     pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Keyword>) {
@@ -486,7 +495,43 @@ impl SessionTx {
                                     ret = ret.neg_join(right, join_left_keys, join_right_keys);
                                 }
                                 (Term::Var(e_kw), Term::Var(v_kw)) => {
-                                    return Err(QueryCompilationError::NegationSafety(vec![e_kw.clone(), v_kw.clone()]).into())
+                                    let mut join_left_keys = vec![];
+                                    let mut join_right_keys = vec![];
+                                    if e_kw == v_kw {
+                                        unimplemented!();
+                                    }
+                                    let e_kw = {
+                                        if seen_variables.contains(&e_kw) {
+                                            let ret = gen_temp_kw();
+                                            join_left_keys.push(e_kw.clone());
+                                            join_right_keys.push(ret.clone());
+                                            ret
+                                        } else {
+                                            seen_variables.insert(e_kw.clone());
+                                            e_kw.clone()
+                                        }
+                                    };
+                                    let v_kw = {
+                                        if seen_variables.contains(v_kw) {
+                                            let ret = gen_temp_kw();
+                                            join_left_keys.push(v_kw.clone());
+                                            join_right_keys.push(ret.clone());
+                                            ret
+                                        } else {
+                                            seen_variables.insert(v_kw.clone());
+                                            v_kw.clone()
+                                        }
+                                    };
+                                    if join_right_keys.is_empty() {
+                                        return Err(QueryCompilationError::NegationSafety(vec![e_kw.clone(), v_kw.clone()]).into());
+                                    }
+                                    let right = Relation::triple(a_triple.attr.clone(), vld, e_kw, v_kw);
+                                    if ret.is_unit() {
+                                        ret = right;
+                                    } else {
+                                        debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
+                                        ret = ret.neg_join(right, join_left_keys, join_right_keys);
+                                    }
                                 }
                                 (Term::Const(eid), Term::Const(val)) => {
                                     let (left_var_1, left_var_2) = (gen_temp_kw(), gen_temp_kw());

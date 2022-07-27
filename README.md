@@ -1,10 +1,10 @@
 ## TODO
 
 * [x] predicates
-* [ ] negation
+* [x] negation
+* [ ] disjunction
 * [ ] aggregation
 * [ ] stratum
-* [ ] disjunction
 * [ ] magic sets
 * [ ] function symbol
 * [ ] arithmetic
