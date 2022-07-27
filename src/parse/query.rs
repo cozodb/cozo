@@ -12,8 +12,8 @@ use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::value::DataValue;
 use crate::parse::triple::TxError;
 use crate::query::compile::{
-    Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, QueryCompilationError, Rule,
-    RuleApplyAtom, RuleSet, Term,
+    Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, LogicalAtom, QueryCompilationError,
+    Rule, RuleApplyAtom, RuleSet, Term,
 };
 use crate::runtime::transact::SessionTx;
 use crate::{EntityId, Validity};
@@ -359,21 +359,61 @@ impl SessionTx {
                 _ => unimplemented!(),
             },
             JsonValue::Object(map) => {
-                // rule application, or built-in predicates,
-                // or disjunction/negation (convert to disjunctive normal forms)
                 if map.contains_key("rule") {
                     self.parse_rule_atom(map, vld)
                 } else if map.contains_key("pred") {
                     Self::parse_predicate_atom(map)
-                } else if map.contains_key("logical") {
-                    dbg!("x");
-                    todo!()
+                } else if map.contains_key("conj")
+                    || map.contains_key("disj")
+                    || map.contains_key("not_exists")
+                {
+                    if map.len() != 1 {
+                        return Err(QueryCompilationError::UnexpectedForm(
+                            JsonValue::Object(map.clone()),
+                            "too many keys".to_string(),
+                        )
+                        .into());
+                    }
+                    self.parse_logical_atom(map, vld)
                 } else {
-                    todo!()
+                    Err(QueryCompilationError::UnexpectedForm(
+                        JsonValue::Object(map.clone()),
+                        "unknown format".to_string(),
+                    )
+                    .into())
                 }
             }
-            _ => unimplemented!(),
+            v => Err(QueryCompilationError::UnexpectedForm(
+                v.clone(),
+                "unknown format".to_string(),
+            )
+            .into()),
         }
+    }
+    fn parse_logical_atom(&mut self, map: &Map<String, JsonValue>, vld: Validity) -> Result<Atom> {
+        let (k, v) = map.iter().next().unwrap();
+        Ok(match k as &str {
+            "not_exists" => {
+                let arg = self.parse_atom(v, vld)?;
+                Atom::Logical(LogicalAtom::Negation(Box::new(arg)))
+            }
+            "conj" | "disj" => {
+                let args = v
+                    .as_array()
+                    .ok_or_else(|| {
+                        QueryCompilationError::UnexpectedForm(v.clone(), "expect array".to_string())
+                    })?
+                    .iter()
+                    .map(|a| self.parse_atom(a, vld))
+                    .try_collect()?;
+                if k == "conj" {
+                    Atom::Logical(LogicalAtom::Conjunction(args))
+                } else {
+                    Atom::Logical(LogicalAtom::Disjunction(args))
+                }
+            }
+            _ => unreachable!(),
+        })
     }
     fn parse_triple_atom(
         &mut self,

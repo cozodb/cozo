@@ -111,11 +111,9 @@ pub struct RuleApplyAtom {
 
 #[derive(Clone, Debug)]
 pub enum LogicalAtom {
-    AttrTriple(AttrTripleAtom),
-    Rule(RuleApplyAtom),
-    Negation(Box<LogicalAtom>),
-    Conjunction(Vec<LogicalAtom>),
-    Disjunction(Vec<LogicalAtom>),
+    Negation(Box<Atom>),
+    Conjunction(Vec<Atom>),
+    Disjunction(Vec<Atom>),
 }
 
 #[derive(Clone, Debug)]

@@ -416,6 +416,39 @@ fn invert_option_err<T>(v: Result<Option<T>>) -> Option<Result<T>> {
 }
 
 impl TripleRelation {
+    pub(crate) fn neg_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
+        tx: &'a SessionTx,
+        eliminate_indices: BTreeSet<usize>,
+    ) -> TupleIter<'a> {
+        match right_join_indices.len() {
+            2 => {
+                let right_first = *right_join_indices.first().unwrap();
+                let right_second = *right_join_indices.last().unwrap();
+                let left_first = *left_join_indices.first().unwrap();
+                let left_second = *left_join_indices.last().unwrap();
+                match (right_first, right_second) {
+                    (0, 1) => self.neg_ev_join(left_iter, left_first, left_second, tx),
+                    (1, 0) => self.neg_ev_join(left_iter, left_second, left_first, tx),
+                    _ => panic!("should not happen"),
+                }
+            }
+            1 => {
+                if right_join_indices[0] == 0 {
+                    self.neg_e_join(left_iter, left_join_indices[0], tx)
+                } else if self.attr.val_type.is_ref_type() {
+                    self.neg_v_ref_join(left_iter, left_join_indices[0], tx)
+                } else if self.attr.indexing.should_index() {
+                    self.neg_v_index_join(left_iter, left_join_indices[0], tx)
+                } else {
+                    self.neg_v_no_index_join(left_iter, left_join_indices[0], tx)
+                }
+            }
+            _ => unreachable!(),
+        }
+    }
     pub(crate) fn join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
@@ -471,6 +504,25 @@ impl TripleRelation {
                 .map(flatten_err),
         )
     }
+    fn neg_ev_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_e_idx: usize,
+        left_v_idx: usize,
+        tx: &'a SessionTx,
+    ) -> TupleIter<'a> {
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                    let eid = tuple.0.get(left_e_idx).unwrap().get_entity_id()?;
+                    let v = tuple.0.get(left_v_idx).unwrap();
+                    let exists = tx.eav_exists(eid, self.attr.id, v, self.vld)?;
+                    Ok(if exists { None } else { Some(tuple) })
+                })
+                .map(flatten_err)
+                .filter_map(invert_option_err),
+        )
+    }
     fn ev_join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
@@ -508,6 +560,26 @@ impl TripleRelation {
                         Ok(Some(Tuple(ret)))
                     } else {
                         Ok(None)
+                    }
+                })
+                .map(flatten_err)
+                .filter_map(invert_option_err),
+        )
+    }
+    fn neg_e_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_e_idx: usize,
+        tx: &'a SessionTx,
+    ) -> TupleIter<'a> {
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                    let eid = tuple.0.get(left_e_idx).unwrap().get_entity_id()?;
+                    match tx.triple_ea_before_scan(eid, self.attr.id, self.vld).next() {
+                        None => Ok(Some(tuple)),
+                        Some(Ok(_)) => Ok(None),
+                        Some(Err(e)) => Err(e),
                     }
                 })
                 .map(flatten_err)
@@ -559,6 +631,29 @@ impl TripleRelation {
                 .map(flatten_err),
         )
     }
+    fn neg_v_ref_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_v_idx: usize,
+        tx: &'a SessionTx,
+    ) -> TupleIter<'a> {
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                    let v_eid = tuple.0.get(left_v_idx).unwrap().get_entity_id()?;
+                    match tx
+                        .triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
+                        .next()
+                    {
+                        None => Ok(Some(tuple)),
+                        Some(Ok(_)) => Ok(None),
+                        Some(Err(e)) => Err(e),
+                    }
+                })
+                .map(flatten_err)
+                .filter_map(invert_option_err),
+        )
+    }
     fn v_ref_join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
@@ -606,6 +701,26 @@ impl TripleRelation {
                 .map(flatten_err),
         )
     }
+    fn neg_v_index_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_v_idx: usize,
+        tx: &'a SessionTx,
+    ) -> TupleIter<'a> {
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                    let val = tuple.0.get(left_v_idx).unwrap();
+                    match tx.triple_av_before_scan(self.attr.id, val, self.vld).next() {
+                        None => Ok(Some(tuple)),
+                        Some(Ok(_)) => Ok(None),
+                        Some(Err(e)) => Err(e),
+                    }
+                })
+                .map(flatten_err)
+                .filter_map(invert_option_err),
+        )
+    }
     fn v_index_join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
@@ -644,6 +759,28 @@ impl TripleRelation {
                 })
                 .flatten_ok()
                 .map(flatten_err),
+        )
+    }
+    fn neg_v_no_index_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        left_v_idx: usize,
+        tx: &'a SessionTx,
+    ) -> TupleIter<'a> {
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                    let val = tuple.0.get(left_v_idx).unwrap();
+                    for item in tx.triple_a_before_scan(self.attr.id, self.vld) {
+                        let (_, _, found_val) = item?;
+                        if *val == found_val {
+                            return Ok(None);
+                        }
+                    }
+                    Ok(Some(tuple))
+                })
+                .map(flatten_err)
+                .filter_map(invert_option_err),
         )
     }
     fn v_no_index_join<'a>(

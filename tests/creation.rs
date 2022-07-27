@@ -141,7 +141,11 @@ fn creation() {
             },
             {
                 "rule": "?",
-                "args": [["?a"], {"pred": "Neq", "args": ["?n", {"pred": "StrCat", "args": ["A", "l", "i", "c", "e"]}]}, {"rule": "ff", "args": [{"person.id": "alice_amorist"}, "?a"]}, ["?a", "person.first_name", "?n"]]
+                "args": [["?a"],
+                    {"pred": "Neq", "args": ["?n", {"pred": "StrCat", "args": ["A", "l", "i", "c", "e"]}]},
+                    {"rule": "ff", "args": [{"person.id": "alice_amorist"}, "?a"]},
+                    {"not_exists": ["?a", "person.last_name", "Goodman"]},
+                    ["?a", "person.first_name", "?n"]]
             }
         ],
         "out": {"friend": {"pull": "?a", "spec": ["person.first_name"]}}

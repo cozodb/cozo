@@ -80,7 +80,20 @@ def Const(item):
     return {'const': item}
 
 
-__all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Add', 'Sub', 'Mul', 'Div', 'Q', 'T', 'R', 'Const']
+def Conj(*items):
+    return {'conj': items}
+
+
+def Disj(*items):
+    return {'disj': items}
+
+
+def NotExists(item):
+    return {'not_exists': item}
+
+
+__all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Add', 'Sub', 'Mul', 'Div', 'Q', 'T', 'R', 'Const', 'Conj', 'Disj',
+           'NotExists']
 
 if __name__ == '__main__':
     import json
