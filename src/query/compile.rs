@@ -84,18 +84,6 @@ impl<T> Term<T> {
             Term::Const(_) => {}
         }
     }
-    pub(crate) fn get_var(&self) -> Option<&Keyword> {
-        match self {
-            Self::Var(k) => Some(k),
-            Self::Const(_) => None,
-        }
-    }
-    pub(crate) fn get_const(&self) -> Option<&T> {
-        match self {
-            Self::Const(v) => Some(v),
-            Self::Var(_) => None,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]

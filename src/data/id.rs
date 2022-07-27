@@ -91,9 +91,6 @@ impl EntityId {
     pub(crate) const MAX_TEMP: EntityId = EntityId(10_000_000);
     pub const MIN_PERM: EntityId = EntityId(10_000_001);
     pub const MAX_PERM: EntityId = EntityId(0x00ff_ffff_ff00_0000);
-    pub(crate) fn is_zero(&self) -> bool {
-        self.0 == 0
-    }
 
     pub(crate) fn from_bytes(b: &[u8]) -> Self {
         EntityId(u64::from_be_bytes([

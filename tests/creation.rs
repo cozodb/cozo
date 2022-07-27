@@ -143,7 +143,11 @@ fn creation() {
                 "rule": "?",
                 "args": [["?a"],
                     {"not_exists": ["?a", "person.last_name", "Goodman"]},
-                    {"pred": "Neq", "args": ["?n", {"pred": "StrCat", "args": ["A", "l", "i", "c", "e"]}]},
+                    {"disj": [
+                        {"pred": "Eq", "args": ["?n", {"pred": "StrCat", "args": ["A", "l", "i", "c", "e"]}]},
+                        {"pred": "Eq", "args": ["?n", "Bob"]},
+                        {"pred": "Eq", "args": ["?n", 12345]},
+                    ]},
                     {"rule": "ff", "args": [{"person.id": "alice_amorist"}, "?a"]},
                     ["?a", "person.first_name", "?n"]
                 ]

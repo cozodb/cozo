@@ -1,16 +1,8 @@
-use anyhow::Result;
 use itertools::Itertools;
 
-use crate::data::expr::{get_op, Expr};
 use crate::query::compile::Atom;
 
 impl Atom {
-    pub(crate) fn is_disjunction(&self) -> bool {
-        matches!(self, Atom::Disjunction(_))
-    }
-    pub(crate) fn is_conjunction(&self) -> bool {
-        matches!(self, Atom::Conjunction(_))
-    }
     pub(crate) fn negation_normal_form(self) -> Self {
         match self {
             a @ (Atom::AttrTriple(_) | Atom::Rule(_) | Atom::Predicate(_)) => a,

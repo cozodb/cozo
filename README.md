@@ -3,9 +3,9 @@
 * [x] predicates
 * [x] negation
 * [x] disjunction
-* [ ] aggregation
 * [ ] stratum
 * [ ] magic sets
+* [ ] aggregation
 * [ ] function symbol
 * [ ] arithmetic
 * [ ] range scan

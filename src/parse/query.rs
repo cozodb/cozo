@@ -1,6 +1,5 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
-use std::iter;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -236,7 +235,7 @@ impl SessionTx {
         &mut self,
         payload: &JsonValue,
         default_vld: Validity,
-    ) -> Result<impl Iterator<Item = (Keyword, Rule)>> {
+    ) -> Result<Vec<(Keyword, Rule)>> {
         let rule_name = payload.get("rule").ok_or_else(|| {
             QueryCompilationError::UnexpectedForm(
                 payload.clone(),
@@ -293,9 +292,6 @@ impl SessionTx {
             .map(|el| self.parse_atom(el, default_vld))
             .try_collect()?;
 
-        let rule_body = Self::reorder_rule_body_for_negations(rule_body)?;
-        let rule_body = Self::reorder_rule_body_for_predicates(rule_body)?;
-
         if rule_head.len()
             != rule_head
                 .iter()
@@ -308,19 +304,23 @@ impl SessionTx {
             )
             .into());
         }
-        Ok(Atom::Conjunction(rule_body)
+        Atom::Conjunction(rule_body)
             .disjunctive_normal_form()
             .into_iter()
-            .map(move |rule_body| {
-                (
+            .map(move |rule_body| -> Result<(Keyword, Rule)> {
+                let rule_body = Self::reorder_rule_body_for_negations(rule_body)?;
+                let rule_body = Self::reorder_rule_body_for_predicates(rule_body)?;
+
+                Ok((
                     rule_name.clone(),
                     Rule {
                         head: rule_head.clone(),
                         body: rule_body,
                         vld,
                     },
-                )
-            }))
+                ))
+            })
+            .try_collect()
     }
 
     fn reorder_rule_body_for_negations(clauses: Vec<Atom>) -> Result<Vec<Atom>> {

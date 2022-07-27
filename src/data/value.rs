@@ -10,9 +10,7 @@ use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
 
-use cozorocks::PinSlice;
-
-use crate::data::encode::{decode_value, EncodedVec};
+use crate::data::encode::EncodedVec;
 use crate::data::id::{EntityId, TxId};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
@@ -63,9 +61,7 @@ impl Debug for DataValue {
             DataValue::Bool(b) => {
                 write!(f, "{}", b)
             }
-            DataValue::EnId(id) => {
-                id.fmt(f)
-            }
+            DataValue::EnId(id) => id.fmt(f),
             DataValue::Int(i) => {
                 write!(f, "{}", i)
             }
@@ -87,11 +83,7 @@ impl Debug for DataValue {
             DataValue::Bytes(b) => {
                 write!(f, "bytes(len={})", b.len())
             }
-            DataValue::List(t) => {
-                f.debug_list()
-                    .entries(t.iter())
-                    .finish()
-            }
+            DataValue::List(t) => f.debug_list().entries(t.iter()).finish(),
             DataValue::DescVal(v) => {
                 write!(f, "desc<{:?}>", v)
             }
@@ -125,16 +117,6 @@ impl DataValue {
                 format!("{:?}", v),
             )),
         }
-    }
-}
-
-pub(crate) struct PinSliceValue {
-    inner: PinSlice,
-}
-
-impl PinSliceValue {
-    pub(crate) fn as_value(&self) -> Result<DataValue> {
-        decode_value(&self.inner.as_ref()[1..])
     }
 }
 
