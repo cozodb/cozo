@@ -20,6 +20,7 @@ pub enum Relation {
     Triple(TripleRelation),
     Derived(StoredDerivedRelation),
     Join(Box<InnerJoin>),
+    NegJoin(Box<NegJoin>),
     Reorder(ReorderRelation),
     Filter(FilteredRelation),
 }
@@ -143,6 +144,13 @@ impl Debug for Relation {
                         .finish()
                 }
             }
+            Relation::NegJoin(r) => f
+                .debug_tuple("NegJoin")
+                .field(&bindings)
+                .field(&r.joiner)
+                .field(&r.left)
+                .field(&r.right)
+                .finish(),
             Relation::Reorder(r) => f
                 .debug_tuple("Reorder")
                 .field(&r.new_order)
@@ -174,6 +182,9 @@ impl Relation {
             Relation::Filter(f) => {
                 f.parent.fill_predicate_binding_indices();
                 f.fill_binding_indices()
+            }
+            Relation::NegJoin(r) => {
+                r.left.fill_predicate_binding_indices();
             }
         }
     }
@@ -235,6 +246,22 @@ impl Relation {
         right_keys: Vec<Keyword>,
     ) -> Self {
         Relation::Join(Box::new(InnerJoin {
+            left: self,
+            right,
+            joiner: Joiner {
+                left_keys,
+                right_keys,
+            },
+            to_eliminate: Default::default(),
+        }))
+    }
+    pub(crate) fn neg_join(
+        self,
+        right: Relation,
+        left_keys: Vec<Keyword>,
+        right_keys: Vec<Keyword>,
+    ) -> Self {
+        Relation::NegJoin(Box::new(NegJoin {
             left: self,
             right,
             joiner: Joiner {
@@ -421,6 +448,7 @@ impl TripleRelation {
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         tx: &'a SessionTx,
+        eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         match right_join_indices.len() {
             2 => {
@@ -429,20 +457,24 @@ impl TripleRelation {
                 let left_first = *left_join_indices.first().unwrap();
                 let left_second = *left_join_indices.last().unwrap();
                 match (right_first, right_second) {
-                    (0, 1) => self.neg_ev_join(left_iter, left_first, left_second, tx),
-                    (1, 0) => self.neg_ev_join(left_iter, left_second, left_first, tx),
+                    (0, 1) => {
+                        self.neg_ev_join(left_iter, left_first, left_second, tx, eliminate_indices)
+                    }
+                    (1, 0) => {
+                        self.neg_ev_join(left_iter, left_second, left_first, tx, eliminate_indices)
+                    }
                     _ => panic!("should not happen"),
                 }
             }
             1 => {
                 if right_join_indices[0] == 0 {
-                    self.neg_e_join(left_iter, left_join_indices[0], tx)
+                    self.neg_e_join(left_iter, left_join_indices[0], tx, eliminate_indices)
                 } else if self.attr.val_type.is_ref_type() {
-                    self.neg_v_ref_join(left_iter, left_join_indices[0], tx)
+                    self.neg_v_ref_join(left_iter, left_join_indices[0], tx, eliminate_indices)
                 } else if self.attr.indexing.should_index() {
-                    self.neg_v_index_join(left_iter, left_join_indices[0], tx)
+                    self.neg_v_index_join(left_iter, left_join_indices[0], tx, eliminate_indices)
                 } else {
-                    self.neg_v_no_index_join(left_iter, left_join_indices[0], tx)
+                    self.neg_v_no_index_join(left_iter, left_join_indices[0], tx, eliminate_indices)
                 }
             }
             _ => unreachable!(),
@@ -509,6 +541,7 @@ impl TripleRelation {
         left_e_idx: usize,
         left_v_idx: usize,
         tx: &'a SessionTx,
+        eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         Box::new(
             left_iter
@@ -516,7 +549,26 @@ impl TripleRelation {
                     let eid = tuple.0.get(left_e_idx).unwrap().get_entity_id()?;
                     let v = tuple.0.get(left_v_idx).unwrap();
                     let exists = tx.eav_exists(eid, self.attr.id, v, self.vld)?;
-                    Ok(if exists { None } else { Some(tuple) })
+                    Ok(if exists {
+                        None
+                    } else if !eliminate_indices.is_empty() {
+                        Some(Tuple(
+                            tuple
+                                .0
+                                .into_iter()
+                                .enumerate()
+                                .filter_map(|(i, v)| {
+                                    if eliminate_indices.contains(&i) {
+                                        None
+                                    } else {
+                                        Some(v)
+                                    }
+                                })
+                                .collect_vec(),
+                        ))
+                    } else {
+                        Some(tuple)
+                    })
                 })
                 .map(flatten_err)
                 .filter_map(invert_option_err),
@@ -570,13 +622,31 @@ impl TripleRelation {
         left_iter: TupleIter<'a>,
         left_e_idx: usize,
         tx: &'a SessionTx,
+        eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let eid = tuple.0.get(left_e_idx).unwrap().get_entity_id()?;
                     match tx.triple_ea_before_scan(eid, self.attr.id, self.vld).next() {
-                        None => Ok(Some(tuple)),
+                        None => Ok(if !eliminate_indices.is_empty() {
+                            Some(Tuple(
+                                tuple
+                                    .0
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter_map(|(i, v)| {
+                                        if eliminate_indices.contains(&i) {
+                                            None
+                                        } else {
+                                            Some(v)
+                                        }
+                                    })
+                                    .collect_vec(),
+                            ))
+                        } else {
+                            Some(tuple)
+                        }),
                         Some(Ok(_)) => Ok(None),
                         Some(Err(e)) => Err(e),
                     }
@@ -635,6 +705,7 @@ impl TripleRelation {
         left_iter: TupleIter<'a>,
         left_v_idx: usize,
         tx: &'a SessionTx,
+        eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         Box::new(
             left_iter
@@ -644,7 +715,24 @@ impl TripleRelation {
                         .triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
                         .next()
                     {
-                        None => Ok(Some(tuple)),
+                        None => Ok(if !eliminate_indices.is_empty() {
+                            Some(Tuple(
+                                tuple
+                                    .0
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter_map(|(i, v)| {
+                                        if eliminate_indices.contains(&i) {
+                                            None
+                                        } else {
+                                            Some(v)
+                                        }
+                                    })
+                                    .collect_vec(),
+                            ))
+                        } else {
+                            Some(tuple)
+                        }),
                         Some(Ok(_)) => Ok(None),
                         Some(Err(e)) => Err(e),
                     }
@@ -705,13 +793,31 @@ impl TripleRelation {
         left_iter: TupleIter<'a>,
         left_v_idx: usize,
         tx: &'a SessionTx,
+        eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let val = tuple.0.get(left_v_idx).unwrap();
                     match tx.triple_av_before_scan(self.attr.id, val, self.vld).next() {
-                        None => Ok(Some(tuple)),
+                        None => Ok(if !eliminate_indices.is_empty() {
+                            Some(Tuple(
+                                tuple
+                                    .0
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter_map(|(i, v)| {
+                                        if eliminate_indices.contains(&i) {
+                                            None
+                                        } else {
+                                            Some(v)
+                                        }
+                                    })
+                                    .collect_vec(),
+                            ))
+                        } else {
+                            Some(tuple)
+                        }),
                         Some(Ok(_)) => Ok(None),
                         Some(Err(e)) => Err(e),
                     }
@@ -765,6 +871,7 @@ impl TripleRelation {
         left_iter: TupleIter<'a>,
         left_v_idx: usize,
         tx: &'a SessionTx,
+        eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         Box::new(
             left_iter
@@ -776,7 +883,24 @@ impl TripleRelation {
                             return Ok(None);
                         }
                     }
-                    Ok(Some(tuple))
+                    Ok(if !eliminate_indices.is_empty() {
+                        Some(Tuple(
+                            tuple
+                                .0
+                                .into_iter()
+                                .enumerate()
+                                .filter_map(|(i, v)| {
+                                    if eliminate_indices.contains(&i) {
+                                        None
+                                    } else {
+                                        Some(v)
+                                    }
+                                })
+                                .collect_vec(),
+                        ))
+                    } else {
+                        Some(tuple)
+                    })
                 })
                 .map(flatten_err)
                 .filter_map(invert_option_err),
@@ -885,6 +1009,7 @@ impl StoredDerivedRelation {
         &'a self,
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
+        eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         debug_assert!(!right_join_indices.is_empty());
         let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
@@ -918,7 +1043,24 @@ impl StoredDerivedRelation {
                         }
                         return Ok(None);
                     }
-                    Ok(Some(tuple))
+                    Ok(Some(if !eliminate_indices.is_empty() {
+                        Tuple(
+                            tuple
+                                .0
+                                .into_iter()
+                                .enumerate()
+                                .filter_map(|(i, v)| {
+                                    if eliminate_indices.contains(&i) {
+                                        None
+                                    } else {
+                                        Some(v)
+                                    }
+                                })
+                                .collect_vec(),
+                        )
+                    } else {
+                        tuple
+                    }))
                 })
                 .map(flatten_err)
                 .filter_map(invert_option_err),
@@ -1048,14 +1190,6 @@ impl Joiner {
     }
 }
 
-#[derive(Debug)]
-pub struct InnerJoin {
-    pub(crate) left: Relation,
-    pub(crate) right: Relation,
-    pub(crate) joiner: Joiner,
-    pub(crate) to_eliminate: BTreeSet<Keyword>,
-}
-
 impl Relation {
     pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
         match self {
@@ -1065,6 +1199,7 @@ impl Relation {
             Relation::Join(r) => r.do_eliminate_temp_vars(used),
             Relation::Reorder(r) => r.relation.eliminate_temp_vars(used),
             Relation::Filter(r) => r.do_eliminate_temp_vars(used),
+            Relation::NegJoin(r) => r.do_eliminate_temp_vars(used),
         }
     }
 
@@ -1076,6 +1211,7 @@ impl Relation {
             Relation::Join(r) => Some(&r.to_eliminate),
             Relation::Reorder(_) => None,
             Relation::Filter(r) => Some(&r.to_eliminate),
+            Relation::NegJoin(r) => Some(&r.to_eliminate),
         }
     }
 
@@ -1098,6 +1234,7 @@ impl Relation {
             Relation::Join(j) => j.bindings(),
             Relation::Reorder(r) => r.bindings(),
             Relation::Filter(r) => r.parent.bindings_after_eliminate(),
+            Relation::NegJoin(j) => j.left.bindings_after_eliminate(),
         }
     }
     pub fn iter<'a>(
@@ -1116,8 +1253,83 @@ impl Relation {
             Relation::Join(j) => j.iter(tx, epoch, use_delta),
             Relation::Reorder(r) => r.iter(tx, epoch, use_delta),
             Relation::Filter(r) => r.iter(tx, epoch, use_delta),
+            Relation::NegJoin(r) => r.iter(tx, epoch, use_delta),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct NegJoin {
+    pub(crate) left: Relation,
+    pub(crate) right: Relation,
+    pub(crate) joiner: Joiner,
+    pub(crate) to_eliminate: BTreeSet<Keyword>,
+}
+impl NegJoin {
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
+        for binding in self.left.bindings_after_eliminate() {
+            if !used.contains(&binding) {
+                self.to_eliminate.insert(binding.clone());
+            }
+        }
+        let mut left = used.clone();
+        left.extend(self.joiner.left_keys.clone());
+        self.left.eliminate_temp_vars(&left)?;
+        // right acts as a filter, introduces nothing, no need to eliminate
+        Ok(())
+    }
+
+    pub(crate) fn iter<'a>(
+        &'a self,
+        tx: &'a SessionTx,
+        epoch: Option<u32>,
+        use_delta: &BTreeSet<TempStoreId>,
+    ) -> TupleIter<'a> {
+        let bindings = self.left.bindings_after_eliminate();
+        let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
+        match &self.right {
+            Relation::Triple(r) => {
+                let join_indices = self
+                    .joiner
+                    .join_indices(
+                        &self.left.bindings_after_eliminate(),
+                        &self.right.bindings_after_eliminate(),
+                    )
+                    .unwrap();
+                r.neg_join(
+                    self.left.iter(tx, epoch, use_delta),
+                    join_indices,
+                    tx,
+                    eliminate_indices,
+                )
+            }
+            Relation::Derived(r) => {
+                let join_indices = self
+                    .joiner
+                    .join_indices(
+                        &self.left.bindings_after_eliminate(),
+                        &self.right.bindings_after_eliminate(),
+                    )
+                    .unwrap();
+                r.neg_join(
+                    self.left.iter(tx, epoch, use_delta),
+                    join_indices,
+                    eliminate_indices,
+                )
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct InnerJoin {
+    pub(crate) left: Relation,
+    pub(crate) right: Relation,
+    pub(crate) joiner: Joiner,
+    pub(crate) to_eliminate: BTreeSet<Keyword>,
 }
 
 impl InnerJoin {
@@ -1205,6 +1417,9 @@ impl InnerJoin {
             }
             Relation::Reorder(_) => {
                 panic!("joining on reordered")
+            }
+            Relation::NegJoin(_) => {
+                panic!("joining on NegJoin")
             }
         }
     }
