@@ -421,7 +421,6 @@ impl TripleRelation {
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         match right_join_indices.len() {
             2 => {
@@ -881,6 +880,49 @@ impl StoredDerivedRelation {
         indices.sort();
         let l = indices.len();
         indices.into_iter().eq(0..l)
+    }
+    fn neg_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
+    ) -> TupleIter<'a> {
+        debug_assert!(!right_join_indices.is_empty());
+        let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
+        right_invert_indices.sort_by_key(|(_, b)| **b);
+        let mut left_to_prefix_indices = vec![];
+        for (ord, (idx, ord_sorted)) in right_invert_indices.iter().enumerate() {
+            if ord != **ord_sorted {
+                break;
+            }
+            left_to_prefix_indices.push(left_join_indices[*idx]);
+        }
+
+        Box::new(
+            left_iter
+                .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                    let prefix = Tuple(
+                        left_to_prefix_indices
+                            .iter()
+                            .map(|i| tuple.0[*i].clone())
+                            .collect_vec(),
+                    );
+
+                    'outer: for found in self.storage.scan_prefix(&prefix) {
+                        let found = found?;
+                        for (left_idx, right_idx) in
+                            left_join_indices.iter().zip(right_join_indices.iter())
+                        {
+                            if tuple.0[*left_idx] != found.0[*right_idx] {
+                                continue 'outer;
+                            }
+                        }
+                        return Ok(None);
+                    }
+                    Ok(Some(tuple))
+                })
+                .map(flatten_err)
+                .filter_map(invert_option_err),
+        )
     }
     fn prefix_join<'a>(
         &'a self,
