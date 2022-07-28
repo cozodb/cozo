@@ -10,7 +10,7 @@ fn main() {
     println!("cargo:rustc-link-lib=lz4");
     println!("cargo:rustc-link-lib=snappy");
     println!("cargo:rustc-link-lib=zstd");
-    println!("cargo:rustc-link-lib=jemalloc");
+    // println!("cargo:rustc-link-lib=jemalloc");
     println!("cargo:rerun-if-changed=src/bridge/mod.rs");
     println!("cargo:rerun-if-changed=bridge/bridge.h");
     println!("cargo:rerun-if-changed=bridge/common.h");

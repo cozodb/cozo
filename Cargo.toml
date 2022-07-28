@@ -30,11 +30,11 @@ ordered-float = { version = "3.0", features = ["serde"] }
 itertools = "0.10.3"
 cozorocks = { path = "cozorocks" }
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = "0.5"
+#[target.'cfg(not(target_env = "msvc"))'.dependencies]
+#tikv-jemallocator = { version = "0.5", features = ["disable_initial_exec_tls"] }
 
-[profile.release]
-lto = true
+#[profile.release]
+#lto = true
 
 [workspace]
 members = ["cozorocks", "cozohttp", "cozopy"]
