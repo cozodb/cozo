@@ -295,11 +295,7 @@ impl Attribute {
             "history": self.with_history
         })
     }
-    pub(crate) fn coerce_value(
-        &self,
-        value: DataValue,
-        ctx: &mut TempIdCtx,
-    ) -> Result<DataValue> {
+    pub(crate) fn coerce_value(&self, value: DataValue, ctx: &mut TempIdCtx) -> Result<DataValue> {
         if self.val_type.is_ref_type() {
             if let DataValue::String(s) = value {
                 return Ok(DataValue::EnId(ctx.str2tempid(&s, false)));

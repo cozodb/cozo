@@ -46,7 +46,7 @@ impl Debug for Db {
 }
 
 impl Db {
-    pub fn build(builder: DbBuilder) -> Result<Self> {
+    pub fn build(builder: DbBuilder<'_>) -> Result<Self> {
         let db = builder
             .use_bloom_filter(true, 10., true)
             .use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)

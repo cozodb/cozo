@@ -18,9 +18,10 @@ pub(crate) mod eval;
 pub(crate) mod pull;
 pub(crate) mod relation;
 pub(crate) mod logical;
+pub(crate) mod graph;
 
 impl SessionTx {
-    pub fn run_query(&mut self, payload: &JsonValue) -> Result<QueryResult> {
+    pub fn run_query(&mut self, payload: &JsonValue) -> Result<QueryResult<'_>> {
         let vld = match payload.get("since") {
             None => Validity::current(),
             Some(v) => Validity::try_from(v)?,

@@ -1,3 +1,5 @@
+#![warn(rust_2018_idioms, future_incompatible)]
+
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
 

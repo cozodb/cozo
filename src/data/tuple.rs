@@ -273,7 +273,7 @@ mod tests {
         let val = Tuple(val);
         let encoded = val.encode_as_key(TempStoreId(123));
         println!("{:x?}", encoded);
-        let encoded_tuple: EncodedTuple = (&encoded as &[u8]).into();
+        let encoded_tuple: EncodedTuple<'_> = (&encoded as &[u8]).into();
         println!("{:?}", encoded_tuple.prefix());
         println!("{:?}", encoded_tuple.arity());
         println!("{:?}", encoded_tuple.get(0));

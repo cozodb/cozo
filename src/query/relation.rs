@@ -59,7 +59,7 @@ impl FilteredRelation {
         tx: &'a SessionTx,
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
-    ) -> TupleIter {
+    ) -> TupleIter<'a> {
         let bindings = self.parent.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         Box::new(
@@ -981,7 +981,7 @@ pub struct StoredDerivedRelation {
 }
 
 impl StoredDerivedRelation {
-    fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<TempStoreId>) -> TupleIter {
+    fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<TempStoreId>) -> TupleIter<'_> {
         if epoch == Some(0) {
             return Box::new(iter::empty());
         }
