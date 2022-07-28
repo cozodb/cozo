@@ -37,4 +37,4 @@ tikv-jemallocator = "0.5"
 lto = true
 
 [workspace]
-members = ["cozorocks", "cozohttp"]
+members = ["cozorocks", "cozohttp", "cozopy"]
