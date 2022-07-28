@@ -1,8 +1,10 @@
+#!/usr/bin/env bash
+
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-  export CC=/usr/bin/clang-10
-  export CPP=/usr/bin/clang-cpp-10
-  export CXX=/usr/bin/clang++-10
-  export LD=/usr/bin/ld.lld-10
+  export CC=/usr/bin/clang-14
+  export CPP=/usr/bin/clang-cpp-14
+  export CXX=/usr/bin/clang++-14
+  export LD=/usr/bin/ld.lld-14
 fi
 
 mkdir -p deps
@@ -21,6 +23,9 @@ cd rocksdb || exit
 make clean
 
 export JEMALLOC_BASE=$INSTALL_DIR
+
+export EXTRA_CFLAGS='-fPIC'
+export EXTRA_CXXFLAGS='-fPIC'
 
 DEBUG_LEVEL=0 \
   JEMALLOC_INCLUDE=" -I $JEMALLOC_BASE/include/" \
