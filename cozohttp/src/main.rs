@@ -2,17 +2,16 @@ use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 
 use actix_cors::Cors;
-use actix_web::{App, HttpResponse, HttpServer, post, Responder, web};
+use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use clap::Parser;
-use log::info;
 
-use cozo::Db;
-use cozorocks::DbBuilder;
+use cozo::{Db, DbBuilder};
+use log::info;
 
 type Result<T> = std::result::Result<T, RespError>;
 
 struct RespError {
-    err: anyhow::Error,
+    err: cozo::Error,
 }
 
 impl Debug for RespError {
@@ -29,8 +28,8 @@ impl Display for RespError {
 
 impl actix_web::error::ResponseError for RespError {}
 
-impl From<anyhow::Error> for RespError {
-    fn from(err: anyhow::Error) -> RespError {
+impl From<cozo::Error> for RespError {
+    fn from(err: cozo::Error) -> RespError {
         RespError { err }
     }
 }
@@ -88,6 +87,7 @@ async fn query(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init();
     let args = Args::parse();
     if args.temp && Path::new(&args.path).exists() {
         panic!(
@@ -117,7 +117,7 @@ async fn main() -> std::io::Result<()> {
             .service(transact)
             .service(transact_attr)
     })
-        .bind(addr)?
-        .run()
-        .await
+    .bind(addr)?
+    .run()
+    .await
 }

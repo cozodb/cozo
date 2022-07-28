@@ -27,10 +27,7 @@ rmpv = "1.0.0"
 base64 = "0.13.0"
 chrono = "0.4.19"
 ordered-float = { version = "3.0", features = ["serde"] }
-actix-web = "4.1.0"
-clap = { version = "3.2.8", features = ["derive"] }
 itertools = "0.10.3"
-actix-cors = "0.6.1"
 cozorocks = { path = "cozorocks" }
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
@@ -40,4 +37,4 @@ tikv-jemallocator = "0.5"
 lto = true
 
 [workspace]
-members = ["cozorocks"]
+members = ["cozorocks", "cozohttp"]

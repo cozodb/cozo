@@ -1,8 +1,10 @@
 #![warn(rust_2018_idioms, future_incompatible)]
 
+pub use anyhow::Error;
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
 
+pub use cozorocks::DbBuilder;
 pub use data::encode::EncodedVec;
 pub use data::id::{AttrId, EntityId, TxId, Validity};
 pub use parse::schema::AttrTxItem;
@@ -14,7 +16,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 pub(crate) mod data;
 pub(crate) mod parse;
+pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod transact;
 pub(crate) mod utils;
-pub(crate) mod query;
