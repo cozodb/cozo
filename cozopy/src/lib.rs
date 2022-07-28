@@ -36,19 +36,19 @@ impl CozoDbPy {
         let db = Db::build(builder).into_py_res()?;
         Ok(Self { db })
     }
-    pub fn transact_attributes(&self, payload: &str) -> PyResult<String> {
+    pub fn transact_attributes(&self, py: Python<'_>, payload: &str) -> PyResult<String> {
         let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
-        let ret = self.db.transact_attributes(&payload).into_py_res()?;
+        let ret = py.allow_threads(|| self.db.transact_attributes(&payload).into_py_res())?;
         Ok(ret.to_string())
     }
-    pub fn transact_triples(&self, payload: &str) -> PyResult<String> {
+    pub fn transact_triples(&self, py: Python<'_>, payload: &str) -> PyResult<String> {
         let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
-        let ret = self.db.transact_triples(&payload).into_py_res()?;
+        let ret = py.allow_threads(|| self.db.transact_triples(&payload).into_py_res())?;
         Ok(ret.to_string())
     }
-    pub fn run_query(&self, payload: &str) -> PyResult<String> {
+    pub fn run_query(&self, py: Python<'_>, payload: &str) -> PyResult<String> {
         let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
-        let ret = self.db.run_query(&payload).into_py_res()?;
+        let ret = py.allow_threads(|| self.db.run_query(&payload).into_py_res())?;
         Ok(ret.to_string())
     }
 }
