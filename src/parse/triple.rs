@@ -208,7 +208,7 @@ impl SessionTx {
         temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple>,
     ) -> Result<()> {
-        if attr.cardinality.is_many() && attr.val_type != AttributeTyping::Tuple && value.is_array()
+        if attr.cardinality.is_many() && attr.val_type != AttributeTyping::List && value.is_array()
         {
             for cur_val in value.as_array().unwrap() {
                 self.parse_tx_request_inner(
@@ -360,7 +360,7 @@ impl SessionTx {
     ) -> Result<()> {
         let kw: Keyword = attr_kw.try_into()?;
         let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
-        if attr.cardinality.is_many() && attr.val_type != AttributeTyping::Tuple && val.is_array() {
+        if attr.cardinality.is_many() && attr.val_type != AttributeTyping::List && val.is_array() {
             for cur_val in val.as_array().unwrap() {
                 self.parse_tx_triple(eid, attr_kw, cur_val, action, since, temp_id_ctx, collected)?;
             }
@@ -425,7 +425,7 @@ impl SessionTx {
             temp_id_ctx.unnamed_tempid()
         };
 
-        if attr.val_type != AttributeTyping::Tuple && val.is_array() {
+        if attr.val_type != AttributeTyping::List && val.is_array() {
             let vals = val.as_array().unwrap();
             for val in vals {
                 self.parse_tx_request_inner(id, &attr, val, action, since, temp_id_ctx, collected)?;

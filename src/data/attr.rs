@@ -73,7 +73,7 @@ pub(crate) enum AttributeTyping {
     Uuid = 8,
     Timestamp = 9,
     Bytes = 10,
-    Tuple = 11,
+    List = 11,
 }
 
 impl AttributeTyping {
@@ -95,7 +95,7 @@ impl Display for AttributeTyping {
             AttributeTyping::Uuid => write!(f, "uuid"),
             AttributeTyping::Timestamp => write!(f, "timestamp"),
             AttributeTyping::Bytes => write!(f, "bytes"),
-            AttributeTyping::Tuple => write!(f, "tuple"),
+            AttributeTyping::List => write!(f, "list"),
         }
     }
 }
@@ -115,7 +115,7 @@ impl TryFrom<&'_ str> for AttributeTyping {
             "uuid" => Uuid,
             "timestamp" => Timestamp,
             "bytes" => Bytes,
-            "tuple" => Tuple,
+            "list" => List,
             s => {
                 return Err(AttributeError::Conversion(
                     s.to_string(),
@@ -193,7 +193,7 @@ impl AttributeTyping {
                     Err(self.type_err(val).into())
                 }
             }
-            AttributeTyping::Tuple => {
+            AttributeTyping::List => {
                 if matches!(val, DataValue::List(_)) {
                     Ok(val)
                 } else {
@@ -239,7 +239,7 @@ impl TryFrom<&'_ str> for AttributeIndex {
         use AttributeIndex::*;
         Ok(match value {
             "none" => None,
-            "index" => Indexed,
+            "indexed" => Indexed,
             "unique" => Unique,
             "identity" => Identity,
             s => {
