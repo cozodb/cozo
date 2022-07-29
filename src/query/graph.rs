@@ -113,15 +113,14 @@ pub(crate) fn reachable_components<'a, T: Ord>(
 
 pub(crate) type StratifiedGraph<T> = BTreeMap<T, BTreeMap<T, bool>>;
 
+/// For this generalized Kahn's algorithm, graph edges can be labelled 'poisoned', so that no
+/// stratum contains any poisoned edges within it.
+/// the returned vector of vector is simultaneously a topological ordering and a
+/// stratification, which is greedy with respect to the starting node.
 pub(crate) fn generalized_kahn(
     graph: &StratifiedGraph<usize>,
     num_nodes: usize,
 ) -> Vec<Vec<usize>> {
-    /// For this generalized Kahn's algorithm, graph edges can be labelled 'poisoned', so that no
-    /// stratum contains any poisoned edges within it.
-    /// the returned vector of vector is simultaneously a topological ordering and a
-    /// stratification, which is greedy with respect to the starting node.
-    /// Assuming starting node is 0.
     let mut in_degree = vec![0; num_nodes];
     for (_from, tos) in graph {
         for to in tos.keys() {
