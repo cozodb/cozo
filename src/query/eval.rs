@@ -28,7 +28,10 @@ impl SessionTx {
             .0
             .clone();
 
-        for cur_prog in stratified_prog.iter().rev() {
+        debug!("evaluate program with {} strata", stratified_prog.len());
+
+        for (idx, cur_prog) in stratified_prog.iter().rev().enumerate() {
+            debug!("stratum {}", idx);
             self.semi_naive_evaluate(cur_prog, &stores)?;
         }
         Ok(ret_area)

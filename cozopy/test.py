@@ -74,13 +74,10 @@ if __name__ == '__main__':
              T.person.friend('?a', '?c'),
              R.ff('?c', '?b')),
         Q(['?a'],
-          NotExists(T.person.last_name('?a', 'Goodman')),
-          Disj(
-              Eq('?n', StrCat('A', 'l', 'i', 'c', 'e')),
-              Eq('?n', 'Bob'),
-              Eq('?n', 12345)
+          T.person.first_name('?a', '?n'),
+          T.person.first_name('?alice', 'Alice'),
+          NotExists(R.ff('?a', '?alice'))
           ),
-          T.person.first_name('?a', '?n')),
     ],
         out={'friend': Pull('?a', ['person.first_name'])})
     print(res)
