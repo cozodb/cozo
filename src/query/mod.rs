@@ -19,6 +19,7 @@ pub(crate) mod pull;
 pub(crate) mod relation;
 pub(crate) mod logical;
 pub(crate) mod graph;
+pub(crate) mod stratify;
 
 impl SessionTx {
     pub fn run_query(&mut self, payload: &JsonValue) -> Result<QueryResult<'_>> {
@@ -125,7 +126,7 @@ impl SessionTx {
                                                     vld,
                                                     spec,
                                                     0,
-                                                    &specs,
+                                                    specs,
                                                     CurrentPath::new(idx)?,
                                                     &mut collected,
                                                     &mut recursive_seen,

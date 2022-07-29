@@ -5,7 +5,7 @@ use anyhow::Result;
 use itertools::Itertools;
 use log::{debug, log_enabled, trace, Level};
 
-use crate::data::keyword::Keyword;
+use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::query::compile::{
     BindingHeadFormatter, BindingHeadTerm, DatalogProgram, QueryCompilationError,
 };
@@ -20,7 +20,7 @@ impl SessionTx {
             .map(|(k, s)| (k.clone(), (self.new_throwaway(), s.arity)))
             .collect::<BTreeMap<_, _>>();
         let ret_area = stores
-            .get(&Keyword::from("?"))
+            .get(&PROG_ENTRY)
             .ok_or(QueryCompilationError::EntryNotFound)?
             .0
             .clone();
