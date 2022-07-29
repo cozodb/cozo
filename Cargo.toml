@@ -37,4 +37,4 @@ cozorocks = { path = "cozorocks" }
 #lto = true
 
 [workspace]
-members = ["cozorocks", "cozohttp", "cozopy"]
+members = ["cozorocks", "cozohttp", "cozopy", "cozoplay/src-tauri"]
