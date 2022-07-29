@@ -122,7 +122,7 @@ pub(crate) fn generalized_kahn(
     num_nodes: usize,
 ) -> Vec<Vec<usize>> {
     let mut in_degree = vec![0; num_nodes];
-    for (_from, tos) in graph {
+    for tos in graph.values() {
         for to in tos.keys() {
             in_degree[*to] += 1;
         }
