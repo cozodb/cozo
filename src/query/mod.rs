@@ -48,7 +48,7 @@ impl SessionTx {
         };
         match payload.get("out") {
             None => {
-                let res = self.semi_naive_evaluate(&prog)?;
+                let res = self.stratified_evaluate(&prog)?;
                 Ok(Box::new(res.scan_all().map_ok(|tuple| {
                     JsonValue::Array(tuple.0.into_iter().map(JsonValue::from).collect_vec())
                 })))
@@ -57,7 +57,7 @@ impl SessionTx {
                 let vld = prog.get(&PROG_ENTRY).unwrap().rules.first().unwrap().vld;
                 let out_spec = out_spec_map.values().cloned().collect_vec();
                 let pull_specs = self.parse_pull_specs_for_query(&out_spec, &prog)?;
-                let res = self.semi_naive_evaluate(&prog)?;
+                let res = self.stratified_evaluate(&prog)?;
                 let map_keys = out_spec_map.keys().cloned().collect_vec();
                 Ok(Box::new(
                     res.scan_all()
@@ -102,7 +102,7 @@ impl SessionTx {
             Some(JsonValue::Array(out_spec)) => {
                 let vld = prog.get(&PROG_ENTRY).unwrap().rules.first().unwrap().vld;
                 let pull_specs = self.parse_pull_specs_for_query(out_spec, &prog)?;
-                let res = self.semi_naive_evaluate(&prog)?;
+                let res = self.stratified_evaluate(&prog)?;
                 Ok(Box::new(
                     res.scan_all()
                         .map_ok(move |tuple| -> Result<JsonValue> {

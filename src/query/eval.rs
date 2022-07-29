@@ -10,13 +10,16 @@ use crate::query::compile::{
     BindingHeadFormatter, BindingHeadTerm, DatalogProgram, QueryCompilationError,
 };
 use crate::query::relation::Relation;
+use crate::query::stratify::stratify_program;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 
 impl SessionTx {
-    pub(crate) fn semi_naive_evaluate(&mut self, prog: &DatalogProgram) -> Result<TempStore> {
-        let stores = prog
+    pub(crate) fn stratified_evaluate(&mut self, prog: &DatalogProgram) -> Result<TempStore> {
+        let stratified_prog = stratify_program(prog)?;
+        let stores = stratified_prog
             .iter()
+            .flatten()
             .map(|(k, s)| (k.clone(), (self.new_throwaway(), s.arity)))
             .collect::<BTreeMap<_, _>>();
         let ret_area = stores
@@ -24,6 +27,17 @@ impl SessionTx {
             .ok_or(QueryCompilationError::EntryNotFound)?
             .0
             .clone();
+
+        for cur_prog in stratified_prog.iter().rev() {
+            self.semi_naive_evaluate(cur_prog, &stores)?;
+        }
+        Ok(ret_area)
+    }
+    fn semi_naive_evaluate(
+        &mut self,
+        prog: &DatalogProgram,
+        stores: &BTreeMap<Keyword, (TempStore, usize)>,
+    ) -> Result<()> {
         let compiled: BTreeMap<_, _> = prog
             .iter()
             .map(
@@ -129,6 +143,6 @@ impl SessionTx {
                 break;
             }
         }
-        Ok(ret_area)
+        Ok(())
     }
 }
