@@ -1,13 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 use itertools::Itertools;
 use serde_json::Map;
 
-use crate::{EntityId, Validity};
 use crate::data::attr::Attribute;
-use crate::data::expr::{Expr, get_op};
+use crate::data::expr::{get_op, Expr};
 use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::value::DataValue;
@@ -16,7 +15,9 @@ use crate::query::compile::{
     Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, QueryCompilationError, Rule,
     RuleApplyAtom, RuleSet, Term,
 };
+use crate::query::magic::magic_sets_rewrite;
 use crate::runtime::transact::SessionTx;
+use crate::{EntityId, Validity};
 
 impl SessionTx {
     pub fn parse_rule_sets(
@@ -70,6 +71,10 @@ impl SessionTx {
                     Err(QueryCompilationError::EntryHeadsNotIdentical.into())
                 } else {
                     Ok(ret)
+                    // dbg!(&ret);
+                    // let magic_ret = magic_sets_rewrite(&ret);
+                    // dbg!(&magic_ret);
+                    // Ok(magic_ret)
                 }
             }
         }
@@ -130,7 +135,7 @@ impl SessionTx {
                     op.min_arity,
                     args.len(),
                 )
-                    .into());
+                .into());
             }
         } else if args.len() != op.min_arity {
             return Err(QueryCompilationError::PredicateArityMismatch(
@@ -138,7 +143,7 @@ impl SessionTx {
                 op.min_arity,
                 args.len(),
             )
-                .into());
+            .into());
         }
 
         Ok(Expr::Apply(op, args))
@@ -163,7 +168,7 @@ impl SessionTx {
                         JsonValue::Object(map.clone()),
                         "must contain either 'const' or 'pred' key".to_string(),
                     )
-                        .into())
+                    .into())
                 }
             }
             v => Ok(Expr::Const(v.into())),
@@ -212,7 +217,7 @@ impl SessionTx {
                             value_rep.clone(),
                             "reserved string values must be quoted".to_string(),
                         )
-                            .into());
+                        .into());
                     }
                 }
                 if let Some(o) = value_rep.as_object() {
@@ -229,6 +234,7 @@ impl SessionTx {
         Ok(Atom::Rule(RuleApplyAtom {
             name: rule_name,
             args,
+            adornment: None,
         }))
     }
     fn parse_rule_definition(
@@ -243,6 +249,9 @@ impl SessionTx {
             )
         })?;
         let rule_name = Keyword::try_from(rule_name)?;
+        if !rule_name.is_prog_entry() {
+            rule_name.validate_not_reserved()?;
+        }
         let vld = payload
             .get("at")
             .map(Validity::try_from)
@@ -294,15 +303,15 @@ impl SessionTx {
 
         if rule_head.len()
             != rule_head
-            .iter()
-            .map(|h| &h.name)
-            .collect::<BTreeSet<_>>()
-            .len()
+                .iter()
+                .map(|h| &h.name)
+                .collect::<BTreeSet<_>>()
+                .len()
         {
             return Err(QueryCompilationError::DuplicateVariables(
                 rule_head.into_iter().map(|h| h.name).collect_vec(),
             )
-                .into());
+            .into());
         }
         Atom::Conjunction(rule_body)
             .disjunctive_normal_form()
@@ -414,7 +423,7 @@ impl SessionTx {
                             JsonValue::Object(map.clone()),
                             "too many keys".to_string(),
                         )
-                            .into());
+                        .into());
                     }
                     self.parse_logical_atom(map, vld)
                 } else {
@@ -422,14 +431,14 @@ impl SessionTx {
                         JsonValue::Object(map.clone()),
                         "unknown format".to_string(),
                     )
-                        .into())
+                    .into())
                 }
             }
             v => Err(QueryCompilationError::UnexpectedForm(
                 v.clone(),
                 "unknown format".to_string(),
             )
-                .into()),
+            .into()),
         }
     }
     fn parse_logical_atom(&mut self, map: &Map<String, JsonValue>, vld: Validity) -> Result<Atom> {
@@ -483,7 +492,7 @@ impl SessionTx {
                 JsonValue::Object(m.clone()),
                 "expect object with exactly one field".to_string(),
             )
-                .into());
+            .into());
         }
         let (k, v) = m.iter().next().unwrap();
         let kw = Keyword::from(k as &str);
@@ -493,7 +502,7 @@ impl SessionTx {
                 JsonValue::Object(m.clone()),
                 "attribute is not a unique index".to_string(),
             )
-                .into());
+            .into());
         }
         let value = attr.val_type.coerce_value(v.into())?;
         let eid = self
@@ -511,7 +520,7 @@ impl SessionTx {
                 JsonValue::Object(m.clone()),
                 "expect object with exactly one field".to_string(),
             )
-                .into());
+            .into());
         }
         let (k, v) = m.iter().next().unwrap();
         if k != "const" {
@@ -519,7 +528,7 @@ impl SessionTx {
                 JsonValue::Object(m.clone()),
                 "expect object with exactly one field named 'const'".to_string(),
             )
-                .into());
+            .into());
         }
         let value = attr.val_type.coerce_value(v.into())?;
         Ok(value)
@@ -539,7 +548,7 @@ impl SessionTx {
                     value_rep.clone(),
                     "reserved string values must be quoted".to_string(),
                 )
-                    .into());
+                .into());
             }
         }
         if let Some(o) = value_rep.as_object() {
@@ -566,7 +575,7 @@ impl SessionTx {
                     entity_rep.clone(),
                     "reserved string values must be quoted".to_string(),
                 )
-                    .into());
+                .into());
             }
         }
         if let Some(u) = entity_rep.as_u64() {
@@ -589,7 +598,7 @@ impl SessionTx {
                 v.clone(),
                 "expect attribute keyword".to_string(),
             )
-                .into()),
+            .into()),
         }
     }
 }

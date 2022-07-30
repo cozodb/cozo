@@ -58,6 +58,16 @@ impl Keyword {
     pub(crate) fn to_string_no_prefix(&self) -> String {
         format!("{}", self.0)
     }
+    pub(crate) fn validate_not_reserved(&self) -> Result<(), KeywordError> {
+        if self.is_reserved() {
+            Err(KeywordError::ReservedKeyword(self.clone()))
+        } else {
+            Ok(())
+        }
+    }
+    pub(crate) fn is_prog_entry(&self) -> bool {
+        self.0 == "?"
+    }
 }
 
 lazy_static! {

@@ -5,7 +5,7 @@ use anyhow::Result;
 use itertools::Itertools;
 
 use crate::data::keyword::{Keyword, PROG_ENTRY};
-use crate::query::compile::{Atom, DatalogProgram, RuleSet};
+use crate::query::compile::{Atom, DatalogProgram};
 use crate::query::graph::{
     generalized_kahn, Graph, reachable_components, StratifiedGraph, strongly_connected_components,
 };
@@ -174,9 +174,10 @@ pub(crate) fn stratify_program(prog: &DatalogProgram) -> Result<Vec<DatalogProgr
     let mut ret: Vec<DatalogProgram> = vec![Default::default(); n_strata];
     for (name, ruleset) in prog {
         if let Some(scc_idx) = invert_indices.get(&name) {
-            let stratum_idx = *invert_sort_result.get(scc_idx).unwrap();
-            let target = ret.get_mut(stratum_idx).unwrap();
-            target.insert(name.clone(), ruleset.clone());
+            if let Some(stratum_idx) = invert_sort_result.get(scc_idx) {
+                let target = ret.get_mut(*stratum_idx).unwrap();
+                target.insert(name.clone(), ruleset.clone());
+            }
         }
     }
 

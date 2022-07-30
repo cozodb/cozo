@@ -5,7 +5,7 @@
     <inspection_tool class="CrateVersionInvalid" enabled="true" level="ERROR" enabled_by_default="true" editorAttributes="ERRORS_ATTRIBUTES" />
     <inspection_tool class="DuplicatedCode" enabled="true" level="WEAK WARNING" enabled_by_default="true">
       <Languages>
-        <language minSize="89" name="Rust" />
+        <language minSize="97" name="Rust" />
       </Languages>
     </inspection_tool>
     <inspection_tool class="MissingFeatures" enabled="true" level="ERROR" enabled_by_default="true" editorAttributes="ERRORS_ATTRIBUTES" />

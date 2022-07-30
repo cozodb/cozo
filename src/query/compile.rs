@@ -84,6 +84,12 @@ impl<T> Term<T> {
             Term::Const(_) => {}
         }
     }
+    pub(crate) fn get_var(&self) -> Option<&Keyword> {
+        match self {
+            Term::Var(k) => Some(k),
+            Term::Const(_) => None
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -97,6 +103,7 @@ pub struct AttrTripleAtom {
 pub struct RuleApplyAtom {
     pub(crate) name: Keyword,
     pub(crate) args: Vec<Term<DataValue>>,
+    pub(crate) adornment: Option<Vec<bool>>
 }
 
 #[derive(Clone, Debug)]

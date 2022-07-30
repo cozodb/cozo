@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Debug;
 
 use itertools::Itertools;
 
@@ -91,9 +92,9 @@ struct Reachable<'a, T> {
     graph: &'a Graph<T>,
 }
 
-impl<'a, T: Ord> Reachable<'a, T> {
+impl<'a, T: Ord + Debug> Reachable<'a, T> {
     fn walk(&self, starting: &T, collected: &mut BTreeSet<&'a T>) {
-        for el in self.graph.get(starting).unwrap() {
+        for el in self.graph.get(starting).ok_or(starting).unwrap() {
             if collected.insert(el) {
                 self.walk(el, collected);
             }
@@ -101,7 +102,7 @@ impl<'a, T: Ord> Reachable<'a, T> {
     }
 }
 
-pub(crate) fn reachable_components<'a, T: Ord>(
+pub(crate) fn reachable_components<'a, T: Ord + Debug>(
     graph: &'a Graph<T>,
     start: &'a T,
 ) -> BTreeSet<&'a T> {
