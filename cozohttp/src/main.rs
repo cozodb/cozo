@@ -2,11 +2,11 @@ use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 
 use actix_cors::Cors;
-use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{App, HttpResponse, HttpServer, post, Responder, web};
 use clap::Parser;
+use log::info;
 
 use cozo::{Db, DbBuilder};
-use log::info;
 
 type Result<T> = std::result::Result<T, RespError>;
 
@@ -117,7 +117,7 @@ async fn main() -> std::io::Result<()> {
             .service(transact)
             .service(transact_attr)
     })
-    .bind(addr)?
-    .run()
-    .await
+        .bind(addr)?
+        .run()
+        .await
 }
