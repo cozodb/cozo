@@ -17,8 +17,9 @@ pub(crate) struct AdornedHead {
 type AdornedDatalogProgram = BTreeMap<AdornedHead, RuleSet>;
 
 pub(crate) fn magic_sets_rewrite(prog: &DatalogProgram) -> DatalogProgram {
-    let adorned = adorn_program(prog);
-    adorned_to_magic(&adorned)
+    let own_rules: BTreeSet<_> = prog.keys().collect();
+    let adorned = adorn_program(prog, &own_rules);
+    adorned_to_magic(&adorned, &own_rules)
 }
 
 fn adorn_atom(
@@ -26,6 +27,7 @@ fn adorn_atom(
     adorned_prog: &AdornedDatalogProgram,
     pending: &mut Vec<AdornedHead>,
     seen_bindings: &mut BTreeSet<Keyword>,
+    own_rules: &BTreeSet<&Keyword>,
 ) -> Atom {
     match atom {
         Atom::AttrTriple(a) => {
@@ -42,36 +44,37 @@ fn adorn_atom(
             Atom::Predicate(p.clone())
         }
         Atom::Rule(rule) => {
-            // first mark adorned rules
-            // then
-            let mut adornment = Vec::with_capacity(rule.args.len());
-            for term in rule.args.iter() {
-                if let Term::Var(kw) = term {
-                    let var_is_free = seen_bindings.insert(kw.clone());
-                    adornment.push(!var_is_free);
-                } else {
-                    adornment.push(false);
+            if own_rules.contains(&rule.name) {
+                // first mark adorned rules
+                // then
+                let mut adornment = Vec::with_capacity(rule.args.len());
+                for term in rule.args.iter() {
+                    if let Term::Var(kw) = term {
+                        let var_is_free = seen_bindings.insert(kw.clone());
+                        adornment.push(!var_is_free);
+                    } else {
+                        adornment.push(false);
+                    }
                 }
+                let adorned_head = AdornedHead {
+                    name: rule.name.clone(),
+                    adornment: adornment.clone(),
+                };
+                let mut ret_rule = rule.clone();
+                ret_rule.adornment = Some(adornment.clone());
+                let ret_rule_head = AdornedHead {
+                    name: rule.name.clone(),
+                    adornment: adornment.clone(),
+                };
+                if !adorned_prog.contains_key(&ret_rule_head) {
+                    pending.push(adorned_head);
+                }
+                Atom::Rule(ret_rule)
+            } else {
+                Atom::Rule(rule.clone())
             }
-            let adorned_head = AdornedHead {
-                name: rule.name.clone(),
-                adornment: adornment.clone(),
-            };
-            let mut ret_rule = rule.clone();
-            ret_rule.adornment = Some(adornment.clone());
-            let ret_rule_head = AdornedHead {
-                name: rule.name.clone(),
-                adornment: adornment.clone(),
-            };
-            if !adorned_prog.contains_key(&ret_rule_head) {
-                pending.push(adorned_head);
-            }
-            Atom::Rule(ret_rule)
         }
-        Atom::Negation(a) => {
-            let ret = adorn_atom(a, adorned_prog, pending, seen_bindings);
-            Atom::Negation(Box::new(ret))
-        }
+        n @ Atom::Negation(_) => n.clone(),
         Atom::Conjunction(_) | Atom::Disjunction(_) => unreachable!(),
     }
 }
@@ -80,13 +83,14 @@ fn adorn_rule(
     rule: &Rule,
     adorned_prog: &AdornedDatalogProgram,
     pending: &mut Vec<AdornedHead>,
+    own_rules: &BTreeSet<&Keyword>,
 ) -> Rule {
     let mut seen_bindings = BTreeSet::new();
 
     let mut ret_body = Vec::with_capacity(rule.body.len());
 
     for atom in &rule.body {
-        let new_atom = adorn_atom(atom, adorned_prog, pending, &mut seen_bindings);
+        let new_atom = adorn_atom(atom, adorned_prog, pending, &mut seen_bindings, own_rules);
         ret_body.push(new_atom);
     }
     Rule {
@@ -96,7 +100,7 @@ fn adorn_rule(
     }
 }
 
-fn adorn_program(input: &DatalogProgram) -> AdornedDatalogProgram {
+fn adorn_program(input: &DatalogProgram, own_rules: &BTreeSet<&Keyword>) -> AdornedDatalogProgram {
     // prerequisites: the input is already in disjunctive normal form,
     let mut adorned_program: AdornedDatalogProgram = Default::default();
     let mut pending_adornment = vec![];
@@ -104,7 +108,7 @@ fn adorn_program(input: &DatalogProgram) -> AdornedDatalogProgram {
     let entry_ruleset = input.get(&PROG_ENTRY as &Keyword).unwrap();
     let mut adorned_rules = Vec::with_capacity(entry_ruleset.rules.len());
     for rule in &entry_ruleset.rules {
-        let adorned_rule = adorn_rule(rule, &adorned_program, &mut pending_adornment);
+        let adorned_rule = adorn_rule(rule, &adorned_program, &mut pending_adornment, own_rules);
         adorned_rules.push(adorned_rule);
     }
     adorned_program.insert(
@@ -126,7 +130,8 @@ fn adorn_program(input: &DatalogProgram) -> AdornedDatalogProgram {
         let original_rule_set = input.get(&head.name).unwrap();
         let mut adorned_rules = Vec::with_capacity(original_rule_set.rules.len());
         for rule in &original_rule_set.rules {
-            let adorned_rule = adorn_rule(rule, &adorned_program, &mut pending_adornment);
+            let adorned_rule =
+                adorn_rule(rule, &adorned_program, &mut pending_adornment, own_rules);
             adorned_rules.push(adorned_rule);
         }
 
@@ -143,7 +148,7 @@ fn adorn_program(input: &DatalogProgram) -> AdornedDatalogProgram {
 }
 
 fn make_adorned_kw(name: &Keyword, prefix: &str, adornment: &[bool]) -> Keyword {
-    let mut rule_name = format!("!{}<{}>", prefix, name.0);
+    let mut rule_name = format!("[{}]{}", name.0, prefix,);
     for bound in adornment {
         rule_name.push(if *bound { 'b' } else { 'f' })
     }
@@ -164,7 +169,7 @@ fn make_magic_sup_rule_head(
     pos: usize,
     adornment: &[bool],
 ) -> Keyword {
-    let mut rule_name = format!("!S<{}>{}.{}.", name.0, rule_idx, pos);
+    let mut rule_name = format!("[{}.{}]S{}", name.0, rule_idx, pos);
     for bound in adornment {
         rule_name.push(if *bound { 'b' } else { 'f' })
     }
@@ -207,7 +212,10 @@ fn make_magic_input_rule_app(name: &Keyword, adornment: &[bool], args: &[Binding
 
 // fn make_magic_sup_rule_app()
 
-fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
+fn adorned_to_magic(
+    input: &AdornedDatalogProgram,
+    own_rules: &BTreeSet<&Keyword>,
+) -> DatalogProgram {
     let mut ret_prog: DatalogProgram = Default::default();
 
     for (rule_head, rule_set) in input {
@@ -292,109 +300,100 @@ fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
                         collected_atoms.push(Atom::AttrTriple(a.clone()))
                     }
                     Atom::Predicate(p) => collected_atoms.push(Atom::Predicate(p.clone())),
-                    Atom::Negation(n) => match n as &Atom {
-                        Atom::AttrTriple(a) => {
-                            if let Term::Var(ref kw) = a.entity {
-                                seen_bindings.insert(kw.clone());
-                            }
-                            if let Term::Var(ref kw) = a.value {
-                                seen_bindings.insert(kw.clone());
-                            }
-                            collected_atoms.push(Atom::AttrTriple(a.clone()))
-                        }
-                        Atom::Rule(_) => {
-                            todo!()
-                        }
-                        _ => unreachable!(),
-                    },
+                    n @ Atom::Negation(_) => collected_atoms.push(n.clone()),
                     Atom::Conjunction(_) | Atom::Disjunction(_) => unreachable!(),
                     Atom::Rule(r) => {
-                        let r_adornment: &Vec<bool> = r.adornment.as_ref().unwrap();
-
-                        if r_adornment.iter().all(|bound| !*bound) {
-                            let head = make_magic_rule_head(&r.name, r_adornment);
-                            collected_atoms.push(Atom::Rule(RuleApplyAtom {
-                                name: head.clone(),
-                                args: r.args.clone(),
-                                adornment: None,
-                            }));
-                        } else {
-                            let sup_head = make_magic_sup_rule_head(
-                                &rule_head.name,
-                                rule_idx,
-                                atom_idx,
-                                &rule_head.adornment,
-                            );
-                            // todo: order it such that seen bindings has the applied rule as prefix
-                            // see m7 in notes
-                            let args = seen_bindings.iter().collect_vec();
-                            let entry =
-                                ret_prog.entry(sup_head.clone()).or_insert_with(|| RuleSet {
-                                    rules: vec![],
-                                    arity: args.len(),
+                        if let Some(r_adornment) = r.adornment.as_ref() {
+                            if r_adornment.iter().all(|bound| !*bound) {
+                                let head = make_magic_rule_head(&r.name, r_adornment);
+                                collected_atoms.push(Atom::Rule(RuleApplyAtom {
+                                    name: head.clone(),
+                                    args: r.args.clone(),
+                                    adornment: None,
+                                }));
+                            } else {
+                                let sup_head = make_magic_sup_rule_head(
+                                    &rule_head.name,
+                                    rule_idx,
+                                    atom_idx,
+                                    &rule_head.adornment,
+                                );
+                                // todo: order it such that seen bindings has the applied rule as prefix
+                                // see m7 in notes
+                                let args = seen_bindings.iter().collect_vec();
+                                let entry =
+                                    ret_prog.entry(sup_head.clone()).or_insert_with(|| RuleSet {
+                                        rules: vec![],
+                                        arity: args.len(),
+                                    });
+                                let mut sup_rule_atoms = vec![];
+                                mem::swap(&mut sup_rule_atoms, &mut collected_atoms);
+                                let head_args = args
+                                    .iter()
+                                    .map(|kw| BindingHeadTerm {
+                                        name: (*kw).clone(),
+                                        aggr: Default::default(),
+                                    })
+                                    .collect_vec();
+                                debug_assert_eq!(entry.arity, head_args.len());
+                                entry.rules.push(Rule {
+                                    head: head_args,
+                                    body: sup_rule_atoms,
+                                    vld: rule.vld,
                                 });
-                            let mut sup_rule_atoms = vec![];
-                            mem::swap(&mut sup_rule_atoms, &mut collected_atoms);
-                            let head_args = args
-                                .iter()
-                                .map(|kw| BindingHeadTerm {
-                                    name: (*kw).clone(),
-                                    aggr: Default::default(),
-                                })
-                                .collect_vec();
-                            debug_assert_eq!(entry.arity, head_args.len());
-                            entry.rules.push(Rule {
-                                head: head_args,
-                                body: sup_rule_atoms,
-                                vld: rule.vld,
-                            });
-                            let sup_app_rule_atom = RuleApplyAtom {
-                                name: sup_head,
-                                args: args.iter().map(|kw| Term::Var((*kw).clone())).collect_vec(),
-                                adornment: None,
-                            };
-                            let sup_app_rule = Atom::Rule(sup_app_rule_atom);
-                            collected_atoms.push(sup_app_rule.clone());
+                                let sup_app_rule_atom = RuleApplyAtom {
+                                    name: sup_head,
+                                    args: args
+                                        .iter()
+                                        .map(|kw| Term::Var((*kw).clone()))
+                                        .collect_vec(),
+                                    adornment: None,
+                                };
+                                let sup_app_rule = Atom::Rule(sup_app_rule_atom);
+                                collected_atoms.push(sup_app_rule.clone());
 
-                            let head = make_magic_rule_head(&r.name, r_adornment);
-                            collected_atoms.push(Atom::Rule(RuleApplyAtom {
-                                name: head.clone(),
-                                args: r.args.clone(),
-                                adornment: None,
-                            }));
+                                let head = make_magic_rule_head(&r.name, r_adornment);
+                                collected_atoms.push(Atom::Rule(RuleApplyAtom {
+                                    name: head.clone(),
+                                    args: r.args.clone(),
+                                    adornment: None,
+                                }));
 
-                            let ihead = make_magic_input_rule_head(&r.name, &r_adornment);
-                            let mut arity = 0;
-                            for is_bound in r_adornment {
-                                if *is_bound {
-                                    arity += 1;
-                                }
-                            }
-                            let ientry = ret_prog.entry(ihead).or_insert_with(|| RuleSet {
-                                rules: vec![],
-                                arity,
-                            });
-                            let ientry_args = r
-                                .args
-                                .iter()
-                                .zip(r_adornment.iter())
-                                .filter_map(|(kw, is_bound)| {
+                                let ihead = make_magic_input_rule_head(&r.name, &r_adornment);
+                                let mut arity = 0;
+                                for is_bound in r_adornment {
                                     if *is_bound {
-                                        Some(BindingHeadTerm {
-                                            name: kw.get_var().cloned().unwrap(),
-                                            aggr: Default::default(),
-                                        })
-                                    } else {
-                                        None
+                                        arity += 1;
                                     }
-                                })
-                                .collect_vec();
-                            debug_assert_eq!(ientry.arity, ientry_args.len());
-                            ientry.rules.push(Rule {
-                                head: ientry_args,
-                                body: vec![sup_app_rule],
-                                vld: rule.vld,
-                            });
+                                }
+                                let ientry = ret_prog.entry(ihead).or_insert_with(|| RuleSet {
+                                    rules: vec![],
+                                    arity,
+                                });
+                                let ientry_args = r
+                                    .args
+                                    .iter()
+                                    .zip(r_adornment.iter())
+                                    .filter_map(|(kw, is_bound)| {
+                                        if *is_bound {
+                                            Some(BindingHeadTerm {
+                                                name: kw.get_var().cloned().unwrap(),
+                                                aggr: Default::default(),
+                                            })
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect_vec();
+                                debug_assert_eq!(ientry.arity, ientry_args.len());
+                                ientry.rules.push(Rule {
+                                    head: ientry_args,
+                                    body: vec![sup_app_rule],
+                                    vld: rule.vld,
+                                });
+                            }
+                        } else {
+                            collected_atoms.push(Atom::Rule(r.clone()))
                         }
                     }
                 }

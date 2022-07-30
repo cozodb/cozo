@@ -3,12 +3,13 @@ use std::mem;
 
 use anyhow::Result;
 use itertools::Itertools;
-use log::{debug, Level, log_enabled, trace};
+use log::{debug, log_enabled, trace, Level};
 
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::query::compile::{
     BindingHeadFormatter, BindingHeadTerm, DatalogProgram, QueryCompilationError,
 };
+use crate::query::magic::magic_sets_rewrite;
 use crate::query::relation::Relation;
 use crate::query::stratify::stratify_program;
 use crate::runtime::temp_store::TempStore;
@@ -16,7 +17,9 @@ use crate::runtime::transact::SessionTx;
 
 impl SessionTx {
     pub(crate) fn stratified_evaluate(&mut self, prog: &DatalogProgram) -> Result<TempStore> {
-        let stratified_prog = stratify_program(prog)?;
+        let mut stratified_prog = stratify_program(prog)?;
+        let magic_transformed = magic_sets_rewrite(&stratified_prog[0]);
+        stratified_prog[0] = magic_transformed;
         // dbg!(&stratified_prog);
         let stores = stratified_prog
             .iter()
@@ -52,8 +55,9 @@ impl SessionTx {
                     let mut collected = Vec::with_capacity(body.rules.len());
                     for (rule_idx, rule) in body.rules.iter().enumerate() {
                         let header = rule.head.iter().map(|t| &t.name).cloned().collect_vec();
-                        let mut relation =
-                            self.compile_rule_body(&rule.body, rule.vld, &stores, &header, k, rule_idx)?;
+                        let mut relation = self.compile_rule_body(
+                            &rule.body, rule.vld, &stores, &header, k, rule_idx,
+                        )?;
                         relation.fill_predicate_binding_indices();
                         collected.push((rule.head.clone(), rule.contained_rules(), relation));
                     }
