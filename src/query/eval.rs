@@ -3,7 +3,7 @@ use std::mem;
 
 use anyhow::Result;
 use itertools::Itertools;
-use log::{debug, log_enabled, trace, Level};
+use log::{debug, Level, log_enabled, trace};
 
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::query::compile::{

@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::str::Utf8Error;
-use lazy_static::lazy_static;
 
+use lazy_static::lazy_static;
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 

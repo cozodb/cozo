@@ -1035,7 +1035,7 @@ impl StoredDerivedRelation {
                     'outer: for found in self.storage.scan_prefix(&prefix) {
                         let found = found?;
                         for (left_idx, right_idx) in
-                            left_join_indices.iter().zip(right_join_indices.iter())
+                        left_join_indices.iter().zip(right_join_indices.iter())
                         {
                             if tuple.0[*left_idx] != found.0[*right_idx] {
                                 continue 'outer;
@@ -1142,7 +1142,7 @@ impl Debug for Joiner {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let left_bindings = BindingFormatter(self.left_keys.clone());
         let right_bindings = BindingFormatter(self.right_keys.clone());
-        write!(f, "{:?}<->{:?}", left_bindings, right_bindings,)
+        write!(f, "{:?}<->{:?}", left_bindings, right_bindings, )
     }
 }
 
@@ -1265,6 +1265,7 @@ pub struct NegJoin {
     pub(crate) joiner: Joiner,
     pub(crate) to_eliminate: BTreeSet<Keyword>,
 }
+
 impl NegJoin {
     pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
         for binding in self.left.bindings_after_eliminate() {

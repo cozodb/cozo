@@ -1,5 +1,5 @@
-use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::collections::btree_map::Entry;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -7,7 +7,7 @@ use itertools::Itertools;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::query::compile::{Atom, DatalogProgram, RuleSet};
 use crate::query::graph::{
-    generalized_kahn, reachable_components, strongly_connected_components, Graph, StratifiedGraph,
+    generalized_kahn, Graph, reachable_components, StratifiedGraph, strongly_connected_components,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -90,7 +90,7 @@ fn verify_no_cycle(g: &StratifiedGraph<&'_ Keyword>, sccs: &[BTreeSet<&Keyword>]
                         return Err(GraphError::GraphNotStratified(
                             scc.iter().cloned().cloned().collect(),
                         )
-                        .into());
+                            .into());
                     }
                 }
             }
@@ -166,7 +166,7 @@ pub(crate) fn stratify_program(prog: &DatalogProgram) -> Result<Vec<DatalogProgr
     let (invert_indices, reduced_graph) = make_scc_reduced_graph(&sccs, &stratified_graph);
     // 6. topological sort the reduced graph to get a stratification
     let sort_result = generalized_kahn(&reduced_graph, stratified_graph.len());
-    let n_strata  = sort_result.len();
+    let n_strata = sort_result.len();
     let invert_sort_result = sort_result.into_iter().enumerate().flat_map(|(stratum, indices)| {
         indices.into_iter().map(move |idx| (idx, stratum))
     }).collect::<BTreeMap<_, _>>();

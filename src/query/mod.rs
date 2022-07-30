@@ -38,7 +38,7 @@ impl SessionTx {
                 payload.clone(),
                 "empty rules".to_string(),
             )
-            .into());
+                .into());
         }
         let prog = if rules_payload.first().unwrap().is_array() {
             let q = json!([{"rule": "?", "args": rules_payload}]);
@@ -146,7 +146,7 @@ impl SessionTx {
                 v.clone(),
                 "out specification should be an array".to_string(),
             )
-            .into()),
+                .into()),
         }
     }
     fn parse_pull_specs_for_query(
@@ -209,11 +209,11 @@ impl SessionTx {
                         v.clone(),
                         "expect binding or map".to_string(),
                     )
-                    .into()),
+                        .into()),
                 }
             })
             .try_collect()
     }
 }
 
-pub type QueryResult<'a> = Box<dyn Iterator<Item = Result<JsonValue>> + 'a>;
+pub type QueryResult<'a> = Box<dyn Iterator<Item=Result<JsonValue>> + 'a>;

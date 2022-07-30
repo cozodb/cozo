@@ -5,6 +5,7 @@ use std::ops::Sub;
 use anyhow::Result;
 use itertools::Itertools;
 
+use crate::{EntityId, Validity};
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
@@ -13,7 +14,6 @@ use crate::data::value::DataValue;
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
-use crate::{EntityId, Validity};
 
 /// example ruleset in python and javascript
 /// ```python
@@ -514,7 +514,7 @@ impl SessionTx {
                                         e_kw.clone(),
                                         v_kw.clone(),
                                     ])
-                                    .into());
+                                        .into());
                                 }
                                 let right =
                                     Relation::triple(a_triple.attr.clone(), vld, e_kw, v_kw);
@@ -563,7 +563,7 @@ impl SessionTx {
                             return Err(QueryCompilationError::ArityMismatch(
                                 rule_app.name.clone(),
                             )
-                            .into());
+                                .into());
                         }
 
                         let mut prev_joiner_vars = vec![];

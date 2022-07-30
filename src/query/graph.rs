@@ -67,8 +67,8 @@ impl<'a> TarjanScc<'a> {
 pub(crate) type Graph<T> = BTreeMap<T, Vec<T>>;
 
 pub(crate) fn strongly_connected_components<T>(graph: &Graph<T>) -> Vec<Vec<&T>>
-where
-    T: Ord,
+    where
+        T: Ord,
 {
     let indices = graph.keys().collect_vec();
     let invert_indices: BTreeMap<_, _> = indices
@@ -177,7 +177,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::query::graph::{
-        generalized_kahn, reachable_components, strongly_connected_components, StratifiedGraph,
+        generalized_kahn, reachable_components, StratifiedGraph, strongly_connected_components,
     };
 
     #[test]
