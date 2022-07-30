@@ -27,16 +27,16 @@ impl<'a> TarjanScc<'a> {
     pub(crate) fn run(mut self) -> Vec<Vec<usize>> {
         for i in 0..self.graph.len() {
             if self.ids[i].is_none() {
-                self.dfs(i)
+                self.dfs(i);
             }
         }
-        self.low
-            .into_iter()
-            .enumerate()
-            .group_by(|(_id, scc)| *scc)
-            .into_iter()
-            .map(|(_scc, args)| args.map(|(id, _scc)| id).collect_vec())
-            .collect_vec()
+
+        let mut low_map: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        for (idx, grp) in self.low.into_iter().enumerate() {
+            low_map.entry(grp).or_default().push(idx);
+        }
+
+        low_map.into_iter().map(|(_, vs)| vs).collect_vec()
     }
     fn dfs(&mut self, at: usize) {
         self.stack.push(at);
@@ -68,8 +68,8 @@ impl<'a> TarjanScc<'a> {
 pub(crate) type Graph<T> = BTreeMap<T, Vec<T>>;
 
 pub(crate) fn strongly_connected_components<T>(graph: &Graph<T>) -> Vec<Vec<&T>>
-    where
-        T: Ord,
+where
+    T: Ord,
 {
     let indices = graph.keys().collect_vec();
     let invert_indices: BTreeMap<_, _> = indices
@@ -165,11 +165,12 @@ pub(crate) fn generalized_kahn(
                     unsafe_nodes.insert(*nxt);
                 }
                 if in_degree[*nxt] == 0 && !unsafe_nodes.contains(nxt) {
-                    safe_pending.push(*nxt)
+                    safe_pending.push(*nxt);
                 }
             }
         }
     }
+    debug_assert_eq!(in_degree.iter().sum::<usize>(), 0);
     ret
 }
 
@@ -178,35 +179,51 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::query::graph::{
-        generalized_kahn, reachable_components, StratifiedGraph, strongly_connected_components,
+        generalized_kahn, reachable_components, strongly_connected_components, StratifiedGraph,
     };
 
     #[test]
     fn test_scc() {
+        // let graph = BTreeMap::from([
+        //     ("a", vec!["b"]),
+        //     ("b", vec!["a", "c"]),
+        //     ("c", vec!["a", "d", "e"]),
+        //     ("d", vec!["e", "e", "e"]),
+        //     ("e", vec![]),
+        //     ("f", vec![]),
+        // ]);
         let graph = BTreeMap::from([
-            ("a", vec!["b"]),
-            ("b", vec!["a", "c"]),
-            ("c", vec!["a", "d", "e"]),
-            ("d", vec!["e", "e", "e"]),
-            ("e", vec![]),
-            ("f", vec![]),
+            (0, vec![1, 5, 9]),
+            (1, vec![6, 10]),
+            (2, vec![4]),
+            (3, vec![9, 10]),
+            (4, vec![]),
+            (5, vec![2]),
+            (6, vec![3]),
+            (7, vec![2]),
+            (8, vec![3]),
+            (9, vec![7]),
+            (10, vec![8]),
+            (11, vec![0, 4]),
         ]);
-        let scc = strongly_connected_components(&graph);
-        dbg!(scc);
-        let reachable = reachable_components(&graph, &"a");
-        dbg!(reachable);
 
-        let s_graph: StratifiedGraph<usize> = BTreeMap::from([
-            (
-                0,
-                BTreeMap::from([(1, false), (2, false), (3, false), (4, true), (5, true)]),
-            ),
-            (1, BTreeMap::from([(6, false)])),
-            (2, BTreeMap::from([(6, false)])),
-            (3, BTreeMap::from([(6, true)])),
-            (4, BTreeMap::from([(6, true)])),
-            (5, BTreeMap::from([(6, false)])),
-        ]);
-        dbg!(generalized_kahn(&s_graph, 7));
+        let scc = strongly_connected_components(&graph);
+        println!("scc found: {:?}", scc);
+
+        // let reachable = reachable_components(&graph, &11);
+        // dbg!(reachable);
+        //
+        // let s_graph: StratifiedGraph<usize> = BTreeMap::from([
+        //     (
+        //         0,
+        //         BTreeMap::from([(1, false), (2, false), (3, false), (4, true), (5, true)]),
+        //     ),
+        //     (1, BTreeMap::from([(6, false)])),
+        //     (2, BTreeMap::from([(6, false)])),
+        //     (3, BTreeMap::from([(6, true)])),
+        //     (4, BTreeMap::from([(6, true)])),
+        //     (5, BTreeMap::from([(6, false)])),
+        // ]);
+        // dbg!(generalized_kahn(&s_graph, 7));
     }
 }
