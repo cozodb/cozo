@@ -10,7 +10,7 @@ use pyo3::prelude::*;
 
 use cozo::{Db, DbBuilder};
 
-#[pyclass(extends=PyException)]
+#[pyclass(extends = PyException)]
 struct ErrorBridge(cozo::Error);
 
 trait PyResultExt<T> {
