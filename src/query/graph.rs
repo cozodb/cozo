@@ -69,7 +69,7 @@ pub(crate) type Graph<T> = BTreeMap<T, Vec<T>>;
 
 pub(crate) fn strongly_connected_components<T>(graph: &Graph<T>) -> Vec<Vec<&T>>
 where
-    T: Ord,
+    T: Ord + Debug,
 {
     let indices = graph.keys().collect_vec();
     let invert_indices: BTreeMap<_, _> = indices
@@ -79,7 +79,11 @@ where
         .collect();
     let idx_graph = graph
         .values()
-        .map(|vs| vs.iter().map(|v| invert_indices[v]).collect_vec())
+        .map(|vs| {
+            vs.iter()
+                .map(|v| invert_indices.get(v).ok_or(v).unwrap().clone())
+                .collect_vec()
+        })
         .collect_vec();
     TarjanScc::new(&idx_graph)
         .run()
@@ -94,9 +98,11 @@ struct Reachable<'a, T> {
 
 impl<'a, T: Ord + Debug> Reachable<'a, T> {
     fn walk(&self, starting: &T, collected: &mut BTreeSet<&'a T>) {
-        for el in self.graph.get(starting).ok_or(starting).unwrap() {
-            if collected.insert(el) {
-                self.walk(el, collected);
+        if let Some(children) = self.graph.get(starting) {
+            for el in children {
+                if collected.insert(el) {
+                    self.walk(el, collected);
+                }
             }
         }
     }

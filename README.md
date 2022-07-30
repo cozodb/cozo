@@ -4,7 +4,7 @@
 * [x] negation
 * [x] disjunction
 * [x] stratum
-* [ ] magic sets
+* [x] magic sets
 * [ ] aggregation
 * [ ] function symbol
 * [ ] arithmetic

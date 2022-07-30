@@ -70,11 +70,10 @@ impl SessionTx {
                 {
                     Err(QueryCompilationError::EntryHeadsNotIdentical.into())
                 } else {
-                    Ok(ret)
+                    // Ok(ret)
                     // dbg!(&ret);
-                    // let magic_ret = magic_sets_rewrite(&ret);
-                    // dbg!(&magic_ret);
-                    // Ok(magic_ret)
+                    let magic_ret = magic_sets_rewrite(&ret);
+                    Ok(magic_ret)
                 }
             }
         }

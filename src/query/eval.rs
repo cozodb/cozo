@@ -17,6 +17,7 @@ use crate::runtime::transact::SessionTx;
 impl SessionTx {
     pub(crate) fn stratified_evaluate(&mut self, prog: &DatalogProgram) -> Result<TempStore> {
         let stratified_prog = stratify_program(prog)?;
+        // dbg!(&stratified_prog);
         let stores = stratified_prog
             .iter()
             .flatten()
@@ -49,10 +50,10 @@ impl SessionTx {
                     Vec<(Vec<BindingHeadTerm>, BTreeSet<Keyword>, Relation)>,
                 )> {
                     let mut collected = Vec::with_capacity(body.rules.len());
-                    for rule in &body.rules {
+                    for (rule_idx, rule) in body.rules.iter().enumerate() {
                         let header = rule.head.iter().map(|t| &t.name).cloned().collect_vec();
                         let mut relation =
-                            self.compile_rule_body(&rule.body, rule.vld, &stores, &header)?;
+                            self.compile_rule_body(&rule.body, rule.vld, &stores, &header, k, rule_idx)?;
                         relation.fill_predicate_binding_indices();
                         collected.push((rule.head.clone(), rule.contained_rules(), relation));
                     }
@@ -111,7 +112,7 @@ impl SessionTx {
                             }
                         }
                         if !should_do_calculation {
-                            debug!("skipping rule {}.{} as none of its dependencies changed in the last iteration", k, rule_n);
+                            // debug!("skip {}.{}", k, rule_n);
                             continue;
                         }
                         for (delta_key, (delta_store, _)) in stores.iter() {

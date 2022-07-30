@@ -5,7 +5,6 @@ use std::ops::Sub;
 use anyhow::Result;
 use itertools::Itertools;
 
-use crate::{EntityId, Validity};
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
@@ -14,6 +13,7 @@ use crate::data::value::DataValue;
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
+use crate::{EntityId, Validity};
 
 /// example ruleset in python and javascript
 /// ```python
@@ -43,8 +43,8 @@ pub enum QueryCompilationError {
     ArityMismatch(Keyword),
     #[error("encountered undefined rule {0}")]
     UndefinedRule(Keyword),
-    #[error("safety: unbound variables {0:?}")]
-    UnsafeUnboundVars(BTreeSet<Keyword>),
+    #[error("safety: unbound variables for rule {0}({1}): needs to return {2:?}, bound {3:?}")]
+    UnsafeUnboundVars(Keyword, usize, BTreeSet<Keyword>, BTreeSet<Keyword>),
     #[error("program logic error: {0}")]
     LogicError(String),
     #[error("entry not found: expect a rule named '?'")]
@@ -87,7 +87,7 @@ impl<T> Term<T> {
     pub(crate) fn get_var(&self) -> Option<&Keyword> {
         match self {
             Term::Var(k) => Some(k),
-            Term::Const(_) => None
+            Term::Const(_) => None,
         }
     }
 }
@@ -103,7 +103,7 @@ pub struct AttrTripleAtom {
 pub struct RuleApplyAtom {
     pub(crate) name: Keyword,
     pub(crate) args: Vec<Term<DataValue>>,
-    pub(crate) adornment: Option<Vec<bool>>
+    pub(crate) adornment: Option<Vec<bool>>,
 }
 
 #[derive(Clone, Debug)]
@@ -221,6 +221,8 @@ impl SessionTx {
         vld: Validity,
         stores: &BTreeMap<Keyword, (TempStore, usize)>,
         ret_vars: &[Keyword],
+        rule_name: &Keyword,
+        rule_idx: usize,
     ) -> Result<Relation> {
         let mut ret = Relation::unit();
         let mut seen_variables = BTreeSet::new();
@@ -521,7 +523,7 @@ impl SessionTx {
                                         e_kw.clone(),
                                         v_kw.clone(),
                                     ])
-                                        .into());
+                                    .into());
                                 }
                                 let right =
                                     Relation::triple(a_triple.attr.clone(), vld, e_kw, v_kw);
@@ -570,7 +572,7 @@ impl SessionTx {
                             return Err(QueryCompilationError::ArityMismatch(
                                 rule_app.name.clone(),
                             )
-                                .into());
+                            .into());
                         }
 
                         let mut prev_joiner_vars = vec![];
@@ -617,7 +619,7 @@ impl SessionTx {
                     _ => unreachable!(),
                 },
                 Atom::Conjunction(_) => unreachable!(),
-                Atom::Disjunction(_) => unreachable!()
+                Atom::Disjunction(_) => unreachable!(),
             }
         }
 
@@ -632,8 +634,13 @@ impl SessionTx {
 
         let cur_ret_set: BTreeSet<_> = ret.bindings_after_eliminate().into_iter().collect();
         if cur_ret_set != ret_vars_set {
-            let diff = cur_ret_set.sub(&cur_ret_set);
-            return Err(QueryCompilationError::UnsafeUnboundVars(diff).into());
+            return Err(QueryCompilationError::UnsafeUnboundVars(
+                rule_name.clone(),
+                rule_idx,
+                ret_vars_set,
+                cur_ret_set,
+            )
+            .into());
         }
         let cur_ret_bindings = ret.bindings_after_eliminate();
         if ret_vars != cur_ret_bindings {

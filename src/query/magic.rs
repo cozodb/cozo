@@ -47,7 +47,8 @@ fn adorn_atom(
             let mut adornment = Vec::with_capacity(rule.args.len());
             for term in rule.args.iter() {
                 if let Term::Var(kw) = term {
-                    adornment.push(seen_bindings.insert(kw.clone()));
+                    let var_is_free = seen_bindings.insert(kw.clone());
+                    adornment.push(!var_is_free);
                 } else {
                     adornment.push(false);
                 }
@@ -157,13 +158,27 @@ fn make_magic_input_rule_head(name: &Keyword, adornment: &[bool]) -> Keyword {
     make_adorned_kw(name, "I", adornment)
 }
 
-fn make_magic_sup_rule_head(name: &Keyword, rule_idx: usize, pos: usize) -> Keyword {
-    let rule_name = format!("!S<{}>{}.{}", name, rule_idx, pos);
+fn make_magic_sup_rule_head(
+    name: &Keyword,
+    rule_idx: usize,
+    pos: usize,
+    adornment: &[bool],
+) -> Keyword {
+    let mut rule_name = format!("!S<{}>{}.{}.", name.0, rule_idx, pos);
+    for bound in adornment {
+        rule_name.push(if *bound { 'b' } else { 'f' })
+    }
     Keyword::from(&rule_name as &str)
 }
 
-fn make_magic_sup_rule_app(name: &Keyword, rule_idx: usize, pos: usize, args: &[Keyword]) -> Atom {
-    let rule_name = make_magic_sup_rule_head(name, rule_idx, pos);
+fn make_magic_sup_rule_app(
+    name: &Keyword,
+    rule_idx: usize,
+    pos: usize,
+    args: &[Keyword],
+    adornment: &[bool],
+) -> Atom {
+    let rule_name = make_magic_sup_rule_head(name, rule_idx, pos, adornment);
     Atom::Rule(RuleApplyAtom {
         name: rule_name,
         args: args.iter().map(|kw| Term::Var(kw.clone())).collect_vec(),
@@ -197,8 +212,16 @@ fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
 
     for (rule_head, rule_set) in input {
         for (rule_idx, rule) in rule_set.rules.iter().enumerate() {
-            if !rule_head.name.is_prog_entry() {
-                let sup_rule_head = make_magic_sup_rule_head(&rule_head.name, rule_idx, 0);
+            let mut rule_is_bound = false;
+            for is_bound in &rule_head.adornment {
+                if *is_bound {
+                    rule_is_bound = true;
+                    break;
+                }
+            }
+            if rule_is_bound {
+                let sup_rule_head =
+                    make_magic_sup_rule_head(&rule_head.name, rule_idx, 0, &rule_head.adornment);
                 let args = rule
                     .head
                     .iter()
@@ -223,6 +246,7 @@ fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
                     &rule_head.adornment,
                     &args,
                 )];
+                debug_assert_eq!(entry.arity, args.len());
                 entry.rules.push(Rule {
                     head: args,
                     body,
@@ -245,12 +269,13 @@ fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
 
             let mut collected_atoms = vec![];
 
-            if !rule_head.name.is_prog_entry() {
+            if rule_is_bound {
                 collected_atoms.push(make_magic_sup_rule_app(
                     &rule_head.name,
                     rule_idx,
                     0,
                     &sup_0_bindings,
+                    &rule_head.adornment,
                 ));
             }
             let mut seen_bindings: BTreeSet<_> = sup_0_bindings.iter().cloned().collect();
@@ -294,8 +319,12 @@ fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
                                 adornment: None,
                             }));
                         } else {
-                            let sup_head =
-                                make_magic_sup_rule_head(&rule_head.name, rule_idx, atom_idx);
+                            let sup_head = make_magic_sup_rule_head(
+                                &rule_head.name,
+                                rule_idx,
+                                atom_idx,
+                                &rule_head.adornment,
+                            );
                             // todo: order it such that seen bindings has the applied rule as prefix
                             // see m7 in notes
                             let args = seen_bindings.iter().collect_vec();
@@ -306,22 +335,25 @@ fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
                                 });
                             let mut sup_rule_atoms = vec![];
                             mem::swap(&mut sup_rule_atoms, &mut collected_atoms);
+                            let head_args = args
+                                .iter()
+                                .map(|kw| BindingHeadTerm {
+                                    name: (*kw).clone(),
+                                    aggr: Default::default(),
+                                })
+                                .collect_vec();
+                            debug_assert_eq!(entry.arity, head_args.len());
                             entry.rules.push(Rule {
-                                head: args
-                                    .iter()
-                                    .map(|kw| BindingHeadTerm {
-                                        name: (*kw).clone(),
-                                        aggr: Default::default(),
-                                    })
-                                    .collect_vec(),
+                                head: head_args,
                                 body: sup_rule_atoms,
                                 vld: rule.vld,
                             });
-                            let sup_app_rule = Atom::Rule(RuleApplyAtom {
+                            let sup_app_rule_atom = RuleApplyAtom {
                                 name: sup_head,
                                 args: args.iter().map(|kw| Term::Var((*kw).clone())).collect_vec(),
                                 adornment: None,
-                            });
+                            };
+                            let sup_app_rule = Atom::Rule(sup_app_rule_atom);
                             collected_atoms.push(sup_app_rule.clone());
 
                             let head = make_magic_rule_head(&r.name, r_adornment);
@@ -342,22 +374,24 @@ fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
                                 rules: vec![],
                                 arity,
                             });
+                            let ientry_args = r
+                                .args
+                                .iter()
+                                .zip(r_adornment.iter())
+                                .filter_map(|(kw, is_bound)| {
+                                    if *is_bound {
+                                        Some(BindingHeadTerm {
+                                            name: kw.get_var().cloned().unwrap(),
+                                            aggr: Default::default(),
+                                        })
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect_vec();
+                            debug_assert_eq!(ientry.arity, ientry_args.len());
                             ientry.rules.push(Rule {
-                                head: r
-                                    .args
-                                    .iter()
-                                    .zip(r_adornment.iter())
-                                    .filter_map(|(kw, is_bound)| {
-                                        if *is_bound {
-                                            Some(BindingHeadTerm {
-                                                name: kw.get_var().cloned().unwrap(),
-                                                aggr: Default::default(),
-                                            })
-                                        } else {
-                                            None
-                                        }
-                                    })
-                                    .collect_vec(),
+                                head: ientry_args,
                                 body: vec![sup_app_rule],
                                 vld: rule.vld,
                             });
@@ -374,6 +408,7 @@ fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
                 rules: vec![],
                 arity: rule_set.arity,
             });
+            debug_assert_eq!(ruleset.arity, rule.head.len());
             ruleset.rules.push(Rule {
                 head: rule.head.clone(),
                 body: collected_atoms,
