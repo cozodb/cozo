@@ -1,4 +1,4 @@
-use std::cmp::{min, Ordering};
+use std::cmp::{max, min, Ordering};
 use std::fmt::{Debug, Formatter};
 
 use anyhow::Result;
@@ -57,7 +57,7 @@ impl Tuple {
             epoch_bytes[3],
         ]);
         ret.extend((len as u16).to_be_bytes());
-        ret.resize(4 * (len + 1), 0);
+        ret.resize(max(6, 4 * (len + 1)), 0);
         for (idx, val) in self.0.iter().enumerate() {
             if idx > 0 {
                 let pos = (ret.len() as u32).to_be_bytes();
@@ -166,7 +166,7 @@ impl<'a> EncodedTuple<'a> {
         };
         rmp_serde::from_slice(&self.0[pos..]).unwrap()
     }
-    pub(crate) fn get(&self, idx: usize) -> anyhow::Result<DataValue> {
+    pub(crate) fn get(&self, idx: usize) -> Result<DataValue> {
         let pos = if idx == 0 {
             4 * (self.arity()? + 1)
         } else {
@@ -209,7 +209,7 @@ pub(crate) struct EncodedTupleIter<'a> {
 }
 
 impl<'a> Iterator for EncodedTupleIter<'a> {
-    type Item = anyhow::Result<DataValue>;
+    type Item = Result<DataValue>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.size == 0 {
