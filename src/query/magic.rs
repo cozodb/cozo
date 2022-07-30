@@ -19,7 +19,7 @@ type AdornedDatalogProgram = BTreeMap<AdornedHead, RuleSet>;
 pub(crate) fn magic_sets_rewrite(prog: &DatalogProgram) -> DatalogProgram {
     let own_rules: BTreeSet<_> = prog.keys().collect();
     let adorned = adorn_program(prog, &own_rules);
-    adorned_to_magic(&adorned, &own_rules)
+    adorned_to_magic(&adorned)
 }
 
 fn adorn_atom(
@@ -212,10 +212,7 @@ fn make_magic_input_rule_app(name: &Keyword, adornment: &[bool], args: &[Binding
 
 // fn make_magic_sup_rule_app()
 
-fn adorned_to_magic(
-    input: &AdornedDatalogProgram,
-    own_rules: &BTreeSet<&Keyword>,
-) -> DatalogProgram {
+fn adorned_to_magic(input: &AdornedDatalogProgram) -> DatalogProgram {
     let mut ret_prog: DatalogProgram = Default::default();
 
     for (rule_head, rule_set) in input {
