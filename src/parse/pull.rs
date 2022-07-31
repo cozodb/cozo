@@ -1,6 +1,6 @@
 use std::cmp::max;
 
-use anyhow::Result;
+use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 use serde_json::Map;
 
@@ -11,12 +11,6 @@ use crate::data::value::DataValue;
 use crate::parse::triple::TxError;
 use crate::query::pull::{AttrPullSpec, PullSpec, PullSpecs};
 use crate::runtime::transact::SessionTx;
-
-#[derive(Debug, thiserror::Error)]
-pub enum PullError {
-    #[error("cannot parse pull format {0}: {1}")]
-    InvalidFormat(JsonValue, String),
-}
 
 impl SessionTx {
     pub(crate) fn parse_pull(&mut self, desc: &JsonValue, depth: usize) -> Result<PullSpecs> {
@@ -29,7 +23,7 @@ impl SessionTx {
             ret.sort();
             Ok(ret)
         } else {
-            Err(PullError::InvalidFormat(desc.clone(), "expect array".to_string()).into())
+            bail!("pull definition: expect array, got {}", desc);
         }
     }
     pub(crate) fn parse_pull_element(
@@ -64,9 +58,7 @@ impl SessionTx {
                 }))
             }
             JsonValue::Object(m) => self.parse_pull_obj(m, depth),
-            v => Err(
-                PullError::InvalidFormat(v.clone(), "expect string or object".to_string()).into(),
-            ),
+            v => bail!("pull element: expect string or object, got {}", v),
         }
     }
     pub(crate) fn parse_pull_obj(
@@ -88,26 +80,27 @@ impl SessionTx {
         for (k, v) in desc {
             match k as &str {
                 "as" => {
-                    as_override = Some(Keyword::from(v.as_str().ok_or_else(|| {
-                        PullError::InvalidFormat(v.clone(), "expect string".to_string())
-                    })?))
+                    as_override =
+                        Some(Keyword::from(v.as_str().ok_or_else(|| {
+                            anyhow!("expect 'as' field to be string, got {}", v)
+                        })?))
                 }
                 "limit" => {
                     take = Some(v.as_u64().ok_or_else(|| {
-                        PullError::InvalidFormat(v.clone(), "expect limit".to_string())
+                        anyhow!("expect 'limit field to be non-negative integer, got {}", v)
                     })? as usize)
                 }
                 "cardinality" => {
                     cardinality_override =
                         Some(AttributeCardinality::try_from(v.as_str().ok_or_else(
-                            || PullError::InvalidFormat(v.clone(), "expect string".to_string()),
+                            || anyhow!("expect 'cardinality' field to be string, got {}", v),
                         )?)?)
                 }
                 "default" => default_val = DataValue::from(v),
                 "pull" => {
-                    let v = v.as_str().ok_or_else(|| {
-                        PullError::InvalidFormat(v.clone(), "expect string".to_string())
-                    })?;
+                    let v = v
+                        .as_str()
+                        .ok_or_else(|| anyhow!("expect 'pull' field to be string, got {}", v))?;
                     if v == "_id" {
                         pull_id = true
                     } else {
@@ -122,17 +115,16 @@ impl SessionTx {
                             continue;
                         }
                     } else {
-                        return Err(PullError::InvalidFormat(
-                            JsonValue::Object(desc.clone()),
-                            "expect boolean or number".to_string(),
-                        )
-                            .into());
+                        bail!(
+                            "expect 'recurse' field to be non-negative integer or boolean, got {}",
+                            v
+                        );
                     }
                     recursive = true;
                 }
                 "depth" => {
                     recursion_depth = v.as_u64().ok_or_else(|| {
-                        PullError::InvalidFormat(v.clone(), "expect depth".to_string())
+                        anyhow!("expect 'depth' field to be non-negative integer, got {}", v)
                     })? as usize
                 }
                 "spec" => {
@@ -140,20 +132,12 @@ impl SessionTx {
                         if let Some(arr) = v.as_array() {
                             arr.clone()
                         } else {
-                            return Err(PullError::InvalidFormat(
-                                JsonValue::Object(desc.clone()),
-                                "expect array".to_string(),
-                            )
-                                .into());
+                            bail!("expect 'spec' field to be an array, got {}", v);
                         }
                     };
                 }
                 v => {
-                    return Err(PullError::InvalidFormat(
-                        v.into(),
-                        "unexpected spec key".to_string(),
-                    )
-                        .into());
+                    bail!("unexpected pull spec key {}", v);
                 }
             }
         }
@@ -165,11 +149,7 @@ impl SessionTx {
         }
 
         if input_kw.is_none() {
-            return Err(PullError::InvalidFormat(
-                JsonValue::Object(desc.clone()),
-                "expect target key".to_string(),
-            )
-                .into());
+            bail!("no target key in pull definition");
         }
 
         let input_kw = input_kw.unwrap();

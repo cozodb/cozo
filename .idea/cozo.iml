@@ -7,6 +7,5 @@
   </component>
   <component name="NewModuleRootManager">
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" name="Python 3.9 interpreter library" level="application" />
   </component>
 </module>

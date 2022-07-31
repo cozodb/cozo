@@ -1,7 +1,7 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::Result;
+use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use serde_json::Map;
 
@@ -27,9 +27,7 @@ impl SessionTx {
     ) -> Result<DatalogProgram> {
         let rules = payload
             .as_array()
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(payload.clone(), "expected array".to_string())
-            })?
+            .ok_or_else(|| anyhow!("expect array for rules, got {}", payload))?
             .iter()
             .map(|o| self.parse_rule_definition(o, default_vld));
         let mut collected: BTreeMap<Keyword, Vec<Rule>> = BTreeMap::new();
@@ -52,7 +50,7 @@ impl SessionTx {
                 let arity = arities.next().unwrap();
                 for other in arities {
                     if other != arity {
-                        return Err(QueryCompilationError::ArityMismatch(name).into());
+                        bail!("arity mismatch for rules under the name of {}", name);
                     }
                 }
                 Ok((name, RuleSet { rules, arity }))
@@ -60,7 +58,7 @@ impl SessionTx {
             .try_collect()?;
 
         match ret.get(&PROG_ENTRY) {
-            None => Err(QueryCompilationError::NoEntryToProgram.into()),
+            None => bail!("no entry defined for datalog program"),
             Some(ruleset) => {
                 if !ruleset
                     .rules
@@ -68,7 +66,7 @@ impl SessionTx {
                     .map(|r| r.head.iter().map(|b| &b.name).collect_vec())
                     .all_equal()
                 {
-                    Err(QueryCompilationError::EntryHeadsNotIdentical.into())
+                    bail!("all heads for the entry query must be identical");
                 } else {
                     Ok(ret)
                 }
@@ -78,9 +76,11 @@ impl SessionTx {
     fn parse_predicate_atom(payload: &Map<String, JsonValue>) -> Result<Atom> {
         let mut pred = Self::parse_expr(payload)?;
         if let Expr::Apply(op, _) = &pred {
-            if !op.is_predicate {
-                return Err(QueryCompilationError::NotAPredicate(op.name).into());
-            }
+            ensure!(
+                op.is_predicate,
+                "non-predicate expression in predicate position: {}",
+                op.name
+            );
         }
         pred.partial_eval()?;
         Ok(Atom::Predicate(pred))
@@ -88,58 +88,37 @@ impl SessionTx {
     fn parse_expr(payload: &Map<String, JsonValue>) -> Result<Expr> {
         let name = payload
             .get("pred")
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    JsonValue::Object(payload.clone()),
-                    "expect key 'pred'".to_string(),
-                )
-            })?
+            .ok_or_else(|| anyhow!("expect expression to have key 'pred'"))?
             .as_str()
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    JsonValue::Object(payload.clone()),
-                    "expect key 'pred' to be the name of a predicate".to_string(),
-                )
-            })?;
+            .ok_or_else(|| anyhow!("expect key 'pred' to be a string referring to a predicate"))?;
 
-        let op =
-            get_op(name).ok_or_else(|| QueryCompilationError::UnknownOperator(name.to_string()))?;
+        let op = get_op(name).ok_or_else(|| anyhow!("unknown operator {}", name))?;
 
         let args: Box<[Expr]> = payload
             .get("args")
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    JsonValue::Object(payload.clone()),
-                    "expect key 'args'".to_string(),
-                )
-            })?
+            .ok_or_else(|| anyhow!("expect key 'args' in expression"))?
             .as_array()
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    JsonValue::Object(payload.clone()),
-                    "expect key 'args' to be an array".to_string(),
-                )
-            })?
+            .ok_or_else(|| anyhow!("expect key 'args' to be an array"))?
             .iter()
             .map(Self::parse_expr_arg)
             .try_collect()?;
 
         if op.vararg {
-            if args.len() < op.min_arity {
-                return Err(QueryCompilationError::PredicateArityMismatch(
-                    op.name,
-                    op.min_arity,
-                    args.len(),
-                )
-                .into());
-            }
-        } else if args.len() != op.min_arity {
-            return Err(QueryCompilationError::PredicateArityMismatch(
+            ensure!(
+                args.len() >= op.min_arity,
+                "arity mismatch for vararg op {}: expect minimum of {}, got {}",
                 op.name,
                 op.min_arity,
-                args.len(),
-            )
-            .into());
+                args.len()
+            );
+        } else if args.len() != op.min_arity {
+            ensure!(
+                args.len() == op.min_arity,
+                "arity mismatch for op {}: expect {}, got {}",
+                op.name,
+                op.min_arity,
+                args.len()
+            );
         }
 
         Ok(Expr::Apply(op, args))
@@ -160,11 +139,7 @@ impl SessionTx {
                 } else if map.contains_key("pred") {
                     Self::parse_expr(map)
                 } else {
-                    Err(QueryCompilationError::UnexpectedForm(
-                        JsonValue::Object(map.clone()),
-                        "must contain either 'const' or 'pred' key".to_string(),
-                    )
-                    .into())
+                    bail!("expression object must contain either 'const' or 'pred' key");
                 }
             }
             v => Ok(Expr::Const(v.into())),
@@ -173,47 +148,27 @@ impl SessionTx {
     fn parse_rule_atom(&mut self, payload: &Map<String, JsonValue>, vld: Validity) -> Result<Atom> {
         let rule_name = payload
             .get("rule")
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    JsonValue::Object(payload.clone()),
-                    "expect key 'rule'".to_string(),
-                )
-            })?
+            .ok_or_else(|| anyhow!("expect key 'rule' in rule atom"))?
             .as_str()
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    JsonValue::Object(payload.clone()),
-                    "expect key 'rule' to be string".to_string(),
-                )
-            })?
+            .ok_or_else(|| anyhow!("expect value for key 'rule' to be a string"))?
             .into();
         let args = payload
             .get("args")
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    JsonValue::Object(payload.clone()),
-                    "expect key 'args'".to_string(),
-                )
-            })?
+            .ok_or_else(|| anyhow!("expect key 'args' in rule atom"))?
             .as_array()
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    JsonValue::Object(payload.clone()),
-                    "expect key 'args' to be an array".to_string(),
-                )
-            })?
+            .ok_or_else(|| anyhow!("expect value for key 'args' to be an array"))?
             .iter()
             .map(|value_rep| -> Result<Term<DataValue>> {
                 if let Some(s) = value_rep.as_str() {
                     let var = Keyword::from(s);
                     if s.starts_with(['?', '_']) {
                         return Ok(Term::Var(var));
-                    } else if var.is_reserved() {
-                        return Err(QueryCompilationError::UnexpectedForm(
-                            value_rep.clone(),
-                            "reserved string values must be quoted".to_string(),
+                    } else {
+                        ensure!(
+                            !var.is_reserved(),
+                            "{} is a reserved string value and must be quoted",
+                            s
                         )
-                        .into());
                     }
                 }
                 if let Some(o) = value_rep.as_object() {
@@ -238,12 +193,9 @@ impl SessionTx {
         payload: &JsonValue,
         default_vld: Validity,
     ) -> Result<Vec<(Keyword, Rule)>> {
-        let rule_name = payload.get("rule").ok_or_else(|| {
-            QueryCompilationError::UnexpectedForm(
-                payload.clone(),
-                "expected key 'rule'".to_string(),
-            )
-        })?;
+        let rule_name = payload
+            .get("rule")
+            .ok_or_else(|| anyhow!("expect key 'rule' in rule definition"))?;
         let rule_name = Keyword::try_from(rule_name)?;
         if !rule_name.is_prog_entry() {
             rule_name.validate_not_reserved()?;
@@ -254,32 +206,16 @@ impl SessionTx {
             .unwrap_or(Ok(default_vld))?;
         let args = payload
             .get("args")
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    payload.clone(),
-                    "expected key 'args'".to_string(),
-                )
-            })?
+            .ok_or_else(|| anyhow!("expect key 'args' in rule definition"))?
             .as_array()
-            .ok_or_else(|| {
-                QueryCompilationError::UnexpectedForm(
-                    payload.clone(),
-                    "expected key 'args' to be an array".to_string(),
-                )
-            })?;
+            .ok_or_else(|| anyhow!("expect value for key 'args' to be an array"))?;
         let mut args = args.iter();
-        let rule_head = args.next().ok_or_else(|| {
-            QueryCompilationError::UnexpectedForm(
-                payload.clone(),
-                "expected key 'args' to be an array containing at least one element".to_string(),
-            )
-        })?;
-        let rule_head = rule_head.as_array().ok_or_else(|| {
-            QueryCompilationError::UnexpectedForm(
-                rule_head.clone(),
-                "expect rule head to be an array".to_string(),
-            )
-        })?;
+        let rule_head = args
+            .next()
+            .ok_or_else(|| anyhow!("expect value for key 'args' to be a non-empty array"))?;
+        let rule_head = rule_head
+            .as_array()
+            .ok_or_else(|| anyhow!("expect rule head to be an array, got {}", rule_head))?;
         let rule_head: Vec<_> = rule_head
             .iter()
             .map(|el| -> Result<BindingHeadTerm> {
@@ -297,18 +233,17 @@ impl SessionTx {
             .map(|el| self.parse_atom(el, default_vld))
             .try_collect()?;
 
-        if rule_head.len()
-            != rule_head
-                .iter()
-                .map(|h| &h.name)
-                .collect::<BTreeSet<_>>()
-                .len()
-        {
-            return Err(QueryCompilationError::DuplicateVariables(
-                rule_head.into_iter().map(|h| h.name).collect_vec(),
-            )
-            .into());
-        }
+        ensure!(
+            rule_head.len()
+                == rule_head
+                    .iter()
+                    .map(|h| &h.name)
+                    .collect::<BTreeSet<_>>()
+                    .len(),
+            "duplicate variables in rule head: {:?}",
+            rule_head.into_iter().map(|h| h.name).collect_vec()
+        );
+
         Atom::Conjunction(rule_body)
             .disjunctive_normal_form()
             .into_iter()
@@ -389,10 +324,15 @@ impl SessionTx {
             }
         }
         for (p, bindings) in predicates_with_meta {
-            if let Some(p) = p {
-                let diff = bindings.difference(&seen_bindings).cloned().collect();
-                return Err(QueryCompilationError::UnsafeBindingInPredicate(p, diff).into());
-            }
+            ensure!(
+                p.is_none(),
+                "unsafe bindings {:?} found in predicate {:?}",
+                bindings
+                    .difference(&seen_bindings)
+                    .cloned()
+                    .collect::<BTreeSet<_>>(),
+                p.unwrap()
+            );
         }
         Ok(ret)
     }
@@ -414,27 +354,17 @@ impl SessionTx {
                     || map.contains_key("disj")
                     || map.contains_key("not_exists")
                 {
-                    if map.len() != 1 {
-                        return Err(QueryCompilationError::UnexpectedForm(
-                            JsonValue::Object(map.clone()),
-                            "too many keys".to_string(),
-                        )
-                        .into());
-                    }
+                    ensure!(
+                        map.len() == 1,
+                        "arity mismatch for atom definition {:?}: expect only one key",
+                        map
+                    );
                     self.parse_logical_atom(map, vld)
                 } else {
-                    Err(QueryCompilationError::UnexpectedForm(
-                        JsonValue::Object(map.clone()),
-                        "unknown format".to_string(),
-                    )
-                    .into())
+                    bail!("unexpected atom definition {:?}", map);
                 }
             }
-            v => Err(QueryCompilationError::UnexpectedForm(
-                v.clone(),
-                "unknown format".to_string(),
-            )
-            .into()),
+            v => bail!("expected atom definition {:?}", v),
         }
     }
     fn parse_logical_atom(&mut self, map: &Map<String, JsonValue>, vld: Validity) -> Result<Atom> {
@@ -444,12 +374,10 @@ impl SessionTx {
                 let arg = self.parse_atom(v, vld)?;
                 Atom::Negation(Box::new(arg))
             }
-            "conj" | "disj" => {
+            n @ ("conj" | "disj") => {
                 let args = v
                     .as_array()
-                    .ok_or_else(|| {
-                        QueryCompilationError::UnexpectedForm(v.clone(), "expect array".to_string())
-                    })?
+                    .ok_or_else(|| anyhow!("expect array argument for atom {}", n))?
                     .iter()
                     .map(|a| self.parse_atom(a, vld))
                     .try_collect()?;
@@ -483,23 +411,19 @@ impl SessionTx {
         m: &Map<String, JsonValue>,
         vld: Validity,
     ) -> Result<EntityId> {
-        if m.len() != 1 {
-            return Err(QueryCompilationError::UnexpectedForm(
-                JsonValue::Object(m.clone()),
-                "expect object with exactly one field".to_string(),
-            )
-            .into());
-        }
+        ensure!(
+            m.len() == 1,
+            "expect map to contain exactly one pair, got {:?}",
+            m
+        );
         let (k, v) = m.iter().next().unwrap();
         let kw = Keyword::from(k as &str);
         let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
-        if !attr.indexing.is_unique_index() {
-            return Err(QueryCompilationError::UnexpectedForm(
-                JsonValue::Object(m.clone()),
-                "attribute is not a unique index".to_string(),
-            )
-            .into());
-        }
+        ensure!(
+            attr.indexing.is_unique_index(),
+            "pull inside query must use unique index, of which {} is not",
+            attr.keyword
+        );
         let value = attr.val_type.coerce_value(v.into())?;
         let eid = self
             .eid_by_unique_av(&attr, &value, vld)?
@@ -511,21 +435,13 @@ impl SessionTx {
         m: &Map<String, JsonValue>,
         attr: &Attribute,
     ) -> Result<DataValue> {
-        if m.len() != 1 {
-            return Err(QueryCompilationError::UnexpectedForm(
-                JsonValue::Object(m.clone()),
-                "expect object with exactly one field".to_string(),
-            )
-            .into());
-        }
+        ensure!(
+            m.len() == 1,
+            "expect map to contain exactly one pair, got {:?}",
+            m
+        );
         let (k, v) = m.iter().next().unwrap();
-        if k != "const" {
-            return Err(QueryCompilationError::UnexpectedForm(
-                JsonValue::Object(m.clone()),
-                "expect object with exactly one field named 'const'".to_string(),
-            )
-            .into());
-        }
+        ensure!(k == "const", "expect key 'const', got {:?}", m);
         let value = attr.val_type.coerce_value(v.into())?;
         Ok(value)
     }
@@ -539,12 +455,8 @@ impl SessionTx {
             let var = Keyword::from(s);
             if s.starts_with(['?', '_']) {
                 return Ok(Term::Var(var));
-            } else if var.is_reserved() {
-                return Err(QueryCompilationError::UnexpectedForm(
-                    value_rep.clone(),
-                    "reserved string values must be quoted".to_string(),
-                )
-                .into());
+            } else {
+                ensure!(!var.is_reserved(), "reserved string {} must be quoted", s);
             }
         }
         if let Some(o) = value_rep.as_object() {
@@ -566,12 +478,8 @@ impl SessionTx {
             let var = Keyword::from(s);
             if s.starts_with(['?', '_']) {
                 return Ok(Term::Var(var));
-            } else if var.is_reserved() {
-                return Err(QueryCompilationError::UnexpectedForm(
-                    entity_rep.clone(),
-                    "reserved string values must be quoted".to_string(),
-                )
-                .into());
+            } else {
+                ensure!(!var.is_reserved(), "reserved string {} must be quoted", s);
             }
         }
         if let Some(u) = entity_rep.as_u64() {
@@ -590,11 +498,7 @@ impl SessionTx {
                 let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
                 Ok(attr)
             }
-            v => Err(QueryCompilationError::UnexpectedForm(
-                v.clone(),
-                "expect attribute keyword".to_string(),
-            )
-            .into()),
+            v => bail!("expect attribute keyword for triple atom, got {}", v),
         }
     }
 }
