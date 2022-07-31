@@ -1,7 +1,7 @@
 use std::cmp::{max, min, Ordering};
 use std::fmt::{Debug, Formatter};
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use itertools::Itertools;
 use rmp_serde::Serializer;
 use serde::Serialize;
@@ -11,12 +11,6 @@ use crate::data::value::DataValue;
 use crate::runtime::temp_store::TempStoreId;
 
 pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 6;
-
-#[derive(Debug, thiserror::Error)]
-pub enum TupleError {
-    #[error("bad data: {0} for {1:x?}")]
-    BadData(String, Vec<u8>),
-}
 
 pub struct Tuple(pub(crate) Vec<DataValue>);
 
@@ -34,7 +28,7 @@ impl Debug for Tuple {
     }
 }
 
-pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item=Result<Tuple>> + 'a>;
+pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
 
 impl Tuple {
     pub(crate) fn arity(&self) -> usize {
@@ -85,14 +79,7 @@ impl<'a> EncodedTuple<'a> {
         let prefix_bytes = prefix.0.to_be_bytes();
         let next_prefix_bytes = (prefix.0 + 1).to_be_bytes();
         (
-            [
-                prefix_bytes[1],
-                prefix_bytes[2],
-                prefix_bytes[3],
-                0,
-                0,
-                0,
-            ],
+            [prefix_bytes[1], prefix_bytes[2], prefix_bytes[3], 0, 0, 0],
             [
                 next_prefix_bytes[1],
                 next_prefix_bytes[2],
@@ -103,7 +90,10 @@ impl<'a> EncodedTuple<'a> {
             ],
         )
     }
-    pub(crate) fn bounds_for_prefix_and_epoch(prefix: TempStoreId, epoch: u32) -> ([u8; 6], [u8; 6]) {
+    pub(crate) fn bounds_for_prefix_and_epoch(
+        prefix: TempStoreId,
+        epoch: u32,
+    ) -> ([u8; 6], [u8; 6]) {
         let prefix_bytes = prefix.0.to_be_bytes();
         let epoch_bytes = epoch.to_be_bytes();
         let epoch_bytes_upper = (epoch + 1).to_be_bytes();
@@ -126,30 +116,18 @@ impl<'a> EncodedTuple<'a> {
             ],
         )
     }
-    pub(crate) fn prefix(&self) -> Result<(TempStoreId, u32), TupleError> {
-        if self.0.len() < 6 {
-            Err(TupleError::BadData(
-                "bad data length".to_string(),
-                self.0.to_vec(),
-            ))
-        } else {
-            let id = u32::from_be_bytes([0, self.0[0], self.0[1], self.0[2]]);
-            let epoch = u32::from_be_bytes([0, self.0[3], self.0[4], self.0[5]]);
-            Ok((TempStoreId(id), epoch))
-        }
+    pub(crate) fn prefix(&self) -> Result<(TempStoreId, u32)> {
+        ensure!(self.0.len() >= 6, "bad data: {:x?}", self.0);
+        let id = u32::from_be_bytes([0, self.0[0], self.0[1], self.0[2]]);
+        let epoch = u32::from_be_bytes([0, self.0[3], self.0[4], self.0[5]]);
+        Ok((TempStoreId(id), epoch))
     }
-    pub(crate) fn arity(&self) -> Result<usize, TupleError> {
+    pub(crate) fn arity(&self) -> Result<usize> {
         if self.0.len() == 6 {
             return Ok(0);
         }
-        if self.0.len() < 8 {
-            Err(TupleError::BadData(
-                "bad data length".to_string(),
-                self.0.to_vec(),
-            ))
-        } else {
-            Ok(u16::from_be_bytes([self.0[6], self.0[7]]) as usize)
-        }
+        ensure!(self.0.len() >= 8, "bad data: {:x?}", self.0);
+        Ok(u16::from_be_bytes([self.0[6], self.0[7]]) as usize)
     }
     fn force_get(&self, idx: usize) -> DataValue {
         let pos = if idx == 0 {
@@ -171,11 +149,7 @@ impl<'a> EncodedTuple<'a> {
             4 * (self.arity()? + 1)
         } else {
             let len_pos = (idx + 1) * 4;
-            if self.0.len() < len_pos + 4 {
-                return Err(
-                    TupleError::BadData("bad data length".to_string(), self.0.to_vec()).into(),
-                );
-            }
+            ensure!(self.0.len() >= len_pos + 4, "bad data: {:x?}", self.0);
             u32::from_be_bytes([
                 self.0[len_pos],
                 self.0[len_pos + 1],
@@ -183,9 +157,11 @@ impl<'a> EncodedTuple<'a> {
                 self.0[len_pos + 3],
             ]) as usize
         };
-        if pos >= self.0.len() {
-            return Err(TupleError::BadData("bad data length".to_string(), self.0.to_vec()).into());
-        }
+        ensure!(
+            pos < self.0.len(),
+            "bad data length for data: {:x?}",
+            self.0
+        );
         Ok(rmp_serde::from_slice(&self.0[pos..])?)
     }
 

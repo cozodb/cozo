@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -26,12 +26,6 @@ pub(crate) enum StorageTag {
     SentinelAttrValue = 8,
     SentinelAttrById = 9,
     SentinelAttrByKeyword = 10,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum StorageTagError {
-    #[error("unexpected value for StorageTag: {0}")]
-    UnexpectedValue(u8),
 }
 
 #[derive(Clone)]
@@ -191,7 +185,7 @@ impl<const N: usize> From<SmallVec<[u8; N]>> for EncodedVec<N> {
 }
 
 impl TryFrom<u8> for StorageTag {
-    type Error = StorageTagError;
+    type Error = anyhow::Error;
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
         use StorageTag::*;
         Ok(match value {
@@ -205,7 +199,7 @@ impl TryFrom<u8> for StorageTag {
             8 => SentinelAttrValue,
             9 => SentinelAttrById,
             10 => SentinelAttrByKeyword,
-            n => return Err(StorageTagError::UnexpectedValue(n)),
+            n => bail!("unexpected storage tag {}", n),
         })
     }
 }

@@ -3,22 +3,13 @@ use std::fmt::{Debug, Formatter};
 use std::mem;
 use std::ops::Rem;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use itertools::Itertools;
 use ordered_float::{Float, OrderedFloat};
 
-use crate::data::expr::ExprError::UnexpectedArgs;
 use crate::data::keyword::Keyword;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-
-#[derive(Debug, thiserror::Error)]
-pub enum ExprError {
-    #[error("unexpected args for {0}: {1:?}")]
-    UnexpectedArgs(&'static str, Vec<DataValue>),
-    #[error("unexpected return type: expected {0}, got {1:?}")]
-    UnexpectedReturnType(String, DataValue),
-}
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -101,7 +92,7 @@ impl Expr {
     pub(crate) fn eval_pred(&self, bindings: &Tuple) -> Result<bool> {
         match self.eval(bindings)? {
             DataValue::Bool(b) => Ok(b),
-            v => Err(ExprError::UnexpectedReturnType("bool".to_string(), v).into()),
+            v => bail!("predicate must have boolean return type, got {:?}", v),
         }
     }
 }
@@ -187,7 +178,7 @@ fn op_add(args: &[DataValue]) -> Result<DataValue> {
         match arg {
             DataValue::Int(i) => i_accum += i,
             DataValue::Float(f) => f_accum += f.0,
-            _ => return Err(UnexpectedArgs("add", args.to_vec()).into()),
+            v => bail!("unexpected arg {:?} for OP_ADD", v),
         }
     }
     if f_accum == 0.0f64 {
@@ -214,7 +205,7 @@ fn op_max(args: &[DataValue]) -> Result<DataValue> {
             (Some(DataValue::Float(a)), DataValue::Float(b)) => {
                 Ok(Some(DataValue::Float(a.0.max(b.0).into())))
             }
-            _ => Err(UnexpectedArgs("max", args.to_vec())),
+            v => bail!("unexpected arg {:?} for OP_MAX", v),
         })?;
     match res {
         None => Ok(DataValue::Float(f64::neg_infinity().into())),
@@ -239,7 +230,7 @@ fn op_min(args: &[DataValue]) -> Result<DataValue> {
             (Some(DataValue::Float(a)), DataValue::Float(b)) => {
                 Ok(Some(DataValue::Float(a.0.min(b.0).into())))
             }
-            _ => Err(UnexpectedArgs("min", args.to_vec())),
+            v => bail!("unexpected arg {:?} for OP_MIN", v),
         })?;
     match res {
         None => Ok(DataValue::Float(f64::infinity().into())),
@@ -254,7 +245,7 @@ fn op_sub(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Float(a), DataValue::Float(b)) => DataValue::Float(*a - *b),
         (DataValue::Int(a), DataValue::Float(b)) => DataValue::Float(((*a as f64) - b.0).into()),
         (DataValue::Float(a), DataValue::Int(b)) => DataValue::Float((a.0 - (*b as f64)).into()),
-        _ => return Err(UnexpectedArgs("sub", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_SUB", v),
     })
 }
 
@@ -266,7 +257,7 @@ fn op_mul(args: &[DataValue]) -> Result<DataValue> {
         match arg {
             DataValue::Int(i) => i_accum *= i,
             DataValue::Float(f) => f_accum *= f.0,
-            _ => return Err(UnexpectedArgs("mul", args.to_vec()).into()),
+            v => bail!("unexpected arg {:?} for OP_MUL", v),
         }
     }
     if f_accum == 1.0f64 {
@@ -285,7 +276,7 @@ fn op_div(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Float(a), DataValue::Float(b)) => DataValue::Float(*a / *b),
         (DataValue::Int(a), DataValue::Float(b)) => DataValue::Float(((*a as f64) / b.0).into()),
         (DataValue::Float(a), DataValue::Int(b)) => DataValue::Float((a.0 / (*b as f64)).into()),
-        _ => return Err(UnexpectedArgs("div", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_DIV", v),
     })
 }
 
@@ -294,7 +285,7 @@ fn op_minus(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Int(i) => DataValue::Int(-(*i)),
         DataValue::Float(f) => DataValue::Float(-(*f)),
-        _ => return Err(UnexpectedArgs("minus", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_MINUS", v),
     })
 }
 
@@ -303,7 +294,7 @@ fn op_abs(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Int(i) => DataValue::Int(i.abs()),
         DataValue::Float(f) => DataValue::Float(f.abs()),
-        _ => return Err(UnexpectedArgs("abs", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ABS", v),
     })
 }
 
@@ -312,7 +303,7 @@ fn op_signum(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Int(i) => DataValue::Int(i.signum()),
         DataValue::Float(f) => DataValue::Float(f.signum()),
-        _ => return Err(UnexpectedArgs("signum", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_SIGNUM", v),
     })
 }
 
@@ -321,7 +312,7 @@ fn op_floor(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Int(i) => DataValue::Int(*i),
         DataValue::Float(f) => DataValue::Float(f.floor()),
-        _ => return Err(UnexpectedArgs("floor", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_FLOOR", v),
     })
 }
 
@@ -330,7 +321,7 @@ fn op_ceil(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Int(i) => DataValue::Int(*i),
         DataValue::Float(f) => DataValue::Float(f.ceil()),
-        _ => return Err(UnexpectedArgs("ceil", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_CEIL", v),
     })
 }
 
@@ -339,7 +330,7 @@ fn op_round(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Int(i) => DataValue::Int(*i),
         DataValue::Float(f) => DataValue::Float(f.round()),
-        _ => return Err(UnexpectedArgs("round", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ROUND", v),
     })
 }
 
@@ -348,7 +339,7 @@ fn op_exp(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("exp", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_EXP", v),
     };
     Ok(DataValue::Float(a.exp().into()))
 }
@@ -358,7 +349,7 @@ fn op_exp2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("exp2", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_EXP2", v),
     };
     Ok(DataValue::Float(a.exp2().into()))
 }
@@ -368,7 +359,7 @@ fn op_ln(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("ln", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_LN", v),
     };
     Ok(DataValue::Float(a.ln().into()))
 }
@@ -378,7 +369,7 @@ fn op_log2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("log2", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_LOG2", v),
     };
     Ok(DataValue::Float(a.log2().into()))
 }
@@ -388,7 +379,7 @@ fn op_log10(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("log10", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_LOG10", v),
     };
     Ok(DataValue::Float(a.log10().into()))
 }
@@ -398,7 +389,7 @@ fn op_sin(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("sin", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_SIN", v),
     };
     Ok(DataValue::Float(a.sin().into()))
 }
@@ -408,7 +399,7 @@ fn op_cos(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("cos", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_COS", v),
     };
     Ok(DataValue::Float(a.cos().into()))
 }
@@ -418,7 +409,7 @@ fn op_tan(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("tan", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_TAN", v),
     };
     Ok(DataValue::Float(a.tan().into()))
 }
@@ -428,7 +419,7 @@ fn op_asin(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("asin", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ASIN", v),
     };
     Ok(DataValue::Float(a.asin().into()))
 }
@@ -438,7 +429,7 @@ fn op_acos(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("acos", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ACOS", v),
     };
     Ok(DataValue::Float(a.acos().into()))
 }
@@ -448,7 +439,7 @@ fn op_atan(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("atan", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ATAN", v),
     };
     Ok(DataValue::Float(a.atan().into()))
 }
@@ -458,12 +449,12 @@ fn op_atan2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("atan2", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ATAN2", v),
     };
     let b = match &args[1] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("atan2", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ATAN2", v),
     };
 
     Ok(DataValue::Float(a.atan2(b).into()))
@@ -474,7 +465,7 @@ fn op_sinh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("sinh", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_SINH", v),
     };
     Ok(DataValue::Float(a.sinh().into()))
 }
@@ -484,7 +475,7 @@ fn op_cosh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("cosh", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_COSH", v),
     };
     Ok(DataValue::Float(a.cosh().into()))
 }
@@ -494,7 +485,7 @@ fn op_tanh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("tanh", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_TANH", v),
     };
     Ok(DataValue::Float(a.tanh().into()))
 }
@@ -504,7 +495,7 @@ fn op_asinh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("asinh", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ASINH", v),
     };
     Ok(DataValue::Float(a.asinh().into()))
 }
@@ -514,7 +505,7 @@ fn op_acosh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("acosh", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ACOSH", v),
     };
     Ok(DataValue::Float(a.acosh().into()))
 }
@@ -524,7 +515,7 @@ fn op_atanh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("atanh", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ATANH", v),
     };
     Ok(DataValue::Float(a.atanh().into()))
 }
@@ -534,12 +525,12 @@ fn op_pow(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("pow", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_POW", v),
     };
     let b = match &args[1] {
         DataValue::Int(i) => *i as f64,
         DataValue::Float(f) => f.0,
-        _ => return Err(UnexpectedArgs("pow", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_POW", v),
     };
     Ok(DataValue::Float(a.powf(b).into()))
 }
@@ -551,7 +542,7 @@ fn op_mod(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Float(a), DataValue::Float(b)) => DataValue::Float(a.rem(*b)),
         (DataValue::Int(a), DataValue::Float(b)) => DataValue::Float(((*a as f64).rem(b.0)).into()),
         (DataValue::Float(a), DataValue::Int(b)) => DataValue::Float((a.0.rem(*b as f64)).into()),
-        _ => return Err(UnexpectedArgs("mod", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_MOD", v),
     })
 }
 
@@ -563,7 +554,7 @@ fn op_and(args: &[DataValue]) -> Result<DataValue> {
                 return Ok(DataValue::Bool(false));
             }
         } else {
-            return Err(UnexpectedArgs("and", args.to_vec()).into());
+            bail!("unexpected arg {:?} for OP_AND", arg);
         }
     }
     Ok(DataValue::Bool(true))
@@ -577,7 +568,7 @@ fn op_or(args: &[DataValue]) -> Result<DataValue> {
                 return Ok(DataValue::Bool(true));
             }
         } else {
-            return Err(UnexpectedArgs("or", args.to_vec()).into());
+            bail!("unexpected arg {:?} for OP_OR", arg);
         }
     }
     Ok(DataValue::Bool(false))
@@ -588,7 +579,7 @@ fn op_not(args: &[DataValue]) -> Result<DataValue> {
     if let DataValue::Bool(b) = &args[0] {
         Ok(DataValue::Bool(!*b))
     } else {
-        Err(UnexpectedArgs("not", args.to_vec()).into())
+        bail!("unexpected arg {:?} for OP_NOT", args);
     }
 }
 
@@ -599,7 +590,7 @@ fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
         if let DataValue::String(s) = arg {
             ret += s;
         } else {
-            return Err(UnexpectedArgs("str_cat", args.to_vec()).into());
+            bail!("unexpected arg {:?} for OP_ADD", arg);
         }
     }
     Ok(DataValue::String(ret.into()))
@@ -609,11 +600,11 @@ define_op!(OP_STARTS_WITH, 2, false, true);
 fn op_starts_with(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::String(s) => s,
-        _ => return Err(UnexpectedArgs("start_with", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_STARTS_WITH", v),
     };
     let b = match &args[0] {
         DataValue::String(s) => s,
-        _ => return Err(UnexpectedArgs("start_with", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_STARTS_WITH", v),
     };
     Ok(DataValue::Bool(a.starts_with(b as &str)))
 }
@@ -622,11 +613,11 @@ define_op!(OP_ENDS_WITH, 2, false, true);
 fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::String(s) => s,
-        _ => return Err(UnexpectedArgs("start_with", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ENDS_WITH", v),
     };
     let b = match &args[0] {
         DataValue::String(s) => s,
-        _ => return Err(UnexpectedArgs("start_with", args.to_vec()).into()),
+        v => bail!("unexpected arg {:?} for OP_ENDS_WITH", v),
     };
     Ok(DataValue::Bool(a.ends_with(b as &str)))
 }

@@ -1,18 +1,11 @@
+use anyhow::{anyhow, ensure};
 use serde_json::json;
 pub(crate) use serde_json::Value as JsonValue;
 
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, TxId};
-use crate::data::keyword::{Keyword, KeywordError};
+use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
-
-#[derive(Debug, thiserror::Error)]
-pub enum JsonError {
-    #[error("cannot convert JSON value {0} to {1}")]
-    Conversion(JsonValue, String),
-    #[error("missing field '{1}' in value {0}")]
-    MissingField(JsonValue, String),
-}
 
 impl From<JsonValue> for DataValue {
     fn from(v: JsonValue) -> Self {
@@ -91,7 +84,7 @@ impl TryFrom<&'_ JsonValue> for Keyword {
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let s = value
             .as_str()
-            .ok_or_else(|| JsonError::Conversion(value.clone(), "Keyword".to_string()))?;
+            .ok_or_else(|| anyhow!("failed to convert {} to a keyword", value))?;
         Ok(Keyword::from(s))
     }
 }
@@ -102,47 +95,51 @@ impl TryFrom<&'_ JsonValue> for Attribute {
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let map = value
             .as_object()
-            .ok_or_else(|| JsonError::Conversion(value.clone(), "Attribute".to_string()))?;
+            .ok_or_else(|| anyhow!("expect object in attribute definition, got {}", value))?;
         let id = match map.get("id") {
             None => AttrId(0),
             Some(v) => AttrId::try_from(v)?,
         };
-        let keyword = map
-            .get("keyword")
-            .ok_or_else(|| JsonError::MissingField(value.clone(), "keyword".to_string()))?;
+        let keyword = map.get("keyword").ok_or_else(|| {
+            anyhow!(
+                "expect field 'keyword' in attribute definition, got {}",
+                value
+            )
+        })?;
         let keyword = Keyword::try_from(keyword)?;
-        if keyword.is_reserved() {
-            return Err(KeywordError::ReservedKeyword(keyword).into());
-        }
+        ensure!(
+            !keyword.is_reserved(),
+            "cannot use reserved keyword {}",
+            keyword
+        );
         let cardinality = map
             .get("cardinality")
-            .ok_or_else(|| JsonError::MissingField(value.clone(), "cardinality".to_string()))?
+            .ok_or_else(|| anyhow!("expect field 'cardinality' in {}", value))?
             .as_str()
-            .ok_or_else(|| {
-                JsonError::Conversion(value.clone(), "AttributeCardinality".to_string())
-            })?;
+            .ok_or_else(|| anyhow!("expect field 'cardinality' to be a string, got {}", value))?;
         let cardinality = AttributeCardinality::try_from(cardinality)?;
         let val_type = map
             .get("type")
-            .ok_or_else(|| JsonError::MissingField(value.clone(), "type".to_string()))?
+            .ok_or_else(|| anyhow!("expect field 'type' in {}", value))?
             .as_str()
-            .ok_or_else(|| JsonError::Conversion(value.clone(), "AttributeTyping".to_string()))?;
+            .ok_or_else(|| anyhow!("expect field 'type' in {} to be a string", value))?;
         let val_type = AttributeTyping::try_from(val_type)?;
 
         let indexing = match map.get("index") {
             None => AttributeIndex::None,
             Some(JsonValue::Bool(true)) => AttributeIndex::Indexed,
             Some(JsonValue::Bool(false)) => AttributeIndex::None,
-            Some(v) => AttributeIndex::try_from(v.as_str().ok_or_else(|| {
-                JsonError::Conversion(value.clone(), "AttributeIndexing".to_string())
-            })?)?,
+            Some(v) => AttributeIndex::try_from(
+                v.as_str()
+                    .ok_or_else(|| anyhow!("cannot convert {} to attribute indexing", v))?,
+            )?,
         };
 
         let with_history = match map.get("history") {
             None => true,
-            Some(v) => v.as_bool().ok_or_else(|| {
-                JsonError::Conversion(value.clone(), "AttributeWithHistory".to_string())
-            })?,
+            Some(v) => v
+                .as_bool()
+                .ok_or_else(|| anyhow!("cannot convert {} to attribute with history flag", v))?,
         };
 
         Ok(Attribute {
@@ -176,12 +173,12 @@ impl From<AttrId> for JsonValue {
 }
 
 impl TryFrom<&'_ JsonValue> for AttrId {
-    type Error = JsonError;
+    type Error = anyhow::Error;
 
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let v = value
             .as_u64()
-            .ok_or_else(|| JsonError::Conversion(value.clone(), "AttrId".to_string()))?;
+            .ok_or_else(|| anyhow!("cannot convert {} to attr id", value))?;
         Ok(AttrId(v))
     }
 }
@@ -193,12 +190,12 @@ impl From<EntityId> for JsonValue {
 }
 
 impl TryFrom<&'_ JsonValue> for EntityId {
-    type Error = JsonError;
+    type Error = anyhow::Error;
 
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let v = value
             .as_u64()
-            .ok_or_else(|| JsonError::Conversion(value.clone(), "EntityId".to_string()))?;
+            .ok_or_else(|| anyhow!("cannot convert {} to entity id", value))?;
         Ok(EntityId(v))
     }
 }
@@ -210,12 +207,12 @@ impl From<TxId> for JsonValue {
 }
 
 impl TryFrom<&'_ JsonValue> for TxId {
-    type Error = JsonError;
+    type Error = anyhow::Error;
 
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let v = value
             .as_u64()
-            .ok_or_else(|| JsonError::Conversion(value.clone(), "TxId".to_string()))?;
+            .ok_or_else(|| anyhow!("cannot convert {} to tx id", value))?;
         Ok(TxId(v))
     }
 }

@@ -1,12 +1,7 @@
+use anyhow::bail;
 use std::fmt::{Display, Formatter};
 
 use serde_derive::{Deserialize, Serialize};
-
-#[derive(Debug, thiserror::Error)]
-pub enum StoreOpError {
-    #[error("unexpected value for StoreOp: {0}")]
-    UnexpectedValue(u8),
-}
 
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
@@ -46,13 +41,13 @@ impl StoreOp {
 }
 
 impl TryFrom<u8> for StoreOp {
-    type Error = StoreOpError;
+    type Error = anyhow::Error;
 
     fn try_from(u: u8) -> Result<Self, Self::Error> {
-        match u {
-            0 => Ok(StoreOp::Retract),
-            1 => Ok(StoreOp::Assert),
-            n => Err(StoreOpError::UnexpectedValue(n)),
-        }
+        Ok(match u {
+            0 => StoreOp::Retract,
+            1 => StoreOp::Assert,
+            n => bail!("unexpect tag for store op: {}", n),
+        })
     }
 }

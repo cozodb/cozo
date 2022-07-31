@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::fmt::{Debug, Formatter};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use ordered_float::OrderedFloat;
 use rmp_serde::Serializer;
 use serde::Serialize;
@@ -14,12 +14,6 @@ use crate::data::encode::EncodedVec;
 use crate::data::id::{EntityId, TxId};
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
-
-#[derive(Debug, thiserror::Error)]
-pub enum ValueError {
-    #[error("type mismatch: expected {0}, got {1}")]
-    TypeMismatch(String, String),
-}
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub enum DataValue {
@@ -109,13 +103,10 @@ impl DataValue {
         ret.into()
     }
 
-    pub(crate) fn get_entity_id(&self) -> Result<EntityId, ValueError> {
+    pub(crate) fn get_entity_id(&self) -> Result<EntityId> {
         match self {
             DataValue::EnId(id) => Ok(*id),
-            v => Err(ValueError::TypeMismatch(
-                "EntityId".to_string(),
-                format!("{:?}", v),
-            )),
+            v => bail!("type mismatch: expect type {:?}, got value {:?}", self, v),
         }
     }
 }

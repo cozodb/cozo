@@ -1,3 +1,4 @@
+use anyhow::bail;
 use std::fmt::{Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -49,12 +50,6 @@ impl TryFrom<&str> for Validity {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum IdError {
-    #[error("Cannot convert to validity: {0}")]
-    JsonValidityError(JsonValue),
-}
-
 impl TryFrom<&JsonValue> for Validity {
     type Error = anyhow::Error;
 
@@ -65,7 +60,7 @@ impl TryFrom<&JsonValue> for Validity {
         if let Some(s) = value.as_str() {
             return s.try_into();
         }
-        Err(IdError::JsonValidityError(value.clone()).into())
+        bail!("cannot convert {} to validity", value);
     }
 }
 

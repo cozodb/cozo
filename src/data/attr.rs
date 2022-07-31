@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
@@ -14,12 +14,6 @@ use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, INLINE_VAL_SIZE_LIMIT};
 use crate::parse::triple::TempIdCtx;
-
-#[derive(Debug, thiserror::Error)]
-pub enum AttributeError {
-    #[error("cannot convert {0} to {1}")]
-    Conversion(String, String),
-}
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
@@ -47,16 +41,13 @@ impl Display for AttributeCardinality {
 }
 
 impl TryFrom<&'_ str> for AttributeCardinality {
-    type Error = AttributeError;
+    type Error = anyhow::Error;
     fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
-        match value {
-            "one" => Ok(AttributeCardinality::One),
-            "many" => Ok(AttributeCardinality::Many),
-            s => Err(AttributeError::Conversion(
-                s.to_string(),
-                "AttributeCardinality".to_string(),
-            )),
-        }
+        Ok(match value {
+            "one" => AttributeCardinality::One,
+            "many" => AttributeCardinality::Many,
+            s => bail!("unknown cardinality {}", s),
+        })
     }
 }
 
@@ -101,7 +92,7 @@ impl Display for AttributeTyping {
 }
 
 impl TryFrom<&'_ str> for AttributeTyping {
-    type Error = AttributeError;
+    type Error = anyhow::Error;
     fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
         use AttributeTyping::*;
         Ok(match value {
@@ -116,12 +107,7 @@ impl TryFrom<&'_ str> for AttributeTyping {
             "timestamp" => Timestamp,
             "bytes" => Bytes,
             "list" => List,
-            s => {
-                return Err(AttributeError::Conversion(
-                    s.to_string(),
-                    "AttributeTyping".to_string(),
-                ));
-            }
+            s => bail!("unknown type {}", s),
         })
     }
 }
@@ -234,7 +220,7 @@ impl Display for AttributeIndex {
 }
 
 impl TryFrom<&'_ str> for AttributeIndex {
-    type Error = AttributeError;
+    type Error = anyhow::Error;
     fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
         use AttributeIndex::*;
         Ok(match value {
@@ -242,12 +228,7 @@ impl TryFrom<&'_ str> for AttributeIndex {
             "indexed" => Indexed,
             "unique" => Unique,
             "identity" => Identity,
-            s => {
-                return Err(AttributeError::Conversion(
-                    s.to_string(),
-                    "AttributeIndex".to_string(),
-                ));
-            }
+            s => bail!("unknown attribute indexing type {}", s),
         })
     }
 }
