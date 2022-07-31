@@ -1,22 +1,14 @@
-use std::collections::{BTreeMap, BTreeSet};
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use itertools::Itertools;
 
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::query::compile::{Atom, DatalogProgram};
 use crate::query::graph::{
-    generalized_kahn, Graph, reachable_components, StratifiedGraph, strongly_connected_components,
+    generalized_kahn, reachable_components, strongly_connected_components, Graph, StratifiedGraph,
 };
-
-#[derive(thiserror::Error, Debug)]
-pub enum GraphError {
-    #[error("every program requires an entry named '?'")]
-    EntryNotFound,
-    #[error("the rules #{0:?} form a cycle with negation/aggregation inside, which is unsafe")]
-    GraphNotStratified(BTreeSet<Keyword>),
-}
 
 impl Atom {
     fn contained_rules(&self) -> BTreeMap<&Keyword, bool> {
@@ -86,12 +78,11 @@ fn verify_no_cycle(g: &StratifiedGraph<&'_ Keyword>, sccs: &[BTreeSet<&Keyword>]
         for scc in sccs {
             if scc.contains(k) {
                 for (v, negated) in vs {
-                    if *negated && scc.contains(v) {
-                        return Err(GraphError::GraphNotStratified(
-                            scc.iter().cloned().cloned().collect(),
-                        )
-                            .into());
-                    }
+                    ensure!(
+                        !negated || !scc.contains(v),
+                        "unstratifiable graph: cycle {:?} contains negation or aggregation",
+                        scc
+                    );
                 }
             }
         }
@@ -137,9 +128,10 @@ pub(crate) fn stratify_program(prog: &DatalogProgram) -> Result<Vec<DatalogProgr
     let prog_entry: &Keyword = &PROG_ENTRY;
     let stratified_graph = convert_program_to_graph(&prog);
     let graph = reduce_to_graph(&stratified_graph);
-    if !graph.contains_key(prog_entry) {
-        return Err(GraphError::EntryNotFound.into());
-    }
+    ensure!(
+        graph.contains_key(prog_entry),
+        "program graph does not have an entry"
+    );
 
     // 1. find reachable clauses starting from the query
     let reachable: BTreeSet<_> = reachable_components(&graph, &prog_entry)
@@ -167,9 +159,11 @@ pub(crate) fn stratify_program(prog: &DatalogProgram) -> Result<Vec<DatalogProgr
     // 6. topological sort the reduced graph to get a stratification
     let sort_result = generalized_kahn(&reduced_graph, stratified_graph.len());
     let n_strata = sort_result.len();
-    let invert_sort_result = sort_result.into_iter().enumerate().flat_map(|(stratum, indices)| {
-        indices.into_iter().map(move |idx| (idx, stratum))
-    }).collect::<BTreeMap<_, _>>();
+    let invert_sort_result = sort_result
+        .into_iter()
+        .enumerate()
+        .flat_map(|(stratum, indices)| indices.into_iter().map(move |idx| (idx, stratum)))
+        .collect::<BTreeMap<_, _>>();
     // 7. translate the stratification into datalog program
     let mut ret: Vec<DatalogProgram> = vec![Default::default(); n_strata];
     for (name, ruleset) in prog {

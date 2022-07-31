@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
@@ -31,7 +31,7 @@ pub struct SessionTx {
     pub(crate) attr_by_kw_cache: BTreeMap<Keyword, Option<Attribute>>,
     pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
     pub(crate) eid_by_attr_val_cache:
-    BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
+        BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
     // "touched" requires the id to exist prior to the transaction, and something related to it has changed
     pub(crate) touched_eids: BTreeSet<EntityId>,
 }
@@ -130,8 +130,9 @@ impl SessionTx {
         Ok(())
     }
 
-    pub(crate) fn get_write_tx_id(&self) -> std::result::Result<TxId, TransactError> {
-        self.w_tx_id.ok_or(TransactError::WriteInReadOnly)
+    pub(crate) fn get_write_tx_id(&self) -> Result<TxId> {
+        self.w_tx_id
+            .ok_or_else(|| anyhow!("attempting to write in read-only transaction"))
     }
     pub(crate) fn bounded_scan(&mut self, lower: &[u8], upper: &[u8]) -> DbIter {
         self.tx
@@ -158,24 +159,4 @@ impl SessionTx {
         it.seek_to_end();
         it
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum TransactError {
-    #[error("attribute conflict for {0:?}: {1}")]
-    AttrConflict(AttrId, String),
-    #[error("attribute consistency for {0:?}: {1}")]
-    AttrConsistency(AttrId, String),
-    #[error("attribute not found {0:?}")]
-    AttrNotFound(AttrId),
-    #[error("attribute not found {0}")]
-    AttrNotFoundKw(Keyword),
-    #[error("attempt to write in read-only transaction")]
-    WriteInReadOnly,
-    #[error("attempt to change immutable property for attr {0:?}")]
-    ChangingImmutableProperty(AttrId),
-    #[error("required triple not found for {0:?}, {1:?}")]
-    RequiredTripleNotFound(EntityId, AttrId),
-    #[error("precondition failed for {0:?} {1:?}, expect {2}, got {3}")]
-    PreconditionFailed(EntityId, AttrId, String, String),
 }

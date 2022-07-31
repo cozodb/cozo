@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::ops::Sub;
 
-use anyhow::Result;
+use anyhow::{anyhow, ensure, Result};
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
@@ -35,39 +35,6 @@ use crate::{EntityId, Validity};
 /// ]
 /// ```
 /// we also have `F.is_married(["anne", "brutus"], ["constantine", "delphi"])` for ad-hoc fact rules
-#[derive(Debug, thiserror::Error)]
-pub enum QueryCompilationError {
-    #[error("error parsing query clause {0}: {1}")]
-    UnexpectedForm(JsonValue, String),
-    #[error("arity mismatch for rule {0}: all definitions must have the same arity")]
-    ArityMismatch(Keyword),
-    #[error("encountered undefined rule {0}")]
-    UndefinedRule(Keyword),
-    #[error("safety: unbound variables for rule {0}({1}): needs to return {2:?}, bound {3:?}")]
-    UnsafeUnboundVars(Keyword, usize, BTreeSet<Keyword>, BTreeSet<Keyword>),
-    #[error("program logic error: {0}")]
-    LogicError(String),
-    #[error("entry not found: expect a rule named '?'")]
-    EntryNotFound,
-    #[error("duplicate variables: {0:?}")]
-    DuplicateVariables(Vec<Keyword>),
-    #[error("no entry to program: you must define a rule named '?'")]
-    NoEntryToProgram,
-    #[error("heads for entry must be identical")]
-    EntryHeadsNotIdentical,
-    #[error("required binding not found: {0}")]
-    BindingNotFound(Keyword),
-    #[error("unknown operator '{0}'")]
-    UnknownOperator(String),
-    #[error("op {0} arity mismatch: expected {1} arguments, found {2}")]
-    PredicateArityMismatch(&'static str, usize, usize),
-    #[error("op {0} is not a predicate")]
-    NotAPredicate(&'static str),
-    #[error("unsafe bindings in expression {0:?}: {1:?}")]
-    UnsafeBindingInPredicate(Expr, BTreeSet<Keyword>),
-    #[error("negation safety: all variables {0:?} are unbound")]
-    NegationSafety(Vec<Keyword>),
-}
 
 #[derive(Clone, Debug)]
 pub enum Term<T> {
@@ -364,13 +331,15 @@ impl SessionTx {
                 Atom::Rule(rule_app) => {
                     let (store, arity) = stores
                         .get(&rule_app.name)
-                        .ok_or_else(|| QueryCompilationError::UndefinedRule(rule_app.name.clone()))?
+                        .ok_or_else(|| anyhow!("undefined rule {} encountered", rule_app.name))?
                         .clone();
-                    if arity != rule_app.args.len() {
-                        return Err(
-                            QueryCompilationError::ArityMismatch(rule_app.name.clone()).into()
-                        );
-                    }
+                    ensure!(
+                        arity == rule_app.args.len(),
+                        "arity mismatch in rule application {}, expect {}, found {}",
+                        rule_app.name,
+                        arity,
+                        rule_app.args.len()
+                    );
 
                     let mut prev_joiner_vars = vec![];
                     let mut temp_left_bindings = vec![];
@@ -518,13 +487,12 @@ impl SessionTx {
                                         v_kw.clone()
                                     }
                                 };
-                                if join_right_keys.is_empty() {
-                                    return Err(QueryCompilationError::NegationSafety(vec![
-                                        e_kw.clone(),
-                                        v_kw.clone(),
-                                    ])
-                                    .into());
-                                }
+                                ensure!(
+                                    !join_right_keys.is_empty(),
+                                    "unsafe negation: {} and {} are unbound",
+                                    e_kw,
+                                    v_kw
+                                );
                                 let right =
                                     Relation::triple(a_triple.attr.clone(), vld, e_kw, v_kw);
                                 if ret.is_unit() {
@@ -565,15 +533,16 @@ impl SessionTx {
                         let (store, arity) = stores
                             .get(&rule_app.name)
                             .ok_or_else(|| {
-                                QueryCompilationError::UndefinedRule(rule_app.name.clone())
+                                anyhow!("undefined rule encountered: {}", rule_app.name)
                             })?
                             .clone();
-                        if arity != rule_app.args.len() {
-                            return Err(QueryCompilationError::ArityMismatch(
-                                rule_app.name.clone(),
-                            )
-                            .into());
-                        }
+                        ensure!(
+                            arity == rule_app.args.len(),
+                            "arity mismatch for {}, expect {}, got {}",
+                            rule_app.name,
+                            arity,
+                            rule_app.args.len()
+                        );
 
                         let mut prev_joiner_vars = vec![];
                         let mut temp_left_bindings = vec![];
@@ -633,15 +602,14 @@ impl SessionTx {
         }
 
         let cur_ret_set: BTreeSet<_> = ret.bindings_after_eliminate().into_iter().collect();
-        if cur_ret_set != ret_vars_set {
-            return Err(QueryCompilationError::UnsafeUnboundVars(
-                rule_name.clone(),
-                rule_idx,
-                ret_vars_set,
-                cur_ret_set,
-            )
-            .into());
-        }
+        ensure!(
+            cur_ret_set == ret_vars_set,
+            "unbound variables in rule head for {}.{}: variables required {:?}, of which only {:?} are bound",
+            rule_name,
+            rule_idx,
+            ret_vars_set,
+            cur_ret_set
+        );
         let cur_ret_bindings = ret.bindings_after_eliminate();
         if ret_vars != cur_ret_bindings {
             ret = ret.reorder(ret_vars.to_vec());

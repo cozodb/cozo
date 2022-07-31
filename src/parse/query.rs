@@ -11,8 +11,7 @@ use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::value::DataValue;
 use crate::query::compile::{
-    Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, QueryCompilationError, Rule,
-    RuleApplyAtom, RuleSet, Term,
+    Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, Rule, RuleApplyAtom, RuleSet, Term,
 };
 use crate::query::magic::magic_sets_rewrite;
 use crate::runtime::transact::SessionTx;

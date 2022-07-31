@@ -1,10 +1,9 @@
 use std::sync::atomic::Ordering;
 
-use anyhow::Result;
+use anyhow::{anyhow, bail, ensure, Result};
 
 use cozorocks::{DbIter, IterBuilder};
 
-use crate::AttrTxItem;
 use crate::data::attr::Attribute;
 use crate::data::encode::{
     encode_attr_by_id, encode_sentinel_attr_by_id, encode_sentinel_attr_by_kw, VEC_SIZE_8,
@@ -12,8 +11,9 @@ use crate::data::encode::{
 use crate::data::id::AttrId;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
-use crate::runtime::transact::{SessionTx, TransactError};
+use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
+use crate::AttrTxItem;
 
 impl SessionTx {
     pub fn tx_attrs(&mut self, payloads: Vec<AttrTxItem>) -> Result<Vec<(StoreOp, AttrId)>> {
@@ -97,30 +97,24 @@ impl SessionTx {
         })
     }
 
-    pub(crate) fn all_attrs(&mut self) -> impl Iterator<Item=Result<Attribute>> {
+    pub(crate) fn all_attrs(&mut self) -> impl Iterator<Item = Result<Attribute>> {
         AttrIter::new(self.tx.iterator())
     }
 
     /// conflict if new attribute has same name as existing one
     pub(crate) fn new_attr(&mut self, mut attr: Attribute) -> Result<AttrId> {
-        if attr.cardinality.is_many() && attr.indexing.is_unique_index() {
-            return Err(TransactError::AttrConsistency(
-                attr.id,
-                "cardinality cannot be 'many' for unique or identity attributes".to_string(),
-            )
-                .into());
-        }
+        ensure!(
+            !attr.cardinality.is_many() || !attr.indexing.is_unique_index(),
+            "cardinality cannot be 'many' for unique or identity attributes: {:?}",
+            attr
+        );
 
-        if self.attr_by_kw(&attr.keyword)?.is_some() {
-            return Err(TransactError::AttrConflict(
-                attr.id,
-                format!(
-                    "new attribute conflicts with existing one for alias {}",
-                    attr.keyword
-                ),
-            )
-                .into());
-        }
+        ensure!(
+            self.attr_by_kw(&attr.keyword)?.is_none(),
+            "new attribute conflicts with existing one for alias {}",
+            attr.keyword
+        );
+
         attr.id = AttrId(self.last_attr_id.fetch_add(1, Ordering::AcqRel) + 1);
         self.put_attr(&attr, StoreOp::Assert)
     }
@@ -129,25 +123,24 @@ impl SessionTx {
     /// or if the attr_id doesn't already exist (or retracted),
     /// or if changing immutable properties (cardinality, val_type, indexing)
     pub(crate) fn amend_attr(&mut self, attr: Attribute) -> Result<AttrId> {
-        let existing = self.attr_by_id(attr.id)?.ok_or_else(|| {
-            TransactError::AttrConflict(attr.id, "expected attributed not found".to_string())
-        })?;
+        let existing = self
+            .attr_by_id(attr.id)?
+            .ok_or_else(|| anyhow!("expected attribute id {:?} not found", attr.id))?;
         let tx_id = self.get_write_tx_id()?;
         if existing.keyword != attr.keyword {
-            if self.attr_by_kw(&attr.keyword)?.is_some() {
-                return Err(TransactError::AttrConflict(
-                    attr.id,
-                    format!("alias conflict: {}", attr.keyword),
-                )
-                    .into());
-            }
-            if existing.val_type != attr.val_type
-                || existing.cardinality != attr.cardinality
-                || existing.indexing != attr.indexing
-                || existing.with_history != attr.with_history
-            {
-                return Err(TransactError::ChangingImmutableProperty(attr.id).into());
-            }
+            ensure!(
+                self.attr_by_kw(&attr.keyword)?.is_none(),
+                "attribute alias {} conflict with existing one",
+                attr.keyword
+            );
+            ensure!(
+                existing.val_type == attr.val_type
+                    && existing.cardinality == attr.cardinality
+                    && existing.indexing == attr.indexing
+                    && existing.with_history == attr.with_history,
+                "changing immutable property for {:?}",
+                attr
+            );
             let kw_sentinel = encode_sentinel_attr_by_kw(&existing.keyword);
             let attr_data = existing.encode_with_op_and_tx(StoreOp::Retract, tx_id);
             self.tx.put(&kw_sentinel, &attr_data)?;
@@ -170,11 +163,7 @@ impl SessionTx {
     /// conflict if retracted attr_id doesn't already exist, or is already retracted
     pub(crate) fn retract_attr(&mut self, aid: AttrId) -> Result<AttrId> {
         match self.attr_by_id(aid)? {
-            None => Err(TransactError::AttrConflict(
-                aid,
-                "attempting to retract non-existing attribute".to_string(),
-            )
-                .into()),
+            None => bail!("attempting to retract non-existing attribute {:?}", aid),
             Some(attr) => {
                 self.put_attr(&attr, StoreOp::Retract)?;
                 Ok(attr.id)
@@ -185,7 +174,7 @@ impl SessionTx {
     pub(crate) fn retract_attr_by_kw(&mut self, kw: &Keyword) -> Result<AttrId> {
         let attr = self
             .attr_by_kw(kw)?
-            .ok_or_else(|| TransactError::AttrNotFoundKw(kw.clone()))?;
+            .ok_or_else(|| anyhow!("attribute not found: {}", kw))?;
         self.retract_attr(attr.id)
     }
 }

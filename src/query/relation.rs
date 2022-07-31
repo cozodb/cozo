@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::iter;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
@@ -10,7 +10,6 @@ use crate::data::expr::Expr;
 use crate::data::keyword::Keyword;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
-use crate::query::compile::QueryCompilationError;
 use crate::runtime::temp_store::{TempStore, TempStoreId};
 use crate::runtime::transact::SessionTx;
 use crate::Validity;
@@ -1035,7 +1034,7 @@ impl StoredDerivedRelation {
                     'outer: for found in self.storage.scan_prefix(&prefix) {
                         let found = found?;
                         for (left_idx, right_idx) in
-                        left_join_indices.iter().zip(right_join_indices.iter())
+                            left_join_indices.iter().zip(right_join_indices.iter())
                         {
                             if tuple.0[*left_idx] != found.0[*right_idx] {
                                 continue 'outer;
@@ -1142,7 +1141,7 @@ impl Debug for Joiner {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let left_bindings = BindingFormatter(self.left_keys.clone());
         let right_bindings = BindingFormatter(self.right_keys.clone());
-        write!(f, "{:?}<->{:?}", left_bindings, right_bindings, )
+        write!(f, "{:?}<->{:?}", left_bindings, right_bindings,)
     }
 }
 
@@ -1167,19 +1166,15 @@ impl Joiner {
         for (l, r) in self.left_keys.iter().zip(self.right_keys.iter()) {
             let l_pos = match left_binding_map.get(l) {
                 None => {
-                    return Err(QueryCompilationError::LogicError(format!(
-                        "join key is wrong: left binding for {} not found: left {:?} vs right {:?}, {:?}",
-                        l, left_bindings, right_bindings, self
-                    )).into());
+                    bail!("join key is wrong: left binding for {} not found: left {:?} vs right {:?}, {:?}",
+                        l, left_bindings, right_bindings, self);
                 }
                 Some(p) => p,
             };
             let r_pos = match right_binding_map.get(r) {
                 None => {
-                    return Err(QueryCompilationError::LogicError(format!(
-                        "join key is wrong: right binding for {} not found: left {:?} vs right {:?}, {:?}",
-                        r, left_bindings, right_bindings, self
-                    )).into());
+                    bail!("join key is wrong: right binding for {} not found: left {:?} vs right {:?}, {:?}",
+                        r, left_bindings, right_bindings, self);
                 }
                 Some(p) => p,
             };

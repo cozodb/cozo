@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
@@ -112,15 +112,9 @@ impl TryFrom<&'_ str> for AttributeTyping {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum TypeError {
-    #[error("provided value {1} is not of type {0:?}")]
-    Typing(AttributeTyping, String),
-}
-
 impl AttributeTyping {
-    fn type_err(&self, val: DataValue) -> TypeError {
-        TypeError::Typing(*self, format!("{:?}", val))
+    fn type_err(&self, val: DataValue) -> anyhow::Error {
+        anyhow!("cannot coerce {:?} to {:?}", val, self)
     }
     pub(crate) fn coerce_value(&self, val: DataValue) -> Result<DataValue> {
         match self {

@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
-use anyhow::Result;
+use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use serde_json::json;
 
 use crate::data::attr::AttributeTyping;
 use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
-use crate::query::compile::{DatalogProgram, QueryCompilationError};
+use crate::query::compile::DatalogProgram;
 use crate::query::pull::{CurrentPath, PullSpecs};
 use crate::query::relation::flatten_err;
 use crate::runtime::transact::SessionTx;
@@ -15,12 +15,12 @@ use crate::Validity;
 
 pub(crate) mod compile;
 pub(crate) mod eval;
+pub(crate) mod graph;
+pub(crate) mod logical;
+pub(crate) mod magic;
 pub(crate) mod pull;
 pub(crate) mod relation;
-pub(crate) mod logical;
-pub(crate) mod graph;
 pub(crate) mod stratify;
-pub(crate) mod magic;
 
 impl SessionTx {
     pub fn run_query(&mut self, payload: &JsonValue) -> Result<QueryResult<'_>> {
@@ -28,19 +28,13 @@ impl SessionTx {
             None => Validity::current(),
             Some(v) => Validity::try_from(v)?,
         };
-        let q = payload.get("q").ok_or_else(|| {
-            QueryCompilationError::UnexpectedForm(payload.clone(), "expect key 'q'".to_string())
-        })?;
-        let rules_payload = q.as_array().ok_or_else(|| {
-            QueryCompilationError::UnexpectedForm(q.clone(), "expect array".to_string())
-        })?;
-        if rules_payload.is_empty() {
-            return Err(QueryCompilationError::UnexpectedForm(
-                payload.clone(),
-                "empty rules".to_string(),
-            )
-                .into());
-        }
+        let q = payload
+            .get("q")
+            .ok_or_else(|| anyhow!("expect field 'q' in query {}", payload))?;
+        let rules_payload = q
+            .as_array()
+            .ok_or_else(|| anyhow!("expect field 'q' to be an array in query {}", payload))?;
+        ensure!(!rules_payload.is_empty(), "no rules in {}", payload);
         let prog = if rules_payload.first().unwrap().is_array() {
             let q = json!([{"rule": "?", "args": rules_payload}]);
             self.parse_rule_sets(&q, vld)?
@@ -143,11 +137,7 @@ impl SessionTx {
                         .map(flatten_err),
                 ))
             }
-            Some(v) => Err(QueryCompilationError::UnexpectedForm(
-                v.clone(),
-                "out specification should be an array".to_string(),
-            )
-                .into()),
+            Some(v) => bail!("out spec should be an array, found {}", v),
         }
     }
     fn parse_pull_specs_for_query(
@@ -174,47 +164,30 @@ impl SessionTx {
                         let kw = Keyword::from(s as &str);
                         let idx = *entry_bindings
                             .get(&kw)
-                            .ok_or_else(|| QueryCompilationError::BindingNotFound(kw.clone()))?;
+                            .ok_or_else(|| anyhow!("binding {} not found", kw))?;
                         Ok((idx, None))
                     }
                     JsonValue::Object(m) => {
                         let kw = m
                             .get("pull")
-                            .ok_or_else(|| {
-                                QueryCompilationError::UnexpectedForm(
-                                    JsonValue::Object(m.clone()),
-                                    "expect key 'pull'".to_string(),
-                                )
-                            })?
+                            .ok_or_else(|| anyhow!("expect field 'pull' in {:?}", m))?
                             .as_str()
-                            .ok_or_else(|| {
-                                QueryCompilationError::UnexpectedForm(
-                                    JsonValue::Object(m.clone()),
-                                    "expect key 'pull' to have a binding as value".to_string(),
-                                )
-                            })?;
+                            .ok_or_else(|| anyhow!("expect 'pull' to be a binding in {:?}", m))?;
                         let kw = Keyword::from(kw);
                         let idx = *entry_bindings
                             .get(&kw)
-                            .ok_or_else(|| QueryCompilationError::BindingNotFound(kw.clone()))?;
-                        let spec = m.get("spec").ok_or_else(|| {
-                            QueryCompilationError::UnexpectedForm(
-                                JsonValue::Object(m.clone()),
-                                "expect key 'spec'".to_string(),
-                            )
-                        })?;
+                            .ok_or_else(|| anyhow!("binding {} not found", kw))?;
+                        let spec = m
+                            .get("spec")
+                            .ok_or_else(|| anyhow!("expect field 'spec' in {:?}", m))?;
                         let specs = self.parse_pull(spec, 0)?;
                         Ok((idx, Some(specs)))
                     }
-                    v => Err(QueryCompilationError::UnexpectedForm(
-                        v.clone(),
-                        "expect binding or map".to_string(),
-                    )
-                        .into()),
+                    v => bail!("expect binding or map, got {:?}", v),
                 }
             })
             .try_collect()
     }
 }
 
-pub type QueryResult<'a> = Box<dyn Iterator<Item=Result<JsonValue>> + 'a>;
+pub type QueryResult<'a> = Box<dyn Iterator<Item = Result<JsonValue>> + 'a>;

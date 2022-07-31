@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use log::{debug, log_enabled, trace, Level};
 
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::query::compile::{
-    BindingHeadFormatter, BindingHeadTerm, DatalogProgram, QueryCompilationError,
+    BindingHeadFormatter, BindingHeadTerm, DatalogProgram,
 };
 use crate::query::magic::magic_sets_rewrite;
 use crate::query::relation::Relation;
@@ -28,7 +28,7 @@ impl SessionTx {
             .collect::<BTreeMap<_, _>>();
         let ret_area = stores
             .get(&PROG_ENTRY)
-            .ok_or(QueryCompilationError::EntryNotFound)?
+            .ok_or_else(|| anyhow!("program entry not found in rules"))?
             .0
             .clone();
 
