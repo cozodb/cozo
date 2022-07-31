@@ -10,7 +10,6 @@ use crate::data::expr::{get_op, Expr};
 use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::value::DataValue;
-use crate::parse::triple::TxError;
 use crate::query::compile::{
     Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, QueryCompilationError, Rule,
     RuleApplyAtom, RuleSet, Term,
@@ -418,7 +417,9 @@ impl SessionTx {
         );
         let (k, v) = m.iter().next().unwrap();
         let kw = Keyword::from(k as &str);
-        let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
+        let attr = self
+            .attr_by_kw(&kw)?
+            .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
         ensure!(
             attr.indexing.is_unique_index(),
             "pull inside query must use unique index, of which {} is not",
@@ -495,7 +496,9 @@ impl SessionTx {
         match attr_rep {
             JsonValue::String(s) => {
                 let kw = Keyword::from(s as &str);
-                let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
+                let attr = self
+                    .attr_by_kw(&kw)?
+                    .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
                 Ok(attr)
             }
             v => bail!("expect attribute keyword for triple atom, got {}", v),

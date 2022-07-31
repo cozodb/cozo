@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use anyhow::Result;
+use anyhow::{anyhow, bail, ensure, Result};
 use serde_json::Map;
 
 use crate::data::attr::{Attribute, AttributeIndex, AttributeTyping};
@@ -42,22 +42,6 @@ impl Display for TxAction {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum TxError {
-    #[error("Error decoding {0}: {1}")]
-    Decoding(JsonValue, String),
-    #[error("triple length error")]
-    TripleLength,
-    #[error("attribute not found: {0}")]
-    AttrNotFound(Keyword),
-    #[error("wrong specification of entity id {0}: {1}")]
-    EntityId(u64, String),
-    #[error("invalid action {0:?}: {1}")]
-    InvalidAction(TxAction, String),
-    #[error("temp id does not occur in head position: {0}")]
-    TempIdNoHead(String),
-}
-
 #[derive(Default)]
 pub(crate) struct TempIdCtx {
     store: BTreeMap<String, (EntityId, bool)>,
@@ -67,9 +51,11 @@ pub(crate) struct TempIdCtx {
 impl TempIdCtx {
     fn validate_usage(&self) -> Result<()> {
         for (k, (_, b)) in self.store.iter() {
-            if !*b {
-                return Err(TxError::TempIdNoHead(k.to_string()).into());
-            }
+            ensure!(
+                *b,
+                "defining temp id {} in non-head position is not allowed",
+                k
+            );
         }
         Ok(())
     }
@@ -124,23 +110,15 @@ impl SessionTx {
     /// }
     /// ```
     /// nesting is allowed for values of type `ref` and `component`
-    pub fn parse_tx_requests(
-        &mut self,
-        req: &JsonValue,
-    ) -> Result<(Vec<Quintuple>, String)> {
+    pub fn parse_tx_requests(&mut self, req: &JsonValue) -> Result<(Vec<Quintuple>, String)> {
         let map = req
             .as_object()
-            .ok_or_else(|| TxError::Decoding(req.clone(), "expected object".to_string()))?;
+            .ok_or_else(|| anyhow!("expect tx request to be an object, got {}", req))?;
         let items = map
             .get("tx")
-            .ok_or_else(|| TxError::Decoding(req.clone(), "expected field 'tx'".to_string()))?
+            .ok_or_else(|| anyhow!("expect field 'tx' in tx request object {}", req))?
             .as_array()
-            .ok_or_else(|| {
-                TxError::Decoding(
-                    req.clone(),
-                    "expected field 'tx' to be an array".to_string(),
-                )
-            })?;
+            .ok_or_else(|| anyhow!("expect field 'tx' to be an array in {}", req))?;
         let default_since = match map.get("since") {
             None => Validity::current(),
             Some(v) => v.try_into()?,
@@ -166,7 +144,7 @@ impl SessionTx {
     ) -> Result<()> {
         let item = item
             .as_object()
-            .ok_or_else(|| TxError::Decoding(item.clone(), "expected object".to_string()))?;
+            .ok_or_else(|| anyhow!("expect tx request item to be an object, got {}", item))?;
         let (inner, action) = {
             if let Some(inner) = item.get("put") {
                 (inner, TxAction::Put)
@@ -175,11 +153,10 @@ impl SessionTx {
             } else if let Some(inner) = item.get("ensure") {
                 (inner, TxAction::Ensure)
             } else {
-                return Err(TxError::Decoding(
-                    JsonValue::Object(item.clone()),
-                    "expect any of the keys 'put', 'retract', 'erase', 'ensure'".to_string(),
-                )
-                    .into());
+                bail!(
+                    "expect key 'put', 'retract', 'erase' or 'ensure' in tx request object, got {:?}",
+                    item
+                );
             }
         };
         let since = match item.get("since") {
@@ -196,7 +173,7 @@ impl SessionTx {
                 .map(|_| ());
         }
 
-        Err(TxError::Decoding(inner.clone(), "expected object or array".to_string()).into())
+        bail!("expect object or array for tx object item, got {}", inner);
     }
     fn parse_tx_request_inner<'a>(
         &mut self,
@@ -224,13 +201,11 @@ impl SessionTx {
             return Ok(());
         }
 
-        if !eid.is_perm() && action != TxAction::Put {
-            return Err(TxError::InvalidAction(
-                action,
-                "using temp id instead of perm id".to_string(),
-            )
-                .into());
-        }
+        ensure!(
+            action == TxAction::Put || eid.is_perm(),
+            "using temp id instead of perm id for op {} is not allow",
+            action
+        );
 
         let v = if let JsonValue::Object(inner) = value {
             self.parse_tx_component(attr, inner, action, since, temp_id_ctx, collected)?
@@ -259,19 +234,15 @@ impl SessionTx {
         temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple>,
     ) -> Result<DataValue> {
-        if action != TxAction::Put {
-            return Err(TxError::InvalidAction(
-                action,
-                "component shorthand cannot be used".to_string(),
-            )
-                .into());
-        }
+        ensure!(
+            action == TxAction::Put,
+            "component shorthand can only be use for 'put', got {}",
+            action
+        );
         let (eid, has_unique_attr) =
             self.parse_tx_request_obj(comp, true, action, since, temp_id_ctx, collected)?;
-        if !has_unique_attr && parent_attr.val_type != AttributeTyping::Component {
-            return Err(TxError::InvalidAction(action,
-                                              "component shorthand must contain at least one unique/identity field for non-component refs".to_string()).into());
-        }
+        ensure!(has_unique_attr || parent_attr.val_type == AttributeTyping::Component,
+            "component shorthand must contain at least one unique/identity field for non-component refs");
         Ok(DataValue::EnId(eid))
     }
     fn parse_tx_request_arr<'a>(
@@ -284,22 +255,16 @@ impl SessionTx {
     ) -> Result<()> {
         match item {
             [eid] => {
-                if action != TxAction::Retract {
-                    return Err(TxError::InvalidAction(
-                        action,
-                        "singlet only allowed for 'retract'".to_string(),
-                    )
-                        .into());
-                }
-                let eid = eid.as_u64().ok_or_else(|| {
-                    TxError::Decoding(eid.clone(), "cannot parse as entity id".to_string())
-                })?;
+                ensure!(
+                    action == TxAction::Retract,
+                    "singlet action only allowed for 'retract', got {}",
+                    action
+                );
+                let eid = eid
+                    .as_u64()
+                    .ok_or_else(|| anyhow!("cannot parse {} as entity id", eid))?;
                 let eid = EntityId(eid);
-                if !eid.is_perm() {
-                    return Err(
-                        TxError::EntityId(eid.0, "expected perm entity id".to_string()).into(),
-                    );
-                }
+                ensure!(eid.is_perm(), "expected perm entity id, got {:?}", eid);
                 collected.push(Quintuple {
                     triple: Triple {
                         id: eid,
@@ -312,25 +277,21 @@ impl SessionTx {
                 Ok(())
             }
             [eid, attr] => {
-                if action != TxAction::Retract {
-                    return Err(TxError::InvalidAction(
-                        action,
-                        "doublet only allowed for 'retract'".to_string(),
-                    )
-                        .into());
-                }
+                ensure!(
+                    action == TxAction::Retract,
+                    "double only allowed for 'retract', got {}",
+                    action
+                );
                 let kw: Keyword = attr.try_into()?;
-                let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
+                let attr = self
+                    .attr_by_kw(&kw)?
+                    .ok_or_else(|| anyhow!("attribute not found {}", kw))?;
 
-                let eid = eid.as_u64().ok_or_else(|| {
-                    TxError::Decoding(eid.clone(), "cannot parse as entity id".to_string())
-                })?;
+                let eid = eid
+                    .as_u64()
+                    .ok_or_else(|| anyhow!("cannot parse {} as entity id", eid))?;
                 let eid = EntityId(eid);
-                if !eid.is_perm() {
-                    return Err(
-                        TxError::EntityId(eid.0, "expected perm entity id".to_string()).into(),
-                    );
-                }
+                ensure!(eid.is_perm(), "expect perm entity id, got {:?}", eid);
                 collected.push(Quintuple {
                     triple: Triple {
                         id: eid,
@@ -345,7 +306,7 @@ impl SessionTx {
             [eid, attr_kw, val] => {
                 self.parse_tx_triple(eid, attr_kw, val, action, since, temp_id_ctx, collected)
             }
-            _ => Err(TxError::TripleLength.into()),
+            arr => bail!("bad triple in tx: {:?}", arr),
         }
     }
     fn parse_tx_triple<'a>(
@@ -359,7 +320,9 @@ impl SessionTx {
         collected: &mut Vec<Quintuple>,
     ) -> Result<()> {
         let kw: Keyword = attr_kw.try_into()?;
-        let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
+        let attr = self
+            .attr_by_kw(&kw)?
+            .ok_or_else(|| anyhow!("attribute not found: {}", kw))?;
         if attr.cardinality.is_many() && attr.val_type != AttributeTyping::List && val.is_array() {
             for cur_val in val.as_array().unwrap() {
                 self.parse_tx_triple(eid, attr_kw, cur_val, action, since, temp_id_ctx, collected)?;
@@ -378,9 +341,7 @@ impl SessionTx {
                 None => {
                     if let Some(i) = eid.as_u64() {
                         let id = EntityId(i);
-                        if !id.is_perm() {
-                            return Err(TxError::EntityId(id.0, "temp id specified".into()).into());
-                        }
+                        ensure!(id.is_perm(), "temp id not allowed here, found {:?}", id);
                         id
                     } else if let Some(s) = eid.as_str() {
                         temp_id_ctx.str2tempid(s, true)
@@ -391,23 +352,19 @@ impl SessionTx {
                 Some(existing_id) => {
                     if let Some(i) = eid.as_u64() {
                         let id = EntityId(i);
-                        if !id.is_perm() {
-                            return Err(TxError::EntityId(id.0, "temp id specified".into()).into());
-                        }
-                        if existing_id != id {
-                            return Err(TxError::EntityId(
-                                id.0,
-                                "conflicting id for identity value".into(),
-                            )
-                                .into());
-                        }
+                        ensure!(id.is_perm(), "temp id not allowed here, found {:?}", id);
+                        ensure!(
+                            existing_id == id,
+                            "conflicting id for identity value: {:?} vs {:?}",
+                            existing_id,
+                            id
+                        );
                         id
                     } else if eid.is_string() {
-                        return Err(TxError::EntityId(
-                            existing_id.0,
-                            "specifying temp_id string together with unique constraint".into(),
-                        )
-                            .into());
+                        bail!(
+                            "specifying temp_id string {} together with unique constraint",
+                            eid
+                        );
                     } else {
                         existing_id
                     }
@@ -415,9 +372,7 @@ impl SessionTx {
             }
         } else if let Some(i) = eid.as_u64() {
             let id = EntityId(i);
-            if !id.is_perm() {
-                return Err(TxError::EntityId(id.0, "temp id specified".into()).into());
-            }
+            ensure!(id.is_perm(), "temp id not allowed here, found {:?}", id);
             id
         } else if let Some(s) = eid.as_str() {
             temp_id_ctx.str2tempid(s, true)
@@ -453,7 +408,7 @@ impl SessionTx {
                 let kw = (k as &str).into();
                 let attr = self
                     .attr_by_kw(&kw)?
-                    .ok_or_else(|| TxError::AttrNotFound(kw.clone()))?;
+                    .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
                 has_unique_attr = has_unique_attr || attr.indexing.is_unique_index();
                 has_identity_attr = has_identity_attr || attr.indexing == AttributeIndex::Identity;
                 if attr.indexing == AttributeIndex::Identity {
@@ -474,13 +429,12 @@ impl SessionTx {
                         None => {}
                         Some(existing_eid) => {
                             if let Some(prev_eid) = eid {
-                                if existing_eid != prev_eid {
-                                    return Err(TxError::EntityId(
-                                        existing_eid.0,
-                                        "conflicting entity id given".to_string(),
-                                    )
-                                        .into());
-                                }
+                                ensure!(
+                                    existing_eid == prev_eid,
+                                    "conflicting entity id: {:?} vs {:?}",
+                                    existing_eid,
+                                    prev_eid
+                                );
                             }
                             eid = Some(existing_eid)
                         }
@@ -490,62 +444,52 @@ impl SessionTx {
             }
         }
         if let Some(given_id) = item.get(PERM_ID_FIELD) {
-            let given_id = given_id.as_u64().ok_or_else(|| {
-                TxError::Decoding(
-                    given_id.clone(),
-                    "unable to interpret as entity id".to_string(),
-                )
-            })?;
+            let given_id = given_id
+                .as_u64()
+                .ok_or_else(|| anyhow!("unable to interpret {} as entity id", given_id))?;
             let given_id = EntityId(given_id);
-            if !given_id.is_perm() {
-                return Err(TxError::EntityId(
-                    given_id.0,
-                    "temp id given where perm id is required".to_string(),
-                )
-                    .into());
-            }
+            ensure!(
+                given_id.is_perm(),
+                "temp id not allowed here, found {:?}",
+                given_id
+            );
             if let Some(prev_id) = eid {
-                if prev_id != given_id {
-                    return Err(TxError::EntityId(
-                        given_id.0,
-                        "conflicting entity id given".to_string(),
-                    )
-                        .into());
-                }
+                ensure!(
+                    prev_id == given_id,
+                    "conflicting entity id give: {:?} vs {:?}",
+                    prev_id,
+                    given_id
+                );
             }
             eid = Some(given_id);
         }
         if let Some(temp_id) = item.get(TEMP_ID_FIELD) {
-            if let Some(eid_inner) = eid {
-                return Err(TxError::EntityId(
-                    eid_inner.0,
-                    "conflicting entity id given".to_string(),
-                )
-                    .into());
-            }
-            let temp_id_str = temp_id.as_str().ok_or_else(|| {
-                TxError::Decoding(
-                    temp_id.clone(),
-                    "unable to interpret as temp id".to_string(),
-                )
-            })?;
+            ensure!(
+                eid.is_none(),
+                "conflicting entity id given: {:?} vs {}",
+                eid.unwrap(),
+                temp_id
+            );
+            let temp_id_str = temp_id
+                .as_str()
+                .ok_or_else(|| anyhow!("unable to interpret {} as temp id", temp_id))?;
             eid = Some(temp_id_ctx.str2tempid(temp_id_str, true));
         }
         let eid = match eid {
             Some(eid) => eid,
             None => temp_id_ctx.unnamed_tempid(),
         };
-        if action != TxAction::Put && !eid.is_perm() {
-            return Err(TxError::InvalidAction(action, "temp id not allowed".to_string()).into());
-        }
+        ensure!(
+            action == TxAction::Put || eid.is_perm(),
+            "temp id {:?} not allowed for {}",
+            eid,
+            action
+        );
         if !is_sub_component {
-            if action == TxAction::Put && eid.is_perm() && !has_identity_attr {
-                return Err(TxError::InvalidAction(
-                    action,
-                    "upsert requires identity attribute present".to_string(),
-                )
-                    .into());
-            }
+            ensure!(
+                action != TxAction::Put || !eid.is_perm() || has_identity_attr,
+                "upsert requires identity attribute present"
+            );
             for (attr, v) in pairs {
                 self.parse_tx_request_inner(eid, &attr, v, action, since, temp_id_ctx, collected)?;
             }
@@ -555,13 +499,11 @@ impl SessionTx {
             }
         } else {
             for (attr, _v) in pairs {
-                if !attr.indexing.is_unique_index() {
-                    return Err(TxError::InvalidAction(
-                        action,
-                        "cannot use non-unique fields to specify entity".to_string(),
-                    )
-                        .into());
-                }
+                ensure!(
+                    attr.indexing.is_unique_index(),
+                    "cannot use non-unique attribute {} to specify entity",
+                    attr.keyword
+                );
             }
         }
         Ok((eid, has_unique_attr))

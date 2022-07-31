@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
@@ -15,58 +15,43 @@ impl AttrTxItem {
     pub fn parse_request(req: &JsonValue) -> Result<(Vec<AttrTxItem>, String)> {
         let map = req
             .as_object()
-            .ok_or_else(|| AttrTxItemError::Decoding(req.clone(), "expected object".to_string()))?;
+            .ok_or_else(|| anyhow!("expect object, got {}", req))?;
         let comment = match map.get("comment") {
             None => "".to_string(),
             Some(c) => c.to_string(),
         };
-        let items = map.get("attrs").ok_or_else(|| {
-            AttrTxItemError::Decoding(req.clone(), "expected key 'attrs'".to_string())
-        })?;
-        let items = items.as_array().ok_or_else(|| {
-            AttrTxItemError::Decoding(items.clone(), "expected array".to_string())
-        })?;
-        if items.is_empty() {
-            return Err(AttrTxItemError::Decoding(
-                req.clone(),
-                "'attrs' cannot be empty".to_string(),
-            )
-                .into());
-        }
+        let items = map
+            .get("attrs")
+            .ok_or_else(|| anyhow!("expect key 'attrs' in {:?}", map))?;
+        let items = items
+            .as_array()
+            .ok_or_else(|| anyhow!("expect array for value of key 'attrs', got {:?}", items))?;
+        ensure!(
+            !items.is_empty(),
+            "array for value of key 'attrs' must be non-empty"
+        );
         let res = items.iter().map(AttrTxItem::try_from).try_collect()?;
         Ok((res, comment))
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum AttrTxItemError {
-    #[error("Error decoding {0}: {1}")]
-    Decoding(JsonValue, String),
 }
 
 impl TryFrom<&'_ JsonValue> for AttrTxItem {
     type Error = anyhow::Error;
 
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
-        let map = value.as_object().ok_or_else(|| {
-            AttrTxItemError::Decoding(value.clone(), "expected object".to_string())
-        })?;
-        if map.len() != 1 {
-            return Err(AttrTxItemError::Decoding(
-                value.clone(),
-                "object must have exactly one field".to_string(),
-            )
-                .into());
-        }
+        let map = value
+            .as_object()
+            .ok_or_else(|| anyhow!("expect object for attribute tx, got {}", value))?;
+        ensure!(
+            map.len() == 1,
+            "attr definition must have exactly one pair, got {}",
+            value
+        );
         let (k, v) = map.into_iter().next().unwrap();
         let op = match k as &str {
             "put" => StoreOp::Assert,
             "retract" => StoreOp::Retract,
-            _ => {
-                return Err(
-                    AttrTxItemError::Decoding(value.clone(), format!("unknown op {}", k)).into(),
-                );
-            }
+            _ => bail!("unknown op {} for attribute tx", k),
         };
 
         let attr = Attribute::try_from(v)?;

@@ -8,7 +8,6 @@ use crate::data::attr::AttributeCardinality;
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
-use crate::parse::triple::TxError;
 use crate::query::pull::{AttrPullSpec, PullSpec, PullSpecs};
 use crate::runtime::transact::SessionTx;
 
@@ -42,7 +41,9 @@ impl SessionTx {
                 } else {
                     input_kw.clone()
                 };
-                let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
+                let attr = self
+                    .attr_by_kw(&kw)?
+                    .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
                 let cardinality = attr.cardinality;
                 Ok(PullSpec::Attr(AttrPullSpec {
                     attr,
@@ -160,7 +161,9 @@ impl SessionTx {
         } else {
             input_kw.clone()
         };
-        let attr = self.attr_by_kw(&kw)?.ok_or(TxError::AttrNotFound(kw))?;
+        let attr = self
+            .attr_by_kw(&kw)?
+            .ok_or_else(|| anyhow!("attribute not found: {}", kw))?;
         let cardinality = cardinality_override.unwrap_or(attr.cardinality);
         let nested = self.parse_pull(&JsonValue::Array(sub_target), depth + 1)?;
 
