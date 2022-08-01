@@ -13,30 +13,30 @@ impl NormalFormRule {
 
         for atom in self.body {
             match atom {
-                a @ NormalFormAtom::Unification(ref u) => {
+                NormalFormAtom::Unification(u) => {
                     if u.is_const() {
                         seen_variables.insert(u.binding.clone());
-                        round_1_collected.push(a);
+                        round_1_collected.push(NormalFormAtom::Unification(u));
                     } else {
                         let unif_vars = u.bindings_in_expr();
                         if unif_vars.is_subset(&seen_variables) {
                             seen_variables.insert(u.binding.clone());
-                            round_1_collected.push(a);
+                            round_1_collected.push(NormalFormAtom::Unification(u));
                         } else {
-                            pending.push(a);
+                            pending.push(NormalFormAtom::Unification(u));
                         }
                     }
                 }
-                a @ NormalFormAtom::AttrTriple(ref t) => {
+                NormalFormAtom::AttrTriple(t) => {
                     seen_variables.insert(t.value.clone());
                     seen_variables.insert(t.entity.clone());
-                    round_1_collected.push(a);
+                    round_1_collected.push(NormalFormAtom::AttrTriple(t));
                 }
-                a @ NormalFormAtom::Rule(ref r) => {
+                NormalFormAtom::Rule(r) => {
                     for arg in &r.args {
                         seen_variables.insert(arg.clone());
                     }
-                    round_1_collected.push(a)
+                    round_1_collected.push(NormalFormAtom::Rule(r))
                 }
                 a @ (NormalFormAtom::NegatedAttrTriple(_)
                 | NormalFormAtom::NegatedRule(_)
@@ -54,54 +54,54 @@ impl NormalFormRule {
             mem::swap(&mut last_pending, &mut pending);
             pending.clear();
             match atom {
-                a @ NormalFormAtom::AttrTriple(ref t) => {
+                NormalFormAtom::AttrTriple(t) => {
                     seen_variables.insert(t.value.clone());
                     seen_variables.insert(t.entity.clone());
-                    collected.push(a)
+                    collected.push(NormalFormAtom::AttrTriple(t))
                 }
-                a @ NormalFormAtom::Rule(ref r) => {
+                NormalFormAtom::Rule(r) => {
                     seen_variables.extend(r.args.iter().cloned());
-                    collected.push(a)
+                    collected.push(NormalFormAtom::Rule(r))
                 }
-                a @ (NormalFormAtom::NegatedAttrTriple(_)
+                NormalFormAtom::NegatedAttrTriple(_)
                 | NormalFormAtom::NegatedRule(_)
-                | NormalFormAtom::Predicate(_)) => {
+                | NormalFormAtom::Predicate(_) => {
                     unreachable!()
                 }
-                a @ NormalFormAtom::Unification(ref u) => {
+                NormalFormAtom::Unification(u) => {
                     seen_variables.insert(u.binding.clone());
-                    collected.push(a);
+                    collected.push(NormalFormAtom::Unification(u));
                 }
             }
-            for atom in last_pending {
+            for atom in last_pending.iter() {
                 match atom {
                     NormalFormAtom::AttrTriple(_) | NormalFormAtom::Rule(_) => unreachable!(),
-                    a @ NormalFormAtom::NegatedAttrTriple(ref t) => {
+                    NormalFormAtom::NegatedAttrTriple(t) => {
                         if seen_variables.contains(&t.value) && seen_variables.contains(&t.entity) {
-                            collected.push(a);
+                            collected.push(NormalFormAtom::NegatedAttrTriple(t.clone()));
                         } else {
-                            pending.push(a);
+                            pending.push(NormalFormAtom::NegatedAttrTriple(t.clone()));
                         }
                     }
-                    a @ NormalFormAtom::NegatedRule(ref r) => {
-                        if r.args.iter().map(|a| seen_variables.contains(a)).all() {
-                            collected.push(a);
+                    NormalFormAtom::NegatedRule(r) => {
+                        if r.args.iter().all(|a| seen_variables.contains(a)) {
+                            collected.push(NormalFormAtom::NegatedRule(r.clone()));
                         } else {
-                            pending.push(a);
+                            pending.push(NormalFormAtom::NegatedRule(r.clone()));
                         }
                     }
-                    a @ NormalFormAtom::Predicate(ref p) => {
+                    NormalFormAtom::Predicate(p) => {
                         if p.bindings().is_subset(&seen_variables) {
-                            collected.push(a);
+                            collected.push(NormalFormAtom::Predicate(p.clone()));
                         } else {
-                            pending.push(a);
+                            pending.push(NormalFormAtom::Predicate(p.clone()));
                         }
                     }
-                    a @ NormalFormAtom::Unification(ref u) => {
+                    NormalFormAtom::Unification(u) => {
                         if u.bindings_in_expr().is_subset(&seen_variables) {
-                            collected.push(a);
+                            collected.push(NormalFormAtom::Unification(u.clone()));
                         } else {
-                            pending.push(a);
+                            pending.push(NormalFormAtom::Unification(u.clone()));
                         }
                     }
                 }

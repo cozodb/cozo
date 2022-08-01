@@ -1,6 +1,6 @@
 use std::cmp::max;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
 use serde_json::Map;
 

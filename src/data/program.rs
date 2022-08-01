@@ -1,12 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
-use itertools::Itertools;
 use smallvec::SmallVec;
-use smartstring::{LazyCompact, SmartString};
 
 use crate::data::attr::Attribute;
-use crate::data::expr::{Expr, Op};
+use crate::data::expr::Expr;
 use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
 use crate::{EntityId, Validity};
@@ -61,55 +59,60 @@ impl InputProgram {
 #[derive(Debug, Clone)]
 pub(crate) struct StratifiedNormalFormProgram(pub(crate) Vec<NormalFormProgram>);
 
-impl StratifiedNormalFormProgram {
-    pub(crate) fn magic_sets_rewrite(self) -> Result<StratifiedMagicProgram> {
-        Ok(StratifiedMagicProgram(
-            self.0
-                .into_iter()
-                .map(|p| p.magic_sets_rewrite())
-                .try_collect()?,
-        ))
-    }
-}
-
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NormalFormProgram {
     pub(crate) prog: BTreeMap<Keyword, Vec<NormalFormRule>>,
 }
 
-impl NormalFormProgram {
-    pub(crate) fn magic_sets_rewrite(self) -> Result<MagicProgram> {
-        todo!()
-    }
-}
-
 #[derive(Debug, Clone)]
-pub(crate) struct StratifiedMagicProgram(Vec<MagicProgram>);
+pub(crate) struct StratifiedMagicProgram(pub(crate) Vec<MagicProgram>);
 
 #[derive(Debug, Clone)]
 pub(crate) struct MagicProgram {
-    prog: BTreeMap<MagicKeyword, Vec<MagicRule>>,
-    keep_rules: Vec<Keyword>,
+    pub(crate) prog: BTreeMap<MagicKeyword, Vec<MagicRule>>,
 }
 
-#[derive(Clone, Debug)]
-enum MagicKeyword {
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+pub(crate) enum MagicKeyword {
     Muggle {
-        name: SmartString<LazyCompact>,
+        inner: Keyword,
     },
     Magic {
-        name: SmartString<LazyCompact>,
+        inner: Keyword,
         adornment: SmallVec<[bool; 8]>,
     },
     Input {
-        to: SmartString<LazyCompact>,
+        inner: Keyword,
         adornment: SmallVec<[bool; 8]>,
     },
     Sup {
-        deriving: SmartString<LazyCompact>,
+        inner: Keyword,
+        adornment: SmallVec<[bool; 8]>,
         rule_idx: u16,
         sup_idx: u16,
     },
+}
+
+impl MagicKeyword {
+    pub(crate) fn as_keyword(&self) -> &Keyword {
+        match self {
+            MagicKeyword::Muggle { inner, .. }
+            | MagicKeyword::Magic { inner, .. }
+            | MagicKeyword::Input { inner, .. }
+            | MagicKeyword::Sup { inner, .. } => inner,
+        }
+    }
+    pub(crate) fn magic_adornment(&self) -> &[bool] {
+        match self {
+            MagicKeyword::Muggle { .. } => &[],
+            MagicKeyword::Magic { adornment, .. }
+            | MagicKeyword::Input { adornment, .. }
+            | MagicKeyword::Sup { adornment, .. } => adornment,
+        }
+    }
+    pub(crate) fn has_bound_adornment(&self) -> bool {
+        self.magic_adornment().iter().any(|b| *b)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -168,7 +171,8 @@ pub(crate) enum MagicAtom {
     AttrTriple(MagicAttrTripleAtom),
     Rule(MagicRuleApplyAtom),
     Predicate(Expr),
-    Negation(Box<MagicAtom>),
+    NegatedAttrTriple(MagicAttrTripleAtom),
+    NegatedRule(MagicRuleApplyAtom),
     Unification(Unification),
 }
 
@@ -188,11 +192,11 @@ pub struct NormalFormAttrTripleAtom {
 
 #[derive(Debug, Clone)]
 pub(crate) struct MagicAttrTripleAtom {
-    attr: Attribute,
-    entity: Keyword,
-    value: Keyword,
-    entity_is_bound: bool,
-    value_is_bound: bool,
+    pub(crate) attr: Attribute,
+    pub(crate) entity: Keyword,
+    pub(crate) value: Keyword,
+    pub(crate) entity_is_bound: bool,
+    pub(crate) value_is_bound: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -209,8 +213,8 @@ pub struct NormalFormRuleApplyAtom {
 
 #[derive(Clone, Debug)]
 pub(crate) struct MagicRuleApplyAtom {
-    name: MagicKeyword,
-    args: Vec<Keyword>,
+    pub(crate) name: MagicKeyword,
+    pub(crate) args: Vec<Keyword>,
 }
 
 #[derive(Clone, Debug)]
@@ -227,7 +231,7 @@ pub struct Unification {
 
 impl Unification {
     pub(crate) fn is_const(&self) -> bool {
-        matches!(self, Expr::Const(_))
+        matches!(self.expr, Expr::Const(_))
     }
     pub(crate) fn bindings_in_expr(&self) -> BTreeSet<Keyword> {
         self.expr.bindings()
