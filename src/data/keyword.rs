@@ -1,12 +1,9 @@
 use std::fmt::{Debug, Display, Formatter};
-use std::str::Utf8Error;
 
 use anyhow::{ensure, Result};
 use lazy_static::lazy_static;
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
-
-use crate::data::json::JsonValue;
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Deserialize, Serialize, Hash)]
 pub struct Keyword(pub(crate) SmartString<LazyCompact>);

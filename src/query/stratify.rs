@@ -5,10 +5,24 @@ use anyhow::{ensure, Result};
 use itertools::Itertools;
 
 use crate::data::keyword::{Keyword, PROG_ENTRY};
+use crate::data::program::{NormalFormAtom, NormalFormProgram, StratifiedNormalFormProgram};
 use crate::query::compile::{Atom, DatalogProgram};
 use crate::query::graph::{
     generalized_kahn, reachable_components, strongly_connected_components, Graph, StratifiedGraph,
 };
+
+impl NormalFormAtom {
+    fn contained_rules(&self) -> BTreeMap<&Keyword, bool> {
+        match self {
+            NormalFormAtom::AttrTriple(_)
+            | NormalFormAtom::Predicate(_)
+            | NormalFormAtom::Unification(_)
+            | NormalFormAtom::NegatedAttrTriple(_) => Default::default(),
+            NormalFormAtom::Rule(r) => BTreeMap::from([(&r.name, false)]),
+            NormalFormAtom::NegatedRule(r) => BTreeMap::from([(&r.name, true)]),
+        }
+    }
+}
 
 impl Atom {
     fn contained_rules(&self) -> BTreeMap<&Keyword, bool> {
@@ -22,24 +36,38 @@ impl Atom {
                 .collect(),
             Atom::Conjunction(_args) | Atom::Disjunction(_args) => {
                 panic!("expect program in disjunctive normal form");
-                // let mut ret: BTreeMap<&Keyword, bool> = Default::default();
-                // for arg in args {
-                //     for (k, v) in arg.contained_rules() {
-                //         match ret.entry(k) {
-                //             Entry::Vacant(e) => {
-                //                 e.insert(v);
-                //             }
-                //             Entry::Occupied(mut e) => {
-                //                 let old = *e.get();
-                //                 e.insert(old || v);
-                //             }
-                //         }
-                //     }
-                // }
-                // ret
             }
         }
     }
+}
+
+fn convert_normal_form_program_to_graph(
+    nf_prog: &NormalFormProgram,
+) -> StratifiedGraph<&'_ Keyword> {
+    nf_prog
+        .prog
+        .iter()
+        .map(|(k, ruleset)| {
+            let mut ret: BTreeMap<&Keyword, bool> = BTreeMap::default();
+            for rule in ruleset {
+                for atom in &rule.body {
+                    let contained = atom.contained_rules();
+                    for (found_key, negated) in contained {
+                        match ret.entry(found_key) {
+                            Entry::Vacant(e) => {
+                                e.insert(negated);
+                            }
+                            Entry::Occupied(mut e) => {
+                                let old = *e.get();
+                                e.insert(old || negated);
+                            }
+                        }
+                    }
+                }
+            }
+            (k, ret)
+        })
+        .collect()
 }
 
 fn convert_program_to_graph(prog: &DatalogProgram) -> StratifiedGraph<&'_ Keyword> {
@@ -93,11 +121,11 @@ fn verify_no_cycle(g: &StratifiedGraph<&'_ Keyword>, sccs: &[BTreeSet<&Keyword>]
 fn make_scc_reduced_graph<'a>(
     sccs: &[BTreeSet<&'a Keyword>],
     graph: &StratifiedGraph<&Keyword>,
-) -> (BTreeMap<&'a Keyword, usize>, StratifiedGraph<usize>) {
+) -> (BTreeMap<Keyword, usize>, StratifiedGraph<usize>) {
     let indices = sccs
         .iter()
         .enumerate()
-        .flat_map(|(idx, scc)| scc.iter().map(move |k| (*k, idx)))
+        .flat_map(|(idx, scc)| scc.iter().map(move |k| ((*k).clone(), idx)))
         .collect::<BTreeMap<_, _>>();
     let mut ret: BTreeMap<usize, BTreeMap<usize, bool>> = Default::default();
     for (from, tos) in graph {
@@ -120,6 +148,120 @@ fn make_scc_reduced_graph<'a>(
         }
     }
     (indices, ret)
+}
+
+impl NormalFormProgram {
+    pub(crate) fn stratify(self) -> Result<StratifiedNormalFormProgram> {
+        // prerequisite: the program is already in disjunctive normal form
+        // 0. build a graph of the program
+        let prog_entry: &Keyword = &PROG_ENTRY;
+        let stratified_graph = convert_normal_form_program_to_graph(&self);
+        let graph = reduce_to_graph(&stratified_graph);
+        ensure!(
+            graph.contains_key(prog_entry),
+            "program graph does not have an entry"
+        );
+
+        // 1. find reachable clauses starting from the query
+        let reachable: BTreeSet<_> = reachable_components(&graph, &prog_entry)
+            .into_iter()
+            .map(|k| (*k).clone())
+            .collect();
+        // 2. prune the graph of unreachable clauses
+        let stratified_graph: StratifiedGraph<_> = stratified_graph
+            .into_iter()
+            .filter(|(k, _)| reachable.contains(k))
+            .collect();
+        let graph: Graph<_> = graph
+            .into_iter()
+            .filter(|(k, _)| reachable.contains(k))
+            .collect();
+        // 3. find SCC of the clauses
+        let sccs: Vec<BTreeSet<&Keyword>> = strongly_connected_components(&graph)
+            .into_iter()
+            .map(|scc| scc.into_iter().cloned().collect())
+            .collect_vec();
+        // 4. for each SCC, verify that no neg/agg edges are present so that it is really stratifiable
+        verify_no_cycle(&stratified_graph, &sccs)?;
+        // 5. build a reduced graph for the SCC's
+        let (invert_indices, reduced_graph) = make_scc_reduced_graph(&sccs, &stratified_graph);
+        // 6. topological sort the reduced graph to get a stratification
+        let sort_result = generalized_kahn(&reduced_graph, stratified_graph.len());
+        let n_strata = sort_result.len();
+        let invert_sort_result = sort_result
+            .into_iter()
+            .enumerate()
+            .flat_map(|(stratum, indices)| indices.into_iter().map(move |idx| (idx, stratum)))
+            .collect::<BTreeMap<_, _>>();
+        // 7. translate the stratification into datalog program
+        let mut ret: Vec<NormalFormProgram> = vec![Default::default(); n_strata];
+        for (name, ruleset) in self.prog {
+            if let Some(scc_idx) = invert_indices.get(&name) {
+                if let Some(stratum_idx) = invert_sort_result.get(scc_idx) {
+                    let target = ret.get_mut(*stratum_idx).unwrap();
+                    target.prog.insert(name, ruleset);
+                }
+            }
+        }
+
+        Ok(StratifiedNormalFormProgram(ret))
+    }
+}
+
+pub(crate) fn convert_to_stratify_program(prog: &DatalogProgram) -> Result<Vec<DatalogProgram>> {
+    // prerequisite: the program is already in disjunctive normal form
+    // 0. build a graph of the program
+    let prog_entry: &Keyword = &PROG_ENTRY;
+    let stratified_graph = convert_program_to_graph(&prog);
+    let graph = reduce_to_graph(&stratified_graph);
+    ensure!(
+        graph.contains_key(prog_entry),
+        "program graph does not have an entry"
+    );
+
+    // 1. find reachable clauses starting from the query
+    let reachable: BTreeSet<_> = reachable_components(&graph, &prog_entry)
+        .into_iter()
+        .map(|k| (*k).clone())
+        .collect();
+    // 2. prune the graph of unreachable clauses
+    let stratified_graph: StratifiedGraph<_> = stratified_graph
+        .into_iter()
+        .filter(|(k, _)| reachable.contains(k))
+        .collect();
+    let graph: Graph<_> = graph
+        .into_iter()
+        .filter(|(k, _)| reachable.contains(k))
+        .collect();
+    // 3. find SCC of the clauses
+    let sccs: Vec<BTreeSet<&Keyword>> = strongly_connected_components(&graph)
+        .into_iter()
+        .map(|scc| scc.into_iter().cloned().collect())
+        .collect_vec();
+    // 4. for each SCC, verify that no neg/agg edges are present so that it is really stratifiable
+    verify_no_cycle(&stratified_graph, &sccs)?;
+    // 5. build a reduced graph for the SCC's
+    let (invert_indices, reduced_graph) = make_scc_reduced_graph(&sccs, &stratified_graph);
+    // 6. topological sort the reduced graph to get a stratification
+    let sort_result = generalized_kahn(&reduced_graph, stratified_graph.len());
+    let n_strata = sort_result.len();
+    let invert_sort_result = sort_result
+        .into_iter()
+        .enumerate()
+        .flat_map(|(stratum, indices)| indices.into_iter().map(move |idx| (idx, stratum)))
+        .collect::<BTreeMap<_, _>>();
+    // 7. translate the stratification into datalog program
+    let mut ret: Vec<DatalogProgram> = vec![Default::default(); n_strata];
+    for (name, ruleset) in prog {
+        if let Some(scc_idx) = invert_indices.get(&name) {
+            if let Some(stratum_idx) = invert_sort_result.get(scc_idx) {
+                let target = ret.get_mut(*stratum_idx).unwrap();
+                target.insert(name.clone(), ruleset.clone());
+            }
+        }
+    }
+
+    Ok(ret)
 }
 
 pub(crate) fn stratify_program(prog: &DatalogProgram) -> Result<Vec<DatalogProgram>> {

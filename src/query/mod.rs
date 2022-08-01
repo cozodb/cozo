@@ -140,7 +140,7 @@ impl SessionTx {
             Some(v) => bail!("out spec should be an array, found {}", v),
         }
     }
-    fn parse_pull_specs_for_query(
+    pub(crate) fn parse_pull_specs_for_query(
         &mut self,
         out_spec: &Vec<JsonValue>,
         prog: &DatalogProgram,

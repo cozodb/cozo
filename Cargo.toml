@@ -9,6 +9,7 @@ authors = ["Ziyang Hu"]
 
 [dependencies]
 casey = "0.3.3"
+either = "1.7.0"
 uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
 rand = "0.8.5"
 anyhow = "1.0"
