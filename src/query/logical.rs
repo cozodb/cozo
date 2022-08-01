@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use anyhow::{bail, Result};
 use itertools::Itertools;
 
@@ -103,15 +105,15 @@ impl InputAtom {
                 }
                 result
             }
-            InputAtom::AttrTriple(a) => Disjunction::conj(a.normalize(false, gen)),
-            InputAtom::Rule(r) => Disjunction::conj(r.normalize(false, gen)),
+            InputAtom::AttrTriple(a) => a.normalize(false, gen),
+            InputAtom::Rule(r) => r.normalize(false, gen),
             InputAtom::Predicate(mut p) => {
                 p.partial_eval()?;
                 Disjunction::singlet(NormalFormAtom::Predicate(p))
             }
             InputAtom::Negation(n) => match *n {
-                InputAtom::Rule(r) => Disjunction::conj(r.normalize(true, gen)),
-                InputAtom::AttrTriple(r) => Disjunction::conj(r.normalize(true, gen)),
+                InputAtom::Rule(r) => r.normalize(true, gen),
+                InputAtom::AttrTriple(r) => r.normalize(true, gen),
                 _ => unreachable!(),
             },
             InputAtom::Unification(u) => Disjunction::singlet(NormalFormAtom::Unification(u)),
@@ -120,12 +122,25 @@ impl InputAtom {
 }
 
 impl InputRuleApplyAtom {
-    fn normalize(mut self, is_negated: bool, gen: &mut TempKwGen) -> Vec<NormalFormAtom> {
+    fn normalize(mut self, is_negated: bool, gen: &mut TempKwGen) -> Disjunction {
         let mut ret = Vec::with_capacity(self.args.len() + 1);
         let mut args = Vec::with_capacity(self.args.len());
+        let mut seen_variables = BTreeSet::new();
         for arg in self.args {
             match arg {
-                InputTerm::Var(kw) => args.push(kw),
+                InputTerm::Var(kw) => {
+                    if seen_variables.insert(kw.clone()) {
+                        args.push(kw);
+                    } else {
+                        let dup = gen.next();
+                        let unif = NormalFormAtom::Unification(Unification {
+                            binding: dup.clone(),
+                            expr: Expr::Binding(kw, None),
+                        });
+                        ret.push(unif);
+                        args.push(dup);
+                    }
+                }
                 InputTerm::Const(val) => {
                     let kw = gen.next();
                     args.push(kw.clone());
@@ -149,12 +164,12 @@ impl InputRuleApplyAtom {
                 args,
             })
         });
-        ret
+        Disjunction::conj(ret)
     }
 }
 
 impl InputAttrTripleAtom {
-    fn normalize(mut self, is_negated: bool, gen: &mut TempKwGen) -> Vec<NormalFormAtom> {
+    fn normalize(mut self, is_negated: bool, gen: &mut TempKwGen) -> Disjunction {
         let wrap = |atom| {
             if is_negated {
                 NormalFormAtom::NegatedAttrTriple(atom)
@@ -162,7 +177,7 @@ impl InputAttrTripleAtom {
                 NormalFormAtom::AttrTriple(atom)
             }
         };
-        match (self.entity, self.value) {
+        Disjunction::conj(match (self.entity, self.value) {
             (InputTerm::Const(eid), InputTerm::Const(val)) => {
                 let ekw = gen.next();
                 let vkw = gen.next();
@@ -211,14 +226,30 @@ impl InputAttrTripleAtom {
                 vec![ue, ret]
             }
             (InputTerm::Var(ekw), InputTerm::Var(vkw)) => {
-                let ret = wrap(NormalFormAttrTripleAtom {
-                    attr: self.attr,
-                    entity: ekw,
-                    value: vkw,
-                });
-                vec![ret]
+                if ekw == vkw {
+                    let dup = gen.next();
+                    let atom = NormalFormAttrTripleAtom {
+                        attr: self.attr,
+                        entity: ekw,
+                        value: dup.clone(),
+                    };
+                    vec![
+                        NormalFormAtom::Unification(Unification {
+                            binding: dup,
+                            expr: Expr::Binding(vkw, None),
+                        }),
+                        wrap(atom),
+                    ]
+                } else {
+                    let ret = wrap(NormalFormAttrTripleAtom {
+                        attr: self.attr,
+                        entity: ekw,
+                        value: vkw,
+                    });
+                    vec![ret]
+                }
             }
-        }
+        })
     }
 }
 

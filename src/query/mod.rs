@@ -21,6 +21,7 @@ pub(crate) mod magic;
 pub(crate) mod pull;
 pub(crate) mod relation;
 pub(crate) mod stratify;
+pub(crate) mod reorder;
 
 impl SessionTx {
     pub fn run_query(&mut self, payload: &JsonValue) -> Result<QueryResult<'_>> {

@@ -49,7 +49,7 @@ impl InputProgram {
                         body: conj.0,
                         vld: rule.vld,
                     };
-                    collected_rules.push(normalized_rule);
+                    collected_rules.push(normalized_rule.convert_to_well_ordered_rule()?);
                 }
             }
             prog.insert(k, collected_rules);
@@ -223,4 +223,13 @@ pub enum InputTerm<T> {
 pub struct Unification {
     pub(crate) binding: Keyword,
     pub(crate) expr: Expr,
+}
+
+impl Unification {
+    pub(crate) fn is_const(&self) -> bool {
+        matches!(self, Expr::Const(_))
+    }
+    pub(crate) fn bindings_in_expr(&self) -> BTreeSet<Keyword> {
+        self.expr.bindings()
+    }
 }
