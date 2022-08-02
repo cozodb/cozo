@@ -13,7 +13,6 @@ use crate::data::encode::{
     EncodedVec, LARGE_VEC_SIZE,
 };
 use crate::data::id::{AttrId, EntityId, Validity};
-use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, INLINE_VAL_SIZE_LIMIT};
 use crate::parse::triple::{Quintuple, TxAction};

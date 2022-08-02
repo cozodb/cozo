@@ -9,15 +9,16 @@ use crate::data::attr::Attribute;
 use crate::data::expr::{get_op, Expr};
 use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
-use crate::data::program::{InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm, NormalFormProgram};
+use crate::data::program::{
+    InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm,
+};
 use crate::data::value::DataValue;
 use crate::query::compile::{
     Atom, AttrTripleAtom, BindingHeadTerm, DatalogProgram, Rule, RuleApplyAtom, RuleSet, Term,
 };
-use crate::query::magic::magic_sets_rewrite;
 use crate::query::pull::PullSpecs;
 use crate::runtime::transact::SessionTx;
-use crate::utils::{swap_option_result, swap_result_option};
+use crate::utils::swap_result_option;
 use crate::{EntityId, Validity};
 
 pub(crate) type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
@@ -663,7 +664,11 @@ impl SessionTx {
             v => bail!("expected atom definition {:?}", v),
         }
     }
-    fn parse_input_logical_atom(&mut self, map: &Map<String, JsonValue>, vld: Validity) -> Result<InputAtom> {
+    fn parse_input_logical_atom(
+        &mut self,
+        map: &Map<String, JsonValue>,
+        vld: Validity,
+    ) -> Result<InputAtom> {
         let (k, v) = map.iter().next().unwrap();
         Ok(match k as &str {
             "not_exists" => {
@@ -804,7 +809,9 @@ impl SessionTx {
                 Ok(InputTerm::Const(self.parse_value_from_map(o, attr)?))
             };
         }
-        Ok(InputTerm::Const(attr.val_type.coerce_value(value_rep.into())?))
+        Ok(InputTerm::Const(
+            attr.val_type.coerce_value(value_rep.into())?,
+        ))
     }
     fn parse_triple_clause_value(
         &mut self,

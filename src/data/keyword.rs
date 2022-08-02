@@ -39,7 +39,7 @@ impl Keyword {
         self.0.is_empty()
             || self
                 .0
-                .starts_with(['_', ':', '<', '.', '*', '?', '!', ']', '['])
+                .starts_with(['_', ':', '<', '.', '*', '#', '$', '?', '!', ']', '['])
     }
     pub(crate) fn to_string_no_prefix(&self) -> String {
         format!("{}", self.0)

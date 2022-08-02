@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
-use anyhow::Result;
 use itertools::Itertools;
 use smallvec::SmallVec;
 
@@ -288,13 +287,11 @@ impl NormalFormAtom {
                     attr: a.attr.clone(),
                     entity: a.entity.clone(),
                     value: a.value.clone(),
-                    entity_is_bound: seen_bindings.contains(&a.entity),
-                    value_is_bound: seen_bindings.contains(&a.value),
                 };
-                if !t.entity_is_bound {
+                if !seen_bindings.contains(&a.entity) {
                     seen_bindings.insert(a.entity.clone());
                 }
-                if !t.value_is_bound {
+                if !seen_bindings.contains(&a.value) {
                     seen_bindings.insert(a.value.clone());
                 }
                 MagicAtom::AttrTriple(t)
@@ -336,8 +333,6 @@ impl NormalFormAtom {
                     attr: na.attr.clone(),
                     entity: na.entity.clone(),
                     value: na.value.clone(),
-                    entity_is_bound: true,
-                    value_is_bound: true,
                 })
             }
             NormalFormAtom::NegatedRule(nr) => MagicAtom::NegatedRule(MagicRuleApplyAtom {

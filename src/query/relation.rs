@@ -22,6 +22,73 @@ pub enum Relation {
     NegJoin(Box<NegJoin>),
     Reorder(ReorderRelation),
     Filter(FilteredRelation),
+    Unification(UnificationRelation),
+}
+
+pub struct UnificationRelation {
+    parent: Box<Relation>,
+    binding: Keyword,
+    expr: Expr,
+    pub(crate) to_eliminate: BTreeSet<Keyword>,
+}
+
+impl UnificationRelation {
+    fn fill_binding_indices(&mut self) {
+        let parent_bindings: BTreeMap<_, _> = self
+            .parent
+            .bindings_after_eliminate()
+            .into_iter()
+            .enumerate()
+            .map(|(a, b)| (b, a))
+            .collect();
+        self.expr.fill_binding_indices(&parent_bindings);
+    }
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
+        for binding in self.parent.bindings_before_eliminate() {
+            if !used.contains(&binding) {
+                self.to_eliminate.insert(binding.clone());
+            }
+        }
+        let mut nxt = used.clone();
+        nxt.extend(self.expr.bindings());
+        self.parent.eliminate_temp_vars(&nxt)?;
+        Ok(())
+    }
+
+    fn iter<'a>(
+        &'a self,
+        tx: &'a SessionTx,
+        epoch: Option<u32>,
+        use_delta: &BTreeSet<TempStoreId>,
+    ) -> TupleIter<'a> {
+        let mut bindings = self.parent.bindings_after_eliminate();
+        bindings.push(self.binding.clone());
+        let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
+        Box::new(
+            self.parent
+                .iter(tx, epoch, use_delta)
+                .map_ok(move |tuple| -> Result<Tuple> {
+                    let result = self.expr.eval(&tuple)?;
+                    let mut ret = tuple.0;
+                    ret.push(result);
+                    if !eliminate_indices.is_empty() {
+                        ret = ret
+                            .into_iter()
+                            .enumerate()
+                            .filter_map(|(i, v)| {
+                                if eliminate_indices.contains(&i) {
+                                    None
+                                } else {
+                                    Some(v)
+                                }
+                            })
+                            .collect_vec();
+                    }
+                    Ok(Tuple(ret))
+                })
+                .map(flatten_err),
+        )
+    }
 }
 
 pub struct FilteredRelation {
@@ -161,6 +228,13 @@ impl Debug for Relation {
                 .field(&r.pred)
                 .field(&r.parent)
                 .finish(),
+            Relation::Unification(r) => f
+                .debug_tuple("Filter")
+                .field(&bindings)
+                .field(&r.binding)
+                .field(&r.expr)
+                .field(&r.parent)
+                .finish(),
         }
     }
 }
@@ -184,6 +258,10 @@ impl Relation {
             }
             Relation::NegJoin(r) => {
                 r.left.fill_predicate_binding_indices();
+            }
+            Relation::Unification(u) => {
+                u.parent.fill_predicate_binding_indices();
+                u.fill_binding_indices()
             }
         }
     }
@@ -235,6 +313,14 @@ impl Relation {
         Relation::Filter(FilteredRelation {
             parent: Box::new(self),
             pred: filter,
+            to_eliminate: Default::default(),
+        })
+    }
+    pub(crate) fn unify(self, binding: Keyword, expr: Expr) -> Self {
+        Relation::Unification(UnificationRelation {
+            parent: Box::new(self),
+            binding,
+            expr: expr,
             to_eliminate: Default::default(),
         })
     }
@@ -1195,6 +1281,7 @@ impl Relation {
             Relation::Reorder(r) => r.relation.eliminate_temp_vars(used),
             Relation::Filter(r) => r.do_eliminate_temp_vars(used),
             Relation::NegJoin(r) => r.do_eliminate_temp_vars(used),
+            Relation::Unification(r) => r.do_eliminate_temp_vars(used),
         }
     }
 
@@ -1207,6 +1294,7 @@ impl Relation {
             Relation::Reorder(_) => None,
             Relation::Filter(r) => Some(&r.to_eliminate),
             Relation::NegJoin(r) => Some(&r.to_eliminate),
+            Relation::Unification(u) => Some(&u.to_eliminate),
         }
     }
 
@@ -1230,6 +1318,11 @@ impl Relation {
             Relation::Reorder(r) => r.bindings(),
             Relation::Filter(r) => r.parent.bindings_after_eliminate(),
             Relation::NegJoin(j) => j.left.bindings_after_eliminate(),
+            Relation::Unification(u) => {
+                let mut bindings = u.parent.bindings_after_eliminate();
+                bindings.push(u.binding.clone());
+                bindings
+            }
         }
     }
     pub fn iter<'a>(
@@ -1249,6 +1342,7 @@ impl Relation {
             Relation::Reorder(r) => r.iter(tx, epoch, use_delta),
             Relation::Filter(r) => r.iter(tx, epoch, use_delta),
             Relation::NegJoin(r) => r.iter(tx, epoch, use_delta),
+            Relation::Unification(r) => r.iter(tx, epoch, use_delta),
         }
     }
 }
@@ -1408,7 +1502,7 @@ impl InnerJoin {
                     self.materialized_join(tx, eliminate_indices, epoch, use_delta)
                 }
             }
-            Relation::Join(_) | Relation::Filter(_) => {
+            Relation::Join(_) | Relation::Filter(_) | Relation::Unification(_) => {
                 self.materialized_join(tx, eliminate_indices, epoch, use_delta)
             }
             Relation::Reorder(_) => {

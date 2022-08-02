@@ -195,8 +195,6 @@ pub(crate) struct MagicAttrTripleAtom {
     pub(crate) attr: Attribute,
     pub(crate) entity: Keyword,
     pub(crate) value: Keyword,
-    pub(crate) entity_is_bound: bool,
-    pub(crate) value_is_bound: bool,
 }
 
 #[derive(Clone, Debug)]

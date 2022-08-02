@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use log::{debug, error};
+use log::{error};
 
 use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
 

@@ -10,7 +10,6 @@ use crate::data::program::{
 };
 use crate::data::value::DataValue;
 use crate::query::compile::Atom;
-use crate::EntityId;
 
 pub(crate) struct Disjunction(pub(crate) Vec<Conjunction>);
 
@@ -122,7 +121,7 @@ impl InputAtom {
 }
 
 impl InputRuleApplyAtom {
-    fn normalize(mut self, is_negated: bool, gen: &mut TempKwGen) -> Disjunction {
+    fn normalize(self, is_negated: bool, gen: &mut TempKwGen) -> Disjunction {
         let mut ret = Vec::with_capacity(self.args.len() + 1);
         let mut args = Vec::with_capacity(self.args.len());
         let mut seen_variables = BTreeSet::new();
@@ -169,7 +168,7 @@ impl InputRuleApplyAtom {
 }
 
 impl InputAttrTripleAtom {
-    fn normalize(mut self, is_negated: bool, gen: &mut TempKwGen) -> Disjunction {
+    fn normalize(self, is_negated: bool, gen: &mut TempKwGen) -> Disjunction {
         let wrap = |atom| {
             if is_negated {
                 NormalFormAtom::NegatedAttrTriple(atom)
