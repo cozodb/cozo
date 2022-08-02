@@ -12,7 +12,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub(crate) enum Expr {
     Binding(Keyword, Option<usize>),
     Const(DataValue),
     Apply(&'static Op, Box<[Expr]>),
@@ -98,7 +98,7 @@ impl Expr {
 }
 
 #[derive(Clone)]
-pub struct Op {
+pub(crate) struct Op {
     pub(crate) name: &'static str,
     pub(crate) min_arity: usize,
     pub(crate) vararg: bool,

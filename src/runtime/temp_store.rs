@@ -8,7 +8,7 @@ use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub struct TempStoreId(pub(crate) u32);
+pub(crate) struct TempStoreId(pub(crate) u32);
 
 impl Debug for TempStoreId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -17,7 +17,7 @@ impl Debug for TempStoreId {
 }
 
 #[derive(Clone)]
-pub struct TempStore {
+pub(crate) struct TempStore {
     pub(crate) db: RawRocksDb,
     pub(crate) id: TempStoreId,
 }
@@ -37,10 +37,10 @@ impl TempStore {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.exists(&key_encoded)
     }
-    pub fn scan_all(&self) -> impl Iterator<Item=anyhow::Result<Tuple>> {
+    pub(crate) fn scan_all(&self) -> impl Iterator<Item=anyhow::Result<Tuple>> {
         self.scan_all_for_epoch(0)
     }
-    pub fn scan_all_for_epoch(
+    pub(crate) fn scan_all_for_epoch(
         &self,
         epoch: u32,
     ) -> impl Iterator<Item=anyhow::Result<Tuple>> {

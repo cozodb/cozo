@@ -1,7 +1,7 @@
 use log::info;
 use serde_json::{json, to_string_pretty};
 
-use cozo::{Db, EntityId, Validity};
+use cozo::Db;
 use cozorocks::DbBuilder;
 
 fn create_db(name: &str) -> Db {
@@ -110,19 +110,19 @@ fn creation() {
 
     info!(
         "{}",
-        to_string_pretty(&db.entities_at(None).unwrap()).unwrap()
+        to_string_pretty(&db.entities_at(&json!(null)).unwrap()).unwrap()
     );
 
     let pulled = db
         .pull(
-            EntityId::MIN_PERM,
+            &json!(10000001),
             &json!([
                 "_id",
                 "person.first_name",
                 "person.last_name",
                 {"pull":"person.friend", "as": "friends", "recurse": true},
             ]),
-            Validity::current(),
+            &json!(())
         )
         .unwrap();
 

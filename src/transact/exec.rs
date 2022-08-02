@@ -15,7 +15,7 @@ use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
 impl SessionTx {
-    pub fn tx_triples(&mut self, payloads: Vec<Quintuple>) -> Result<Vec<(EntityId, isize)>> {
+    pub(crate) fn tx_triples(&mut self, payloads: Vec<Quintuple>) -> Result<Vec<(EntityId, isize)>> {
         let mut ret = Vec::with_capacity(payloads.len());
         for payload in payloads {
             match payload.action {

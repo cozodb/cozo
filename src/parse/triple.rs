@@ -20,7 +20,7 @@ pub(crate) struct Triple {
 }
 
 #[derive(Debug)]
-pub struct Quintuple {
+pub(crate) struct Quintuple {
     pub(crate) triple: Triple,
     pub(crate) action: TxAction,
     pub(crate) validity: Validity,
@@ -28,7 +28,7 @@ pub struct Quintuple {
 
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
-pub enum TxAction {
+pub(crate) enum TxAction {
     Put,
     Retract,
     RetractAllEA,
@@ -110,7 +110,7 @@ impl SessionTx {
     /// }
     /// ```
     /// nesting is allowed for values of type `ref` and `component`
-    pub fn parse_tx_requests(&mut self, req: &JsonValue) -> Result<(Vec<Quintuple>, String)> {
+    pub(crate) fn parse_tx_requests(&mut self, req: &JsonValue) -> Result<(Vec<Quintuple>, String)> {
         let map = req
             .as_object()
             .ok_or_else(|| anyhow!("expect tx request to be an object, got {}", req))?;

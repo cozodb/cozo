@@ -6,9 +6,9 @@ use smallvec::SmallVec;
 
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
+use crate::data::id::{EntityId, Validity};
 use crate::data::keyword::Keyword;
 use crate::data::value::DataValue;
-use crate::{EntityId, Validity};
 
 #[derive(Default)]
 pub(crate) struct TempKwGen {
@@ -23,7 +23,7 @@ impl TempKwGen {
 }
 
 #[derive(Clone, Debug, Default)]
-pub enum Aggregation {
+pub(crate) enum Aggregation {
     #[default]
     Todo,
 }
@@ -109,7 +109,7 @@ impl Debug for MagicKeyword {
                 }
                 Ok(())
             }
-            MagicKeyword::Input{ inner, adornment } => {
+            MagicKeyword::Input { inner, adornment } => {
                 write!(f, "{}|I", inner.0)?;
                 for b in adornment {
                     if *b {
@@ -120,7 +120,12 @@ impl Debug for MagicKeyword {
                 }
                 Ok(())
             }
-            MagicKeyword::Sup { inner, adornment, rule_idx, sup_idx } => {
+            MagicKeyword::Sup {
+                inner,
+                adornment,
+                rule_idx,
+                sup_idx,
+            } => {
                 write!(f, "{}|S.{}.{}", inner.0, rule_idx, sup_idx)?;
                 for b in adornment {
                     if *b {
@@ -228,14 +233,14 @@ pub(crate) enum MagicAtom {
 }
 
 #[derive(Clone, Debug)]
-pub struct InputAttrTripleAtom {
+pub(crate) struct InputAttrTripleAtom {
     pub(crate) attr: Attribute,
     pub(crate) entity: InputTerm<EntityId>,
     pub(crate) value: InputTerm<DataValue>,
 }
 
 #[derive(Debug, Clone)]
-pub struct NormalFormAttrTripleAtom {
+pub(crate) struct NormalFormAttrTripleAtom {
     pub(crate) attr: Attribute,
     pub(crate) entity: Keyword,
     pub(crate) value: Keyword,
@@ -249,13 +254,13 @@ pub(crate) struct MagicAttrTripleAtom {
 }
 
 #[derive(Clone, Debug)]
-pub struct InputRuleApplyAtom {
+pub(crate) struct InputRuleApplyAtom {
     pub(crate) name: Keyword,
     pub(crate) args: Vec<InputTerm<DataValue>>,
 }
 
 #[derive(Clone, Debug)]
-pub struct NormalFormRuleApplyAtom {
+pub(crate) struct NormalFormRuleApplyAtom {
     pub(crate) name: Keyword,
     pub(crate) args: Vec<Keyword>,
 }
@@ -267,13 +272,13 @@ pub(crate) struct MagicRuleApplyAtom {
 }
 
 #[derive(Clone, Debug)]
-pub enum InputTerm<T> {
+pub(crate) enum InputTerm<T> {
     Var(Keyword),
     Const(T),
 }
 
 #[derive(Clone, Debug)]
-pub struct Unification {
+pub(crate) struct Unification {
     pub(crate) binding: Keyword,
     pub(crate) expr: Expr,
 }

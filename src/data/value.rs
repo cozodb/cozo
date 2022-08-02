@@ -16,7 +16,7 @@ use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
-pub enum DataValue {
+pub(crate) enum DataValue {
     #[serde(rename = "n")]
     Null,
     #[serde(rename = "b")]

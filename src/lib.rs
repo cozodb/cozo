@@ -4,8 +4,6 @@ pub use anyhow::Error;
 
 pub use cozorocks::DbBuilder;
 pub use data::encode::EncodedVec;
-pub use data::id::{AttrId, EntityId, TxId, Validity};
-pub use parse::schema::AttrTxItem;
 pub use runtime::db::Db;
 
 // #[cfg(not(target_env = "msvc"))]

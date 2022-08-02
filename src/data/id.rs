@@ -9,13 +9,13 @@ use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Deserialize, Serialize, Hash)]
-pub struct Validity(pub i64);
+pub(crate) struct Validity(pub(crate) i64);
 
 impl Validity {
     pub(crate) const MAX: Validity = Validity(i64::MAX);
     pub(crate) const NO_HISTORY: Validity = Validity(i64::MIN + 1);
     pub(crate) const MIN: Validity = Validity(i64::MIN);
-    pub fn current() -> Self {
+    pub(crate) fn current() -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -80,12 +80,12 @@ impl Debug for Validity {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, Hash)]
-pub struct EntityId(pub u64);
+pub(crate) struct EntityId(pub(crate) u64);
 
 impl EntityId {
     pub(crate) const MAX_TEMP: EntityId = EntityId(10_000_000);
-    pub const MIN_PERM: EntityId = EntityId(10_000_001);
-    pub const MAX_PERM: EntityId = EntityId(0x00ff_ffff_ff00_0000);
+    pub(crate) const MIN_PERM: EntityId = EntityId(10_000_001);
+    pub(crate) const MAX_PERM: EntityId = EntityId(0x00ff_ffff_ff00_0000);
 
     pub(crate) fn from_bytes(b: &[u8]) -> Self {
         EntityId(u64::from_be_bytes([
@@ -113,7 +113,7 @@ impl Debug for EntityId {
 }
 
 #[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq, Deserialize, Serialize, Hash)]
-pub struct AttrId(pub u64);
+pub(crate) struct AttrId(pub(crate) u64);
 
 impl AttrId {
     pub(crate) const MAX_TEMP: AttrId = AttrId(10_000_000);
@@ -147,7 +147,7 @@ impl Debug for AttrId {
 }
 
 #[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq, Deserialize, Serialize, Hash)]
-pub struct TxId(pub u64);
+pub(crate) struct TxId(pub(crate) u64);
 
 impl TxId {
     pub(crate) const MAX_SYS: TxId = TxId(10000);

@@ -5,7 +5,7 @@ use serde_derive::{Deserialize, Serialize};
 
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
-pub enum StoreOp {
+pub(crate) enum StoreOp {
     Retract = 0,
     Assert = 1,
 }

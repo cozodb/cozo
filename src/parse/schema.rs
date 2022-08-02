@@ -6,13 +6,13 @@ use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
 
 #[derive(Debug)]
-pub struct AttrTxItem {
+pub(crate) struct AttrTxItem {
     pub(crate) op: StoreOp,
     pub(crate) attr: Attribute,
 }
 
 impl AttrTxItem {
-    pub fn parse_request(req: &JsonValue) -> Result<(Vec<AttrTxItem>, String)> {
+    pub(crate) fn parse_request(req: &JsonValue) -> Result<(Vec<AttrTxItem>, String)> {
         let map = req
             .as_object()
             .ok_or_else(|| anyhow!("expect object, got {}", req))?;

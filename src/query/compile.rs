@@ -9,29 +9,8 @@ use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 
-/// example ruleset in python and javascript
-/// ```python
-/// [
-///     R.ancestor(["?a", "?b"],
-///         T.parent("?a", "?b")),
-///     R.ancestor(["?a", "?b"],
-///         T.parent("?a", "?c"),
-///         R.ancestor("?c", "?b")),
-///     Q(["?a"],
-///         R.ancestor("?a", {"name": "Anne"}))
-/// ]
-///
-/// [
-///     Q.at("1990-01-01")(["?old_than_anne"],
-///         T.age({"name": "Anne"}, "?anne_age"),
-///         T.age("?older_than_anne", "?age"),
-///         Gt("?age", "?anne_age"))
-/// ]
-/// ```
-/// we also have `F.is_married(["anne", "brutus"], ["constantine", "delphi"])` for ad-hoc fact rules
-
 #[derive(Clone, Debug, Default)]
-pub enum Aggregation {
+pub(crate) enum Aggregation {
     #[default]
     None,
 }

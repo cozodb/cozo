@@ -11,12 +11,12 @@ use crate::data::encode::{
 use crate::data::id::AttrId;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
+use crate::parse::schema::AttrTxItem;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
-use crate::AttrTxItem;
 
 impl SessionTx {
-    pub fn tx_attrs(&mut self, payloads: Vec<AttrTxItem>) -> Result<Vec<(StoreOp, AttrId)>> {
+    pub(crate) fn tx_attrs(&mut self, payloads: Vec<AttrTxItem>) -> Result<Vec<(StoreOp, AttrId)>> {
         let mut ret = Vec::with_capacity(payloads.len());
         for item in payloads {
             let id = item.attr.id;

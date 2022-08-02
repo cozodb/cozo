@@ -20,9 +20,9 @@ use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
 use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
+use crate::parse::schema::AttrTxItem;
 use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
-use crate::AttrTxItem;
 
 pub struct Db {
     db: RocksDb,
@@ -145,7 +145,12 @@ impl Db {
         it.seek_to_start();
         it
     }
-    pub fn pull(&self, eid: EntityId, payload: &JsonValue, vld: Validity) -> Result<JsonValue> {
+    pub fn pull(&self, eid: &JsonValue, payload: &JsonValue, vld: &JsonValue) -> Result<JsonValue> {
+        let eid = EntityId::try_from(eid)?;
+        let vld = match vld {
+            JsonValue::Null => Validity::current(),
+            v => Validity::try_from(v)?,
+        };
         let mut tx = self.transact()?;
         let specs = tx.parse_pull(payload, 0)?;
         let mut collected = Default::default();
@@ -198,8 +203,11 @@ impl Db {
         let mut tx = self.transact()?;
         tx.all_attrs().map_ok(|v| v.to_json()).try_collect()
     }
-    pub fn entities_at(&self, vld: Option<Validity>) -> Result<JsonValue> {
-        let vld = vld.unwrap_or_else(Validity::current);
+    pub fn entities_at(&self, vld: &JsonValue) -> Result<JsonValue> {
+        let vld = match vld {
+            JsonValue::Null => Validity::current(),
+            v => Validity::try_from(v)?,
+        };
         let mut tx = self.transact()?;
         let mut current = encode_eav_key(
             EntityId::MIN_PERM,

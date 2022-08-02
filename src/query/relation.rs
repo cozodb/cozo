@@ -7,14 +7,14 @@ use itertools::Itertools;
 
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
+use crate::data::id::Validity;
 use crate::data::keyword::Keyword;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::runtime::temp_store::{TempStore, TempStoreId};
 use crate::runtime::transact::SessionTx;
-use crate::Validity;
 
-pub enum Relation {
+pub(crate) enum Relation {
     Fixed(InlineFixedRelation),
     Triple(TripleRelation),
     Derived(StoredDerivedRelation),
@@ -25,7 +25,7 @@ pub enum Relation {
     Unification(UnificationRelation),
 }
 
-pub struct UnificationRelation {
+pub(crate) struct UnificationRelation {
     parent: Box<Relation>,
     binding: Keyword,
     expr: Expr,
@@ -91,7 +91,7 @@ impl UnificationRelation {
     }
 }
 
-pub struct FilteredRelation {
+pub(crate) struct FilteredRelation {
     parent: Box<Relation>,
     pred: Expr,
     pub(crate) to_eliminate: BTreeSet<Keyword>,
@@ -349,7 +349,7 @@ impl Relation {
 }
 
 #[derive(Debug)]
-pub struct ReorderRelation {
+pub(crate) struct ReorderRelation {
     pub(crate) relation: Box<Relation>,
     pub(crate) new_order: Vec<Keyword>,
 }
@@ -395,7 +395,7 @@ impl ReorderRelation {
 }
 
 #[derive(Debug)]
-pub struct InlineFixedRelation {
+pub(crate) struct InlineFixedRelation {
     pub(crate) bindings: Vec<Keyword>,
     pub(crate) data: Vec<Vec<DataValue>>,
     pub(crate) to_eliminate: BTreeSet<Keyword>,
@@ -493,7 +493,7 @@ impl InlineFixedRelation {
 }
 
 #[derive(Debug)]
-pub struct TripleRelation {
+pub(crate) struct TripleRelation {
     pub(crate) attr: Attribute,
     pub(crate) vld: Validity,
     pub(crate) bindings: [Keyword; 2],
@@ -1050,7 +1050,7 @@ fn get_eliminate_indices(bindings: &[Keyword], eliminate: &BTreeSet<Keyword>) ->
 }
 
 #[derive(Debug)]
-pub struct StoredDerivedRelation {
+pub(crate) struct StoredDerivedRelation {
     pub(crate) bindings: Vec<Keyword>,
     pub(crate) storage: TempStore,
 }
@@ -1288,7 +1288,7 @@ impl Relation {
         }
     }
 
-    pub fn bindings_after_eliminate(&self) -> Vec<Keyword> {
+    pub(crate) fn bindings_after_eliminate(&self) -> Vec<Keyword> {
         let ret = self.bindings_before_eliminate();
         if let Some(to_eliminate) = self.eliminate_set() {
             ret.into_iter()
@@ -1315,7 +1315,7 @@ impl Relation {
             }
         }
     }
-    pub fn iter<'a>(
+    pub(crate) fn iter<'a>(
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
@@ -1338,7 +1338,7 @@ impl Relation {
 }
 
 #[derive(Debug)]
-pub struct NegJoin {
+pub(crate) struct NegJoin {
     pub(crate) left: Relation,
     pub(crate) right: Relation,
     pub(crate) joiner: Joiner,
@@ -1405,7 +1405,7 @@ impl NegJoin {
 }
 
 #[derive(Debug)]
-pub struct InnerJoin {
+pub(crate) struct InnerJoin {
     pub(crate) left: Relation,
     pub(crate) right: Relation,
     pub(crate) joiner: Joiner,

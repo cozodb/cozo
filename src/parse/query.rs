@@ -7,6 +7,7 @@ use serde_json::{json, Map};
 
 use crate::data::attr::Attribute;
 use crate::data::expr::{get_op, Expr};
+use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::program::{
@@ -17,7 +18,6 @@ use crate::data::value::DataValue;
 use crate::query::pull::PullSpecs;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_result_option;
-use crate::{EntityId, Validity};
 
 pub(crate) type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
 

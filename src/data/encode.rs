@@ -41,11 +41,6 @@ impl<const N: usize> EncodedVec<N> {
 }
 
 impl EncodedVec<LARGE_VEC_SIZE> {
-    pub fn new(data: &[u8]) -> Self {
-        Self {
-            inner: SmallVec::from_slice(data),
-        }
-    }
     pub fn debug_value(&self, data: &[u8]) -> String {
         match StorageTag::try_from(self.inner[0]).unwrap() {
             StorageTag::TripleEntityAttrValue
@@ -116,10 +111,6 @@ impl<const N: usize> Debug for EncodedVec<N> {
                         let (a, t) = decode_attr_key_by_id(self).unwrap();
                         write!(f, " {:?} @{:?}", a, t)
                     }
-                    // StorageTag::AttrByKeyword => {
-                    //     let (a, t) = decode_attr_key_by_kw(self).unwrap();
-                    //     write!(f, " {:?} @{:?}", a, t)
-                    // }
                     StorageTag::Tx => {
                         write!(f, " {:?}", TxId::from_bytes(self))
                     }

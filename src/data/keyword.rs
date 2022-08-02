@@ -6,7 +6,7 @@ use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Deserialize, Serialize, Hash)]
-pub struct Keyword(pub(crate) SmartString<LazyCompact>);
+pub(crate) struct Keyword(pub(crate) SmartString<LazyCompact>);
 
 impl Display for Keyword {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
