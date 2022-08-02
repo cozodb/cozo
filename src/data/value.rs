@@ -12,7 +12,6 @@ use uuid::Uuid;
 
 use crate::data::encode::EncodedVec;
 use crate::data::id::{EntityId, TxId};
-use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
@@ -27,8 +26,6 @@ pub(crate) enum DataValue {
     Int(i64),
     #[serde(rename = "f")]
     Float(OrderedFloat<f64>),
-    #[serde(rename = "k")]
-    Keyword(Keyword),
     #[serde(rename = "s")]
     String(SmartString<LazyCompact>),
     #[serde(rename = "u")]
@@ -61,9 +58,6 @@ impl Debug for DataValue {
             }
             DataValue::Float(n) => {
                 write!(f, "{}", n.0)
-            }
-            DataValue::Keyword(k) => {
-                write!(f, "{:?}", k)
             }
             DataValue::String(s) => {
                 write!(f, "{:?}", s)

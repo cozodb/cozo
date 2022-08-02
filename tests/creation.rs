@@ -41,8 +41,8 @@ fn creation() {
     let last_id = res["results"][6][0].as_u64().unwrap();
     db.transact_attributes(&json!({
         "attrs": [
-            {"put": {"id": first_id, "keyword": ":person.id", "cardinality": "one", "type": "string", "index": "identity", "history": false}},
-            {"retract": {"id": last_id, "keyword": ":person.covid", "cardinality": "one", "type": "bool"}}
+            {"put": {"id": first_id, "keyword": "person.id", "cardinality": "one", "type": "string", "index": "identity", "history": false}},
+            {"retract": {"id": last_id, "keyword": "person.covid", "cardinality": "one", "type": "bool"}}
         ]
     })).unwrap();
     assert_eq!(db.current_schema().unwrap().as_array().unwrap().len(), 6);
@@ -122,7 +122,7 @@ fn creation() {
                 "person.last_name",
                 {"pull":"person.friend", "as": "friends", "recurse": true},
             ]),
-            &json!(())
+            &json!(()),
         )
         .unwrap();
 

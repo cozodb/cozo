@@ -164,7 +164,7 @@ struct BindingFormatter(Vec<Keyword>);
 
 impl Debug for BindingFormatter {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let s = self.0.iter().map(|f| f.to_string_no_prefix()).join(", ");
+        let s = self.0.iter().map(|f| f.to_string()).join(", ");
         write!(f, "[{}]", s)
     }
 }

@@ -265,12 +265,12 @@ impl Db {
             map_for_entry.insert("_id".to_string(), e_found.0.into());
             if attr.cardinality.is_many() {
                 let arr = map_for_entry
-                    .entry(attr.keyword.to_string_no_prefix())
+                    .entry(attr.keyword.to_string())
                     .or_insert_with(|| json!([]));
                 let arr = arr.as_array_mut().unwrap();
                 arr.push(value.into());
             } else {
-                map_for_entry.insert(attr.keyword.to_string_no_prefix(), value.into());
+                map_for_entry.insert(attr.keyword.to_string(), value.into());
             }
             current.encoded_entity_amend_validity_to_inf_past();
             it.seek(&current);

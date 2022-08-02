@@ -196,7 +196,7 @@ impl SessionTx {
                 }
             }
             PullSpec::PullId(kw) => {
-                collector.insert(kw.to_string_no_prefix(), eid.into());
+                collector.insert(kw.to_string(), eid.into());
                 Ok(())
             }
         }
@@ -285,7 +285,7 @@ impl SessionTx {
             let sentinel = (recursion_path.pop_to_last(), eid);
             if !recursive_seen.insert(sentinel) {
                 sub_collector.insert("_id".to_string(), eid.into());
-                collector.insert(spec.name.to_string_no_prefix(), sub_collector.into());
+                collector.insert(spec.name.to_string(), sub_collector.into());
                 return Ok(());
             }
 
@@ -312,9 +312,9 @@ impl SessionTx {
                 )?;
             }
 
-            collector.insert(spec.name.to_string_no_prefix(), sub_collector.into());
+            collector.insert(spec.name.to_string(), sub_collector.into());
         } else if spec.nested.is_empty() {
-            collector.insert(spec.name.to_string_no_prefix(), value.into());
+            collector.insert(spec.name.to_string(), value.into());
         } else {
             let eid = value.get_entity_id()?;
             let sentinel = (path.clone(), eid);
@@ -333,7 +333,7 @@ impl SessionTx {
                     recursive_seen,
                 )?;
             }
-            collector.insert(spec.name.to_string_no_prefix(), sub_collector.into());
+            collector.insert(spec.name.to_string(), sub_collector.into());
         }
         Ok(())
     }
@@ -392,9 +392,9 @@ impl SessionTx {
                 }
                 sub_collectors.push(sub_collector);
             }
-            collector.insert(spec.name.to_string_no_prefix(), sub_collectors.into());
+            collector.insert(spec.name.to_string(), sub_collectors.into());
         } else if spec.nested.is_empty() {
-            collector.insert(spec.name.to_string_no_prefix(), values.into());
+            collector.insert(spec.name.to_string(), values.into());
         } else {
             let mut sub_collectors = vec![];
             for value in values {
@@ -414,7 +414,7 @@ impl SessionTx {
                 }
                 sub_collectors.push(sub_collector);
             }
-            collector.insert(spec.name.to_string_no_prefix(), sub_collectors.into());
+            collector.insert(spec.name.to_string(), sub_collectors.into());
         }
         Ok(())
     }
@@ -532,7 +532,7 @@ impl SessionTx {
                     let val_id = value.get_entity_id()?;
                     if pull_all_seen.contains(&val_id) {
                         let arr = collector
-                            .entry(attr.keyword.to_string_no_prefix())
+                            .entry(attr.keyword.to_string())
                             .or_insert_with(|| json!([]));
                         let arr = arr.as_array_mut().unwrap();
                         arr.push(value.into());
@@ -541,14 +541,14 @@ impl SessionTx {
                         self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
 
                         let arr = collector
-                            .entry(attr.keyword.to_string_no_prefix())
+                            .entry(attr.keyword.to_string())
                             .or_insert_with(|| json!([]));
                         let arr = arr.as_array_mut().unwrap();
                         arr.push(subcollector.into());
                     }
                 } else {
                     let arr = collector
-                        .entry(attr.keyword.to_string_no_prefix())
+                        .entry(attr.keyword.to_string())
                         .or_insert_with(|| json!([]));
                     let arr = arr.as_array_mut().unwrap();
                     arr.push(value.into());
@@ -556,14 +556,14 @@ impl SessionTx {
             } else if attr.val_type == AttributeTyping::Component {
                 let val_id = value.get_entity_id()?;
                 if pull_all_seen.contains(&val_id) {
-                    collector.insert(attr.keyword.to_string_no_prefix(), value.into());
+                    collector.insert(attr.keyword.to_string(), value.into());
                 } else {
                     let mut subcollector = Map::default();
                     self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
-                    collector.insert(attr.keyword.to_string_no_prefix(), subcollector.into());
+                    collector.insert(attr.keyword.to_string(), subcollector.into());
                 }
             } else {
-                collector.insert(attr.keyword.to_string_no_prefix(), value.into());
+                collector.insert(attr.keyword.to_string(), value.into());
             }
             current.encoded_entity_amend_validity_to_inf_past();
             it.seek(&current);

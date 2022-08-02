@@ -10,19 +10,18 @@ pub(crate) struct Keyword(pub(crate) SmartString<LazyCompact>);
 
 impl Display for Keyword {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, ":{}", self.0)
+        write!(f, "{}", self.0)
     }
 }
 
 impl Debug for Keyword {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{}", self.0)
     }
 }
 
 impl From<&str> for Keyword {
     fn from(value: &str) -> Self {
-        let value = value.strip_prefix(':').unwrap_or(value);
         Self(value.into())
     }
 }
@@ -40,9 +39,6 @@ impl Keyword {
             || self
                 .0
                 .starts_with(['_', ':', '<', '.', '*', '#', '$', '?', '!', ']', '['])
-    }
-    pub(crate) fn to_string_no_prefix(&self) -> String {
-        format!("{}", self.0)
     }
     pub(crate) fn validate_not_reserved(&self) -> Result<()> {
         ensure!(

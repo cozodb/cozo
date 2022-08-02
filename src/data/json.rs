@@ -73,7 +73,6 @@ impl From<DataValue> for JsonValue {
             DataValue::DescVal(v) => JsonValue::from(*v.0),
             DataValue::Bottom => JsonValue::Null,
             DataValue::EnId(i) => JsonValue::Number(i.0.into()),
-            DataValue::Keyword(t) => JsonValue::String(t.to_string()),
             DataValue::Timestamp(i) => JsonValue::Number(i.into()),
         }
     }
