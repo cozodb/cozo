@@ -229,7 +229,7 @@ impl Debug for Relation {
                 .field(&r.parent)
                 .finish(),
             Relation::Unification(r) => f
-                .debug_tuple("Filter")
+                .debug_tuple("Unify")
                 .field(&bindings)
                 .field(&r.binding)
                 .field(&r.expr)
