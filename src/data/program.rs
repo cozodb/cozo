@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Debug, Formatter};
 
 use anyhow::Result;
 use smallvec::SmallVec;
@@ -72,7 +73,7 @@ pub(crate) struct MagicProgram {
     pub(crate) prog: BTreeMap<MagicKeyword, Vec<MagicRule>>,
 }
 
-#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) enum MagicKeyword {
     Muggle {
         inner: Keyword,
@@ -91,6 +92,47 @@ pub(crate) enum MagicKeyword {
         rule_idx: u16,
         sup_idx: u16,
     },
+}
+
+impl Debug for MagicKeyword {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MagicKeyword::Muggle { inner } => write!(f, "{}", inner.0),
+            MagicKeyword::Magic { inner, adornment } => {
+                write!(f, "{}|M", inner.0)?;
+                for b in adornment {
+                    if *b {
+                        write!(f, "b")?
+                    } else {
+                        write!(f, "f")?
+                    }
+                }
+                Ok(())
+            }
+            MagicKeyword::Input{ inner, adornment } => {
+                write!(f, "{}|I", inner.0)?;
+                for b in adornment {
+                    if *b {
+                        write!(f, "b")?
+                    } else {
+                        write!(f, "f")?
+                    }
+                }
+                Ok(())
+            }
+            MagicKeyword::Sup { inner, adornment, rule_idx, sup_idx } => {
+                write!(f, "{}|S.{}.{}", inner.0, rule_idx, sup_idx)?;
+                for b in adornment {
+                    if *b {
+                        write!(f, "b")?
+                    } else {
+                        write!(f, "f")?
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
 }
 
 impl MagicKeyword {
@@ -137,6 +179,21 @@ pub(crate) struct MagicRule {
     pub(crate) aggr: Vec<Option<Aggregation>>,
     pub(crate) body: Vec<MagicAtom>,
     pub(crate) vld: Validity,
+}
+
+impl MagicRule {
+    pub(crate) fn contained_rules(&self) -> BTreeSet<MagicKeyword> {
+        let mut coll = BTreeSet::new();
+        for atom in self.body.iter() {
+            match atom {
+                MagicAtom::Rule(rule) | MagicAtom::NegatedRule(rule) => {
+                    coll.insert(rule.name.clone());
+                }
+                _ => {}
+            }
+        }
+        coll
+    }
 }
 
 #[derive(Debug, Clone)]

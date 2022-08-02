@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::env::temp_dir;
 use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -11,8 +11,7 @@ use uuid::Uuid;
 
 use cozorocks::{DbBuilder, DbIter, RawRocksDb, RocksDb};
 
-use crate::AttrTxItem;
-use crate::data::compare::{DB_KEY_PREFIX_LEN, rusty_cmp};
+use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::encode::{
     decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, StorageTag,
 };
@@ -23,6 +22,7 @@ use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
 use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
+use crate::AttrTxItem;
 
 pub struct Db {
     db: RocksDb,
@@ -272,7 +272,15 @@ impl Db {
     }
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let ret: Vec<_> = tx.run_query(payload)?.try_collect()?;
+        let (input_program, out_spec, vld) = tx.parse_query(payload)?;
+        dbg!(&input_program);
+        let program = input_program.to_normalized_program()?;
+        let program = program.stratify()?;
+        dbg!(&program);
+        let program = program.magic_sets_rewrite();
+        let result = tx.stratified_magic_evaluate(&program)?;
+        let ret = tx.run_pull_on_query_results(result, out_spec, vld)?;
+        let ret: Vec<_> = ret.try_collect()?;
         Ok(json!(ret))
     }
 }

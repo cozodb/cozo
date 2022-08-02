@@ -132,30 +132,27 @@ fn creation() {
     let query = json!({
         "q": [
             {
-                "rule": "ff",
+                "rule": "friend_of_friend",
                 "args": [["?a", "?b"], ["?a", "person.friend", "?b"]]
             },
             {
-                "rule": "ff",
-                "args": [["?a", "?b"], ["?a", "person.friend", "?c"], {"rule": "ff", "args": ["?c", "?b"]}]
+                "rule": "friend_of_friend",
+                "args": [["?a", "?b"], ["?a", "person.friend", "?c"], {"rule": "friend_of_friend", "args": ["?c", "?b"]}]
             },
             {
                 "rule": "?",
                 "args": [["?a"],
-                    ["?alice", "person.first_name", "Alice"],
-                    // {"rule": "ff", "args": ["?alice", "?a"]},
-                    {"not_exists": {"rule": "ff", "args": ["?alice", "?a"]}},
+                    // ["?alice", "person.first_name", "Alice"],
+                    {"rule": "friend_of_friend", "args": ["?alice", "?a"]},
+                    // {"not_exists": {"rule": "friend_of_friend", "args": ["?alice", "?a"]}},
                     ["?a", "person.first_name", "?n"],
                 ]
             }
         ],
         "out": {"friend": {"pull": "?a", "spec": ["person.first_name"]}}
     });
-    let mut tx = db.transact().unwrap();
-    let ret = tx.run_query(&query).unwrap();
-    let res: Vec<_> = ret.try_collect().unwrap();
-    let res = json!(res);
-    let res = to_string_pretty(&res).unwrap();
+    let ret = db.run_query(&query).unwrap();
+    let res = to_string_pretty(&ret).unwrap();
     info!("{}", res);
 
     // // iteration
