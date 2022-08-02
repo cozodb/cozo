@@ -83,6 +83,7 @@ def Retract(d):
 def Pull(variable, spec):
     return {'pull': variable, 'spec': spec}
 
+
 class TripleClass:
     def __init__(self, attr_name):
         self._attr_name = attr_name
@@ -161,6 +162,7 @@ Mul = PredicateClass('Mul')
 Div = PredicateClass('Div')
 StrCat = PredicateClass('StrCat')
 
+
 def Const(item):
     return {'const': item}
 
@@ -177,6 +179,10 @@ def NotExists(item):
     return {'not_exists': item}
 
 
+def Unify(binding, expr):
+    return {'unify': binding, 'expr': expr}
+
+
 __all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Add', 'Sub', 'Mul', 'Div', 'Q', 'T', 'R', 'Const', 'Conj', 'Disj',
            'NotExists', 'CozoDb', 'Typing', 'Cardinality', 'Indexing', 'PutAttr', 'RetractAttr', 'Attribute', 'Put',
-           'Retract', 'Pull', 'StrCat']
+           'Retract', 'Pull', 'StrCat', 'Unify']
