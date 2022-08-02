@@ -5,9 +5,8 @@
 * [x] disjunction
 * [x] stratum
 * [x] magic sets
+* [x] unification
 * [ ] aggregation
-* [ ] function symbol
-* [ ] arithmetic
 * [ ] range scan
 * [ ] public API
 * [ ] sorting
