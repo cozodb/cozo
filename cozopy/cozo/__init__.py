@@ -145,7 +145,7 @@ class PredicateClass:
     def __call__(self, *args):
         if self._pred_name is None:
             raise Exception("you need to set the predicate name first")
-        ret = {'pred': self._pred_name, 'args': list(args)}
+        ret = {'op': self._pred_name, 'args': list(args)}
         return ret
 
 

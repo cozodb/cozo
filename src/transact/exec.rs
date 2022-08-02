@@ -6,12 +6,7 @@ use cozorocks::{DbIter, IterBuilder};
 
 use crate::data::attr::{Attribute, AttributeTyping};
 use crate::data::compare::compare_key;
-use crate::data::encode::{
-    decode_ae_key, decode_ea_key, decode_vae_key, decode_value, decode_value_from_key,
-    decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v,
-    encode_eav_key, encode_sentinel_attr_val, encode_sentinel_entity_attr, encode_vae_key,
-    EncodedVec, LARGE_VEC_SIZE,
-};
+use crate::data::encode::{decode_ae_key, decode_ea_key, decode_vae_key, decode_value, decode_value_from_key, decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v, encode_eav_key, encode_sentinel_attr_val, encode_sentinel_entity_attr, encode_vae_key, EncodedVec, LARGE_VEC_SIZE};
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, INLINE_VAL_SIZE_LIMIT};
@@ -407,28 +402,6 @@ impl SessionTx {
             },
         )
     }
-    pub(crate) fn restore_bottom_value(
-        &self,
-        eid: EntityId,
-        aid: AttrId,
-        vld: Validity,
-    ) -> Result<DataValue> {
-        let encoded = encode_eav_key(eid, aid, &DataValue::Bottom, vld);
-        let res = self
-            .tx
-            .get(&encoded, false)?
-            .ok_or_else(|| anyhow!("triple not found with {:?} and {:?}", eid, aid))?;
-        decode_value(&res.as_ref()[1..])
-    }
-    pub(crate) fn triple_ea_scan(
-        &self,
-        eid: EntityId,
-        aid: AttrId,
-    ) -> impl Iterator<Item = Result<(EntityId, AttrId, DataValue, Validity, StoreOp)>> {
-        let lower = encode_eav_key(eid, aid, &DataValue::Null, Validity::MAX);
-        let upper = encode_eav_key(eid, aid, &DataValue::Bottom, Validity::MIN);
-        TripleEntityAttrIter::new(self.tx.iterator(), lower, upper)
-    }
     pub(crate) fn triple_ea_before_scan(
         &self,
         eid: EntityId,
@@ -454,34 +427,6 @@ impl SessionTx {
         }
         Ok(false)
     }
-    pub(crate) fn triple_ae_scan(
-        &self,
-        aid: AttrId,
-        eid: EntityId,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue, Validity, StoreOp)>> {
-        let lower = encode_aev_key(aid, eid, &DataValue::Null, Validity::MAX);
-        let upper = encode_aev_key(aid, eid, &DataValue::Bottom, Validity::MIN);
-        TripleAttrEntityIter::new(self.tx.iterator(), lower, upper)
-    }
-    pub(crate) fn triple_ae_before_scan(
-        &self,
-        aid: AttrId,
-        eid: EntityId,
-        before: Validity,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
-        let lower = encode_aev_key(aid, eid, &DataValue::Null, Validity::MAX);
-        let upper = encode_aev_key(aid, eid, &DataValue::Bottom, Validity::MIN);
-        TripleAttrEntityBeforeIter::new(self.tx.iterator(), lower, upper, before)
-    }
-    pub(crate) fn triple_av_scan(
-        &self,
-        aid: AttrId,
-        v: &DataValue,
-    ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId, Validity, StoreOp)>> {
-        let lower = encode_ave_key(aid, v, EntityId::MIN_PERM, Validity::MAX);
-        let upper = encode_ave_key(aid, v, EntityId::MAX_PERM, Validity::MIN);
-        TripleAttrValueIter::new(self.tx.iterator(), lower, upper)
-    }
     pub(crate) fn triple_av_before_scan(
         &self,
         aid: AttrId,
@@ -502,15 +447,6 @@ impl SessionTx {
         let upper = encode_ave_key(aid, v, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueAfterIter::new(self.tx.iterator(), lower, upper, after)
     }
-    pub(crate) fn triple_vref_a_scan(
-        &self,
-        v_eid: EntityId,
-        aid: AttrId,
-    ) -> impl Iterator<Item = Result<(EntityId, AttrId, EntityId, Validity, StoreOp)>> {
-        let lower = encode_vae_key(v_eid, aid, EntityId::MIN_PERM, Validity::MAX);
-        let upper = encode_vae_key(v_eid, aid, EntityId::MAX_PERM, Validity::MIN);
-        TripleValueRefAttrIter::new(self.tx.iterator(), lower, upper)
-    }
     pub(crate) fn triple_vref_a_before_scan(
         &self,
         v_eid: EntityId,
@@ -521,31 +457,6 @@ impl SessionTx {
         let upper = encode_vae_key(v_eid, aid, EntityId::MAX_PERM, Validity::MIN);
         TripleValueRefAttrBeforeIter::new(self.tx.iterator(), lower, upper, before)
     }
-    pub(crate) fn triple_e_scan(
-        &self,
-        eid: EntityId,
-    ) -> impl Iterator<Item = Result<(EntityId, AttrId, DataValue, Validity, StoreOp)>> {
-        let lower = encode_eav_key(eid, AttrId::MIN_PERM, &DataValue::Null, Validity::MAX);
-        let upper = encode_eav_key(eid, AttrId::MAX_PERM, &DataValue::Bottom, Validity::MIN);
-        TripleEntityAttrIter::new(self.tx.iterator(), lower, upper)
-    }
-    pub(crate) fn triple_e_before_scan(
-        &self,
-        eid: EntityId,
-        before: Validity,
-    ) -> impl Iterator<Item = Result<(EntityId, AttrId, DataValue)>> {
-        let lower = encode_eav_key(eid, AttrId::MIN_PERM, &DataValue::Null, Validity::MAX);
-        let upper = encode_eav_key(eid, AttrId::MAX_PERM, &DataValue::Bottom, Validity::MIN);
-        TripleEntityAttrBeforeIter::new(self.tx.iterator(), lower, upper, before)
-    }
-    pub(crate) fn triple_a_scan(
-        &self,
-        aid: AttrId,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue, Validity, StoreOp)>> {
-        let lower = encode_aev_key(aid, EntityId::MIN_PERM, &DataValue::Null, Validity::MAX);
-        let upper = encode_aev_key(aid, EntityId::MAX_PERM, &DataValue::Bottom, Validity::MIN);
-        TripleAttrEntityIter::new(self.tx.iterator(), lower, upper)
-    }
     pub(crate) fn triple_a_before_scan(
         &self,
         aid: AttrId,
@@ -555,64 +466,6 @@ impl SessionTx {
         let upper = encode_aev_key(aid, EntityId::MAX_PERM, &DataValue::Bottom, Validity::MIN);
         TripleAttrEntityBeforeIter::new(self.tx.iterator(), lower, upper, before)
     }
-    pub(crate) fn triple_a_scan_all(
-        &self,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue, Validity, StoreOp)>> {
-        let lower = encode_aev_key(
-            AttrId::MIN_PERM,
-            EntityId::MIN_PERM,
-            &DataValue::Null,
-            Validity::MAX,
-        );
-        let upper = encode_aev_key(
-            AttrId::MAX_PERM,
-            EntityId::MAX_PERM,
-            &DataValue::Bottom,
-            Validity::MIN,
-        );
-        TripleAttrEntityIter::new(self.tx.iterator(), lower, upper)
-    }
-    pub(crate) fn triple_a_before_scan_all(
-        &self,
-        before: Validity,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
-        let lower = encode_aev_key(
-            AttrId::MIN_PERM,
-            EntityId::MIN_PERM,
-            &DataValue::Null,
-            Validity::MAX,
-        );
-        let upper = encode_aev_key(
-            AttrId::MAX_PERM,
-            EntityId::MAX_PERM,
-            &DataValue::Bottom,
-            Validity::MIN,
-        );
-        TripleAttrEntityBeforeIter::new(self.tx.iterator(), lower, upper, before)
-    }
-    pub(crate) fn triple_vref_scan(
-        &self,
-        v_eid: EntityId,
-    ) -> impl Iterator<Item = Result<(EntityId, AttrId, EntityId, Validity, StoreOp)>> {
-        let lower = encode_vae_key(v_eid, AttrId::MIN_PERM, EntityId::MIN_PERM, Validity::MAX);
-        let upper = encode_vae_key(v_eid, AttrId::MAX_PERM, EntityId::MAX_PERM, Validity::MIN);
-        TripleValueRefAttrIter::new(self.tx.iterator(), lower, upper)
-    }
-    pub(crate) fn triple_vref_before_scan(
-        &self,
-        v_eid: EntityId,
-        before: Validity,
-    ) -> impl Iterator<Item = Result<(EntityId, AttrId, EntityId)>> {
-        let lower = encode_vae_key(v_eid, AttrId::MIN_PERM, EntityId::MIN_PERM, Validity::MAX);
-        let upper = encode_vae_key(v_eid, AttrId::MAX_PERM, EntityId::MAX_PERM, Validity::MIN);
-        TripleValueRefAttrBeforeIter::new(self.tx.iterator(), lower, upper, before)
-    }
-}
-
-enum LatestTripleExistence {
-    Asserted,
-    Retracted,
-    NotFound,
 }
 
 // normal version
@@ -623,17 +476,6 @@ struct TripleEntityAttrIter {
 }
 
 impl TripleEntityAttrIter {
-    fn new(
-        builder: IterBuilder,
-        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
-        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
-    ) -> Self {
-        let it = builder.upper_bound(&upper_bound).start();
-        Self {
-            it,
-            current: lower_bound,
-        }
-    }
     fn next_inner(&mut self) -> Result<Option<(EntityId, AttrId, DataValue, Validity, StoreOp)>> {
         self.it.seek(&self.current);
         return match self.it.pair()? {
@@ -723,17 +565,6 @@ struct TripleAttrEntityIter {
 }
 
 impl TripleAttrEntityIter {
-    fn new(
-        builder: IterBuilder,
-        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
-        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
-    ) -> Self {
-        let it = builder.upper_bound(&upper_bound).start();
-        Self {
-            it,
-            current: lower_bound,
-        }
-    }
     fn next_inner(&mut self) -> Result<Option<(AttrId, EntityId, DataValue, Validity, StoreOp)>> {
         loop {
             self.it.seek(&self.current);
@@ -827,17 +658,6 @@ struct TripleAttrValueIter {
 }
 
 impl TripleAttrValueIter {
-    fn new(
-        builder: IterBuilder,
-        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
-        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
-    ) -> Self {
-        let it = builder.upper_bound(&upper_bound).start();
-        Self {
-            it,
-            current: lower_bound,
-        }
-    }
     fn next_inner(&mut self) -> Result<Option<(AttrId, DataValue, EntityId, Validity, StoreOp)>> {
         self.it.seek(&self.current);
         return match self.it.pair()? {
@@ -983,17 +803,6 @@ struct TripleValueRefAttrIter {
 }
 
 impl TripleValueRefAttrIter {
-    fn new(
-        builder: IterBuilder,
-        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
-        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
-    ) -> Self {
-        let it = builder.upper_bound(&upper_bound).start();
-        Self {
-            it,
-            current: lower_bound,
-        }
-    }
     fn next_inner(&mut self) -> Result<Option<(EntityId, AttrId, EntityId, Validity, StoreOp)>> {
         self.it.seek(&self.current);
         return match self.it.pair()? {

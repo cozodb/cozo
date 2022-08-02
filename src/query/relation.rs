@@ -293,16 +293,6 @@ impl Relation {
             bindings: [e_binding, v_binding],
         })
     }
-    pub(crate) fn singlet(bindings: Vec<Keyword>, data: Vec<DataValue>) -> Self {
-        Self::fixed(bindings, vec![data])
-    }
-    pub(crate) fn fixed(bindings: Vec<Keyword>, data: Vec<Vec<DataValue>>) -> Self {
-        Self::Fixed(InlineFixedRelation {
-            bindings,
-            data,
-            to_eliminate: Default::default(),
-        })
-    }
     pub(crate) fn reorder(self, new_order: Vec<Keyword>) -> Self {
         Self::Reorder(ReorderRelation {
             relation: Box::new(self),

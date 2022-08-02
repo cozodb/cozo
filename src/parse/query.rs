@@ -11,6 +11,7 @@ use crate::data::json::JsonValue;
 use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::program::{
     InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm,
+    Unification,
 };
 use crate::data::value::DataValue;
 use crate::query::pull::PullSpecs;
@@ -177,9 +178,27 @@ impl SessionTx {
         pred.partial_eval()?;
         Ok(InputAtom::Predicate(pred))
     }
+    fn parse_unification(payload: &Map<String, JsonValue>) -> Result<InputAtom> {
+        let binding = payload
+            .get("unify")
+            .ok_or_else(|| anyhow!("expect expression to have field 'unify'"))?
+            .as_str()
+            .ok_or_else(|| anyhow!("expect field 'unify' to be a keyword"))?;
+        let binding = Keyword::from(binding);
+        ensure!(
+            !binding.is_reserved(),
+            "binding for unification {} is reserved",
+            binding
+        );
+        let expr = payload
+            .get("expr")
+            .ok_or_else(|| anyhow!("expect unify map to have field 'expr'"))?;
+        let expr = Self::parse_expr_arg(expr)?;
+        Ok(InputAtom::Unification(Unification { binding, expr }))
+    }
     fn parse_expr(payload: &Map<String, JsonValue>) -> Result<Expr> {
         let name = payload
-            .get("pred")
+            .get("op")
             .ok_or_else(|| anyhow!("expect expression to have key 'pred'"))?
             .as_str()
             .ok_or_else(|| anyhow!("expect key 'pred' to be a string referring to a predicate"))?;
@@ -228,7 +247,7 @@ impl SessionTx {
             JsonValue::Object(map) => {
                 if let Some(v) = map.get("const") {
                     Ok(Expr::Const(v.into()))
-                } else if map.contains_key("pred") {
+                } else if map.contains_key("op") {
                     Self::parse_expr(map)
                 } else {
                     bail!("expression object must contain either 'const' or 'pred' key");
@@ -352,8 +371,10 @@ impl SessionTx {
             JsonValue::Object(map) => {
                 if map.contains_key("rule") {
                     self.parse_input_rule_atom(map, vld)
-                } else if map.contains_key("pred") {
+                } else if map.contains_key("op") {
                     Self::parse_input_predicate_atom(map)
+                } else if map.contains_key("unify") {
+                    Self::parse_unification(map)
                 } else if map.contains_key("conj")
                     || map.contains_key("disj")
                     || map.contains_key("not_exists")

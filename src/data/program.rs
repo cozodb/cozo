@@ -207,12 +207,6 @@ pub(crate) enum InputAtom {
     Unification(Unification),
 }
 
-impl InputAtom {
-    pub(crate) fn is_negation(&self) -> bool {
-        matches!(self, InputAtom::Negation(_))
-    }
-}
-
 #[derive(Debug, Clone)]
 pub(crate) enum NormalFormAtom {
     AttrTriple(NormalFormAttrTripleAtom),

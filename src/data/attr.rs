@@ -12,7 +12,7 @@ use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
-use crate::data::value::{DataValue, INLINE_VAL_SIZE_LIMIT};
+use crate::data::value::DataValue;
 use crate::parse::triple::TempIdCtx;
 
 #[repr(u8)]
@@ -277,33 +277,5 @@ impl Attribute {
             }
         }
         self.val_type.coerce_value(value)
-    }
-    pub fn encode(&self) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
-        let mut ret = SmallVec::<[u8; INLINE_VAL_SIZE_LIMIT]>::new();
-        self.serialize(&mut Serializer::new(&mut ret)).unwrap();
-        ret.into()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
-    use crate::data::id::AttrId;
-    use crate::data::keyword::Keyword;
-
-    #[test]
-    fn show_sizes() {
-        let attr = Attribute {
-            id: AttrId(0),
-            keyword: Keyword::from("01234567890123456789012/01234567890123456789012"),
-            cardinality: AttributeCardinality::One,
-            val_type: AttributeTyping::Ref,
-            indexing: AttributeIndex::None,
-            with_history: false,
-        };
-        let encoded = attr.encode();
-        dbg!(encoded.len());
-        dbg!("01234567890123456789012".as_bytes().len());
-        dbg!(Attribute::decode(&encoded).unwrap());
     }
 }

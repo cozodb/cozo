@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use log::info;
 use serde_json::{json, to_string_pretty};
 

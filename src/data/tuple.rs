@@ -34,9 +34,6 @@ impl Tuple {
     pub(crate) fn arity(&self) -> usize {
         self.0.len()
     }
-    pub(crate) fn encode_as_key(&self, prefix: TempStoreId) -> Vec<u8> {
-        self.encode_as_key_for_epoch(prefix, 0)
-    }
     pub(crate) fn encode_as_key_for_epoch(&self, prefix: TempStoreId, epoch: u32) -> Vec<u8> {
         let len = self.arity();
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
@@ -228,39 +225,5 @@ pub(crate) fn rusty_scratch_cmp(a: &[u8], b: &[u8]) -> i8 {
         Ordering::Greater => 1,
         Ordering::Equal => 0,
         Ordering::Less => -1,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use crate::data::tuple::{EncodedTuple, Tuple};
-    use crate::data::value::DataValue;
-    use crate::runtime::temp_store::TempStoreId;
-
-    #[test]
-    fn test_serde() {
-        let val: Vec<DataValue> = vec![
-            json!(1).into(),
-            json!(2.0).into(),
-            json!("my_name_is").into(),
-        ];
-        let val = Tuple(val);
-        let encoded = val.encode_as_key(TempStoreId(123));
-        println!("{:x?}", encoded);
-        let encoded_tuple: EncodedTuple<'_> = (&encoded as &[u8]).into();
-        println!("{:?}", encoded_tuple.prefix());
-        println!("{:?}", encoded_tuple.arity());
-        println!("{:?}", encoded_tuple.get(0));
-        println!("{:?}", encoded_tuple.get(1));
-        println!("{:?}", encoded_tuple.get(2));
-        println!("{:?}", encoded_tuple.get(3));
-        println!(
-            "{:?}",
-            encoded_tuple
-                .iter()
-                .collect::<anyhow::Result<Vec<DataValue>>>()
-        )
     }
 }

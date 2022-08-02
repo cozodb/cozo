@@ -402,13 +402,6 @@ pub(crate) fn encode_sentinel_entity_attr(eid: EntityId, aid: AttrId) -> Encoded
 }
 
 #[inline]
-pub(crate) fn decode_sentinel_entity_attr(src: &[u8]) -> Result<(EntityId, AttrId)> {
-    let eid = EntityId::from_bytes(&src[..VEC_SIZE_8]);
-    let aid = AttrId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
-    Ok((eid, aid))
-}
-
-#[inline]
 pub(crate) fn encode_sentinel_attr_val(aid: AttrId, val: &DataValue) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     ret.extend(aid.bytes());
@@ -431,10 +424,6 @@ pub(crate) fn encode_sentinel_attr_by_id(aid: AttrId) -> EncodedVec<VEC_SIZE_8> 
     ret[0] = StorageTag::SentinelAttrById as u8;
     debug_assert_eq!(ret.len(), VEC_SIZE_8);
     ret.into()
-}
-
-pub(crate) fn decode_sentinel_attr_by_id(src: &[u8]) -> Result<AttrId> {
-    Ok(AttrId::from_bytes(src))
 }
 
 #[inline]
