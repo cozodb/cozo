@@ -281,12 +281,14 @@ impl Db {
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
         let (input_program, out_spec, vld) = tx.parse_query(payload)?;
-        let normalized_program = input_program.to_normalized_program()?;
-        let stratified_program = normalized_program.stratify()?;
-        let program = stratified_program.magic_sets_rewrite();
+        let program = input_program
+            .to_normalized_program()?
+            .stratify()?
+            .magic_sets_rewrite();
         let result = tx.stratified_magic_evaluate(&program)?;
-        let ret = tx.run_pull_on_query_results(result, out_spec, vld)?;
-        let ret: Vec<_> = ret.try_collect()?;
+        let ret: Vec<_> = tx
+            .run_pull_on_query_results(result, out_spec, vld)?
+            .try_collect()?;
         Ok(json!(ret))
     }
 }
