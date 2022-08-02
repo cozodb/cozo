@@ -10,6 +10,7 @@ use crate::data::program::{
 };
 use crate::data::value::DataValue;
 
+#[derive(Debug)]
 pub(crate) struct Disjunction(pub(crate) Vec<Conjunction>);
 
 impl Disjunction {
@@ -36,6 +37,7 @@ impl Disjunction {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Conjunction(pub(crate) Vec<NormalFormAtom>);
 
 impl InputAtom {
@@ -77,9 +79,9 @@ impl InputAtom {
     }
 
     pub(crate) fn disjunctive_normal_form(self) -> Result<Disjunction> {
+        let neg_form = self.negation_normal_form()?;
         let mut gen = TempKwGen::default();
-        self.negation_normal_form()?
-            .do_disjunctive_normal_form(&mut gen)
+        neg_form.do_disjunctive_normal_form(&mut gen)
     }
 
     fn do_disjunctive_normal_form(self, gen: &mut TempKwGen) -> Result<Disjunction> {

@@ -107,7 +107,6 @@ impl MagicProgram {
                             collected_atoms.push(MagicAtom::Unification(u));
                         }
                         MagicAtom::Rule(r_app) => {
-                            dbg!(&r_app);
                             if r_app.name.has_bound_adornment() {
                                 // we are guaranteed to have a magic rule application
                                 let sup_kw = make_sup_kw();
@@ -153,12 +152,12 @@ impl MagicProgram {
                                     )
                                     .collect_vec();
                                 let inp_aggr = vec![None; inp_args.len()];
-                                inp_entry.push(dbg!(MagicRule {
+                                inp_entry.push(MagicRule {
                                     head: inp_args,
                                     aggr: inp_aggr,
                                     body: vec![sup_rule_app],
                                     vld: rule.vld,
-                                }))
+                                });
                             }
                             seen_bindings.extend(r_app.args.iter().cloned());
                             collected_atoms.push(MagicAtom::Rule(r_app));

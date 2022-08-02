@@ -101,9 +101,11 @@ impl SessionTx {
                     for (rule_n, (_head, deriving_rules, relation)) in rules.iter().enumerate() {
                         let mut should_do_calculation = false;
                         for d_rule in deriving_rules {
-                            if *prev_changed.get(d_rule).unwrap() {
-                                should_do_calculation = true;
-                                break;
+                            if let Some(changed) = prev_changed.get(d_rule) {
+                                if *changed {
+                                    should_do_calculation = true;
+                                    break;
+                                }
                             }
                         }
                         if !should_do_calculation {

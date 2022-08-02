@@ -7,7 +7,7 @@ use crate::data::program::{NormalFormAtom, NormalFormRule};
 
 impl NormalFormRule {
     pub(crate) fn convert_to_well_ordered_rule(self) -> Result<Self> {
-        let mut seen_variables: BTreeSet<_> = self.head.iter().cloned().collect();
+        let mut seen_variables = BTreeSet::default();
         let mut round_1_collected = vec![];
         let mut pending = vec![];
 
@@ -47,9 +47,8 @@ impl NormalFormRule {
         }
 
         let mut collected = vec![];
-        seen_variables = self.head.iter().cloned().collect();
-        let mut last_pending = pending;
-        let mut pending = vec![];
+        seen_variables.clear();
+        let mut last_pending = vec![];
         for atom in round_1_collected {
             mem::swap(&mut last_pending, &mut pending);
             pending.clear();

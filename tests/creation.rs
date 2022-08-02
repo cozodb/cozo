@@ -142,9 +142,9 @@ fn creation() {
             {
                 "rule": "?",
                 "args": [["?a"],
-                    // ["?alice", "person.first_name", "Alice"],
-                    {"rule": "friend_of_friend", "args": ["?alice", "?a"]},
-                    // {"not_exists": {"rule": "friend_of_friend", "args": ["?alice", "?a"]}},
+                    ["?alice", "person.first_name", "Alice"],
+                    // {"rule": "friend_of_friend", "args": ["?alice", "?a"]},
+                    {"not_exists": {"rule": "friend_of_friend", "args": ["?alice", "?a"]}},
                     ["?a", "person.first_name", "?n"],
                 ]
             }
