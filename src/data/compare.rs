@@ -53,10 +53,13 @@ pub(crate) fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_triple_eav(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_e, a_a, a_t) = decode_ea_key(a).unwrap();
-    let (b_e, b_a, b_t) = decode_ea_key(b).unwrap();
+    return_if_resolved!(a[..8].cmp(&b[..8]));
+    if a.len() == 8 || b.len() == 8 {
+        return a.len().cmp(&b.len());
+    }
+    let (_a_e, a_a, a_t) = decode_ea_key(a).unwrap();
+    let (_b_e, b_a, b_t) = decode_ea_key(b).unwrap();
 
-    return_if_resolved!(a_e.cmp(&b_e));
     return_if_resolved!(a_a.cmp(&b_a));
 
     let a_v = decode_value_from_key(a).unwrap();
@@ -68,10 +71,14 @@ fn compare_key_triple_eav(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_triple_aev(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_a, a_e, a_t) = decode_ae_key(a).unwrap();
-    let (b_a, b_e, b_t) = decode_ae_key(b).unwrap();
+    return_if_resolved!(a[..8].cmp(&b[..8]));
+    if a.len() == 8 || b.len() == 8 {
+        return a.len().cmp(&b.len());
+    }
 
-    return_if_resolved!(a_a.cmp(&b_a));
+    let (_a_a, a_e, a_t) = decode_ae_key(a).unwrap();
+    let (_b_a, b_e, b_t) = decode_ae_key(b).unwrap();
+
     return_if_resolved!(a_e.cmp(&b_e));
 
     let a_v = decode_value_from_key(a).unwrap();
@@ -83,10 +90,13 @@ fn compare_key_triple_aev(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_triple_ave(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_a, a_e, a_t) = decode_ae_key(a).unwrap();
-    let (b_a, b_e, b_t) = decode_ae_key(b).unwrap();
+    return_if_resolved!(a[..8].cmp(&b[..8]));
+    if a.len() == 8 || b.len() == 8 {
+        return a.len().cmp(&b.len());
+    }
 
-    return_if_resolved!(a_a.cmp(&b_a));
+    let (_a_a, a_e, a_t) = decode_ae_key(a).unwrap();
+    let (_b_a, b_e, b_t) = decode_ae_key(b).unwrap();
 
     let a_v = decode_value_from_key(a).unwrap();
     let b_v = decode_value_from_key(b).unwrap();
@@ -98,10 +108,14 @@ fn compare_key_triple_ave(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_triple_vae(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_v, a_a, a_e, a_t) = decode_vae_key(a).unwrap();
-    let (b_v, b_a, b_e, b_t) = decode_vae_key(b).unwrap();
+    return_if_resolved!(a[..8].cmp(&b[..8]));
+    if a.len() == 8 || b.len() == 8 {
+        return a.len().cmp(&b.len());
+    }
 
-    return_if_resolved!(a_v.cmp(&b_v));
+    let (_a_v, a_a, a_e, a_t) = decode_vae_key(a).unwrap();
+    let (_b_v, b_a, b_e, b_t) = decode_vae_key(b).unwrap();
+
     return_if_resolved!(a_a.cmp(&b_a));
     return_if_resolved!(a_e.cmp(&b_e));
     a_t.cmp(&b_t).reverse()
@@ -109,12 +123,16 @@ fn compare_key_triple_vae(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_attr_by_id(a: &[u8], b: &[u8]) -> Ordering {
+    return_if_resolved!(a[..8].cmp(&b[..8]));
+    if a.len() == 8 || b.len() == 8 {
+        return a.len().cmp(&b.len());
+    }
+
     debug_assert_eq!(a[0], StorageTag::AttrById as u8);
     debug_assert_eq!(b[0], StorageTag::AttrById as u8);
-    let (a_a, a_t) = decode_attr_key_by_id(a).unwrap();
-    let (b_a, b_t) = decode_attr_key_by_id(b).unwrap();
+    let (_a_a, a_t) = decode_attr_key_by_id(a).unwrap();
+    let (_b_a, b_t) = decode_attr_key_by_id(b).unwrap();
 
-    return_if_resolved!(a_a.cmp(&b_a));
     a_t.cmp(&b_t).reverse()
 }
 
@@ -130,9 +148,13 @@ fn compare_key_unique_entity_attr(a: &[u8], b: &[u8]) -> Ordering {
 
 #[inline]
 fn compare_key_unique_attr_val(a: &[u8], b: &[u8]) -> Ordering {
-    let (a_a, a_v) = decode_sentinel_attr_val(a).unwrap();
-    let (b_a, b_v) = decode_sentinel_attr_val(b).unwrap();
-    return_if_resolved!(a_a.cmp(&b_a));
+    return_if_resolved!(a[..8].cmp(&b[..8]));
+    if a.len() == 8 || b.len() == 8 {
+        return a.len().cmp(&b.len());
+    }
+
+    let (_a_a, a_v) = decode_sentinel_attr_val(a).unwrap();
+    let (_b_a, b_v) = decode_sentinel_attr_val(b).unwrap();
     a_v.cmp(&b_v)
 }
 

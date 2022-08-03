@@ -14,7 +14,7 @@ use crate::data::value::DataValue;
 use crate::runtime::transact::TxLog;
 
 #[repr(u8)]
-#[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Copy, Clone)]
 pub(crate) enum StorageTag {
     TripleEntityAttrValue = 1,
     TripleAttrEntityValue = 2,
