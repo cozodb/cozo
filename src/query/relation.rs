@@ -916,7 +916,6 @@ impl TripleRelation {
                     let val = tuple.0.get(left_v_idx).unwrap();
                     tx.triple_av_before_scan(self.attr.id, val, self.vld)
                         .map_ok(move |(_, val, eid)| {
-                            dbg!(&val, &eid);
                             let mut ret = tuple.0.clone();
                             ret.push(eid.to_value());
                             ret.push(val);
