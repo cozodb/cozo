@@ -6,16 +6,37 @@ use itertools::Itertools;
 use log::{debug, log_enabled, trace, Level};
 
 use crate::data::keyword::{Keyword, PROG_ENTRY};
-use crate::data::program::{MagicKeyword, MagicProgram, StratifiedMagicProgram};
+use crate::data::program::{MagicKeyword, StratifiedMagicProgram};
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 
+pub(crate) type CompiledProgram =
+    BTreeMap<MagicKeyword, Vec<(Vec<Keyword>, BTreeSet<MagicKeyword>, Relation)>>;
+
 impl SessionTx {
     pub(crate) fn stratified_magic_evaluate(
         &mut self,
-        prog: &StratifiedMagicProgram,
+        strata: &[CompiledProgram],
+        stores: &BTreeMap<MagicKeyword, TempStore>,
     ) -> Result<TempStore> {
+        let ret_area = stores
+            .get(&MagicKeyword::Muggle {
+                inner: PROG_ENTRY.clone(),
+            })
+            .ok_or_else(|| anyhow!("program entry not found in rules"))?
+            .clone();
+
+        for (idx, cur_prog) in strata.iter().rev().enumerate() {
+            debug!("stratum {}", idx);
+            self.semi_naive_magic_evaluate(cur_prog, &stores)?;
+        }
+        Ok(ret_area)
+    }
+    pub(crate) fn stratified_magic_compile(
+        &mut self,
+        prog: &StratifiedMagicProgram,
+    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicKeyword, TempStore>)> {
         let stores = prog
             .0
             .iter()
@@ -27,61 +48,61 @@ impl SessionTx {
                 )
             })
             .collect::<BTreeMap<_, _>>();
-        let ret_area = stores
-            .get(&MagicKeyword::Muggle {
-                inner: PROG_ENTRY.clone(),
-            })
-            .ok_or_else(|| anyhow!("program entry not found in rules"))?
-            .clone();
-        debug!("evaluate program with {} strata", prog.0.len());
 
-        for (idx, cur_prog) in prog.0.iter().rev().enumerate() {
-            debug!("stratum {}", idx);
-            self.semi_naive_magic_evaluate(cur_prog, &stores)?;
-        }
-        Ok(ret_area)
+        let compiled: Vec<_> = prog
+            .0
+            .iter()
+            .rev()
+            .map(|cur_prog| -> Result<CompiledProgram> {
+                cur_prog
+                    .prog
+                    .iter()
+                    .map(
+                        |(k, body)| -> Result<(
+                            MagicKeyword,
+                            Vec<(Vec<Keyword>, BTreeSet<MagicKeyword>, Relation)>,
+                        )> {
+                            let mut collected = Vec::with_capacity(body.len());
+                            for (rule_idx, rule) in body.iter().enumerate() {
+                                let header = &rule.head;
+                                let mut relation = self.compile_magic_rule_body(
+                                    &rule, k, rule_idx, &stores, &header,
+                                )?;
+                                relation.fill_predicate_binding_indices();
+                                collected.push((
+                                    rule.head.clone(),
+                                    rule.contained_rules(),
+                                    relation,
+                                ));
+                            }
+                            Ok((k.clone(), collected))
+                        },
+                    )
+                    .try_collect()
+            })
+            .try_collect()?;
+        Ok((compiled, stores))
     }
     fn semi_naive_magic_evaluate(
         &mut self,
-        prog: &MagicProgram,
+        prog: &CompiledProgram,
         stores: &BTreeMap<MagicKeyword, TempStore>,
     ) -> Result<()> {
-        let compiled: BTreeMap<_, _> = prog
-            .prog
-            .iter()
-            .map(
-                |(k, body)| -> Result<(
-                    MagicKeyword,
-                    Vec<(Vec<Keyword>, BTreeSet<MagicKeyword>, Relation)>,
-                )> {
-                    let mut collected = Vec::with_capacity(body.len());
-                    for (rule_idx, rule) in body.iter().enumerate() {
-                        let header = &rule.head;
-                        let mut relation =
-                            self.compile_magic_rule_body(&rule, k, rule_idx, &stores, &header)?;
-                        relation.fill_predicate_binding_indices();
-                        collected.push((rule.head.clone(), rule.contained_rules(), relation));
-                    }
-                    Ok((k.clone(), collected))
-                },
-            )
-            .try_collect()?;
-
         if log_enabled!(Level::Debug) {
-            for (k, vs) in compiled.iter() {
+            for (k, vs) in prog.iter() {
                 for (i, (binding, _, rel)) in vs.iter().enumerate() {
                     debug!("{:?}.{} {:?}: {:#?}", k, i, binding, rel)
                 }
             }
         }
 
-        let mut changed: BTreeMap<_, _> = compiled.keys().map(|k| (k, false)).collect();
+        let mut changed: BTreeMap<_, _> = prog.keys().map(|k| (k, false)).collect();
         let mut prev_changed = changed.clone();
 
         for epoch in 0u32.. {
             debug!("epoch {}", epoch);
             if epoch == 0 {
-                for (k, rules) in compiled.iter() {
+                for (k, rules) in prog.iter() {
                     let store = stores.get(k).unwrap();
                     let use_delta = BTreeSet::default();
                     for (rule_n, (_head, _deriving_rules, relation)) in rules.iter().enumerate() {
@@ -100,7 +121,7 @@ impl SessionTx {
                     *v = false;
                 }
 
-                for (k, rules) in compiled.iter() {
+                for (k, rules) in prog.iter() {
                     let store = stores.get(k).unwrap();
                     for (rule_n, (_head, deriving_rules, relation)) in rules.iter().enumerate() {
                         let mut should_do_calculation = false;

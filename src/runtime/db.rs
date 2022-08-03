@@ -285,10 +285,21 @@ impl Db {
             .to_normalized_program()?
             .stratify()?
             .magic_sets_rewrite();
-        let result = tx.stratified_magic_evaluate(&program)?;
+        let (compiled, stores) = tx.stratified_magic_compile(&program)?;
+        let result = tx.stratified_magic_evaluate(&compiled, &stores)?;
         let ret: Vec<_> = tx
             .run_pull_on_query_results(result, out_spec, vld)?
             .try_collect()?;
         Ok(json!(ret))
+    }
+    pub fn explain_query(&self, payload: &JsonValue) -> Result<JsonValue> {
+        let mut tx = self.transact()?;
+        let (input_program, out_spec, vld) = tx.parse_query(payload)?;
+        let normalized_program = input_program.to_normalized_program()?;
+        let stratified_program = normalized_program.stratify()?;
+        let magic_program = stratified_program.magic_sets_rewrite();
+        let (compiled_strata, _) = tx.stratified_magic_compile(&magic_program)?;
+
+        todo!()
     }
 }
