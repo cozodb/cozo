@@ -108,8 +108,8 @@ if __name__ == '__main__':
     db = insert_data(False)
     start_time = time.time()
     res = db.run([Q(['?c', '?code', '?desc'],
-                    T.country.code('?c', 'VN'),
-                    Unify('?c', 10000239),
+                    Disj(T.country.code('?c', 'CU'),
+                         Unify('?c', 10000239)),
                     T.country.code('?c', '?code'),
                     T.country.desc('?c', '?desc'))])
     end_time = time.time()

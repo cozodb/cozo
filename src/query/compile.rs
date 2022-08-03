@@ -15,7 +15,7 @@ impl SessionTx {
         rule: &MagicRule,
         rule_name: &MagicKeyword,
         rule_idx: usize,
-        stores: &BTreeMap<MagicKeyword, (TempStore, usize)>,
+        stores: &BTreeMap<MagicKeyword, TempStore>,
         ret_vars: &[Keyword],
     ) -> Result<Relation> {
         let mut ret = Relation::unit();
@@ -58,15 +58,15 @@ impl SessionTx {
                     }
                 }
                 MagicAtom::Rule(rule_app) => {
-                    let (store, arity) = stores
+                    let store = stores
                         .get(&rule_app.name)
                         .ok_or_else(|| anyhow!("undefined rule {:?} encountered", rule_app.name))?
                         .clone();
                     ensure!(
-                        arity == rule_app.args.len(),
+                        store.key_size == rule_app.args.len(),
                         "arity mismatch in rule application {:?}, expect {}, found {}",
                         rule_app.name,
-                        arity,
+                        store.key_size,
                         rule_app.args.len()
                     );
                     let mut prev_joiner_vars = vec![];
@@ -129,15 +129,15 @@ impl SessionTx {
                     }
                 }
                 MagicAtom::NegatedRule(rule_app) => {
-                    let (store, arity) = stores
+                    let store = stores
                         .get(&rule_app.name)
                         .ok_or_else(|| anyhow!("undefined rule encountered: {:?}", rule_app.name))?
                         .clone();
                     ensure!(
-                        arity == rule_app.args.len(),
+                        store.key_size == rule_app.args.len(),
                         "arity mismatch for {:?}, expect {}, got {}",
                         rule_app.name,
-                        arity,
+                        store.key_size,
                         rule_app.args.len()
                     );
 

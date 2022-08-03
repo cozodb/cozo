@@ -20,14 +20,18 @@ impl SessionTx {
             .0
             .iter()
             .flat_map(|p| p.prog.iter())
-            .map(|(k, s)| (k.clone(), (self.new_throwaway(), s[0].head.len())))
+            .map(|(k, s)| {
+                (
+                    k.clone(),
+                    (self.new_throwaway(s[0].head.len(), 0, k.clone())),
+                )
+            })
             .collect::<BTreeMap<_, _>>();
         let ret_area = stores
             .get(&MagicKeyword::Muggle {
                 inner: PROG_ENTRY.clone(),
             })
             .ok_or_else(|| anyhow!("program entry not found in rules"))?
-            .0
             .clone();
         debug!("evaluate program with {} strata", prog.0.len());
 
@@ -40,7 +44,7 @@ impl SessionTx {
     fn semi_naive_magic_evaluate(
         &mut self,
         prog: &MagicProgram,
-        stores: &BTreeMap<MagicKeyword, (TempStore, usize)>,
+        stores: &BTreeMap<MagicKeyword, TempStore>,
     ) -> Result<()> {
         let compiled: BTreeMap<_, _> = prog
             .prog
@@ -78,7 +82,7 @@ impl SessionTx {
             debug!("epoch {}", epoch);
             if epoch == 0 {
                 for (k, rules) in compiled.iter() {
-                    let (store, _arity) = stores.get(k).unwrap();
+                    let store = stores.get(k).unwrap();
                     let use_delta = BTreeSet::default();
                     for (rule_n, (_head, _deriving_rules, relation)) in rules.iter().enumerate() {
                         debug!("initial calculation for rule {:?}.{}", k, rule_n);
@@ -97,7 +101,7 @@ impl SessionTx {
                 }
 
                 for (k, rules) in compiled.iter() {
-                    let (store, _arity) = stores.get(k).unwrap();
+                    let store = stores.get(k).unwrap();
                     for (rule_n, (_head, deriving_rules, relation)) in rules.iter().enumerate() {
                         let mut should_do_calculation = false;
                         for d_rule in deriving_rules {
@@ -112,7 +116,7 @@ impl SessionTx {
                             // debug!("skip {}.{}", k, rule_n);
                             continue;
                         }
-                        for (delta_key, (delta_store, _)) in stores.iter() {
+                        for (delta_key, delta_store) in stores.iter() {
                             if !deriving_rules.contains(delta_key) {
                                 continue;
                             }

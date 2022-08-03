@@ -16,6 +16,7 @@ use crate::data::encode::{
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::keyword::Keyword;
+use crate::data::program::MagicKeyword;
 use crate::data::value::DataValue;
 use crate::runtime::temp_store::{TempStore, TempStoreId};
 
@@ -66,12 +67,34 @@ impl TxLog {
 }
 
 impl SessionTx {
-    pub(crate) fn new_throwaway(&self) -> TempStore {
+    pub(crate) fn new_throwaway(
+        &self,
+        key_size: usize,
+        val_size: usize,
+        rule_name: MagicKeyword,
+    ) -> TempStore {
         let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
         TempStore {
             db: self.temp_store.clone(),
             id: TempStoreId(old_count),
+            key_size,
+            val_size,
+            rule_name,
+        }
+    }
+
+    pub(crate) fn temp_area(&self) -> TempStore {
+        let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
+        let old_count = old_count & 0x00ff_ffffu32;
+        TempStore {
+            db: self.temp_store.clone(),
+            id: TempStoreId(old_count),
+            key_size: 0,
+            val_size: 0,
+            rule_name: MagicKeyword::Muggle {
+                inner: Keyword::from(""),
+            },
         }
     }
 

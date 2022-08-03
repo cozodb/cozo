@@ -1,9 +1,10 @@
 use std::fmt::{Debug, Formatter};
 
-use log::{error};
+use log::error;
 
 use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
 
+use crate::data::program::MagicKeyword;
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 
@@ -20,6 +21,9 @@ impl Debug for TempStoreId {
 pub(crate) struct TempStore {
     pub(crate) db: RawRocksDb,
     pub(crate) id: TempStoreId,
+    pub(crate) key_size: usize,
+    pub(crate) val_size: usize,
+    pub(crate) rule_name: MagicKeyword,
 }
 
 impl Debug for TempStore {
@@ -37,13 +41,13 @@ impl TempStore {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.exists(&key_encoded)
     }
-    pub(crate) fn scan_all(&self) -> impl Iterator<Item=anyhow::Result<Tuple>> {
+    pub(crate) fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<Tuple>> {
         self.scan_all_for_epoch(0)
     }
     pub(crate) fn scan_all_for_epoch(
         &self,
         epoch: u32,
-    ) -> impl Iterator<Item=anyhow::Result<Tuple>> {
+    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
         let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, epoch);
         let mut it = self
             .db
@@ -57,14 +61,14 @@ impl TempStore {
     pub(crate) fn scan_prefix(
         &self,
         prefix: &Tuple,
-    ) -> impl Iterator<Item=anyhow::Result<Tuple>> {
+    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
         self.scan_prefix_for_epoch(prefix, 0)
     }
     pub(crate) fn scan_prefix_for_epoch(
         &self,
         prefix: &Tuple,
         epoch: u32,
-    ) -> impl Iterator<Item=anyhow::Result<Tuple>> {
+    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bottom);
         let upper = Tuple(upper);

@@ -196,7 +196,7 @@ impl Debug for Relation {
             Relation::Derived(r) => f
                 .debug_tuple("Derived")
                 .field(&bindings)
-                .field(&r.storage.id)
+                .field(&r.storage.rule_name)
                 .finish(),
             Relation::Join(r) => {
                 if r.left.is_unit() {
@@ -231,9 +231,9 @@ impl Debug for Relation {
             Relation::Unification(r) => f
                 .debug_tuple("Unify")
                 .field(&bindings)
+                .field(&r.parent)
                 .field(&r.binding)
                 .field(&r.expr)
-                .field(&r.parent)
                 .finish(),
         }
     }
@@ -989,7 +989,7 @@ impl TripleRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         // [f, b] where b is not indexed
-        let throwaway = tx.new_throwaway();
+        let throwaway = tx.temp_area();
         for item in tx.triple_a_before_scan(self.attr.id, self.vld) {
             match item {
                 Err(e) => return Box::new([Err(e)].into_iter()),
@@ -1528,7 +1528,7 @@ impl InnerJoin {
             .sorted_by_key(|(_, b)| **b)
             .map(|(a, _)| a)
             .collect_vec();
-        let throwaway = tx.new_throwaway();
+        let throwaway = tx.temp_area();
         for item in self.right.iter(tx, epoch, use_delta) {
             match item {
                 Ok(tuple) => {
