@@ -186,7 +186,7 @@ impl SessionTx {
             .ok_or_else(|| anyhow!("expect field 'unify' to be a keyword"))?;
         let binding = Keyword::from(binding);
         ensure!(
-            !binding.is_reserved(),
+            binding.is_query_var(),
             "binding for unification {} is reserved",
             binding
         );

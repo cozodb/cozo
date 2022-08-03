@@ -100,7 +100,8 @@ impl DataValue {
     pub(crate) fn get_entity_id(&self) -> Result<EntityId> {
         match self {
             DataValue::EnId(id) => Ok(*id),
-            v => bail!("type mismatch: expect type {:?}, got value {:?}", self, v),
+            DataValue::Int(id) => Ok(EntityId(*id as u64)),
+            v => bail!("type mismatch: expect type EntId, got value {:?}", self),
         }
     }
 }
