@@ -2,15 +2,16 @@ from cozo import *
 
 if __name__ == '__main__':
     db = CozoDb('_test', destroy_on_exit=True)
-    res = db.tx_attr([
-        PutAttr('person.idd', Typing.string, index=Indexing.identity),
-        PutAttr('person.first_name', Typing.string, index=Indexing.indexed),
-        PutAttr('person.last_name', Typing.string, index=Indexing.indexed),
-        PutAttr('person.age', Typing.int, index=Indexing.indexed),
-        PutAttr('person.friend', Typing.ref, cardinality=Cardinality.many, index=Indexing.indexed),
-        PutAttr('person.weight', Typing.float, index=Indexing.indexed),
-        PutAttr('person.covid', Typing.bool),
-    ])
+    res = db.tx_attr(
+        DefAttrs('person')
+        .idd(Typing.string, index=Indexing.identity)
+        .first_name(Typing.string, index=Indexing.indexed)
+        .last_name(Typing.string, index=Indexing.indexed)
+        .age(Typing.int, index=Indexing.indexed)
+        .friend(Typing.ref, cardinality=Cardinality.many, index=Indexing.indexed)
+        .weight(Typing.float, index=Indexing.indexed)
+        .covid(Typing.bool)()
+    )
     print(res)
     print(db.tx_attr([
         PutAttr('person.id', Typing.string, id=res['results'][0][0], cardinality=Cardinality.one,

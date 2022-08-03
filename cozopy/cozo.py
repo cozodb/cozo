@@ -84,6 +84,31 @@ def Pull(variable, spec):
     return {'pull': variable, 'spec': spec}
 
 
+class DefAttrs:
+    def __init__(self, prefix):
+        self.prefix = prefix
+        self.attrs = []
+
+    def __call__(self, *args, **kwargs):
+        return self.attrs
+
+    def __getattr__(self, item):
+        return DefAttributesHelper(self, item)
+
+
+class DefAttributesHelper:
+    def __init__(self, parent, name):
+        self.parent = parent
+        self.name = name
+
+    def __call__(self, typing, id=None, cardinality=Cardinality.one, index=Indexing.none, history=False):
+        keyword = f'{self.parent.prefix}.{self.name}'
+        self.parent.attrs.append({
+            'put': Attribute(keyword, typing, id, cardinality, index, history)
+        })
+        return self.parent
+
+
 class TripleClass:
     def __init__(self, attr_name):
         self._attr_name = attr_name
@@ -185,4 +210,4 @@ def Unify(binding, expr):
 
 __all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Add', 'Sub', 'Mul', 'Div', 'Q', 'T', 'R', 'Const', 'Conj', 'Disj',
            'NotExists', 'CozoDb', 'Typing', 'Cardinality', 'Indexing', 'PutAttr', 'RetractAttr', 'Attribute', 'Put',
-           'Retract', 'Pull', 'StrCat', 'Unify']
+           'Retract', 'Pull', 'StrCat', 'Unify', 'DefAttrs']
