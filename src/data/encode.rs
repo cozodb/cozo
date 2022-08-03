@@ -278,6 +278,11 @@ pub(crate) fn encode_aev_key(
 
 #[inline]
 pub(crate) fn decode_ae_key(src: &[u8]) -> Result<(AttrId, EntityId, Validity)> {
+    debug_assert!(
+        src[0] == StorageTag::TripleAttrEntityValue as u8
+            || src[0] == StorageTag::TripleAttrValueEntity as u8
+    );
+    debug_assert!(src.len() >= VEC_SIZE_24);
     let aid = AttrId::from_bytes(&src[0..VEC_SIZE_8]);
     let eid = EntityId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
     let vld = Validity::from_bytes(&src[VEC_SIZE_16..VEC_SIZE_24]);

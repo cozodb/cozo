@@ -219,7 +219,7 @@ impl SessionTx {
                         );
                     }
                 } else if let Some(v_slice) = self.tx.get(&ave_encoded, false)? {
-                    let (_, found_eid, _) = decode_ae_key(&v_slice)?;
+                    let found_eid = decode_value_from_val(&v_slice)?.get_entity_id()?;
                     ensure!(
                         found_eid == eid,
                         "unique constraint violated for attr {} with value {:?}",

@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Debug;
 
 use anyhow::{anyhow, ensure, Result};
 
@@ -8,12 +7,6 @@ use crate::data::program::{MagicAtom, MagicKeyword, MagicRule};
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
-
-#[derive(Clone, Debug, Default)]
-pub(crate) enum Aggregation {
-    #[default]
-    None,
-}
 
 impl SessionTx {
     pub(crate) fn compile_magic_rule_body(

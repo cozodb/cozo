@@ -3,6 +3,7 @@ use std::fmt::{Debug, Formatter};
 
 use anyhow::Result;
 use smallvec::SmallVec;
+use crate::data::aggr::Aggregation;
 
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
@@ -20,12 +21,6 @@ impl TempKwGen {
         self.last_id += 1;
         Keyword::from(&format!("*{}", self.last_id) as &str)
     }
-}
-
-#[derive(Clone, Debug, Default)]
-pub(crate) enum Aggregation {
-    #[default]
-    Todo,
 }
 
 #[derive(Debug, Clone)]
