@@ -36,6 +36,7 @@ impl CozoDbPy {
     #[new]
     #[args(create_if_missing = true, destroy_on_exit = false)]
     fn new(path: &str, create_if_missing: bool, destroy_on_exit: bool) -> PyResult<Self> {
+        let _ = env_logger::try_init();
         let builder = DbBuilder::default()
             .path(path)
             .create_if_missing(create_if_missing)
