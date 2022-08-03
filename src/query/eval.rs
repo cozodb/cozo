@@ -2,17 +2,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
 use anyhow::{anyhow, Result};
-use itertools::Itertools;
 use log::{debug, log_enabled, trace, Level};
 
-use crate::data::keyword::{Keyword, PROG_ENTRY};
-use crate::data::program::{MagicKeyword, StratifiedMagicProgram};
-use crate::query::relation::Relation;
+use crate::data::keyword::PROG_ENTRY;
+use crate::data::program::MagicKeyword;
+use crate::query::compile::CompiledProgram;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
-
-pub(crate) type CompiledProgram =
-    BTreeMap<MagicKeyword, Vec<(Vec<Keyword>, BTreeSet<MagicKeyword>, Relation)>>;
 
 impl SessionTx {
     pub(crate) fn stratified_magic_evaluate(
@@ -32,56 +28,6 @@ impl SessionTx {
             self.semi_naive_magic_evaluate(cur_prog, &stores)?;
         }
         Ok(ret_area)
-    }
-    pub(crate) fn stratified_magic_compile(
-        &mut self,
-        prog: &StratifiedMagicProgram,
-    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicKeyword, TempStore>)> {
-        let stores = prog
-            .0
-            .iter()
-            .flat_map(|p| p.prog.iter())
-            .map(|(k, s)| {
-                (
-                    k.clone(),
-                    (self.new_throwaway(s[0].head.len(), 0, k.clone())),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        let compiled: Vec<_> = prog
-            .0
-            .iter()
-            .rev()
-            .map(|cur_prog| -> Result<CompiledProgram> {
-                cur_prog
-                    .prog
-                    .iter()
-                    .map(
-                        |(k, body)| -> Result<(
-                            MagicKeyword,
-                            Vec<(Vec<Keyword>, BTreeSet<MagicKeyword>, Relation)>,
-                        )> {
-                            let mut collected = Vec::with_capacity(body.len());
-                            for (rule_idx, rule) in body.iter().enumerate() {
-                                let header = &rule.head;
-                                let mut relation = self.compile_magic_rule_body(
-                                    &rule, k, rule_idx, &stores, &header,
-                                )?;
-                                relation.fill_predicate_binding_indices();
-                                collected.push((
-                                    rule.head.clone(),
-                                    rule.contained_rules(),
-                                    relation,
-                                ));
-                            }
-                            Ok((k.clone(), collected))
-                        },
-                    )
-                    .try_collect()
-            })
-            .try_collect()?;
-        Ok((compiled, stores))
     }
     fn semi_naive_magic_evaluate(
         &mut self,

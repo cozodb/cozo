@@ -1,15 +1,69 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, ensure, Result};
+use itertools::Itertools;
 
 use crate::data::expr::Expr;
 use crate::data::keyword::Keyword;
-use crate::data::program::{MagicAtom, MagicKeyword, MagicRule};
+use crate::data::program::{MagicAtom, MagicKeyword, MagicRule, StratifiedMagicProgram};
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 
+pub(crate) type CompiledProgram =
+    BTreeMap<MagicKeyword, Vec<(Vec<Keyword>, BTreeSet<MagicKeyword>, Relation)>>;
+
 impl SessionTx {
+    pub(crate) fn stratified_magic_compile(
+        &mut self,
+        prog: &StratifiedMagicProgram,
+    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicKeyword, TempStore>)> {
+        let stores = prog
+            .0
+            .iter()
+            .flat_map(|p| p.prog.iter())
+            .map(|(k, s)| {
+                (
+                    k.clone(),
+                    (self.new_throwaway(s[0].head.len(), 0, k.clone())),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        let compiled: Vec<_> = prog
+            .0
+            .iter()
+            .rev()
+            .map(|cur_prog| -> Result<CompiledProgram> {
+                cur_prog
+                    .prog
+                    .iter()
+                    .map(
+                        |(k, body)| -> Result<(
+                            MagicKeyword,
+                            Vec<(Vec<Keyword>, BTreeSet<MagicKeyword>, Relation)>,
+                        )> {
+                            let mut collected = Vec::with_capacity(body.len());
+                            for (rule_idx, rule) in body.iter().enumerate() {
+                                let header = &rule.head;
+                                let mut relation = self.compile_magic_rule_body(
+                                    &rule, k, rule_idx, &stores, &header,
+                                )?;
+                                relation.fill_predicate_binding_indices();
+                                collected.push((
+                                    rule.head.clone(),
+                                    rule.contained_rules(),
+                                    relation,
+                                ));
+                            }
+                            Ok((k.clone(), collected))
+                        },
+                    )
+                    .try_collect()
+            })
+            .try_collect()?;
+        Ok((compiled, stores))
+    }
     pub(crate) fn compile_magic_rule_body(
         &mut self,
         rule: &MagicRule,
