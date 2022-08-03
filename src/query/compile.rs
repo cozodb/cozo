@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, ensure, Result};
 
+use crate::data::expr::Expr;
 use crate::data::keyword::Keyword;
 use crate::data::program::{MagicAtom, MagicKeyword, MagicRule};
 use crate::query::relation::Relation;
@@ -164,8 +165,15 @@ impl SessionTx {
                     ret = ret.filter(p.clone());
                 }
                 MagicAtom::Unification(u) => {
-                    seen_variables.insert(u.binding.clone());
-                    ret = ret.unify(u.binding.clone(), u.expr.clone());
+                    if seen_variables.contains(&u.binding) {
+                        ret = ret.filter(Expr::build_equate(vec![
+                            Expr::Binding(u.binding.clone(), None),
+                            u.expr.clone(),
+                        ]));
+                    } else {
+                        seen_variables.insert(u.binding.clone());
+                        ret = ret.unify(u.binding.clone(), u.expr.clone());
+                    }
                 }
             }
         }

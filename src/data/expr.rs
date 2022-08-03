@@ -19,6 +19,9 @@ pub(crate) enum Expr {
 }
 
 impl Expr {
+    pub(crate) fn build_equate(exprs: Vec<Expr>) -> Self {
+        Expr::Apply(&OP_EQ, exprs.into())
+    }
     pub(crate) fn negate(self) -> Self {
         Expr::Apply(&OP_NOT, Box::new([self]))
     }
