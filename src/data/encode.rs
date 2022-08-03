@@ -175,6 +175,14 @@ impl<const N: usize> From<SmallVec<[u8; N]>> for EncodedVec<N> {
     }
 }
 
+impl From<&'_ [u8]> for EncodedVec<LARGE_VEC_SIZE> {
+    fn from(item: &'_ [u8]) -> Self {
+        Self {
+            inner: SmallVec::from_slice(item),
+        }
+    }
+}
+
 impl TryFrom<u8> for StorageTag {
     type Error = anyhow::Error;
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {

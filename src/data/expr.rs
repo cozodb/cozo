@@ -648,11 +648,6 @@ fn op_is_num(args: &[DataValue]) -> Result<DataValue> {
     )))
 }
 
-define_op!(OP_IS_ID, 1, false, true);
-fn op_is_id(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(args[0], DataValue::EnId(_))))
-}
-
 define_op!(OP_IS_STRING, 1, false, true);
 fn op_is_string(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::String(_))))
@@ -728,7 +723,6 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "IsInt" => &OP_IS_INT,
         "IsFloat" => &OP_IS_FLOAT,
         "IsNum" => &OP_IS_NUM,
-        "IsId" => &OP_IS_ID,
         "IsString" => &OP_IS_STRING,
         "IsList" => &OP_IS_LIST,
         "IsBytes" => &OP_IS_BYTES,

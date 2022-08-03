@@ -6,7 +6,12 @@ use cozorocks::{DbIter, IterBuilder};
 
 use crate::data::attr::{Attribute, AttributeTyping};
 use crate::data::compare::compare_key;
-use crate::data::encode::{decode_ae_key, decode_ea_key, decode_vae_key, decode_value, decode_value_from_key, decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v, encode_eav_key, encode_sentinel_attr_val, encode_sentinel_entity_attr, encode_vae_key, EncodedVec, LARGE_VEC_SIZE};
+use crate::data::encode::{
+    decode_ae_key, decode_ea_key, decode_vae_key, decode_value, decode_value_from_key,
+    decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v,
+    encode_eav_key, encode_sentinel_attr_val, encode_sentinel_entity_attr, encode_vae_key,
+    EncodedVec, LARGE_VEC_SIZE,
+};
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, INLINE_VAL_SIZE_LIMIT};
@@ -15,7 +20,10 @@ use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
 impl SessionTx {
-    pub(crate) fn tx_triples(&mut self, payloads: Vec<Quintuple>) -> Result<Vec<(EntityId, isize)>> {
+    pub(crate) fn tx_triples(
+        &mut self,
+        payloads: Vec<Quintuple>,
+    ) -> Result<Vec<(EntityId, isize)>> {
         let mut ret = Vec::with_capacity(payloads.len());
         for payload in payloads {
             match payload.action {
@@ -228,7 +236,7 @@ impl SessionTx {
                     );
                 }
             }
-            let e_in_val_encoded = DataValue::EnId(eid).encode_with_op_and_tx(op, tx_id);
+            let e_in_val_encoded = eid.to_value().encode_with_op_and_tx(op, tx_id);
             if real_delete {
                 self.tx.del(&ave_encoded)?;
             } else {
@@ -281,7 +289,7 @@ impl SessionTx {
                         new_eid
                     }
                 };
-                let new_v = DataValue::EnId(perm_v_eid);
+                let new_v = perm_v_eid.to_value();
                 return self.write_triple(eid, attr, &new_v, vld, StoreOp::Assert);
             }
         }
@@ -433,7 +441,7 @@ impl SessionTx {
         v: &DataValue,
         before: Validity,
     ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
-        let lower = encode_ave_key(aid, v, EntityId::MIN_PERM, Validity::MAX);
+        let lower = encode_ave_key(aid, v, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_key(aid, v, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueBeforeIter::new(self.tx.iterator(), lower, upper, before)
     }
@@ -443,7 +451,7 @@ impl SessionTx {
         v: &DataValue,
         after: Validity,
     ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
-        let lower = encode_ave_key(aid, v, EntityId::MIN_PERM, Validity::MAX);
+        let lower = encode_ave_key(aid, v, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_key(aid, v, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueAfterIter::new(self.tx.iterator(), lower, upper, after)
     }
@@ -453,7 +461,7 @@ impl SessionTx {
         aid: AttrId,
         before: Validity,
     ) -> impl Iterator<Item = Result<(EntityId, AttrId, EntityId)>> {
-        let lower = encode_vae_key(v_eid, aid, EntityId::MIN_PERM, Validity::MAX);
+        let lower = encode_vae_key(v_eid, aid, EntityId::ZERO, Validity::MAX);
         let upper = encode_vae_key(v_eid, aid, EntityId::MAX_PERM, Validity::MIN);
         TripleValueRefAttrBeforeIter::new(self.tx.iterator(), lower, upper, before)
     }
@@ -462,7 +470,7 @@ impl SessionTx {
         aid: AttrId,
         before: Validity,
     ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
-        let lower = encode_aev_key(aid, EntityId::MIN_PERM, &DataValue::Null, Validity::MAX);
+        let lower = encode_aev_key(aid, EntityId::ZERO, &DataValue::Null, Validity::MAX);
         let upper = encode_aev_key(aid, EntityId::MAX_PERM, &DataValue::Bottom, Validity::MIN);
         TripleAttrEntityBeforeIter::new(self.tx.iterator(), lower, upper, before)
     }
@@ -710,7 +718,10 @@ impl TripleAttrValueBeforeIter {
             match self.it.pair()? {
                 None => return Ok(None),
                 Some((k_slice, v_slice)) => {
-                    let (aid, eid, tid) = decode_ae_key(k_slice)?;
+                    let (aid, mut eid, tid) = decode_ae_key(k_slice)?;
+                    if eid.is_placeholder() {
+                        eid = decode_value_from_val(v_slice)?.get_entity_id()?;
+                    }
                     if tid > self.before {
                         self.current.encoded_entity_amend_validity(self.before);
                         continue;

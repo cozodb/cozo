@@ -291,7 +291,7 @@ impl SessionTx {
                         Ok(InputTerm::Const(c.into()))
                     } else {
                         let eid = self.parse_eid_from_map(o, vld)?;
-                        Ok(InputTerm::Const(DataValue::EnId(eid)))
+                        Ok(InputTerm::Const(eid.to_value()))
                     };
                 }
                 Ok(InputTerm::Const(value_rep.into()))
@@ -493,7 +493,7 @@ impl SessionTx {
         if let Some(o) = value_rep.as_object() {
             return if attr.val_type.is_ref_type() {
                 let eid = self.parse_eid_from_map(o, vld)?;
-                Ok(InputTerm::Const(DataValue::EnId(eid)))
+                Ok(InputTerm::Const(DataValue::Int(eid.0 as i64)))
             } else {
                 Ok(InputTerm::Const(self.parse_value_from_map(o, attr)?))
             };

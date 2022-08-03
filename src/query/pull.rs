@@ -437,7 +437,7 @@ impl SessionTx {
                 let (_, _, value) = found?;
                 self.pull_attr_collect(
                     spec,
-                    DataValue::EnId(value),
+                    value.to_value(),
                     vld,
                     depth,
                     root,
@@ -462,7 +462,7 @@ impl SessionTx {
             let iter = self.triple_vref_a_before_scan(eid, spec.attr.id, vld);
             for found in iter {
                 let (_, _, value) = found?;
-                collection.push(DataValue::EnId(value));
+                collection.push(value.to_value());
                 if let Some(n) = spec.take {
                     if n <= collection.len() {
                         break;

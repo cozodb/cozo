@@ -20,8 +20,6 @@ pub(crate) enum DataValue {
     Null,
     #[serde(rename = "b")]
     Bool(bool),
-    #[serde(rename = "e")]
-    EnId(EntityId),
     #[serde(rename = "i")]
     Int(i64),
     #[serde(rename = "f")]
@@ -52,7 +50,6 @@ impl Debug for DataValue {
             DataValue::Bool(b) => {
                 write!(f, "{}", b)
             }
-            DataValue::EnId(id) => id.fmt(f),
             DataValue::Int(i) => {
                 write!(f, "{}", i)
             }
@@ -99,9 +96,8 @@ impl DataValue {
 
     pub(crate) fn get_entity_id(&self) -> Result<EntityId> {
         match self {
-            DataValue::EnId(id) => Ok(*id),
             DataValue::Int(id) => Ok(EntityId(*id as u64)),
-            v => bail!("type mismatch: expect type EntId, got value {:?}", self),
+            _ => bail!("type mismatch: expect type EntId, got value {:?}", self),
         }
     }
 }

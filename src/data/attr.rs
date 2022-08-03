@@ -8,7 +8,7 @@ use serde_json::json;
 use smallvec::SmallVec;
 
 use crate::data::encode::EncodedVec;
-use crate::data::id::{AttrId, EntityId, TxId};
+use crate::data::id::{AttrId, TxId};
 use crate::data::json::JsonValue;
 use crate::data::keyword::Keyword;
 use crate::data::triple::StoreOp;
@@ -116,8 +116,7 @@ impl AttributeTyping {
     pub(crate) fn coerce_value(&self, val: DataValue) -> Result<DataValue> {
         match self {
             AttributeTyping::Ref | AttributeTyping::Component => match val {
-                val @ DataValue::EnId(_) => Ok(val),
-                DataValue::Int(s) if s > 0 => Ok(DataValue::EnId(EntityId(s as u64))),
+                DataValue::Int(s) if s > 0 => Ok(DataValue::Int(s)),
                 val => Err(self.type_err(val).into()),
             },
             AttributeTyping::Bool => {
@@ -265,7 +264,7 @@ impl Attribute {
     pub(crate) fn coerce_value(&self, value: DataValue, ctx: &mut TempIdCtx) -> Result<DataValue> {
         if self.val_type.is_ref_type() {
             if let DataValue::String(s) = value {
-                return Ok(DataValue::EnId(ctx.str2tempid(&s, false)));
+                return Ok(ctx.str2tempid(&s, false).to_value());
             }
         }
         self.val_type.coerce_value(value)

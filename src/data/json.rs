@@ -72,7 +72,6 @@ impl From<DataValue> for JsonValue {
             }
             DataValue::DescVal(v) => JsonValue::from(*v.0),
             DataValue::Bottom => JsonValue::Null,
-            DataValue::EnId(i) => JsonValue::Number(i.0.into()),
             DataValue::Timestamp(i) => JsonValue::Number(i.into()),
         }
     }

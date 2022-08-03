@@ -601,7 +601,7 @@ impl TripleRelation {
                     tx.triple_a_before_scan(self.attr.id, self.vld)
                         .map_ok(move |(_, e_id, val)| {
                             let mut ret = tuple.0.clone();
-                            ret.push(DataValue::EnId(e_id));
+                            ret.push(e_id.to_value());
                             ret.push(val);
                             Tuple(ret)
                         })
@@ -667,7 +667,7 @@ impl TripleRelation {
                     if exists {
                         let v = v.clone();
                         let mut ret = tuple.0;
-                        ret.push(DataValue::EnId(eid));
+                        ret.push(eid.to_value());
                         ret.push(v);
 
                         if !eliminate_indices.is_empty() {
@@ -751,7 +751,7 @@ impl TripleRelation {
                             tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
                                 .map_ok(move |(eid, _, val)| {
                                     let mut ret = tuple.0.clone();
-                                    ret.push(DataValue::EnId(eid));
+                                    ret.push(eid.to_value());
                                     ret.push(val);
                                     if !eliminate_indices.is_empty() {
                                         ret = ret
@@ -837,8 +837,8 @@ impl TripleRelation {
                             tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
                                 .map_ok(move |(_, _, e_id)| {
                                     let mut ret = tuple.0.clone();
-                                    ret.push(DataValue::EnId(e_id));
-                                    ret.push(DataValue::EnId(v_eid));
+                                    ret.push(e_id.to_value());
+                                    ret.push(v_eid.to_value());
 
                                     if !eliminate_indices.is_empty() {
                                         ret = ret
@@ -916,8 +916,9 @@ impl TripleRelation {
                     let val = tuple.0.get(left_v_idx).unwrap();
                     tx.triple_av_before_scan(self.attr.id, val, self.vld)
                         .map_ok(move |(_, val, eid)| {
+                            dbg!(&val, &eid);
                             let mut ret = tuple.0.clone();
-                            ret.push(DataValue::EnId(eid));
+                            ret.push(eid.to_value());
                             ret.push(val);
 
                             if !eliminate_indices.is_empty() {
@@ -994,7 +995,7 @@ impl TripleRelation {
             match item {
                 Err(e) => return Box::new([Err(e)].into_iter()),
                 Ok((_, eid, val)) => {
-                    let t = Tuple(vec![val, DataValue::EnId(eid)]);
+                    let t = Tuple(vec![val, eid.to_value()]);
                     if let Err(e) = throwaway.put(&t, 0) {
                         return Box::new([Err(e.into())].into_iter());
                     }
@@ -1325,7 +1326,7 @@ impl Relation {
             Relation::Fixed(f) => Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone())))),
             Relation::Triple(r) => Box::new(
                 tx.triple_a_before_scan(r.attr.id, r.vld)
-                    .map_ok(|(_, e_id, y)| Tuple(vec![DataValue::EnId(e_id), y])),
+                    .map_ok(|(_, e_id, y)| Tuple(vec![e_id.to_value(), y])),
             ),
             Relation::Derived(r) => r.iter(epoch, use_delta),
             Relation::Join(j) => j.iter(tx, epoch, use_delta),

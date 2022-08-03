@@ -1,3 +1,4 @@
+import json
 import time
 
 import pandas as pd
@@ -105,3 +106,12 @@ def insert_data(destroy_on_exit):
 
 if __name__ == '__main__':
     db = insert_data(False)
+    start_time = time.time()
+    res = db.run([Q(['?c', '?code', '?desc'],
+                    T.country.code('?c', 'VN'),
+                    Unify('?c', 10000239),
+                    T.country.code('?c', '?code'),
+                    T.country.desc('?c', '?desc'))])
+    end_time = time.time()
+    print(json.dumps(res, indent=2))
+    print(f'{len(res)} results fetched in {(end_time - start_time) * 1000:.3f}ms')

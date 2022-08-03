@@ -1,16 +1,27 @@
 use log::info;
 use serde_json::{json, to_string_pretty};
 
-use cozo::Db;
+use cozo::{Db, EncodedVec};
 use cozorocks::DbBuilder;
 
-fn create_db(name: &str) -> Db {
+fn create_db(name: &str, destroy_on_exit: bool) -> Db {
     let builder = DbBuilder::default()
         .path(name)
         .create_if_missing(true)
-        .destroy_on_exit(true);
+        .destroy_on_exit(destroy_on_exit);
     Db::build(builder).unwrap()
 }
+
+// #[test]
+// fn air() {
+//     init_logger();
+//     let db = create_db("cozopy/db_test_flights", false);
+//     let mut it = db.total_iter();
+//     while let Some((k, v)) = it.pair().unwrap() {
+//         println!("{:?}", EncodedVec::from(k));
+//         it.next();
+//     }
+// }
 
 fn init_logger() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -21,7 +32,7 @@ fn test_send_sync<T: Send + Sync>(_: &T) {}
 #[test]
 fn creation() {
     init_logger();
-    let db = create_db("_test_db");
+    let db = create_db("_test_db", true);
     test_send_sync(&db);
     assert!(db.current_schema().unwrap().as_array().unwrap().is_empty());
     let res = db.transact_attributes(&json!({

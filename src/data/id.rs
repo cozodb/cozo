@@ -1,12 +1,13 @@
-use anyhow::bail;
 use std::fmt::{Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use anyhow::bail;
 use chrono::{DateTime, TimeZone, Utc};
 use serde_derive::{Deserialize, Serialize};
 
 use crate::data::json::JsonValue;
 use crate::data::triple::StoreOp;
+use crate::data::value::DataValue;
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Deserialize, Serialize, Hash)]
 pub(crate) struct Validity(pub(crate) i64);
@@ -83,9 +84,14 @@ impl Debug for Validity {
 pub(crate) struct EntityId(pub(crate) u64);
 
 impl EntityId {
+    pub(crate) const ZERO: EntityId = EntityId(0);
     pub(crate) const MAX_TEMP: EntityId = EntityId(10_000_000);
     pub(crate) const MIN_PERM: EntityId = EntityId(10_000_001);
     pub(crate) const MAX_PERM: EntityId = EntityId(0x00ff_ffff_ff00_0000);
+
+    pub(crate) fn to_value(&self) -> DataValue {
+        DataValue::Int(self.0 as i64)
+    }
 
     pub(crate) fn from_bytes(b: &[u8]) -> Self {
         EntityId(u64::from_be_bytes([
@@ -97,6 +103,9 @@ impl EntityId {
     }
     pub(crate) fn is_perm(&self) -> bool {
         *self >= Self::MIN_PERM
+    }
+    pub(crate) fn is_placeholder(&self) -> bool {
+        self.0 == 0
     }
 }
 

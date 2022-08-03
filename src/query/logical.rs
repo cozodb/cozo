@@ -8,7 +8,6 @@ use crate::data::program::{
     InputAtom, InputAttrTripleAtom, InputRuleApplyAtom, InputTerm, NormalFormAtom,
     NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, TempKwGen, Unification,
 };
-use crate::data::value::DataValue;
 
 #[derive(Debug)]
 pub(crate) struct Disjunction(pub(crate) Vec<Conjunction>);
@@ -189,7 +188,7 @@ impl InputAttrTripleAtom {
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const(DataValue::EnId(eid)),
+                    expr: Expr::Const(eid.to_value()),
                 });
                 let uv = NormalFormAtom::Unification(Unification {
                     binding: vkw,
@@ -221,7 +220,7 @@ impl InputAttrTripleAtom {
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const(DataValue::EnId(eid)),
+                    expr: Expr::Const(eid.to_value()),
                 });
                 vec![ue, ret]
             }
