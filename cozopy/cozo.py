@@ -207,6 +207,7 @@ class AggrClass:
 
 Count = AggrClass('Count')
 Min = AggrClass('Min')
+Max = AggrClass('Max')
 
 
 def Const(item):
@@ -231,4 +232,4 @@ def Unify(binding, expr):
 
 __all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Add', 'Sub', 'Mul', 'Div', 'Q', 'T', 'R', 'Const', 'Conj', 'Disj',
            'NotExists', 'CozoDb', 'Typing', 'Cardinality', 'Indexing', 'PutAttr', 'RetractAttr', 'Attribute', 'Put',
-           'Retract', 'Pull', 'StrCat', 'Unify', 'DefAttrs', 'Count', 'Min']
+           'Retract', 'Pull', 'StrCat', 'Unify', 'DefAttrs', 'Count', 'Min', 'Max']

@@ -78,11 +78,13 @@ impl SessionTx {
                                 } else {
                                     store.clone()
                                 };
-                                for item_res in rule.relation.iter(self, Some(0), &use_delta) {
+                                for (serial, item_res) in
+                                    rule.relation.iter(self, Some(0), &use_delta).enumerate()
+                                {
                                     let item = item_res?;
                                     trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
                                     if rule_is_aggr {
-                                        store_to_use.normal_aggr_put(&item, &rule.aggr)?;
+                                        store_to_use.normal_aggr_put(&item, &rule.aggr, serial)?;
                                     } else {
                                         store_to_use.put(&item, 0)?;
                                     }

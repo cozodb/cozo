@@ -121,6 +121,7 @@ impl TempStore {
         &self,
         tuple: &Tuple,
         aggrs: &[Option<Aggregation>],
+        serial: usize,
     ) -> Result<(), RocksDbStatus> {
         let mut vals = vec![];
         for (idx, agg) in aggrs.iter().enumerate() {
@@ -133,6 +134,7 @@ impl TempStore {
                 vals.push(tuple.0[idx].clone());
             }
         }
+        vals.push(DataValue::Int(serial as i64));
         self.db
             .put(&Tuple(vals).encode_as_key_for_epoch(self.id, 0), &[])
     }
@@ -173,22 +175,43 @@ impl TempStore {
                 None
             }
         });
+        let mut invert_indices = vec![];
+        let mut idx = 0;
+        for aggr in aggrs.iter() {
+            if aggr.is_none() {
+                invert_indices.push(idx);
+                idx += 1;
+            }
+        }
+        for aggr in aggrs.iter() {
+            if aggr.is_some() {
+                invert_indices.push(idx);
+                idx += 1;
+            }
+        }
+        let invert_indices = invert_indices
+            .into_iter()
+            .enumerate()
+            .sorted_by_key(|(_a, b)| *b)
+            .map(|(a, _b)| a)
+            .collect_vec();
         for (key, group) in grouped.into_iter() {
             if key.is_some() {
                 let mut aggr_res = vec![DataValue::Bottom; aggrs.len()];
-                for tup_res in group.into_iter() {
-                    let tuple = tup_res.unwrap().0;
-                    for (i, val) in tuple.into_iter().enumerate() {
-                        if let Some(aggr_op) = &aggrs[i] {
-                            aggr_res[i] = (aggr_op.combine)(&aggr_res[i], &val)?;
+                for tuple in group.into_iter() {
+                    let tuple = tuple?;
+                    for (idx, aggr) in aggrs.iter().enumerate() {
+                        let val = &tuple.0[invert_indices[idx]];
+                        if let Some(aggr_op) = aggr {
+                            aggr_res[idx] = (aggr_op.combine)(&aggr_res[idx], val)?;
                         } else {
-                            aggr_res[i] = val;
+                            aggr_res[idx] = val.clone();
                         }
                     }
-                }
-                for (i, aggr) in aggrs.iter().enumerate() {
-                    if let Some(aggr_op) = aggr {
-                        aggr_res[i] = (aggr_op.combine)(&aggr_res[i], &DataValue::Bottom)?;
+                    for (i, aggr) in aggrs.iter().enumerate() {
+                        if let Some(aggr_op) = aggr {
+                            aggr_res[i] = (aggr_op.combine)(&aggr_res[i], &DataValue::Bottom)?;
+                        }
                     }
                 }
                 store.put(&Tuple(aggr_res), 0)?;

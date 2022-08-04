@@ -112,7 +112,7 @@ if __name__ == '__main__':
     #                      Unify('?c', 10000239)),
     #                 T.country.code('?c', '?code'),
     #                 T.country.desc('?c', '?desc'))])
-    res = db.run([Q([Count('?a')],
+    res = db.run([Q([Max('?n')],
                     T.route.distance('?a', '?n'))])
     end_time = time.time()
     print(json.dumps(res, indent=2))
