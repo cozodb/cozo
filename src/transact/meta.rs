@@ -6,10 +6,10 @@ use cozorocks::{DbIter, IterBuilder};
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
-    encode_attr_by_id, encode_sentinel_attr_by_id, encode_sentinel_attr_by_kw, VEC_SIZE_8,
+    encode_attr_by_id, encode_sentinel_attr_by_id, encode_sentinel_attr_by_name, VEC_SIZE_8,
 };
 use crate::data::id::AttrId;
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::parse::schema::AttrTxItem;
 use crate::runtime::transact::SessionTx;
@@ -20,12 +20,12 @@ impl SessionTx {
         let mut ret = Vec::with_capacity(payloads.len());
         for item in payloads {
             let id = item.attr.id;
-            let kw = item.attr.keyword.clone();
+            let kw = item.attr.name.clone();
             if item.op.is_retract() {
                 if item.attr.id.is_perm() {
                     ret.push((item.op, self.retract_attr(item.attr.id)?));
                 } else {
-                    ret.push((item.op, self.retract_attr_by_kw(&item.attr.keyword)?));
+                    ret.push((item.op, self.retract_attr_by_kw(&item.attr.name)?));
                 }
             } else if item.attr.id.is_perm() {
                 ret.push((item.op, self.amend_attr(item.attr)?));
@@ -55,27 +55,27 @@ impl SessionTx {
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
                     self.attr_by_id_cache.insert(attr.id, None);
-                    self.attr_by_kw_cache.insert(attr.keyword, None);
+                    self.attr_by_kw_cache.insert(attr.name, None);
                     None
                 } else {
                     self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
-                        .insert(attr.keyword.clone(), Some(attr.clone()));
+                        .insert(attr.name.clone(), Some(attr.clone()));
                     Some(attr)
                 }
             }
         })
     }
 
-    pub(crate) fn attr_by_kw(&mut self, kw: &Keyword) -> Result<Option<Attribute>> {
-        if let Some(res) = self.attr_by_kw_cache.get(kw) {
+    pub(crate) fn attr_by_name(&mut self, name: &Symbol) -> Result<Option<Attribute>> {
+        if let Some(res) = self.attr_by_kw_cache.get(name) {
             return Ok(res.clone());
         }
 
-        let anchor = encode_sentinel_attr_by_kw(kw);
+        let anchor = encode_sentinel_attr_by_name(name);
         Ok(match self.tx.get(&anchor, false)? {
             None => {
-                self.attr_by_kw_cache.insert(kw.clone(), None);
+                self.attr_by_kw_cache.insert(name.clone(), None);
                 None
             }
             Some(v_slice) => {
@@ -85,12 +85,12 @@ impl SessionTx {
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
                     self.attr_by_id_cache.insert(attr.id, None);
-                    self.attr_by_kw_cache.insert(kw.clone(), None);
+                    self.attr_by_kw_cache.insert(name.clone(), None);
                     None
                 } else {
                     self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
-                        .insert(attr.keyword.clone(), Some(attr.clone()));
+                        .insert(attr.name.clone(), Some(attr.clone()));
                     Some(attr)
                 }
             }
@@ -110,9 +110,9 @@ impl SessionTx {
         );
 
         ensure!(
-            self.attr_by_kw(&attr.keyword)?.is_none(),
+            self.attr_by_name(&attr.name)?.is_none(),
             "new attribute conflicts with existing one for alias {}",
-            attr.keyword
+            attr.name
         );
 
         attr.id = AttrId(self.last_attr_id.fetch_add(1, Ordering::AcqRel) + 1);
@@ -127,11 +127,11 @@ impl SessionTx {
             .attr_by_id(attr.id)?
             .ok_or_else(|| anyhow!("expected attribute id {:?} not found", attr.id))?;
         let tx_id = self.get_write_tx_id()?;
-        if existing.keyword != attr.keyword {
+        if existing.name != attr.name {
             ensure!(
-                self.attr_by_kw(&attr.keyword)?.is_none(),
+                self.attr_by_name(&attr.name)?.is_none(),
                 "attribute alias {} conflict with existing one",
-                attr.keyword
+                attr.name
             );
             ensure!(
                 existing.val_type == attr.val_type
@@ -141,7 +141,7 @@ impl SessionTx {
                 "changing immutable property for {:?}",
                 attr
             );
-            let kw_sentinel = encode_sentinel_attr_by_kw(&existing.keyword);
+            let kw_sentinel = encode_sentinel_attr_by_name(&existing.name);
             let attr_data = existing.encode_with_op_and_tx(StoreOp::Retract, tx_id);
             self.tx.put(&kw_sentinel, &attr_data)?;
         }
@@ -155,7 +155,7 @@ impl SessionTx {
         self.tx.put(&id_encoded, &attr_data)?;
         let id_sentinel = encode_sentinel_attr_by_id(attr.id);
         self.tx.put(&id_sentinel, &attr_data)?;
-        let kw_sentinel = encode_sentinel_attr_by_kw(&attr.keyword);
+        let kw_sentinel = encode_sentinel_attr_by_name(&attr.name);
         self.tx.put(&kw_sentinel, &attr_data)?;
         Ok(attr.id)
     }
@@ -171,9 +171,9 @@ impl SessionTx {
         }
     }
 
-    pub(crate) fn retract_attr_by_kw(&mut self, kw: &Keyword) -> Result<AttrId> {
+    pub(crate) fn retract_attr_by_kw(&mut self, kw: &Symbol) -> Result<AttrId> {
         let attr = self
-            .attr_by_kw(kw)?
+            .attr_by_name(kw)?
             .ok_or_else(|| anyhow!("attribute not found: {}", kw))?;
         self.retract_attr(attr.id)
     }

@@ -107,13 +107,13 @@ mod tests {
     use std::collections::{BTreeMap, HashMap};
     use std::mem::size_of;
 
-    use crate::data::keyword::Keyword;
+    use crate::data::symb::Symbol;
     use crate::data::value::DataValue;
 
     #[test]
     fn show_size() {
         dbg!(size_of::<DataValue>());
-        dbg!(size_of::<Keyword>());
+        dbg!(size_of::<Symbol>());
         dbg!(size_of::<String>());
         dbg!(size_of::<HashMap<String, String>>());
         dbg!(size_of::<BTreeMap<String, String>>());

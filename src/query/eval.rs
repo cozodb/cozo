@@ -4,8 +4,8 @@ use std::mem;
 use anyhow::{anyhow, Result};
 use log::{debug, log_enabled, trace, Level};
 
-use crate::data::keyword::PROG_ENTRY;
-use crate::data::program::MagicKeyword;
+use crate::data::symb::PROG_ENTRY;
+use crate::data::program::MagicSymbol;
 use crate::query::compile::CompiledProgram;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
@@ -14,10 +14,10 @@ impl SessionTx {
     pub(crate) fn stratified_magic_evaluate(
         &mut self,
         strata: &[CompiledProgram],
-        stores: &BTreeMap<MagicKeyword, TempStore>,
+        stores: &BTreeMap<MagicSymbol, TempStore>,
     ) -> Result<TempStore> {
         let ret_area = stores
-            .get(&MagicKeyword::Muggle {
+            .get(&MagicSymbol::Muggle {
                 inner: PROG_ENTRY.clone(),
             })
             .ok_or_else(|| anyhow!("program entry not found in rules"))?
@@ -32,7 +32,7 @@ impl SessionTx {
     fn semi_naive_magic_evaluate(
         &mut self,
         prog: &CompiledProgram,
-        stores: &BTreeMap<MagicKeyword, TempStore>,
+        stores: &BTreeMap<MagicSymbol, TempStore>,
     ) -> Result<()> {
         if log_enabled!(Level::Debug) {
             for (k, vs) in prog.iter() {

@@ -6,34 +6,34 @@ use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Deserialize, Serialize, Hash)]
-pub(crate) struct Keyword(pub(crate) SmartString<LazyCompact>);
+pub(crate) struct Symbol(pub(crate) SmartString<LazyCompact>);
 
-impl Display for Keyword {
+impl Display for Symbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl Debug for Keyword {
+impl Debug for Symbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl From<&str> for Keyword {
+impl From<&str> for Symbol {
     fn from(value: &str) -> Self {
         Self(value.into())
     }
 }
 
-impl TryFrom<&[u8]> for Keyword {
+impl TryFrom<&[u8]> for Symbol {
     type Error = anyhow::Error;
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(std::str::from_utf8(value)?.into())
     }
 }
 
-impl Keyword {
+impl Symbol {
     pub(crate) fn is_reserved(&self) -> bool {
         self.0.is_empty()
             || self
@@ -46,7 +46,7 @@ impl Keyword {
     pub(crate) fn validate_not_reserved(&self) -> Result<()> {
         ensure!(
             !self.is_reserved(),
-            "reserved keyword not allowed here: {}",
+            "reserved symbol not allowed here: {}",
             self.0
         );
         Ok(())
@@ -57,17 +57,17 @@ impl Keyword {
 }
 
 lazy_static! {
-    pub(crate) static ref PROG_ENTRY: Keyword = Keyword::from("?");
+    pub(crate) static ref PROG_ENTRY: Symbol = Symbol::from("?");
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::data::keyword::Keyword;
+    use crate::data::symb::Symbol;
 
     #[test]
-    fn reserved_kw() {
-        assert!(Keyword("_a".into()).is_reserved());
-        assert!(Keyword(":a".into()).is_reserved());
-        assert!(Keyword("".into()).is_reserved());
+    fn reserved_symb() {
+        assert!(Symbol("_a".into()).is_reserved());
+        assert!(Symbol(":a".into()).is_reserved());
+        assert!(Symbol("".into()).is_reserved());
     }
 }

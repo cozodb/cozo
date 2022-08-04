@@ -4,7 +4,7 @@ use log::error;
 
 use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
 
-use crate::data::program::MagicKeyword;
+use crate::data::program::MagicSymbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 
@@ -23,7 +23,7 @@ pub(crate) struct TempStore {
     pub(crate) id: TempStoreId,
     pub(crate) key_size: usize,
     pub(crate) val_size: usize,
-    pub(crate) rule_name: MagicKeyword,
+    pub(crate) rule_name: MagicSymbol,
 }
 
 impl Debug for TempStore {

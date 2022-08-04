@@ -6,7 +6,7 @@ use serde_json::Map;
 
 use crate::data::attr::AttributeCardinality;
 use crate::data::json::JsonValue;
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::query::pull::{AttrPullSpec, PullSpec, PullSpecs};
 use crate::runtime::transact::SessionTx;
@@ -34,22 +34,22 @@ impl SessionTx {
             JsonValue::String(s) if s == "*" => Ok(PullSpec::PullAll),
             JsonValue::String(s) if s == "_id" => Ok(PullSpec::PullId("_id".into())),
             JsonValue::String(s) => {
-                let input_kw = Keyword::from(s.as_ref());
-                let reverse = input_kw.0.starts_with('<');
-                let kw = if reverse {
-                    Keyword::from(input_kw.0.strip_prefix('<').unwrap())
+                let input_symb = Symbol::from(s.as_ref());
+                let reverse = input_symb.0.starts_with('<');
+                let symb = if reverse {
+                    Symbol::from(input_symb.0.strip_prefix('<').unwrap())
                 } else {
-                    input_kw.clone()
+                    input_symb.clone()
                 };
                 let attr = self
-                    .attr_by_kw(&kw)?
-                    .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
+                    .attr_by_name(&symb)?
+                    .ok_or_else(|| anyhow!("attribute {} not found", symb))?;
                 let cardinality = attr.cardinality;
                 Ok(PullSpec::Attr(AttrPullSpec {
                     attr,
                     default_val: DataValue::Null,
                     reverse,
-                    name: input_kw,
+                    name: input_symb,
                     cardinality,
                     take: None,
                     nested: vec![],
@@ -71,7 +71,7 @@ impl SessionTx {
         let mut as_override = None;
         let mut take = None;
         let mut cardinality_override = None;
-        let mut input_kw = None;
+        let mut input_symb = None;
         let mut sub_target = vec![];
         let mut recursive = false;
         let mut recursion_limit = None;
@@ -82,7 +82,7 @@ impl SessionTx {
             match k as &str {
                 "as" => {
                     as_override =
-                        Some(Keyword::from(v.as_str().ok_or_else(|| {
+                        Some(Symbol::from(v.as_str().ok_or_else(|| {
                             anyhow!("expect 'as' field to be string, got {}", v)
                         })?))
                 }
@@ -105,7 +105,7 @@ impl SessionTx {
                     if v == "_id" {
                         pull_id = true
                     } else {
-                        input_kw = Some(Keyword::from(v));
+                        input_symb = Some(Symbol::from(v));
                     }
                 }
                 "recurse" => {
@@ -149,21 +149,21 @@ impl SessionTx {
             ));
         }
 
-        if input_kw.is_none() {
+        if input_symb.is_none() {
             bail!("no target key in pull definition");
         }
 
-        let input_kw = input_kw.unwrap();
+        let input_symb = input_symb.unwrap();
 
-        let reverse = input_kw.0.starts_with('<');
-        let kw = if reverse {
-            Keyword::from(input_kw.0.strip_prefix('<').unwrap())
+        let reverse = input_symb.0.starts_with('<');
+        let symb = if reverse {
+            Symbol::from(input_symb.0.strip_prefix('<').unwrap())
         } else {
-            input_kw.clone()
+            input_symb.clone()
         };
         let attr = self
-            .attr_by_kw(&kw)?
-            .ok_or_else(|| anyhow!("attribute not found: {}", kw))?;
+            .attr_by_name(&symb)?
+            .ok_or_else(|| anyhow!("attribute not found: {}", symb))?;
         let cardinality = cardinality_override.unwrap_or(attr.cardinality);
         let nested = self.parse_pull(&JsonValue::Array(sub_target), depth + 1)?;
 
@@ -181,7 +181,7 @@ impl SessionTx {
             attr,
             default_val,
             reverse,
-            name: as_override.unwrap_or(input_kw),
+            name: as_override.unwrap_or(input_symb),
             cardinality,
             take,
             nested,

@@ -4,20 +4,20 @@ use anyhow::{anyhow, ensure, Result};
 use itertools::Itertools;
 
 use crate::data::expr::Expr;
-use crate::data::keyword::Keyword;
-use crate::data::program::{MagicAtom, MagicKeyword, MagicRule, StratifiedMagicProgram};
+use crate::data::symb::Symbol;
+use crate::data::program::{MagicAtom, MagicSymbol, MagicRule, StratifiedMagicProgram};
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type CompiledProgram =
-    BTreeMap<MagicKeyword, Vec<(Vec<Keyword>, BTreeSet<MagicKeyword>, Relation)>>;
+    BTreeMap<MagicSymbol, Vec<(Vec<Symbol>, BTreeSet<MagicSymbol>, Relation)>>;
 
 impl SessionTx {
     pub(crate) fn stratified_magic_compile(
         &mut self,
         prog: &StratifiedMagicProgram,
-    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicKeyword, TempStore>)> {
+    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, TempStore>)> {
         let stores = prog
             .0
             .iter()
@@ -40,8 +40,8 @@ impl SessionTx {
                     .iter()
                     .map(
                         |(k, body)| -> Result<(
-                            MagicKeyword,
-                            Vec<(Vec<Keyword>, BTreeSet<MagicKeyword>, Relation)>,
+                            MagicSymbol,
+                            Vec<(Vec<Symbol>, BTreeSet<MagicSymbol>, Relation)>,
                         )> {
                             let mut collected = Vec::with_capacity(body.len());
                             for (rule_idx, rule) in body.iter().enumerate() {
@@ -67,16 +67,16 @@ impl SessionTx {
     pub(crate) fn compile_magic_rule_body(
         &mut self,
         rule: &MagicRule,
-        rule_name: &MagicKeyword,
+        rule_name: &MagicSymbol,
         rule_idx: usize,
-        stores: &BTreeMap<MagicKeyword, TempStore>,
-        ret_vars: &[Keyword],
+        stores: &BTreeMap<MagicSymbol, TempStore>,
+        ret_vars: &[Symbol],
     ) -> Result<Relation> {
         let mut ret = Relation::unit();
         let mut seen_variables = BTreeSet::new();
         let mut serial_id = 0;
         let mut gen_kw = || {
-            let ret = Keyword::from(&format!("**{}", serial_id) as &str);
+            let ret = Symbol::from(&format!("**{}", serial_id) as &str);
             serial_id += 1;
             ret
         };

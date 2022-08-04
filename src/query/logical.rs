@@ -6,7 +6,7 @@ use itertools::Itertools;
 use crate::data::expr::Expr;
 use crate::data::program::{
     InputAtom, InputAttrTripleAtom, InputRuleApplyAtom, InputTerm, NormalFormAtom,
-    NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, TempKwGen, Unification,
+    NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, TempSymbGen, Unification,
 };
 
 #[derive(Debug)]
@@ -79,11 +79,11 @@ impl InputAtom {
 
     pub(crate) fn disjunctive_normal_form(self) -> Result<Disjunction> {
         let neg_form = self.negation_normal_form()?;
-        let mut gen = TempKwGen::default();
+        let mut gen = TempSymbGen::default();
         neg_form.do_disjunctive_normal_form(&mut gen)
     }
 
-    fn do_disjunctive_normal_form(self, gen: &mut TempKwGen) -> Result<Disjunction> {
+    fn do_disjunctive_normal_form(self, gen: &mut TempSymbGen) -> Result<Disjunction> {
         // invariants: the input is already in negation normal form
         // the return value is a disjunction of conjunctions, with no nesting
         Ok(match self {
@@ -121,7 +121,7 @@ impl InputAtom {
 }
 
 impl InputRuleApplyAtom {
-    fn normalize(self, is_negated: bool, gen: &mut TempKwGen) -> Disjunction {
+    fn normalize(self, is_negated: bool, gen: &mut TempSymbGen) -> Disjunction {
         let mut ret = Vec::with_capacity(self.args.len() + 1);
         let mut args = Vec::with_capacity(self.args.len());
         let mut seen_variables = BTreeSet::new();
@@ -168,7 +168,7 @@ impl InputRuleApplyAtom {
 }
 
 impl InputAttrTripleAtom {
-    fn normalize(self, is_negated: bool, gen: &mut TempKwGen) -> Disjunction {
+    fn normalize(self, is_negated: bool, gen: &mut TempSymbGen) -> Disjunction {
         let wrap = |atom| {
             if is_negated {
                 NormalFormAtom::NegatedAttrTriple(atom)

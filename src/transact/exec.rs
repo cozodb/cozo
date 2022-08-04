@@ -212,7 +212,7 @@ impl SessionTx {
                         ensure!(
                             found_eid == eid,
                             "unique constraint violated for attr {} with value {:?}",
-                            attr.keyword,
+                            attr.name,
                             v
                         );
                     }
@@ -222,7 +222,7 @@ impl SessionTx {
                         ensure!(
                             found_eid == eid,
                             "unique constraint violated for attr {} with value {:?}",
-                            attr.keyword,
+                            attr.name,
                             v
                         );
                     }
@@ -231,7 +231,7 @@ impl SessionTx {
                     ensure!(
                         found_eid == eid,
                         "unique constraint violated for attr {} with value {:?}",
-                        attr.keyword,
+                        attr.name,
                         v
                     );
                 }

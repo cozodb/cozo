@@ -11,7 +11,7 @@ use crate::data::encode::{
 };
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::DataValue;
 use crate::parse::query::OutSpec;
@@ -24,7 +24,7 @@ pub(crate) type PullSpecs = Vec<PullSpec>;
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) enum PullSpec {
     PullAll,
-    PullId(Keyword),
+    PullId(Symbol),
     Attr(AttrPullSpec),
 }
 
@@ -45,7 +45,7 @@ pub(crate) struct AttrPullSpec {
     pub(crate) reverse: bool,
     pub(crate) attr: Attribute,
     pub(crate) default_val: DataValue,
-    pub(crate) name: Keyword,
+    pub(crate) name: Symbol,
     pub(crate) cardinality: AttributeCardinality,
     pub(crate) take: Option<usize>,
     pub(crate) nested: PullSpecs,
@@ -532,7 +532,7 @@ impl SessionTx {
                     let val_id = value.get_entity_id()?;
                     if pull_all_seen.contains(&val_id) {
                         let arr = collector
-                            .entry(attr.keyword.to_string())
+                            .entry(attr.name.to_string())
                             .or_insert_with(|| json!([]));
                         let arr = arr.as_array_mut().unwrap();
                         arr.push(value.into());
@@ -541,14 +541,14 @@ impl SessionTx {
                         self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
 
                         let arr = collector
-                            .entry(attr.keyword.to_string())
+                            .entry(attr.name.to_string())
                             .or_insert_with(|| json!([]));
                         let arr = arr.as_array_mut().unwrap();
                         arr.push(subcollector.into());
                     }
                 } else {
                     let arr = collector
-                        .entry(attr.keyword.to_string())
+                        .entry(attr.name.to_string())
                         .or_insert_with(|| json!([]));
                     let arr = arr.as_array_mut().unwrap();
                     arr.push(value.into());
@@ -556,14 +556,14 @@ impl SessionTx {
             } else if attr.val_type == AttributeTyping::Component {
                 let val_id = value.get_entity_id()?;
                 if pull_all_seen.contains(&val_id) {
-                    collector.insert(attr.keyword.to_string(), value.into());
+                    collector.insert(attr.name.to_string(), value.into());
                 } else {
                     let mut subcollector = Map::default();
                     self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
-                    collector.insert(attr.keyword.to_string(), subcollector.into());
+                    collector.insert(attr.name.to_string(), subcollector.into());
                 }
             } else {
-                collector.insert(attr.keyword.to_string(), value.into());
+                collector.insert(attr.name.to_string(), value.into());
             }
             current.encoded_entity_amend_validity_to_inf_past();
             it.seek(&current);

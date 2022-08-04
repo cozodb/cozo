@@ -4,7 +4,7 @@ pub(crate) use serde_json::Value as JsonValue;
 
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, TxId};
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 
 impl From<JsonValue> for DataValue {
@@ -77,13 +77,13 @@ impl From<DataValue> for JsonValue {
     }
 }
 
-impl TryFrom<&'_ JsonValue> for Keyword {
+impl TryFrom<&'_ JsonValue> for Symbol {
     type Error = anyhow::Error;
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let s = value
             .as_str()
-            .ok_or_else(|| anyhow!("failed to convert {} to a keyword", value))?;
-        Ok(Keyword::from(s))
+            .ok_or_else(|| anyhow!("failed to convert {} to a symbol", value))?;
+        Ok(Symbol::from(s))
     }
 }
 
@@ -98,17 +98,17 @@ impl TryFrom<&'_ JsonValue> for Attribute {
             None => AttrId(0),
             Some(v) => AttrId::try_from(v)?,
         };
-        let keyword = map.get("keyword").ok_or_else(|| {
+        let name = map.get("name").ok_or_else(|| {
             anyhow!(
-                "expect field 'keyword' in attribute definition, got {}",
+                "expect field 'name' in attribute definition, got {}",
                 value
             )
         })?;
-        let keyword = Keyword::try_from(keyword)?;
+        let symb = Symbol::try_from(name)?;
         ensure!(
-            !keyword.is_reserved(),
-            "cannot use reserved keyword {}",
-            keyword
+            !symb.is_reserved(),
+            "cannot use reserved symbol {}",
+            symb
         );
         let cardinality = map
             .get("cardinality")
@@ -142,7 +142,7 @@ impl TryFrom<&'_ JsonValue> for Attribute {
 
         Ok(Attribute {
             id,
-            keyword,
+            name: symb,
             cardinality,
             val_type,
             indexing,
@@ -155,7 +155,7 @@ impl From<Attribute> for JsonValue {
     fn from(attr: Attribute) -> Self {
         json!({
             "id": attr.id.0,
-            "keyword": attr.keyword.to_string(),
+            "name": attr.name.to_string(),
             "cardinality": attr.cardinality.to_string(),
             "type": attr.val_type.to_string(),
             "index": attr.indexing.to_string(),

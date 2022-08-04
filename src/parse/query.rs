@@ -9,11 +9,11 @@ use crate::data::attr::Attribute;
 use crate::data::expr::{get_op, Expr};
 use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::keyword::{Keyword, PROG_ENTRY};
 use crate::data::program::{
     InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm,
     Unification,
 };
+use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::DataValue;
 use crate::query::pull::PullSpecs;
 use crate::runtime::transact::SessionTx;
@@ -59,7 +59,7 @@ impl SessionTx {
     fn parse_query_out_spec(
         &mut self,
         payload: &JsonValue,
-        entry_bindings: &[Keyword],
+        entry_bindings: &[Symbol],
     ) -> Result<OutSpec> {
         match payload {
             JsonValue::Object(out_spec_map) => {
@@ -79,7 +79,7 @@ impl SessionTx {
     pub(crate) fn parse_pull_specs_for_query_spec(
         &mut self,
         out_spec: &Vec<JsonValue>,
-        entry_bindings: &[Keyword],
+        entry_bindings: &[Symbol],
     ) -> Result<Vec<(usize, Option<PullSpecs>)>> {
         let entry_bindings: BTreeMap<_, _> = entry_bindings
             .iter()
@@ -91,22 +91,22 @@ impl SessionTx {
             .map(|spec| -> Result<(usize, Option<PullSpecs>)> {
                 match spec {
                     JsonValue::String(s) => {
-                        let kw = Keyword::from(s as &str);
+                        let symb = Symbol::from(s as &str);
                         let idx = *entry_bindings
-                            .get(&kw)
-                            .ok_or_else(|| anyhow!("binding {} not found", kw))?;
+                            .get(&symb)
+                            .ok_or_else(|| anyhow!("binding {} not found", symb))?;
                         Ok((idx, None))
                     }
                     JsonValue::Object(m) => {
-                        let kw = m
+                        let symb = m
                             .get("pull")
                             .ok_or_else(|| anyhow!("expect field 'pull' in {:?}", m))?
                             .as_str()
                             .ok_or_else(|| anyhow!("expect 'pull' to be a binding in {:?}", m))?;
-                        let kw = Keyword::from(kw);
+                        let symb = Symbol::from(symb);
                         let idx = *entry_bindings
-                            .get(&kw)
-                            .ok_or_else(|| anyhow!("binding {} not found", kw))?;
+                            .get(&symb)
+                            .ok_or_else(|| anyhow!("binding {} not found", symb))?;
                         let spec = m
                             .get("spec")
                             .ok_or_else(|| anyhow!("expect field 'spec' in {:?}", m))?;
@@ -129,7 +129,7 @@ impl SessionTx {
             .ok_or_else(|| anyhow!("expect array for rules, got {}", payload))?
             .iter()
             .map(|o| self.parse_input_rule_definition(o, default_vld));
-        let mut collected: BTreeMap<Keyword, Vec<InputRule>> = BTreeMap::new();
+        let mut collected: BTreeMap<Symbol, Vec<InputRule>> = BTreeMap::new();
         for res in rules {
             let (name, rule) = res?;
             match collected.entry(name) {
@@ -141,9 +141,9 @@ impl SessionTx {
                 }
             }
         }
-        let ret: BTreeMap<Keyword, Vec<InputRule>> = collected
+        let ret: BTreeMap<Symbol, Vec<InputRule>> = collected
             .into_iter()
-            .map(|(name, rules)| -> Result<(Keyword, Vec<InputRule>)> {
+            .map(|(name, rules)| -> Result<(Symbol, Vec<InputRule>)> {
                 let mut arities = rules.iter().map(|r| r.head.len());
                 let arity = arities.next().unwrap();
                 for other in arities {
@@ -155,7 +155,7 @@ impl SessionTx {
             })
             .try_collect()?;
 
-        match ret.get(&PROG_ENTRY as &Keyword) {
+        match ret.get(&PROG_ENTRY as &Symbol) {
             None => bail!("no entry defined for datalog program"),
             Some(ruleset) => {
                 if !ruleset.iter().map(|r| &r.head).all_equal() {
@@ -183,8 +183,8 @@ impl SessionTx {
             .get("unify")
             .ok_or_else(|| anyhow!("expect expression to have field 'unify'"))?
             .as_str()
-            .ok_or_else(|| anyhow!("expect field 'unify' to be a keyword"))?;
-        let binding = Keyword::from(binding);
+            .ok_or_else(|| anyhow!("expect field 'unify' to be a symbol"))?;
+        let binding = Symbol::from(binding);
         ensure!(
             binding.is_query_var(),
             "binding for unification {} is reserved",
@@ -237,9 +237,9 @@ impl SessionTx {
     fn parse_expr_arg(payload: &JsonValue) -> Result<Expr> {
         match payload {
             JsonValue::String(s) => {
-                let kw = Keyword::from(s as &str);
-                if kw.is_reserved() {
-                    Ok(Expr::Binding(kw, None))
+                let symb = Symbol::from(s as &str);
+                if symb.is_reserved() {
+                    Ok(Expr::Binding(symb, None))
                 } else {
                     Ok(Expr::Const(DataValue::String(s.into())))
                 }
@@ -275,7 +275,7 @@ impl SessionTx {
             .iter()
             .map(|value_rep| -> Result<InputTerm<DataValue>> {
                 if let Some(s) = value_rep.as_str() {
-                    let var = Keyword::from(s);
+                    let var = Symbol::from(s);
                     if s.starts_with(['?', '_']) {
                         return Ok(InputTerm::Var(var));
                     } else {
@@ -306,11 +306,11 @@ impl SessionTx {
         &mut self,
         payload: &JsonValue,
         default_vld: Validity,
-    ) -> Result<(Keyword, InputRule)> {
+    ) -> Result<(Symbol, InputRule)> {
         let rule_name = payload
             .get("rule")
             .ok_or_else(|| anyhow!("expect key 'rule' in rule definition"))?;
-        let rule_name = Keyword::try_from(rule_name)?;
+        let rule_name = Symbol::try_from(rule_name)?;
         if !rule_name.is_prog_entry() {
             rule_name.validate_not_reserved()?;
         }
@@ -334,7 +334,7 @@ impl SessionTx {
         let mut rule_aggr = vec![];
         for head_item in rule_head_vec {
             if let Some(s) = head_item.as_str() {
-                rule_head.push(Keyword::from(s));
+                rule_head.push(Symbol::from(s));
                 rule_aggr.push(None);
             } else {
                 todo!()
@@ -446,14 +446,14 @@ impl SessionTx {
             m
         );
         let (k, v) = m.iter().next().unwrap();
-        let kw = Keyword::from(k as &str);
+        let symb = Symbol::from(k as &str);
         let attr = self
-            .attr_by_kw(&kw)?
-            .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
+            .attr_by_name(&symb)?
+            .ok_or_else(|| anyhow!("attribute {} not found", symb))?;
         ensure!(
             attr.indexing.is_unique_index(),
             "pull inside query must use unique index, of which {} is not",
-            attr.keyword
+            attr.name
         );
         let value = attr.val_type.coerce_value(v.into())?;
         let eid = self
@@ -483,7 +483,7 @@ impl SessionTx {
         vld: Validity,
     ) -> Result<InputTerm<DataValue>> {
         if let Some(s) = value_rep.as_str() {
-            let var = Keyword::from(s);
+            let var = Symbol::from(s);
             if s.starts_with(['?', '_']) {
                 return Ok(InputTerm::Var(var));
             } else {
@@ -508,7 +508,7 @@ impl SessionTx {
         vld: Validity,
     ) -> Result<InputTerm<EntityId>> {
         if let Some(s) = entity_rep.as_str() {
-            let var = Keyword::from(s);
+            let var = Symbol::from(s);
             if s.starts_with(['?', '_']) {
                 return Ok(InputTerm::Var(var));
             } else {
@@ -527,13 +527,13 @@ impl SessionTx {
     fn parse_triple_atom_attr(&mut self, attr_rep: &JsonValue) -> Result<Attribute> {
         match attr_rep {
             JsonValue::String(s) => {
-                let kw = Keyword::from(s as &str);
+                let kw = Symbol::from(s as &str);
                 let attr = self
-                    .attr_by_kw(&kw)?
+                    .attr_by_name(&kw)?
                     .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
                 Ok(attr)
             }
-            v => bail!("expect attribute keyword for triple atom, got {}", v),
+            v => bail!("expect attribute name for triple atom, got {}", v),
         }
     }
 }

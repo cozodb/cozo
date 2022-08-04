@@ -8,7 +8,7 @@ use itertools::Itertools;
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::runtime::temp_store::{TempStore, TempStoreId};
@@ -27,9 +27,9 @@ pub(crate) enum Relation {
 
 pub(crate) struct UnificationRelation {
     parent: Box<Relation>,
-    binding: Keyword,
+    binding: Symbol,
     expr: Expr,
-    pub(crate) to_eliminate: BTreeSet<Keyword>,
+    pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
 
 impl UnificationRelation {
@@ -43,7 +43,7 @@ impl UnificationRelation {
             .collect();
         self.expr.fill_binding_indices(&parent_bindings);
     }
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         for binding in self.parent.bindings_before_eliminate() {
             if !used.contains(&binding) {
                 self.to_eliminate.insert(binding.clone());
@@ -94,11 +94,11 @@ impl UnificationRelation {
 pub(crate) struct FilteredRelation {
     parent: Box<Relation>,
     pred: Expr,
-    pub(crate) to_eliminate: BTreeSet<Keyword>,
+    pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
 
 impl FilteredRelation {
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         for binding in self.parent.bindings_before_eliminate() {
             if !used.contains(&binding) {
                 self.to_eliminate.insert(binding.clone());
@@ -160,7 +160,7 @@ impl FilteredRelation {
     }
 }
 
-struct BindingFormatter(Vec<Keyword>);
+struct BindingFormatter(Vec<Symbol>);
 
 impl Debug for BindingFormatter {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -191,7 +191,7 @@ impl Debug for Relation {
             Relation::Triple(r) => f
                 .debug_tuple("Triple")
                 .field(&bindings)
-                .field(&r.attr.keyword)
+                .field(&r.attr.name)
                 .finish(),
             Relation::Derived(r) => f
                 .debug_tuple("Derived")
@@ -278,14 +278,14 @@ impl Relation {
     pub(crate) fn cartesian_join(self, right: Relation) -> Self {
         self.join(right, vec![], vec![])
     }
-    pub(crate) fn derived(bindings: Vec<Keyword>, storage: TempStore) -> Self {
+    pub(crate) fn derived(bindings: Vec<Symbol>, storage: TempStore) -> Self {
         Self::Derived(StoredDerivedRelation { bindings, storage })
     }
     pub(crate) fn triple(
         attr: Attribute,
         vld: Validity,
-        e_binding: Keyword,
-        v_binding: Keyword,
+        e_binding: Symbol,
+        v_binding: Symbol,
     ) -> Self {
         Self::Triple(TripleRelation {
             attr,
@@ -293,7 +293,7 @@ impl Relation {
             bindings: [e_binding, v_binding],
         })
     }
-    pub(crate) fn reorder(self, new_order: Vec<Keyword>) -> Self {
+    pub(crate) fn reorder(self, new_order: Vec<Symbol>) -> Self {
         Self::Reorder(ReorderRelation {
             relation: Box::new(self),
             new_order,
@@ -306,7 +306,7 @@ impl Relation {
             to_eliminate: Default::default(),
         })
     }
-    pub(crate) fn unify(self, binding: Keyword, expr: Expr) -> Self {
+    pub(crate) fn unify(self, binding: Symbol, expr: Expr) -> Self {
         Relation::Unification(UnificationRelation {
             parent: Box::new(self),
             binding,
@@ -317,8 +317,8 @@ impl Relation {
     pub(crate) fn join(
         self,
         right: Relation,
-        left_keys: Vec<Keyword>,
-        right_keys: Vec<Keyword>,
+        left_keys: Vec<Symbol>,
+        right_keys: Vec<Symbol>,
     ) -> Self {
         Relation::Join(Box::new(InnerJoin {
             left: self,
@@ -333,8 +333,8 @@ impl Relation {
     pub(crate) fn neg_join(
         self,
         right: Relation,
-        left_keys: Vec<Keyword>,
-        right_keys: Vec<Keyword>,
+        left_keys: Vec<Symbol>,
+        right_keys: Vec<Symbol>,
     ) -> Self {
         Relation::NegJoin(Box::new(NegJoin {
             left: self,
@@ -351,11 +351,11 @@ impl Relation {
 #[derive(Debug)]
 pub(crate) struct ReorderRelation {
     pub(crate) relation: Box<Relation>,
-    pub(crate) new_order: Vec<Keyword>,
+    pub(crate) new_order: Vec<Symbol>,
 }
 
 impl ReorderRelation {
-    fn bindings(&self) -> Vec<Keyword> {
+    fn bindings(&self) -> Vec<Symbol> {
         self.new_order.clone()
     }
     fn iter<'a>(
@@ -396,9 +396,9 @@ impl ReorderRelation {
 
 #[derive(Debug)]
 pub(crate) struct InlineFixedRelation {
-    pub(crate) bindings: Vec<Keyword>,
+    pub(crate) bindings: Vec<Symbol>,
     pub(crate) data: Vec<Vec<DataValue>>,
-    pub(crate) to_eliminate: BTreeSet<Keyword>,
+    pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
 
 impl InlineFixedRelation {
@@ -409,7 +409,7 @@ impl InlineFixedRelation {
             to_eliminate: Default::default(),
         }
     }
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         for binding in &self.bindings {
             if !used.contains(binding) {
                 self.to_eliminate.insert(binding.clone());
@@ -496,7 +496,7 @@ impl InlineFixedRelation {
 pub(crate) struct TripleRelation {
     pub(crate) attr: Attribute,
     pub(crate) vld: Validity,
-    pub(crate) bindings: [Keyword; 2],
+    pub(crate) bindings: [Symbol; 2],
 }
 
 pub(crate) fn flatten_err<T, E1: Into<anyhow::Error>, E2: Into<anyhow::Error>>(
@@ -1035,7 +1035,7 @@ impl TripleRelation {
     }
 }
 
-fn get_eliminate_indices(bindings: &[Keyword], eliminate: &BTreeSet<Keyword>) -> BTreeSet<usize> {
+fn get_eliminate_indices(bindings: &[Symbol], eliminate: &BTreeSet<Symbol>) -> BTreeSet<usize> {
     bindings
         .iter()
         .enumerate()
@@ -1051,7 +1051,7 @@ fn get_eliminate_indices(bindings: &[Keyword], eliminate: &BTreeSet<Keyword>) ->
 
 #[derive(Debug)]
 pub(crate) struct StoredDerivedRelation {
-    pub(crate) bindings: Vec<Keyword>,
+    pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: TempStore,
 }
 
@@ -1209,8 +1209,8 @@ impl StoredDerivedRelation {
 
 pub(crate) struct Joiner {
     // invariant: these are of the same lengths
-    pub(crate) left_keys: Vec<Keyword>,
-    pub(crate) right_keys: Vec<Keyword>,
+    pub(crate) left_keys: Vec<Symbol>,
+    pub(crate) right_keys: Vec<Symbol>,
 }
 
 impl Debug for Joiner {
@@ -1224,8 +1224,8 @@ impl Debug for Joiner {
 impl Joiner {
     pub(crate) fn join_indices(
         &self,
-        left_bindings: &[Keyword],
-        right_bindings: &[Keyword],
+        left_bindings: &[Symbol],
+        right_bindings: &[Symbol],
     ) -> Result<(Vec<usize>, Vec<usize>)> {
         let left_binding_map = left_bindings
             .iter()
@@ -1262,7 +1262,7 @@ impl Joiner {
 }
 
 impl Relation {
-    pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
+    pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         match self {
             Relation::Fixed(r) => r.do_eliminate_temp_vars(used),
             Relation::Triple(_r) => Ok(()),
@@ -1275,7 +1275,7 @@ impl Relation {
         }
     }
 
-    fn eliminate_set(&self) -> Option<&BTreeSet<Keyword>> {
+    fn eliminate_set(&self) -> Option<&BTreeSet<Symbol>> {
         match self {
             Relation::Fixed(r) => Some(&r.to_eliminate),
             Relation::Triple(_) => None,
@@ -1288,7 +1288,7 @@ impl Relation {
         }
     }
 
-    pub(crate) fn bindings_after_eliminate(&self) -> Vec<Keyword> {
+    pub(crate) fn bindings_after_eliminate(&self) -> Vec<Symbol> {
         let ret = self.bindings_before_eliminate();
         if let Some(to_eliminate) = self.eliminate_set() {
             ret.into_iter()
@@ -1299,7 +1299,7 @@ impl Relation {
         }
     }
 
-    fn bindings_before_eliminate(&self) -> Vec<Keyword> {
+    fn bindings_before_eliminate(&self) -> Vec<Symbol> {
         match self {
             Relation::Fixed(f) => f.bindings.clone(),
             Relation::Triple(t) => t.bindings.to_vec(),
@@ -1342,11 +1342,11 @@ pub(crate) struct NegJoin {
     pub(crate) left: Relation,
     pub(crate) right: Relation,
     pub(crate) joiner: Joiner,
-    pub(crate) to_eliminate: BTreeSet<Keyword>,
+    pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
 
 impl NegJoin {
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         for binding in self.left.bindings_after_eliminate() {
             if !used.contains(&binding) {
                 self.to_eliminate.insert(binding.clone());
@@ -1409,11 +1409,11 @@ pub(crate) struct InnerJoin {
     pub(crate) left: Relation,
     pub(crate) right: Relation,
     pub(crate) joiner: Joiner,
-    pub(crate) to_eliminate: BTreeSet<Keyword>,
+    pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
 
 impl InnerJoin {
-    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Keyword>) -> Result<()> {
+    pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         for binding in self.bindings() {
             if !used.contains(&binding) {
                 self.to_eliminate.insert(binding.clone());
@@ -1428,7 +1428,7 @@ impl InnerJoin {
         Ok(())
     }
 
-    pub(crate) fn bindings(&self) -> Vec<Keyword> {
+    pub(crate) fn bindings(&self) -> Vec<Symbol> {
         let mut ret = self.left.bindings_after_eliminate();
         ret.extend(self.right.bindings_after_eliminate());
         debug_assert_eq!(ret.len(), ret.iter().collect::<BTreeSet<_>>().len());

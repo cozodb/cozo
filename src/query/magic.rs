@@ -4,9 +4,9 @@ use std::mem;
 use itertools::Itertools;
 use smallvec::SmallVec;
 
-use crate::data::keyword::{Keyword, PROG_ENTRY};
+use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::program::{
-    MagicAtom, MagicAttrTripleAtom, MagicKeyword, MagicProgram, MagicRule, MagicRuleApplyAtom,
+    MagicAtom, MagicAttrTripleAtom, MagicSymbol, MagicProgram, MagicRule, MagicRuleApplyAtom,
     NormalFormAtom, NormalFormProgram, NormalFormRule, StratifiedMagicProgram,
     StratifiedNormalFormProgram,
 };
@@ -31,7 +31,7 @@ impl MagicProgram {
         };
         for (rule_head, rules) in self.prog {
             // at this point, rule_head must be Muggle or Magic, the remaining options are impossible
-            let rule_name = rule_head.as_keyword();
+            let rule_name = rule_head.as_plain_symbol();
             let adornment = rule_head.magic_adornment();
 
             // can only be true if rule is magic and args are not all free
@@ -40,7 +40,7 @@ impl MagicProgram {
             for (rule_idx, rule) in rules.into_iter().enumerate() {
                 let mut sup_idx = 0;
                 let mut make_sup_kw = || {
-                    let ret = MagicKeyword::Sup {
+                    let ret = MagicSymbol::Sup {
                         inner: rule_name.clone(),
                         adornment: adornment.into(),
                         rule_idx: rule_idx as u16,
@@ -50,7 +50,7 @@ impl MagicProgram {
                     ret
                 };
                 let mut collected_atoms = vec![];
-                let mut seen_bindings: BTreeSet<Keyword> = Default::default();
+                let mut seen_bindings: BTreeSet<Symbol> = Default::default();
 
                 // SIP from input rule if rule has any bound args
                 if rule_has_bound_args {
@@ -66,7 +66,7 @@ impl MagicProgram {
                         .collect_vec();
                     let sup_aggr = vec![None; sup_args.len()];
                     let sup_body = vec![MagicAtom::Rule(MagicRuleApplyAtom {
-                        name: MagicKeyword::Input {
+                        name: MagicSymbol::Input {
                             inner: rule_name.clone(),
                             adornment: adornment.into(),
                         },
@@ -132,8 +132,8 @@ impl MagicProgram {
                                 collected_atoms.push(sup_rule_app.clone());
 
                                 // finally add to the input rule application
-                                let inp_kw = MagicKeyword::Input {
-                                    inner: r_app.name.as_keyword().clone(),
+                                let inp_kw = MagicSymbol::Input {
+                                    inner: r_app.name.as_plain_symbol().clone(),
                                     adornment: r_app.name.magic_adornment().into(),
                                 };
                                 let inp_entry = ret_prog.prog.entry(inp_kw.clone()).or_default();
@@ -179,9 +179,9 @@ impl MagicProgram {
 }
 
 impl NormalFormProgram {
-    fn get_downstream_rules(&self) -> BTreeSet<Keyword> {
+    fn get_downstream_rules(&self) -> BTreeSet<Symbol> {
         let own_rules: BTreeSet<_> = self.prog.keys().collect();
-        let mut downstream_rules: BTreeSet<Keyword> = Default::default();
+        let mut downstream_rules: BTreeSet<Symbol> = Default::default();
         for rules in self.prog.values() {
             for rule in rules {
                 for atom in rule.body.iter() {
@@ -198,7 +198,7 @@ impl NormalFormProgram {
         }
         downstream_rules
     }
-    fn adorn(&self, upstream_rules: &BTreeSet<Keyword>) -> MagicProgram {
+    fn adorn(&self, upstream_rules: &BTreeSet<Symbol>) -> MagicProgram {
         let rules_to_rewrite: BTreeSet<_> = self
             .prog
             .keys()
@@ -226,7 +226,7 @@ impl NormalFormProgram {
                 adorned_rules.push(adorned_rule);
             }
             adorned_prog.prog.insert(
-                MagicKeyword::Muggle {
+                MagicSymbol::Muggle {
                     inner: rule_name.clone(),
                 },
                 adorned_rules,
@@ -237,7 +237,7 @@ impl NormalFormProgram {
             if adorned_prog.prog.contains_key(&head) {
                 continue;
             }
-            let original_rules = self.prog.get(head.as_keyword()).unwrap();
+            let original_rules = self.prog.get(head.as_plain_symbol()).unwrap();
             let adornment = head.magic_adornment();
             let mut adorned_rules = Vec::with_capacity(original_rules.len());
             for rule in original_rules {
@@ -260,9 +260,9 @@ impl NormalFormProgram {
 impl NormalFormAtom {
     fn adorn(
         &self,
-        pending: &mut Vec<MagicKeyword>,
-        seen_bindings: &mut BTreeSet<Keyword>,
-        rules_to_rewrite: &BTreeSet<Keyword>,
+        pending: &mut Vec<MagicSymbol>,
+        seen_bindings: &mut BTreeSet<Symbol>,
+        rules_to_rewrite: &BTreeSet<Symbol>,
     ) -> MagicAtom {
         match self {
             NormalFormAtom::AttrTriple(a) => {
@@ -291,7 +291,7 @@ impl NormalFormAtom {
                     for arg in rule.args.iter() {
                         adornment.push(!seen_bindings.insert(arg.clone()));
                     }
-                    let name = MagicKeyword::Magic {
+                    let name = MagicSymbol::Magic {
                         inner: rule.name.clone(),
                         adornment,
                     };
@@ -304,7 +304,7 @@ impl NormalFormAtom {
                     })
                 } else {
                     MagicAtom::Rule(MagicRuleApplyAtom {
-                        name: MagicKeyword::Muggle {
+                        name: MagicSymbol::Muggle {
                             inner: rule.name.clone(),
                         },
                         args: rule.args.clone(),
@@ -319,7 +319,7 @@ impl NormalFormAtom {
                 })
             }
             NormalFormAtom::NegatedRule(nr) => MagicAtom::NegatedRule(MagicRuleApplyAtom {
-                name: MagicKeyword::Muggle {
+                name: MagicSymbol::Muggle {
                     inner: nr.name.clone(),
                 },
                 args: nr.args.clone(),
@@ -335,9 +335,9 @@ impl NormalFormAtom {
 impl NormalFormRule {
     fn adorn(
         &self,
-        pending: &mut Vec<MagicKeyword>,
-        rules_to_rewrite: &BTreeSet<Keyword>,
-        mut seen_bindings: BTreeSet<Keyword>,
+        pending: &mut Vec<MagicSymbol>,
+        rules_to_rewrite: &BTreeSet<Symbol>,
+        mut seen_bindings: BTreeSet<Symbol>,
     ) -> MagicRule {
         let mut ret_body = Vec::with_capacity(self.body.len());
 

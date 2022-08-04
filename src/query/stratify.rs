@@ -4,14 +4,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{ensure, Result};
 use itertools::Itertools;
 
-use crate::data::keyword::{Keyword, PROG_ENTRY};
+use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::program::{NormalFormAtom, NormalFormProgram, StratifiedNormalFormProgram};
 use crate::query::graph::{
     generalized_kahn, reachable_components, strongly_connected_components, Graph, StratifiedGraph,
 };
 
 impl NormalFormAtom {
-    fn contained_rules(&self) -> BTreeMap<&Keyword, bool> {
+    fn contained_rules(&self) -> BTreeMap<&Symbol, bool> {
         match self {
             NormalFormAtom::AttrTriple(_)
             | NormalFormAtom::Predicate(_)
@@ -25,12 +25,12 @@ impl NormalFormAtom {
 
 fn convert_normal_form_program_to_graph(
     nf_prog: &NormalFormProgram,
-) -> StratifiedGraph<&'_ Keyword> {
+) -> StratifiedGraph<&'_ Symbol> {
     nf_prog
         .prog
         .iter()
         .map(|(k, ruleset)| {
-            let mut ret: BTreeMap<&Keyword, bool> = BTreeMap::default();
+            let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
             for rule in ruleset {
                 for atom in &rule.body {
                     let contained = atom.contained_rules();
@@ -52,13 +52,13 @@ fn convert_normal_form_program_to_graph(
         .collect()
 }
 
-fn reduce_to_graph<'a>(g: &StratifiedGraph<&'a Keyword>) -> Graph<&'a Keyword> {
+fn reduce_to_graph<'a>(g: &StratifiedGraph<&'a Symbol>) -> Graph<&'a Symbol> {
     g.iter()
         .map(|(k, s)| (*k, s.iter().map(|(sk, _)| *sk).collect_vec()))
         .collect()
 }
 
-fn verify_no_cycle(g: &StratifiedGraph<&'_ Keyword>, sccs: &[BTreeSet<&Keyword>]) -> Result<()> {
+fn verify_no_cycle(g: &StratifiedGraph<&'_ Symbol>, sccs: &[BTreeSet<&Symbol>]) -> Result<()> {
     for (k, vs) in g {
         for scc in sccs {
             if scc.contains(k) {
@@ -76,9 +76,9 @@ fn verify_no_cycle(g: &StratifiedGraph<&'_ Keyword>, sccs: &[BTreeSet<&Keyword>]
 }
 
 fn make_scc_reduced_graph<'a>(
-    sccs: &[BTreeSet<&'a Keyword>],
-    graph: &StratifiedGraph<&Keyword>,
-) -> (BTreeMap<Keyword, usize>, StratifiedGraph<usize>) {
+    sccs: &[BTreeSet<&'a Symbol>],
+    graph: &StratifiedGraph<&Symbol>,
+) -> (BTreeMap<Symbol, usize>, StratifiedGraph<usize>) {
     let indices = sccs
         .iter()
         .enumerate()
@@ -111,7 +111,7 @@ impl NormalFormProgram {
     pub(crate) fn stratify(self) -> Result<StratifiedNormalFormProgram> {
         // prerequisite: the program is already in disjunctive normal form
         // 0. build a graph of the program
-        let prog_entry: &Keyword = &PROG_ENTRY;
+        let prog_entry: &Symbol = &PROG_ENTRY;
         let stratified_graph = convert_normal_form_program_to_graph(&self);
         let graph = reduce_to_graph(&stratified_graph);
         ensure!(
@@ -134,7 +134,7 @@ impl NormalFormProgram {
             .filter(|(k, _)| reachable.contains(k))
             .collect();
         // 3. find SCC of the clauses
-        let sccs: Vec<BTreeSet<&Keyword>> = strongly_connected_components(&graph)
+        let sccs: Vec<BTreeSet<&Symbol>> = strongly_connected_components(&graph)
             .into_iter()
             .map(|scc| scc.into_iter().cloned().collect())
             .collect_vec();

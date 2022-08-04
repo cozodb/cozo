@@ -15,8 +15,8 @@ use crate::data::encode::{
     encode_sentinel_attr_by_id, encode_sentinel_entity_attr, encode_tx, EncodedVec,
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
-use crate::data::keyword::Keyword;
-use crate::data::program::MagicKeyword;
+use crate::data::symb::Symbol;
+use crate::data::program::MagicSymbol;
 use crate::data::value::DataValue;
 use crate::runtime::temp_store::{TempStore, TempStoreId};
 
@@ -29,7 +29,7 @@ pub struct SessionTx {
     pub(crate) last_ent_id: Arc<AtomicU64>,
     pub(crate) last_tx_id: Arc<AtomicU64>,
     pub(crate) attr_by_id_cache: BTreeMap<AttrId, Option<Attribute>>,
-    pub(crate) attr_by_kw_cache: BTreeMap<Keyword, Option<Attribute>>,
+    pub(crate) attr_by_kw_cache: BTreeMap<Symbol, Option<Attribute>>,
     pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
     pub(crate) eid_by_attr_val_cache:
         BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
@@ -71,7 +71,7 @@ impl SessionTx {
         &self,
         key_size: usize,
         val_size: usize,
-        rule_name: MagicKeyword,
+        rule_name: MagicSymbol,
     ) -> TempStore {
         let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
@@ -92,8 +92,8 @@ impl SessionTx {
             id: TempStoreId(old_count),
             key_size: 0,
             val_size: 0,
-            rule_name: MagicKeyword::Muggle {
-                inner: Keyword::from(""),
+            rule_name: MagicSymbol::Muggle {
+                inner: Symbol::from(""),
             },
         }
     }

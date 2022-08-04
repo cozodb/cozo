@@ -47,7 +47,7 @@ pub(crate) fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
         SentinelEntityAttr => compare_key_unique_entity_attr(a, b),
         SentinelAttrValue => compare_key_unique_attr_val(a, b),
         SentinelAttrById => compare_key_unique_attr_by_id(a, b),
-        SentinelAttrByKeyword => compare_key_unique_attr_by_kw(a, b),
+        SentinelAttrByName => compare_key_unique_attr_by_name(a, b),
     }
 }
 
@@ -164,6 +164,6 @@ fn compare_key_unique_attr_by_id(a: &[u8], b: &[u8]) -> Ordering {
 }
 
 #[inline]
-fn compare_key_unique_attr_by_kw(a: &[u8], b: &[u8]) -> Ordering {
+fn compare_key_unique_attr_by_name(a: &[u8], b: &[u8]) -> Ordering {
     a.cmp(b)
 }

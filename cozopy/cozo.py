@@ -28,7 +28,7 @@ class Typing(str, Enum):
     int = 'int'
     float = 'float'
     string = 'string'
-    keyword = 'keyword'
+    name = 'name'
     uuid = 'uuid'
     timestamp = 'timestamp'
     bytes = 'bytes'
@@ -47,9 +47,9 @@ class Indexing(str, Enum):
     identity = 'identity'
 
 
-def Attribute(keyword, typing, id, cardinality, index, history):
+def Attribute(name, typing, id, cardinality, index, history):
     ret = {
-        'keyword': keyword,
+        'name': name,
         'type': typing,
         'cardinality': cardinality,
         'index': index,
@@ -60,15 +60,15 @@ def Attribute(keyword, typing, id, cardinality, index, history):
     return ret
 
 
-def PutAttr(keyword, typing, id=None, cardinality=Cardinality.one, index=Indexing.none, history=False):
+def PutAttr(name, typing, id=None, cardinality=Cardinality.one, index=Indexing.none, history=False):
     return {
-        'put': Attribute(keyword, typing, id, cardinality, index, history)
+        'put': Attribute(name, typing, id, cardinality, index, history)
     }
 
 
-def RetractAttr(keyword, typing, id, cardinality, index, history):
+def RetractAttr(name, typing, id, cardinality, index, history):
     return {
-        'retract': Attribute(keyword, typing, id, cardinality, index, history)
+        'retract': Attribute(name, typing, id, cardinality, index, history)
     }
 
 
@@ -102,9 +102,9 @@ class DefAttributesHelper:
         self.name = name
 
     def __call__(self, typing, id=None, cardinality=Cardinality.one, index=Indexing.none, history=False):
-        keyword = f'{self.parent.prefix}.{self.name}'
+        name = f'{self.parent.prefix}.{self.name}'
         self.parent.attrs.append({
-            'put': Attribute(keyword, typing, id, cardinality, index, history)
+            'put': Attribute(name, typing, id, cardinality, index, history)
         })
         return self.parent
 

@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 
 use crate::data::attr::Attribute;
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::DataValue;
 use crate::runtime::transact::TxLog;
@@ -25,7 +25,7 @@ pub(crate) enum StorageTag {
     SentinelEntityAttr = 7,
     SentinelAttrValue = 8,
     SentinelAttrById = 9,
-    SentinelAttrByKeyword = 10,
+    SentinelAttrByName = 10,
 }
 
 #[derive(Clone)]
@@ -58,7 +58,7 @@ impl EncodedVec<LARGE_VEC_SIZE> {
             }
             StorageTag::AttrById
             | StorageTag::SentinelAttrById
-            | StorageTag::SentinelAttrByKeyword => {
+            | StorageTag::SentinelAttrByName => {
                 let op = StoreOp::try_from(data[0]).unwrap();
                 if data.len() <= 1 {
                     op.to_string()
@@ -129,9 +129,9 @@ impl<const N: usize> Debug for EncodedVec<N> {
                     StorageTag::SentinelAttrById => {
                         write!(f, " {:?}", AttrId::from_bytes(self))
                     }
-                    StorageTag::SentinelAttrByKeyword => {
-                        let kw = decode_sentinel_attr_by_kw(self).unwrap();
-                        write!(f, " {:?}", kw)
+                    StorageTag::SentinelAttrByName => {
+                        let name = decode_sentinel_attr_by_name(self).unwrap();
+                        write!(f, " {:?}", name)
                     }
                 }
             }
@@ -197,7 +197,7 @@ impl TryFrom<u8> for StorageTag {
             7 => SentinelEntityAttr,
             8 => SentinelAttrValue,
             9 => SentinelAttrById,
-            10 => SentinelAttrByKeyword,
+            10 => SentinelAttrByName,
             n => bail!("unexpected storage tag {}", n),
         })
     }
@@ -431,14 +431,14 @@ pub(crate) fn encode_sentinel_attr_by_id(aid: AttrId) -> EncodedVec<VEC_SIZE_8> 
 }
 
 #[inline]
-pub(crate) fn encode_sentinel_attr_by_kw(kw: &Keyword) -> EncodedVec<LARGE_VEC_SIZE> {
+pub(crate) fn encode_sentinel_attr_by_name(name: &Symbol) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
-    ret.push(StorageTag::SentinelAttrByKeyword as u8);
-    ret.extend_from_slice(kw.0.as_bytes());
+    ret.push(StorageTag::SentinelAttrByName as u8);
+    ret.extend_from_slice(name.0.as_bytes());
     ret.into()
 }
 
 #[inline]
-pub(crate) fn decode_sentinel_attr_by_kw(src: &[u8]) -> Result<Keyword> {
-    Ok(Keyword::try_from(&src[1..])?)
+pub(crate) fn decode_sentinel_attr_by_name(src: &[u8]) -> Result<Symbol> {
+    Ok(Symbol::try_from(&src[1..])?)
 }

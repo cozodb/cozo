@@ -6,6 +6,7 @@
 * [x] stratum
 * [x] magic sets
 * [x] unification
+* [ ] duplicate symbols in rule heads
 * [ ] aggregation
 * [ ] range scan
 * [ ] public API

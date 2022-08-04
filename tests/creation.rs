@@ -37,13 +37,13 @@ fn creation() {
     assert!(db.current_schema().unwrap().as_array().unwrap().is_empty());
     let res = db.transact_attributes(&json!({
         "attrs": [
-            {"put": {"keyword": "person.idd", "cardinality": "one", "type": "string", "index": "identity", "history": false}},
-            {"put": {"keyword": "person.first_name", "cardinality": "one", "type": "string", "index": true}},
-            {"put": {"keyword": "person.last_name", "cardinality": "one", "type": "string", "index": true}},
-            {"put": {"keyword": "person.age", "cardinality": "one", "type": "int"}},
-            {"put": {"keyword": "person.friend", "cardinality": "many", "type": "ref"}},
-            {"put": {"keyword": "person.weight", "cardinality": "one", "type": "float"}},
-            {"put": {"keyword": "person.covid", "cardinality": "one", "type": "bool"}},
+            {"put": {"name": "person.idd", "cardinality": "one", "type": "string", "index": "identity", "history": false}},
+            {"put": {"name": "person.first_name", "cardinality": "one", "type": "string", "index": true}},
+            {"put": {"name": "person.last_name", "cardinality": "one", "type": "string", "index": true}},
+            {"put": {"name": "person.age", "cardinality": "one", "type": "int"}},
+            {"put": {"name": "person.friend", "cardinality": "many", "type": "ref"}},
+            {"put": {"name": "person.weight", "cardinality": "one", "type": "float"}},
+            {"put": {"name": "person.covid", "cardinality": "one", "type": "bool"}},
         ]
     }))
     .unwrap();
@@ -52,8 +52,8 @@ fn creation() {
     let last_id = res["results"][6][0].as_u64().unwrap();
     db.transact_attributes(&json!({
         "attrs": [
-            {"put": {"id": first_id, "keyword": "person.id", "cardinality": "one", "type": "string", "index": "identity", "history": false}},
-            {"retract": {"id": last_id, "keyword": "person.covid", "cardinality": "one", "type": "bool"}}
+            {"put": {"id": first_id, "name": "person.id", "cardinality": "one", "type": "string", "index": "identity", "history": false}},
+            {"retract": {"id": last_id, "name": "person.covid", "cardinality": "one", "type": "bool"}}
         ]
     })).unwrap();
     assert_eq!(db.current_schema().unwrap().as_array().unwrap().len(), 6);

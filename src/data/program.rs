@@ -8,24 +8,24 @@ use crate::data::aggr::Aggregation;
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
 use crate::data::id::{EntityId, Validity};
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 
 #[derive(Default)]
-pub(crate) struct TempKwGen {
+pub(crate) struct TempSymbGen {
     last_id: u32,
 }
 
-impl TempKwGen {
-    pub(crate) fn next(&mut self) -> Keyword {
+impl TempSymbGen {
+    pub(crate) fn next(&mut self) -> Symbol {
         self.last_id += 1;
-        Keyword::from(&format!("*{}", self.last_id) as &str)
+        Symbol::from(&format!("*{}", self.last_id) as &str)
     }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct InputProgram {
-    pub(crate) prog: BTreeMap<Keyword, Vec<InputRule>>,
+    pub(crate) prog: BTreeMap<Symbol, Vec<InputRule>>,
 }
 
 impl InputProgram {
@@ -57,7 +57,7 @@ pub(crate) struct StratifiedNormalFormProgram(pub(crate) Vec<NormalFormProgram>)
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NormalFormProgram {
-    pub(crate) prog: BTreeMap<Keyword, Vec<NormalFormRule>>,
+    pub(crate) prog: BTreeMap<Symbol, Vec<NormalFormRule>>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,35 +65,35 @@ pub(crate) struct StratifiedMagicProgram(pub(crate) Vec<MagicProgram>);
 
 #[derive(Debug, Clone)]
 pub(crate) struct MagicProgram {
-    pub(crate) prog: BTreeMap<MagicKeyword, Vec<MagicRule>>,
+    pub(crate) prog: BTreeMap<MagicSymbol, Vec<MagicRule>>,
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) enum MagicKeyword {
+pub(crate) enum MagicSymbol {
     Muggle {
-        inner: Keyword,
+        inner: Symbol,
     },
     Magic {
-        inner: Keyword,
+        inner: Symbol,
         adornment: SmallVec<[bool; 8]>,
     },
     Input {
-        inner: Keyword,
+        inner: Symbol,
         adornment: SmallVec<[bool; 8]>,
     },
     Sup {
-        inner: Keyword,
+        inner: Symbol,
         adornment: SmallVec<[bool; 8]>,
         rule_idx: u16,
         sup_idx: u16,
     },
 }
 
-impl Debug for MagicKeyword {
+impl Debug for MagicSymbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MagicKeyword::Muggle { inner } => write!(f, "{}", inner.0),
-            MagicKeyword::Magic { inner, adornment } => {
+            MagicSymbol::Muggle { inner } => write!(f, "{}", inner.0),
+            MagicSymbol::Magic { inner, adornment } => {
                 write!(f, "{}|M", inner.0)?;
                 for b in adornment {
                     if *b {
@@ -104,7 +104,7 @@ impl Debug for MagicKeyword {
                 }
                 Ok(())
             }
-            MagicKeyword::Input { inner, adornment } => {
+            MagicSymbol::Input { inner, adornment } => {
                 write!(f, "{}|I", inner.0)?;
                 for b in adornment {
                     if *b {
@@ -115,7 +115,7 @@ impl Debug for MagicKeyword {
                 }
                 Ok(())
             }
-            MagicKeyword::Sup {
+            MagicSymbol::Sup {
                 inner,
                 adornment,
                 rule_idx,
@@ -135,21 +135,21 @@ impl Debug for MagicKeyword {
     }
 }
 
-impl MagicKeyword {
-    pub(crate) fn as_keyword(&self) -> &Keyword {
+impl MagicSymbol {
+    pub(crate) fn as_plain_symbol(&self) -> &Symbol {
         match self {
-            MagicKeyword::Muggle { inner, .. }
-            | MagicKeyword::Magic { inner, .. }
-            | MagicKeyword::Input { inner, .. }
-            | MagicKeyword::Sup { inner, .. } => inner,
+            MagicSymbol::Muggle { inner, .. }
+            | MagicSymbol::Magic { inner, .. }
+            | MagicSymbol::Input { inner, .. }
+            | MagicSymbol::Sup { inner, .. } => inner,
         }
     }
     pub(crate) fn magic_adornment(&self) -> &[bool] {
         match self {
-            MagicKeyword::Muggle { .. } => &[],
-            MagicKeyword::Magic { adornment, .. }
-            | MagicKeyword::Input { adornment, .. }
-            | MagicKeyword::Sup { adornment, .. } => adornment,
+            MagicSymbol::Muggle { .. } => &[],
+            MagicSymbol::Magic { adornment, .. }
+            | MagicSymbol::Input { adornment, .. }
+            | MagicSymbol::Sup { adornment, .. } => adornment,
         }
     }
     pub(crate) fn has_bound_adornment(&self) -> bool {
@@ -159,7 +159,7 @@ impl MagicKeyword {
 
 #[derive(Debug, Clone)]
 pub(crate) struct InputRule {
-    pub(crate) head: Vec<Keyword>,
+    pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<Aggregation>>,
     pub(crate) body: Vec<InputAtom>,
     pub(crate) vld: Validity,
@@ -167,7 +167,7 @@ pub(crate) struct InputRule {
 
 #[derive(Debug, Clone)]
 pub(crate) struct NormalFormRule {
-    pub(crate) head: Vec<Keyword>,
+    pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<Aggregation>>,
     pub(crate) body: Vec<NormalFormAtom>,
     pub(crate) vld: Validity,
@@ -175,14 +175,14 @@ pub(crate) struct NormalFormRule {
 
 #[derive(Debug, Clone)]
 pub(crate) struct MagicRule {
-    pub(crate) head: Vec<Keyword>,
+    pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<Aggregation>>,
     pub(crate) body: Vec<MagicAtom>,
     pub(crate) vld: Validity,
 }
 
 impl MagicRule {
-    pub(crate) fn contained_rules(&self) -> BTreeSet<MagicKeyword> {
+    pub(crate) fn contained_rules(&self) -> BTreeSet<MagicSymbol> {
         let mut coll = BTreeSet::new();
         for atom in self.body.iter() {
             match atom {
@@ -237,44 +237,44 @@ pub(crate) struct InputAttrTripleAtom {
 #[derive(Debug, Clone)]
 pub(crate) struct NormalFormAttrTripleAtom {
     pub(crate) attr: Attribute,
-    pub(crate) entity: Keyword,
-    pub(crate) value: Keyword,
+    pub(crate) entity: Symbol,
+    pub(crate) value: Symbol,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct MagicAttrTripleAtom {
     pub(crate) attr: Attribute,
-    pub(crate) entity: Keyword,
-    pub(crate) value: Keyword,
+    pub(crate) entity: Symbol,
+    pub(crate) value: Symbol,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct InputRuleApplyAtom {
-    pub(crate) name: Keyword,
+    pub(crate) name: Symbol,
     pub(crate) args: Vec<InputTerm<DataValue>>,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct NormalFormRuleApplyAtom {
-    pub(crate) name: Keyword,
-    pub(crate) args: Vec<Keyword>,
+    pub(crate) name: Symbol,
+    pub(crate) args: Vec<Symbol>,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct MagicRuleApplyAtom {
-    pub(crate) name: MagicKeyword,
-    pub(crate) args: Vec<Keyword>,
+    pub(crate) name: MagicSymbol,
+    pub(crate) args: Vec<Symbol>,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) enum InputTerm<T> {
-    Var(Keyword),
+    Var(Symbol),
     Const(T),
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct Unification {
-    pub(crate) binding: Keyword,
+    pub(crate) binding: Symbol,
     pub(crate) expr: Expr,
 }
 
@@ -282,7 +282,7 @@ impl Unification {
     pub(crate) fn is_const(&self) -> bool {
         matches!(self.expr, Expr::Const(_))
     }
-    pub(crate) fn bindings_in_expr(&self) -> BTreeSet<Keyword> {
+    pub(crate) fn bindings_in_expr(&self) -> BTreeSet<Symbol> {
         self.expr.bindings()
     }
 }

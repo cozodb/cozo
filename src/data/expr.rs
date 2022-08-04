@@ -7,13 +7,13 @@ use anyhow::{bail, Result};
 use itertools::Itertools;
 use ordered_float::{Float, OrderedFloat};
 
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
-    Binding(Keyword, Option<usize>),
+    Binding(Symbol, Option<usize>),
     Const(DataValue),
     Apply(&'static Op, Box<[Expr]>),
 }
@@ -25,7 +25,7 @@ impl Expr {
     pub(crate) fn negate(self) -> Self {
         Expr::Apply(&OP_NOT, Box::new([self]))
     }
-    pub(crate) fn fill_binding_indices(&mut self, binding_map: &BTreeMap<Keyword, usize>) {
+    pub(crate) fn fill_binding_indices(&mut self, binding_map: &BTreeMap<Symbol, usize>) {
         match self {
             Expr::Binding(k, idx) => {
                 let found_idx = *binding_map.get(k).unwrap();
@@ -64,12 +64,12 @@ impl Expr {
         }
         Ok(())
     }
-    pub(crate) fn bindings(&self) -> BTreeSet<Keyword> {
+    pub(crate) fn bindings(&self) -> BTreeSet<Symbol> {
         let mut ret = BTreeSet::new();
         self.collect_bindings(&mut ret);
         ret
     }
-    pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Keyword>) {
+    pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Symbol>) {
         match self {
             Expr::Binding(b, _) => {
                 coll.insert(b.clone());

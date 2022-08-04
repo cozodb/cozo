@@ -8,7 +8,7 @@ use serde_json::Map;
 use crate::data::attr::{Attribute, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 
@@ -282,9 +282,9 @@ impl SessionTx {
                     "double only allowed for 'retract', got {}",
                     action
                 );
-                let kw: Keyword = attr.try_into()?;
+                let kw: Symbol = attr.try_into()?;
                 let attr = self
-                    .attr_by_kw(&kw)?
+                    .attr_by_name(&kw)?
                     .ok_or_else(|| anyhow!("attribute not found {}", kw))?;
 
                 let eid = eid
@@ -319,9 +319,9 @@ impl SessionTx {
         temp_id_ctx: &mut TempIdCtx,
         collected: &mut Vec<Quintuple>,
     ) -> Result<()> {
-        let kw: Keyword = attr_kw.try_into()?;
+        let kw: Symbol = attr_kw.try_into()?;
         let attr = self
-            .attr_by_kw(&kw)?
+            .attr_by_name(&kw)?
             .ok_or_else(|| anyhow!("attribute not found: {}", kw))?;
         if attr.cardinality.is_many() && attr.val_type != AttributeTyping::List && val.is_array() {
             for cur_val in val.as_array().unwrap() {
@@ -407,7 +407,7 @@ impl SessionTx {
             if k != PERM_ID_FIELD && k != TEMP_ID_FIELD {
                 let kw = (k as &str).into();
                 let attr = self
-                    .attr_by_kw(&kw)?
+                    .attr_by_name(&kw)?
                     .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
                 has_unique_attr = has_unique_attr || attr.indexing.is_unique_index();
                 has_identity_attr = has_identity_attr || attr.indexing == AttributeIndex::Identity;
@@ -502,7 +502,7 @@ impl SessionTx {
                 ensure!(
                     attr.indexing.is_unique_index(),
                     "cannot use non-unique attribute {} to specify entity",
-                    attr.keyword
+                    attr.name
                 );
             }
         }

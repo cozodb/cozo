@@ -10,7 +10,7 @@ use smallvec::SmallVec;
 use crate::data::encode::EncodedVec;
 use crate::data::id::{AttrId, TxId};
 use crate::data::json::JsonValue;
-use crate::data::keyword::Keyword;
+use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::DataValue;
 use crate::parse::triple::TempIdCtx;
@@ -223,7 +223,7 @@ pub(crate) struct Attribute {
     #[serde(rename = "i")]
     pub(crate) id: AttrId,
     #[serde(rename = "n")]
-    pub(crate) keyword: Keyword,
+    pub(crate) name: Symbol,
     #[serde(rename = "c")]
     pub(crate) cardinality: AttributeCardinality,
     #[serde(rename = "t")]
@@ -254,7 +254,7 @@ impl Attribute {
     pub(crate) fn to_json(&self) -> JsonValue {
         json!({
             "id": self.id.0,
-            "keyword": self.keyword.to_string(),
+            "name": self.name.to_string(),
             "cardinality": self.cardinality.to_string(),
             "type": self.val_type.to_string(),
             "index": self.indexing.to_string(),
