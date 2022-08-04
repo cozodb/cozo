@@ -23,7 +23,7 @@ impl SessionTx {
             .ok_or_else(|| anyhow!("program entry not found in rules"))?
             .clone();
 
-        for (idx, cur_prog) in strata.iter().rev().enumerate() {
+        for (idx, cur_prog) in strata.iter().enumerate() {
             debug!("stratum {}", idx);
             self.semi_naive_magic_evaluate(cur_prog, &stores)?;
         }
