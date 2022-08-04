@@ -51,6 +51,14 @@ impl Symbol {
         );
         Ok(())
     }
+    pub(crate) fn validate_query_var(&self) -> Result<()> {
+        ensure!(
+            self.is_query_var(),
+            "query var must start with '?': {}",
+            self.0
+        );
+        Ok(())
+    }
     pub(crate) fn is_prog_entry(&self) -> bool {
         self.0 == "?"
     }

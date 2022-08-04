@@ -4,8 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{ensure, Result};
 use itertools::Itertools;
 
-use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::program::{NormalFormAtom, NormalFormProgram, StratifiedNormalFormProgram};
+use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::query::graph::{
     generalized_kahn, reachable_components, strongly_connected_components, Graph, StratifiedGraph,
 };
@@ -31,17 +31,45 @@ fn convert_normal_form_program_to_graph(
         .iter()
         .map(|(k, ruleset)| {
             let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
+            let has_aggr = ruleset
+                .iter()
+                .any(|rule| rule.aggr.iter().any(|a| a.is_some()));
+            let is_meet = has_aggr
+                && ruleset.iter().map(|rule| &rule.aggr).all_equal()
+                && ruleset.iter().all(|rule| {
+                    rule.aggr.iter().all(|v| match v {
+                        None => true,
+                        Some(v) => v.is_meet,
+                    })
+                });
             for rule in ruleset {
                 for atom in &rule.body {
                     let contained = atom.contained_rules();
-                    for (found_key, negated) in contained {
+                    for (found_key, is_negated) in contained {
                         match ret.entry(found_key) {
                             Entry::Vacant(e) => {
-                                e.insert(negated);
+                                if has_aggr {
+                                    if is_meet && k == found_key {
+                                        e.insert(is_negated);
+                                    } else {
+                                        e.insert(true);
+                                    }
+                                } else {
+                                    e.insert(is_negated);
+                                }
                             }
                             Entry::Occupied(mut e) => {
                                 let old = *e.get();
-                                e.insert(old || negated);
+                                let new_val = if has_aggr {
+                                    if is_meet && k == found_key {
+                                        is_negated
+                                    } else {
+                                        true
+                                    }
+                                } else {
+                                    is_negated
+                                };
+                                e.insert(old || new_val);
                             }
                         }
                     }

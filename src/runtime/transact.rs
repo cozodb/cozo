@@ -15,8 +15,8 @@ use crate::data::encode::{
     encode_sentinel_attr_by_id, encode_sentinel_entity_attr, encode_tx, EncodedVec,
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
-use crate::data::symb::Symbol;
 use crate::data::program::MagicSymbol;
+use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::runtime::temp_store::{TempStore, TempStoreId};
 
@@ -67,31 +67,24 @@ impl TxLog {
 }
 
 impl SessionTx {
-    pub(crate) fn new_throwaway(
-        &self,
-        key_size: usize,
-        val_size: usize,
-        rule_name: MagicSymbol,
-    ) -> TempStore {
+    pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> TempStore {
         let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
         TempStore {
             db: self.temp_store.clone(),
             id: TempStoreId(old_count),
-            key_size,
-            val_size,
+            arity,
             rule_name,
         }
     }
 
-    pub(crate) fn temp_area(&self) -> TempStore {
+    pub(crate) fn new_temp_store(&self) -> TempStore {
         let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
         TempStore {
             db: self.temp_store.clone(),
             id: TempStoreId(old_count),
-            key_size: 0,
-            val_size: 0,
+            arity: 0,
             rule_name: MagicSymbol::Muggle {
                 inner: Symbol::from(""),
             },

@@ -3,32 +3,83 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{anyhow, ensure, Result};
 use itertools::Itertools;
 
+use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
+use crate::data::program::{MagicAtom, MagicRule, MagicSymbol, StratifiedMagicProgram};
 use crate::data::symb::Symbol;
-use crate::data::program::{MagicAtom, MagicSymbol, MagicRule, StratifiedMagicProgram};
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 
-pub(crate) type CompiledProgram =
-    BTreeMap<MagicSymbol, Vec<(Vec<Symbol>, BTreeSet<MagicSymbol>, Relation)>>;
+pub(crate) type CompiledProgram = BTreeMap<MagicSymbol, CompiledRuleSet>;
+
+#[derive(Debug)]
+pub(crate) struct CompiledRuleSet {
+    pub(crate) rules: Vec<CompiledRule>,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum AggrKind {
+    None,
+    Normal,
+    Meet,
+}
+
+impl CompiledRuleSet {
+    pub(crate) fn aggr_kind(&self) -> AggrKind {
+        let mut is_aggr = false;
+        for rule in &self.rules {
+            for aggr in &rule.aggr {
+                if aggr.is_some() {
+                    is_aggr = true;
+                    break;
+                }
+            }
+        }
+        if !is_aggr {
+            return AggrKind::None;
+        }
+        if !self.rules.iter().map(|r| &r.aggr).all_equal() {
+            return AggrKind::Normal;
+        }
+        for aggr in self.rules[0].aggr.iter() {
+            if let Some(aggr) = aggr {
+                if !aggr.is_meet {
+                    return AggrKind::Normal;
+                }
+            }
+        }
+        return AggrKind::Meet;
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct CompiledRule {
+    pub(crate) aggr: Vec<Option<Aggregation>>,
+    pub(crate) relation: Relation,
+    pub(crate) contained_rules: BTreeSet<MagicSymbol>,
+}
+
+impl CompiledRule {
+    pub(crate) fn is_aggr(&self) -> bool {
+        self.aggr.iter().any(|a| a.is_some())
+    }
+}
 
 impl SessionTx {
     pub(crate) fn stratified_magic_compile(
         &mut self,
         prog: &StratifiedMagicProgram,
     ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, TempStore>)> {
-        let stores = prog
-            .0
-            .iter()
-            .flat_map(|p| p.prog.iter())
-            .map(|(k, s)| {
-                (
-                    k.clone(),
-                    (self.new_throwaway(s[0].head.len(), 0, k.clone())),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
+        let mut stores: BTreeMap<MagicSymbol, TempStore> = Default::default();
+        for stratum in prog.0.iter() {
+            for (name, ruleset) in &stratum.prog {
+                stores.insert(
+                    name.clone(),
+                    self.new_rule_store(name.clone(), ruleset.rules[0].head.len()),
+                );
+            }
+        }
 
         let compiled: Vec<_> = prog
             .0
@@ -38,27 +89,21 @@ impl SessionTx {
                 cur_prog
                     .prog
                     .iter()
-                    .map(
-                        |(k, body)| -> Result<(
-                            MagicSymbol,
-                            Vec<(Vec<Symbol>, BTreeSet<MagicSymbol>, Relation)>,
-                        )> {
-                            let mut collected = Vec::with_capacity(body.len());
-                            for (rule_idx, rule) in body.iter().enumerate() {
-                                let header = &rule.head;
-                                let mut relation = self.compile_magic_rule_body(
-                                    &rule, k, rule_idx, &stores, &header,
-                                )?;
-                                relation.fill_predicate_binding_indices();
-                                collected.push((
-                                    rule.head.clone(),
-                                    rule.contained_rules(),
-                                    relation,
-                                ));
-                            }
-                            Ok((k.clone(), collected))
-                        },
-                    )
+                    .map(|(k, body)| -> Result<(MagicSymbol, CompiledRuleSet)> {
+                        let mut collected = Vec::with_capacity(body.rules.len());
+                        for (rule_idx, rule) in body.rules.iter().enumerate() {
+                            let header = &rule.head;
+                            let mut relation =
+                                self.compile_magic_rule_body(&rule, k, rule_idx, &stores, &header)?;
+                            relation.fill_predicate_binding_indices();
+                            collected.push(CompiledRule {
+                                aggr: rule.aggr.clone(),
+                                relation,
+                                contained_rules: rule.contained_rules(),
+                            })
+                        }
+                        Ok((k.clone(), CompiledRuleSet { rules: collected }))
+                    })
                     .try_collect()
             })
             .try_collect()?;
@@ -117,10 +162,10 @@ impl SessionTx {
                         .ok_or_else(|| anyhow!("undefined rule {:?} encountered", rule_app.name))?
                         .clone();
                     ensure!(
-                        store.key_size == rule_app.args.len(),
+                        store.arity == rule_app.args.len(),
                         "arity mismatch in rule application {:?}, expect {}, found {}",
                         rule_app.name,
-                        store.key_size,
+                        store.arity,
                         rule_app.args.len()
                     );
                     let mut prev_joiner_vars = vec![];
@@ -188,10 +233,10 @@ impl SessionTx {
                         .ok_or_else(|| anyhow!("undefined rule encountered: {:?}", rule_app.name))?
                         .clone();
                     ensure!(
-                        store.key_size == rule_app.args.len(),
+                        store.arity == rule_app.args.len(),
                         "arity mismatch for {:?}, expect {}, got {}",
                         rule_app.name,
-                        store.key_size,
+                        store.arity,
                         rule_app.args.len()
                     );
 

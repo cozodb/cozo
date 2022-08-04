@@ -4,21 +4,37 @@ use std::mem;
 use itertools::Itertools;
 use smallvec::SmallVec;
 
-use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::program::{
-    MagicAtom, MagicAttrTripleAtom, MagicSymbol, MagicProgram, MagicRule, MagicRuleApplyAtom,
-    NormalFormAtom, NormalFormProgram, NormalFormRule, StratifiedMagicProgram,
+    MagicAtom, MagicAttrTripleAtom, MagicProgram, MagicRule, MagicRuleApplyAtom, MagicRuleSet,
+    MagicSymbol, NormalFormAtom, NormalFormProgram, NormalFormRule, StratifiedMagicProgram,
     StratifiedNormalFormProgram,
 };
+use crate::data::symb::{Symbol, PROG_ENTRY};
+
+impl NormalFormProgram {
+    pub(crate) fn exempt_aggr_rules(&self, exempt_rules: &mut BTreeSet<Symbol>) {
+        for (name, rule_set) in self.prog.iter() {
+            'outer: for rule in rule_set.iter() {
+                for aggr in rule.aggr.iter() {
+                    if aggr.is_some() {
+                        exempt_rules.insert(name.clone());
+                        continue 'outer;
+                    }
+                }
+            }
+        }
+    }
+}
 
 impl StratifiedNormalFormProgram {
     pub(crate) fn magic_sets_rewrite(self) -> StratifiedMagicProgram {
-        let mut upstream_rules = BTreeSet::from([PROG_ENTRY.clone()]);
+        let mut exempt_rules = BTreeSet::from([PROG_ENTRY.clone()]);
         let mut collected = vec![];
         for prog in self.0 {
-            let adorned = prog.adorn(&upstream_rules);
+            prog.exempt_aggr_rules(&mut exempt_rules);
+            let adorned = prog.adorn(&exempt_rules);
             collected.push(adorned.magic_rewrite());
-            upstream_rules.extend(prog.get_downstream_rules());
+            exempt_rules.extend(prog.get_downstream_rules());
         }
         StratifiedMagicProgram(collected)
     }
@@ -29,7 +45,7 @@ impl MagicProgram {
         let mut ret_prog = MagicProgram {
             prog: Default::default(),
         };
-        for (rule_head, rules) in self.prog {
+        for (rule_head, ruleset) in self.prog {
             // at this point, rule_head must be Muggle or Magic, the remaining options are impossible
             let rule_name = rule_head.as_plain_symbol();
             let adornment = rule_head.magic_adornment();
@@ -37,7 +53,7 @@ impl MagicProgram {
             // can only be true if rule is magic and args are not all free
             let rule_has_bound_args = rule_head.has_bound_adornment();
 
-            for (rule_idx, rule) in rules.into_iter().enumerate() {
+            for (rule_idx, rule) in ruleset.rules.into_iter().enumerate() {
                 let mut sup_idx = 0;
                 let mut make_sup_kw = || {
                     let ret = MagicSymbol::Sup {
@@ -75,12 +91,14 @@ impl MagicProgram {
 
                     ret_prog.prog.insert(
                         sup_kw.clone(),
-                        vec![MagicRule {
-                            head: sup_args.clone(),
-                            aggr: sup_aggr,
-                            body: sup_body,
-                            vld: rule.vld,
-                        }],
+                        MagicRuleSet {
+                            rules: vec![MagicRule {
+                                head: sup_args.clone(),
+                                aggr: sup_aggr,
+                                body: sup_body,
+                                vld: rule.vld,
+                            }],
+                        },
                     );
 
                     seen_bindings.extend(sup_args.iter().cloned());
@@ -117,7 +135,7 @@ impl MagicProgram {
                                 mem::swap(&mut sup_rule_atoms, &mut collected_atoms);
 
                                 // add the sup rule to the program, this clears all collected atoms
-                                sup_rule_entry.push(MagicRule {
+                                sup_rule_entry.rules.push(MagicRule {
                                     head: args.clone(),
                                     aggr: vec![None; args.len()],
                                     body: sup_rule_atoms,
@@ -152,7 +170,7 @@ impl MagicProgram {
                                     )
                                     .collect_vec();
                                 let inp_aggr = vec![None; inp_args.len()];
-                                inp_entry.push(MagicRule {
+                                inp_entry.rules.push(MagicRule {
                                     head: inp_args,
                                     aggr: inp_aggr,
                                     body: vec![sup_rule_app],
@@ -166,7 +184,7 @@ impl MagicProgram {
                 }
 
                 let entry = ret_prog.prog.entry(rule_head.clone()).or_default();
-                entry.push(MagicRule {
+                entry.rules.push(MagicRule {
                     head: rule.head,
                     aggr: rule.aggr,
                     body: collected_atoms,
@@ -229,7 +247,9 @@ impl NormalFormProgram {
                 MagicSymbol::Muggle {
                     inner: rule_name.clone(),
                 },
-                adorned_rules,
+                MagicRuleSet {
+                    rules: adorned_rules,
+                },
             );
         }
 
@@ -251,7 +271,12 @@ impl NormalFormProgram {
                     rule.adorn(&mut pending_adornment, &rules_to_rewrite, seen_bindings);
                 adorned_rules.push(adorned_rule);
             }
-            adorned_prog.prog.insert(head, adorned_rules);
+            adorned_prog.prog.insert(
+                head,
+                MagicRuleSet {
+                    rules: adorned_rules,
+                },
+            );
         }
         adorned_prog
     }

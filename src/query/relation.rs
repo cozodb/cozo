@@ -989,7 +989,7 @@ impl TripleRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         // [f, b] where b is not indexed
-        let throwaway = tx.temp_area();
+        let throwaway = tx.new_temp_store();
         for item in tx.triple_a_before_scan(self.attr.id, self.vld) {
             match item {
                 Err(e) => return Box::new([Err(e)].into_iter()),
@@ -1528,7 +1528,7 @@ impl InnerJoin {
             .sorted_by_key(|(_, b)| **b)
             .map(|(a, _)| a)
             .collect_vec();
-        let throwaway = tx.temp_area();
+        let throwaway = tx.new_temp_store();
         for item in self.right.iter(tx, epoch, use_delta) {
             match item {
                 Ok(tuple) => {

@@ -3,8 +3,8 @@ use std::fmt::{Debug, Formatter};
 
 use anyhow::Result;
 use smallvec::SmallVec;
-use crate::data::aggr::Aggregation;
 
+use crate::data::aggr::Aggregation;
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
 use crate::data::id::{EntityId, Validity};
@@ -63,9 +63,14 @@ pub(crate) struct NormalFormProgram {
 #[derive(Debug, Clone)]
 pub(crate) struct StratifiedMagicProgram(pub(crate) Vec<MagicProgram>);
 
+#[derive(Debug, Clone, Default)]
+pub(crate) struct MagicRuleSet {
+    pub(crate) rules: Vec<MagicRule>,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct MagicProgram {
-    pub(crate) prog: BTreeMap<MagicSymbol, Vec<MagicRule>>,
+    pub(crate) prog: BTreeMap<MagicSymbol, MagicRuleSet>,
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]

@@ -5,6 +5,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use serde_json::{json, Map};
 
+use crate::data::aggr::get_aggr;
 use crate::data::attr::Attribute;
 use crate::data::expr::{get_op, Expr};
 use crate::data::id::{EntityId, Validity};
@@ -334,10 +335,35 @@ impl SessionTx {
         let mut rule_aggr = vec![];
         for head_item in rule_head_vec {
             if let Some(s) = head_item.as_str() {
-                rule_head.push(Symbol::from(s));
+                let symbol = Symbol::from(s);
+                symbol.validate_query_var()?;
+                rule_head.push(symbol);
                 rule_aggr.push(None);
+            } else if let Some(m) = head_item.as_object() {
+                let s = m
+                    .get("symb")
+                    .ok_or_else(|| anyhow!("expect field 'symb' in rule head map"))?
+                    .as_str()
+                    .ok_or_else(|| {
+                        anyhow!("expect field 'symb' in rule head map to be a symbol")
+                    })?;
+                let symbol = Symbol::from(s);
+                symbol.validate_query_var()?;
+
+                let aggr = m
+                    .get("aggr")
+                    .ok_or_else(|| anyhow!("expect field 'aggr' in rule head map"))?
+                    .as_str()
+                    .ok_or_else(|| {
+                        anyhow!("expect field 'aggr' in rule head map to be a symbol")
+                    })?;
+                let aggr = get_aggr(aggr)
+                    .ok_or_else(|| anyhow!("aggregation {} not found", aggr))?
+                    .clone();
+                rule_head.push(symbol);
+                rule_aggr.push(Some(aggr));
             } else {
-                todo!()
+                bail!("cannot parse {} as rule head", head_item);
             }
         }
         let rule_body: Vec<InputAtom> = args

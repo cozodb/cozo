@@ -6,8 +6,8 @@
 * [x] stratum
 * [x] magic sets
 * [x] unification
+* [x] aggregation
 * [ ] duplicate symbols in rule heads
-* [ ] aggregation
 * [ ] range scan
 * [ ] public API
 * [ ] sorting

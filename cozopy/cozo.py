@@ -158,34 +158,55 @@ R = RuleClass(None)
 Q = RuleClass('?')
 
 
-class PredicateClass:
-    def __init__(self, pred_name):
-        self._pred_name = pred_name
+class OpClass:
+    def __init__(self, op_name):
+        self._op_name = op_name
 
     def __getattr__(self, name):
-        if self._pred_name is None:
+        if self._op_name is None:
             return self.__class__(name)
         else:
-            raise Exception("cannot nest predicate name")
+            raise Exception("cannot nest op name")
 
     def __call__(self, *args):
-        if self._pred_name is None:
-            raise Exception("you need to set the predicate name first")
-        ret = {'op': self._pred_name, 'args': list(args)}
+        if self._op_name is None:
+            raise Exception("you need to set the op name first")
+        ret = {'op': self._op_name, 'args': list(args)}
         return ret
 
 
-Gt = PredicateClass('Gt')
-Lt = PredicateClass('Lt')
-Ge = PredicateClass('Ge')
-Le = PredicateClass('Le')
-Eq = PredicateClass('Eq')
-Neq = PredicateClass('Neq')
-Add = PredicateClass('Add')
-Sub = PredicateClass('Sub')
-Mul = PredicateClass('Mul')
-Div = PredicateClass('Div')
-StrCat = PredicateClass('StrCat')
+Gt = OpClass('Gt')
+Lt = OpClass('Lt')
+Ge = OpClass('Ge')
+Le = OpClass('Le')
+Eq = OpClass('Eq')
+Neq = OpClass('Neq')
+Add = OpClass('Add')
+Sub = OpClass('Sub')
+Mul = OpClass('Mul')
+Div = OpClass('Div')
+StrCat = OpClass('StrCat')
+
+
+class AggrClass:
+    def __init__(self, aggr_name):
+        self._aggr_name = aggr_name
+
+    def __getattr__(self, name):
+        if self._aggr_name is None:
+            return self.__class__(name)
+        else:
+            raise Exception("cannot nest aggr name")
+
+    def __call__(self, symb):
+        if self._aggr_name is None:
+            raise Exception("you need to set the predicate name first")
+        ret = {'aggr': self._aggr_name, 'symb': symb}
+        return ret
+
+
+Count = AggrClass('Count')
+Min = AggrClass('Min')
 
 
 def Const(item):
@@ -210,4 +231,4 @@ def Unify(binding, expr):
 
 __all__ = ['Gt', 'Lt', 'Ge', 'Le', 'Eq', 'Neq', 'Add', 'Sub', 'Mul', 'Div', 'Q', 'T', 'R', 'Const', 'Conj', 'Disj',
            'NotExists', 'CozoDb', 'Typing', 'Cardinality', 'Indexing', 'PutAttr', 'RetractAttr', 'Attribute', 'Put',
-           'Retract', 'Pull', 'StrCat', 'Unify', 'DefAttrs']
+           'Retract', 'Pull', 'StrCat', 'Unify', 'DefAttrs', 'Count', 'Min']

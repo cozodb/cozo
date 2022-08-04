@@ -1,12 +1,16 @@
 use std::fmt::{Debug, Formatter};
 
+use anyhow::Result;
+use itertools::Itertools;
 use log::error;
 
 use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
 
+use crate::data::aggr::Aggregation;
 use crate::data::program::MagicSymbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
+use crate::utils::swap_result_option;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) struct TempStoreId(pub(crate) u32);
@@ -21,9 +25,8 @@ impl Debug for TempStoreId {
 pub(crate) struct TempStore {
     pub(crate) db: RawRocksDb,
     pub(crate) id: TempStoreId,
-    pub(crate) key_size: usize,
-    pub(crate) val_size: usize,
     pub(crate) rule_name: MagicSymbol,
+    pub(crate) arity: usize,
 }
 
 impl Debug for TempStore {
@@ -33,17 +36,169 @@ impl Debug for TempStore {
 }
 
 impl TempStore {
+    pub(crate) fn aggr_meet_put(
+        &self,
+        tuple: &Tuple,
+        aggrs: &[Option<Aggregation>],
+        epoch: u32,
+    ) -> anyhow::Result<bool> {
+        let key = Tuple(
+            aggrs
+                .iter()
+                .enumerate()
+                .map(|(i, ma)| {
+                    if ma.is_none() {
+                        tuple.0[i].clone()
+                    } else {
+                        DataValue::Bottom
+                    }
+                })
+                .collect_vec(),
+        );
+        let key_encoded = key.encode_as_key_for_epoch(self.id, 0);
+        let prev_aggr = swap_result_option(
+            self.db
+                .get(&key_encoded)?
+                .map(|slice| EncodedTuple(&slice).decode()),
+        )?;
+
+        if let Some(prev_aggr) = prev_aggr {
+            let tuple_to_store = Tuple(
+                aggrs
+                    .iter()
+                    .enumerate()
+                    .map(|(i, aggr)| {
+                        if let Some(aggr_op) = aggr {
+                            let op = aggr_op.combine;
+                            op(&prev_aggr.0[i], &tuple.0[i])
+                        } else {
+                            Ok(DataValue::Bottom)
+                        }
+                    })
+                    .try_collect()?,
+            );
+
+            if prev_aggr == tuple_to_store {
+                Ok(false)
+            } else {
+                let tuple_data = tuple_to_store.encode_as_key_for_epoch(self.id, 0);
+                self.db.put(&key_encoded, &tuple_data)?;
+                if epoch != 0 {
+                    let key_encoded = key.encode_as_key_for_epoch(self.id, epoch);
+                    self.db.put(&key_encoded, &tuple_data)?;
+                }
+                Ok(true)
+            }
+        } else {
+            let tuple_to_store = Tuple(
+                aggrs
+                    .iter()
+                    .enumerate()
+                    .map(|(i, aggr)| {
+                        if let Some(aggr_op) = aggr {
+                            let op = aggr_op.combine;
+                            op(&DataValue::Bottom, &tuple.0[i])
+                        } else {
+                            Ok(DataValue::Bottom)
+                        }
+                    })
+                    .try_collect()?,
+            );
+            let tuple_data = tuple_to_store.encode_as_key_for_epoch(self.id, 0);
+            self.db.put(&key_encoded, &tuple_data)?;
+            if epoch != 0 {
+                let key_encoded = key.encode_as_key_for_epoch(self.id, epoch);
+                self.db.put(&key_encoded, &tuple_data)?;
+            }
+            Ok(true)
+        }
+    }
     pub(crate) fn put(&self, tuple: &Tuple, epoch: u32) -> Result<(), RocksDbStatus> {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.put(&key_encoded, &[])
+    }
+    pub(crate) fn normal_aggr_put(
+        &self,
+        tuple: &Tuple,
+        aggrs: &[Option<Aggregation>],
+    ) -> Result<(), RocksDbStatus> {
+        let mut vals = vec![];
+        for (idx, agg) in aggrs.iter().enumerate() {
+            if agg.is_none() {
+                vals.push(tuple.0[idx].clone());
+            }
+        }
+        for (idx, agg) in aggrs.iter().enumerate() {
+            if agg.is_some() {
+                vals.push(tuple.0[idx].clone());
+            }
+        }
+        self.db
+            .put(&Tuple(vals).encode_as_key_for_epoch(self.id, 0), &[])
     }
     pub(crate) fn exists(&self, tuple: &Tuple, epoch: u32) -> Result<bool, RocksDbStatus> {
         let key_encoded = tuple.encode_as_key_for_epoch(self.id, epoch);
         self.db.exists(&key_encoded)
     }
-    pub(crate) fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<Tuple>> {
-        self.scan_all_for_epoch(0)
+
+    pub(crate) fn normal_aggr_scan_and_put(
+        &self,
+        aggrs: &[Option<Aggregation>],
+        store: &TempStore,
+    ) -> Result<()> {
+        let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, 0);
+        let mut it = self
+            .db
+            .iterator()
+            .upper_bound(&upper)
+            .prefix_same_as_start(true)
+            .start();
+        it.seek(&lower);
+        let it = TempStoreIter { it, started: false };
+        let aggrs = aggrs.to_vec();
+        let key_indices = aggrs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, aggr)| if aggr.is_none() { Some(i) } else { None })
+            .collect_vec();
+        let grouped = it.group_by(move |t_res| {
+            if let Ok(tuple) = t_res {
+                Some(
+                    key_indices
+                        .iter()
+                        .map(|i| tuple.0[*i].clone())
+                        .collect_vec(),
+                )
+            } else {
+                None
+            }
+        });
+        for (key, group) in grouped.into_iter() {
+            if key.is_some() {
+                let mut aggr_res = vec![DataValue::Bottom; aggrs.len()];
+                for tup_res in group.into_iter() {
+                    let tuple = tup_res.unwrap().0;
+                    for (i, val) in tuple.into_iter().enumerate() {
+                        if let Some(aggr_op) = &aggrs[i] {
+                            aggr_res[i] = (aggr_op.combine)(&aggr_res[i], &val)?;
+                        } else {
+                            aggr_res[i] = val;
+                        }
+                    }
+                }
+                for (i, aggr) in aggrs.iter().enumerate() {
+                    if let Some(aggr_op) = aggr {
+                        aggr_res[i] = (aggr_op.combine)(&aggr_res[i], &DataValue::Bottom)?;
+                    }
+                }
+                store.put(&Tuple(aggr_res), 0)?;
+            } else {
+                return group.into_iter().next().unwrap().map(|_| ());
+            }
+        }
+        Ok(())
     }
+
     pub(crate) fn scan_all_for_epoch(
         &self,
         epoch: u32,
@@ -56,7 +211,10 @@ impl TempStore {
             .prefix_same_as_start(true)
             .start();
         it.seek(&lower);
-        ThrowawayIter { it, started: false }
+        TempStoreIter { it, started: false }
+    }
+    pub(crate) fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<Tuple>> {
+        self.scan_all_for_epoch(0)
     }
     pub(crate) fn scan_prefix(
         &self,
@@ -81,16 +239,16 @@ impl TempStore {
             .prefix_same_as_start(true)
             .start();
         it.seek(&lower);
-        ThrowawayIter { it, started: false }
+        TempStoreIter { it, started: false }
     }
 }
 
-struct ThrowawayIter {
+struct TempStoreIter {
     it: DbIter,
     started: bool,
 }
 
-impl Iterator for ThrowawayIter {
+impl Iterator for TempStoreIter {
     type Item = anyhow::Result<Tuple>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -102,9 +260,26 @@ impl Iterator for ThrowawayIter {
         match self.it.pair() {
             Err(e) => Some(Err(e.into())),
             Ok(None) => None,
-            Ok(Some((k_slice, _v_slice))) => match EncodedTuple(k_slice).decode() {
+            Ok(Some((k_slice, v_slice))) => match EncodedTuple(k_slice).decode() {
                 Err(e) => Some(Err(e)),
-                Ok(t) => Some(Ok(t)),
+                Ok(t) => {
+                    if v_slice.len() == 0 {
+                        Some(Ok(t))
+                    } else {
+                        match EncodedTuple(v_slice).decode() {
+                            Err(e) => Some(Err(e)),
+                            Ok(vt) => Some(Ok(Tuple(
+                                t.0.into_iter()
+                                    .zip(vt.0)
+                                    .map(|(kv, vv)| match kv {
+                                        DataValue::Bottom => vv,
+                                        kv => kv,
+                                    })
+                                    .collect_vec(),
+                            ))),
+                        }
+                    }
+                }
             },
         }
     }
