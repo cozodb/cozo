@@ -33,15 +33,23 @@ impl TryFrom<&'_ JsonValue> for SortDir {
 
     fn try_from(value: &'_ JsonValue) -> std::result::Result<Self, Self::Error> {
         match value {
-            JsonValue::String(s) => {
-                todo!()
-            }
-            _ => bail!("unexpected value {} for sort direction specification", value)
+            JsonValue::String(s) => Ok(match s as &str {
+                "asc" => SortDir::Asc,
+                "desc" => SortDir::Dsc,
+                _ => bail!(
+                    "unexpected value {} for sort direction specification",
+                    value
+                ),
+            }),
+            _ => bail!(
+                "unexpected value {} for sort direction specification",
+                value
+            ),
         }
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct QueryOutOptions {
     pub(crate) out_spec: Option<OutSpec>,
     pub(crate) vld: Validity,
@@ -103,19 +111,25 @@ impl SessionTx {
                 .map(|v| v as usize)
                 .ok_or_else(|| anyhow!("'offset' must be a positive number"))
         }))?;
-        let sorters = payload.get("sort")
-            .unwrap_or_else(|| &json!([]))
+        let sorters = payload
+            .get("sort")
+            .unwrap_or(&json!([]))
             .as_array()
             .ok_or_else(|| anyhow!("'sort' is expected to be an array"))?
             .iter()
             .map(|sorter| -> Result<(Symbol, SortDir)> {
-                let sorter = sorter.as_object()
+                let sorter = sorter
+                    .as_object()
                     .ok_or_else(|| anyhow!("'sort' must be an array of objects"))?;
-                ensure!(sorter.len() == 1, "'sort' spec must be an object of a single pair");
+                ensure!(
+                    sorter.len() == 1,
+                    "'sort' spec must be an object of a single pair"
+                );
                 let (k, v) = sorter.iter().next().unwrap();
 
                 todo!()
-            }).try_collect()?;
+            })
+            .try_collect()?;
         Ok((
             input_prog,
             QueryOutOptions {
@@ -123,7 +137,7 @@ impl SessionTx {
                 vld,
                 limit,
                 offset,
-                sorters
+                sorters,
             },
         ))
     }
