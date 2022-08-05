@@ -14,10 +14,10 @@ use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
+use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::query::QueryOutOptions;
 use crate::query::relation::flatten_err;
-use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type PullSpecs = Vec<PullSpec>;
@@ -84,14 +84,14 @@ impl CurrentPath {
 }
 
 impl SessionTx {
-    pub(crate) fn run_pull_on_query_results(
-        &mut self,
-        res_store: TempStore,
+    pub(crate) fn run_pull_on_query_results<'a>(
+        &'a mut self,
+        res_iter: impl Iterator<Item = Result<Tuple>> + 'a,
         out_opts: QueryOutOptions,
-    ) -> Result<QueryResult<'_>> {
+    ) -> Result<QueryResult<'a>> {
         let out_iter = match out_opts.offset {
-            None => Left(res_store.scan_all()),
-            Some(n) => Right(res_store.scan_all().skip(n)),
+            None => Left(res_iter),
+            Some(n) => Right(res_iter.skip(n)),
         };
         match out_opts.out_spec {
             None => Ok(Box::new(out_iter.map_ok(|tuple| {

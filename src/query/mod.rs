@@ -7,3 +7,4 @@ pub(crate) mod pull;
 pub(crate) mod relation;
 pub(crate) mod reorder;
 pub(crate) mod stratify;
+pub(crate) mod sort;

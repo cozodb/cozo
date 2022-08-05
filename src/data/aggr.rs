@@ -107,12 +107,22 @@ fn aggr_max(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
     }
 }
 
+define_aggr!(AGGR_CHOICE, true);
+fn aggr_choice(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
+    Ok(if *accum == DataValue::Bottom {
+        current.clone()
+    } else {
+        accum.clone()
+    })
+}
+
 pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
     Some(match name {
         "Count" => &AGGR_COUNT,
         "Sum" => &AGGR_SUM,
         "Min" => &AGGR_MIN,
         "Max" => &AGGR_MAX,
+        "Choice" => &AGGR_CHOICE,
         _ => return None,
     })
 }

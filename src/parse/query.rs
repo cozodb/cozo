@@ -111,7 +111,7 @@ impl SessionTx {
                 .map(|v| v as usize)
                 .ok_or_else(|| anyhow!("'offset' must be a positive number"))
         }))?;
-        let sorters = payload
+        let mut sorters: Vec<_> = payload
             .get("sort")
             .unwrap_or(&json!([]))
             .as_array()
@@ -127,9 +127,39 @@ impl SessionTx {
                 );
                 let (k, v) = sorter.iter().next().unwrap();
 
-                todo!()
+                let k = Symbol::from(k as &str);
+                let d = SortDir::try_from(v)?;
+                Ok((k, d))
             })
             .try_collect()?;
+        if !sorters.is_empty() {
+            let entry = input_prog
+                .prog
+                .get(&PROG_ENTRY)
+                .ok_or_else(|| anyhow!("program entry point not found"))?;
+            ensure!(
+                entry.iter().map(|e| &e.head).all_equal(),
+                "program entry point must have equal bindings"
+            );
+            let entry_head = &entry[0].head;
+            if sorters
+                .iter()
+                .map(|(k, _v)| k)
+                .eq(entry_head.iter().take(sorters.len()))
+            {
+                if sorters.iter().all(|(_k, v)| *v == SortDir::Asc) {
+                    sorters = vec![];
+                }
+            }
+            if !sorters.is_empty() {
+                let head_symbols: BTreeSet<_> = entry_head.iter().collect();
+                for (k, _) in sorters.iter() {
+                    if !head_symbols.contains(k) {
+                        bail!("sorted argument {} not found in program entry head", k);
+                    }
+                }
+            }
+        }
         Ok((
             input_prog,
             QueryOutOptions {

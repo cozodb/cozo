@@ -10,7 +10,7 @@
 * [x] duplicate symbols in rule heads
 * [x] limit, offset
 * [x] public API
-* [ ] sorting
+* [x] sorting
 * [ ] range scan
 
 comparators can have problems when sorting mixed integers and floats

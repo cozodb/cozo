@@ -43,7 +43,7 @@ impl TempStore {
         tuple: &Tuple,
         aggrs: &[Option<Aggregation>],
         epoch: u32,
-    ) -> anyhow::Result<bool> {
+    ) -> Result<bool> {
         let key = Tuple(
             aggrs
                 .iter()
@@ -149,7 +149,7 @@ impl TempStore {
         &self,
         aggrs: &[Option<Aggregation>],
         store: &TempStore,
-        mut limiter: Option<&mut QueryLimiter>
+        mut limiter: Option<&mut QueryLimiter>,
     ) -> Result<bool> {
         let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, 0);
         let mut it = self
@@ -235,10 +235,7 @@ impl TempStore {
         Ok(false)
     }
 
-    pub(crate) fn scan_all_for_epoch(
-        &self,
-        epoch: u32,
-    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
+    pub(crate) fn scan_all_for_epoch(&self, epoch: u32) -> impl Iterator<Item = Result<Tuple>> {
         let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, epoch);
         let mut it = self
             .db
@@ -249,20 +246,28 @@ impl TempStore {
         it.seek(&lower);
         TempStoreIter { it, started: false }
     }
-    pub(crate) fn scan_all(&self) -> impl Iterator<Item = anyhow::Result<Tuple>> {
+    pub(crate) fn scan_all(&self) -> impl Iterator<Item = Result<Tuple>> {
         self.scan_all_for_epoch(0)
     }
-    pub(crate) fn scan_prefix(
-        &self,
-        prefix: &Tuple,
-    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
+    pub(crate) fn scan_sorted(&self) -> impl Iterator<Item = Result<Tuple>> {
+        let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, 0);
+        let mut it = self
+            .db
+            .iterator()
+            .upper_bound(&upper)
+            .prefix_same_as_start(true)
+            .start();
+        it.seek(&lower);
+        SortedIter { it, started: false }
+    }
+    pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item = Result<Tuple>> {
         self.scan_prefix_for_epoch(prefix, 0)
     }
     pub(crate) fn scan_prefix_for_epoch(
         &self,
         prefix: &Tuple,
         epoch: u32,
-    ) -> impl Iterator<Item = anyhow::Result<Tuple>> {
+    ) -> impl Iterator<Item = Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bottom);
         let upper = Tuple(upper);
@@ -279,13 +284,37 @@ impl TempStore {
     }
 }
 
+struct SortedIter {
+    it: DbIter,
+    started: bool,
+}
+
+impl Iterator for SortedIter {
+    type Item = Result<Tuple>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.started {
+            self.started = true;
+        } else {
+            self.it.next();
+        }
+        match self.it.pair() {
+            Err(e) => Some(Err(e.into())),
+            Ok(None) => None,
+            Ok(Some((_, v_slice))) => match EncodedTuple(v_slice).decode() {
+                Ok(res) => Some(Ok(res)),
+                Err(e) => Some(Err(e)),
+            },
+        }
+    }
+}
+
 struct TempStoreIter {
     it: DbIter,
     started: bool,
 }
 
 impl Iterator for TempStoreIter {
-    type Item = anyhow::Result<Tuple>;
+    type Item = Result<Tuple>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if !self.started {

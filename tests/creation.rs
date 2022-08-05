@@ -151,7 +151,7 @@ fn creation() {
             },
             {
                 "rule": "?",
-                "args": [["?a"],
+                "args": [["?a", "?n"],
                     ["?alice", "person.first_name", "Alice"],
                     // {"rule": "friend_of_friend", "args": ["?alice", "?a"]},
                     {"not_exists": {"rule": "friend_of_friend", "args": ["?alice", "?a"]}},
@@ -160,6 +160,7 @@ fn creation() {
             }
         ],
         "out": {"friend": {"pull": "?a", "spec": ["person.first_name"]}},
+        "sort": [{"?n": "desc"}],
         "limit": 1,
     });
     let ret = db.run_query(&query).unwrap();

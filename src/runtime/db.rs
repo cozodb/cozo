@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use anyhow::Result;
+use either::{Left, Right};
 use itertools::Itertools;
 use serde_json::json;
 use uuid::Uuid;
@@ -17,6 +18,7 @@ use crate::data::encode::{
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
+use crate::data::symb::PROG_ENTRY;
 use crate::data::triple::StoreOp;
 use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
@@ -281,16 +283,43 @@ impl Db {
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
         let (input_program, out_opts) = tx.parse_query(payload)?;
+        let entry_head = &input_program.prog.get(&PROG_ENTRY).unwrap()[0].head.clone();
         let program = input_program
             .to_normalized_program()?
             .stratify()?
             .magic_sets_rewrite();
         let (compiled, stores) = tx.stratified_magic_compile(&program)?;
-        let result = tx.stratified_magic_evaluate(&compiled, &stores, out_opts.num_to_take())?;
-        let ret: Vec<_> = tx
-            .run_pull_on_query_results(result, out_opts)?
-            .try_collect()?;
-        Ok(json!(ret))
+        let result = tx.stratified_magic_evaluate(
+            &compiled,
+            &stores,
+            if out_opts.sorters.is_empty() {
+                out_opts.num_to_take()
+            } else {
+                None
+            },
+        )?;
+        if !out_opts.sorters.is_empty() {
+            let sorted_result = tx.sort_and_collect(result, &out_opts.sorters, entry_head)?;
+            let sorted_iter = if let Some(offset) = out_opts.offset {
+                Left(sorted_result.scan_sorted().skip(offset))
+            } else {
+                Right(sorted_result.scan_sorted())
+            };
+            let sorted_iter = if let Some(limit) = out_opts.limit {
+                Left(sorted_iter.take(limit))
+            } else {
+                Right(sorted_iter)
+            };
+            let ret: Vec<_> = tx
+                .run_pull_on_query_results(sorted_iter, out_opts)?
+                .try_collect()?;
+            Ok(json!(ret))
+        } else {
+            let ret: Vec<_> = tx
+                .run_pull_on_query_results(result.scan_all(), out_opts)?
+                .try_collect()?;
+            Ok(json!(ret))
+        }
     }
     pub fn explain_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
