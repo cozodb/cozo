@@ -1,4 +1,4 @@
-script = {SOI ~ (option | rule)+ ~ EOI}
+script = {SOI ~ (option | rule | adhoc_rule)+ ~ EOI}
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 BLOCK_COMMENT = _{ "/*" ~ (BLOCK_COMMENT | !"*/" ~ ANY)* ~ "*/" }
@@ -10,6 +10,8 @@ ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 compound_ident = {ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ":=" ~ rule_body ~ ";"}
+adhoc_rule = {rule_head ~ "<-" ~ (list ~ ",")* ~ list? ~ ";" }
+adhoc_rule_head = {ident ~ "(" ~ (var ~ ",")* ~ var? ~ ")"}
 
 rule_head = {ident ~ "(" ~ (head_arg ~ ",")* ~ head_arg? ~ ")"}
 head_arg = {aggr_arg | var}
@@ -19,7 +21,7 @@ rule_body = {(disjunction ~ ",")* ~ disjunction?}
 disjunction = {(atom ~ "or" )+ ~ atom}
 atom = {grouped | triple | negation | apply | expr}
 negation = {"not" ~ atom}
-triple = {compound_ident ~ "[" ~ (expr | triple_pull) ~ "," ~ (expr | triple_pull) ~ ","? ~"]"}
+triple = { "[" ~ (expr | triple_pull) ~ compound_ident ~ (expr | triple_pull) ~ "]"}
 triple_pull = {compound_ident ~ "[" ~ expr ~ "]"}
 apply = {ident ~ "(" ~ apply_args ~ ")"}
 apply_args = {(expr ~ ",")* ~ expr?}
@@ -36,7 +38,7 @@ op_sub = { "-" }
 op_mul = { "*" }
 op_div = { "/" }
 op_mod = { "%" }
-op_eq = { "==" }
+op_eq = { "=" }
 op_ne = { "!=" }
 op_gt = { ">" }
 op_lt = { "<" }
@@ -55,9 +57,24 @@ grouping = { "(" ~ expr ~ ")" }
 option = _{(limit_option|offset_option)~";"}
 limit_option = {":limit" ~ "=" ~ pos_int}
 offset_option = {":offset" ~ "=" ~ pos_int}
-out_option = {":out" ~ "=" ~ out_args}
+out_option = {":out" ~ "=" ~ out_spec}
 
-out_args = {"x"}
+out_spec = _{out_map_spec | out_list_spec}
+out_map_spec = {"{" ~ (out_map_pair ~ ",")* ~ out_map_pair? ~ "}"}
+out_map_pair = {compound_ident ~ ":" ~ pull_spec}
+out_list_spec = {"[" ~ (pull_spec ~ ",")* ~ pull_spec? ~ "]"}
+pull_spec = {var ~ ("(" ~ (pull_arg ~ ",")* ~ pull_arg? ~ ")")? ~ pull_modifier*}
+pull_arg = { pull_all | pull_id | pull_attr}
+pull_attr = {compound_ident ~ pull_spec?}
+pull_all = {"*"}
+pull_id = {"_id"}
+pull_modifier = {pull_as | pull_limit | pull_offset | pull_default | pull_recurse | pull_depth}
+pull_as = {"as" ~ compound_ident}
+pull_limit = {"limit" ~ pos_int}
+pull_offset = {"offset" ~ pos_int}
+pull_default = {"default" ~ expr}
+pull_recurse = {"recurse" ~ (boolean | pos_int)}
+pull_depth = {"depth" ~ pos_int}
 
 // literals
 
