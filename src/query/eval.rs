@@ -10,11 +10,28 @@ use crate::query::compile::{AggrKind, CompiledProgram};
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
 
+pub(crate) struct QueryLimiter {
+    limit: Option<usize>,
+    counter: usize,
+}
+
+impl QueryLimiter {
+    pub(crate) fn incr(&mut self) -> bool {
+        if let Some(limit) = self.limit {
+            self.counter += 1;
+            self.counter >= limit
+        } else {
+            false
+        }
+    }
+}
+
 impl SessionTx {
     pub(crate) fn stratified_magic_evaluate(
         &mut self,
         strata: &[CompiledProgram],
         stores: &BTreeMap<MagicSymbol, TempStore>,
+        num_to_take: Option<usize>,
     ) -> Result<TempStore> {
         let ret_area = stores
             .get(&MagicSymbol::Muggle {
@@ -25,7 +42,7 @@ impl SessionTx {
 
         for (idx, cur_prog) in strata.iter().enumerate() {
             debug!("stratum {}", idx);
-            self.semi_naive_magic_evaluate(cur_prog, &stores)?;
+            self.semi_naive_magic_evaluate(cur_prog, &stores, num_to_take)?;
         }
         Ok(ret_area)
     }
@@ -33,6 +50,7 @@ impl SessionTx {
         &mut self,
         prog: &CompiledProgram,
         stores: &BTreeMap<MagicSymbol, TempStore>,
+        num_to_take: Option<usize>,
     ) -> Result<()> {
         if log_enabled!(Level::Debug) {
             for (k, vs) in prog.iter() {
@@ -44,6 +62,10 @@ impl SessionTx {
 
         let mut changed: BTreeMap<_, _> = prog.keys().map(|k| (k, false)).collect();
         let mut prev_changed = changed.clone();
+        let mut limiter = QueryLimiter {
+            limit: num_to_take,
+            counter: 0,
+        };
 
         for epoch in 0u32.. {
             debug!("epoch {}", epoch);
@@ -52,6 +74,7 @@ impl SessionTx {
                     let aggr_kind = ruleset.aggr_kind();
                     let store = stores.get(k).unwrap();
                     let use_delta = BTreeSet::default();
+                    let should_check_limit = num_to_take.is_some() && k.is_prog_entry();
                     match aggr_kind {
                         AggrKind::None | AggrKind::Meet => {
                             let is_meet = aggr_kind == AggrKind::Meet;
@@ -63,7 +86,17 @@ impl SessionTx {
                                     if is_meet {
                                         store.aggr_meet_put(&item, &rule.aggr, 0)?;
                                     } else {
-                                        store.put(&item, 0)?;
+                                        if should_check_limit {
+                                            if !store.exists(&item, 0)? {
+                                                store.put(&item, 0)?;
+                                                if limiter.incr() {
+                                                    trace!("early stopping due to result count limit exceeded");
+                                                    return Ok(());
+                                                }
+                                            }
+                                        } else {
+                                            store.put(&item, 0)?;
+                                        }
                                     }
                                     *changed.get_mut(k).unwrap() = true;
                                 }
@@ -86,12 +119,32 @@ impl SessionTx {
                                     if rule_is_aggr {
                                         store_to_use.normal_aggr_put(&item, &rule.aggr, serial)?;
                                     } else {
-                                        store_to_use.put(&item, 0)?;
+                                        if should_check_limit {
+                                            if !store.exists(&item, 0)? {
+                                                store.put(&item, 0)?;
+                                                if limiter.incr() {
+                                                    trace!("early stopping due to result count limit exceeded");
+                                                    return Ok(());
+                                                }
+                                            }
+                                        } else {
+                                            store_to_use.put(&item, 0)?;
+                                        }
                                     }
                                     *changed.get_mut(k).unwrap() = true;
                                 }
                                 if rule_is_aggr {
-                                    store_to_use.normal_aggr_scan_and_put(&rule.aggr, store)?;
+                                    if store_to_use.normal_aggr_scan_and_put(
+                                        &rule.aggr,
+                                        store,
+                                        if should_check_limit {
+                                            Some(&mut limiter)
+                                        } else {
+                                            None
+                                        },
+                                    )? {
+                                        return Ok(());
+                                    }
                                 }
                             }
                         }
@@ -105,6 +158,7 @@ impl SessionTx {
 
                 for (k, ruleset) in prog.iter() {
                     let store = stores.get(k).unwrap();
+                    let should_check_limit = num_to_take.is_some() && k.is_prog_entry();
                     for (rule_n, rule) in ruleset.rules.iter().enumerate() {
                         let mut should_do_calculation = false;
                         for d_rule in &rule.contained_rules {
@@ -160,6 +214,12 @@ impl SessionTx {
                                         *changed.get_mut(k).unwrap() = true;
                                         store.put(&item, epoch)?;
                                         store.put(&item, 0)?;
+                                        if should_check_limit {
+                                            if limiter.incr() {
+                                                trace!("early stopping due to result count limit exceeded");
+                                                return Ok(());
+                                            }
+                                        }
                                     }
                                 }
                             }

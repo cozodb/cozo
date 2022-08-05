@@ -159,7 +159,8 @@ fn creation() {
                 ]
             }
         ],
-        "out": {"friend": {"pull": "?a", "spec": ["person.first_name"]}}
+        "out": {"friend": {"pull": "?a", "spec": ["person.first_name"]}},
+        "limit": 1,
     });
     let ret = db.run_query(&query).unwrap();
     let res = to_string_pretty(&ret).unwrap();

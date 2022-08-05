@@ -22,11 +22,28 @@ use crate::utils::swap_result_option;
 
 pub(crate) type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
 
+pub(crate) struct QueryOutOptions {
+    pub(crate) out_spec: Option<OutSpec>,
+    pub(crate) vld: Validity,
+    pub(crate) limit: Option<usize>,
+    pub(crate) offset: Option<usize>,
+}
+
+impl QueryOutOptions {
+    pub(crate) fn num_to_take(&self) -> Option<usize> {
+        match (self.limit, self.offset) {
+            (None, _) => None,
+            (Some(i), None) => Some(i),
+            (Some(i), Some(j)) => Some(i + j),
+        }
+    }
+}
+
 impl SessionTx {
     pub(crate) fn parse_query(
         &mut self,
         payload: &JsonValue,
-    ) -> Result<(InputProgram, Option<OutSpec>, Validity)> {
+    ) -> Result<(InputProgram, QueryOutOptions)> {
         let vld = match payload.get("since") {
             None => Validity::current(),
             Some(v) => Validity::try_from(v)?,
@@ -55,7 +72,25 @@ impl SessionTx {
             .get("out")
             .map(|spec| self.parse_query_out_spec(spec, entry_bindings));
         let out_spec = swap_result_option(out_spec)?;
-        Ok((input_prog, out_spec, vld))
+        let limit = swap_result_option(payload.get("limit").map(|v| {
+            v.as_u64()
+                .map(|v| v as usize)
+                .ok_or_else(|| anyhow!("'limit' must be a positive number"))
+        }))?;
+        let offset = swap_result_option(payload.get("offset").map(|v| {
+            v.as_u64()
+                .map(|v| v as usize)
+                .ok_or_else(|| anyhow!("'offset' must be a positive number"))
+        }))?;
+        Ok((
+            input_prog,
+            QueryOutOptions {
+                out_spec,
+                vld,
+                limit,
+                offset,
+            },
+        ))
     }
     fn parse_query_out_spec(
         &mut self,

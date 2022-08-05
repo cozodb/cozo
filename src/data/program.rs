@@ -190,6 +190,13 @@ impl MagicSymbol {
     pub(crate) fn has_bound_adornment(&self) -> bool {
         self.magic_adornment().iter().any(|b| *b)
     }
+    pub(crate) fn is_prog_entry(&self) -> bool {
+        if let MagicSymbol::Muggle { inner } = self {
+            inner.is_prog_entry()
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

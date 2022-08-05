@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use anyhow::Result;
+use either::{Left, Right};
 use itertools::Itertools;
 use serde_json::{json, Map};
 use smallvec::{smallvec, SmallVec, ToSmallVec};
@@ -14,7 +15,7 @@ use crate::data::json::JsonValue;
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::DataValue;
-use crate::parse::query::OutSpec;
+use crate::parse::query::QueryOutOptions;
 use crate::query::relation::flatten_err;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
@@ -86,18 +87,20 @@ impl SessionTx {
     pub(crate) fn run_pull_on_query_results(
         &mut self,
         res_store: TempStore,
-        out_spec: Option<OutSpec>,
-        vld: Validity,
+        out_opts: QueryOutOptions,
     ) -> Result<QueryResult<'_>> {
-        match out_spec {
-            None => Ok(Box::new(res_store.scan_all().map_ok(|tuple| {
+        let out_iter = match out_opts.offset {
+            None => Left(res_store.scan_all()),
+            Some(n) => Right(res_store.scan_all().skip(n)),
+        };
+        match out_opts.out_spec {
+            None => Ok(Box::new(out_iter.map_ok(|tuple| {
                 JsonValue::Array(tuple.0.into_iter().map(JsonValue::from).collect_vec())
             }))),
             Some((pull_specs, out_keys)) => {
                 // type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
                 Ok(Box::new(
-                    res_store
-                        .scan_all()
+                    out_iter
                         .map_ok(move |tuple| -> Result<JsonValue> {
                             let tuple = tuple.0;
                             let res_iter =
@@ -115,7 +118,7 @@ impl SessionTx {
                                             for (idx, spec) in specs.iter().enumerate() {
                                                 self.pull(
                                                     eid,
-                                                    vld,
+                                                    out_opts.vld,
                                                     spec,
                                                     0,
                                                     &specs,

@@ -8,9 +8,9 @@
 * [x] unification
 * [x] aggregation
 * [x] duplicate symbols in rule heads
-* [ ] limit, offset
-* [ ] range scan
-* [ ] public API
+* [x] limit, offset
+* [x] public API
 * [ ] sorting
+* [ ] range scan
 
 comparators can have problems when sorting mixed integers and floats

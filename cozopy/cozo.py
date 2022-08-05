@@ -14,10 +14,14 @@ class CozoDb:
     def tx(self, payload):
         return json.loads(self.inner.transact_triples(json.dumps({'tx': payload}, ensure_ascii=False)))
 
-    def run(self, q, out=None):
+    def run(self, q, out=None, limit=None, offset=None):
         payload = {'q': q}
         if out is not None:
             payload['out'] = out
+        if limit is not None:
+            payload['limit'] = limit
+        if offset is not None:
+            payload['offset'] = offset
         return json.loads(self.inner.run_query(json.dumps(payload, ensure_ascii=False)))
 
 

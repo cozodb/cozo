@@ -1,3 +1,4 @@
+use std::borrow::BorrowMut;
 use std::fmt::{Debug, Formatter};
 
 use anyhow::Result;
@@ -10,6 +11,7 @@ use crate::data::aggr::Aggregation;
 use crate::data::program::MagicSymbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
+use crate::query::eval::QueryLimiter;
 use crate::utils::swap_result_option;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -147,7 +149,8 @@ impl TempStore {
         &self,
         aggrs: &[Option<Aggregation>],
         store: &TempStore,
-    ) -> Result<()> {
+        mut limiter: Option<&mut QueryLimiter>
+    ) -> Result<bool> {
         let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, 0);
         let mut it = self
             .db
@@ -214,12 +217,22 @@ impl TempStore {
                         }
                     }
                 }
-                store.put(&Tuple(aggr_res), 0)?;
+                let res_tpl = Tuple(aggr_res);
+                if let Some(lmt) = limiter.borrow_mut() {
+                    if !store.exists(&res_tpl, 0)? {
+                        store.put(&res_tpl, 0)?;
+                        if lmt.incr() {
+                            return Ok(true);
+                        }
+                    }
+                } else {
+                    store.put(&res_tpl, 0)?;
+                }
             } else {
-                return group.into_iter().next().unwrap().map(|_| ());
+                return group.into_iter().next().unwrap().map(|_| true);
             }
         }
-        Ok(())
+        Ok(false)
     }
 
     pub(crate) fn scan_all_for_epoch(
