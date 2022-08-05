@@ -167,6 +167,11 @@ fn creation() {
     let res = to_string_pretty(&ret).unwrap();
     info!("{}", res);
 
+    // ?(?c, ?code, ?desc) := country.code[?c, 'CU'] or ?c = 10000239, country.code[?c, ?code], country.desc[?c, ?desc];
+    // :limit = 25;
+    // :offset = 2;
+    // :out = {friend: ?a[] }
+
     // // iteration
     // let mut it = db.total_iter();
     // while let Some((k_slice, v_slice)) = it.pair().unwrap() {

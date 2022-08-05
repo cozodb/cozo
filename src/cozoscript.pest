@@ -1,0 +1,107 @@
+script = {SOI ~ (option | rule)+ ~ EOI}
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+BLOCK_COMMENT = _{ "/*" ~ (BLOCK_COMMENT | !"*/" ~ ANY)* ~ "*/" }
+LINE_COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }
+COMMENT = _{(BLOCK_COMMENT | LINE_COMMENT)}
+
+var = @{"?" ~ (XID_CONTINUE | "_")*}
+ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
+compound_ident = {ident ~ ("." ~ ident)?}
+option_ident = @{":" ~ LOWERCASE_LETTER+ }
+
+rule = {rule_head ~ ":=" ~ rule_body ~ ";"}
+
+rule_head = {ident ~ "(" ~ (head_arg ~ ",")* ~ head_arg? ~ ")"}
+head_arg = {aggr_arg | var}
+aggr_arg = {ident ~ "(" ~ var ~ ")"}
+
+rule_body = {(disjunction ~ ",")* ~ disjunction?}
+disjunction = {(atom ~ "or" )+ ~ atom}
+atom = {grouped | triple | negation | apply | expr}
+negation = {"not" ~ atom}
+triple = {compound_ident ~ "[" ~ expr ~ "," ~ expr ~ ","? ~"]"}
+apply = {ident ~ "(" ~ apply_args ~ ")"}
+apply_args = {(expr ~ ",")* ~ expr?}
+grouped = {"(" ~ rule_body ~ ")"}
+
+expr = {unary ~ (operation ~ unary)*}
+operation = _{ (op_and | op_or | op_pow | op_str_cat | op_add | op_sub | op_mul | op_div | op_mod |
+                op_ge | op_le | op_gt | op_lt | op_eq | op_ne)}
+op_or = { "||" }
+op_and = { "&&" }
+op_str_cat = { "++" }
+op_add = { "+" }
+op_sub = { "-" }
+op_mul = { "*" }
+op_div = { "/" }
+op_mod = { "%" }
+op_eq = { "==" }
+op_ne = { "!=" }
+op_gt = { ">" }
+op_lt = { "<" }
+op_ge = { ">=" }
+op_le = { "<=" }
+op_pow = { "^" }
+unary = { (unary_op ~ unary) | term }
+unary_op = _{ minus | negate }
+minus = { "-" }
+negate = { "!" }
+
+term = { var | grouping | apply | list | literal }
+list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
+grouping = { "(" ~ expr ~ ")" }
+
+option = {option_ident ~ "=" ~ option_body ~ ";"}
+option_body = {"XXX"}
+
+// literals
+
+quoted_string = ${ "\"" ~ quoted_string_inner ~ "\"" }
+quoted_string_inner = { char* }
+char = {
+    !("\"" | "\\") ~ ANY
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+s_quoted_string = ${ "\'" ~ s_quoted_string_inner ~ "\'" }
+s_quoted_string_inner = { s_char* }
+s_char = {
+    !("\'" | "\\") ~ ANY
+    | "\\" ~ ("\'" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
+raw_string = {
+    "r" ~ PUSH("#"*) ~ "\""    // push the number signs onto the stack
+    ~ raw_string_inner
+    ~ "\"" ~ POP               // match a quotation mark and the number signs
+}
+raw_string_inner = {
+    (
+        !("\"" ~ PEEK)    // unless the next character is a quotation mark
+                          // followed by the correct amount of number signs,
+        ~ ANY             // consume one character
+    )*
+}
+string = _{(raw_string | s_quoted_string | quoted_string)}
+// Boolean and null
+boolean = { "true" | "false" }
+null = { "null" }
+// Numbers
+pos_int = @{ASCII_DIGIT ~ ("_" | ASCII_DIGIT)*}
+hex_pos_int = @{"0x" ~ ASCII_HEX_DIGIT ~ ("_" | ASCII_HEX_DIGIT)*}
+octo_pos_int = @{"0o" ~ ASCII_OCT_DIGIT ~ ("_" | ASCII_OCT_DIGIT)*}
+bin_pos_int = @{"0b" ~ ASCII_BIN_DIGIT ~ ("_" | ASCII_BIN_DIGIT)*}
+int = _{(hex_pos_int | octo_pos_int | bin_pos_int | pos_int)}
+dot_float = @{
+    ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
+    ~ ("." ~ ("_" | ASCII_DIGIT)+)
+}
+sci_float = @{
+    ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
+    ~ ("." ~ ("_" | ASCII_DIGIT)+)?
+    ~ (^"e" ~ ("+" | "-")? ~ ("_" | ASCII_DIGIT)+)
+}
+float = _{(sci_float | dot_float)}
+number = _{(float | int)}
+literal = _{ null | boolean | number | string}
