@@ -2,7 +2,6 @@ use std::cmp::{max, min};
 use std::fmt::{Debug, Formatter};
 
 use anyhow::{bail, Result};
-use ordered_float::Float;
 
 use crate::data::value::DataValue;
 

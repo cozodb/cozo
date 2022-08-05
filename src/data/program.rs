@@ -1,3 +1,4 @@
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
@@ -34,13 +35,42 @@ impl InputProgram {
         for (k, rules) in self.prog {
             let mut collected_rules = vec![];
             for rule in rules {
+                let mut counter = -1;
+                let mut gen_symb = || {
+                    counter += 1;
+                    Symbol::from(&format!("***{}", counter) as &str)
+                };
                 let normalized_body =
                     InputAtom::Conjunction(rule.body).disjunctive_normal_form()?;
+                let mut new_head = Vec::with_capacity(rule.head.len());
+                let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
+                for symb in rule.head.iter() {
+                    match seen.entry(symb) {
+                        Entry::Vacant(e) => {
+                            e.insert(vec![]);
+                            new_head.push(symb.clone());
+                        }
+                        Entry::Occupied(mut e) => {
+                            let new_symb = gen_symb();
+                            e.get_mut().push(new_symb.clone());
+                            new_head.push(new_symb);
+                        }
+                    }
+                }
                 for conj in normalized_body.0 {
+                    let mut body = conj.0;
+                    for (old_symb, new_symbs) in seen.iter() {
+                        for new_symb in new_symbs.iter() {
+                            body.push(NormalFormAtom::Unification(Unification {
+                                binding: new_symb.clone(),
+                                expr: Expr::Binding((*old_symb).clone(), None),
+                            }))
+                        }
+                    }
                     let normalized_rule = NormalFormRule {
-                        head: rule.head.clone(),
+                        head: new_head.clone(),
                         aggr: rule.aggr.clone(),
-                        body: conj.0,
+                        body,
                         vld: rule.vld,
                     };
                     collected_rules.push(normalized_rule.convert_to_well_ordered_rule()?);
