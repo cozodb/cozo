@@ -22,11 +22,32 @@ use crate::utils::swap_result_option;
 
 pub(crate) type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum SortDir {
+    Asc,
+    Dsc,
+}
+
+impl TryFrom<&'_ JsonValue> for SortDir {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &'_ JsonValue) -> std::result::Result<Self, Self::Error> {
+        match value {
+            JsonValue::String(s) => {
+                todo!()
+            }
+            _ => bail!("unexpected value {} for sort direction specification", value)
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) struct QueryOutOptions {
     pub(crate) out_spec: Option<OutSpec>,
     pub(crate) vld: Validity,
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
+    pub(crate) sorters: Vec<(Symbol, SortDir)>,
 }
 
 impl QueryOutOptions {
@@ -82,6 +103,19 @@ impl SessionTx {
                 .map(|v| v as usize)
                 .ok_or_else(|| anyhow!("'offset' must be a positive number"))
         }))?;
+        let sorters = payload.get("sort")
+            .unwrap_or_else(|| &json!([]))
+            .as_array()
+            .ok_or_else(|| anyhow!("'sort' is expected to be an array"))?
+            .iter()
+            .map(|sorter| -> Result<(Symbol, SortDir)> {
+                let sorter = sorter.as_object()
+                    .ok_or_else(|| anyhow!("'sort' must be an array of objects"))?;
+                ensure!(sorter.len() == 1, "'sort' spec must be an object of a single pair");
+                let (k, v) = sorter.iter().next().unwrap();
+
+                todo!()
+            }).try_collect()?;
         Ok((
             input_prog,
             QueryOutOptions {
@@ -89,6 +123,7 @@ impl SessionTx {
                 vld,
                 limit,
                 offset,
+                sorters
             },
         ))
     }

@@ -14,7 +14,7 @@ class CozoDb:
     def tx(self, payload):
         return json.loads(self.inner.transact_triples(json.dumps({'tx': payload}, ensure_ascii=False)))
 
-    def run(self, q, out=None, limit=None, offset=None):
+    def run(self, q, out=None, limit=None, offset=None, sort=None):
         payload = {'q': q}
         if out is not None:
             payload['out'] = out
@@ -22,7 +22,18 @@ class CozoDb:
             payload['limit'] = limit
         if offset is not None:
             payload['offset'] = offset
+        if sort is not None:
+            payload['sort'] = [convert_sort_arg(arg) for arg in sort]
         return json.loads(self.inner.run_query(json.dumps(payload, ensure_ascii=False)))
+
+
+def convert_sort_arg(arg):
+    if arg.startswith('+'):
+        return {arg[1:]: 'asc'}
+    elif arg.startswith('-'):
+        return {arg[1:]: 'desc'}
+    else:
+        return {arg: 'asc'}
 
 
 class Typing(str, Enum):
