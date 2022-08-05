@@ -8,7 +8,6 @@ COMMENT = _{(BLOCK_COMMENT | LINE_COMMENT)}
 var = @{"?" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 compound_ident = {ident ~ ("." ~ ident)?}
-option_ident = @{":" ~ LOWERCASE_LETTER+ }
 
 rule = {rule_head ~ ":=" ~ rule_body ~ ";"}
 
@@ -20,7 +19,8 @@ rule_body = {(disjunction ~ ",")* ~ disjunction?}
 disjunction = {(atom ~ "or" )+ ~ atom}
 atom = {grouped | triple | negation | apply | expr}
 negation = {"not" ~ atom}
-triple = {compound_ident ~ "[" ~ expr ~ "," ~ expr ~ ","? ~"]"}
+triple = {compound_ident ~ "[" ~ (expr | triple_pull) ~ "," ~ (expr | triple_pull) ~ ","? ~"]"}
+triple_pull = {compound_ident ~ "[" ~ expr ~ "]"}
 apply = {ident ~ "(" ~ apply_args ~ ")"}
 apply_args = {(expr ~ ",")* ~ expr?}
 grouped = {"(" ~ rule_body ~ ")"}
@@ -52,8 +52,12 @@ term = { var | grouping | apply | list | literal }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = {option_ident ~ "=" ~ option_body ~ ";"}
-option_body = {"XXX"}
+option = _{(limit_option|offset_option)~";"}
+limit_option = {":limit" ~ "=" ~ pos_int}
+offset_option = {":offset" ~ "=" ~ pos_int}
+out_option = {":out" ~ "=" ~ out_args}
+
+out_args = {"x"}
 
 // literals
 
