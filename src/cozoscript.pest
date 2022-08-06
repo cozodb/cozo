@@ -1,25 +1,30 @@
-script = {SOI ~ (option | rule | adhoc_rule)+ ~ EOI}
+script = _{SOI ~ (option | rule | adhoc_rule)+ ~ EOI}
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 BLOCK_COMMENT = _{ "/*" ~ (BLOCK_COMMENT | !"*/" ~ ANY)* ~ "*/" }
 LINE_COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }
 COMMENT = _{(BLOCK_COMMENT | LINE_COMMENT)}
 
+prog_entry = {"?"}
 var = @{"?" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 compound_ident = {ident ~ ("." ~ ident)?}
 
-rule = {rule_head ~ ":=" ~ rule_body ~ ";"}
+rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"}
 adhoc_rule = {rule_head ~ "<-" ~ (list ~ ",")* ~ list? ~ ";" }
 adhoc_rule_head = {ident ~ "(" ~ (var ~ ",")* ~ var? ~ ")"}
 
-rule_head = {ident ~ "(" ~ (head_arg ~ ",")* ~ head_arg? ~ ")"}
+rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
 head_arg = {aggr_arg | var}
 aggr_arg = {ident ~ "(" ~ var ~ ")"}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
-disjunction = {(atom ~ "or" )+ ~ atom}
-atom = {grouped | triple | negation | apply | expr}
+rule_apply = {ident ~ "[" ~ apply_args ~ "]"}
+
+
+disjunction = {(atom ~ "or" )* ~ atom}
+atom = _{grouped | triple | negation | rule_apply | expr | unify}
+unify = {var ~ "is" ~ expr}
 negation = {"not" ~ atom}
 triple = { "[" ~ (expr | triple_pull) ~ compound_ident ~ (expr | triple_pull) ~ "]"}
 triple_pull = {compound_ident ~ "[" ~ expr ~ "]"}
@@ -50,11 +55,11 @@ unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }
 
-term = { var | grouping | apply | list | literal }
+term = _{ var | grouping | apply | list | literal }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = _{(limit_option|offset_option)~";"}
+option = _{(limit_option|offset_option|out_option)~";"}
 limit_option = {":limit" ~ "=" ~ pos_int}
 offset_option = {":offset" ~ "=" ~ pos_int}
 out_option = {":out" ~ "=" ~ out_spec}
