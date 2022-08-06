@@ -10,6 +10,15 @@ def remove_nan(d):
     return {k: v for (k, v) in d.items() if v is not None and v == v}
 
 
+# put airport {
+#   iata: string,
+#   icao: string indexed,
+#   city: string identity,
+#   country: ref
+# }
+# put whatever: string;
+# retract attr
+
 def insert_data(destroy_on_exit):
     db = CozoDb('db_test_flights', destroy_on_exit=destroy_on_exit)
     try:

@@ -1,8 +1,4 @@
-use std::collections::BTreeSet;
-
-use anyhow::{anyhow, bail, ensure, Result};
-
-use pest::Parser;
+use anyhow::{anyhow, bail, Result};
 
 use crate::parse::cozoscript::number::parse_int;
 use crate::parse::cozoscript::Pair;

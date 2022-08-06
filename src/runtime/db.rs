@@ -22,6 +22,7 @@ use crate::data::symb::PROG_ENTRY;
 use crate::data::triple::StoreOp;
 use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
+use crate::parse::cozoscript::query::parse_query_to_json;
 use crate::parse::schema::AttrTxItem;
 use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
@@ -279,6 +280,14 @@ impl Db {
         }
         let collected = collected.into_iter().map(|(_, v)| v).collect_vec();
         Ok(json!(collected))
+    }
+    pub fn run_script(&self, payload: &str) -> Result<JsonValue> {
+        let payload = parse_query_to_json(payload)?;
+        self.run_query(&payload)
+    }
+    pub fn explain_script(&self, payload: &str) -> Result<JsonValue> {
+        let payload = parse_query_to_json(payload)?;
+        self.explain_query(&payload)
     }
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
