@@ -23,6 +23,8 @@ use crate::data::triple::StoreOp;
 use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
 use crate::parse::cozoscript::query::parse_query_to_json;
+use crate::parse::cozoscript::schema::parse_schema_to_json;
+use crate::parse::cozoscript::tx::parse_tx_to_json;
 use crate::parse::schema::AttrTxItem;
 use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
@@ -172,6 +174,10 @@ impl Db {
         }
         Ok(JsonValue::Object(collected))
     }
+    pub fn run_tx_triples(&self, payload: &str) -> Result<JsonValue> {
+        let payload = parse_tx_to_json(payload)?;
+        self.transact_triples(&payload)
+    }
     pub fn transact_triples(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
         let (payloads, comment) = tx.parse_tx_requests(payload)?;
@@ -186,6 +192,10 @@ impl Db {
             "tx_id": tx_id,
             "results": res
         }))
+    }
+    pub fn run_tx_attributes(&self, payload: &str) -> Result<JsonValue> {
+        let payload = parse_schema_to_json(payload)?;
+        self.transact_attributes(&payload)
     }
     pub fn transact_attributes(&self, payload: &JsonValue) -> Result<JsonValue> {
         let (attrs, comment) = AttrTxItem::parse_request(payload)?;
@@ -283,6 +293,7 @@ impl Db {
     }
     pub fn run_script(&self, payload: &str) -> Result<JsonValue> {
         let payload = parse_query_to_json(payload)?;
+        println!("{}", payload);
         self.run_query(&payload)
     }
     pub fn explain_script(&self, payload: &str) -> Result<JsonValue> {

@@ -1,81 +1,53 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use itertools::Itertools;
-use serde_json::{json, Map};
+use serde_json::json;
 
 use pest::Parser;
 
 use crate::data::json::JsonValue;
+use crate::parse::cozoscript::query::build_expr;
 use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 
-pub(crate) fn parse_schema_to_json(src: &str) -> Result<JsonValue> {
-    let parsed = CozoScriptParser::parse(Rule::schema_script, &src)?;
+pub(crate) fn parse_tx_to_json(src: &str) -> Result<JsonValue> {
+    let parsed = CozoScriptParser::parse(Rule::tx_script, &src)?;
     parsed_to_json(parsed)
 }
 
 fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
     let mut ret = vec![];
     for pair in src {
-        for clause in parse_schema_clause(pair)? {
-            ret.push(clause);
-        }
+        ret.push(parse_tx_clause(pair)?);
     }
     Ok(json!({ "attrs": ret }))
 }
 
-fn parse_schema_clause(src: Pair<'_>) -> Result<Vec<JsonValue>> {
+fn parse_tx_clause(src: Pair<'_>) -> Result<JsonValue> {
     let mut src = src.into_inner();
-    let op = match src.next().unwrap().as_rule() {
-        Rule::schema_put => "put",
-        Rule::schema_retract => "retract",
-        _ => unreachable!(),
-    };
-    let ident = src.next().unwrap().as_str();
-    let mut ret = vec![];
-    let attr_def = src.next().unwrap();
-    match attr_def.as_rule() {
-        Rule::simple_schema_def => {
-            let mut ret_map = json!({ "name": ident });
-            parse_attr_defs(attr_def.into_inner(), ret_map.as_object_mut().unwrap())?;
-            ret.push(json!({ op: ret_map }));
-        }
-        Rule::nested_schema_def => {
-            for clause in attr_def.into_inner() {
-                let mut clause_row = clause.into_inner();
-                let nested_ident = clause_row.next().unwrap().as_str();
-                let combined_ident = format!("{}.{}", ident, nested_ident);
-                let mut ret_map = json!({ "name": combined_ident });
-                parse_attr_defs(clause_row, ret_map.as_object_mut().unwrap())?;
-                ret.push(json!({ op: ret_map }));
-            }
-        }
-        _ => unreachable!(),
-    }
-    Ok(ret)
+    let op = src.next().unwrap().as_str();
+    let map = parse_tx_map(src.next().unwrap())?;
+    Ok(json!({ op: map }))
 }
 
-fn parse_attr_defs(mut src: Pairs<'_>, map: &mut Map<String, JsonValue>) -> Result<()> {
-    for pair in src {
-        match pair.as_str() {
-            "one" => map.insert("cardinality".to_string(), json!("one")),
-            "many" => map.insert("cardinality".to_string(), json!("many")),
-            "history" => map.insert("history".to_string(), json!(true)),
-            "no_history" => map.insert("history".to_string(), json!(false)),
-            "identity" => map.insert("index".to_string(), json!("identity")),
-            "index" => map.insert("index".to_string(), json!("index")),
-            "no_index" => map.insert("index".to_string(), json!("none")),
-            "unique" => map.insert("index".to_string(), json!("unique")),
-            "ref" => map.insert("type".to_string(), json!("ref")),
-            "component" => map.insert("type".to_string(), json!("component")),
-            "bool" => map.insert("type".to_string(), json!("bool")),
-            "int" => map.insert("type".to_string(), json!("int")),
-            "float" => map.insert("type".to_string(), json!("float")),
-            "string" => map.insert("type".to_string(), json!("string")),
-            "uuid" => map.insert("type".to_string(), json!("uuid")),
-            "timestamp" => map.insert("type".to_string(), json!("timestamp")),
-            "bytes" => map.insert("type".to_string(), json!("bytes")),
-            "list" => map.insert("type".to_string(), json!("list")),
-            v => bail!("cannot interpret {} as attribute property", v),
-        };
+fn parse_tx_map(src: Pair<'_>) -> Result<JsonValue> {
+    src.into_inner().map(parse_tx_pair).try_collect()
+}
+
+fn parse_tx_pair(src: Pair<'_>) -> Result<(String, JsonValue)> {
+    let mut src = src.into_inner();
+    let name = src.next().unwrap().as_str();
+    let el = parse_el(src.next().unwrap())?;
+    Ok((name.to_string(), el))
+}
+
+fn parse_el(src: Pair<'_>) -> Result<JsonValue> {
+    match src.as_rule() {
+        Rule::tx_map => parse_tx_map(src),
+        Rule::tx_list => parse_tx_list(src),
+        Rule::expr => build_expr(src),
+        _ => unreachable!(),
     }
-    Ok(())
+}
+
+fn parse_tx_list(src: Pair<'_>) -> Result<JsonValue> {
+    src.into_inner().map(parse_el).try_collect()
 }

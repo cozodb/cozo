@@ -139,31 +139,40 @@ fn creation() {
 
     info!("{}", to_string_pretty(&pulled).unwrap());
 
-    let query = json!({
-        "q": [
-            {
-                "rule": "friend_of_friend",
-                "args": [["?a", "?b"], ["?a", "person.friend", "?b"]]
-            },
-            {
-                "rule": "friend_of_friend",
-                "args": [["?a", "?b"], ["?a", "person.friend", "?c"], {"rule": "friend_of_friend", "args": ["?c", "?b"]}]
-            },
-            {
-                "rule": "?",
-                "args": [["?a", "?n"],
-                    ["?alice", "person.first_name", "Alice"],
-                    // {"rule": "friend_of_friend", "args": ["?alice", "?a"]},
-                    {"not_exists": {"rule": "friend_of_friend", "args": ["?alice", "?a"]}},
-                    ["?a", "person.first_name", "?n"],
-                ]
-            }
-        ],
-        "out": {"friend": {"pull": "?a", "spec": ["person.first_name"]}},
-        "sort": [{"?n": "desc"}],
-        "limit": 1,
-    });
-    let ret = db.run_query(&query).unwrap();
+    let query = r#"
+    friend_of_friend[?a, ?b] := [?a person.friend ?b];
+    friend_of_friend[?a, ?b] := [?a person.friend ?c], friend_of_friend[?c, ?b];
+
+    ?[?a, ?n] := [?alice person.first_name "Alice"],
+                 not friend_of_friend[?alice, ?a],
+                 [?a person.first_name ?n];
+    "#;
+
+    // let query = json!({
+    //     "q": [
+    //         {
+    //             "rule": "friend_of_friend",
+    //             "args": [["?a", "?b"], ["?a", "person.friend", "?b"]]
+    //         },
+    //         {
+    //             "rule": "friend_of_friend",
+    //             "args": [["?a", "?b"], ["?a", "person.friend", "?c"], {"rule": "friend_of_friend", "args": ["?c", "?b"]}]
+    //         },
+    //         {
+    //             "rule": "?",
+    //             "args": [["?a", "?n"],
+    //                 ["?alice", "person.first_name", "Alice"],
+    //                 // {"rule": "friend_of_friend", "args": ["?alice", "?a"]},
+    //                 {"not_exists": {"rule": "friend_of_friend", "args": ["?alice", "?a"]}},
+    //                 ["?a", "person.first_name", "?n"],
+    //             ]
+    //         }
+    //     ],
+    //     "out": {"friend": {"pull": "?a", "spec": ["person.first_name"]}},
+    //     "sort": [{"?n": "desc"}],
+    //     "limit": 1,
+    // });
+    let ret = db.run_script(query).unwrap();
     let res = to_string_pretty(&ret).unwrap();
     info!("{}", res);
 

@@ -45,7 +45,7 @@ fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
             r => unreachable!("{:?}", r),
         }
     }
-    ret_map.insert("rules".to_string(), json!(rules));
+    ret_map.insert("q".to_string(), json!(rules));
     Ok(json!(ret_map))
 }
 
@@ -192,15 +192,14 @@ fn parse_rule(src: Pair<'_>) -> Result<JsonValue> {
 fn parse_rule_head(src: Pair<'_>) -> Result<(String, JsonValue)> {
     let mut src = src.into_inner();
     let name = src.next().unwrap().as_str();
-    let heading = src.next().unwrap();
-    let args: Vec<_> = heading
-        .into_inner()
+    let args: Vec<_> = src
         .map(parse_rule_head_arg)
         .try_collect()?;
     Ok((name.to_string(), json!(args)))
 }
 
 fn parse_rule_head_arg(src: Pair<'_>) -> Result<JsonValue> {
+    let src = src.into_inner().next().unwrap();
     Ok(match src.as_rule() {
         Rule::var => json!(src.as_str()),
         Rule::aggr_arg => {
@@ -230,8 +229,8 @@ fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
         }
         Rule::triple => parse_triple(src)?,
         Rule::negation => {
-            dbg!(src);
-            JsonValue::Null
+            let inner = parse_atom(src.into_inner().next().unwrap())?;
+            json!({"not_exists": inner})
         }
         Rule::apply => {
             dbg!(src);
@@ -333,7 +332,7 @@ fn build_expr_infix(
     Ok(json!({"op": name, "args": args}))
 }
 
-fn build_expr(pair: Pair<'_>) -> Result<JsonValue> {
+pub(crate) fn build_expr(pair: Pair<'_>) -> Result<JsonValue> {
     PREC_CLIMBER.climb(pair.into_inner(), build_unary, build_expr_infix)
 }
 
@@ -380,12 +379,12 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
                 Rule::null => JsonValue::Null,
                 Rule::boolean => JsonValue::Bool(s == "true"),
                 Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
-                    let s = parse_string(inner.next().unwrap())?;
+                    let s = parse_string(p)?;
                     json!(s)
                 }
                 Rule::list => {
                     let mut collected = vec![];
-                    for p in inner.next().unwrap().into_inner() {
+                    for p in p.into_inner() {
                         collected.push(build_expr(p)?)
                     }
                     json!(collected)
