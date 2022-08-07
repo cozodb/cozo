@@ -14,6 +14,9 @@ pub(crate) fn parse_schema_to_json(src: &str) -> Result<JsonValue> {
 fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
     let mut ret = vec![];
     for pair in src {
+        if pair.as_rule() == Rule::EOI {
+            break;
+        }
         for clause in parse_schema_clause(pair)? {
             ret.push(clause);
         }
@@ -28,12 +31,12 @@ fn parse_schema_clause(src: Pair<'_>) -> Result<Vec<JsonValue>> {
         Rule::schema_retract => "retract",
         _ => unreachable!(),
     };
-    let ident = src.next().unwrap().as_str();
+    let ident = src.next().unwrap().into_inner().next().unwrap().as_str();
     let mut ret = vec![];
     let attr_def = src.next().unwrap();
     match attr_def.as_rule() {
         Rule::simple_schema_def => {
-            let mut ret_map = json!({ "name": ident });
+            let mut ret_map = json!({ "name": ident, "cardinality": "one" });
             parse_attr_defs(attr_def.into_inner(), ret_map.as_object_mut().unwrap())?;
             ret.push(json!({ op: ret_map }));
         }
@@ -42,7 +45,7 @@ fn parse_schema_clause(src: Pair<'_>) -> Result<Vec<JsonValue>> {
                 let mut clause_row = clause.into_inner();
                 let nested_ident = clause_row.next().unwrap().as_str();
                 let combined_ident = format!("{}.{}", ident, nested_ident);
-                let mut ret_map = json!({ "name": combined_ident });
+                let mut ret_map = json!({ "name": combined_ident, "cardinality": "one" });
                 parse_attr_defs(clause_row, ret_map.as_object_mut().unwrap())?;
                 ret.push(json!({ op: ret_map }));
             }
@@ -60,7 +63,7 @@ fn parse_attr_defs(src: Pairs<'_>, map: &mut Map<String, JsonValue>) -> Result<(
             "history" => map.insert("history".to_string(), json!(true)),
             "no_history" => map.insert("history".to_string(), json!(false)),
             "identity" => map.insert("index".to_string(), json!("identity")),
-            "index" => map.insert("index".to_string(), json!("index")),
+            "index" => map.insert("index".to_string(), json!("indexed")),
             "no_index" => map.insert("index".to_string(), json!("none")),
             "unique" => map.insert("index".to_string(), json!("unique")),
             "ref" => map.insert("type".to_string(), json!("ref")),

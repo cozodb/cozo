@@ -409,8 +409,6 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::to_string_pretty;
-
     use crate::parse::cozoscript::query::parse_query_to_json;
 
     #[test]

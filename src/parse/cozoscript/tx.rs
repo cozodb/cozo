@@ -16,9 +16,13 @@ pub(crate) fn parse_tx_to_json(src: &str) -> Result<JsonValue> {
 fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
     let mut ret = vec![];
     for pair in src {
+        if pair.as_rule() == Rule::EOI {
+            break;
+        }
+
         ret.push(parse_tx_clause(pair)?);
     }
-    Ok(json!({ "attrs": ret }))
+    Ok(json!({ "tx": ret }))
 }
 
 fn parse_tx_clause(src: Pair<'_>) -> Result<JsonValue> {

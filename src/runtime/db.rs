@@ -343,11 +343,11 @@ impl Db {
     }
     pub fn explain_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let (input_program, out_opts) = tx.parse_query(payload)?;
+        let (input_program, _out_opts) = tx.parse_query(payload)?;
         let normalized_program = input_program.to_normalized_program()?;
         let stratified_program = normalized_program.stratify()?;
         let magic_program = stratified_program.magic_sets_rewrite();
-        let (compiled_strata, _) = tx.stratified_magic_compile(&magic_program)?;
+        let (_compiled_strata, _) = tx.stratified_magic_compile(&magic_program)?;
 
         todo!()
     }
