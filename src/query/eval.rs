@@ -103,49 +103,28 @@ impl SessionTx {
                             }
                         }
                         AggrKind::Normal => {
+                            let store_to_use = self.new_temp_store();
                             for (rule_n, rule) in ruleset.rules.iter().enumerate() {
                                 debug!("Calculation for normal aggr rule {:?}.{}", k, rule_n);
-                                let rule_is_aggr = rule.is_aggr();
-                                let store_to_use = if rule_is_aggr {
-                                    self.new_temp_store()
-                                } else {
-                                    store.clone()
-                                };
                                 for (serial, item_res) in
                                     rule.relation.iter(self, Some(0), &use_delta).enumerate()
                                 {
                                     let item = item_res?;
                                     trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
-                                    if rule_is_aggr {
-                                        store_to_use.normal_aggr_put(&item, &rule.aggr, serial)?;
-                                    } else {
-                                        if should_check_limit {
-                                            if !store.exists(&item, 0)? {
-                                                store.put(&item, 0)?;
-                                                if limiter.incr() {
-                                                    trace!("early stopping due to result count limit exceeded");
-                                                    return Ok(());
-                                                }
-                                            }
-                                        } else {
-                                            store_to_use.put(&item, 0)?;
-                                        }
-                                    }
+                                    store_to_use.normal_aggr_put(&item, &rule.aggr, serial)?;
                                     *changed.get_mut(k).unwrap() = true;
                                 }
-                                if rule_is_aggr {
-                                    if store_to_use.normal_aggr_scan_and_put(
-                                        &rule.aggr,
-                                        store,
-                                        if should_check_limit {
-                                            Some(&mut limiter)
-                                        } else {
-                                            None
-                                        },
-                                    )? {
-                                        return Ok(());
-                                    }
-                                }
+                            }
+                            if store_to_use.normal_aggr_scan_and_put(
+                                &ruleset.rules[0].aggr,
+                                store,
+                                if should_check_limit {
+                                    Some(&mut limiter)
+                                } else {
+                                    None
+                                },
+                            )? {
+                                return Ok(());
                             }
                         }
                     }

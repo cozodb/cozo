@@ -472,7 +472,7 @@ impl SessionTx {
                         anyhow!("expect field 'aggr' in rule head map to be a symbol")
                     })?;
                 let aggr = get_aggr(aggr)
-                    .ok_or_else(|| anyhow!("aggregation {} not found", aggr))?
+                    .ok_or_else(|| anyhow!("aggregation '{}' not found", aggr))?
                     .clone();
                 rule_head.push(symbol);
                 rule_aggr.push(Some(aggr));

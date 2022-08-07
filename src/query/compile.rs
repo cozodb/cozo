@@ -39,9 +39,6 @@ impl CompiledRuleSet {
         if !is_aggr {
             return AggrKind::None;
         }
-        if !self.rules.iter().map(|r| &r.aggr).all_equal() {
-            return AggrKind::Normal;
-        }
         for aggr in self.rules[0].aggr.iter() {
             if let Some(aggr) = aggr {
                 if !aggr.is_meet {
@@ -58,12 +55,6 @@ pub(crate) struct CompiledRule {
     pub(crate) aggr: Vec<Option<Aggregation>>,
     pub(crate) relation: Relation,
     pub(crate) contained_rules: BTreeSet<MagicSymbol>,
-}
-
-impl CompiledRule {
-    pub(crate) fn is_aggr(&self) -> bool {
-        self.aggr.iter().any(|a| a.is_some())
-    }
 }
 
 impl SessionTx {
@@ -102,6 +93,11 @@ impl SessionTx {
                                 contained_rules: rule.contained_rules(),
                             })
                         }
+                        ensure!(
+                            collected.iter().map(|r| &r.aggr).all_equal(),
+                            "rule heads must contain identical aggregations: {:?}",
+                            collected
+                        );
                         Ok((k.clone(), CompiledRuleSet { rules: collected }))
                     })
                     .try_collect()

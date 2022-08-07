@@ -35,7 +35,6 @@ fn convert_normal_form_program_to_graph(
                 .iter()
                 .any(|rule| rule.aggr.iter().any(|a| a.is_some()));
             let is_meet = has_aggr
-                && ruleset.iter().map(|rule| &rule.aggr).all_equal()
                 && ruleset.iter().all(|rule| {
                     rule.aggr.iter().all(|v| match v {
                         None => true,

@@ -220,9 +220,9 @@ class AggrClass:
         return ret
 
 
-Count = AggrClass('Count')
-Min = AggrClass('Min')
-Max = AggrClass('Max')
+Count = AggrClass('count')
+Min = AggrClass('min')
+Max = AggrClass('max')
 
 
 def Const(item):

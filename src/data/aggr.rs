@@ -118,11 +118,11 @@ fn aggr_choice(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
 
 pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
     Some(match name {
-        "Count" => &AGGR_COUNT,
-        "Sum" => &AGGR_SUM,
-        "Min" => &AGGR_MIN,
-        "Max" => &AGGR_MAX,
-        "Choice" => &AGGR_CHOICE,
+        "count" => &AGGR_COUNT,
+        "sum" => &AGGR_SUM,
+        "min" => &AGGR_MIN,
+        "max" => &AGGR_MAX,
+        "choice" => &AGGR_CHOICE,
         _ => return None,
     })
 }

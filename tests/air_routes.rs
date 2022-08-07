@@ -83,5 +83,31 @@ fn air_routes() -> Result<()> {
     dbg!(no_routes_airport_time.elapsed());
     println!("{}", res);
 
+    let runway_distribution_time = Instant::now();
+    let res = db.run_script(r#"
+        ?[?runways, count(?a)] := [?a airport.runways ?runways];
+    "#)?;
+    dbg!(runway_distribution_time.elapsed());
+    println!("{}", res);
+
+    let most_out_routes_time = Instant::now();
+    let res = db.run_script(r#"
+        route_count[?a, count(?r)] := [?r route.src ?a];
+        ?[?code, ?n] := route_count[?a, ?n], ?n > 180, [?a airport.iata ?code];
+        :sort -?n;
+    "#)?;
+    dbg!(most_out_routes_time.elapsed());
+    println!("{}", res);
+
+    let most_routes_time = Instant::now();
+    let res = db.run_script(r#"
+        route_count[?a, count(?r)] := [?r route.src ?a] or [?r route.dst ?a];
+        ?[?code, ?n] := route_count[?a, ?n], ?n > 400, [?a airport.iata ?code];
+        :sort -?n;
+    "#)?;
+    dbg!(most_routes_time.elapsed());
+    println!("{}", res);
+
+
     Ok(())
 }
