@@ -119,26 +119,6 @@ fn creation() {
     }))
     .unwrap();
 
-    info!(
-        "{}",
-        to_string_pretty(&db.entities_at(&json!(null)).unwrap()).unwrap()
-    );
-
-    let pulled = db
-        .pull(
-            &json!(10000001),
-            &json!([
-                "_id",
-                "person.first_name",
-                "person.last_name",
-                {"pull":"person.friend", "as": "friends", "recurse": true},
-            ]),
-            &json!(()),
-        )
-        .unwrap();
-
-    info!("{}", to_string_pretty(&pulled).unwrap());
-
     let query = r#"
     friend_of_friend[?a, ?b] := [?a person.friend ?b];
     friend_of_friend[?a, ?b] := [?a person.friend ?c], friend_of_friend[?c, ?b];
@@ -156,19 +136,4 @@ fn creation() {
     let ret = db.run_script(query).unwrap();
     let res = to_string_pretty(&ret).unwrap();
     info!("{}", res);
-
-    // ?(?c, ?code, ?desc) := country.code[?c, 'CU'] or ?c = 10000239, country.code[?c, ?code], country.desc[?c, ?desc];
-    // :limit = 25;
-    // :offset = 2;
-    // :out = {friend: ?a[] }
-
-    // // iteration
-    // let mut it = db.total_iter();
-    // while let Some((k_slice, v_slice)) = it.pair().unwrap() {
-    //     let key = EncodedVec::new(k_slice);
-    //     let val = key.debug_value(v_slice);
-    //     dbg!(key);
-    //     dbg!(val);
-    //     it.next();
-    // }
 }
