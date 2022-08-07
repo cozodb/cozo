@@ -9,9 +9,9 @@ use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
 
 use crate::data::json::JsonValue;
-use crate::parse::cozoscript::{CozoScriptParser, Rule, Pair, Pairs};
 use crate::parse::cozoscript::number::parse_int;
 use crate::parse::cozoscript::string::parse_string;
+use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 
 pub(crate) fn parse_query_to_json(src: &str) -> Result<JsonValue> {
     let parsed = CozoScriptParser::parse(Rule::script, &src)?;
@@ -34,6 +34,23 @@ fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
             Rule::offset_option => {
                 let offset = parse_limit_or_offset(pair)?;
                 ret_map.insert("offset".to_string(), json!(offset));
+            }
+            Rule::sort_option => {
+                let mut collected = vec![];
+                for part in pair.into_inner() {
+                    let mut var = "";
+                    let mut dir = "asc";
+                    for a in part.into_inner() {
+                        match a.as_rule() {
+                            Rule::var => var = a.as_str(),
+                            Rule::sort_asc => dir = "asc",
+                            Rule::sort_desc => dir = "desc",
+                            _ => unreachable!(),
+                        }
+                    }
+                    collected.push(json!({ var: dir }))
+                }
+                ret_map.insert("sort".to_string(), json!(collected));
             }
             Rule::out_option => {
                 ret_map.insert(
@@ -88,26 +105,34 @@ fn parse_pull_arg(src: Pair<'_>) -> Result<JsonValue> {
     let pull_def = src.next().unwrap();
     let mut ret = match pull_def.as_rule() {
         Rule::pull_all => {
-            json!({"pull": "*"})
+            json!("*")
         }
         Rule::pull_id => {
-            json!({"pull": "_id"})
+            json!("_id")
         }
         Rule::pull_attr => {
             let mut pull_def = pull_def.into_inner();
-            let mut ret = json!({"pull": pull_def.next().unwrap().as_str()});
+            let mut ret = json!(pull_def.next().unwrap().as_str());
             if let Some(args) = pull_def.next() {
                 let args: Vec<_> = args.into_inner().map(parse_pull_arg).try_collect()?;
-                ret.as_object_mut()
-                    .unwrap()
-                    .insert("spec".to_string(), json!(args));
+                if !args.is_empty() {
+                    if !ret.is_object() {
+                        ret = json!({ "pull": ret });
+                    }
+                    ret.as_object_mut()
+                        .unwrap()
+                        .insert("spec".to_string(), json!(args));
+                }
             }
             ret
         }
         _ => unreachable!(),
     };
-    let inner_map = ret.as_object_mut().unwrap();
     for modifier in src {
+        if !ret.is_object() {
+            ret = json!({ "pull": ret });
+        }
+        let inner_map = ret.as_object_mut().unwrap();
         match modifier.as_rule() {
             Rule::pull_as => {
                 inner_map.insert(
@@ -117,38 +142,23 @@ fn parse_pull_arg(src: Pair<'_>) -> Result<JsonValue> {
             }
             Rule::pull_limit => {
                 let n = modifier.into_inner().next().unwrap().as_str();
-                inner_map.insert(
-                    "limit".to_string(),
-                    json!(str2usize(n)?),
-                );
+                inner_map.insert("limit".to_string(), json!(str2usize(n)?));
             }
             Rule::pull_offset => {
                 let n = modifier.into_inner().next().unwrap().as_str();
-                inner_map.insert(
-                    "offset".to_string(),
-                    json!(str2usize(n)?),
-                );
+                inner_map.insert("offset".to_string(), json!(str2usize(n)?));
             }
             Rule::pull_default => {
                 let d = build_expr(modifier.into_inner().next().unwrap())?;
-                inner_map.insert(
-                    "default".to_string(),
-                    d,
-                );
+                inner_map.insert("default".to_string(), d);
             }
             Rule::pull_recurse => {
                 let d = build_expr(modifier.into_inner().next().unwrap())?;
-                inner_map.insert(
-                    "recurse".to_string(),
-                    d,
-                );
+                inner_map.insert("recurse".to_string(), d);
             }
             Rule::pull_depth => {
                 let n = modifier.into_inner().next().unwrap().as_str();
-                inner_map.insert(
-                    "depth".to_string(),
-                    json!(str2usize(n)?),
-                );
+                inner_map.insert("depth".to_string(), json!(str2usize(n)?));
             }
             _ => unreachable!(),
         }
@@ -192,9 +202,7 @@ fn parse_rule(src: Pair<'_>) -> Result<JsonValue> {
 fn parse_rule_head(src: Pair<'_>) -> Result<(String, JsonValue)> {
     let mut src = src.into_inner();
     let name = src.next().unwrap().as_str();
-    let args: Vec<_> = src
-        .map(parse_rule_head_arg)
-        .try_collect()?;
+    let args: Vec<_> = src.map(parse_rule_head_arg).try_collect()?;
     Ok((name.to_string(), json!(args)))
 }
 
@@ -230,7 +238,7 @@ fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
         Rule::triple => parse_triple(src)?,
         Rule::negation => {
             let inner = parse_atom(src.into_inner().next().unwrap())?;
-            json!({"not_exists": inner})
+            json!({ "not_exists": inner })
         }
         Rule::apply => {
             dbg!(src);
@@ -402,6 +410,7 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
 #[cfg(test)]
 mod tests {
     use serde_json::to_string_pretty;
+
     use crate::parse::cozoscript::query::parse_query_to_json;
 
     #[test]

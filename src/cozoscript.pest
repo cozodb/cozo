@@ -61,18 +61,23 @@ term = _{ var | grouping | apply | list | literal }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = _{(limit_option|offset_option|out_option)~";"}
-limit_option = {":limit" ~ "=" ~ pos_int}
-offset_option = {":offset" ~ "=" ~ pos_int}
-out_option = {":out" ~ "=" ~ out_spec}
+option = _{(limit_option|offset_option|out_option|sort_option)~";"}
+limit_option = {":limit"  ~ pos_int}
+offset_option = {":offset" ~ pos_int}
+out_option = {":out" ~ out_spec}
+sort_option = {":sort" ~ (sort_arg ~ ",")* ~ sort_arg }
+sort_arg = { sort_dir? ~ var }
+sort_dir = _{ sort_asc | sort_desc }
+sort_asc = {"+"}
+sort_desc = {"-"}
 
 pull_ident = @{"<"? ~ compound_ident}
 out_spec = _{out_map_spec | out_list_spec}
 out_map_spec = {"{" ~ (out_map_pair ~ ",")* ~ out_map_pair? ~ "}"}
 out_map_pair = {compound_ident ~ ":" ~ pull_spec}
 out_list_spec = {"[" ~ (pull_spec ~ ",")* ~ pull_spec? ~ "]"}
-pull_spec = {var ~ pull_args}
-pull_args = {("(" ~ (pull_arg ~ ",")* ~ pull_arg? ~ ")")?}
+pull_spec = {var ~ pull_args?}
+pull_args = {("[" ~ (pull_arg ~ ",")* ~ pull_arg? ~ "]")?}
 pull_arg = {( pull_all | pull_id | pull_attr ) ~ pull_modifier*}
 pull_attr = {pull_ident ~ pull_args?}
 pull_all = {"*"}
@@ -155,5 +160,3 @@ tx_map = {"{" ~ (tx_pair ~ ",")* ~ tx_pair? ~ "}"}
 tx_pair = {compound_ident ~ ":" ~ tx_el}
 tx_list = {"[" ~ (tx_el ~ ",")* ~ tx_el? ~ "]"}
 tx_el = _{ tx_map | tx_list | expr }
-
-// TODO sorting
