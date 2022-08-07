@@ -43,6 +43,9 @@ impl Symbol {
     pub(crate) fn is_query_var(&self) -> bool {
         self.0.starts_with('?') && self.0.len() > 1
     }
+    pub(crate) fn is_ignored_var(&self) -> bool {
+        self.0 == "?_"
+    }
     pub(crate) fn validate_not_reserved(&self) -> Result<()> {
         ensure!(
             !self.is_reserved(),

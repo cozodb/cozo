@@ -7,6 +7,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use either::{Left, Right};
 use itertools::Itertools;
+use log::debug;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -308,6 +309,7 @@ impl Db {
             .to_normalized_program()?
             .stratify()?
             .magic_sets_rewrite();
+        debug!("{:#?}", program);
         let (compiled, stores) = tx.stratified_magic_compile(&program)?;
         let result = tx.stratified_magic_evaluate(
             &compiled,

@@ -55,7 +55,7 @@ impl SessionTx {
         if log_enabled!(Level::Debug) {
             for (k, vs) in prog.iter() {
                 for (i, compiled) in vs.rules.iter().enumerate() {
-                    debug!("{:?}.{} {:?}", k, i, compiled)
+                    debug!("{:?}.{} {:#?}", k, i, compiled)
                 }
             }
         }

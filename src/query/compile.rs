@@ -120,7 +120,7 @@ impl SessionTx {
         let mut ret = Relation::unit();
         let mut seen_variables = BTreeSet::new();
         let mut serial_id = 0;
-        let mut gen_kw = || {
+        let mut gen_symb = || {
             let ret = Symbol::from(&format!("**{}", serial_id) as &str);
             serial_id += 1;
             ret
@@ -131,7 +131,7 @@ impl SessionTx {
                     let mut join_left_keys = vec![];
                     let mut join_right_keys = vec![];
                     let e_kw = if seen_variables.contains(&t.entity) {
-                        let kw = gen_kw();
+                        let kw = gen_symb();
                         join_left_keys.push(t.entity.clone());
                         join_right_keys.push(kw.clone());
                         kw
@@ -140,7 +140,7 @@ impl SessionTx {
                         t.entity.clone()
                     };
                     let v_kw = if seen_variables.contains(&t.value) {
-                        let kw = gen_kw();
+                        let kw = gen_symb();
                         join_left_keys.push(t.value.clone());
                         join_right_keys.push(kw.clone());
                         kw
@@ -175,7 +175,7 @@ impl SessionTx {
                     for var in &rule_app.args {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
-                            let rk = gen_kw();
+                            let rk = gen_symb();
                             right_vars.push(rk.clone());
                             right_joiner_vars.push(rk);
                         } else {
@@ -193,23 +193,21 @@ impl SessionTx {
                     let mut join_right_keys = vec![];
                     let e_kw = {
                         if seen_variables.contains(&a_triple.entity) {
-                            let kw = gen_kw();
+                            let kw = gen_symb();
                             join_left_keys.push(a_triple.entity.clone());
                             join_right_keys.push(kw.clone());
                             kw
                         } else {
-                            seen_variables.insert(a_triple.entity.clone());
                             a_triple.entity.clone()
                         }
                     };
                     let v_kw = {
                         if seen_variables.contains(&a_triple.value) {
-                            let kw = gen_kw();
+                            let kw = gen_symb();
                             join_left_keys.push(a_triple.value.clone());
                             join_right_keys.push(kw.clone());
                             kw
                         } else {
-                            seen_variables.insert(a_triple.value.clone());
                             a_triple.value.clone()
                         }
                     };
@@ -247,11 +245,10 @@ impl SessionTx {
                     for var in &rule_app.args {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
-                            let rk = gen_kw();
+                            let rk = gen_symb();
                             right_vars.push(rk.clone());
                             right_joiner_vars.push(rk);
                         } else {
-                            seen_variables.insert(var.clone());
                             right_vars.push(var.clone());
                         }
                     }
