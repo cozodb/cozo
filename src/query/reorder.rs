@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::mem;
 
-use anyhow::{ensure, Result};
+use anyhow::{bail, Result};
 
 use crate::data::program::{NormalFormAtom, NormalFormRule};
 
@@ -107,11 +107,33 @@ impl NormalFormRule {
             }
         }
 
-        ensure!(
-            pending.is_empty(),
-            "found unsafe atoms in rule: {:?}",
-            pending
-        );
+        if !pending.is_empty() {
+            for atom in pending {
+                match atom {
+                    NormalFormAtom::AttrTriple(_) | NormalFormAtom::Rule(_) => unreachable!(),
+                    NormalFormAtom::NegatedAttrTriple(t) => {
+                        if seen_variables.contains(&t.value) || seen_variables.contains(&t.entity) {
+                            collected.push(NormalFormAtom::NegatedAttrTriple(t.clone()));
+                        } else {
+                            bail!("found unsafe triple in rule: {:?}", t)
+                        }
+                    }
+                    NormalFormAtom::NegatedRule(r) => {
+                        if r.args.iter().any(|a| seen_variables.contains(a)) {
+                            collected.push(NormalFormAtom::NegatedRule(r.clone()));
+                        } else {
+                            bail!("found unsafe rule application in rule: {:?}", r);
+                        }
+                    }
+                    NormalFormAtom::Predicate(p) => {
+                        bail!("found unsafe predicate in rule: {:?}", p)
+                    }
+                    NormalFormAtom::Unification(u) => {
+                        bail!("found unsafe unification in rule: {:?}", u)
+                    }
+                }
+            }
+        }
 
         Ok(NormalFormRule {
             head: self.head,

@@ -2,8 +2,8 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use anyhow::{anyhow, bail, ensure, Result};
-use serde_json::Map;
+use anyhow::{anyhow, bail, ensure, Context, Result};
+use serde_json::{json, Map};
 
 use crate::data::attr::{Attribute, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, Validity};
@@ -110,7 +110,10 @@ impl SessionTx {
     /// }
     /// ```
     /// nesting is allowed for values of type `ref` and `component`
-    pub(crate) fn parse_tx_requests(&mut self, req: &JsonValue) -> Result<(Vec<Quintuple>, String)> {
+    pub(crate) fn parse_tx_requests(
+        &mut self,
+        req: &JsonValue,
+    ) -> Result<(Vec<Quintuple>, String)> {
         let map = req
             .as_object()
             .ok_or_else(|| anyhow!("expect tx request to be an object, got {}", req))?;
@@ -408,7 +411,8 @@ impl SessionTx {
                 let kw = (k as &str).into();
                 let attr = self
                     .attr_by_name(&kw)?
-                    .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
+                    .ok_or_else(|| anyhow!("attribute '{}' not found", kw))
+                    .with_context(|| format!("cannot process {}", json!(item)))?;
                 has_unique_attr = has_unique_attr || attr.indexing.is_unique_index();
                 has_identity_attr = has_identity_attr || attr.indexing == AttributeIndex::Identity;
                 if attr.indexing == AttributeIndex::Identity {

@@ -108,6 +108,10 @@ def insert_data(destroy_on_exit):
         end_time = time.time()
         print(f'{len(d_res)} node data added in {(end_time - start_time) * 1000:.3f}ms')
         print(f'{len(d_res) / (end_time - start_time):.0f} insertions per second')
+        with open('air-routes-data.json', 'w', encoding='utf-8') as f:
+            for row in insertions:
+                json.dump(row['put'], f, ensure_ascii=False)
+                f.write('\n')
     except Exception as e:
         print(f'data already exists? {e}')
     return db

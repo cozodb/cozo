@@ -78,6 +78,6 @@ pub(crate) fn parse_string(pair: Pair<'_>) -> Result<String> {
         Rule::s_quoted_string => Ok(parse_s_quoted_string(pair)?),
         Rule::raw_string => Ok(parse_raw_string(pair)?),
         Rule::ident => Ok(pair.as_str().to_string()),
-        _ => unreachable!(),
+        t => unreachable!("{:?}", t),
     }
 }

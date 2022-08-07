@@ -3,10 +3,9 @@ use std::str::FromStr;
 use anyhow::Result;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use serde_json::{json, Map};
-
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
+use serde_json::{json, Map};
 
 use crate::data::json::JsonValue;
 use crate::parse::cozoscript::number::parse_int;
@@ -240,14 +239,12 @@ fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
             let inner = parse_atom(src.into_inner().next().unwrap())?;
             json!({ "not_exists": inner })
         }
-        Rule::apply => {
-            dbg!(src);
-            JsonValue::Null
-        }
         Rule::expr => build_expr(src)?,
         Rule::unify => {
-            dbg!(src);
-            JsonValue::Null
+            let mut src = src.into_inner();
+            let var = src.next().unwrap().as_str();
+            let expr = build_expr(src.next().unwrap())?;
+            json!({"unify": var, "expr": expr})
         }
         Rule::rule_apply => {
             let mut src = src.into_inner();

@@ -1,11 +1,13 @@
+use std::str::FromStr;
+
 use anyhow::Result;
 use itertools::Itertools;
-use serde_json::json;
-
 use pest::Parser;
+use serde_json::json;
 
 use crate::data::json::JsonValue;
 use crate::parse::cozoscript::query::build_expr;
+use crate::parse::cozoscript::string::parse_string;
 use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 
 pub(crate) fn parse_tx_to_json(src: &str) -> Result<JsonValue> {
@@ -27,9 +29,18 @@ fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
 
 fn parse_tx_clause(src: Pair<'_>) -> Result<JsonValue> {
     let mut src = src.into_inner();
-    let op = src.next().unwrap().as_str();
-    let map = parse_tx_map(src.next().unwrap())?;
-    Ok(json!({ op: map }))
+    let nxt = src.next().unwrap();
+    match nxt.as_rule() {
+        Rule::tx_map => {
+            let map = parse_tx_map(nxt)?;
+            Ok(json!({ "put": map }))
+        }
+        _ => {
+            let op = nxt.as_str();
+            let map = parse_tx_map(src.next().unwrap())?;
+            Ok(json!({ op: map }))
+        }
+    }
 }
 
 fn parse_tx_map(src: Pair<'_>) -> Result<JsonValue> {
@@ -38,9 +49,13 @@ fn parse_tx_map(src: Pair<'_>) -> Result<JsonValue> {
 
 fn parse_tx_pair(src: Pair<'_>) -> Result<(String, JsonValue)> {
     let mut src = src.into_inner();
-    let name = src.next().unwrap().as_str();
+    let name = src.next().unwrap();
+    let name = match name.as_rule() {
+        Rule::tx_special_ident | Rule::compound_ident => name.as_str().to_string(),
+        _ => parse_string(name)?,
+    };
     let el = parse_el(src.next().unwrap())?;
-    Ok((name.to_string(), el))
+    Ok((name, el))
 }
 
 fn parse_el(src: Pair<'_>) -> Result<JsonValue> {
@@ -48,6 +63,7 @@ fn parse_el(src: Pair<'_>) -> Result<JsonValue> {
         Rule::tx_map => parse_tx_map(src),
         Rule::tx_list => parse_tx_list(src),
         Rule::expr => build_expr(src),
+        Rule::neg_num => Ok(JsonValue::from_str(src.as_str())?),
         _ => unreachable!(),
     }
 }
