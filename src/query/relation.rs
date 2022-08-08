@@ -1057,7 +1057,7 @@ pub(crate) struct StoredDerivedRelation {
 
 impl StoredDerivedRelation {
     fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<TempStoreId>) -> TupleIter<'_> {
-        if epoch == Some(0) {
+        if epoch == Some(0) && use_delta.contains(&self.storage.id) {
             return Box::new(iter::empty());
         }
 
@@ -1149,7 +1149,7 @@ impl StoredDerivedRelation {
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
     ) -> TupleIter<'a> {
-        if epoch == Some(0) {
+        if epoch == Some(0) && use_delta.contains(&self.storage.id) {
             return Box::new(iter::empty());
         }
         let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();

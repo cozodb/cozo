@@ -37,9 +37,9 @@ macro_rules! define_aggr {
 define_aggr!(AGGR_COUNT, false);
 fn aggr_count(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
     match (accum, current) {
-        (DataValue::Bottom, DataValue::Bottom) => Ok(DataValue::Int(0)),
-        (DataValue::Bottom, _) => Ok(DataValue::Int(1)),
-        (DataValue::Int(i), DataValue::Bottom) => Ok(DataValue::Int(*i)),
+        (DataValue::Guard, DataValue::Guard) => Ok(DataValue::Int(0)),
+        (DataValue::Guard, _) => Ok(DataValue::Int(1)),
+        (DataValue::Int(i), DataValue::Guard) => Ok(DataValue::Int(*i)),
         (DataValue::Int(i), _) => Ok(DataValue::Int(*i + 1)),
         _ => unreachable!(),
     }
@@ -48,11 +48,11 @@ fn aggr_count(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
 define_aggr!(AGGR_SUM, false);
 fn aggr_sum(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
     match (accum, current) {
-        (DataValue::Bottom, DataValue::Bottom) => Ok(DataValue::Int(0)),
-        (DataValue::Bottom, DataValue::Int(i)) => Ok(DataValue::Int(*i)),
-        (DataValue::Bottom, DataValue::Float(f)) => Ok(DataValue::Float(f.0.into())),
-        (DataValue::Int(i), DataValue::Bottom) => Ok(DataValue::Int(*i)),
-        (DataValue::Float(f), DataValue::Bottom) => Ok(DataValue::Float(f.0.into())),
+        (DataValue::Guard, DataValue::Guard) => Ok(DataValue::Int(0)),
+        (DataValue::Guard, DataValue::Int(i)) => Ok(DataValue::Int(*i)),
+        (DataValue::Guard, DataValue::Float(f)) => Ok(DataValue::Float(f.0.into())),
+        (DataValue::Int(i), DataValue::Guard) => Ok(DataValue::Int(*i)),
+        (DataValue::Float(f), DataValue::Guard) => Ok(DataValue::Float(f.0.into())),
         (DataValue::Int(i), DataValue::Int(j)) => Ok(DataValue::Int(*i + *j)),
         (DataValue::Int(j), DataValue::Float(i)) | (DataValue::Float(i), DataValue::Int(j)) => {
             Ok(DataValue::Float((i.0 + (*j as f64)).into()))
@@ -69,8 +69,8 @@ fn aggr_sum(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
 define_aggr!(AGGR_MIN, true);
 fn aggr_min(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
     match (accum, current) {
-        (DataValue::Bottom, DataValue::Int(i)) => Ok(DataValue::Int(*i)),
-        (DataValue::Bottom, DataValue::Float(f)) => Ok(DataValue::Float(f.0.into())),
+        (DataValue::Guard, DataValue::Int(i)) => Ok(DataValue::Int(*i)),
+        (DataValue::Guard, DataValue::Float(f)) => Ok(DataValue::Float(f.0.into())),
         (DataValue::Int(i), DataValue::Int(j)) => Ok(DataValue::Int(min(*i, *j))),
         (DataValue::Int(j), DataValue::Float(i)) | (DataValue::Float(i), DataValue::Int(j)) => {
             Ok(DataValue::Float(min(i.clone(), (*j as f64).into())))
@@ -89,9 +89,9 @@ fn aggr_min(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
 define_aggr!(AGGR_MAX, true);
 fn aggr_max(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
     match (accum, current) {
-        (DataValue::Bottom, DataValue::Int(i)) => Ok(DataValue::Int(*i)),
-        (DataValue::Bottom, DataValue::Float(f)) => Ok(DataValue::Float(f.0.into())),
-        (DataValue::Float(f), DataValue::Bottom) => Ok(DataValue::Float(f.0.into())),
+        (DataValue::Guard, DataValue::Int(i)) => Ok(DataValue::Int(*i)),
+        (DataValue::Guard, DataValue::Float(f)) => Ok(DataValue::Float(f.0.into())),
+        (DataValue::Float(f), DataValue::Guard) => Ok(DataValue::Float(f.0.into())),
         (DataValue::Int(i), DataValue::Int(j)) => Ok(DataValue::Int(max(*i, *j))),
         (DataValue::Int(j), DataValue::Float(i)) | (DataValue::Float(i), DataValue::Int(j)) => {
             Ok(DataValue::Float(max(i.clone(), (*j as f64).into())))
@@ -109,7 +109,7 @@ fn aggr_max(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
 
 define_aggr!(AGGR_CHOICE, true);
 fn aggr_choice(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
-    Ok(if *accum == DataValue::Bottom {
+    Ok(if *accum == DataValue::Guard {
         current.clone()
     } else {
         accum.clone()

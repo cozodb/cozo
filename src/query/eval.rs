@@ -107,7 +107,7 @@ impl SessionTx {
                             for (rule_n, rule) in ruleset.rules.iter().enumerate() {
                                 debug!("Calculation for normal aggr rule {:?}.{}", k, rule_n);
                                 for (serial, item_res) in
-                                    rule.relation.iter(self, None, &use_delta).enumerate()
+                                    rule.relation.iter(self, Some(0), &use_delta).enumerate()
                                 {
                                     let item = item_res?;
                                     trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
@@ -149,7 +149,6 @@ impl SessionTx {
                             }
                         }
                         if !should_do_calculation {
-                            // debug!("skip {}.{}", k, rule_n);
                             continue;
                         }
                         for (delta_key, delta_store) in stores.iter() {

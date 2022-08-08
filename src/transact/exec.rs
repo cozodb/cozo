@@ -102,7 +102,7 @@ impl SessionTx {
         let gen_err = || anyhow!("required triple not found for {:?}, {:?}", eid, aid);
         self.tx.get(&sentinel, true)?.ok_or_else(gen_err)?;
         let v_in_key = if attr.cardinality.is_one() {
-            &DataValue::Bottom
+            &DataValue::Guard
         } else {
             v
         };
@@ -144,15 +144,15 @@ impl SessionTx {
         // elide value in key for eav and aev if cardinality is one
         let (v_in_key, v_in_val) = if attr.cardinality.is_one() {
             (
-                &DataValue::Bottom,
+                &DataValue::Guard,
                 if op.is_assert() {
                     v
                 } else {
-                    &DataValue::Bottom
+                    &DataValue::Guard
                 },
             )
         } else {
-            (v, &DataValue::Bottom)
+            (v, &DataValue::Guard)
         };
         let val_encoded = v_in_val.encode_with_op_and_tx(op, tx_id);
 
@@ -164,7 +164,7 @@ impl SessionTx {
         }
         // elide value in data for aev if it is big
         let val_encoded = if val_encoded.len() > INLINE_VAL_SIZE_LIMIT {
-            DataValue::Bottom.encode_with_op_and_tx(op, tx_id)
+            DataValue::Guard.encode_with_op_and_tx(op, tx_id)
         } else {
             val_encoded
         };
@@ -184,7 +184,7 @@ impl SessionTx {
             } else {
                 self.tx.put(
                     &vae_encoded,
-                    &DataValue::Bottom.encode_with_op_and_tx(op, tx_id),
+                    &DataValue::Guard.encode_with_op_and_tx(op, tx_id),
                 )?;
             }
         }
@@ -542,7 +542,7 @@ impl TripleEntityAttrBeforeIter {
                         continue;
                     }
                     let mut v = decode_value_from_key(k_slice)?;
-                    if v == DataValue::Bottom {
+                    if v == DataValue::Guard {
                         v = decode_value_from_val(v_slice)?;
                     }
                     self.current.copy_from_slice(k_slice);
@@ -635,7 +635,7 @@ impl TripleAttrEntityBeforeIter {
                         continue;
                     }
                     let mut v = decode_value_from_key(k_slice)?;
-                    if v == DataValue::Bottom {
+                    if v == DataValue::Guard {
                         v = decode_value_from_val(v_slice)?;
                     }
                     self.current.copy_from_slice(k_slice);

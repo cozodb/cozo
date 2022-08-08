@@ -52,7 +52,7 @@ impl TempStore {
                     if ma.is_none() {
                         tuple.0[i].clone()
                     } else {
-                        DataValue::Bottom
+                        DataValue::Guard
                     }
                 })
                 .collect_vec(),
@@ -74,7 +74,7 @@ impl TempStore {
                             let op = aggr_op.combine;
                             op(&prev_aggr.0[i], &tuple.0[i])
                         } else {
-                            Ok(DataValue::Bottom)
+                            Ok(DataValue::Guard)
                         }
                     })
                     .try_collect()?,
@@ -99,9 +99,9 @@ impl TempStore {
                     .map(|(i, aggr)| {
                         if let Some(aggr_op) = aggr {
                             let op = aggr_op.combine;
-                            op(&DataValue::Bottom, &tuple.0[i])
+                            op(&DataValue::Guard, &tuple.0[i])
                         } else {
-                            Ok(DataValue::Bottom)
+                            Ok(DataValue::Guard)
                         }
                     })
                     .try_collect()?,
@@ -200,7 +200,7 @@ impl TempStore {
             .collect_vec();
         for (key, group) in grouped.into_iter() {
             if key.is_some() {
-                let mut aggr_res = vec![DataValue::Bottom; aggrs.len()];
+                let mut aggr_res = vec![DataValue::Guard; aggrs.len()];
                 for tuple in group.into_iter() {
                     let tuple = tuple?;
                     for (idx, aggr) in aggrs.iter().enumerate() {
@@ -213,7 +213,7 @@ impl TempStore {
                     }
                     for (i, aggr) in aggrs.iter().enumerate() {
                         if let Some(aggr_op) = aggr {
-                            aggr_res[i] = (aggr_op.combine)(&aggr_res[i], &DataValue::Bottom)?;
+                            aggr_res[i] = (aggr_op.combine)(&aggr_res[i], &DataValue::Guard)?;
                         }
                     }
                 }
@@ -337,7 +337,7 @@ impl Iterator for TempStoreIter {
                                 t.0.into_iter()
                                     .zip(vt.0)
                                     .map(|(kv, vv)| match kv {
-                                        DataValue::Bottom => vv,
+                                        DataValue::Guard => vv,
                                         kv => kv,
                                     })
                                     .collect_vec(),

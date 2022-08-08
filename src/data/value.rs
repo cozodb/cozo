@@ -35,6 +35,8 @@ pub(crate) enum DataValue {
 
     #[serde(rename = "z")]
     List(Box<[DataValue]>),
+    #[serde(rename = "g")]
+    Guard,
     #[serde(rename = "o")]
     DescVal(Reverse<Box<DataValue>>),
     #[serde(rename = "r")]
@@ -74,6 +76,9 @@ impl Debug for DataValue {
             }
             DataValue::Bottom => {
                 write!(f, "bottom")
+            }
+            DataValue::Guard => {
+                write!(f, "guard")
             }
         }
     }
