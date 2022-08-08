@@ -242,5 +242,66 @@ fn air_routes() -> Result<()> {
     dbg!(airport_with_one_route_time.elapsed());
     assert_eq!(res, json!([[777]]));
 
+    let single_runway_with_most_routes_time = Instant::now();
+    let res = db.run_script(r#"
+        single_or_lgw[?a] := [?a airport.iata 'LGW'] or [?a airport.runways 1];
+        out_counts[?a, count(?r)] := single_or_lgw[?a], [?r route.src ?a];
+        ?[?code, ?city, ?out_n] := out_counts[?a, ?out_n], [?a airport.city ?city], [?a airport.iata ?code];
+
+        :order -?out_n;
+        :limit 10;
+    "#)?;
+    dbg!(single_runway_with_most_routes_time.elapsed());
+    assert_eq!(
+        res,
+        json!([
+            ["LGW", "London", 232],
+            ["STN", "London", 211],
+            ["LIS", "Lisbon", 139],
+            ["LTN", "London", 130],
+            ["SZX", "Shenzhen", 129],
+            ["CKG", "Chongqing", 122],
+            ["STR", "Stuttgart", 121],
+            ["XIY", "Xianyang", 117],
+            ["KMG", "Kunming", 116],
+            ["SAW", "Istanbul", 115]
+        ])
+    );
+
+    let most_routes_in_canada_time = Instant::now();
+    let res = db.run_script(r#"
+        ca_airports[?a, count(?r)] := [?c country.code 'CA'], [?a airport.country ?c], [?r route.src ?a];
+        ?[?code, ?city, ?n_routes] := ca_airports[?a, ?n_routes], [?a airport.iata ?code], [?a airport.city ?city];
+
+        :order -?n_routes;
+        :limit 10;
+    "#)?;
+    dbg!(most_routes_in_canada_time.elapsed());
+    assert_eq!(
+        res,
+        json!([
+            ["YYZ", "Toronto", 195],
+            ["YUL", "Montreal", 121],
+            ["YVR", "Vancouver", 105],
+            ["YYC", "Calgary", 74],
+            ["YEG", "Edmonton", 47],
+            ["YHZ", "Halifax", 45],
+            ["YWG", "Winnipeg", 38],
+            ["YOW", "Ottawa", 36],
+            ["YZF", "Yellowknife", 21],
+            ["YQB", "Quebec City", 20]
+        ])
+    );
+
+    let uk_count_time = Instant::now();
+    let res =db.run_script(r"
+        ?[?region, count(?a)] := [?c country.code 'UK'], [?a airport.country ?c], [?a airport.region ?region];
+    ")?;
+    dbg!(uk_count_time.elapsed());
+    assert_eq!(
+        res,
+        json!([["GB-ENG", 27], ["GB-NIR", 3], ["GB-SCT", 25], ["GB-WLS", 3]])
+    );
+
     Ok(())
 }
