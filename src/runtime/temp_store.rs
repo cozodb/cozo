@@ -64,42 +64,34 @@ impl TempStore {
                 .map(|slice| EncodedTuple(&slice).decode()),
         )?;
 
-        if let Some(prev_aggr) = prev_aggr {
-            let tuple_to_store = Tuple(
-                aggrs
-                    .iter()
-                    .enumerate()
-                    .map(|(i, aggr)| {
-                        if let Some(aggr_op) = aggr {
-                            let op = aggr_op.combine;
-                            op(&prev_aggr.0[i], &tuple.0[i])
-                        } else {
-                            Ok(DataValue::Guard)
-                        }
-                    })
-                    .try_collect()?,
-            );
-
-            if prev_aggr == tuple_to_store {
-                Ok(false)
-            } else {
-                let tuple_data = tuple_to_store.encode_as_key_for_epoch(self.id, 0);
+        if let Some(mut prev_aggr) = prev_aggr {
+            let mut changed = false;
+            for (i, aggr) in aggrs.iter().enumerate() {
+                if let Some(aggr_op) = aggr {
+                    let op = aggr_op.combine;
+                    changed |= op(&mut prev_aggr.0[i], &tuple.0[i])?;
+                }
+            }
+            if changed {
+                let tuple_data = prev_aggr.encode_as_key_for_epoch(self.id, 0);
                 self.db.put(&key_encoded, &tuple_data)?;
                 if epoch != 0 {
                     let key_encoded = key.encode_as_key_for_epoch(self.id, epoch);
                     self.db.put(&key_encoded, &tuple_data)?;
                 }
-                Ok(true)
             }
+            Ok(changed)
         } else {
             let tuple_to_store = Tuple(
                 aggrs
                     .iter()
                     .enumerate()
-                    .map(|(i, aggr)| {
+                    .map(|(i, aggr)| -> Result<DataValue> {
                         if let Some(aggr_op) = aggr {
                             let op = aggr_op.combine;
-                            op(&DataValue::Guard, &tuple.0[i])
+                            let mut init = DataValue::Guard;
+                            op(&mut init, &tuple.0[i])?;
+                            Ok(init)
                         } else {
                             Ok(DataValue::Guard)
                         }
@@ -201,20 +193,28 @@ impl TempStore {
         for (key, group) in grouped.into_iter() {
             if key.is_some() {
                 let mut aggr_res = vec![DataValue::Guard; aggrs.len()];
-                for tuple in group.into_iter() {
+                let mut it = group.into_iter();
+                let first_tuple = it.next().unwrap()?;
+                for (idx, aggr) in aggrs.iter().enumerate() {
+                    let val = &first_tuple.0[invert_indices[idx]];
+                    if let Some(aggr_op) = aggr {
+                        (aggr_op.combine)(&mut aggr_res[idx], val)?;
+                    } else {
+                        aggr_res[idx] = first_tuple.0[idx].clone();
+                    }
+                }
+                for tuple in it {
                     let tuple = tuple?;
                     for (idx, aggr) in aggrs.iter().enumerate() {
                         let val = &tuple.0[invert_indices[idx]];
                         if let Some(aggr_op) = aggr {
-                            aggr_res[idx] = (aggr_op.combine)(&aggr_res[idx], val)?;
-                        } else {
-                            aggr_res[idx] = val.clone();
+                            (aggr_op.combine)(&mut aggr_res[idx], val)?;
                         }
                     }
-                    for (i, aggr) in aggrs.iter().enumerate() {
-                        if let Some(aggr_op) = aggr {
-                            aggr_res[i] = (aggr_op.combine)(&aggr_res[i], &DataValue::Guard)?;
-                        }
+                }
+                for (i, aggr) in aggrs.iter().enumerate() {
+                    if let Some(aggr_op) = aggr {
+                        (aggr_op.combine)(&mut aggr_res[i], &DataValue::Guard)?;
                     }
                 }
                 let res_tpl = Tuple(aggr_res);

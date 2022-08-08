@@ -189,11 +189,11 @@ impl SessionTx {
                 .iter()
                 .map(|(k, _v)| k)
                 .eq(entry_head.iter().take(sorters.len()))
+                && sorters.iter().all(|(_k, v)| *v == SortDir::Asc)
             {
-                if sorters.iter().all(|(_k, v)| *v == SortDir::Asc) {
-                    sorters = vec![];
-                }
+                sorters = vec![];
             }
+
             if !sorters.is_empty() {
                 let head_symbols: BTreeSet<_> = entry_head.iter().collect();
                 for (k, _) in sorters.iter() {

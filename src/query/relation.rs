@@ -310,7 +310,7 @@ impl Relation {
         Relation::Unification(UnificationRelation {
             parent: Box::new(self),
             binding,
-            expr: expr,
+            expr,
             to_eliminate: Default::default(),
         })
     }

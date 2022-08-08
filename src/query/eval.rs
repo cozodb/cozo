@@ -85,18 +85,16 @@ impl SessionTx {
                                     trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
                                     if is_meet {
                                         store.aggr_meet_put(&item, &rule.aggr, 0)?;
-                                    } else {
-                                        if should_check_limit {
-                                            if !store.exists(&item, 0)? {
-                                                store.put(&item, 0)?;
-                                                if limiter.incr() {
-                                                    trace!("early stopping due to result count limit exceeded");
-                                                    return Ok(());
-                                                }
-                                            }
-                                        } else {
+                                    } else if should_check_limit {
+                                        if !store.exists(&item, 0)? {
                                             store.put(&item, 0)?;
+                                            if limiter.incr() {
+                                                trace!("early stopping due to result count limit exceeded");
+                                                return Ok(());
+                                            }
                                         }
+                                    } else {
+                                        store.put(&item, 0)?;
                                     }
                                     *changed.get_mut(k).unwrap() = true;
                                 }
@@ -172,32 +170,22 @@ impl SessionTx {
                                     if aggr_changed {
                                         *changed.get_mut(k).unwrap() = true;
                                     }
+                                } else if store.exists(&item, 0)? {
+                                    trace!(
+                                        "item for {:?}.{}: {:?} at {}, rederived",
+                                        k,
+                                        rule_n,
+                                        item,
+                                        epoch
+                                    );
                                 } else {
-                                    if store.exists(&item, 0)? {
-                                        trace!(
-                                            "item for {:?}.{}: {:?} at {}, rederived",
-                                            k,
-                                            rule_n,
-                                            item,
-                                            epoch
-                                        );
-                                    } else {
-                                        trace!(
-                                            "item for {:?}.{}: {:?} at {}",
-                                            k,
-                                            rule_n,
-                                            item,
-                                            epoch
-                                        );
-                                        *changed.get_mut(k).unwrap() = true;
-                                        store.put(&item, epoch)?;
-                                        store.put(&item, 0)?;
-                                        if should_check_limit {
-                                            if limiter.incr() {
-                                                trace!("early stopping due to result count limit exceeded");
-                                                return Ok(());
-                                            }
-                                        }
+                                    trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
+                                    *changed.get_mut(k).unwrap() = true;
+                                    store.put(&item, epoch)?;
+                                    store.put(&item, 0)?;
+                                    if should_check_limit && limiter.incr() {
+                                        trace!("early stopping due to result count limit exceeded");
+                                        return Ok(());
                                     }
                                 }
                             }
