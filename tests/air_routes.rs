@@ -310,7 +310,7 @@ fn air_routes() -> Result<()> {
         routes_count[?a, count(?r)] := given[?code], [?a airport.iata ?code], [?r route.src ?a];
         ?[?code, ?n] := routes_count[?a, ?n], [?a airport.iata ?code];
 
-        given <- [['AUS'],['AMS'],['JFK'],['DUB'],['MEX']];
+        given <- [['A' ++ 'U' ++ 'S'],['AMS'],['JFK'],['DUB'],['MEX']];
         "#,
     )?;
     dbg!(routes_per_airport_time.elapsed());
