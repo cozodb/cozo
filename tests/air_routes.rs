@@ -1,4 +1,5 @@
 use std::fs::read_to_string;
+use std::str::FromStr;
 use std::time::Instant;
 
 use anyhow::Result;
@@ -101,36 +102,14 @@ fn air_routes() -> Result<()> {
     dbg!(no_routes_airport_time.elapsed());
     assert_eq!(
         res,
-        json!([
-            ["AFW"],
-            ["APA"],
-            ["APK"],
-            ["BID"],
-            ["BVS"],
-            ["BWU"],
-            ["CRC"],
-            ["CVT"],
-            ["EKA"],
-            ["GYZ"],
-            ["HFN"],
-            ["HZK"],
-            ["ILG"],
-            ["INT"],
-            ["ISL"],
-            ["KGG"],
-            ["NBW"],
-            ["NFO"],
-            ["PSY"],
-            ["RIG"],
-            ["SFD"],
-            ["SFH"],
-            ["SXF"],
-            ["TUA"],
-            ["TWB"],
-            ["TXL"],
-            ["VCV"],
-            ["YEI"]
-        ])
+        serde_json::Value::from_str(
+            r#"[
+            ["AFW"],["APA"],["APK"],["BID"],["BVS"],["BWU"],["CRC"],["CVT"],["EKA"],["GYZ"],
+            ["HFN"],["HZK"],["ILG"],["INT"],["ISL"],["KGG"],["NBW"],["NFO"],["PSY"],["RIG"],
+            ["SFD"],["SFH"],["SXF"],["TUA"],["TWB"],["TXL"],["VCV"],["YEI"]
+        ]"#
+        )
+        .unwrap()
     );
 
     let runway_distribution_time = Instant::now();
@@ -164,35 +143,16 @@ fn air_routes() -> Result<()> {
     dbg!(most_out_routes_time.elapsed());
     assert_eq!(
         res,
-        json!([
-            ["IST", 307],
-            ["CDG", 293],
-            ["AMS", 282],
-            ["MUC", 270],
-            ["ORD", 264],
-            ["DFW", 251],
-            ["PEK", 248],
-            ["DXB", 247],
-            ["ATL", 242],
-            ["LGW", 232],
-            ["LHR", 221],
-            ["MAN", 216],
-            ["LAX", 213],
-            ["PVG", 212],
-            ["STN", 211],
-            ["VIE", 206],
-            ["BCN", 203],
-            ["BER", 202],
-            ["JFK", 201],
-            ["IAH", 199],
-            ["EWR", 197],
-            ["YYZ", 195],
-            ["CPH", 194],
-            ["DOH", 186],
-            ["DUB", 185],
-            ["CLT", 184],
-            ["SVO", 181]
-        ])
+        serde_json::Value::from_str(
+            r#"[
+        ["FRA",307],["IST",307],["CDG",293],["AMS",282],["MUC",270],["ORD",264],["DFW",251],
+        ["PEK",248],["DXB",247],["ATL",242],["DME",232],["LGW",232],["LHR",221],["DEN",216],
+        ["MAN",216],["LAX",213],["PVG",212],["STN",211],["MAD",206],["VIE",206],["BCN",203],
+        ["BER",202],["FCO",201],["JFK",201],["DUS",199],["IAH",199],["EWR",197],["MIA",195],
+        ["YYZ",195],["BRU",194],["CPH",194],["DOH",186],["DUB",185],["CLT",184],["SVO",181]
+        ]"#
+        )
+        .unwrap()
     );
 
     let most_routes_time = Instant::now();
@@ -206,30 +166,14 @@ fn air_routes() -> Result<()> {
     dbg!(most_routes_time.elapsed());
     assert_eq!(
         res,
-        json!([
-            ["IST", 614],
-            ["CDG", 587],
-            ["AMS", 566],
-            ["MUC", 541],
-            ["ORD", 527],
-            ["DFW", 502],
-            ["PEK", 497],
-            ["DXB", 494],
-            ["ATL", 484],
-            ["DME", 465],
-            ["LGW", 464],
-            ["LHR", 442],
-            ["DEN", 432],
-            ["MAN", 431],
-            ["LAX", 426],
-            ["PVG", 424],
-            ["STN", 423],
-            ["VIE", 412],
-            ["BCN", 406],
-            ["BER", 404],
-            ["FCO", 402],
-            ["JFK", 401]
-        ])
+        serde_json::Value::from_str(
+            r#"[
+        ["FRA",614],["IST",614],["CDG",587],["AMS",566],["MUC",541],["ORD",527],["DFW",502],
+        ["PEK",497],["DXB",494],["ATL",484],["DME",465],["LGW",464],["LHR",442],["DEN",432],
+        ["MAN",431],["LAX",426],["PVG",424],["STN",423],["MAD",412],["VIE",412],["BCN",406],
+        ["BER",404],["FCO",402],["JFK",401]]"#
+        )
+        .unwrap()
     );
 
     let airport_with_one_route_time = Instant::now();
@@ -254,18 +198,13 @@ fn air_routes() -> Result<()> {
     dbg!(single_runway_with_most_routes_time.elapsed());
     assert_eq!(
         res,
-        json!([
-            ["LGW", "London", 232],
-            ["STN", "London", 211],
-            ["LIS", "Lisbon", 139],
-            ["LTN", "London", 130],
-            ["SZX", "Shenzhen", 129],
-            ["CKG", "Chongqing", 122],
-            ["STR", "Stuttgart", 121],
-            ["XIY", "Xianyang", 117],
-            ["KMG", "Kunming", 116],
-            ["SAW", "Istanbul", 115]
-        ])
+        serde_json::Value::from_str(
+            r#"[
+        ["LGW","London",232],["STN","London",211],["CTU","Chengdu",139],["LIS","Lisbon",139],
+        ["BHX","Birmingham",130],["LTN","London",130],["SZX","Shenzhen",129],
+        ["CKG","Chongqing",122],["STR","Stuttgart",121],["CRL","Brussels",117]]"#
+        )
+        .unwrap()
     );
 
     let most_routes_in_canada_time = Instant::now();
@@ -294,13 +233,58 @@ fn air_routes() -> Result<()> {
     );
 
     let uk_count_time = Instant::now();
-    let res =db.run_script(r"
+    let res = db.run_script(r"
         ?[?region, count(?a)] := [?c country.code 'UK'], [?a airport.country ?c], [?a airport.region ?region];
     ")?;
     dbg!(uk_count_time.elapsed());
     assert_eq!(
         res,
         json!([["GB-ENG", 27], ["GB-NIR", 3], ["GB-SCT", 25], ["GB-WLS", 3]])
+    );
+
+    let airports_by_country = Instant::now();
+    let res = db.run_script(
+        r"
+        airports_by_country[?c, count(?a)] := [?a airport.country ?c];
+        country_count[?c, max(?count)] := airports_by_country[?c, ?count];
+        ?[?code, ?count] := [?c country.code ?code], country_count[?c, ?count];
+        ?[?code, ?count] := [?c country.code ?code], not country_count[?c, ?_], ?count is 0;
+
+        :order ?count;
+    ",
+    )?;
+    dbg!(airports_by_country.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+    ["AD",0],["LI",0],["MC",0],["PN",0],["SM",0],["AG",1],["AI",1],["AL",1],["AS",1],["AW",1],
+    ["BB",1],["BH",1],["BI",1],["BJ",1],["BL",1],["BM",1],["BN",1],["BT",1],["CC",1],["CF",1],
+    ["CW",1],["CX",1],["DJ",1],["DM",1],["ER",1],["FO",1],["GD",1],["GF",1],["GI",1],["GM",1],
+    ["GN",1],["GP",1],["GU",1],["GW",1],["HK",1],["IM",1],["JE",1],["KM",1],["KP",1],["KS",1],
+    ["KW",1],["LB",1],["LS",1],["LU",1],["LV",1],["MD",1],["MF",1],["ML",1],["MO",1],["MQ",1],
+    ["MS",1],["MT",1],["NC",1],["NE",1],["NF",1],["NI",1],["NR",1],["PM",1],["PW",1],["QA",1],
+    ["SL",1],["SR",1],["SS",1],["ST",1],["SV",1],["SX",1],["SZ",1],["TG",1],["TL",1],["TM",1],
+    ["TV",1],["VC",1],["WS",1],["YT",1],["AM",2],["BF",2],["CI",2],["EH",2],["FK",2],["GA",2],
+    ["GG",2],["GQ",2],["GT",2],["GY",2],["HT",2],["HU",2],["JM",2],["JO",2],["KG",2],["KI",2],
+    ["KN",2],["LC",2],["LR",2],["ME",2],["MH",2],["MK",2],["MP",2],["MU",2],["PY",2],["RE",2],
+    ["RW",2],["SC",2],["SG",2],["SH",2],["SI",2],["SK",2],["SY",2],["TT",2],["UY",2],["VG",2],
+    ["VI",2],["WF",2],["BQ",3],["BY",3],["CG",3],["CY",3],["EE",3],["GE",3],["KH",3],["KY",3],
+    ["LT",3],["MR",3],["RS",3],["ZW",3],["BA",4],["BG",4],["BW",4],["FM",4],["OM",4],["SN",4],
+    ["TC",4],["TJ",4],["UG",4],["AF",5],["AZ",5],["BE",5],["CM",5],["CZ",5],["NL",5],["PA",5],
+    ["SD",5],["TD",5],["TO",5],["AT",6],["CH",6],["CK",6],["GH",6],["HN",6],["IL",6],["IQ",6],
+    ["LK",6],["SO",6],["BD",7],["CV",7],["DO",7],["IE",7],["IS",7],["MW",7],["PR",7],["DK",8],
+    ["HR",8],["LA",8],["MV",8],["TN",8],["TW",9],["YE",9],["ZM",9],["AE",10],["FJ",10],["MN",10],
+    ["CD",11],["EG",11],["LY",11],["MZ",11],["NP",11],["TZ",11],["UZ",11],["CU",12],["BZ",13],
+    ["CR",13],["MG",13],["PL",13],["AO",14],["GL",14],["KE",14],["RO",14],["BO",15],["EC",15],
+    ["KR",15],["UA",15],["ET",16],["MA",16],["CL",17],["MM",17],["SB",17],["BS",18],["NG",19],
+    ["PT",19],["FI",20],["ZA",20],["KZ",21],["PK",21],["PE",22],["VN",22],["NZ",25],["PG",26],
+    ["SA",26],["VU",26],["VE",27],["DZ",30],["TH",33],["DE",34],["MY",35],["AR",38],["IT",38],
+    ["GR",39],["PF",39],["SE",39],["PH",40],["ES",43],["IR",45],["NO",49],["CO",51],["TR",52],
+    ["UK",58],["FR",59],["MX",60],["JP",65],["ID",70],["IN",77],["BR",117],["RU",129],["AU",132],
+    ["CA",205],["CN",217],["US",586]]"#
+        )
+        .unwrap()
     );
 
     Ok(())

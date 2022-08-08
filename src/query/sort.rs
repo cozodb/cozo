@@ -24,20 +24,20 @@ impl SessionTx {
             .map(|(k, dir)| (head_indices[k], *dir))
             .collect_vec();
         let ret = self.new_temp_store();
-        for tuple in original.scan_all() {
+        for (idx, tuple) in original.scan_all().enumerate() {
             let tuple = tuple?;
-            let key = Tuple(
-                idx_sorters
-                    .iter()
-                    .map(|(idx, dir)| {
-                        let mut val = tuple.0[*idx].clone();
-                        if *dir == SortDir::Dsc {
-                            val = DataValue::DescVal(Reverse(Box::new(val)));
-                        }
-                        val
-                    })
-                    .collect_vec(),
-            );
+            let mut key = idx_sorters
+                .iter()
+                .map(|(idx, dir)| {
+                    let mut val = tuple.0[*idx].clone();
+                    if *dir == SortDir::Dsc {
+                        val = DataValue::DescVal(Reverse(Box::new(val)));
+                    }
+                    val
+                })
+                .collect_vec();
+            key.push(DataValue::Int(idx as i64));
+            let key = Tuple(key);
             let encoded_key = key.encode_as_key_for_epoch(ret.id, 0);
             let encoded_val = tuple.encode_as_key_for_epoch(ret.id, 0);
             ret.db.put(&encoded_key, &encoded_val)?;
