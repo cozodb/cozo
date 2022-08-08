@@ -287,5 +287,22 @@ fn air_routes() -> Result<()> {
         .unwrap()
     );
 
+    let n_airports_by_continent_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        airports_by_continent[?c, count(?a)] := [?a airport.iata ?_], [?c geo.contains ?a];
+        ?[?cont, max(?count)] := airports_by_continent[?c, ?count], [?c continent.code ?cont];
+        ?[?cont, max(?count)] := [?_ continent.code ?cont], ?count is 0;
+    "#,
+    )?;
+    dbg!(n_airports_by_continent_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[["AF",321],["AN",0],["AS",971],["EU",605],["NA",989],["OC",305],["SA",313]]"#
+        )
+        .unwrap()
+    );
+
     Ok(())
 }

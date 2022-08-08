@@ -26,7 +26,7 @@ rmp-serde = "1.1.0"
 rmpv = "1.0.0"
 base64 = "0.13.0"
 chrono = "0.4.19"
-ordered-float = { version = "3.0", features = ["serde"] }
+num-traits = "0.2.15"
 itertools = "0.10.3"
 pest = "2.2.1"
 pest_derive = "2.2.1"

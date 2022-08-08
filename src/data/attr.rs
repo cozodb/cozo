@@ -12,7 +12,7 @@ use crate::data::id::{AttrId, TxId};
 use crate::data::json::JsonValue;
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, Number};
 use crate::parse::triple::TempIdCtx;
 
 #[repr(u8)]
@@ -116,7 +116,7 @@ impl AttributeTyping {
     pub(crate) fn coerce_value(&self, val: DataValue) -> Result<DataValue> {
         match self {
             AttributeTyping::Ref | AttributeTyping::Component => match val {
-                DataValue::Int(s) if s > 0 => Ok(DataValue::Int(s)),
+                DataValue::Number(Number::Int(s)) if s > 0 => Ok(DataValue::Number(Number::Int(s))),
                 val => Err(self.type_err(val).into()),
             },
             AttributeTyping::Bool => {
@@ -127,15 +127,15 @@ impl AttributeTyping {
                 }
             }
             AttributeTyping::Int => {
-                if matches!(val, DataValue::Int(_)) {
+                if matches!(val, DataValue::Number(Number::Int(_))) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val).into())
                 }
             }
             AttributeTyping::Float => match val {
-                v @ DataValue::Float(_) => Ok(v),
-                DataValue::Int(i) => Ok(DataValue::Float((i as f64).into())),
+                v @ DataValue::Number(Number::Float(_)) => Ok(v),
+                DataValue::Number(Number::Int(i)) => Ok(DataValue::Number(Number::Float(i as f64))),
                 val => Err(self.type_err(val).into()),
             },
             AttributeTyping::String => {
@@ -154,7 +154,7 @@ impl AttributeTyping {
             }
             AttributeTyping::Timestamp => match val {
                 val @ DataValue::Timestamp(_) => Ok(val),
-                DataValue::Int(i) => Ok(DataValue::Timestamp(i)),
+                DataValue::Number(Number::Int(i)) => Ok(DataValue::Timestamp(i)),
                 val => Err(self.type_err(val).into()),
             },
             AttributeTyping::Bytes => {

@@ -90,7 +90,7 @@ impl EntityId {
     pub(crate) const MAX_PERM: EntityId = EntityId(0x00ff_ffff_ff00_0000);
 
     pub(crate) fn to_value(&self) -> DataValue {
-        DataValue::Int(self.0 as i64)
+        DataValue::from(self.0 as i64)
     }
 
     pub(crate) fn from_bytes(b: &[u8]) -> Self {

@@ -36,7 +36,7 @@ impl SessionTx {
                     val
                 })
                 .collect_vec();
-            key.push(DataValue::Int(idx as i64));
+            key.push(DataValue::from(idx as i64));
             let key = Tuple(key);
             let encoded_key = key.encode_as_key_for_epoch(ret.id, 0);
             let encoded_val = tuple.encode_as_key_for_epoch(ret.id, 0);

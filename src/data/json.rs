@@ -5,7 +5,7 @@ pub(crate) use serde_json::Value as JsonValue;
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::symb::Symbol;
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, Number};
 
 impl From<JsonValue> for DataValue {
     fn from(v: JsonValue) -> Self {
@@ -13,9 +13,9 @@ impl From<JsonValue> for DataValue {
             JsonValue::Null => DataValue::Null,
             JsonValue::Bool(b) => DataValue::Bool(b),
             JsonValue::Number(n) => match n.as_i64() {
-                Some(i) => DataValue::Int(i),
+                Some(i) => DataValue::from(i),
                 None => match n.as_f64() {
-                    Some(f) => DataValue::Float(f.into()),
+                    Some(f) => DataValue::from(f),
                     None => DataValue::String(n.to_string().into()),
                 },
             },
@@ -38,9 +38,9 @@ impl<'a> From<&'a JsonValue> for DataValue {
             JsonValue::Null => DataValue::Null,
             JsonValue::Bool(b) => DataValue::Bool(*b),
             JsonValue::Number(n) => match n.as_i64() {
-                Some(i) => DataValue::Int(i),
+                Some(i) => DataValue::from(i),
                 None => match n.as_f64() {
-                    Some(f) => DataValue::Float(f.into()),
+                    Some(f) => DataValue::from(f),
                     None => DataValue::String(n.to_string().into()),
                 },
             },
@@ -62,8 +62,8 @@ impl From<DataValue> for JsonValue {
         match v {
             DataValue::Null => JsonValue::Null,
             DataValue::Bool(b) => JsonValue::Bool(b),
-            DataValue::Int(i) => JsonValue::Number(i.into()),
-            DataValue::Float(f) => json!(f.0),
+            DataValue::Number(Number::Int(i)) => JsonValue::Number(i.into()),
+            DataValue::Number(Number::Float(f)) => json!(f),
             DataValue::String(t) => JsonValue::String(t.into()),
             DataValue::Uuid(uuid) => JsonValue::String(uuid.to_string()),
             DataValue::Bytes(bytes) => JsonValue::String(base64::encode(bytes)),
@@ -73,7 +73,7 @@ impl From<DataValue> for JsonValue {
             DataValue::DescVal(v) => JsonValue::from(*v.0),
             DataValue::Bottom => JsonValue::Null,
             DataValue::Timestamp(i) => JsonValue::Number(i.into()),
-            DataValue::Guard => JsonValue::Null
+            DataValue::Guard => JsonValue::Null,
         }
     }
 }
@@ -99,18 +99,11 @@ impl TryFrom<&'_ JsonValue> for Attribute {
             None => AttrId(0),
             Some(v) => AttrId::try_from(v)?,
         };
-        let name = map.get("name").ok_or_else(|| {
-            anyhow!(
-                "expect field 'name' in attribute definition, got {}",
-                value
-            )
-        })?;
+        let name = map
+            .get("name")
+            .ok_or_else(|| anyhow!("expect field 'name' in attribute definition, got {}", value))?;
         let symb = Symbol::try_from(name)?;
-        ensure!(
-            !symb.is_reserved(),
-            "cannot use reserved symbol {}",
-            symb
-        );
+        ensure!(!symb.is_reserved(), "cannot use reserved symbol {}", symb);
         let cardinality = map
             .get("cardinality")
             .ok_or_else(|| anyhow!("expect field 'cardinality' in {}", value))?

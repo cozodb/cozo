@@ -12,5 +12,3 @@
 * [x] public API
 * [x] sorting
 * [ ] range scan
-
-comparators can have problems when sorting mixed integers and floats

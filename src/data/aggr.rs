@@ -1,9 +1,9 @@
-use std::cmp::{max, min};
+use std::cmp::{max, min, Ordering};
 use std::fmt::{Debug, Formatter};
 
 use anyhow::{bail, Result};
 
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, Number};
 
 #[derive(Clone)]
 pub(crate) struct Aggregation {
@@ -37,10 +37,12 @@ macro_rules! define_aggr {
 define_aggr!(AGGR_COUNT, false);
 fn aggr_count(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
     match (accum, current) {
-        (DataValue::Guard, DataValue::Guard) => Ok(DataValue::Int(0)),
-        (DataValue::Guard, _) => Ok(DataValue::Int(1)),
-        (DataValue::Int(i), DataValue::Guard) => Ok(DataValue::Int(*i)),
-        (DataValue::Int(i), _) => Ok(DataValue::Int(*i + 1)),
+        (DataValue::Guard, DataValue::Guard) => Ok(DataValue::Number(Number::Int(0))),
+        (DataValue::Guard, _) => Ok(DataValue::Number(Number::Int(1))),
+        (DataValue::Number(Number::Int(i)), DataValue::Guard) => {
+            Ok(DataValue::Number(Number::Int(*i)))
+        }
+        (DataValue::Number(Number::Int(i)), _) => Ok(DataValue::Number(Number::Int(*i + 1))),
         _ => unreachable!(),
     }
 }
@@ -48,16 +50,29 @@ fn aggr_count(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
 define_aggr!(AGGR_SUM, false);
 fn aggr_sum(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
     match (accum, current) {
-        (DataValue::Guard, DataValue::Guard) => Ok(DataValue::Int(0)),
-        (DataValue::Guard, DataValue::Int(i)) => Ok(DataValue::Int(*i)),
-        (DataValue::Guard, DataValue::Float(f)) => Ok(DataValue::Float(f.0.into())),
-        (DataValue::Int(i), DataValue::Guard) => Ok(DataValue::Int(*i)),
-        (DataValue::Float(f), DataValue::Guard) => Ok(DataValue::Float(f.0.into())),
-        (DataValue::Int(i), DataValue::Int(j)) => Ok(DataValue::Int(*i + *j)),
-        (DataValue::Int(j), DataValue::Float(i)) | (DataValue::Float(i), DataValue::Int(j)) => {
-            Ok(DataValue::Float((i.0 + (*j as f64)).into()))
+        (DataValue::Guard, DataValue::Guard) => Ok(DataValue::Number(Number::Int(0))),
+        (DataValue::Guard, DataValue::Number(Number::Int(i))) => {
+            Ok(DataValue::Number(Number::Int(*i)))
         }
-        (DataValue::Float(i), DataValue::Float(j)) => Ok(DataValue::Float((i.0 + j.0).into())),
+        (DataValue::Guard, DataValue::Number(Number::Float(f))) => {
+            Ok(DataValue::Number(Number::Float(*f)))
+        }
+        (DataValue::Number(Number::Int(i)), DataValue::Guard) => {
+            Ok(DataValue::Number(Number::Int(*i)))
+        }
+        (DataValue::Number(Number::Float(f)), DataValue::Guard) => {
+            Ok(DataValue::Number(Number::Float(*f)))
+        }
+        (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Int(j))) => {
+            Ok(DataValue::Number(Number::Int(*i + *j)))
+        }
+        (DataValue::Number(Number::Int(j)), DataValue::Number(Number::Float(i)))
+        | (DataValue::Number(Number::Float(i)), DataValue::Number(Number::Int(j))) => {
+            Ok(DataValue::Number(Number::Float(*i + (*j as f64))))
+        }
+        (DataValue::Number(Number::Float(i)), DataValue::Number(Number::Float(j))) => {
+            Ok(DataValue::Number(Number::Float(*i + *j)))
+        }
         (i, j) => bail!(
             "cannot compute min: encountered value {:?} for aggregate {:?}",
             j,
@@ -69,14 +84,31 @@ fn aggr_sum(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
 define_aggr!(AGGR_MIN, true);
 fn aggr_min(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
     match (accum, current) {
-        (DataValue::Guard, DataValue::Int(i)) => Ok(DataValue::Int(*i)),
-        (DataValue::Guard, DataValue::Float(f)) => Ok(DataValue::Float(f.0.into())),
-        (DataValue::Int(i), DataValue::Int(j)) => Ok(DataValue::Int(min(*i, *j))),
-        (DataValue::Int(j), DataValue::Float(i)) | (DataValue::Float(i), DataValue::Int(j)) => {
-            Ok(DataValue::Float(min(i.clone(), (*j as f64).into())))
+        (DataValue::Guard, DataValue::Number(Number::Int(i))) => {
+            Ok(DataValue::Number(Number::Int(*i)))
         }
-        (DataValue::Float(i), DataValue::Float(j)) => {
-            Ok(DataValue::Float(min(i.clone(), j.clone())))
+        (DataValue::Guard, DataValue::Number(Number::Float(f))) => {
+            Ok(DataValue::Number(Number::Float(*f)))
+        }
+        (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Int(j))) => {
+            Ok(DataValue::Number(Number::Int(min(*i, *j))))
+        }
+        (DataValue::Number(Number::Int(j)), DataValue::Number(Number::Float(i)))
+        | (DataValue::Number(Number::Float(i)), DataValue::Number(Number::Int(j))) => {
+            let m = match i.total_cmp(&(*j as f64)) {
+                Ordering::Less => *i,
+                Ordering::Equal => *i,
+                Ordering::Greater => *j as f64,
+            };
+            Ok(DataValue::Number(Number::Float(m)))
+        }
+        (DataValue::Number(Number::Float(i)), DataValue::Number(Number::Float(j))) => {
+            let m = match i.total_cmp(j) {
+                Ordering::Less => *i,
+                Ordering::Equal => *i,
+                Ordering::Greater => *j,
+            };
+            Ok(DataValue::Number(Number::Float(m)))
         }
         (i, j) => bail!(
             "cannot compute min: encountered value {:?} for aggregate {:?}",
@@ -89,15 +121,34 @@ fn aggr_min(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
 define_aggr!(AGGR_MAX, true);
 fn aggr_max(accum: &DataValue, current: &DataValue) -> Result<DataValue> {
     match (accum, current) {
-        (DataValue::Guard, DataValue::Int(i)) => Ok(DataValue::Int(*i)),
-        (DataValue::Guard, DataValue::Float(f)) => Ok(DataValue::Float(f.0.into())),
-        (DataValue::Float(f), DataValue::Guard) => Ok(DataValue::Float(f.0.into())),
-        (DataValue::Int(i), DataValue::Int(j)) => Ok(DataValue::Int(max(*i, *j))),
-        (DataValue::Int(j), DataValue::Float(i)) | (DataValue::Float(i), DataValue::Int(j)) => {
-            Ok(DataValue::Float(max(i.clone(), (*j as f64).into())))
+        (DataValue::Guard, DataValue::Number(Number::Int(i))) => {
+            Ok(DataValue::Number(Number::Int(*i)))
         }
-        (DataValue::Float(i), DataValue::Float(j)) => {
-            Ok(DataValue::Float(max(i.clone(), j.clone())))
+        (DataValue::Guard, DataValue::Number(Number::Float(f))) => {
+            Ok(DataValue::Number(Number::Float(*f)))
+        }
+        (DataValue::Number(Number::Float(f)), DataValue::Guard) => {
+            Ok(DataValue::Number(Number::Float(*f)))
+        }
+        (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Int(j))) => {
+            Ok(DataValue::Number(Number::Int(max(*i, *j))))
+        }
+        (DataValue::Number(Number::Int(j)), DataValue::Number(Number::Float(i)))
+        | (DataValue::Number(Number::Float(i)), DataValue::Number(Number::Int(j))) => {
+            let m = match i.total_cmp(&(*j as f64)) {
+                Ordering::Less => *j as f64,
+                Ordering::Equal => *i,
+                Ordering::Greater => *i,
+            };
+            Ok(DataValue::Number(Number::Float(m)))
+        }
+        (DataValue::Number(Number::Float(i)), DataValue::Number(Number::Float(j))) => {
+            let m = match i.total_cmp(j) {
+                Ordering::Less => *j,
+                Ordering::Equal => *i,
+                Ordering::Greater => *i,
+            };
+            Ok(DataValue::Number(Number::Float(m)))
         }
         (i, j) => bail!(
             "cannot compute min: encountered value {:?} for aggregate {:?}",

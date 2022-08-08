@@ -1,8 +1,7 @@
-use std::cmp::Reverse;
-use std::fmt::{Debug, Formatter};
+use std::cmp::{Ordering, Reverse};
+use std::fmt::{Debug, Display, Formatter};
 
 use anyhow::{bail, Result};
-use ordered_float::OrderedFloat;
 use rmp_serde::Serializer;
 use serde::Serialize;
 use serde_derive::{Deserialize, Serialize};
@@ -21,9 +20,7 @@ pub(crate) enum DataValue {
     #[serde(rename = "b")]
     Bool(bool),
     #[serde(rename = "i")]
-    Int(i64),
-    #[serde(rename = "f")]
-    Float(OrderedFloat<f64>),
+    Number(Number),
     #[serde(rename = "s")]
     String(SmartString<LazyCompact>),
     #[serde(rename = "u")]
@@ -43,6 +40,83 @@ pub(crate) enum DataValue {
     Bottom,
 }
 
+impl From<i64> for DataValue {
+    fn from(v: i64) -> Self {
+        DataValue::Number(Number::Int(v))
+    }
+}
+
+impl From<f64> for DataValue {
+    fn from(v: f64) -> Self {
+        DataValue::Number(Number::Float(v))
+    }
+}
+
+#[derive(Copy, Clone, Deserialize, Serialize)]
+pub(crate) enum Number {
+    #[serde(rename = "i")]
+    Int(i64),
+    #[serde(rename = "f")]
+    Float(f64),
+}
+
+impl PartialEq for Number {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Number {}
+
+impl Display for Number {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Number::Int(i) => write!(f, "{}", i),
+            Number::Float(n) => write!(f, "{}", n),
+        }
+    }
+}
+
+impl Debug for Number {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Number::Int(i) => write!(f, "{}", i),
+            Number::Float(n) => write!(f, "{}", n),
+        }
+    }
+}
+
+impl PartialOrd for Number {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Number {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Number::Int(i), Number::Float(r)) => {
+                let l = *i as f64;
+                match l.total_cmp(&r) {
+                    Ordering::Less => Ordering::Less,
+                    Ordering::Equal => Ordering::Less,
+                    Ordering::Greater => Ordering::Greater,
+                }
+            }
+            (Number::Float(l), Number::Int(i)) => {
+                let r = *i as f64;
+                match l.total_cmp(&r) {
+                    Ordering::Less => Ordering::Less,
+                    Ordering::Equal => Ordering::Greater,
+                    Ordering::Greater => Ordering::Greater,
+                }
+            }
+            (Number::Int(l), Number::Int(r)) => l.cmp(r),
+            (Number::Float(l), Number::Float(r)) => l.total_cmp(r),
+        }
+    }
+}
+
 impl Debug for DataValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -52,11 +126,8 @@ impl Debug for DataValue {
             DataValue::Bool(b) => {
                 write!(f, "{}", b)
             }
-            DataValue::Int(i) => {
+            DataValue::Number(i) => {
                 write!(f, "{}", i)
-            }
-            DataValue::Float(n) => {
-                write!(f, "{}", n.0)
             }
             DataValue::String(s) => {
                 write!(f, "{:?}", s)
@@ -101,7 +172,7 @@ impl DataValue {
 
     pub(crate) fn get_entity_id(&self) -> Result<EntityId> {
         match self {
-            DataValue::Int(id) => Ok(EntityId(*id as u64)),
+            DataValue::Number(Number::Int(id)) => Ok(EntityId(*id as u64)),
             _ => bail!("type mismatch: expect type EntId, got value {:?}", self),
         }
     }

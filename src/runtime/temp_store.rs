@@ -136,7 +136,7 @@ impl TempStore {
                 vals.push(tuple.0[idx].clone());
             }
         }
-        vals.push(DataValue::Int(serial as i64));
+        vals.push(DataValue::from(serial as i64));
         self.db
             .put(&Tuple(vals).encode_as_key_for_epoch(self.id, 0), &[])
     }
