@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter};
 use std::mem;
 use std::ops::Rem;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
 
 use crate::data::symb::Symbol;
@@ -13,6 +13,7 @@ use crate::data::value::{DataValue, Number};
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
     Binding(Symbol, Option<usize>),
+    Param(Symbol),
     Const(DataValue),
     Apply(&'static Op, Box<[Expr]>),
 }
@@ -30,7 +31,7 @@ impl Expr {
                 let found_idx = *binding_map.get(k).unwrap();
                 *idx = Some(found_idx)
             }
-            Expr::Const(_) => {}
+            Expr::Const(_) | Expr::Param(_) => {}
             Expr::Apply(_, args) => {
                 for arg in args.iter_mut() {
                     arg.fill_binding_indices(binding_map);
@@ -38,11 +39,24 @@ impl Expr {
             }
         }
     }
-    pub(crate) fn partial_eval(&mut self) -> Result<()> {
+    pub(crate) fn partial_eval(&mut self, param_pool: &BTreeMap<Symbol, DataValue>) -> Result<()> {
+        let found_val = if let Expr::Param(s) = self {
+            Some(
+                param_pool
+                    .get(s)
+                    .ok_or_else(|| anyhow!("input parameter {} not found", s))?,
+            )
+        } else {
+            None
+        };
+        if let Some(found_val) = found_val {
+            *self = Expr::Const(found_val.clone());
+            return Ok(());
+        }
         if let Expr::Apply(_, args) = self {
             let mut all_evaluated = true;
             for arg in args.iter_mut() {
-                arg.partial_eval()?;
+                arg.partial_eval(param_pool)?;
                 all_evaluated = all_evaluated && matches!(arg, Expr::Const(_));
             }
             if all_evaluated {
@@ -73,7 +87,7 @@ impl Expr {
             Expr::Binding(b, _) => {
                 coll.insert(b.clone());
             }
-            Expr::Const(_) => {}
+            Expr::Const(_) | Expr::Param(_) => {}
             Expr::Apply(_, args) => {
                 for arg in args.iter() {
                     arg.collect_bindings(coll)
@@ -89,6 +103,7 @@ impl Expr {
                 let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings)).try_collect()?;
                 (op.inner)(&args)
             }
+            Expr::Param(s) => bail!("input var {} not bound", s),
         }
     }
     pub(crate) fn eval_pred(&self, bindings: &Tuple) -> Result<bool> {

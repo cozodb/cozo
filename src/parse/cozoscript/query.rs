@@ -367,6 +367,7 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
             Ok(match op {
                 Rule::term => build_unary(p)?,
                 Rule::var => json!(s),
+                Rule::param => json!({"param": s}),
                 Rule::minus => {
                     let inner = build_unary(inner.next().unwrap())?;
                     json!({"op": "Minus", "args": [inner]})

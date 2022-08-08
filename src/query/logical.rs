@@ -107,7 +107,7 @@ impl InputAtom {
             InputAtom::AttrTriple(a) => a.normalize(false, gen),
             InputAtom::Rule(r) => r.normalize(false, gen),
             InputAtom::Predicate(mut p) => {
-                p.partial_eval()?;
+                p.partial_eval(&Default::default())?;
                 Disjunction::singlet(NormalFormAtom::Predicate(p))
             }
             InputAtom::Negation(n) => match *n {

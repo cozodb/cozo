@@ -302,7 +302,8 @@ impl Db {
     }
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let (input_program, out_opts, const_rules) = tx.parse_query(payload)?;
+        let (input_program, out_opts, const_rules) =
+            tx.parse_query(payload, &Default::default())?;
         let entry_head = &input_program.prog.get(&PROG_ENTRY).unwrap()[0].head.clone();
         let program = input_program
             .to_normalized_program()?
@@ -344,7 +345,8 @@ impl Db {
     }
     pub fn explain_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let (input_program, _out_opts, const_rules) = tx.parse_query(payload)?;
+        let (input_program, _out_opts, const_rules) =
+            tx.parse_query(payload, &Default::default())?;
         let normalized_program = input_program.to_normalized_program()?;
         let stratified_program = normalized_program.stratify()?;
         let magic_program = stratified_program.magic_sets_rewrite();

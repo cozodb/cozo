@@ -75,6 +75,7 @@ impl SessionTx {
     pub(crate) fn parse_query(
         &mut self,
         payload: &JsonValue,
+        params_pool: &BTreeMap<Symbol, DataValue>,
     ) -> Result<(InputProgram, QueryOutOptions, ConstRules)> {
         let vld = match payload.get("since") {
             None => Validity::current(),
@@ -89,9 +90,9 @@ impl SessionTx {
         ensure!(!rules_payload.is_empty(), "no rules in {}", payload);
         let input_prog = if rules_payload.first().unwrap().is_array() {
             let q = json!([{"rule": "?", "args": rules_payload}]);
-            self.parse_input_rule_sets(&q, vld)?
+            self.parse_input_rule_sets(&q, vld, &params_pool)?
         } else {
-            self.parse_input_rule_sets(q, vld)?
+            self.parse_input_rule_sets(q, vld, &params_pool)?
         };
         let entry_bindings = &input_prog
             .prog
@@ -131,7 +132,7 @@ impl SessionTx {
                                     anyhow!("data in rule is expected to be an array, got {}", v)
                                 })?
                                 .iter()
-                                .map(|v| Self::parse_const_expr(v))
+                                .map(|v| Self::parse_const_expr(v, &params_pool))
                                 .try_collect()?;
                             Ok(Tuple(tuple))
                         })
@@ -282,12 +283,13 @@ impl SessionTx {
         &mut self,
         payload: &JsonValue,
         default_vld: Validity,
+        params_pool: &BTreeMap<Symbol, DataValue>,
     ) -> Result<InputProgram> {
         let rules = payload
             .as_array()
             .ok_or_else(|| anyhow!("expect array for rules, got {}", payload))?
             .iter()
-            .map(|o| self.parse_input_rule_definition(o, default_vld));
+            .map(|o| self.parse_input_rule_definition(o, default_vld, params_pool));
         let mut collected: BTreeMap<Symbol, Vec<InputRule>> = BTreeMap::new();
         for res in rules {
             let (name, rule) = res?;
@@ -325,7 +327,10 @@ impl SessionTx {
             }
         }
     }
-    fn parse_input_predicate_atom(payload: &Map<String, JsonValue>) -> Result<InputAtom> {
+    fn parse_input_predicate_atom(
+        payload: &Map<String, JsonValue>,
+        param_pool: &BTreeMap<Symbol, DataValue>,
+    ) -> Result<InputAtom> {
         let mut pred = Self::parse_apply_expr(payload)?;
         if let Expr::Apply(op, _) = &pred {
             ensure!(
@@ -334,7 +339,7 @@ impl SessionTx {
                 op.name
             );
         }
-        pred.partial_eval()?;
+        pred.partial_eval(param_pool)?;
         Ok(InputAtom::Predicate(pred))
     }
     fn parse_unification(payload: &Map<String, JsonValue>) -> Result<InputAtom> {
@@ -356,6 +361,18 @@ impl SessionTx {
         Ok(InputAtom::Unification(Unification { binding, expr }))
     }
     fn parse_apply_expr(payload: &Map<String, JsonValue>) -> Result<Expr> {
+        if let Some(name) = payload.get("param") {
+            let name = name
+                .as_str()
+                .ok_or_else(|| anyhow!("input var cannot be specified as {}", name))?;
+            ensure!(
+                name.starts_with("$") && name.len() > 1,
+                "wrong input var format: {}",
+                name
+            );
+            return Ok(Expr::Param(Symbol::from(name)));
+        }
+
         let name = payload
             .get("op")
             .ok_or_else(|| anyhow!("expect expression to have key 'pred'"))?
@@ -393,15 +410,21 @@ impl SessionTx {
 
         Ok(Expr::Apply(op, args))
     }
-    fn parse_const_expr(payload: &JsonValue) -> Result<DataValue> {
+    fn parse_const_expr(
+        payload: &JsonValue,
+        params_pool: &BTreeMap<Symbol, DataValue>,
+    ) -> Result<DataValue> {
         Ok(match payload {
             Value::Array(arr) => {
-                let exprs: Vec<_> = arr.iter().map(Self::parse_const_expr).try_collect()?;
+                let exprs: Vec<_> = arr
+                    .iter()
+                    .map(|v| Self::parse_const_expr(v, params_pool))
+                    .try_collect()?;
                 DataValue::List(exprs.into())
             }
             Value::Object(m) => {
                 let mut ex = Self::parse_apply_expr(m)?;
-                ex.partial_eval()?;
+                ex.partial_eval(params_pool)?;
                 match ex {
                     Expr::Const(c) => c,
                     v => bail!("failed to convert {:?} to constant", v),
@@ -482,6 +505,7 @@ impl SessionTx {
         &mut self,
         payload: &JsonValue,
         default_vld: Validity,
+        params_pool: &BTreeMap<Symbol, DataValue>,
     ) -> Result<(Symbol, InputRule)> {
         let rule_name = payload
             .get("rule")
@@ -542,7 +566,7 @@ impl SessionTx {
             }
         }
         let rule_body: Vec<InputAtom> = args
-            .map(|el| self.parse_input_atom(el, default_vld))
+            .map(|el| self.parse_input_atom(el, default_vld, params_pool))
             .try_collect()?;
 
         ensure!(
@@ -561,7 +585,12 @@ impl SessionTx {
             },
         ))
     }
-    fn parse_input_atom(&mut self, payload: &JsonValue, vld: Validity) -> Result<InputAtom> {
+    fn parse_input_atom(
+        &mut self,
+        payload: &JsonValue,
+        vld: Validity,
+        params_pool: &BTreeMap<Symbol, DataValue>,
+    ) -> Result<InputAtom> {
         match payload {
             JsonValue::Array(arr) => match arr as &[JsonValue] {
                 [entity_rep, attr_rep, value_rep] => {
@@ -573,7 +602,7 @@ impl SessionTx {
                 if map.contains_key("rule") {
                     self.parse_input_rule_atom(map, vld)
                 } else if map.contains_key("op") {
-                    Self::parse_input_predicate_atom(map)
+                    Self::parse_input_predicate_atom(map, params_pool)
                 } else if map.contains_key("unify") {
                     Self::parse_unification(map)
                 } else if map.contains_key("conj")
@@ -585,7 +614,7 @@ impl SessionTx {
                         "arity mismatch for atom definition {:?}: expect only one key",
                         map
                     );
-                    self.parse_input_logical_atom(map, vld)
+                    self.parse_input_logical_atom(map, vld, params_pool)
                 } else {
                     bail!("unexpected atom definition {:?}", map);
                 }
@@ -597,11 +626,12 @@ impl SessionTx {
         &mut self,
         map: &Map<String, JsonValue>,
         vld: Validity,
+        params_pool: &BTreeMap<Symbol, DataValue>,
     ) -> Result<InputAtom> {
         let (k, v) = map.iter().next().unwrap();
         Ok(match k as &str {
             "not_exists" => {
-                let arg = self.parse_input_atom(v, vld)?;
+                let arg = self.parse_input_atom(v, vld, params_pool)?;
                 InputAtom::Negation(Box::new(arg))
             }
             n @ ("conj" | "disj") => {
@@ -609,7 +639,7 @@ impl SessionTx {
                     .as_array()
                     .ok_or_else(|| anyhow!("expect array argument for atom {}", n))?
                     .iter()
-                    .map(|a| self.parse_input_atom(a, vld))
+                    .map(|a| self.parse_input_atom(a, vld, params_pool))
                     .try_collect()?;
                 if k == "conj" {
                     InputAtom::Conjunction(args)

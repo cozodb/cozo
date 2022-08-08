@@ -9,6 +9,7 @@ COMMENT = _{(BLOCK_COMMENT | LINE_COMMENT)}
 
 prog_entry = {"?"}
 var = @{"?" ~ (XID_CONTINUE | "_")*}
+param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 compound_ident = {ident ~ ("." ~ ident)?}
 
@@ -56,7 +57,7 @@ unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }
 
-term = _{ var | grouping | apply | list | literal }
+term = _{ var | param | grouping | apply | list | literal }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
