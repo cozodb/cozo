@@ -45,7 +45,7 @@ op_sub = { "-" }
 op_mul = { "*" }
 op_div = { "/" }
 op_mod = { "%" }
-op_eq = { "=" }
+op_eq = { "=="| "=" }
 op_ne = { "!=" }
 op_gt = { ">" }
 op_lt = { "<" }

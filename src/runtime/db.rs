@@ -294,7 +294,6 @@ impl Db {
     }
     pub fn run_script(&self, payload: &str) -> Result<JsonValue> {
         let payload = parse_query_to_json(payload)?;
-        println!("{}", payload);
         self.run_query(&payload)
     }
     pub fn explain_script(&self, payload: &str) -> Result<JsonValue> {
