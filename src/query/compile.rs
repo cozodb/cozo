@@ -7,6 +7,7 @@ use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAtom, MagicRule, MagicSymbol, StratifiedMagicProgram};
 use crate::data::symb::Symbol;
+use crate::parse::query::ConstRules;
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
 use crate::runtime::transact::SessionTx;
@@ -61,10 +62,25 @@ impl SessionTx {
     pub(crate) fn stratified_magic_compile(
         &mut self,
         prog: &StratifiedMagicProgram,
+        const_rules: &ConstRules,
     ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, TempStore>)> {
         let mut stores: BTreeMap<MagicSymbol, TempStore> = Default::default();
+
+        for (name, data) in const_rules {
+            let store = self.new_rule_store(name.clone(), data[0].0.len());
+            for tuple in data {
+                store.put(tuple, 0)?;
+            }
+            stores.insert(name.clone(), store);
+        }
+
         for stratum in prog.0.iter() {
             for (name, ruleset) in &stratum.prog {
+                ensure!(
+                    !const_rules.contains_key(name),
+                    "name clash between rule and const rule: {:?}",
+                    name
+                );
                 stores.insert(
                     name.clone(),
                     self.new_rule_store(name.clone(), ruleset.rules[0].head.len()),
@@ -155,7 +171,7 @@ impl SessionTx {
                 MagicAtom::Rule(rule_app) => {
                     let store = stores
                         .get(&rule_app.name)
-                        .ok_or_else(|| anyhow!("undefined rule {:?} encountered", rule_app.name))?
+                        .ok_or_else(|| anyhow!("undefined rule '{:?}' encountered", rule_app.name))?
                         .clone();
                     ensure!(
                         store.arity == rule_app.args.len(),
@@ -224,7 +240,9 @@ impl SessionTx {
                 MagicAtom::NegatedRule(rule_app) => {
                     let store = stores
                         .get(&rule_app.name)
-                        .ok_or_else(|| anyhow!("undefined rule encountered: {:?}", rule_app.name))?
+                        .ok_or_else(|| {
+                            anyhow!("undefined rule encountered: '{:?}'", rule_app.name)
+                        })?
                         .clone();
                     ensure!(
                         store.arity == rule_app.args.len(),

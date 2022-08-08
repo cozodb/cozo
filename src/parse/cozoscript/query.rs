@@ -1,6 +1,7 @@
+use std::borrow::BorrowMut;
 use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
@@ -20,11 +21,23 @@ pub(crate) fn parse_query_to_json(src: &str) -> Result<JsonValue> {
 fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
     let mut ret_map = Map::default();
     let mut rules = vec![];
+    let mut const_rules = Map::default();
     for pair in src {
         match pair.as_rule() {
             Rule::rule => rules.push(parse_rule(pair)?),
-            Rule::adhoc_rule => {
-                println!("adhoc")
+            Rule::const_rule => {
+                let mut src = pair.into_inner();
+                let name = src.next().unwrap().as_str();
+                let data = build_expr(src.next().unwrap())?;
+                let data = data
+                    .as_array()
+                    .ok_or_else(|| anyhow!("expect const rules to be specified as an array"))?;
+                let entries = const_rules
+                    .entry(name.to_string())
+                    .or_insert_with(|| json!([]))
+                    .borrow_mut();
+                let entries = entries.as_array_mut().unwrap();
+                entries.extend_from_slice(data);
             }
             Rule::limit_option => {
                 let limit = parse_limit_or_offset(pair)?;
@@ -61,6 +74,7 @@ fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
             r => unreachable!("{:?}", r),
         }
     }
+    ret_map.insert("const_rules".to_string(), json!(const_rules));
     ret_map.insert("q".to_string(), json!(rules));
     Ok(json!(ret_map))
 }

@@ -304,5 +304,23 @@ fn air_routes() -> Result<()> {
         .unwrap()
     );
 
+    let routes_per_airport_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        routes_count[?a, count(?r)] := given[?code], [?a airport.iata ?code], [?r route.src ?a];
+        ?[?code, ?n] := routes_count[?a, ?n], [?a airport.iata ?code];
+
+        given <- [['AUS'],['AMS'],['JFK'],['DUB'],['MEX']];
+        "#,
+    )?;
+    dbg!(routes_per_airport_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[["AMS",282],["AUS",95],["DUB",185],["JFK",201],["MEX",116]]"#
+        )
+        .unwrap()
+    );
+
     Ok(())
 }

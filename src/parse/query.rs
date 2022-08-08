@@ -12,9 +12,10 @@ use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{
     InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm,
-    Unification,
+    MagicSymbol, Unification,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::query::pull::PullSpecs;
 use crate::runtime::transact::SessionTx;
@@ -68,11 +69,13 @@ impl QueryOutOptions {
     }
 }
 
+pub(crate) type ConstRules = BTreeMap<MagicSymbol, Vec<Tuple>>;
+
 impl SessionTx {
     pub(crate) fn parse_query(
         &mut self,
         payload: &JsonValue,
-    ) -> Result<(InputProgram, QueryOutOptions)> {
+    ) -> Result<(InputProgram, QueryOutOptions, ConstRules)> {
         let vld = match payload.get("since") {
             None => Validity::current(),
             Some(v) => Validity::try_from(v)?,
@@ -111,6 +114,46 @@ impl SessionTx {
                 .map(|v| v as usize)
                 .ok_or_else(|| anyhow!("'offset' must be a positive number"))
         }))?;
+        let const_rules = if let Some(rules) = payload.get("const_rules") {
+            rules
+                .as_object()
+                .ok_or_else(|| anyhow!("const rules is expected to be an object"))?
+                .iter()
+                .map(|(k, v)| -> Result<(MagicSymbol, Vec<Tuple>)> {
+                    let data: Vec<Tuple> = v
+                        .as_array()
+                        .ok_or_else(|| anyhow!("rules spec is expected to be an array"))?
+                        .iter()
+                        .map(|v| -> Result<Tuple> {
+                            let tuple = v
+                                .as_array()
+                                .ok_or_else(|| {
+                                    anyhow!("data in rule is expected to be an array, got {}", v)
+                                })?
+                                .iter()
+                                .map(|v| DataValue::from(v))
+                                .collect();
+                            Ok(Tuple(tuple))
+                        })
+                        .try_collect()?;
+                    let name = Symbol::from(k as &str);
+                    ensure!(
+                        !name.is_reserved(),
+                        "reserved name for const rule: {}",
+                        name
+                    );
+                    ensure!(!data.is_empty(), "const rule is empty: {}", name);
+                    ensure!(
+                        data.iter().map(|t| t.0.len()).all_equal(),
+                        "const rule have varying length data: {}",
+                        name
+                    );
+                    Ok((MagicSymbol::Muggle { inner: name }, data))
+                })
+                .try_collect()?
+        } else {
+            BTreeMap::default()
+        };
         let mut sorters: Vec<_> = payload
             .get("sort")
             .unwrap_or(&json!([]))
@@ -169,6 +212,7 @@ impl SessionTx {
                 offset,
                 sorters,
             },
+            const_rules,
         ))
     }
     fn parse_query_out_spec(

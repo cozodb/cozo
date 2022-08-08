@@ -79,9 +79,9 @@ where
         .collect();
     let idx_graph = graph
         .values()
-        .map(|vs| {
+        .map(|vs| -> Vec<usize> {
             vs.iter()
-                .map(|v| invert_indices.get(v).ok_or(v).unwrap().clone())
+                .filter_map(|v| invert_indices.get(v).cloned())
                 .collect_vec()
         })
         .collect_vec();

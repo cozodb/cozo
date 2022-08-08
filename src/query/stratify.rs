@@ -116,7 +116,10 @@ fn make_scc_reduced_graph<'a>(
         let from_idx = *indices.get(from).unwrap();
         let cur_entry = ret.entry(from_idx).or_default();
         for (to, poisoned) in tos {
-            let to_idx = *indices.get(to).unwrap();
+            let to_idx = match indices.get(to) {
+                Some(i) => *i,
+                None => continue,
+            };
             if from_idx == to_idx {
                 continue;
             }

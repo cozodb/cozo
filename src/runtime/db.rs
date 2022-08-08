@@ -302,14 +302,14 @@ impl Db {
     }
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let (input_program, out_opts) = tx.parse_query(payload)?;
+        let (input_program, out_opts, const_rules) = tx.parse_query(payload)?;
         let entry_head = &input_program.prog.get(&PROG_ENTRY).unwrap()[0].head.clone();
         let program = input_program
             .to_normalized_program()?
             .stratify()?
             .magic_sets_rewrite();
         debug!("{:#?}", program);
-        let (compiled, stores) = tx.stratified_magic_compile(&program)?;
+        let (compiled, stores) = tx.stratified_magic_compile(&program, &const_rules)?;
         let result = tx.stratified_magic_evaluate(
             &compiled,
             &stores,
@@ -344,11 +344,11 @@ impl Db {
     }
     pub fn explain_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let (input_program, _out_opts) = tx.parse_query(payload)?;
+        let (input_program, _out_opts, const_rules) = tx.parse_query(payload)?;
         let normalized_program = input_program.to_normalized_program()?;
         let stratified_program = normalized_program.stratify()?;
         let magic_program = stratified_program.magic_sets_rewrite();
-        let (_compiled_strata, _) = tx.stratified_magic_compile(&magic_program)?;
+        let (_compiled_strata, _) = tx.stratified_magic_compile(&magic_program, &const_rules)?;
 
         todo!()
     }
