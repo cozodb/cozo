@@ -361,7 +361,8 @@ fn air_routes() -> Result<()> {
     assert_eq!(res, json!([["OK", 4]]));
 
     let multi_res_time = Instant::now();
-    let res = db.run_script(r#"
+    let res = db.run_script(
+        r#"
         total[count(?a)] := [?a airport.iata ?_];
         high[count(?a)] := [?a airport.runways ?n], ?n >= 6;
         low[count(?a)] := [?a airport.runways ?n], ?n <= 2;
@@ -370,11 +371,26 @@ fn air_routes() -> Result<()> {
 
         ?[?total, ?high, ?low, ?four, ?france] := total[?total], high[?high], low[?low],
                                                   four[?four], france[?france];
-    "#)?;
+    "#,
+    )?;
     dbg!(multi_res_time.elapsed());
     assert_eq!(
         res,
         serde_json::Value::from_str(r#"[[3504,6,3204,53,59]]"#).unwrap()
+    );
+
+    let multi_unification_time = Instant::now();
+    let res = db.run_script(r#"
+        target_airports[collect(?a, 5)] := [?a airport.iata ?_];
+        ?[?code, count(?r)] := target_airports[?targets], ?a is_in ?targets, [?a airport.iata ?code], [?r route.src ?a];
+    "#)?;
+    dbg!(multi_unification_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[["ANC",41],["ATL",242],["AUS",95],["BNA",74],["BOS",141]]"#
+        )
+        .unwrap()
     );
 
     Ok(())
