@@ -155,6 +155,29 @@ fn air_routes() -> Result<()> {
         .unwrap()
     );
 
+    let most_out_routes_time_inv = Instant::now();
+    let res = db.run_script(
+        r#"
+        route_count[count(?r), ?a, ?x] := [?r route.src ?a], ?x is 1;
+        ?[?code, ?n] := route_count[?n, ?a, ?_], ?n > 180, [?a airport.iata ?code];
+        :sort -?n;
+    "#,
+    )?;
+    dbg!(most_out_routes_time_inv.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+        ["FRA",307],["IST",307],["CDG",293],["AMS",282],["MUC",270],["ORD",264],["DFW",251],
+        ["PEK",248],["DXB",247],["ATL",242],["DME",232],["LGW",232],["LHR",221],["DEN",216],
+        ["MAN",216],["LAX",213],["PVG",212],["STN",211],["MAD",206],["VIE",206],["BCN",203],
+        ["BER",202],["FCO",201],["JFK",201],["DUS",199],["IAH",199],["EWR",197],["MIA",195],
+        ["YYZ",195],["BRU",194],["CPH",194],["DOH",186],["DUB",185],["CLT",184],["SVO",181]
+        ]"#
+        )
+        .unwrap()
+    );
+
     let most_routes_time = Instant::now();
     let res = db.run_script(
         r#"
@@ -478,6 +501,37 @@ fn air_routes() -> Result<()> {
     ["LHR","PHX"],["LHR","PIT"],["LHR","RDU"],["LHR","SAN"],["LHR","SEA"],["LHR","SFO"],
     ["LHR","SJC"],["LHR","SLC"],["LIS","ATL"],["LIS","BOS"],["LIS","EWR"],["LIS","IAD"],
     ["LIS","JFK"],["LIS","MIA"],["LIS","ORD"],["LIS","PHL"],["LIS","SFO"]]"#
+        )
+        .unwrap()
+    );
+
+    let len_of_names_count_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[sum(?n)] := [?a airport.iata 'AUS'],
+                      [?r route.src ?a],
+                      [?r route.dst ?a2],
+                      [?a2 airport.city ?city_name],
+                      ?n is length(?city_name);
+    "#,
+    )?;
+    dbg!(len_of_names_count_time.elapsed());
+    assert_eq!(res, json!([[866]]));
+
+    let group_count_by_out_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        route_count[count(?r), ?a] := [?r route.src ?a];
+        ?[?n, count(?a)] := route_count[?n, ?a];
+        :order -?a;
+        :limit 10;
+    "#,
+    )?;
+    dbg!(group_count_by_out_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[[1,777],[2,649],[3,359],[4,232],[5,150],[6,139],[7,100],[8,74],[9,63],[10,59]]"#
         )
         .unwrap()
     );

@@ -153,35 +153,23 @@ impl TempStore {
         it.seek(&lower);
         let it = TempStoreIter { it, started: false };
         let aggrs = aggrs.to_vec();
-        let key_indices = aggrs
-            .iter()
-            .enumerate()
-            .filter_map(|(i, aggr)| if aggr.is_none() { Some(i) } else { None })
-            .collect_vec();
+        let n_keys = aggrs.iter().filter(|aggr| aggr.is_none()).count();
         let grouped = it.group_by(move |t_res| {
             if let Ok(tuple) = t_res {
-                Some(
-                    key_indices
-                        .iter()
-                        .map(|i| tuple.0[*i].clone())
-                        .collect_vec(),
-                )
+                Some(tuple.0[..n_keys].to_vec())
             } else {
                 None
             }
         });
         let mut invert_indices = vec![];
-        let mut idx = 0;
-        for aggr in aggrs.iter() {
+        for (idx, aggr) in aggrs.iter().enumerate() {
             if aggr.is_none() {
                 invert_indices.push(idx);
-                idx += 1;
             }
         }
-        for aggr in aggrs.iter() {
+        for (idx, aggr) in aggrs.iter().enumerate() {
             if aggr.is_some() {
                 invert_indices.push(idx);
-                idx += 1;
             }
         }
         let invert_indices = invert_indices
@@ -200,7 +188,7 @@ impl TempStore {
                     if let Some((aggr_op, aggr_args)) = aggr {
                         (aggr_op.combine)(&mut aggr_res[idx], val, aggr_args)?;
                     } else {
-                        aggr_res[idx] = first_tuple.0[idx].clone();
+                        aggr_res[idx] = first_tuple.0[invert_indices[idx]].clone();
                     }
                 }
                 for tuple in it {

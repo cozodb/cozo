@@ -1,5 +1,5 @@
 use std::cmp::{Ordering, Reverse};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
 
 use anyhow::{bail, Result};
@@ -19,13 +19,19 @@ use crate::data::triple::StoreOp;
 pub(crate) struct RegexWrapper(pub(crate) Regex);
 
 impl Serialize for RegexWrapper {
-    fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error> where S: serde::Serializer {
+    fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
         panic!("serializing regex");
     }
 }
 
 impl<'de> Deserialize<'de> for RegexWrapper {
-    fn deserialize<D>(_deserializer: D) -> std::result::Result<Self, D::Error> where D: Deserializer<'de> {
+    fn deserialize<D>(_deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
         panic!("deserializing regex");
     }
 }
@@ -72,6 +78,8 @@ pub(crate) enum DataValue {
     List(Vec<DataValue>),
     #[serde(rename = "y")]
     Set(BTreeSet<DataValue>),
+    #[serde(rename = "w")]
+    Map(BTreeMap<DataValue, DataValue>),
     #[serde(rename = "g")]
     Guard,
     #[serde(rename = "o")]
@@ -201,6 +209,7 @@ impl Debug for DataValue {
             }
             DataValue::List(t) => f.debug_list().entries(t.iter()).finish(),
             DataValue::Set(t) => f.debug_list().entries(t.iter()).finish(),
+            DataValue::Map(m) => f.debug_map().entries(m.iter()).finish(),
             DataValue::DescVal(v) => {
                 write!(f, "desc<{:?}>", v)
             }
@@ -245,6 +254,12 @@ impl DataValue {
         match self {
             DataValue::Set(s) => Some(s),
             _ => None,
+        }
+    }
+    pub(crate) fn get_map(&self) -> Option<&BTreeMap<DataValue, DataValue>> {
+        match self {
+            DataValue::Map(m) => Some(m),
+            _ => None
         }
     }
     pub(crate) fn get_int(&self) -> Option<i64> {

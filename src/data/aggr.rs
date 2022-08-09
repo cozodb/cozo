@@ -1,8 +1,9 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::ops::Sub;
 
 use anyhow::{anyhow, bail, ensure, Result};
+use itertools::Itertools;
 
 use crate::data::value::{DataValue, Number};
 
@@ -48,6 +49,42 @@ fn aggr_unique(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) 
         }
         (_, DataValue::Guard) => false,
         (DataValue::Set(l), val) => l.insert(val.clone()),
+        _ => unreachable!(),
+    })
+}
+
+define_aggr!(AGGR_GROUP_COUNT, false);
+fn aggr_group_count(
+    accum: &mut DataValue,
+    current: &DataValue,
+    _args: &[DataValue],
+) -> Result<bool> {
+    dbg!(&current);
+    Ok(match (accum, current) {
+        (accum @ DataValue::Guard, DataValue::Guard) => {
+            *accum = DataValue::List(vec![]);
+            true
+        }
+        (accum @ DataValue::Guard, val) => {
+            *accum = DataValue::Map(BTreeMap::from([(val.clone(), DataValue::from(1))]));
+            true
+        }
+        (accum, DataValue::Guard) => {
+            *accum = DataValue::List(
+                accum
+                    .get_map()
+                    .unwrap()
+                    .iter()
+                    .map(|(k, v)| DataValue::List(vec![k.clone(), v.clone()]))
+                    .collect_vec(),
+            );
+            true
+        }
+        (DataValue::Map(l), val) => {
+            let entry = l.entry(val.clone()).or_insert_with(|| DataValue::from(0));
+            *entry = DataValue::from(entry.get_int().unwrap() + 1);
+            true
+        }
         _ => unreachable!(),
     })
 }
@@ -348,6 +385,7 @@ fn aggr_choice(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) 
 pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
     Some(match name {
         "count" => &AGGR_COUNT,
+        "group_count" => &AGGR_GROUP_COUNT,
         "count_unique" => &AGGR_COUNT_UNIQUE,
         "sum" => &AGGR_SUM,
         "min" => &AGGR_MIN,
