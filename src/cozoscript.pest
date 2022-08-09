@@ -18,7 +18,7 @@ const_rule = {ident ~ "<-" ~ expr ~ ";" }
 
 rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
 head_arg = {aggr_arg | var}
-aggr_arg = {ident ~ "(" ~ var ~ ")"}
+aggr_arg = {ident ~ "(" ~ var ~ ("," ~ expr)* ~ ")"}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
 rule_apply = {ident ~ "[" ~ apply_args ~ "]"}

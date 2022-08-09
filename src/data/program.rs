@@ -202,7 +202,7 @@ impl MagicSymbol {
 #[derive(Debug, Clone)]
 pub(crate) struct InputRule {
     pub(crate) head: Vec<Symbol>,
-    pub(crate) aggr: Vec<Option<Aggregation>>,
+    pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<InputAtom>,
     pub(crate) vld: Validity,
 }
@@ -210,7 +210,7 @@ pub(crate) struct InputRule {
 #[derive(Debug, Clone)]
 pub(crate) struct NormalFormRule {
     pub(crate) head: Vec<Symbol>,
-    pub(crate) aggr: Vec<Option<Aggregation>>,
+    pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<NormalFormAtom>,
     pub(crate) vld: Validity,
 }
@@ -218,7 +218,7 @@ pub(crate) struct NormalFormRule {
 #[derive(Debug, Clone)]
 pub(crate) struct MagicRule {
     pub(crate) head: Vec<Symbol>,
-    pub(crate) aggr: Vec<Option<Aggregation>>,
+    pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<MagicAtom>,
     pub(crate) vld: Validity,
 }

@@ -41,7 +41,7 @@ impl TempStore {
     pub(crate) fn aggr_meet_put(
         &self,
         tuple: &Tuple,
-        aggrs: &[Option<Aggregation>],
+        aggrs: &[Option<(Aggregation, Vec<DataValue>)>],
         epoch: u32,
     ) -> Result<bool> {
         let key = Tuple(
@@ -67,9 +67,9 @@ impl TempStore {
         if let Some(mut prev_aggr) = prev_aggr {
             let mut changed = false;
             for (i, aggr) in aggrs.iter().enumerate() {
-                if let Some(aggr_op) = aggr {
+                if let Some((aggr_op, aggr_args)) = aggr {
                     let op = aggr_op.combine;
-                    changed |= op(&mut prev_aggr.0[i], &tuple.0[i])?;
+                    changed |= op(&mut prev_aggr.0[i], &tuple.0[i], aggr_args)?;
                 }
             }
             if changed {
@@ -87,10 +87,10 @@ impl TempStore {
                     .iter()
                     .enumerate()
                     .map(|(i, aggr)| -> Result<DataValue> {
-                        if let Some(aggr_op) = aggr {
+                        if let Some((aggr_op, aggr_args)) = aggr {
                             let op = aggr_op.combine;
                             let mut init = DataValue::Guard;
-                            op(&mut init, &tuple.0[i])?;
+                            op(&mut init, &tuple.0[i], aggr_args)?;
                             Ok(init)
                         } else {
                             Ok(DataValue::Guard)
@@ -114,7 +114,7 @@ impl TempStore {
     pub(crate) fn normal_aggr_put(
         &self,
         tuple: &Tuple,
-        aggrs: &[Option<Aggregation>],
+        aggrs: &[Option<(Aggregation, Vec<DataValue>)>],
         serial: usize,
     ) -> Result<(), RocksDbStatus> {
         let mut vals = vec![];
@@ -139,7 +139,7 @@ impl TempStore {
 
     pub(crate) fn normal_aggr_scan_and_put(
         &self,
-        aggrs: &[Option<Aggregation>],
+        aggrs: &[Option<(Aggregation, Vec<DataValue>)>],
         store: &TempStore,
         mut limiter: Option<&mut QueryLimiter>,
     ) -> Result<bool> {
@@ -197,8 +197,8 @@ impl TempStore {
                 let first_tuple = it.next().unwrap()?;
                 for (idx, aggr) in aggrs.iter().enumerate() {
                     let val = &first_tuple.0[invert_indices[idx]];
-                    if let Some(aggr_op) = aggr {
-                        (aggr_op.combine)(&mut aggr_res[idx], val)?;
+                    if let Some((aggr_op, aggr_args)) = aggr {
+                        (aggr_op.combine)(&mut aggr_res[idx], val, aggr_args)?;
                     } else {
                         aggr_res[idx] = first_tuple.0[idx].clone();
                     }
@@ -207,14 +207,14 @@ impl TempStore {
                     let tuple = tuple?;
                     for (idx, aggr) in aggrs.iter().enumerate() {
                         let val = &tuple.0[invert_indices[idx]];
-                        if let Some(aggr_op) = aggr {
-                            (aggr_op.combine)(&mut aggr_res[idx], val)?;
+                        if let Some((aggr_op, aggr_args)) = aggr {
+                            (aggr_op.combine)(&mut aggr_res[idx], val, aggr_args)?;
                         }
                     }
                 }
                 for (i, aggr) in aggrs.iter().enumerate() {
-                    if let Some(aggr_op) = aggr {
-                        (aggr_op.combine)(&mut aggr_res[i], &DataValue::Guard)?;
+                    if let Some((aggr_op, aggr_args)) = aggr {
+                        (aggr_op.combine)(&mut aggr_res[i], &DataValue::Guard, aggr_args)?;
                     }
                 }
                 let res_tpl = Tuple(aggr_res);

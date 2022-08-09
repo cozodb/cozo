@@ -565,8 +565,18 @@ impl SessionTx {
                 let aggr = get_aggr(aggr)
                     .ok_or_else(|| anyhow!("aggregation '{}' not found", aggr))?
                     .clone();
+                let aggr_args: Vec<DataValue> = match m.get("args") {
+                    None => vec![],
+                    Some(aggr_args) => aggr_args
+                        .as_array()
+                        .ok_or_else(|| anyhow!("aggregation args must be an array"))?
+                        .iter()
+                        .map(|v| Self::parse_const_expr(v, params_pool))
+                        .try_collect()?,
+                };
+
                 rule_head.push(symbol);
-                rule_aggr.push(Some(aggr));
+                rule_aggr.push(Some((aggr, aggr_args)));
             } else {
                 bail!("cannot parse {} as rule head", head_item);
             }

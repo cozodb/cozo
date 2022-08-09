@@ -199,14 +199,13 @@ impl DataValue {
     }
     pub(crate) fn get_int(&self) -> Option<i64> {
         match self {
-            DataValue::Number(Number::Int(i)) => Some(*i),
+            DataValue::Number(n) => n.get_int(),
             _ => None,
         }
     }
     pub(crate) fn get_float(&self) -> Option<f64> {
         match self {
-            DataValue::Number(Number::Int(i)) => Some(*i as f64),
-            DataValue::Number(Number::Float(f)) => Some(*f),
+            DataValue::Number(n) => Some(n.get_float()),
             _ => None,
         }
     }

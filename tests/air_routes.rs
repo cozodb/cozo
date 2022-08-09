@@ -351,5 +351,31 @@ fn air_routes() -> Result<()> {
             .unwrap()
     );
 
+    let const_return_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?name, count(?a)] := [?a airport.region 'US-OK'], ?name is 'OK';
+    "#,
+    )?;
+    dbg!(const_return_time.elapsed());
+    assert_eq!(res, json!([["OK", 4]]));
+
+    let multi_res_time = Instant::now();
+    let res = db.run_script(r#"
+        total[count(?a)] := [?a airport.iata ?_];
+        high[count(?a)] := [?a airport.runways ?n], ?n >= 6;
+        low[count(?a)] := [?a airport.runways ?n], ?n <= 2;
+        four[count(?a)] := [?a airport.runways ?n], ?n = 4;
+        france[count(?a)] := [?fr country.code 'FR'], [?a airport.country ?fr];
+
+        ?[?total, ?high, ?low, ?four, ?france] := total[?total], high[?high], low[?low],
+                                                  four[?four], france[?france];
+    "#)?;
+    dbg!(multi_res_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(r#"[[3504,6,3204,53,59]]"#).unwrap()
+    );
+
     Ok(())
 }

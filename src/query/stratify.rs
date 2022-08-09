@@ -38,7 +38,7 @@ fn convert_normal_form_program_to_graph(
                 && ruleset.iter().all(|rule| {
                     rule.aggr.iter().all(|v| match v {
                         None => true,
-                        Some(v) => v.is_meet,
+                        Some((v, _)) => v.is_meet,
                     })
                 });
             for rule in ruleset {

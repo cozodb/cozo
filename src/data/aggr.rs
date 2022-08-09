@@ -7,7 +7,7 @@ use crate::data::value::{DataValue, Number};
 #[derive(Clone)]
 pub(crate) struct Aggregation {
     pub(crate) name: &'static str,
-    pub(crate) combine: fn(&mut DataValue, &DataValue) -> Result<bool>,
+    pub(crate) combine: fn(&mut DataValue, &DataValue, &[DataValue]) -> Result<bool>,
     pub(crate) is_meet: bool,
 }
 
@@ -34,7 +34,7 @@ macro_rules! define_aggr {
 }
 
 define_aggr!(AGGR_COLLECT, false);
-fn aggr_collect(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
+fn aggr_collect(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
         (accum @ DataValue::Guard, DataValue::Guard) => {
             *accum = DataValue::List(vec![]);
@@ -54,7 +54,7 @@ fn aggr_collect(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
 }
 
 define_aggr!(AGGR_COUNT, false);
-fn aggr_count(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
+fn aggr_count(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
         (accum @ DataValue::Guard, DataValue::Guard) => {
             *accum = DataValue::Number(Number::Int(0));
@@ -74,18 +74,14 @@ fn aggr_count(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
 }
 
 define_aggr!(AGGR_MEAN, false);
-fn aggr_mean(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
+fn aggr_mean(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
         (accum @ DataValue::Guard, DataValue::Guard) => {
             *accum = DataValue::from(0.);
             true
         }
-        (accum @ DataValue::Guard, DataValue::Number(Number::Int(i))) => {
-            *accum = DataValue::List(vec![DataValue::from(*i as f64), DataValue::from(1)]);
-            true
-        }
-        (accum @ DataValue::Guard, DataValue::Number(Number::Float(f))) => {
-            *accum = DataValue::List(vec![DataValue::from(*f), DataValue::from(1)]);
+        (accum @ DataValue::Guard, DataValue::Number(n)) => {
+            *accum = DataValue::List(vec![DataValue::from(n.get_float()), DataValue::from(1)]);
             true
         }
         (accum @ DataValue::List(_), DataValue::Guard) => {
@@ -111,7 +107,7 @@ fn aggr_mean(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
 }
 
 define_aggr!(AGGR_SUM, false);
-fn aggr_sum(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
+fn aggr_sum(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
         (accum @ DataValue::Guard, DataValue::Guard) => {
             *accum = DataValue::Number(Number::Int(0));
@@ -152,7 +148,7 @@ fn aggr_sum(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
 }
 
 define_aggr!(AGGR_MIN, true);
-fn aggr_min(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
+fn aggr_min(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
         (accum @ DataValue::Guard, DataValue::Number(n)) => {
             *accum = DataValue::Number(*n);
@@ -176,7 +172,7 @@ fn aggr_min(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
 }
 
 define_aggr!(AGGR_MAX, true);
-fn aggr_max(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
+fn aggr_max(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
         (accum @ DataValue::Guard, DataValue::Number(n)) => {
             *accum = DataValue::Number(*n);
@@ -200,7 +196,7 @@ fn aggr_max(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
 }
 
 define_aggr!(AGGR_CHOICE, true);
-fn aggr_choice(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
+fn aggr_choice(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
         (accum @ DataValue::Guard, v) => {
             *accum = v.clone();

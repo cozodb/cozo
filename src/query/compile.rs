@@ -7,6 +7,7 @@ use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAtom, MagicRule, MagicSymbol, StratifiedMagicProgram};
 use crate::data::symb::Symbol;
+use crate::data::value::DataValue;
 use crate::parse::query::ConstRules;
 use crate::query::relation::Relation;
 use crate::runtime::temp_store::TempStore;
@@ -41,7 +42,7 @@ impl CompiledRuleSet {
             return AggrKind::None;
         }
         for aggr in self.rules[0].aggr.iter() {
-            if let Some(aggr) = aggr {
+            if let Some((aggr, _args)) = aggr {
                 if !aggr.is_meet {
                     return AggrKind::Normal;
                 }
@@ -53,7 +54,7 @@ impl CompiledRuleSet {
 
 #[derive(Debug)]
 pub(crate) struct CompiledRule {
-    pub(crate) aggr: Vec<Option<Aggregation>>,
+    pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) relation: Relation,
     pub(crate) contained_rules: BTreeSet<MagicSymbol>,
 }

@@ -227,7 +227,8 @@ fn parse_rule_head_arg(src: Pair<'_>) -> Result<JsonValue> {
             let mut inner = src.into_inner();
             let aggr_name = inner.next().unwrap().as_str();
             let var = inner.next().unwrap().as_str();
-            json!({"aggr": aggr_name, "symb": var})
+            let args: Vec<_> = inner.map(|a| build_expr(a)).try_collect()?;
+            json!({"aggr": aggr_name, "symb": var, "args": args})
         }
         _ => unreachable!(),
     })
