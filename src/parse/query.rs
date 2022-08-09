@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Map};
 
 use crate::data::aggr::get_aggr;
 use crate::data::attr::Attribute;
@@ -331,7 +331,7 @@ impl SessionTx {
         payload: &Map<String, JsonValue>,
         param_pool: &BTreeMap<Symbol, DataValue>,
     ) -> Result<InputAtom> {
-        let mut pred = Self::parse_apply_expr(payload)?;
+        let mut pred = Self::parse_apply_expr(payload, param_pool)?;
         if let Expr::Apply(op, _) = &pred {
             ensure!(
                 op.is_predicate,
@@ -342,7 +342,10 @@ impl SessionTx {
         pred.partial_eval(param_pool)?;
         Ok(InputAtom::Predicate(pred))
     }
-    fn parse_unification(payload: &Map<String, JsonValue>) -> Result<InputAtom> {
+    fn parse_unification(
+        payload: &Map<String, JsonValue>,
+        params_pool: &BTreeMap<Symbol, DataValue>,
+    ) -> Result<InputAtom> {
         let binding = payload
             .get("unify")
             .ok_or_else(|| anyhow!("expect expression to have field 'unify'"))?
@@ -357,10 +360,14 @@ impl SessionTx {
         let expr = payload
             .get("expr")
             .ok_or_else(|| anyhow!("expect unify map to have field 'expr'"))?;
-        let expr = Self::parse_expr_arg(expr)?;
+        let mut expr = Self::parse_expr_arg(expr, params_pool)?;
+        expr.partial_eval(params_pool)?;
         Ok(InputAtom::Unification(Unification { binding, expr }))
     }
-    fn parse_apply_expr(payload: &Map<String, JsonValue>) -> Result<Expr> {
+    fn parse_apply_expr(
+        payload: &Map<String, JsonValue>,
+        params_pool: &BTreeMap<Symbol, DataValue>,
+    ) -> Result<Expr> {
         if let Some(name) = payload.get("param") {
             let name = name
                 .as_str()
@@ -387,7 +394,7 @@ impl SessionTx {
             .as_array()
             .ok_or_else(|| anyhow!("expect key 'args' to be an array"))?
             .iter()
-            .map(Self::parse_expr_arg)
+            .map(|v| Self::parse_expr_arg(v, params_pool))
             .try_collect()?;
 
         if op.vararg {
@@ -414,26 +421,16 @@ impl SessionTx {
         payload: &JsonValue,
         params_pool: &BTreeMap<Symbol, DataValue>,
     ) -> Result<DataValue> {
-        Ok(match payload {
-            Value::Array(arr) => {
-                let exprs: Vec<_> = arr
-                    .iter()
-                    .map(|v| Self::parse_const_expr(v, params_pool))
-                    .try_collect()?;
-                DataValue::List(exprs.into())
-            }
-            Value::Object(m) => {
-                let mut ex = Self::parse_apply_expr(m)?;
-                ex.partial_eval(params_pool)?;
-                match ex {
-                    Expr::Const(c) => c,
-                    v => bail!("failed to convert {:?} to constant", v),
-                }
-            }
-            v => DataValue::from(v),
+        let res = Self::parse_expr_arg(payload, params_pool)?;
+        Ok(match res {
+            Expr::Const(v) => v,
+            v => bail!("cannot convert {:?} to constant", v),
         })
     }
-    fn parse_expr_arg(payload: &JsonValue) -> Result<Expr> {
+    fn parse_expr_arg(
+        payload: &JsonValue,
+        params_pool: &BTreeMap<Symbol, DataValue>,
+    ) -> Result<Expr> {
         match payload {
             JsonValue::String(s) => {
                 let symb = Symbol::from(s as &str);
@@ -446,11 +443,20 @@ impl SessionTx {
             JsonValue::Object(map) => {
                 if let Some(v) = map.get("const") {
                     Ok(Expr::Const(v.into()))
-                } else if map.contains_key("op") {
-                    Self::parse_apply_expr(map)
+                } else if map.contains_key("op") || map.contains_key("param") {
+                    let mut ret = Self::parse_apply_expr(map, params_pool)?;
+                    ret.partial_eval(params_pool)?;
+                    Ok(ret)
                 } else {
                     bail!("expression object must contain either 'const' or 'pred' key");
                 }
+            }
+            JsonValue::Array(l) => {
+                let l: Vec<_> = l
+                    .iter()
+                    .map(|v| Self::parse_expr_arg(v, params_pool))
+                    .try_collect()?;
+                Ok(Expr::Apply(get_op("List").unwrap(), l.into()))
             }
             v => Ok(Expr::Const(v.into())),
         }
@@ -604,7 +610,7 @@ impl SessionTx {
                 } else if map.contains_key("op") {
                     Self::parse_input_predicate_atom(map, params_pool)
                 } else if map.contains_key("unify") {
-                    Self::parse_unification(map)
+                    Self::parse_unification(map, params_pool)
                 } else if map.contains_key("conj")
                     || map.contains_key("disj")
                     || map.contains_key("not_exists")

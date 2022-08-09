@@ -141,6 +141,11 @@ macro_rules! define_op {
     };
 }
 
+define_op!(OP_LIST, 0, true, false);
+pub(crate) fn op_list(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::List(args.to_vec()))
+}
+
 define_op!(OP_EQ, 0, true, true);
 pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(args.iter().all_equal()))
@@ -685,6 +690,7 @@ fn op_is_timestamp(args: &[DataValue]) -> Result<DataValue> {
 
 pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
     Some(match name {
+        "List" => &OP_LIST,
         "Add" => &OP_ADD,
         "Sub" => &OP_SUB,
         "Mul" => &OP_MUL,

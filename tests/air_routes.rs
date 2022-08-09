@@ -322,5 +322,34 @@ fn air_routes() -> Result<()> {
         .unwrap()
     );
 
+    let airports_by_route_number_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        route_count[?a, count(?r)] := [?r route.src ?a];
+        ?[?n, collect(?code)] := route_count[?a, ?n], [?a airport.iata ?code], ?n = 105;
+    "#,
+    )?;
+    dbg!(airports_by_route_number_time.elapsed());
+    assert_eq!(res, json!([[105, ["TFS", "YVR"]]]));
+
+    let out_from_aus_time = Instant::now();
+    let res = db.run_script(r#"
+        out_by_runways[?n_runways, count(?a)] := [?aus airport.iata 'AUS'],
+                                                 [?r1 route.src ?aus],
+                                                 [?r1 route.dst ?a],
+                                                 [?a airport.runways ?n_runways];
+        two_hops[count(?a)] := [?aus airport.iata 'AUS'],
+                               [?r1 route.src ?aus],
+                               [?r1 route.dst ?a],
+                               [?r route.src ?a];
+        ?[max(?total), collect(?coll)] := two_hops[?total], out_by_runways[?n, ?ct], ?coll is [?n, ?ct];
+    "#)?;
+    dbg!(out_from_aus_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(r#"[[7909,[[1,9],[2,23],[3,29],[4,24],[5,5],[6,3],[7,2]]]]"#)
+            .unwrap()
+    );
+
     Ok(())
 }

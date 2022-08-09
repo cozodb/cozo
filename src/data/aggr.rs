@@ -40,7 +40,7 @@ fn aggr_collect(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
             *accum = DataValue::List(vec![]);
             true
         }
-        (accum@DataValue::Guard, val) => {
+        (accum @ DataValue::Guard, val) => {
             *accum = DataValue::List(vec![val.clone()]);
             true
         }
@@ -88,13 +88,13 @@ fn aggr_mean(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
             *accum = DataValue::List(vec![DataValue::from(*f), DataValue::from(1)]);
             true
         }
-        (accum@DataValue::List(_), DataValue::Guard) => {
+        (accum @ DataValue::List(_), DataValue::Guard) => {
             let args = accum.get_list().unwrap();
             let total = args[0].get_float().unwrap();
             let count = args[1].get_float().unwrap();
             *accum = DataValue::from(total / count);
             true
-        },
+        }
         (DataValue::List(l), DataValue::Number(j)) => {
             let new_total = l[0].get_float().unwrap() + j.get_float();
             l[0] = DataValue::from(new_total);
@@ -158,6 +158,7 @@ fn aggr_min(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
             *accum = DataValue::Number(*n);
             true
         }
+        (_, DataValue::Guard) => false,
         (DataValue::Number(i), DataValue::Number(j)) => {
             if *i <= *j {
                 false
@@ -181,6 +182,7 @@ fn aggr_max(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
             *accum = DataValue::Number(*n);
             true
         }
+        (_, DataValue::Guard) => false,
         (DataValue::Number(i), DataValue::Number(j)) => {
             if *i >= *j {
                 false
