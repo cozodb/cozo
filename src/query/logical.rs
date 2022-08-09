@@ -135,6 +135,7 @@ impl InputRuleApplyAtom {
                         let unif = NormalFormAtom::Unification(Unification {
                             binding: dup.clone(),
                             expr: Expr::Binding(kw, None),
+                            one_many_unif: false,
                         });
                         ret.push(unif);
                         args.push(dup);
@@ -146,6 +147,7 @@ impl InputRuleApplyAtom {
                     let unif = NormalFormAtom::Unification(Unification {
                         binding: kw,
                         expr: Expr::Const(val),
+                        one_many_unif: false,
                     });
                     ret.push(unif)
                 }
@@ -189,10 +191,12 @@ impl InputAttrTripleAtom {
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
                     expr: Expr::Const(eid.to_value()),
+                    one_many_unif: false,
                 });
                 let uv = NormalFormAtom::Unification(Unification {
                     binding: vkw,
                     expr: Expr::Const(val),
+                    one_many_unif: false,
                 });
                 vec![ue, uv, ret]
             }
@@ -207,6 +211,7 @@ impl InputAttrTripleAtom {
                 let uv = NormalFormAtom::Unification(Unification {
                     binding: vkw,
                     expr: Expr::Const(val),
+                    one_many_unif: false,
                 });
                 vec![uv, ret]
             }
@@ -221,6 +226,7 @@ impl InputAttrTripleAtom {
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
                     expr: Expr::Const(eid.to_value()),
+                    one_many_unif: false,
                 });
                 vec![ue, ret]
             }
@@ -236,6 +242,7 @@ impl InputAttrTripleAtom {
                         NormalFormAtom::Unification(Unification {
                             binding: dup,
                             expr: Expr::Binding(vkw, None),
+                            one_many_unif: false,
                         }),
                         wrap(atom),
                     ]

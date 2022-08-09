@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::data::value::{DataValue, Number};
 
@@ -34,18 +34,35 @@ macro_rules! define_aggr {
 }
 
 define_aggr!(AGGR_COLLECT, false);
-fn aggr_collect(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
+fn aggr_collect(accum: &mut DataValue, current: &DataValue, args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
         (accum @ DataValue::Guard, DataValue::Guard) => {
+            if let Some(limit) = args.get(0) {
+                let limit = limit
+                    .get_int()
+                    .ok_or_else(|| anyhow!("collect limit must be an integer"))?;
+                ensure!(limit > 0, "collect limit must be positive, got {}", limit);
+            }
             *accum = DataValue::List(vec![]);
             true
         }
         (accum @ DataValue::Guard, val) => {
+            if let Some(limit) = args.get(0) {
+                let limit = limit
+                    .get_int()
+                    .ok_or_else(|| anyhow!("collect limit must be an integer"))?;
+                ensure!(limit > 0, "collect limit must be positive, got {}", limit);
+            }
             *accum = DataValue::List(vec![val.clone()]);
             true
         }
         (_, DataValue::Guard) => false,
         (DataValue::List(l), val) => {
+            if let Some(limit) = args.get(0).and_then(|v| v.get_int()) {
+                if l.len() >= (limit as usize) {
+                    return Ok(false);
+                }
+            }
             l.push(val.clone());
             true
         }

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::iter;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
@@ -29,7 +29,28 @@ pub(crate) struct UnificationRelation {
     parent: Box<Relation>,
     binding: Symbol,
     expr: Expr,
+    is_multi: bool,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
+}
+
+fn eliminate_from_tuple(
+    mut ret: Vec<DataValue>,
+    eliminate_indices: &BTreeSet<usize>,
+) -> Vec<DataValue> {
+    if !eliminate_indices.is_empty() {
+        ret = ret
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, v)| {
+                if eliminate_indices.contains(&i) {
+                    None
+                } else {
+                    Some(v)
+                }
+            })
+            .collect_vec();
+    }
+    ret
 }
 
 impl UnificationRelation {
@@ -64,30 +85,41 @@ impl UnificationRelation {
         let mut bindings = self.parent.bindings_after_eliminate();
         bindings.push(self.binding.clone());
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
-        Box::new(
-            self.parent
+        if self.is_multi {
+            let it = self
+                .parent
                 .iter(tx, epoch, use_delta)
-                .map_ok(move |tuple| -> Result<Tuple> {
-                    let result = self.expr.eval(&tuple)?;
-                    let mut ret = tuple.0;
-                    ret.push(result);
-                    if !eliminate_indices.is_empty() {
-                        ret = ret
-                            .into_iter()
-                            .enumerate()
-                            .filter_map(|(i, v)| {
-                                if eliminate_indices.contains(&i) {
-                                    None
-                                } else {
-                                    Some(v)
-                                }
-                            })
-                            .collect_vec();
+                .map_ok(move |tuple| -> Result<Vec<Tuple>> {
+                    let result_list = self.expr.eval(&tuple)?;
+                    let result_list = result_list.get_list().ok_or_else(|| {
+                        anyhow!("multi unification encountered non-list {:?}", result_list)
+                    })?;
+                    let mut coll = vec![];
+                    for result in result_list {
+                        let mut ret = tuple.0.clone();
+                        ret.push(result.clone());
+                        ret = eliminate_from_tuple(ret, &eliminate_indices);
+                        coll.push(Tuple(ret));
                     }
-                    Ok(Tuple(ret))
+                    Ok(coll)
                 })
-                .map(flatten_err),
-        )
+                .map(flatten_err)
+                .flatten_ok();
+            Box::new(it)
+        } else {
+            Box::new(
+                self.parent
+                    .iter(tx, epoch, use_delta)
+                    .map_ok(move |tuple| -> Result<Tuple> {
+                        let result = self.expr.eval(&tuple)?;
+                        let mut ret = tuple.0;
+                        ret.push(result);
+                        ret = eliminate_from_tuple(ret, &eliminate_indices);
+                        Ok(Tuple(ret))
+                    })
+                    .map(flatten_err),
+            )
+        }
     }
 }
 
@@ -134,22 +166,8 @@ impl FilteredRelation {
                 .filter_map(move |tuple| match tuple {
                     Ok(t) => match self.pred.eval_pred(&t) {
                         Ok(true) => {
-                            if !eliminate_indices.is_empty() {
-                                let ret =
-                                    t.0.into_iter()
-                                        .enumerate()
-                                        .filter_map(|(i, v)| {
-                                            if eliminate_indices.contains(&i) {
-                                                None
-                                            } else {
-                                                Some(v)
-                                            }
-                                        })
-                                        .collect_vec();
-                                Some(Ok(Tuple(ret)))
-                            } else {
-                                Some(Ok(t))
-                            }
+                            let t = eliminate_from_tuple(t.0, &eliminate_indices);
+                            Some(Ok(Tuple(t)))
                         }
                         Ok(false) => None,
                         Err(e) => Some(Err(e)),
@@ -306,11 +324,12 @@ impl Relation {
             to_eliminate: Default::default(),
         })
     }
-    pub(crate) fn unify(self, binding: Symbol, expr: Expr) -> Self {
+    pub(crate) fn unify(self, binding: Symbol, expr: Expr, is_multi: bool) -> Self {
         Relation::Unification(UnificationRelation {
             parent: Box::new(self),
             binding,
             expr,
+            is_multi,
             to_eliminate: Default::default(),
         })
     }
@@ -439,20 +458,7 @@ impl InlineFixedRelation {
                 if left_join_values.into_iter().eq(right_join_values.iter()) {
                     let mut ret = tuple.0;
                     ret.extend_from_slice(&data);
-
-                    if !eliminate_indices.is_empty() {
-                        ret = ret
-                            .into_iter()
-                            .enumerate()
-                            .filter_map(|(i, v)| {
-                                if eliminate_indices.contains(&i) {
-                                    None
-                                } else {
-                                    Some(v)
-                                }
-                            })
-                            .collect_vec();
-                    }
+                    ret = eliminate_from_tuple(ret, &eliminate_indices);
                     Some(Tuple(ret))
                 } else {
                     None
@@ -669,20 +675,7 @@ impl TripleRelation {
                         let mut ret = tuple.0;
                         ret.push(eid.to_value());
                         ret.push(v);
-
-                        if !eliminate_indices.is_empty() {
-                            ret = ret
-                                .into_iter()
-                                .enumerate()
-                                .filter_map(|(i, v)| {
-                                    if eliminate_indices.contains(&i) {
-                                        None
-                                    } else {
-                                        Some(v)
-                                    }
-                                })
-                                .collect_vec();
-                        }
+                        ret = eliminate_from_tuple(ret, &eliminate_indices);
                         Ok(Some(Tuple(ret)))
                     } else {
                         Ok(None)
@@ -753,19 +746,7 @@ impl TripleRelation {
                                     let mut ret = tuple.0.clone();
                                     ret.push(eid.to_value());
                                     ret.push(val);
-                                    if !eliminate_indices.is_empty() {
-                                        ret = ret
-                                            .into_iter()
-                                            .enumerate()
-                                            .filter_map(|(i, v)| {
-                                                if eliminate_indices.contains(&i) {
-                                                    None
-                                                } else {
-                                                    Some(v)
-                                                }
-                                            })
-                                            .collect_vec();
-                                    }
+                                    ret = eliminate_from_tuple(ret, &eliminate_indices);
                                     Tuple(ret)
                                 })
                         })
@@ -839,21 +820,7 @@ impl TripleRelation {
                                     let mut ret = tuple.0.clone();
                                     ret.push(e_id.to_value());
                                     ret.push(v_eid.to_value());
-
-                                    if !eliminate_indices.is_empty() {
-                                        ret = ret
-                                            .into_iter()
-                                            .enumerate()
-                                            .filter_map(|(i, v)| {
-                                                if eliminate_indices.contains(&i) {
-                                                    None
-                                                } else {
-                                                    Some(v)
-                                                }
-                                            })
-                                            .collect_vec();
-                                    }
-
+                                    ret = eliminate_from_tuple(ret, &eliminate_indices);
                                     Tuple(ret)
                                 })
                         })
@@ -919,21 +886,7 @@ impl TripleRelation {
                             let mut ret = tuple.0.clone();
                             ret.push(eid.to_value());
                             ret.push(val);
-
-                            if !eliminate_indices.is_empty() {
-                                ret = ret
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec();
-                            }
-
+                            ret = eliminate_from_tuple(ret, &eliminate_indices);
                             Tuple(ret)
                         })
                 })
@@ -1013,19 +966,7 @@ impl TripleRelation {
                             let v_eid = found.pop().unwrap();
                             let mut ret = tuple.0.clone();
                             ret.push(v_eid);
-                            if !eliminate_indices.is_empty() {
-                                ret = ret
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec();
-                            }
+                            ret = eliminate_from_tuple(ret, &eliminate_indices);
                             Tuple(ret)
                         })
                 })
@@ -1184,20 +1125,7 @@ impl StoredDerivedRelation {
                             // dbg!("filter", &tuple, &prefix, &found);
                             let mut ret = tuple.0.clone();
                             ret.extend(found.0);
-
-                            if !eliminate_indices.is_empty() {
-                                ret = ret
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec();
-                            }
+                            ret = eliminate_from_tuple(ret, &eliminate_indices);
                             Some(Tuple(ret))
                         })
                 })
@@ -1562,19 +1490,7 @@ impl InnerJoin {
                         for i in restore_indices.iter() {
                             ret.push(found.0[*i].clone());
                         }
-                        if !eliminate_indices.is_empty() {
-                            ret = ret
-                                .into_iter()
-                                .enumerate()
-                                .filter_map(|(i, v)| {
-                                    if eliminate_indices.contains(&i) {
-                                        None
-                                    } else {
-                                        Some(v)
-                                    }
-                                })
-                                .collect_vec();
-                        }
+                        ret = eliminate_from_tuple(ret, &eliminate_indices);
                         Tuple(ret)
                     })
                 })

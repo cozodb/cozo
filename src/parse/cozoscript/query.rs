@@ -261,6 +261,12 @@ fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
             let expr = build_expr(src.next().unwrap())?;
             json!({"unify": var, "expr": expr})
         }
+        Rule::unify_multi => {
+            let mut src = src.into_inner();
+            let var = src.next().unwrap().as_str();
+            let expr = build_expr(src.next().unwrap())?;
+            json!({"unify": var, "expr": expr, "multi": true})
+        }
         Rule::rule_apply => {
             let mut src = src.into_inner();
             let name = src.next().unwrap().as_str();
@@ -368,7 +374,7 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
             Ok(match op {
                 Rule::term => build_unary(p)?,
                 Rule::var => json!(s),
-                Rule::param => json!({"param": s}),
+                Rule::param => json!({ "param": s }),
                 Rule::minus => {
                     let inner = build_unary(inner.next().unwrap())?;
                     json!({"op": "Minus", "args": [inner]})

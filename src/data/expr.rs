@@ -22,6 +22,9 @@ impl Expr {
     pub(crate) fn build_equate(exprs: Vec<Expr>) -> Self {
         Expr::Apply(&OP_EQ, exprs.into())
     }
+    pub(crate) fn build_is_in(exprs: Vec<Expr>) -> Self {
+        Expr::Apply(&OP_IS_IN, exprs.into())
+    }
     pub(crate) fn negate(self) -> Self {
         Expr::Apply(&OP_NOT, Box::new([self]))
     }
@@ -149,6 +152,15 @@ pub(crate) fn op_list(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_EQ, 0, true, true);
 pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(args.iter().all_equal()))
+}
+
+define_op!(OP_IS_IN, 2, false, true);
+pub(crate) fn op_is_in(args: &[DataValue]) -> Result<DataValue> {
+    let left = &args[0];
+    let right = args[1]
+        .get_list()
+        .ok_or_else(|| anyhow!("right hand side of 'is_in' is not a list"))?;
+    Ok(DataValue::Bool(right.contains(left)))
 }
 
 define_op!(OP_NEQ, 0, true, true);
@@ -744,6 +756,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "IsBytes" => &OP_IS_BYTES,
         "IsUuid" => &OP_IS_UUID,
         "IsTimestamp" => &OP_IS_TIMESTAMP,
+        "IsIn" => &OP_IS_IN,
         _ => return None,
     })
 }

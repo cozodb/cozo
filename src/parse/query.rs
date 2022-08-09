@@ -362,7 +362,17 @@ impl SessionTx {
             .ok_or_else(|| anyhow!("expect unify map to have field 'expr'"))?;
         let mut expr = Self::parse_expr_arg(expr, params_pool)?;
         expr.partial_eval(params_pool)?;
-        Ok(InputAtom::Unification(Unification { binding, expr }))
+        let one_many_unif = match payload.get("multi") {
+            None => false,
+            Some(v) => v
+                .as_bool()
+                .ok_or_else(|| anyhow!("unification 'multi' field must be a boolean"))?,
+        };
+        Ok(InputAtom::Unification(Unification {
+            binding,
+            expr,
+            one_many_unif,
+        }))
     }
     fn parse_apply_expr(
         payload: &Map<String, JsonValue>,

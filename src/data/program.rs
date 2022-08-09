@@ -64,6 +64,7 @@ impl InputProgram {
                             body.push(NormalFormAtom::Unification(Unification {
                                 binding: new_symb.clone(),
                                 expr: Expr::Binding((*old_symb).clone(), None),
+                                one_many_unif: false
                             }))
                         }
                     }
@@ -318,6 +319,7 @@ pub(crate) enum InputTerm<T> {
 pub(crate) struct Unification {
     pub(crate) binding: Symbol,
     pub(crate) expr: Expr,
+    pub(crate) one_many_unif: bool
 }
 
 impl Unification {
