@@ -562,5 +562,75 @@ fn air_routes() -> Result<()> {
     let expected = 14.425513698630137;
     assert!(abs(v - expected) < 1e-8);
 
+    let n_routes_from_london_uk_time = Instant::now();
+    let res = db.run_script(r#"
+        ?[?code, count(?r)] := [?a airport.city 'London'], [?a airport.region 'GB-ENG'], [?r route.src ?a], [?a airport.iata ?code];
+    "#)?;
+    dbg!(n_routes_from_london_uk_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[["LCY",51],["LGW",232],["LHR",221],["LTN",130],["STN",211]]"#
+        )
+        .unwrap()
+    );
+
+    let reachable_from_london_uk_in_two_hops_time = Instant::now();
+    let res = db.run_script(r#"
+        lon_uk_airports[?a] := [?a airport.city 'London'], [?a airport.region 'GB-ENG'];
+        one_hop[?a2] := lon_uk_airports[?a], [?r route.src ?a], [?r route.dst ?a2], not lon_uk_airports[?a2];
+        ?[count_unique(?a3)] := one_hop[?a2], [?r2 route.src ?a2], [?r2 route.dst ?a3], not lon_uk_airports[?a3];
+    "#)?;
+    dbg!(reachable_from_london_uk_in_two_hops_time.elapsed());
+    assert_eq!(res, json!([[2353]]));
+
+    let routes_within_england_time = Instant::now();
+    let res = db.run_script(r#"
+        eng_aps[?a] := [?a airport.region 'GB-ENG'];
+        ?[?src, ?dst] := eng_aps[?a1], eng_aps[?a2], [?r route.src ?a1], [?r route.dst ?a2], [?a1 airport.iata ?src], [?a2 airport.iata ?dst];
+    "#)?;
+    dbg!(routes_within_england_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+    ["BHX","NCL"],["BRS","NCL"],["EMA","SOU"],["EXT","ISC"],["EXT","MAN"],["EXT","NQY"],
+    ["HUY","NWI"],["ISC","EXT"],["ISC","LEQ"],["ISC","NQY"],["LBA","LHR"],["LBA","NQY"],
+    ["LBA","SOU"],["LCY","MAN"],["LCY","NCL"],["LEQ","ISC"],["LGW","NCL"],["LGW","NQY"],
+    ["LHR","LBA"],["LHR","MAN"],["LHR","NCL"],["LHR","NQY"],["LPL","NQY"],["MAN","EXT"],
+    ["MAN","LCY"],["MAN","LHR"],["MAN","NQY"],["MAN","NWI"],["MAN","SEN"],["MAN","SOU"],
+    ["MME","NWI"],["NCL","BHX"],["NCL","BRS"],["NCL","LCY"],["NCL","LGW"],["NCL","LHR"],
+    ["NCL","SOU"],["NQY","EXT"],["NQY","ISC"],["NQY","LBA"],["NQY","LGW"],["NQY","LHR"],
+    ["NQY","LPL"],["NQY","MAN"],["NQY","SEN"],["NWI","HUY"],["NWI","MAN"],["NWI","MME"],
+    ["SEN","MAN"],["SEN","NQY"],["SOU","EMA"],["SOU","LBA"],["SOU","MAN"],["SOU","NCL"]]"#
+        )
+        .unwrap()
+    );
+
+    let routes_within_england_time_no_dup = Instant::now();
+    let res = db.run_script(
+        r#"
+        eng_aps[?a] := [?a airport.region 'GB-ENG'];
+        ?[?pair] := eng_aps[?a1], eng_aps[?a2], [?r route.src ?a1], [?r route.dst ?a2],
+                         [?a1 airport.iata ?src], [?a2 airport.iata ?dst],
+                         ?pair is sort([?src, ?dst]);
+    "#,
+    )?;
+    dbg!(routes_within_england_time_no_dup.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+    [["BHX","NCL"]],[["BRS","NCL"]],[["EMA","SOU"]],[["EXT","ISC"]],[["EXT","MAN"]],[["EXT","NQY"]],
+    [["HUY","NWI"]],[["ISC","LEQ"]],[["ISC","NQY"]],[["LBA","LHR"]],[["LBA","NQY"]],[["LBA","SOU"]],
+    [["LCY","MAN"]],[["LCY","NCL"]],[["LGW","NCL"]],[["LGW","NQY"]],[["LHR","MAN"]],[["LHR","NCL"]],
+    [["LHR","NQY"]],[["LPL","NQY"]],[["MAN","NQY"]],[["MAN","NWI"]],[["MAN","SEN"]],[["MAN","SOU"]],
+    [["MME","NWI"]],[["NCL","SOU"]],[["NQY","SEN"]]]"#
+        )
+        .unwrap()
+    );
+
+    println!("{}", res);
+
     Ok(())
 }

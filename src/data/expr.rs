@@ -711,6 +711,16 @@ fn op_length(args: &[DataValue]) -> Result<DataValue> {
     }))
 }
 
+define_op!(OP_SORT, 1, false, false);
+fn op_sort(args: &[DataValue]) -> Result<DataValue> {
+    let mut arg = args[0]
+        .get_list()
+        .ok_or_else(|| anyhow!("cannot apply 'sort' to {:?}", args))?
+        .to_vec();
+    arg.sort();
+    Ok(DataValue::List(arg))
+}
+
 pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
     Some(match name {
         "list" => &OP_LIST,
@@ -769,6 +779,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "is_timestamp" => &OP_IS_TIMESTAMP,
         "is_in" => &OP_IS_IN,
         "length" => &OP_LENGTH,
+        "sort" => &OP_SORT,
         _ => return None,
     })
 }
