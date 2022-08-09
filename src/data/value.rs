@@ -241,6 +241,12 @@ impl DataValue {
             _ => None,
         }
     }
+    pub(crate) fn get_set(&self) -> Option<&BTreeSet<DataValue>> {
+        match self {
+            DataValue::Set(s) => Some(s),
+            _ => None,
+        }
+    }
     pub(crate) fn get_int(&self) -> Option<i64> {
         match self {
             DataValue::Number(n) => n.get_int(),

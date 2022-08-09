@@ -52,6 +52,30 @@ fn aggr_unique(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) 
     })
 }
 
+define_aggr!(AGGR_COUNT_UNIQUE, false);
+fn aggr_count_unique(
+    accum: &mut DataValue,
+    current: &DataValue,
+    _args: &[DataValue],
+) -> Result<bool> {
+    Ok(match (accum, current) {
+        (accum @ DataValue::Guard, DataValue::Guard) => {
+            *accum = DataValue::from(0);
+            true
+        }
+        (accum @ DataValue::Guard, val) => {
+            *accum = DataValue::Set(BTreeSet::from([val.clone()]));
+            true
+        }
+        (accum, DataValue::Guard) => {
+            *accum = DataValue::from(accum.get_set().unwrap().len() as i64);
+            true
+        }
+        (DataValue::Set(l), val) => l.insert(val.clone()),
+        _ => unreachable!(),
+    })
+}
+
 define_aggr!(AGGR_UNION, true);
 fn aggr_union(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
@@ -324,6 +348,7 @@ fn aggr_choice(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) 
 pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
     Some(match name {
         "count" => &AGGR_COUNT,
+        "count_unique" => &AGGR_COUNT_UNIQUE,
         "sum" => &AGGR_SUM,
         "min" => &AGGR_MIN,
         "max" => &AGGR_MAX,

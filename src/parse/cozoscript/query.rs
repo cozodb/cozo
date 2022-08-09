@@ -249,6 +249,7 @@ fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
             let grouped: Vec<_> = src.into_inner().map(parse_disjunction).try_collect()?;
             json!({ "conj": grouped })
         }
+        Rule::disjunction => parse_disjunction(src)?,
         Rule::triple => parse_triple(src)?,
         Rule::negation => {
             let inner = parse_atom(src.into_inner().next().unwrap())?;
@@ -338,21 +339,21 @@ fn build_expr_infix(
 ) -> Result<JsonValue> {
     let args = vec![lhs?, rhs?];
     let name = match op.as_rule() {
-        Rule::op_add => "Add",
-        Rule::op_sub => "Sub",
-        Rule::op_mul => "Mul",
-        Rule::op_div => "Div",
-        Rule::op_mod => "Mod",
-        Rule::op_pow => "Pow",
-        Rule::op_eq => "Eq",
-        Rule::op_ne => "Neq",
-        Rule::op_gt => "Gt",
-        Rule::op_ge => "Ge",
-        Rule::op_lt => "Lt",
-        Rule::op_le => "Le",
-        Rule::op_str_cat => "StrCat",
-        Rule::op_or => "Or",
-        Rule::op_and => "And",
+        Rule::op_add => "add",
+        Rule::op_sub => "sub",
+        Rule::op_mul => "mul",
+        Rule::op_div => "div",
+        Rule::op_mod => "mod",
+        Rule::op_pow => "pow",
+        Rule::op_eq => "eq",
+        Rule::op_ne => "neq",
+        Rule::op_gt => "gt",
+        Rule::op_ge => "ge",
+        Rule::op_lt => "lt",
+        Rule::op_le => "le",
+        Rule::op_str_cat => "str_cat",
+        Rule::op_or => "or",
+        Rule::op_and => "and",
         _ => unreachable!(),
     };
     Ok(json!({"op": name, "args": args}))
@@ -415,6 +416,17 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
                         collected.push(build_expr(p)?)
                     }
                     json!(collected)
+                }
+                Rule::apply => {
+                    let mut p = p.into_inner();
+                    let ident = p.next().unwrap().as_str();
+                    let args: Vec<_> = p
+                        .next()
+                        .unwrap()
+                        .into_inner()
+                        .map(|ex| build_expr(ex))
+                        .try_collect()?;
+                    json!({"op": ident, "args": args})
                 }
                 r => unreachable!("Encountered unknown op {:?}", r),
             })

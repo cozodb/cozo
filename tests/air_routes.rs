@@ -53,7 +53,7 @@ fn air_routes() -> Result<()> {
             distance: int
         }
         put geo {
-            contains: ref
+            contains: ref many,
         }
     "#,
     );
@@ -392,6 +392,35 @@ fn air_routes() -> Result<()> {
         )
         .unwrap()
     );
+
+    let num_routes_from_eu_to_us_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        routes[unique(?r)] := [?eu continent.code 'EU'],
+                              [?us country.code 'US'],
+                              [?eu geo.contains ?a],
+                              [?r route.src ?a],
+                              [?r route.dst ?a2],
+                              [?a2 airport.country ?us];
+        ?[?n] := routes[?rs], ?n is length(?rs);
+    "#,
+    )?;
+    dbg!(num_routes_from_eu_to_us_time.elapsed());
+    assert_eq!(res, json!([[417]]));
+
+    let num_airports_in_us_with_routes_from_eu_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[count_unique(?a2)] := [?eu continent.code 'EU'],
+                                [?us country.code 'US'],
+                                [?eu geo.contains ?a],
+                                [?r route.src ?a],
+                                [?r route.dst ?a2],
+                                [?a2 airport.country ?us];
+    "#,
+    )?;
+    dbg!(num_airports_in_us_with_routes_from_eu_time.elapsed());
+    assert_eq!(res, json!([[45]]));
 
     Ok(())
 }

@@ -7,7 +7,7 @@ use serde_json::{json, Map};
 
 use crate::data::aggr::get_aggr;
 use crate::data::attr::Attribute;
-use crate::data::expr::{get_op, Expr};
+use crate::data::expr::{get_op, Expr, OP_LIST};
 use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{
@@ -466,7 +466,7 @@ impl SessionTx {
                     .iter()
                     .map(|v| Self::parse_expr_arg(v, params_pool))
                     .try_collect()?;
-                Ok(Expr::Apply(get_op("List").unwrap(), l.into()))
+                Ok(Expr::Apply(&OP_LIST, l.into()))
             }
             v => Ok(Expr::Const(v.into())),
         }
