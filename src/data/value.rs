@@ -31,7 +31,7 @@ pub(crate) enum DataValue {
     Bytes(Box<[u8]>),
 
     #[serde(rename = "z")]
-    List(Box<[DataValue]>),
+    List(Vec<DataValue>),
     #[serde(rename = "g")]
     Guard,
     #[serde(rename = "o")]
@@ -58,6 +58,21 @@ pub(crate) enum Number {
     Int(i64),
     #[serde(rename = "f")]
     Float(f64),
+}
+
+impl Number {
+    pub(crate) fn get_int(&self) -> Option<i64> {
+        match self {
+            Number::Int(i) => Some(*i),
+            _ => None,
+        }
+    }
+    pub(crate) fn get_float(&self) -> f64 {
+        match self {
+            Number::Int(i) => *i as f64,
+            Number::Float(f) => *f,
+        }
+    }
 }
 
 impl PartialEq for Number {
@@ -174,6 +189,25 @@ impl DataValue {
         match self {
             DataValue::Number(Number::Int(id)) => Ok(EntityId(*id as u64)),
             _ => bail!("type mismatch: expect type EntId, got value {:?}", self),
+        }
+    }
+    pub(crate) fn get_list(&self) -> Option<&[DataValue]> {
+        match self {
+            DataValue::List(l) => Some(l),
+            _ => None,
+        }
+    }
+    pub(crate) fn get_int(&self) -> Option<i64> {
+        match self {
+            DataValue::Number(Number::Int(i)) => Some(*i),
+            _ => None,
+        }
+    }
+    pub(crate) fn get_float(&self) -> Option<f64> {
+        match self {
+            DataValue::Number(Number::Int(i)) => Some(*i as f64),
+            DataValue::Number(Number::Float(f)) => Some(*f),
+            _ => None,
         }
     }
 }

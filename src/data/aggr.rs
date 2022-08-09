@@ -33,6 +33,26 @@ macro_rules! define_aggr {
     };
 }
 
+define_aggr!(AGGR_COLLECT, false);
+fn aggr_collect(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
+    Ok(match (accum, current) {
+        (accum @ DataValue::Guard, DataValue::Guard) => {
+            *accum = DataValue::List(vec![]);
+            true
+        }
+        (accum@DataValue::Guard, val) => {
+            *accum = DataValue::List(vec![val.clone()]);
+            true
+        }
+        (_, DataValue::Guard) => false,
+        (DataValue::List(l), val) => {
+            l.push(val.clone());
+            true
+        }
+        _ => unreachable!(),
+    })
+}
+
 define_aggr!(AGGR_COUNT, false);
 fn aggr_count(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
     Ok(match (accum, current) {
@@ -50,6 +70,43 @@ fn aggr_count(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
             true
         }
         _ => unreachable!(),
+    })
+}
+
+define_aggr!(AGGR_MEAN, false);
+fn aggr_mean(accum: &mut DataValue, current: &DataValue) -> Result<bool> {
+    Ok(match (accum, current) {
+        (accum @ DataValue::Guard, DataValue::Guard) => {
+            *accum = DataValue::from(0.);
+            true
+        }
+        (accum @ DataValue::Guard, DataValue::Number(Number::Int(i))) => {
+            *accum = DataValue::List(vec![DataValue::from(*i as f64), DataValue::from(1)]);
+            true
+        }
+        (accum @ DataValue::Guard, DataValue::Number(Number::Float(f))) => {
+            *accum = DataValue::List(vec![DataValue::from(*f), DataValue::from(1)]);
+            true
+        }
+        (accum@DataValue::List(_), DataValue::Guard) => {
+            let args = accum.get_list().unwrap();
+            let total = args[0].get_float().unwrap();
+            let count = args[1].get_float().unwrap();
+            *accum = DataValue::from(total / count);
+            true
+        },
+        (DataValue::List(l), DataValue::Number(j)) => {
+            let new_total = l[0].get_float().unwrap() + j.get_float();
+            l[0] = DataValue::from(new_total);
+            let new_count = l[1].get_int().unwrap() + 1;
+            l[1] = DataValue::from(new_count);
+            true
+        }
+        (i, j) => bail!(
+            "cannot compute mean: encountered value {:?} for aggregate {:?}",
+            j,
+            i
+        ),
     })
 }
 
@@ -157,7 +214,9 @@ pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
         "sum" => &AGGR_SUM,
         "min" => &AGGR_MIN,
         "max" => &AGGR_MAX,
+        "mean" => &AGGR_MEAN,
         "choice" => &AGGR_CHOICE,
+        "collect" => &AGGR_COLLECT,
         _ => return None,
     })
 }
