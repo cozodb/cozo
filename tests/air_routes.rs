@@ -422,5 +422,65 @@ fn air_routes() -> Result<()> {
     dbg!(num_airports_in_us_with_routes_from_eu_time.elapsed());
     assert_eq!(res, json!([[45]]));
 
+    let num_routes_in_us_airports_from_eu_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?code, count(?r)] := [?eu continent.code 'EU'],
+                               [?us country.code 'US'],
+                               [?eu geo.contains ?a],
+                               [?r route.src ?a],
+                               [?r route.dst ?a2],
+                               [?a2 airport.country ?us],
+                               [?a2 airport.iata ?code];
+        :order ?r;
+    "#,
+    )?;
+    dbg!(num_routes_in_us_airports_from_eu_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"
+    [["ANC",1],["BNA",1],["CHS",1],["CLE",1],["IND",1],["MCI",1],["STL",1],["BDL",2],["BWI",2],
+     ["CVG",2],["MSY",2],["PHX",2],["RDU",2],["SJC",2],["AUS",3],["PDX",3],["RSW",3],["SAN",3],
+     ["SLC",3],["PIT",4],["SFB",5],["SWF",5],["TPA",5],["DTW",6],["MSP",6],["OAK",6],["DEN",7],
+     ["FLL",7],["PVD",7],["CLT",8],["IAH",8],["DFW",10],["SEA",10],["LAS",11],["MCO",13],["ATL",15],
+     ["SFO",20],["IAD",21],["PHL",22],["BOS",25],["LAX",25],["ORD",27],["MIA",28],["EWR",38],
+     ["JFK",42]]"#
+        )
+        .unwrap()
+    );
+
+    let routes_from_eu_to_us_starting_with_l_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?eu_code, ?us_code] := [?eu continent.code 'EU'],
+                               [?us country.code 'US'],
+                               [?eu geo.contains ?a],
+                               [?a airport.iata ?eu_code],
+                               starts_with(?eu_code, 'L'),
+                               [?r route.src ?a],
+                               [?r route.dst ?a2],
+                               [?a2 airport.country ?us],
+                               [?a2 airport.iata ?us_code];
+    "#,
+    )?;
+    dbg!(routes_from_eu_to_us_starting_with_l_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+    ["LGW","AUS"],["LGW","BOS"],["LGW","DEN"],["LGW","FLL"],["LGW","JFK"],["LGW","LAS"],
+    ["LGW","LAX"],["LGW","MCO"],["LGW","MIA"],["LGW","OAK"],["LGW","ORD"],["LGW","SEA"],
+    ["LGW","SFO"],["LGW","TPA"],["LHR","ATL"],["LHR","AUS"],["LHR","BNA"],["LHR","BOS"],
+    ["LHR","BWI"],["LHR","CHS"],["LHR","CLT"],["LHR","DEN"],["LHR","DFW"],["LHR","DTW"],
+    ["LHR","EWR"],["LHR","IAD"],["LHR","IAH"],["LHR","JFK"],["LHR","LAS"],["LHR","LAX"],
+    ["LHR","MIA"],["LHR","MSP"],["LHR","MSY"],["LHR","ORD"],["LHR","PDX"],["LHR","PHL"],
+    ["LHR","PHX"],["LHR","PIT"],["LHR","RDU"],["LHR","SAN"],["LHR","SEA"],["LHR","SFO"],
+    ["LHR","SJC"],["LHR","SLC"],["LIS","ATL"],["LIS","BOS"],["LIS","EWR"],["LIS","IAD"],
+    ["LIS","JFK"],["LIS","MIA"],["LIS","ORD"],["LIS","PHL"],["LIS","SFO"]]"#
+        )
+        .unwrap()
+    );
+
     Ok(())
 }

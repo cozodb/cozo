@@ -626,7 +626,7 @@ fn op_starts_with(args: &[DataValue]) -> Result<DataValue> {
         DataValue::String(s) => s,
         v => bail!("unexpected arg {:?} for OP_STARTS_WITH", v),
     };
-    let b = match &args[0] {
+    let b = match &args[1] {
         DataValue::String(s) => s,
         v => bail!("unexpected arg {:?} for OP_STARTS_WITH", v),
     };
