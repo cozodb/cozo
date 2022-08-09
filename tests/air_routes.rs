@@ -587,7 +587,8 @@ fn air_routes() -> Result<()> {
     let routes_within_england_time = Instant::now();
     let res = db.run_script(r#"
         eng_aps[?a] := [?a airport.region 'GB-ENG'];
-        ?[?src, ?dst] := eng_aps[?a1], eng_aps[?a2], [?r route.src ?a1], [?r route.dst ?a2], [?a1 airport.iata ?src], [?a2 airport.iata ?dst];
+        ?[?src, ?dst] := eng_aps[?a1], [?r route.src ?a1], [?r route.dst ?a2], eng_aps[?a2],
+                         [?a1 airport.iata ?src], [?a2 airport.iata ?dst];
     "#)?;
     dbg!(routes_within_england_time.elapsed());
     assert_eq!(
@@ -611,7 +612,7 @@ fn air_routes() -> Result<()> {
     let res = db.run_script(
         r#"
         eng_aps[?a] := [?a airport.region 'GB-ENG'];
-        ?[?pair] := eng_aps[?a1], eng_aps[?a2], [?r route.src ?a1], [?r route.dst ?a2],
+        ?[?pair] := eng_aps[?a1], [?r route.src ?a1], [?r route.dst ?a2], eng_aps[?a2],
                          [?a1 airport.iata ?src], [?a2 airport.iata ?dst],
                          ?pair is sort([?src, ?dst]);
     "#,
