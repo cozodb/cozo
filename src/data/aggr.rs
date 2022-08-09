@@ -1,4 +1,6 @@
+use std::collections::BTreeSet;
 use std::fmt::{Debug, Formatter};
+use std::ops::Sub;
 
 use anyhow::{anyhow, bail, ensure, Result};
 
@@ -31,6 +33,102 @@ macro_rules! define_aggr {
             is_meet: $is_meet,
         };
     };
+}
+
+define_aggr!(AGGR_UNIQUE, false);
+fn aggr_unique(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
+    Ok(match (accum, current) {
+        (accum @ DataValue::Guard, DataValue::Guard) => {
+            *accum = DataValue::Set(Default::default());
+            true
+        }
+        (accum @ DataValue::Guard, val) => {
+            *accum = DataValue::Set(BTreeSet::from([val.clone()]));
+            true
+        }
+        (_, DataValue::Guard) => false,
+        (DataValue::Set(l), val) => l.insert(val.clone()),
+        _ => unreachable!(),
+    })
+}
+
+define_aggr!(AGGR_UNION, true);
+fn aggr_union(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
+    Ok(match (accum, current) {
+        (accum @ DataValue::Guard, DataValue::Guard) => {
+            *accum = DataValue::Set(Default::default());
+            true
+        }
+        (accum @ DataValue::Guard, DataValue::Set(s)) => {
+            *accum = DataValue::Set(s.clone());
+            true
+        }
+        (accum @ DataValue::Guard, DataValue::List(s)) => {
+            *accum = DataValue::Set(s.iter().cloned().collect());
+            true
+        }
+        (_, DataValue::Guard) => false,
+        (DataValue::Set(l), DataValue::Set(s)) => {
+            if s.is_subset(l) {
+                false
+            } else {
+                l.extend(s.iter().cloned());
+                true
+            }
+        }
+        (DataValue::Set(l), DataValue::List(s)) => {
+            let s: BTreeSet<_> = s.iter().cloned().collect();
+            if s.is_subset(l) {
+                false
+            } else {
+                l.extend(s);
+                true
+            }
+        }
+        (_, v) => bail!("cannot compute 'union' for value {:?}", v),
+    })
+}
+
+define_aggr!(AGGR_INTERSECTION, true);
+fn aggr_intersection(
+    accum: &mut DataValue,
+    current: &DataValue,
+    _args: &[DataValue],
+) -> Result<bool> {
+    Ok(match (accum, current) {
+        (DataValue::Guard, DataValue::Guard) => false,
+        (accum @ DataValue::Guard, DataValue::Set(s)) => {
+            *accum = DataValue::Set(s.clone());
+            true
+        }
+        (accum @ DataValue::Guard, DataValue::List(s)) => {
+            *accum = DataValue::Set(s.iter().cloned().collect());
+            true
+        }
+        (_, DataValue::Guard) => false,
+        (DataValue::Set(l), DataValue::Set(s)) => {
+            if l.is_empty() || l.is_subset(s) {
+                false
+            } else {
+                *l = l.sub(s);
+                true
+            }
+        }
+        (DataValue::Set(l), DataValue::List(s)) => {
+            if l.is_empty() {
+                false
+            } else {
+                let s: BTreeSet<_> = s.iter().cloned().collect();
+                if l.is_subset(&s) {
+                    false
+                } else {
+                    *l = l.sub(&s);
+                    true
+                }
+            }
+        }
+        (_, v) => bail!("cannot compute 'intersection' for value {:?}", v),
+    })
 }
 
 define_aggr!(AGGR_COLLECT, false);
@@ -232,6 +330,9 @@ pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
         "mean" => &AGGR_MEAN,
         "choice" => &AGGR_CHOICE,
         "collect" => &AGGR_COLLECT,
+        "unique" => &AGGR_UNIQUE,
+        "union" => &AGGR_UNION,
+        "intersection" => &AGGR_INTERSECTION,
         _ => return None,
     })
 }

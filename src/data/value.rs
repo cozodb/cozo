@@ -1,9 +1,11 @@
 use std::cmp::{Ordering, Reverse};
+use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 
 use anyhow::{bail, Result};
+use regex::Regex;
 use rmp_serde::Serializer;
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_derive::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
@@ -12,6 +14,41 @@ use uuid::Uuid;
 use crate::data::encode::EncodedVec;
 use crate::data::id::{EntityId, TxId};
 use crate::data::triple::StoreOp;
+
+#[derive(Clone)]
+pub(crate) struct RegexWrapper(pub(crate) Regex);
+
+impl Serialize for RegexWrapper {
+    fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error> where S: serde::Serializer {
+        panic!("serializing regex");
+    }
+}
+
+impl<'de> Deserialize<'de> for RegexWrapper {
+    fn deserialize<D>(_deserializer: D) -> std::result::Result<Self, D::Error> where D: Deserializer<'de> {
+        panic!("deserializing regex");
+    }
+}
+
+impl PartialEq for RegexWrapper {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_str() == other.0.as_str()
+    }
+}
+
+impl Eq for RegexWrapper {}
+
+impl Ord for RegexWrapper {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.as_str().cmp(other.0.as_str())
+    }
+}
+
+impl PartialOrd for RegexWrapper {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.as_str().partial_cmp(other.0.as_str())
+    }
+}
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 pub(crate) enum DataValue {
@@ -29,9 +66,12 @@ pub(crate) enum DataValue {
     Timestamp(i64),
     #[serde(rename = "v")]
     Bytes(Box<[u8]>),
-
+    #[serde(rename = "x")]
+    Regex(RegexWrapper),
     #[serde(rename = "z")]
     List(Vec<DataValue>),
+    #[serde(rename = "y")]
+    Set(BTreeSet<DataValue>),
     #[serde(rename = "g")]
     Guard,
     #[serde(rename = "o")]
@@ -147,6 +187,9 @@ impl Debug for DataValue {
             DataValue::String(s) => {
                 write!(f, "{:?}", s)
             }
+            DataValue::Regex(r) => {
+                write!(f, "{:?}", r.0.as_str())
+            }
             DataValue::Uuid(u) => {
                 write!(f, "{}", u)
             }
@@ -157,6 +200,7 @@ impl Debug for DataValue {
                 write!(f, "bytes(len={})", b.len())
             }
             DataValue::List(t) => f.debug_list().entries(t.iter()).finish(),
+            DataValue::Set(t) => f.debug_list().entries(t.iter()).finish(),
             DataValue::DescVal(v) => {
                 write!(f, "desc<{:?}>", v)
             }

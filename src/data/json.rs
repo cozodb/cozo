@@ -74,6 +74,12 @@ impl From<DataValue> for JsonValue {
             DataValue::Bottom => JsonValue::Null,
             DataValue::Timestamp(i) => JsonValue::Number(i.into()),
             DataValue::Guard => JsonValue::Null,
+            DataValue::Set(l) => {
+                JsonValue::Array(l.iter().map(|v| JsonValue::from(v.clone())).collect())
+            }
+            DataValue::Regex(r) => {
+                json!(r.0.as_str())
+            }
         }
     }
 }
