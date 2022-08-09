@@ -700,6 +700,17 @@ fn op_is_timestamp(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::Timestamp(_))))
 }
 
+define_op!(OP_LENGTH, 1, false, false);
+fn op_length(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::from(match &args[0] {
+        DataValue::Set(s) => s.len() as i64,
+        DataValue::List(l) => l.len() as i64,
+        DataValue::String(s) => s.chars().count() as i64,
+        DataValue::Bytes(b) => b.len() as i64,
+        v => bail!("cannot apply 'length' to {:?}", v),
+    }))
+}
+
 pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
     Some(match name {
         "List" => &OP_LIST,
@@ -757,6 +768,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "IsUuid" => &OP_IS_UUID,
         "IsTimestamp" => &OP_IS_TIMESTAMP,
         "IsIn" => &OP_IS_IN,
+        "Length" => &OP_LENGTH,
         _ => return None,
     })
 }
