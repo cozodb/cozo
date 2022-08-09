@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::time::Instant;
 
 use anyhow::Result;
+use num_traits::abs;
 use serde_json::json;
 
 use cozo::Db;
@@ -522,8 +523,10 @@ fn air_routes() -> Result<()> {
     let res = db.run_script(
         r#"
         route_count[count(?r), ?a] := [?r route.src ?a];
-        ?[?n, count(?a)] := route_count[?n, ?a];
-        :order -?a;
+        rc[max(?n), ?a] := route_count[?n, ?a];
+        rc[max(?n), ?a] := [?a airport.iata ?_], ?n is 0;
+        ?[?n, count(?a)] := rc[?n, ?a];
+        :order ?n;
         :limit 10;
     "#,
     )?;
@@ -531,10 +534,33 @@ fn air_routes() -> Result<()> {
     assert_eq!(
         res,
         serde_json::Value::from_str(
-            r#"[[1,777],[2,649],[3,359],[4,232],[5,150],[6,139],[7,100],[8,74],[9,63],[10,59]]"#
+            r#"[[0,29],[1,777],[2,649],[3,359],[4,232],[5,150],[6,139],[7,100],[8,74],[9,63]]"#
         )
         .unwrap()
     );
+
+    let mean_group_count_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        route_count[count(?r), ?a] := [?r route.src ?a];
+        rc[max(?n), ?a] := route_count[?n, ?a] or ([?a airport.iata ?_], ?n is 0);
+        ?[mean(?n)] := rc[?n, ?_];
+    "#,
+    )?;
+    dbg!(mean_group_count_time.elapsed());
+    let v = res
+        .as_array()
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .get(0)
+        .unwrap()
+        .as_f64()
+        .unwrap();
+    let expected = 14.425513698630137;
+    assert!(abs(v - expected) < 1e-8);
 
     Ok(())
 }

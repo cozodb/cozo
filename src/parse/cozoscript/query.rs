@@ -245,7 +245,7 @@ fn parse_disjunction(src: Pair<'_>) -> Result<JsonValue> {
 
 fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
     Ok(match src.as_rule() {
-        Rule::grouped => {
+        Rule::rule_body => {
             let grouped: Vec<_> = src.into_inner().map(parse_disjunction).try_collect()?;
             json!({ "conj": grouped })
         }

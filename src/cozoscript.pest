@@ -33,7 +33,7 @@ triple = { "[" ~ (expr | triple_pull) ~ compound_ident ~ (expr | triple_pull) ~ 
 triple_pull = {compound_ident ~ "[" ~ expr ~ "]"}
 apply = {ident ~ "(" ~ apply_args ~ ")"}
 apply_args = {(expr ~ ",")* ~ expr?}
-grouped = {"(" ~ rule_body ~ ")"}
+grouped = _{"(" ~ rule_body ~ ")"}
 
 expr = {unary ~ (operation ~ unary)*}
 operation = _{ (op_and | op_or | op_pow | op_str_cat | op_add | op_sub | op_mul | op_div | op_mod |
