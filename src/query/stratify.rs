@@ -26,6 +26,27 @@ impl NormalFormAtom {
 fn convert_normal_form_program_to_graph(
     nf_prog: &NormalFormProgram,
 ) -> StratifiedGraph<&'_ Symbol> {
+    let meet_rules: BTreeSet<_> = nf_prog
+        .prog
+        .iter()
+        .filter_map(|(k, ruleset)| {
+            let has_aggr = ruleset
+                .iter()
+                .any(|rule| rule.aggr.iter().any(|a| a.is_some()));
+            let is_meet = has_aggr
+                && ruleset.iter().all(|rule| {
+                    rule.aggr.iter().all(|v| match v {
+                        None => true,
+                        Some((v, _)) => v.is_meet,
+                    })
+                });
+            if is_meet {
+                Some(k)
+            } else {
+                None
+            }
+        })
+        .collect();
     nf_prog
         .prog
         .iter()
@@ -45,6 +66,7 @@ fn convert_normal_form_program_to_graph(
                 for atom in &rule.body {
                     let contained = atom.contained_rules();
                     for (found_key, is_negated) in contained {
+                        let found_key_is_meet = meet_rules.contains(found_key) && found_key != k;
                         match ret.entry(found_key) {
                             Entry::Vacant(e) => {
                                 if has_aggr {
@@ -54,19 +76,19 @@ fn convert_normal_form_program_to_graph(
                                         e.insert(true);
                                     }
                                 } else {
-                                    e.insert(is_negated);
+                                    e.insert(found_key_is_meet || is_negated);
                                 }
                             }
                             Entry::Occupied(mut e) => {
                                 let old = *e.get();
                                 let new_val = if has_aggr {
                                     if is_meet && k == found_key {
-                                        is_negated
+                                        found_key_is_meet || is_negated
                                     } else {
                                         true
                                     }
                                 } else {
-                                    is_negated
+                                    found_key_is_meet || is_negated
                                 };
                                 e.insert(old || new_val);
                             }

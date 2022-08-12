@@ -1045,12 +1045,87 @@ fn air_routes() -> Result<()> {
     dbg!(great_circle_distance.elapsed());
     assert_eq!(res, json!([[66.0]]));
 
-    let aus_to_edi_via_man_time = Instant::now();
-    let res = db.run_script(r#"
-        routes[?dst, ?path]
-    "#)?;
+    let aus_to_edi_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        us_uk_airports[?a] := [?c country.code 'UK'], [?a airport.country ?c];
+        us_uk_airports[?a] := [?c country.code 'US'], [?a airport.country ?c];
+        routes[?a2, shortest(?path)] := [?a airport.iata 'AUS'], [?r route.src ?a],
+                                        [?r route.dst ?a2], us_uk_airports[?a2],
+                                        [?a2 airport.iata ?dst],
+                                        ?path is ['AUS', ?dst];
+        routes[?a2, shortest(?path)] := routes[?a, ?prev], [?r route.src ?a],
+                                        [?r route.dst ?a2], us_uk_airports[?a2],
+                                        [?a2 airport.iata ?dst],
+                                        ?path is append(?prev, ?dst);
+        ?[?path] := [?edi airport.iata 'EDI'], routes[?edi, ?path];
+    "#,
+    )?;
+    dbg!(aus_to_edi_time.elapsed());
+    assert_eq!(res, json!([[["AUS", "BOS", "EDI"]]]));
 
-    println!("{}", res);
+    let reachable_from_lhr = Instant::now();
+    let res = db.run_script(
+        r#"
+        routes[?a2, shortest(?path)] := [?a airport.iata 'LHR'], [?r route.src ?a],
+                                        [?r route.dst ?a2],
+                                        [?a2 airport.iata ?dst],
+                                        ?path is ['LHR', ?dst];
+        routes[?a2, shortest(?path)] := routes[?a, ?prev], [?r route.src ?a],
+                                        [?r route.dst ?a2],
+                                        [?a2 airport.iata ?dst],
+                                        ?path is append(?prev, ?dst);
+        ?[?len, ?path] := routes[?_, ?path], ?len is length(?path);
+
+        :order -?len;
+        :limit 10;
+    "#,
+    )?;
+    dbg!(reachable_from_lhr.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"
+    [[8,["LHR","YYZ","YTS","YMO","YFA","ZKE","YAT","YPO"]],
+    [7,["LHR","DFW","ANC","AKN","PIP","UGB","PTH"]],[7,["LHR","DFW","ANC","ANI","CHU","CKD","RDV"]],
+    [7,["LHR","DFW","ANC","ANI","CHU","CKD","SLQ"]],[7,["LHR","DFW","ANC","BET","OOK","TNK","WWT"]],
+    [7,["LHR","DFW","SYD","AYQ","MEB","WMB","PTJ"]],[7,["LHR","DFW","SYD","WTB","SGO","CMA","XTG"]],
+    [7,["LHR","KEF","GOH","JAV","JUV","NAQ","THU"]],[7,["LHR","LAX","BNE","ISA","BQL","BEU","BVI"]],
+    [7,["LHR","YUL","YGL","YPX","AKV","YIK","YZG"]]]
+    "#
+        )
+        .unwrap()
+    );
+
+    let furtherest_from_lhr = Instant::now();
+    let res = db.run_script(
+        r#"
+        routes[?a2, min_cost(?cost_pair)] := [?a airport.iata 'LHR'], [?r route.src ?a],
+                                             [?r route.dst ?a2],
+                                             [?r route.distance ?dist],
+                                             [?a2 airport.iata ?dst],
+                                             ?path is ['LHR', ?dst],
+                                             ?cost_pair is [?path, ?dist];
+        routes[?a2, min_cost(?cost_pair)] := routes[?a, ?prev], [?r route.src ?a],
+                                             [?r route.dst ?a2],
+                                             [?r route.distance ?dist],
+                                             [?a2 airport.iata ?dst],
+                                             ?path is append(first(?prev), ?dst),
+                                             ?cost_pair is [?path, last(?prev) + ?dist];
+        ?[?cost, ?path] := routes[?dst, ?cost_pair], ?cost is last(?cost_pair), ?path is first(?cost_pair);
+
+        :order -?cost;
+        :limit 10;
+    "#,
+    )?;
+    dbg!(furtherest_from_lhr.elapsed());
+    assert_eq!(res, serde_json::Value::from_str(r#"
+    [[12922,["LHR","JNB","HLE","ASI","BZZ"]],[12114,["LHR","PVG","BNE","CHC","IVC"]],
+     [12030,["LHR","PVG","BNE","CHC","DUD"]],[12015,["LHR","NRT","AKL","WLG","TIU"]],
+     [11921,["LHR","PVG","BNE","CHC","HKK"]],[11910,["LHR","NRT","AKL","WLG","WSZ"]],
+     [11826,["LHR","PVG","BNE","CHC"]],[11766,["LHR","PVG","BNE","ZQN"]],
+     [11758,["LHR","NRT","AKL","BHE"]],[11751,["LHR","NRT","AKL","NSN"]]]
+    "#).unwrap());
 
     Ok(())
 }

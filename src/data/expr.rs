@@ -751,10 +751,11 @@ fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let y1 = args[1].get_float().ok_or_else(gen_err)?;
     let x2 = args[2].get_float().ok_or_else(gen_err)?;
     let y2 = args[3].get_float().ok_or_else(gen_err)?;
-    let ret = 2. * f64::acos(f64::sqrt(
-        f64::sin((x1 - y1) / 2.).powi(2)
-            + f64::cos(x1) * f64::cos(y1) * f64::sin((x2 - y2) / 2.).powi(2),
-    ));
+    let ret = 2.
+        * f64::acos(f64::sqrt(
+            f64::sin((x1 - y1) / 2.).powi(2)
+                + f64::cos(x1) * f64::cos(y1) * f64::sin((x2 - y2) / 2.).powi(2),
+        ));
     Ok(DataValue::from(ret))
 }
 
@@ -765,10 +766,11 @@ fn op_haversine_deg(args: &[DataValue]) -> Result<DataValue> {
     let y1 = args[1].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let x2 = args[2].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let y2 = args[3].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
-    let ret = 2. * f64::acos(f64::sqrt(
-        f64::sin((x1 - y1) / 2.).powi(2)
-            + f64::cos(x1) * f64::cos(y1) * f64::sin((x2 - y2) / 2.).powi(2),
-    ));
+    let ret = 2.
+        * f64::acos(f64::sqrt(
+            f64::sin((x1 - y1) / 2.).powi(2)
+                + f64::cos(x1) * f64::cos(y1) * f64::sin((x2 - y2) / 2.).powi(2),
+        ));
     Ok(DataValue::from(ret * 180. / f64::PI()))
 }
 
@@ -786,6 +788,63 @@ fn op_rad_to_deg(args: &[DataValue]) -> Result<DataValue> {
         .get_float()
         .ok_or_else(|| anyhow!("cannot convert to degrees: {:?}", args))?;
     Ok(DataValue::from(x * 180. / f64::PI()))
+}
+
+define_op!(OP_FIRST, 1, false, false);
+fn op_first(args: &[DataValue]) -> Result<DataValue> {
+    Ok(args[0]
+        .get_list()
+        .ok_or_else(|| anyhow!("cannot compute 'first' of {:?}", args))?
+        .first()
+        .cloned()
+        .unwrap_or(DataValue::Null))
+}
+
+define_op!(OP_LAST, 1, false, false);
+fn op_last(args: &[DataValue]) -> Result<DataValue> {
+    Ok(args[0]
+        .get_list()
+        .ok_or_else(|| anyhow!("cannot compute 'last' of {:?}", args))?
+        .last()
+        .cloned()
+        .unwrap_or(DataValue::Null))
+}
+
+define_op!(OP_NTH, 2, false, false);
+fn op_nth(args: &[DataValue]) -> Result<DataValue> {
+    let l = args[0]
+        .get_list()
+        .ok_or_else(|| anyhow!("first argument to 'nth' mut be a list, got args {:?}", args))?;
+    let n = args[1].get_int().ok_or_else(|| {
+        anyhow!(
+            "second argument to 'nth' mut be an integer, got args {:?}",
+            args
+        )
+    })?;
+    Ok(if n >= 0 {
+        let n = n as usize;
+        if n >= l.len() {
+            DataValue::Null
+        } else {
+            l[n].clone()
+        }
+    } else {
+        let len = l.len() as i64;
+        let idx = len + n;
+        if idx < 0 {
+            DataValue::Null
+        } else {
+            l[idx as usize].clone()
+        }
+    })
+}
+
+define_op!(OP_NEGATE, 1, false, true);
+fn op_negate(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::Bool(b) => Ok(DataValue::Bool(!*b)),
+        v => bail!("cannot negate {:?}", v)
+    }
 }
 
 pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
@@ -854,6 +913,10 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "haversine_deg" => &OP_HAVERSINE_DEG,
         "deg_to_rad" => &OP_DEG_TO_RAD,
         "rad_to_deg" => &OP_RAD_TO_DEG,
+        "nth" => &OP_NTH,
+        "first" => &OP_FIRST,
+        "last" => &OP_LAST,
+        "negate" => &OP_NEGATE,
         _ => return None,
     })
 }
