@@ -656,6 +656,163 @@ fn air_routes() -> Result<()> {
         .unwrap()
     );
 
+    let na_from_india_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?ind_c, ?na_c] := [?india country.code 'IN'], [?ind_a airport.country ?india],
+                            [?r route.src ?ind_a], [?r route.dst ?na_a],
+                            [?na_a airport.country ?dst_country],
+                            [?dst_country country.code ?dst_country_name],
+                            ?dst_country_name is_in ['US', 'CA'],
+                            [?ind_a airport.iata ?ind_c], [?na_a airport.iata ?na_c];
+
+    "#,
+    )?;
+    dbg!(na_from_india_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+    ["BOM","EWR"],["BOM","JFK"],["BOM","YYZ"],["DEL","EWR"],["DEL","IAD"],["DEL","JFK"],
+    ["DEL","ORD"],["DEL","SFO"],["DEL","YVR"],["DEL","YYZ"]]"#
+        )
+        .unwrap()
+    );
+
+    let eu_cities_reachable_from_fll_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?city_name] := [?a airport.iata 'FLL'],
+                         [?r route.src ?a],
+                         [?r route.dst ?a2],
+                         [?cont geo.contains ?a2],
+                         [?cont continent.code 'EU'],
+                         [?a2 airport.city ?city_name];
+    "#,
+    )?;
+    dbg!(eu_cities_reachable_from_fll_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+    ["Barcelona"],["Copenhagen"],["London"],["Madrid"],["Oslo"],["Paris"],["Stockholm"]]"#
+        )
+        .unwrap()
+    );
+
+    let clt_to_eu_or_sa_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?code] := [?a airport.iata 'CLT'], [?r route.src ?a], [?r route.dst ?a2],
+                    [?cont geo.contains ?a2], [?cont continent.code ?c_name],
+                    ?c_name is_in ['EU', 'SA'],
+                    [?a2 airport.iata ?code];
+    "#,
+    )?;
+    dbg!(clt_to_eu_or_sa_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[["BCN"],["CDG"],["DUB"],["FCO"],["FRA"],["GIG"],["GRU"],["LHR"],["MAD"],["MUC"]]"#
+        )
+        .unwrap()
+    );
+
+    let london_to_us_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?l_code, ?us_code] := ?l_code is_in ['LHR', 'LCY', 'LGW', 'LTN', 'STN'],
+                                [?a airport.iata ?l_code],
+                                [?r route.src ?a], [?r route.dst ?a2],
+                                [?us country.code 'US'],
+                                [?a2 airport.country ?us],
+                                [?a2 airport.iata ?us_code];
+    "#,
+    )?;
+    dbg!(london_to_us_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"
+    [["LGW","AUS"],["LGW","BOS"],["LGW","DEN"],["LGW","FLL"],["LGW","JFK"],["LGW","LAS"],
+     ["LGW","LAX"],["LGW","MCO"],["LGW","MIA"],["LGW","OAK"],["LGW","ORD"],["LGW","SEA"],
+     ["LGW","SFO"],["LGW","TPA"],["LHR","ATL"],["LHR","AUS"],["LHR","BNA"],["LHR","BOS"],
+     ["LHR","BWI"],["LHR","CHS"],["LHR","CLT"],["LHR","DEN"],["LHR","DFW"],["LHR","DTW"],
+     ["LHR","EWR"],["LHR","IAD"],["LHR","IAH"],["LHR","JFK"],["LHR","LAS"],["LHR","LAX"],
+     ["LHR","MIA"],["LHR","MSP"],["LHR","MSY"],["LHR","ORD"],["LHR","PDX"],["LHR","PHL"],
+     ["LHR","PHX"],["LHR","PIT"],["LHR","RDU"],["LHR","SAN"],["LHR","SEA"],["LHR","SFO"],
+     ["LHR","SJC"],["LHR","SLC"],["STN","BOS"],["STN","EWR"],["STN","IAD"],["STN","SFB"]]
+    "#
+        )
+        .unwrap()
+    );
+
+    let tx_to_ny_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?tx_code, ?ny_code] := [?a airport.region 'US-TX'],
+                                 [?r route.src ?a],
+                                 [?r route.dst ?a2],
+                                 [?a2 airport.region 'US-NY'],
+                                 [?a airport.iata ?tx_code],
+                                 [?a2 airport.iata ?ny_code];
+    "#,
+    )?;
+    dbg!(tx_to_ny_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"
+    [["AUS","BUF"],["AUS","EWR"],["AUS","JFK"],["DAL","LGA"],["DFW","BUF"],["DFW","EWR"],
+     ["DFW","JFK"],["DFW","LGA"],["HOU","EWR"],["HOU","JFK"],["HOU","LGA"],["IAH","EWR"],
+     ["IAH","JFK"],["IAH","LGA"],["SAT","EWR"],["SAT","JFK"]]
+    "#
+        )
+        .unwrap()
+    );
+
+    let denver_to_mexico_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?city_name] := [?a airport.iata 'DEN'], [?r route.src ?a], [?r route.dst ?a2],
+                         [?a2 airport.country ?ct],
+                         [?ct country.code 'MX'],
+                         [?a2 airport.city ?city_name];
+    "#,
+    )?;
+    dbg!(denver_to_mexico_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+    ["Cancun"],["Cozumel"],["Guadalajara"],["Mexico City"],["Monterrey"],
+    ["Puerto Vallarta"],["San José del Cabo"]]"#
+        )
+        .unwrap()
+    );
+
+    let three_cities_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        three[?a] := ?city is_in ['London', 'Munich', 'Paris'], [?a airport.city ?city];
+        ?[?src, ?dst] := three[?s], [?r route.src ?s], [?r route.dst ?d], three[?d],
+                         [?s airport.iata ?src], [?d airport.iata ?dst];
+    "#,
+    )?;
+    dbg!(three_cities_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+    ["CDG","LCY"],["CDG","LGW"],["CDG","LHR"],["CDG","LTN"],["CDG","MUC"],["LCY","CDG"],
+    ["LCY","MUC"],["LCY","ORY"],["LGW","CDG"],["LGW","MUC"],["LHR","CDG"],["LHR","MUC"],
+    ["LHR","ORY"],["LTN","CDG"],["LTN","MUC"],["LTN","ORY"],["MUC","CDG"],["MUC","LCY"],
+    ["MUC","LGW"],["MUC","LHR"],["MUC","LTN"],["MUC","ORY"],["MUC","STN"],["ORY","LCY"],
+    ["ORY","LHR"],["ORY","MUC"],["STN","MUC"]]"#
+        )
+        .unwrap()
+    );
+
     println!("{}", res);
 
     Ok(())
