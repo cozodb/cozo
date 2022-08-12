@@ -585,11 +585,13 @@ fn air_routes() -> Result<()> {
     assert_eq!(res, json!([[2353]]));
 
     let routes_within_england_time = Instant::now();
-    let res = db.run_script(r#"
+    let res = db.run_script(
+        r#"
         eng_aps[?a] := [?a airport.region 'GB-ENG'];
         ?[?src, ?dst] := eng_aps[?a1], [?r route.src ?a1], [?r route.dst ?a2], eng_aps[?a2],
                          [?a1 airport.iata ?src], [?a2 airport.iata ?dst];
-    "#)?;
+    "#,
+    )?;
     dbg!(routes_within_england_time.elapsed());
     assert_eq!(
         res,
@@ -627,6 +629,29 @@ fn air_routes() -> Result<()> {
     [["LCY","MAN"]],[["LCY","NCL"]],[["LGW","NCL"]],[["LGW","NQY"]],[["LHR","MAN"]],[["LHR","NCL"]],
     [["LHR","NQY"]],[["LPL","NQY"]],[["MAN","NQY"]],[["MAN","NWI"]],[["MAN","SEN"]],[["MAN","SOU"]],
     [["MME","NWI"]],[["NCL","SOU"]],[["NQY","SEN"]]]"#
+        )
+        .unwrap()
+    );
+
+    let hard_route_finding_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        reachable[?a, choice(?p)] := [?s airport.iata 'AUS'],
+                                     [?r route.src ?s], [?r route.dst ?a],
+                                     [?a airport.iata ?code], ?code != 'YYZ', ?p is ['AUS', ?code];
+        reachable[?a, choice(?p)] := reachable[?b, ?prev],
+                                     [?r route.src ?b], [?r route.dst ?a], [?a airport.iata ?code],
+                                     ?code != 'YYZ', ?p is append(?prev, ?code);
+        ?[?p] := reachable[?a, ?p], [?a airport.iata 'YPO'];
+
+        :limit 1;
+    "#,
+    )?;
+    dbg!(hard_route_finding_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[[["AUS","BOS","YTZ","YTS","YMO","YFA","ZKE","YAT","YPO"]]]"#
         )
         .unwrap()
     );

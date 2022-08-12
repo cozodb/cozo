@@ -685,6 +685,18 @@ fn op_is_list(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::List(_))))
 }
 
+define_op!(OP_APPEND, 2, false, false);
+fn op_append(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::List(l) => {
+            let mut l = l.clone();
+            l.push(args[1].clone());
+            Ok(DataValue::List(l))
+        }
+        v => bail!("cannot append to {:?}", v)
+    }
+}
+
 define_op!(OP_IS_BYTES, 1, false, true);
 fn op_is_bytes(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::Bytes(_))))
@@ -780,6 +792,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "is_in" => &OP_IS_IN,
         "length" => &OP_LENGTH,
         "sort" => &OP_SORT,
+        "append" => &OP_APPEND,
         _ => return None,
     })
 }
