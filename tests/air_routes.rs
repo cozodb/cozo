@@ -813,6 +813,125 @@ fn air_routes() -> Result<()> {
         .unwrap()
     );
 
+    let long_distance_from_lgw_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?city, ?dist] := [?a airport.iata 'LGW'], [?r route.src ?a], [?r route.dst ?a2],
+                           [?r route.distance ?dist], ?dist > 4000, [?a2 airport.city ?city];
+    "#,
+    )?;
+    dbg!(long_distance_from_lgw_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"
+    [["Austin",4921],["Beijing",5070],["Bridgetown",4197],["Buenos Aires",6908],["Calgary",4380],
+    ["Cancun",4953],["Cape Town",5987],["Chengdu",5156],["Chongqing",5303],["Colombo",5399],
+    ["Denver",4678],["Duong Dong",6264],["Fort Lauderdale",4410],["Havana",4662],["Hong Kong",5982],
+    ["Kigali",4077],["Kingston",4680],["Langkawi",6299],["Las Vegas",5236],["Los Angeles",5463],
+    ["Malé",5287],["Miami",4429],["Montego Bay",4699],["Oakland",5364],["Orlando",4341],
+    ["Port Louis",6053],["Port of Spain",4408],["Punta Cana",4283],["Rayong",6008],
+    ["Rio de Janeiro",5736],["San Francisco",5374],["San Jose",5419],["Seattle",4807],
+    ["Shanghai",5745],["Singapore",6751],["St. George",4076],["Taipei",6080],["Tampa",4416],
+    ["Tianjin",5147],["Vancouver",4731],["Varadero",4618],["Vieux Fort",4222]]"#
+        )
+        .unwrap()
+    );
+
+    let long_routes_one_dir_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?src, ?dist, ?dst] := [?r route.distance ?dist], ?dist > 8000, [?r route.src ?s],
+                                [?r route.dst ?d], [?s airport.iata ?src], [?d airport.iata ?dst],
+                                ?src < ?dst;
+    "#,
+    )?;
+    dbg!(long_routes_one_dir_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"
+    [["AKL",8186,"ORD"],["AKL",8818,"DXB"],["AKL",9025,"DOH"],["ATL",8434,"JNB"],["AUH",8053,"DFW"],
+    ["AUH",8139,"SFO"],["AUH",8372,"LAX"],["CAN",8754,"MEX"],["DFW",8022,"DXB"],["DFW",8105,"HKG"],
+    ["DFW",8574,"SYD"],["DOH",8030,"IAH"],["DOH",8287,"LAX"],["DXB",8085,"SFO"],["DXB",8150,"IAH"],
+    ["DXB",8321,"LAX"],["EWR",8047,"HKG"],["EWR",9523,"SIN"],["HKG",8054,"JFK"],["HKG",8135,"IAD"],
+    ["IAH",8591,"SYD"],["JED",8314,"LAX"],["JFK",8504,"MNL"],["LAX",8246,"RUH"],["LAX",8756,"SIN"],
+    ["LHR",9009,"PER"],["MEL",8197,"YVR"],["PEK",8884,"PTY"],["SCL",8208,"TLV"],["SEA",8059,"SIN"],
+    ["SFO",8433,"SIN"]]"#
+        )
+        .unwrap()
+    );
+
+    let longest_routes_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?src, ?dist, ?dst] := [?r route.distance ?dist], [?r route.src ?s],
+                                [?r route.dst ?d], [?s airport.iata ?src], [?d airport.iata ?dst],
+                                ?src < ?dst;
+        :sort -?dist;
+        :limit 20;
+    "#,
+    )?;
+    dbg!(longest_routes_time.elapsed());
+    assert_eq!(res, serde_json::Value::from_str(r#"
+    [["EWR",9523,"SIN"],["AKL",9025,"DOH"],["LHR",9009,"PER"],["PEK",8884,"PTY"],["AKL",8818,"DXB"],
+    ["LAX",8756,"SIN"],["CAN",8754,"MEX"],["IAH",8591,"SYD"],["DFW",8574,"SYD"],["JFK",8504,"MNL"],
+    ["ATL",8434,"JNB"],["SFO",8433,"SIN"],["AUH",8372,"LAX"],["DXB",8321,"LAX"],["JED",8314,"LAX"],
+    ["DOH",8287,"LAX"],["LAX",8246,"RUH"],["SCL",8208,"TLV"],["MEL",8197,"YVR"],["AKL",8186,"ORD"]]"#).unwrap());
+
+    let longest_routes_from_each_airports = Instant::now();
+    let res = db.run_script(r#"
+        ap[?a, max(?dist)] := [?r route.src ?a], [?r route.distance ?dist];
+        ?[?src, ?dist, ?dst] := ap[?a, ?dist], [?r route.src ?a], [?r route.distance ?dist], [?r route.dst ?d],
+                                [?a airport.iata ?src], [?d airport.iata ?dst];
+        :limit 10;
+    "#)?;
+    dbg!(longest_routes_from_each_airports.elapsed());
+    assert_eq!(res, serde_json::Value::from_str(r#"
+    [["ANC",3368,"KEF"],["ATL",8434,"JNB"],["AUS",5294,"FRA"],["BNA",4168,"LHR"],["BOS",7952,"HKG"],
+    ["BWI",3622,"LHR"],["DCA",2434,"SFO"],["DFW",8574,"SYD"],["FLL",7808,"DXB"],["IAD",8135,"HKG"]]"#).unwrap());
+
+    let total_distance_from_three_cities_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        three[?a] := ?city is_in ['London', 'Munich', 'Paris'], [?a airport.city ?city];
+        ?[sum(?dist)] := three[?a], [?r route.src ?a], [?r route.distance ?dist];
+    "#,
+    )?;
+    dbg!(total_distance_from_three_cities_time.elapsed());
+    assert_eq!(res, json!([[2733379]]));
+
+    let total_distance_within_three_cities_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        three[?a] := ?city is_in ['London', 'Munich', 'Paris'], [?a airport.city ?city];
+        ?[sum(?dist)] := three[?a], [?r route.src ?a], [?r route.dst ?a2], three[?a2],
+                         [?r route.distance ?dist];
+    "#,
+    )?;
+    dbg!(total_distance_within_three_cities_time.elapsed());
+    assert_eq!(res, json!([[10282]]));
+
+    let specific_distance_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?dist] := [?a airport.iata 'AUS'], [?a2 airport.iata 'MEX'], [?r route.src ?a],
+                    [?r route.dst ?a2], [?r route.distance ?dist];
+    "#,
+    )?;
+    dbg!(specific_distance_time.elapsed());
+    assert_eq!(res, json!([[748]]));
+
+    let n_routes_between_time = Instant::now();
+    let res = db.run_script(r#"
+        us_a[?a] := [?us country.code 'US'], [?us geo.contains ?a];
+        ?[count(?r)] := [?r route.distance ?dist], ?dist >= 100, ?dist <= 200,
+                        [?r route.src ?s], us_a[?s],
+                        [?r route.dst ?d], us_a[?d];
+    "#)?;
+    dbg!(n_routes_between_time.elapsed());
+    assert_eq!(res, json!([[597]]));
+
     println!("{}", res);
 
     Ok(())
