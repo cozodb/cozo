@@ -865,7 +865,7 @@ fn air_routes() -> Result<()> {
     let longest_routes_time = Instant::now();
     let res = db.run_script(
         r#"
-        ?[?src, ?dist, ?dst] := [?r route.distance ?dist], [?r route.src ?s],
+        ?[?src, ?dist, ?dst] := [?r route.distance ?dist], ?dist > 4000, [?r route.src ?s],
                                 [?r route.dst ?d], [?s airport.iata ?src], [?d airport.iata ?dst],
                                 ?src < ?dst;
         :sort -?dist;
@@ -923,14 +923,132 @@ fn air_routes() -> Result<()> {
     assert_eq!(res, json!([[748]]));
 
     let n_routes_between_time = Instant::now();
-    let res = db.run_script(r#"
+    let res = db.run_script(
+        r#"
         us_a[?a] := [?us country.code 'US'], [?us geo.contains ?a];
         ?[count(?r)] := [?r route.distance ?dist], ?dist >= 100, ?dist <= 200,
                         [?r route.src ?s], us_a[?s],
                         [?r route.dst ?d], us_a[?d];
-    "#)?;
+    "#,
+    )?;
     dbg!(n_routes_between_time.elapsed());
     assert_eq!(res, json!([[597]]));
+
+    let one_stop_distance_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?code, ?dist] := [?s airport.iata 'AUS'], [?r1 route.src ?s], [?r1 route.dst ?a],
+           [?r2 route.src ?a], [?r2 route.dst ?d], [?d airport.iata 'LHR'],
+           [?r1 route.distance ?dis1], [?r2 route.distance ?dis2], ?dist is ?dis1 + ?dis2,
+           [?a airport.iata ?code];
+        :order ?dist;
+        :limit 10;
+    "#,
+    )?;
+    dbg!(one_stop_distance_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"
+    [["DTW",4893],["YYZ",4901],["ORD",4912],["PIT",4916],["BNA",4923],["DFW",4926],["BOS",4944],
+    ["EWR",4953],["IAD",4959],["JFK",4960]]"#
+        )
+        .unwrap()
+    );
+
+    let airport_most_routes_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ac[?a, count(?r)] := [?r route.src ?a];
+        ?[?code, ?n] := ac[?a, ?n], [?a airport.iata ?code];
+        :order -?n;
+        :limit 10;
+    "#,
+    )?;
+    dbg!(airport_most_routes_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"
+    [["FRA",307],["IST",307],["CDG",293],["AMS",282],["MUC",270],
+    ["ORD",264],["DFW",251],["PEK",248],["DXB",247],["ATL",242]]
+    "#
+        )
+        .unwrap()
+    );
+
+    let north_of_77_time = Instant::now();
+    let res = db.run_script(r#"
+        ?[?city, ?latitude] := [?a airport.lat ?lat], ?lat > 77, [?a airport.city ?city], ?latitude is round(?lat);
+    "#)?;
+    dbg!(north_of_77_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(r#"[["Longyearbyen",78.0],["Qaanaaq",77.0]]"#).unwrap()
+    );
+
+    let greenwich_meridian_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?code] := [?a airport.lon ?lon], ?lon > -0.1, ?lon < 0.1, [?a airport.iata ?code];
+    "#,
+    )?;
+    dbg!(greenwich_meridian_time.elapsed());
+    assert_eq!(res, json!([["CDT"], ["LCY"], ["LDE"], ["LEH"]]));
+
+    let box_around_heathrow_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        h_box[?lhr_lon, ?lhr_lat] := [?lhr airport.iata 'LHR'],
+                                     [?lhr airport.lon ?lhr_lon],
+                                     [?lhr airport.lat ?lhr_lat];
+        ?[?code] := h_box[?lhr_lon, ?lhr_lat], [?a airport.lon ?lon], [?a airport.lat ?lat],
+                    abs(?lhr_lon - ?lon) < 1, abs(?lhr_lat - ?lat) < 1, [?a airport.iata ?code];
+    "#,
+    )?;
+    dbg!(box_around_heathrow_time.elapsed());
+    assert_eq!(
+        res,
+        json!([["LCY"], ["LGW"], ["LHR"], ["LTN"], ["SOU"], ["STN"]])
+    );
+
+    let dfw_by_region_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?region, collect(?code)] := [?dfw airport.iata 'DFW'],
+                                      [?us country.code 'US'],
+                                      [?r route.src ?dfw],
+                                      [?r route.dst ?a], [?a airport.country ?us],
+                                      ?region is_in ['US-CA', 'US-TX', 'US-FL', 'US-CO', 'US-IL'],
+                                      [?a airport.region ?region],
+                                      [?a airport.iata ?code];
+    "#,
+    )?;
+    dbg!(dfw_by_region_time.elapsed());
+    assert_eq!(res, serde_json::Value::from_str(r#"
+    [["US-CA",["BFL","BUR","FAT","LAX","MRY","OAK","ONT","PSP","SAN","SBA","SFO","SJC","SMF","SNA"]],
+    ["US-CO",["ASE","COS","DEN","DRO","EGE","GJT","GUC","HDN","MTJ"]],
+    ["US-FL",["ECP","EYW","FLL","GNV","JAX","MCO","MIA","PBI","PNS","RSW","SRQ","TLH","TPA","VPS"]],
+    ["US-IL",["BMI","CMI","MLI","ORD","PIA","SPI"]],
+    ["US-TX",["ABI","ACT","AMA","AUS","BPT","BRO","CLL","CRP","DRT","ELP","GGG","GRK","HOU","HRL",
+              "IAH","LBB","LRD","MAF","MFE","SAT","SJT","SPS","TYR"]]]
+    "#).unwrap());
+
+    let great_circle_distance = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?deg_diff] := [?a airport.iata 'SFO'], [?a airport.lat ?a_lat], [?a airport.lon ?a_lon],
+                        [?b airport.iata 'NRT'], [?b airport.lat ?b_lat], [?b airport.lon ?b_lon],
+                        ?deg_diff is round(haversine_deg(?a_lat, ?a_lon, ?b_lat, ?b_lon));
+    "#,
+    )?;
+    dbg!(great_circle_distance.elapsed());
+    assert_eq!(res, json!([[66.0]]));
+
+    let aus_to_edi_via_man_time = Instant::now();
+    let res = db.run_script(r#"
+        routes[?dst, ?path]
+    "#)?;
 
     println!("{}", res);
 

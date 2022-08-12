@@ -378,11 +378,11 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
                 Rule::param => json!({ "param": s }),
                 Rule::minus => {
                     let inner = build_unary(inner.next().unwrap())?;
-                    json!({"op": "Minus", "args": [inner]})
+                    json!({"op": "minus", "args": [inner]})
                 }
                 Rule::negate => {
                     let inner = build_unary(inner.next().unwrap())?;
-                    json!({"op": "Negate", "args": [inner]})
+                    json!({"op": "negate", "args": [inner]})
                 }
                 Rule::pos_int => {
                     let i = s.replace('_', "").parse::<i64>()?;

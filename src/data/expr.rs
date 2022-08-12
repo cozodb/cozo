@@ -5,6 +5,7 @@ use std::ops::Rem;
 
 use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
+use num_traits::FloatConst;
 
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
@@ -693,7 +694,7 @@ fn op_append(args: &[DataValue]) -> Result<DataValue> {
             l.push(args[1].clone());
             Ok(DataValue::List(l))
         }
-        v => bail!("cannot append to {:?}", v)
+        v => bail!("cannot append to {:?}", v),
     }
 }
 
@@ -731,6 +732,60 @@ fn op_sort(args: &[DataValue]) -> Result<DataValue> {
         .to_vec();
     arg.sort();
     Ok(DataValue::List(arg))
+}
+
+define_op!(OP_PI, 0, false, false);
+fn op_pi(_args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::from(f64::PI()))
+}
+
+define_op!(OP_E, 0, false, false);
+fn op_e(_args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::from(f64::E()))
+}
+
+define_op!(OP_HAVERSINE, 4, false, false);
+fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
+    let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);
+    let x1 = args[0].get_float().ok_or_else(gen_err)?;
+    let y1 = args[1].get_float().ok_or_else(gen_err)?;
+    let x2 = args[2].get_float().ok_or_else(gen_err)?;
+    let y2 = args[3].get_float().ok_or_else(gen_err)?;
+    let ret = 2. * f64::acos(f64::sqrt(
+        f64::sin((x1 - y1) / 2.).powi(2)
+            + f64::cos(x1) * f64::cos(y1) * f64::sin((x2 - y2) / 2.).powi(2),
+    ));
+    Ok(DataValue::from(ret))
+}
+
+define_op!(OP_HAVERSINE_DEG, 4, false, false);
+fn op_haversine_deg(args: &[DataValue]) -> Result<DataValue> {
+    let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);
+    let x1 = args[0].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
+    let y1 = args[1].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
+    let x2 = args[2].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
+    let y2 = args[3].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
+    let ret = 2. * f64::acos(f64::sqrt(
+        f64::sin((x1 - y1) / 2.).powi(2)
+            + f64::cos(x1) * f64::cos(y1) * f64::sin((x2 - y2) / 2.).powi(2),
+    ));
+    Ok(DataValue::from(ret * 180. / f64::PI()))
+}
+
+define_op!(OP_DEG_TO_RAD, 1, false, false);
+fn op_deg_to_rad(args: &[DataValue]) -> Result<DataValue> {
+    let x = args[0]
+        .get_float()
+        .ok_or_else(|| anyhow!("cannot convert to radian: {:?}", args))?;
+    Ok(DataValue::from(x * f64::PI() / 180.))
+}
+
+define_op!(OP_RAD_TO_DEG, 1, false, false);
+fn op_rad_to_deg(args: &[DataValue]) -> Result<DataValue> {
+    let x = args[0]
+        .get_float()
+        .ok_or_else(|| anyhow!("cannot convert to degrees: {:?}", args))?;
+    Ok(DataValue::from(x * 180. / f64::PI()))
 }
 
 pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
@@ -793,6 +848,12 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "length" => &OP_LENGTH,
         "sort" => &OP_SORT,
         "append" => &OP_APPEND,
+        "pi" => &OP_PI,
+        "e" => &OP_E,
+        "haversine" => &OP_HAVERSINE,
+        "haversine_deg" => &OP_HAVERSINE_DEG,
+        "deg_to_rad" => &OP_DEG_TO_RAD,
+        "rad_to_deg" => &OP_RAD_TO_DEG,
         _ => return None,
     })
 }
