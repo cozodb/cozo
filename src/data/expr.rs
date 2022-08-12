@@ -839,14 +839,6 @@ fn op_nth(args: &[DataValue]) -> Result<DataValue> {
     })
 }
 
-define_op!(OP_NEGATE, 1, false, true);
-fn op_negate(args: &[DataValue]) -> Result<DataValue> {
-    match &args[0] {
-        DataValue::Bool(b) => Ok(DataValue::Bool(!*b)),
-        v => bail!("cannot negate {:?}", v)
-    }
-}
-
 pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
     Some(match name {
         "list" => &OP_LIST,
@@ -916,7 +908,6 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "nth" => &OP_NTH,
         "first" => &OP_FIRST,
         "last" => &OP_LAST,
-        "negate" => &OP_NEGATE,
         _ => return None,
     })
 }

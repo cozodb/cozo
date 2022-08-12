@@ -449,8 +449,8 @@ mod tests {
         friend_of_friend[?a, ?b] := friend_of_friend[?a, ?c], [?c person.friend ?b];
 
         ?[?a, ?b] := [?a person.friend ?b], [?a person.age ?age], ?age > 18 + 9;
-        :limit = 20;
-        :offset = 30;
+        :limit 20;
+        :offset 30;
         "#;
         let parsed = parse_query_to_json(src).unwrap();
         // println!("{}", to_string_pretty(&parsed).unwrap());
