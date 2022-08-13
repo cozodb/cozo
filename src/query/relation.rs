@@ -674,7 +674,7 @@ impl TripleRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         match right_join_indices.len() {
-            0 => self.cartesian_join(left_iter, tx),
+            0 => self.cartesian_join(left_iter, tx, eliminate_indices),
             2 => {
                 let right_first = *right_join_indices.first().unwrap();
                 let right_second = *right_join_indices.last().unwrap();
@@ -704,7 +704,12 @@ impl TripleRelation {
             _ => unreachable!(),
         }
     }
-    fn cartesian_join<'a>(&'a self, left_iter: TupleIter<'a>, tx: &'a SessionTx) -> TupleIter<'a> {
+    fn cartesian_join<'a>(
+        &'a self,
+        left_iter: TupleIter<'a>,
+        tx: &'a SessionTx,
+        eliminate_indices: BTreeSet<usize>,
+    ) -> TupleIter<'a> {
         // [f, f] not really a join
         let it = left_iter
             .map_ok(|tuple| {
@@ -718,7 +723,7 @@ impl TripleRelation {
             })
             .flatten_ok()
             .map(flatten_err);
-        self.return_filtered_iter(it, Default::default())
+        self.return_filtered_iter(it, eliminate_indices)
     }
     fn neg_ev_join<'a>(
         &'a self,
@@ -1577,7 +1582,6 @@ impl InnerJoin {
                         &self.right.bindings_after_eliminate(),
                     )
                     .unwrap();
-                // println!("{:?}, {:?}, {:?}, {:?}", self, join_indices, self.left.bindings_after_eliminate(), self.right.bindings_after_eliminate());
                 r.join(
                     self.left.iter(tx, epoch, use_delta),
                     join_indices,
