@@ -895,12 +895,12 @@ impl TripleRelation {
                             Tuple(ret)
                         };
                         if self.attr.with_history {
-                            Left(tx.triple_ea_scan(eid, self.attr.id).map_ok(clj))
-                        } else {
-                            Right(
+                            Left(
                                 tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
                                     .map_ok(clj),
                             )
+                        } else {
+                            Right(tx.triple_ea_scan(eid, self.attr.id).map_ok(clj))
                         }
                     })
             })
@@ -975,13 +975,26 @@ impl TripleRelation {
                     .get_entity_id()
                     .with_context(|| format!("{:?}", self))
                     .map(move |v_eid| {
-                        tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
-                            .map_ok(move |(_, _, e_id)| {
-                                let mut ret = tuple.0.clone();
-                                ret.push(e_id.to_value());
-                                ret.push(v_eid.to_value());
-                                Tuple(ret)
-                            })
+                        if self.attr.with_history {
+                            Left(
+                                tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
+                                    .map_ok(move |(_, _, e_id)| {
+                                        let mut ret = tuple.0.clone();
+                                        ret.push(e_id.to_value());
+                                        ret.push(v_eid.to_value());
+                                        Tuple(ret)
+                                    }),
+                            )
+                        } else {
+                            Right(tx.triple_vref_a_scan(v_eid, self.attr.id).map_ok(
+                                move |(_, _, e_id)| {
+                                    let mut ret = tuple.0.clone();
+                                    ret.push(e_id.to_value());
+                                    ret.push(v_eid.to_value());
+                                    Tuple(ret)
+                                },
+                            ))
+                        }
                     })
             })
             .map(flatten_err)
@@ -1132,7 +1145,7 @@ impl TripleRelation {
                 Err(e) => return Box::new([Err(e)].into_iter()),
                 Ok((_, eid, val)) => {
                     let t = Tuple(vec![val, eid.to_value()]);
-                    if let Err(e) = throwaway.put(&t, 0) {
+                    if let Err(e) = throwaway.put(t, 0) {
                         return Box::new([Err(e.into())].into_iter());
                     }
                 }
@@ -1719,7 +1732,7 @@ impl InnerJoin {
                             .map(|i| tuple.0[*i].clone())
                             .collect_vec(),
                     );
-                    if let Err(e) = throwaway.put(&stored_tuple, 0) {
+                    if let Err(e) = throwaway.put(stored_tuple, 0) {
                         return Box::new([Err(e.into())].into_iter());
                     }
                 }

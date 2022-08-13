@@ -137,7 +137,7 @@ impl TryFrom<&'_ JsonValue> for Attribute {
         };
 
         let with_history = match map.get("history") {
-            None => true,
+            None => false,
             Some(v) => v
                 .as_bool()
                 .ok_or_else(|| anyhow!("cannot convert {} to attribute with history flag", v))?,

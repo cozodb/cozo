@@ -310,10 +310,10 @@ impl Db {
             .stratify()?
             .magic_sets_rewrite();
         debug!("{:#?}", program);
-        let (compiled, stores) = tx.stratified_magic_compile(&program, &const_rules)?;
+        let (compiled, mut stores) = tx.stratified_magic_compile(&program, &const_rules)?;
         let result = tx.stratified_magic_evaluate(
             &compiled,
-            &stores,
+            &mut stores,
             if out_opts.sorters.is_empty() {
                 out_opts.num_to_take()
             } else {

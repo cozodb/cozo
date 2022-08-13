@@ -12,7 +12,7 @@ use crate::runtime::temp_store::TempStoreId;
 
 pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 6;
 
-#[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub(crate) struct Tuple(pub(crate) Vec<DataValue>);
 
 impl Debug for Tuple {

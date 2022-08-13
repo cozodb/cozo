@@ -413,6 +413,19 @@ impl SessionTx {
     ) -> impl Iterator<Item = Result<(EntityId, AttrId, DataValue)>> {
         let lower = encode_eav_key(eid, aid, &DataValue::Null, Validity::MAX);
         let upper = encode_eav_key(eid, aid, &DataValue::Bottom, Validity::MIN);
+        println!("zz");
+        for x in TripleEntityAttrIter::new(self.tx.iterator(), lower.clone(), upper.clone()) {
+            dbg!(x.unwrap());
+        }
+        for y in TripleEntityAttrBeforeIter::new(
+            self.tx.iterator(),
+            lower.clone(),
+            upper.clone(),
+            Validity::current(),
+        ) {
+            dbg!(y.unwrap());
+        }
+
         TripleEntityAttrIter::new(self.tx.iterator(), lower, upper)
     }
     pub(crate) fn triple_ea_before_scan(

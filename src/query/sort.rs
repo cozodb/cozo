@@ -38,9 +38,7 @@ impl SessionTx {
                 .collect_vec();
             key.push(DataValue::from(idx as i64));
             let key = Tuple(key);
-            let encoded_key = key.encode_as_key_for_epoch(ret.id, 0);
-            let encoded_val = tuple.encode_as_key_for_epoch(ret.id, 0);
-            ret.db.put(&encoded_key, &encoded_val)?;
+            ret.put_kv(key, tuple, 0)?;
         }
         Ok(ret)
     }

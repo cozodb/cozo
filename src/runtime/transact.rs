@@ -70,25 +70,25 @@ impl SessionTx {
     pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> TempStore {
         let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        TempStore {
-            db: self.temp_store.clone(),
-            id: TempStoreId(old_count),
-            arity,
+        TempStore::new(
+            self.temp_store.clone(),
+            TempStoreId(old_count),
             rule_name,
-        }
+            arity,
+        )
     }
 
     pub(crate) fn new_temp_store(&self) -> TempStore {
         let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        TempStore {
-            db: self.temp_store.clone(),
-            id: TempStoreId(old_count),
-            arity: 0,
-            rule_name: MagicSymbol::Muggle {
+        TempStore::new(
+            self.temp_store.clone(),
+            TempStoreId(old_count),
+            MagicSymbol::Muggle {
                 inner: Symbol::from(""),
             },
-        }
+            0,
+        )
     }
 
     pub(crate) fn clear_cache(&mut self) {
