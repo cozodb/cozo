@@ -29,19 +29,25 @@ impl Expr {
     pub(crate) fn negate(self) -> Self {
         Expr::Apply(&OP_NOT, Box::new([self]))
     }
-    pub(crate) fn fill_binding_indices(&mut self, binding_map: &BTreeMap<Symbol, usize>) {
+    pub(crate) fn fill_binding_indices(
+        &mut self,
+        binding_map: &BTreeMap<Symbol, usize>,
+    ) -> Result<()> {
         match self {
             Expr::Binding(k, idx) => {
-                let found_idx = *binding_map.get(k).unwrap();
+                let found_idx = *binding_map.get(k).ok_or_else(|| {
+                    anyhow!("cannot find binding {}, this indicates a system error", k)
+                })?;
                 *idx = Some(found_idx)
             }
             Expr::Const(_) | Expr::Param(_) => {}
             Expr::Apply(_, args) => {
                 for arg in args.iter_mut() {
-                    arg.fill_binding_indices(binding_map);
+                    arg.fill_binding_indices(binding_map)?;
                 }
             }
         }
+        Ok(())
     }
     pub(crate) fn partial_eval(&mut self, param_pool: &BTreeMap<Symbol, DataValue>) -> Result<()> {
         let found_val = if let Expr::Param(s) = self {

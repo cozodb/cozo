@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::iter;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
@@ -33,28 +33,27 @@ pub(crate) struct UnificationRelation {
     pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
 
-fn eliminate_from_tuple(
-    mut ret: Vec<DataValue>,
-    eliminate_indices: &BTreeSet<usize>,
-) -> Vec<DataValue> {
+fn eliminate_from_tuple(mut ret: Tuple, eliminate_indices: &BTreeSet<usize>) -> Tuple {
     if !eliminate_indices.is_empty() {
-        ret = ret
-            .into_iter()
-            .enumerate()
-            .filter_map(|(i, v)| {
-                if eliminate_indices.contains(&i) {
-                    None
-                } else {
-                    Some(v)
-                }
-            })
-            .collect_vec();
+        ret = Tuple(
+            ret.0
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, v)| {
+                    if eliminate_indices.contains(&i) {
+                        None
+                    } else {
+                        Some(v)
+                    }
+                })
+                .collect_vec(),
+        );
     }
     ret
 }
 
 impl UnificationRelation {
-    fn fill_binding_indices(&mut self) {
+    fn fill_binding_indices(&mut self) -> Result<()> {
         let parent_bindings: BTreeMap<_, _> = self
             .parent
             .bindings_after_eliminate()
@@ -62,7 +61,7 @@ impl UnificationRelation {
             .enumerate()
             .map(|(a, b)| (b, a))
             .collect();
-        self.expr.fill_binding_indices(&parent_bindings);
+        self.expr.fill_binding_indices(&parent_bindings)
     }
     pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         for binding in self.parent.bindings_before_eliminate() {
@@ -98,8 +97,9 @@ impl UnificationRelation {
                     for result in result_list {
                         let mut ret = tuple.0.clone();
                         ret.push(result.clone());
-                        ret = eliminate_from_tuple(ret, &eliminate_indices);
-                        coll.push(Tuple(ret));
+                        let ret = Tuple(ret);
+                        let ret = eliminate_from_tuple(ret, &eliminate_indices);
+                        coll.push(ret);
                     }
                     Ok(coll)
                 })
@@ -114,8 +114,9 @@ impl UnificationRelation {
                         let result = self.expr.eval(&tuple)?;
                         let mut ret = tuple.0;
                         ret.push(result);
-                        ret = eliminate_from_tuple(ret, &eliminate_indices);
-                        Ok(Tuple(ret))
+                        let ret = Tuple(ret);
+                        let ret = eliminate_from_tuple(ret, &eliminate_indices);
+                        Ok(ret)
                     })
                     .map(flatten_err),
             )
@@ -125,7 +126,7 @@ impl UnificationRelation {
 
 pub(crate) struct FilteredRelation {
     parent: Box<Relation>,
-    pred: Expr,
+    pred: Vec<Expr>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
 
@@ -137,12 +138,14 @@ impl FilteredRelation {
             }
         }
         let mut nxt = used.clone();
-        nxt.extend(self.pred.bindings());
+        for e in self.pred.iter() {
+            nxt.extend(e.bindings());
+        }
         self.parent.eliminate_temp_vars(&nxt)?;
         Ok(())
     }
 
-    fn fill_binding_indices(&mut self) {
+    fn fill_binding_indices(&mut self) -> Result<()> {
         let parent_bindings: BTreeMap<_, _> = self
             .parent
             .bindings_after_eliminate()
@@ -150,7 +153,10 @@ impl FilteredRelation {
             .enumerate()
             .map(|(a, b)| (b, a))
             .collect();
-        self.pred.fill_binding_indices(&parent_bindings);
+        for e in self.pred.iter_mut() {
+            e.fill_binding_indices(&parent_bindings)?;
+        }
+        Ok(())
     }
     fn iter<'a>(
         &'a self,
@@ -164,14 +170,17 @@ impl FilteredRelation {
             self.parent
                 .iter(tx, epoch, use_delta)
                 .filter_map(move |tuple| match tuple {
-                    Ok(t) => match self.pred.eval_pred(&t) {
-                        Ok(true) => {
-                            let t = eliminate_from_tuple(t.0, &eliminate_indices);
-                            Some(Ok(Tuple(t)))
+                    Ok(t) => {
+                        for p in self.pred.iter() {
+                            match p.eval_pred(&t) {
+                                Ok(false) => return None,
+                                Err(e) => return Some(Err(e)),
+                                Ok(true) => {}
+                            }
                         }
-                        Ok(false) => None,
-                        Err(e) => Some(Err(e)),
-                    },
+                        let t = eliminate_from_tuple(t, &eliminate_indices);
+                        Some(Ok(t))
+                    }
                     Err(e) => Some(Err(e)),
                 }),
         )
@@ -210,11 +219,13 @@ impl Debug for Relation {
                 .debug_tuple("Triple")
                 .field(&bindings)
                 .field(&r.attr.name)
+                .field(&r.filters)
                 .finish(),
             Relation::Derived(r) => f
                 .debug_tuple("Derived")
                 .field(&bindings)
                 .field(&r.storage.rule_name)
+                .field(&r.filters)
                 .finish(),
             Relation::Join(r) => {
                 if r.left.is_unit() {
@@ -258,30 +269,66 @@ impl Debug for Relation {
 }
 
 impl Relation {
-    pub(crate) fn fill_predicate_binding_indices(&mut self) {
+    pub(crate) fn get_filters(&mut self) -> Option<&mut Vec<Expr>> {
+        match self {
+            Relation::Triple(t) => Some(&mut t.filters),
+            Relation::Derived(d) => Some(&mut d.filters),
+            Relation::Join(j) => j.right.get_filters(),
+            Relation::Filter(f) => Some(&mut f.pred),
+            _ => None,
+        }
+    }
+    pub(crate) fn fill_normal_binding_indices(&mut self) -> Result<()> {
         match self {
             Relation::Fixed(_) => {}
-            Relation::Triple(_) => {}
-            Relation::Derived(_) => {}
-            Relation::Join(r) => {
-                r.left.fill_predicate_binding_indices();
-                r.right.fill_predicate_binding_indices();
+            Relation::Triple(t) => {
+                t.fill_binding_indices()?;
+            }
+            Relation::Derived(d) => {
+                d.fill_binding_indices()?;
             }
             Relation::Reorder(r) => {
-                r.relation.fill_predicate_binding_indices();
+                r.relation.fill_normal_binding_indices()?;
             }
             Relation::Filter(f) => {
-                f.parent.fill_predicate_binding_indices();
-                f.fill_binding_indices()
+                f.parent.fill_normal_binding_indices()?;
+                f.fill_binding_indices()?
             }
             Relation::NegJoin(r) => {
-                r.left.fill_predicate_binding_indices();
+                r.left.fill_normal_binding_indices()?;
             }
             Relation::Unification(u) => {
-                u.parent.fill_predicate_binding_indices();
-                u.fill_binding_indices()
+                u.parent.fill_normal_binding_indices()?;
+                u.fill_binding_indices()?
+            }
+            Relation::Join(r) => {
+                r.left.fill_normal_binding_indices()?;
             }
         }
+        if matches!(self, Relation::Join(_)) {
+            let bindings = self.bindings_before_eliminate();
+            match self {
+                Relation::Join(r) => {
+                    r.right.fill_join_binding_indices(bindings)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+    pub(crate) fn fill_join_binding_indices(&mut self, bindings: Vec<Symbol>) -> Result<()> {
+        match self {
+            Relation::Triple(t) => {
+                t.fill_join_binding_indices(&bindings)?;
+            }
+            Relation::Derived(d) => {
+                d.fill_join_binding_indices(&bindings)?;
+            }
+            r => {
+                r.fill_normal_binding_indices()?;
+            }
+        }
+        Ok(())
     }
     pub(crate) fn unit() -> Self {
         Self::Fixed(InlineFixedRelation::unit())
@@ -297,7 +344,11 @@ impl Relation {
         self.join(right, vec![], vec![])
     }
     pub(crate) fn derived(bindings: Vec<Symbol>, storage: TempStore) -> Self {
-        Self::Derived(StoredDerivedRelation { bindings, storage })
+        Self::Derived(StoredDerivedRelation {
+            bindings,
+            storage,
+            filters: vec![],
+        })
     }
     pub(crate) fn triple(
         attr: Attribute,
@@ -309,6 +360,7 @@ impl Relation {
             attr,
             vld,
             bindings: [e_binding, v_binding],
+            filters: vec![],
         })
     }
     pub(crate) fn reorder(self, new_order: Vec<Symbol>) -> Self {
@@ -320,7 +372,7 @@ impl Relation {
     pub(crate) fn filter(self, filter: Expr) -> Self {
         Relation::Filter(FilteredRelation {
             parent: Box::new(self),
-            pred: filter,
+            pred: vec![filter],
             to_eliminate: Default::default(),
         })
     }
@@ -458,8 +510,9 @@ impl InlineFixedRelation {
                 if left_join_values.into_iter().eq(right_join_values.iter()) {
                     let mut ret = tuple.0;
                     ret.extend_from_slice(&data);
-                    ret = eliminate_from_tuple(ret, &eliminate_indices);
-                    Some(Tuple(ret))
+                    let ret = Tuple(ret);
+                    let ret = eliminate_from_tuple(ret, &eliminate_indices);
+                    Some(ret)
                 } else {
                     None
                 }
@@ -503,6 +556,7 @@ pub(crate) struct TripleRelation {
     pub(crate) attr: Attribute,
     pub(crate) vld: Validity,
     pub(crate) bindings: [Symbol; 2],
+    pub(crate) filters: Vec<Expr>,
 }
 
 pub(crate) fn flatten_err<T, E1: Into<anyhow::Error>, E2: Into<anyhow::Error>>(
@@ -523,7 +577,58 @@ fn invert_option_err<T>(v: Result<Option<T>>) -> Option<Result<T>> {
     }
 }
 
+fn filter_iter(
+    filters: Vec<Expr>,
+    it: impl Iterator<Item = Result<Tuple>>,
+) -> impl Iterator<Item = Result<Tuple>> {
+    it.filter_map_ok(move |t| -> Option<Result<Tuple>> {
+        for p in filters.iter() {
+            match p.eval_pred(&t) {
+                Ok(false) => return None,
+                Err(e) => return Some(Err(e)),
+                Ok(true) => {}
+            }
+        }
+        Some(Ok(t))
+    })
+    .map(flatten_err)
+}
+
 impl TripleRelation {
+    fn fill_binding_indices(&mut self) -> Result<()> {
+        let bindings: BTreeMap<_, _> = self
+            .bindings
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(a, b)| (b, a))
+            .collect();
+        for e in self.filters.iter_mut() {
+            e.fill_binding_indices(&bindings)?;
+        }
+        Ok(())
+    }
+
+    fn fill_join_binding_indices(&mut self, bindings: &[Symbol]) -> Result<()> {
+        let bindings: BTreeMap<_, _> = bindings
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(a, b)| (b, a))
+            .collect();
+        for e in self.filters.iter_mut() {
+            e.fill_binding_indices(&bindings)?;
+        }
+        Ok(())
+    }
+
+    fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
+        let it = tx
+            .triple_a_before_scan(self.attr.id, self.vld)
+            .map_ok(|(_, e_id, y)| Tuple(vec![e_id.to_value(), y]));
+        self.return_filtered_iter(it, Default::default())
+    }
+
     pub(crate) fn neg_join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
@@ -601,20 +706,19 @@ impl TripleRelation {
     }
     fn cartesian_join<'a>(&'a self, left_iter: TupleIter<'a>, tx: &'a SessionTx) -> TupleIter<'a> {
         // [f, f] not really a join
-        Box::new(
-            left_iter
-                .map_ok(|tuple| {
-                    tx.triple_a_before_scan(self.attr.id, self.vld)
-                        .map_ok(move |(_, e_id, val)| {
-                            let mut ret = tuple.0.clone();
-                            ret.push(e_id.to_value());
-                            ret.push(val);
-                            Tuple(ret)
-                        })
-                })
-                .flatten_ok()
-                .map(flatten_err),
-        )
+        let it = left_iter
+            .map_ok(|tuple| {
+                tx.triple_a_before_scan(self.attr.id, self.vld)
+                    .map_ok(move |(_, e_id, val)| {
+                        let mut ret = tuple.0.clone();
+                        ret.push(e_id.to_value());
+                        ret.push(val);
+                        Tuple(ret)
+                    })
+            })
+            .flatten_ok()
+            .map(flatten_err);
+        self.return_filtered_iter(it, Default::default())
     }
     fn neg_ev_join<'a>(
         &'a self,
@@ -627,7 +731,12 @@ impl TripleRelation {
         Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let eid = tuple.0.get(left_e_idx).unwrap().get_entity_id()?;
+                    let eid = tuple
+                        .0
+                        .get(left_e_idx)
+                        .unwrap()
+                        .get_entity_id()
+                        .with_context(|| format!("{:?}", self))?;
                     let v = tuple.0.get(left_v_idx).unwrap();
                     let exists = tx.eav_exists(eid, self.attr.id, v, self.vld)?;
                     Ok(if exists {
@@ -664,26 +773,29 @@ impl TripleRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         // [b, b] actually a filter
-        Box::new(
-            left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let eid = tuple.0.get(left_e_idx).unwrap().get_entity_id()?;
-                    let v = tuple.0.get(left_v_idx).unwrap();
-                    let exists = tx.eav_exists(eid, self.attr.id, v, self.vld)?;
-                    if exists {
-                        let v = v.clone();
-                        let mut ret = tuple.0;
-                        ret.push(eid.to_value());
-                        ret.push(v);
-                        ret = eliminate_from_tuple(ret, &eliminate_indices);
-                        Ok(Some(Tuple(ret)))
-                    } else {
-                        Ok(None)
-                    }
-                })
-                .map(flatten_err)
-                .filter_map(invert_option_err),
-        )
+        let it = left_iter
+            .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                let eid = tuple
+                    .0
+                    .get(left_e_idx)
+                    .unwrap()
+                    .get_entity_id()
+                    .with_context(|| format!("{:?}", self))?;
+                let v = tuple.0.get(left_v_idx).unwrap();
+                let exists = tx.eav_exists(eid, self.attr.id, v, self.vld)?;
+                if exists {
+                    let v = v.clone();
+                    let mut ret = tuple.0;
+                    ret.push(eid.to_value());
+                    ret.push(v);
+                    Ok(Some(Tuple(ret)))
+                } else {
+                    Ok(None)
+                }
+            })
+            .map(flatten_err)
+            .filter_map(invert_option_err);
+        self.return_filtered_iter(it, eliminate_indices)
     }
     fn neg_e_join<'a>(
         &'a self,
@@ -695,7 +807,12 @@ impl TripleRelation {
         Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let eid = tuple.0.get(left_e_idx).unwrap().get_entity_id()?;
+                    let eid = tuple
+                        .0
+                        .get(left_e_idx)
+                        .unwrap()
+                        .get_entity_id()
+                        .with_context(|| format!("{:?}, {:?}", self, tuple))?;
                     match tx.triple_ea_before_scan(eid, self.attr.id, self.vld).next() {
                         None => Ok(if !eliminate_indices.is_empty() {
                             Some(Tuple(
@@ -731,30 +848,28 @@ impl TripleRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         // [b, f]
-        Box::new(
-            left_iter
-                .map_ok(move |tuple| {
-                    let eliminate_indices = eliminate_indices.clone();
-                    tuple
-                        .0
-                        .get(left_e_idx)
-                        .unwrap()
-                        .get_entity_id()
-                        .map(move |eid| {
-                            tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
-                                .map_ok(move |(eid, _, val)| {
-                                    let mut ret = tuple.0.clone();
-                                    ret.push(eid.to_value());
-                                    ret.push(val);
-                                    ret = eliminate_from_tuple(ret, &eliminate_indices);
-                                    Tuple(ret)
-                                })
-                        })
-                })
-                .map(flatten_err)
-                .flatten_ok()
-                .map(flatten_err),
-        )
+        let it = left_iter
+            .map_ok(move |tuple| {
+                tuple
+                    .0
+                    .get(left_e_idx)
+                    .unwrap()
+                    .get_entity_id()
+                    .with_context(|| format!("{:?}, {:?}, {}", self, tuple, left_e_idx))
+                    .map(move |eid| {
+                        tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
+                            .map_ok(move |(eid, _, val)| {
+                                let mut ret = tuple.0.clone();
+                                ret.push(eid.to_value());
+                                ret.push(val);
+                                Tuple(ret)
+                            })
+                    })
+            })
+            .map(flatten_err)
+            .flatten_ok()
+            .map(flatten_err);
+        self.return_filtered_iter(it, eliminate_indices)
     }
     fn neg_v_ref_join<'a>(
         &'a self,
@@ -766,7 +881,12 @@ impl TripleRelation {
         Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let v_eid = tuple.0.get(left_v_idx).unwrap().get_entity_id()?;
+                    let v_eid = tuple
+                        .0
+                        .get(left_v_idx)
+                        .unwrap()
+                        .get_entity_id()
+                        .with_context(|| format!("{:?}", self))?;
                     match tx
                         .triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
                         .next()
@@ -805,30 +925,28 @@ impl TripleRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         // [f, b] where b is a ref
-        Box::new(
-            left_iter
-                .map_ok(move |tuple| {
-                    let eliminate_indices = eliminate_indices.clone();
-                    tuple
-                        .0
-                        .get(left_v_idx)
-                        .unwrap()
-                        .get_entity_id()
-                        .map(move |v_eid| {
-                            tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
-                                .map_ok(move |(_, _, e_id)| {
-                                    let mut ret = tuple.0.clone();
-                                    ret.push(e_id.to_value());
-                                    ret.push(v_eid.to_value());
-                                    ret = eliminate_from_tuple(ret, &eliminate_indices);
-                                    Tuple(ret)
-                                })
-                        })
-                })
-                .map(flatten_err)
-                .flatten_ok()
-                .map(flatten_err),
-        )
+        let it = left_iter
+            .map_ok(move |tuple| {
+                tuple
+                    .0
+                    .get(left_v_idx)
+                    .unwrap()
+                    .get_entity_id()
+                    .with_context(|| format!("{:?}", self))
+                    .map(move |v_eid| {
+                        tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
+                            .map_ok(move |(_, _, e_id)| {
+                                let mut ret = tuple.0.clone();
+                                ret.push(e_id.to_value());
+                                ret.push(v_eid.to_value());
+                                Tuple(ret)
+                            })
+                    })
+            })
+            .map(flatten_err)
+            .flatten_ok()
+            .map(flatten_err);
+        self.return_filtered_iter(it, eliminate_indices)
     }
     fn neg_v_index_join<'a>(
         &'a self,
@@ -876,23 +994,20 @@ impl TripleRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
         // [f, b] where b is indexed
-        Box::new(
-            left_iter
-                .map_ok(move |tuple| {
-                    let eliminate_indices = eliminate_indices.clone();
-                    let val = tuple.0.get(left_v_idx).unwrap();
-                    tx.triple_av_before_scan(self.attr.id, val, self.vld)
-                        .map_ok(move |(_, val, eid)| {
-                            let mut ret = tuple.0.clone();
-                            ret.push(eid.to_value());
-                            ret.push(val);
-                            ret = eliminate_from_tuple(ret, &eliminate_indices);
-                            Tuple(ret)
-                        })
-                })
-                .flatten_ok()
-                .map(flatten_err),
-        )
+        let it = left_iter
+            .map_ok(move |tuple| {
+                let val = tuple.0.get(left_v_idx).unwrap();
+                tx.triple_av_before_scan(self.attr.id, val, self.vld)
+                    .map_ok(move |(_, val, eid)| {
+                        let mut ret = tuple.0.clone();
+                        ret.push(eid.to_value());
+                        ret.push(val);
+                        Tuple(ret)
+                    })
+            })
+            .flatten_ok()
+            .map(flatten_err);
+        self.return_filtered_iter(it, eliminate_indices)
     }
     fn neg_v_no_index_join<'a>(
         &'a self,
@@ -954,25 +1069,44 @@ impl TripleRelation {
                 }
             }
         }
-        Box::new(
-            left_iter
-                .map_ok(move |tuple| {
-                    let val = tuple.0.get(left_v_idx).unwrap();
-                    let prefix = Tuple(vec![val.clone()]);
-                    let eliminate_indices = eliminate_indices.clone();
-                    throwaway
-                        .scan_prefix(&prefix)
-                        .map_ok(move |Tuple(mut found)| {
-                            let v_eid = found.pop().unwrap();
-                            let mut ret = tuple.0.clone();
-                            ret.push(v_eid);
-                            ret = eliminate_from_tuple(ret, &eliminate_indices);
-                            Tuple(ret)
-                        })
-                })
-                .flatten_ok()
-                .map(flatten_err),
-        )
+        let it = left_iter
+            .map_ok(move |tuple| {
+                let val = tuple.0.get(left_v_idx).unwrap();
+                let prefix = Tuple(vec![val.clone()]);
+                throwaway
+                    .scan_prefix(&prefix)
+                    .map_ok(move |Tuple(mut found)| {
+                        let v_eid = found.pop().unwrap();
+                        let mut ret = tuple.0.clone();
+                        ret.push(v_eid);
+                        Tuple(ret)
+                    })
+            })
+            .flatten_ok()
+            .map(flatten_err);
+        self.return_filtered_iter(it, eliminate_indices)
+    }
+    fn return_filtered_iter<'a>(
+        &'a self,
+        it: impl Iterator<Item = Result<Tuple>> + 'a,
+        eliminate_indices: BTreeSet<usize>,
+    ) -> TupleIter<'a> {
+        if self.filters.is_empty() {
+            if eliminate_indices.is_empty() {
+                Box::new(it)
+            } else {
+                Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+            }
+        } else {
+            if eliminate_indices.is_empty() {
+                Box::new(filter_iter(self.filters.clone(), it))
+            } else {
+                Box::new(
+                    filter_iter(self.filters.clone(), it)
+                        .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
+                )
+            }
+        }
     }
 }
 
@@ -994,9 +1128,37 @@ fn get_eliminate_indices(bindings: &[Symbol], eliminate: &BTreeSet<Symbol>) -> B
 pub(crate) struct StoredDerivedRelation {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: TempStore,
+    pub(crate) filters: Vec<Expr>,
 }
 
 impl StoredDerivedRelation {
+    fn fill_binding_indices(&mut self) -> Result<()> {
+        let bindings: BTreeMap<_, _> = self
+            .bindings
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(a, b)| (b, a))
+            .collect();
+        for e in self.filters.iter_mut() {
+            e.fill_binding_indices(&bindings)?;
+        }
+        Ok(())
+    }
+
+    fn fill_join_binding_indices(&mut self, bindings: &[Symbol]) -> Result<()> {
+        let bindings: BTreeMap<_, _> = bindings
+            .iter()
+            .cloned()
+            .enumerate()
+            .map(|(a, b)| (b, a))
+            .collect();
+        for e in self.filters.iter_mut() {
+            e.fill_binding_indices(&bindings)?;
+        }
+        Ok(())
+    }
+
     fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<TempStoreId>) -> TupleIter<'_> {
         if epoch == Some(0) && use_delta.contains(&self.storage.id) {
             return Box::new(iter::empty());
@@ -1012,8 +1174,12 @@ impl StoredDerivedRelation {
                 }
             }
         };
-
-        Box::new(self.storage.scan_all_for_epoch(scan_epoch))
+        let it = self.storage.scan_all_for_epoch(scan_epoch);
+        if self.filters.is_empty() {
+            Box::new(it)
+        } else {
+            Box::new(filter_iter(self.filters.clone(), it))
+        }
     }
     fn join_is_prefix(&self, right_join_indices: &[usize]) -> bool {
         let mut indices = right_join_indices.to_vec();
@@ -1109,29 +1275,41 @@ impl StoredDerivedRelation {
                 }
             }
         };
-        Box::new(
-            left_iter
-                .map_ok(move |tuple| {
-                    let eliminate_indices = eliminate_indices.clone();
-                    let prefix = Tuple(
-                        left_to_prefix_indices
-                            .iter()
-                            .map(|i| tuple.0[*i].clone())
-                            .collect_vec(),
-                    );
-                    self.storage
-                        .scan_prefix_for_epoch(&prefix, scan_epoch)
-                        .filter_map_ok(move |found| {
-                            // dbg!("filter", &tuple, &prefix, &found);
-                            let mut ret = tuple.0.clone();
-                            ret.extend(found.0);
-                            ret = eliminate_from_tuple(ret, &eliminate_indices);
-                            Some(Tuple(ret))
-                        })
-                })
-                .flatten_ok()
-                .map(flatten_err),
-        )
+        let it = left_iter
+            .map_ok(move |tuple| {
+                let prefix = Tuple(
+                    left_to_prefix_indices
+                        .iter()
+                        .map(|i| tuple.0[*i].clone())
+                        .collect_vec(),
+                );
+                self.storage
+                    .scan_prefix_for_epoch(&prefix, scan_epoch)
+                    .filter_map_ok(move |found| {
+                        // dbg!("filter", &tuple, &prefix, &found);
+                        let mut ret = tuple.0.clone();
+                        ret.extend(found.0);
+                        Some(Tuple(ret))
+                    })
+            })
+            .flatten_ok()
+            .map(flatten_err);
+        if self.filters.is_empty() {
+            if eliminate_indices.is_empty() {
+                Box::new(it)
+            } else {
+                Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+            }
+        } else {
+            if eliminate_indices.is_empty() {
+                Box::new(filter_iter(self.filters.clone(), it))
+            } else {
+                Box::new(
+                    filter_iter(self.filters.clone(), it)
+                        .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
+                )
+            }
+        }
     }
 }
 
@@ -1251,10 +1429,7 @@ impl Relation {
     ) -> TupleIter<'a> {
         match self {
             Relation::Fixed(f) => Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone())))),
-            Relation::Triple(r) => Box::new(
-                tx.triple_a_before_scan(r.attr.id, r.vld)
-                    .map_ok(|(_, e_id, y)| Tuple(vec![e_id.to_value(), y])),
-            ),
+            Relation::Triple(r) => r.iter(tx),
             Relation::Derived(r) => r.iter(epoch, use_delta),
             Relation::Join(j) => j.iter(tx, epoch, use_delta),
             Relation::Reorder(r) => r.iter(tx, epoch, use_delta),
@@ -1349,6 +1524,15 @@ impl InnerJoin {
         }
         let mut left = used.clone();
         left.extend(self.joiner.left_keys.clone());
+        if let Some(filters) = match &self.right {
+            Relation::Triple(r) => Some(&r.filters),
+            Relation::Derived(r) => Some(&r.filters),
+            _ => None,
+        } {
+            for filter in filters {
+                left.extend(filter.bindings());
+            }
+        }
         self.left.eliminate_temp_vars(&left)?;
         let mut right = used.clone();
         right.extend(self.joiner.right_keys.clone());
@@ -1393,6 +1577,7 @@ impl InnerJoin {
                         &self.right.bindings_after_eliminate(),
                     )
                     .unwrap();
+                // println!("{:?}, {:?}, {:?}, {:?}", self, join_indices, self.left.bindings_after_eliminate(), self.right.bindings_after_eliminate());
                 r.join(
                     self.left.iter(tx, epoch, use_delta),
                     join_indices,
@@ -1490,8 +1675,8 @@ impl InnerJoin {
                         for i in restore_indices.iter() {
                             ret.push(found.0[*i].clone());
                         }
-                        ret = eliminate_from_tuple(ret, &eliminate_indices);
-                        Tuple(ret)
+                        let ret = eliminate_from_tuple(Tuple(ret), &eliminate_indices);
+                        ret
                     })
                 })
                 .flatten_ok()

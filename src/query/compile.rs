@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{anyhow, Context, ensure, Result};
 use itertools::Itertools;
 
 use crate::data::aggr::Aggregation;
@@ -103,7 +103,8 @@ impl SessionTx {
                             let header = &rule.head;
                             let mut relation =
                                 self.compile_magic_rule_body(&rule, k, rule_idx, &stores, &header)?;
-                            relation.fill_predicate_binding_indices();
+                            relation.fill_normal_binding_indices()
+                                .with_context(|| format!("error encountered when filling binding indices for {:#?}", relation))?;
                             collected.push(CompiledRule {
                                 aggr: rule.aggr.clone(),
                                 relation,
@@ -273,21 +274,31 @@ impl SessionTx {
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::Predicate(p) => {
-                    ret = ret.filter(p.clone());
+                    if let Some(fs) = ret.get_filters() {
+                        fs.push(p.clone());
+                    } else {
+                        ret = ret.filter(p.clone());
+                    }
                 }
                 MagicAtom::Unification(u) => {
                     if seen_variables.contains(&u.binding) {
-                        if u.one_many_unif {
-                            ret = ret.filter(Expr::build_is_in(vec![
+                        let expr = if u.one_many_unif {
+                            Expr::build_is_in(vec![
                                 Expr::Binding(u.binding.clone(), None),
                                 u.expr.clone(),
-                            ]));
+                            ])
                         } else {
-                            ret = ret.filter(Expr::build_equate(vec![
+                            Expr::build_equate(vec![
                                 Expr::Binding(u.binding.clone(), None),
                                 u.expr.clone(),
-                            ]));
+                            ])
+                        };
+                        if let Some(fs) = ret.get_filters() {
+                            fs.push(expr);
+                        } else {
+                            ret = ret.filter(expr);
                         }
+
                     } else {
                         seen_variables.insert(u.binding.clone());
                         ret = ret.unify(u.binding.clone(), u.expr.clone(), u.one_many_unif);
