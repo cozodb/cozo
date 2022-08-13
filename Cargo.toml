@@ -39,5 +39,8 @@ cozorocks = { path = "cozorocks" }
 #[profile.release]
 #lto = true
 
+[profile.release]
+debug = true
+
 [workspace]
 members = ["cozorocks", "cozohttp", "cozopy", "cozoplay/src-tauri"]

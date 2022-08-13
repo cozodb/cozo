@@ -3,11 +3,12 @@ use std::fmt::{Debug, Formatter};
 use std::iter;
 
 use anyhow::{anyhow, bail, Context, Result};
+use either::{Left, Right};
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
-use crate::data::id::Validity;
+use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
@@ -623,10 +624,17 @@ impl TripleRelation {
     }
 
     fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
-        let it = tx
-            .triple_a_before_scan(self.attr.id, self.vld)
-            .map_ok(|(_, e_id, y)| Tuple(vec![e_id.to_value(), y]));
-        self.return_filtered_iter(it, Default::default())
+        if self.attr.with_history {
+            let it = tx
+                .triple_a_before_scan(self.attr.id, self.vld)
+                .map_ok(|(_, e_id, y)| Tuple(vec![e_id.to_value(), y]));
+            self.return_filtered_iter(it, Default::default())
+        } else {
+            let it = tx
+                .triple_a_scan(self.attr.id)
+                .map_ok(|(_, e_id, y)| Tuple(vec![e_id.to_value(), y]));
+            self.return_filtered_iter(it, Default::default())
+        }
     }
 
     pub(crate) fn neg_join<'a>(
@@ -713,13 +721,26 @@ impl TripleRelation {
         // [f, f] not really a join
         let it = left_iter
             .map_ok(|tuple| {
-                tx.triple_a_before_scan(self.attr.id, self.vld)
-                    .map_ok(move |(_, e_id, val)| {
-                        let mut ret = tuple.0.clone();
-                        ret.push(e_id.to_value());
-                        ret.push(val);
-                        Tuple(ret)
-                    })
+                if self.attr.with_history {
+                    Left(tx.triple_a_before_scan(self.attr.id, self.vld).map_ok(
+                        move |(_, e_id, val)| {
+                            let mut ret = tuple.0.clone();
+                            ret.push(e_id.to_value());
+                            ret.push(val);
+                            Tuple(ret)
+                        },
+                    ))
+                } else {
+                    Right(
+                        tx.triple_a_scan(self.attr.id)
+                            .map_ok(move |(_, e_id, val)| {
+                                let mut ret = tuple.0.clone();
+                                ret.push(e_id.to_value());
+                                ret.push(val);
+                                Tuple(ret)
+                            }),
+                    )
+                }
             })
             .flatten_ok()
             .map(flatten_err);
@@ -818,7 +839,12 @@ impl TripleRelation {
                         .unwrap()
                         .get_entity_id()
                         .with_context(|| format!("{:?}, {:?}", self, tuple))?;
-                    match tx.triple_ea_before_scan(eid, self.attr.id, self.vld).next() {
+                    let nxt = if self.attr.with_history {
+                        tx.triple_ea_before_scan(eid, self.attr.id, self.vld).next()
+                    } else {
+                        tx.triple_ea_scan(eid, self.attr.id).next()
+                    };
+                    match nxt {
                         None => Ok(if !eliminate_indices.is_empty() {
                             Some(Tuple(
                                 tuple
@@ -862,13 +888,20 @@ impl TripleRelation {
                     .get_entity_id()
                     .with_context(|| format!("{:?}, {:?}, {}", self, tuple, left_e_idx))
                     .map(move |eid| {
-                        tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
-                            .map_ok(move |(eid, _, val)| {
-                                let mut ret = tuple.0.clone();
-                                ret.push(eid.to_value());
-                                ret.push(val);
-                                Tuple(ret)
-                            })
+                        let clj = move |(eid, _, val): (EntityId, AttrId, DataValue)| {
+                            let mut ret = tuple.0.clone();
+                            ret.push(eid.to_value());
+                            ret.push(val);
+                            Tuple(ret)
+                        };
+                        if self.attr.with_history {
+                            Left(tx.triple_ea_scan(eid, self.attr.id).map_ok(clj))
+                        } else {
+                            Right(
+                                tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
+                                    .map_ok(clj),
+                            )
+                        }
                     })
             })
             .map(flatten_err)
@@ -892,10 +925,13 @@ impl TripleRelation {
                         .unwrap()
                         .get_entity_id()
                         .with_context(|| format!("{:?}", self))?;
-                    match tx
-                        .triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
-                        .next()
-                    {
+                    let nxt = if self.attr.with_history {
+                        tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
+                            .next()
+                    } else {
+                        tx.triple_vref_a_scan(v_eid, self.attr.id).next()
+                    };
+                    match nxt {
                         None => Ok(if !eliminate_indices.is_empty() {
                             Some(Tuple(
                                 tuple
@@ -964,7 +1000,12 @@ impl TripleRelation {
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let val = tuple.0.get(left_v_idx).unwrap();
-                    match tx.triple_av_before_scan(self.attr.id, val, self.vld).next() {
+                    let nxt = if self.attr.with_history {
+                        tx.triple_av_before_scan(self.attr.id, val, self.vld).next()
+                    } else {
+                        tx.triple_av_scan(self.attr.id, val).next()
+                    };
+                    match nxt {
                         None => Ok(if !eliminate_indices.is_empty() {
                             Some(Tuple(
                                 tuple
@@ -1002,13 +1043,26 @@ impl TripleRelation {
         let it = left_iter
             .map_ok(move |tuple| {
                 let val = tuple.0.get(left_v_idx).unwrap();
-                tx.triple_av_before_scan(self.attr.id, val, self.vld)
-                    .map_ok(move |(_, val, eid)| {
-                        let mut ret = tuple.0.clone();
-                        ret.push(eid.to_value());
-                        ret.push(val);
-                        Tuple(ret)
-                    })
+                if self.attr.with_history {
+                    Left(
+                        tx.triple_av_before_scan(self.attr.id, val, self.vld)
+                            .map_ok(move |(_, val, eid): (AttrId, DataValue, EntityId)| {
+                                let mut ret = tuple.0.clone();
+                                ret.push(eid.to_value());
+                                ret.push(val);
+                                Tuple(ret)
+                            }),
+                    )
+                } else {
+                    Right(tx.triple_av_scan(self.attr.id, val).map_ok(
+                        move |(_, val, eid): (AttrId, DataValue, EntityId)| {
+                            let mut ret = tuple.0.clone();
+                            ret.push(eid.to_value());
+                            ret.push(val);
+                            Tuple(ret)
+                        },
+                    ))
+                }
             })
             .flatten_ok()
             .map(flatten_err);
@@ -1025,7 +1079,12 @@ impl TripleRelation {
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let val = tuple.0.get(left_v_idx).unwrap();
-                    for item in tx.triple_a_before_scan(self.attr.id, self.vld) {
+                    let it = if self.attr.with_history {
+                        Left(tx.triple_a_before_scan(self.attr.id, self.vld))
+                    } else {
+                        Right(tx.triple_a_scan(self.attr.id))
+                    };
+                    for item in it {
                         let (_, _, found_val) = item?;
                         if *val == found_val {
                             return Ok(None);
@@ -1063,7 +1122,12 @@ impl TripleRelation {
     ) -> TupleIter<'a> {
         // [f, b] where b is not indexed
         let throwaway = tx.new_temp_store();
-        for item in tx.triple_a_before_scan(self.attr.id, self.vld) {
+        let it = if self.attr.with_history {
+            Left(tx.triple_a_before_scan(self.attr.id, self.vld))
+        } else {
+            Right(tx.triple_a_scan(self.attr.id))
+        };
+        for item in it {
             match item {
                 Err(e) => return Box::new([Err(e)].into_iter()),
                 Ok((_, eid, val)) => {
