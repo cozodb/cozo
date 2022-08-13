@@ -1,14 +1,12 @@
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::RefCell;
+use std::borrow::{BorrowMut};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::ops::Bound::{Excluded, Included};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use anyhow::Result;
 use itertools::Itertools;
-use log::error;
 
 use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
 
@@ -17,7 +15,6 @@ use crate::data::program::MagicSymbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 use crate::query::eval::QueryLimiter;
-use crate::utils::swap_result_option;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) struct TempStoreId(pub(crate) u32);
@@ -46,7 +43,7 @@ impl Debug for TempStore {
 
 impl TempStore {
     pub(crate) fn new(
-        db: RawRocksDb,
+        _db: RawRocksDb,
         id: TempStoreId,
         rule_name: MagicSymbol,
         arity: usize,
@@ -105,7 +102,7 @@ impl TempStore {
         // )?;
         let prev_aggr = zero_target.get_mut(&key);
 
-        if let Some(mut prev_aggr) = prev_aggr {
+        if let Some(prev_aggr) = prev_aggr {
             let mut changed = false;
             for (i, aggr) in aggrs.iter().enumerate() {
                 if let Some((aggr_op, aggr_args)) = aggr {
@@ -264,7 +261,7 @@ impl TempStore {
             .sorted_by_key(|(_a, b)| *b)
             .map(|(a, _b)| a)
             .collect_vec();
-        for (key, group) in grouped.into_iter() {
+        for (_key, group) in grouped.into_iter() {
             // if key.is_some() {
             let mut aggr_res = vec![DataValue::Guard; aggrs.len()];
             let mut it = group.into_iter();
@@ -357,7 +354,7 @@ impl TempStore {
         self.ensure_mem_db_for_epoch(0);
         let target = self.mem_db.try_read().unwrap();
         let target = target.get(0).unwrap().try_read().unwrap();
-        target.clone().into_iter().map(|(k, v)| Ok(v))
+        target.clone().into_iter().map(|(_k, v)| Ok(v))
         // let (lower, upper) = EncodedTuple::bounds_for_prefix_and_epoch(self.id, 0);
         // let mut it = self
         //     .db

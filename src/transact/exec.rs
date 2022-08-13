@@ -413,19 +413,6 @@ impl SessionTx {
     ) -> impl Iterator<Item = Result<(EntityId, AttrId, DataValue)>> {
         let lower = encode_eav_key(eid, aid, &DataValue::Null, Validity::MAX);
         let upper = encode_eav_key(eid, aid, &DataValue::Bottom, Validity::MIN);
-        println!("zz");
-        for x in TripleEntityAttrIter::new(self.tx.iterator(), lower.clone(), upper.clone()) {
-            dbg!(x.unwrap());
-        }
-        for y in TripleEntityAttrBeforeIter::new(
-            self.tx.iterator(),
-            lower.clone(),
-            upper.clone(),
-            Validity::current(),
-        ) {
-            dbg!(y.unwrap());
-        }
-
         TripleEntityAttrIter::new(self.tx.iterator(), lower, upper)
     }
     pub(crate) fn triple_ea_before_scan(
@@ -645,11 +632,14 @@ impl TripleAttrEntityIter {
         } else {
             self.started = true;
         }
-        match self.it.key()? {
+        match self.it.pair()? {
             None => Ok(None),
-            Some(k_slice) => {
+            Some((k_slice, v_slice)) => {
                 let (aid, eid, _tid) = decode_ae_key(k_slice)?;
-                let v = decode_value_from_key(k_slice)?;
+                let mut v = decode_value_from_key(k_slice)?;
+                if v == DataValue::Guard {
+                    v = decode_value_from_val(v_slice)?;
+                }
                 Ok(Some((aid, eid, v)))
             }
         }
@@ -744,10 +734,13 @@ impl TripleAttrValueIter {
         } else {
             self.started = true;
         }
-        return match self.it.key()? {
+        return match self.it.pair()? {
             None => Ok(None),
-            Some(k_slice) => {
-                let (aid, eid, _tid) = decode_ae_key(k_slice)?;
+            Some((k_slice, v_slice)) => {
+                let (aid, mut eid, _tid) = decode_ae_key(k_slice)?;
+                if eid.is_placeholder() {
+                    eid = decode_value_from_val(v_slice)?.get_entity_id()?;
+                }
                 let v = decode_value_from_key(k_slice)?;
                 Ok(Some((aid, v, eid)))
             }
