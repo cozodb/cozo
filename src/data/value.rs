@@ -6,7 +6,6 @@ use anyhow::{bail, Result};
 use regex::Regex;
 use rmp_serde::Serializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_derive::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
@@ -56,7 +55,7 @@ impl PartialOrd for RegexWrapper {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) enum DataValue {
     #[serde(rename = "n")]
     Null,
@@ -100,7 +99,7 @@ impl From<f64> for DataValue {
     }
 }
 
-#[derive(Copy, Clone, Deserialize, Serialize)]
+#[derive(Copy, Clone, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) enum Number {
     #[serde(rename = "i")]
     Int(i64),

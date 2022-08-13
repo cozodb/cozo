@@ -3,7 +3,6 @@ use std::fmt::{Display, Formatter};
 use anyhow::{anyhow, bail, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
-use serde_derive::{Deserialize, Serialize};
 use serde_json::json;
 use smallvec::SmallVec;
 
@@ -16,7 +15,17 @@ use crate::data::value::{DataValue, Number};
 use crate::parse::triple::TempIdCtx;
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy,
+    Clone,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Eq,
+    Debug,
+    serde_derive::Deserialize,
+    serde_derive::Serialize,
+)]
 pub(crate) enum AttributeCardinality {
     One = 1,
     Many = 2,
@@ -52,7 +61,17 @@ impl TryFrom<&'_ str> for AttributeCardinality {
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy,
+    Clone,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Eq,
+    Debug,
+    serde_derive::Deserialize,
+    serde_derive::Serialize,
+)]
 pub(crate) enum AttributeTyping {
     Ref = 1,
     Component = 2,
@@ -176,7 +195,9 @@ impl AttributeTyping {
 }
 
 #[repr(u8)]
-#[derive(Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
+)]
 pub(crate) enum AttributeIndex {
     None = 0,
     Indexed = 1,
@@ -218,7 +239,9 @@ impl TryFrom<&'_ str> for AttributeIndex {
     }
 }
 
-#[derive(Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
+)]
 pub(crate) struct Attribute {
     #[serde(rename = "i")]
     pub(crate) id: AttrId,

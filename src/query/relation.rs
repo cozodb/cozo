@@ -1173,21 +1173,16 @@ impl TripleRelation {
         it: impl Iterator<Item = Result<Tuple>> + 'a,
         eliminate_indices: BTreeSet<usize>,
     ) -> TupleIter<'a> {
-        if self.filters.is_empty() {
-            if eliminate_indices.is_empty() {
-                Box::new(it)
-            } else {
+        match (self.filters.is_empty(), eliminate_indices.is_empty()) {
+            (true, true) => Box::new(it),
+            (true, false) => {
                 Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
             }
-        } else {
-            if eliminate_indices.is_empty() {
-                Box::new(filter_iter(self.filters.clone(), it))
-            } else {
-                Box::new(
-                    filter_iter(self.filters.clone(), it)
-                        .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
-                )
-            }
+            (false, true) => Box::new(filter_iter(self.filters.clone(), it)),
+            (false, false) => Box::new(
+                filter_iter(self.filters.clone(), it)
+                    .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
+            ),
         }
     }
 }
@@ -1376,21 +1371,16 @@ impl StoredDerivedRelation {
             })
             .flatten_ok()
             .map(flatten_err);
-        if self.filters.is_empty() {
-            if eliminate_indices.is_empty() {
-                Box::new(it)
-            } else {
+        match (self.filters.is_empty(), eliminate_indices.is_empty()) {
+            (true, true) => Box::new(it),
+            (true, false) => {
                 Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
             }
-        } else {
-            if eliminate_indices.is_empty() {
-                Box::new(filter_iter(self.filters.clone(), it))
-            } else {
-                Box::new(
-                    filter_iter(self.filters.clone(), it)
-                        .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
-                )
-            }
+            (false, true) => Box::new(filter_iter(self.filters.clone(), it)),
+            (false, false) => Box::new(
+                filter_iter(self.filters.clone(), it)
+                    .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
+            ),
         }
     }
 }

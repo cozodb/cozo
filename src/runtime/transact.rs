@@ -5,7 +5,6 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
-use serde_derive::{Deserialize, Serialize};
 use smallvec::SmallVec;
 
 use cozorocks::{DbIter, RawRocksDb, Tx};
@@ -37,7 +36,9 @@ pub struct SessionTx {
     pub(crate) touched_eids: BTreeSet<EntityId>,
 }
 
-#[derive(Clone, PartialEq, Ord, PartialOrd, Eq, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
+)]
 pub(crate) struct TxLog {
     #[serde(rename = "i")]
     pub(crate) id: TxId,
