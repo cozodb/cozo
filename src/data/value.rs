@@ -55,7 +55,9 @@ impl PartialOrd for RegexWrapper {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize)]
+#[derive(
+    Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize,
+)]
 pub(crate) enum DataValue {
     #[serde(rename = "n")]
     Null,
@@ -258,6 +260,12 @@ impl DataValue {
     pub(crate) fn get_map(&self) -> Option<&BTreeMap<DataValue, DataValue>> {
         match self {
             DataValue::Map(m) => Some(m),
+            _ => None,
+        }
+    }
+    pub(crate) fn get_string(&self) -> Option<&str> {
+        match self {
+            DataValue::String(s) => Some(s),
             _ => None
         }
     }
@@ -275,6 +283,8 @@ impl DataValue {
     }
 }
 
+pub(crate) const LARGEST_UTF_CHAR: char = '\u{10ffff}';
+
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, HashMap};
@@ -290,5 +300,20 @@ mod tests {
         dbg!(size_of::<String>());
         dbg!(size_of::<HashMap<String, String>>());
         dbg!(size_of::<BTreeMap<String, String>>());
+    }
+    #[test]
+    fn utf8() {
+        let c = char::from_u32(0x10FFFF).unwrap();
+        let mut s = String::new();
+        s.push(c);
+        println!("{}", s);
+        println!(
+            "{:b} {:b} {:b} {:b}",
+            s.as_bytes()[0],
+            s.as_bytes()[1],
+            s.as_bytes()[2],
+            s.as_bytes()[3]
+        );
+        dbg!(s);
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{anyhow, Context, ensure, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use itertools::Itertools;
 
 use crate::data::aggr::Aggregation;
@@ -103,8 +103,12 @@ impl SessionTx {
                             let header = &rule.head;
                             let mut relation =
                                 self.compile_magic_rule_body(&rule, k, rule_idx, &stores, &header)?;
-                            relation.fill_normal_binding_indices()
-                                .with_context(|| format!("error encountered when filling binding indices for {:#?}", relation))?;
+                            relation.fill_normal_binding_indices().with_context(|| {
+                                format!(
+                                    "error encountered when filling binding indices for {:#?}",
+                                    relation
+                                )
+                            })?;
                             collected.push(CompiledRule {
                                 aggr: rule.aggr.clone(),
                                 relation,
@@ -275,7 +279,7 @@ impl SessionTx {
                 }
                 MagicAtom::Predicate(p) => {
                     if let Some(fs) = ret.get_filters() {
-                        fs.push(p.clone());
+                        fs.extend(p.to_conjunction());
                     } else {
                         ret = ret.filter(p.clone());
                     }
@@ -298,7 +302,6 @@ impl SessionTx {
                         } else {
                             ret = ret.filter(expr);
                         }
-
                     } else {
                         seen_variables.insert(u.binding.clone());
                         ret = ret.unify(u.binding.clone(), u.expr.clone(), u.one_many_unif);

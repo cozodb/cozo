@@ -1,3 +1,4 @@
+use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::mem;
@@ -6,10 +7,11 @@ use std::ops::Rem;
 use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
 use num_traits::FloatConst;
+use smartstring::SmartString;
 
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
-use crate::data::value::{DataValue, Number};
+use crate::data::value::{DataValue, Number, LARGEST_UTF_CHAR};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
@@ -20,6 +22,20 @@ pub(crate) enum Expr {
 }
 
 impl Expr {
+    pub(crate) fn get_binding(&self) -> Option<&Symbol> {
+        if let Expr::Binding(symb, _) = self {
+            Some(symb)
+        } else {
+            None
+        }
+    }
+    pub(crate) fn get_const(&self) -> Option<&DataValue> {
+        if let Expr::Const(val) = self {
+            Some(val)
+        } else {
+            None
+        }
+    }
     pub(crate) fn build_equate(exprs: Vec<Expr>) -> Self {
         Expr::Apply(&OP_EQ, exprs.into())
     }
@@ -28,6 +44,12 @@ impl Expr {
     }
     pub(crate) fn negate(self) -> Self {
         Expr::Apply(&OP_NOT, Box::new([self]))
+    }
+    pub(crate) fn to_conjunction(&self) -> Vec<Self> {
+        match self {
+            Expr::Apply(op, exprs) if **op == OP_AND => exprs.to_vec(),
+            v => vec![v.clone()],
+        }
     }
     pub(crate) fn fill_binding_indices(
         &mut self,
@@ -122,6 +144,135 @@ impl Expr {
             v => bail!("predicate must have boolean return type, got {:?}", v),
         }
     }
+    pub(crate) fn extract_bound(&self, targets: &[Symbol]) -> Result<ValueRange> {
+        Ok(match self {
+            Expr::Binding(_, _) | Expr::Param(_) | Expr::Const(_) => ValueRange::default(),
+            Expr::Apply(op, args) => match op.name {
+                n if n == OP_GE.name || n == OP_GT.name => {
+                    if let Some(symb) = args[0].get_binding() {
+                        if let Some(val) = args[1].get_const() {
+                            if targets.contains(symb) {
+                                return Ok(ValueRange::lower_bound(val.clone()));
+                            }
+                        }
+                    }
+                    if let Some(symb) = args[1].get_binding() {
+                        if let Some(val) = args[0].get_const() {
+                            if targets.contains(symb) {
+                                return Ok(ValueRange::upper_bound(val.clone()));
+                            }
+                        }
+                    }
+                    ValueRange::default()
+                }
+                n if n == OP_LE.name || n == OP_LT.name => {
+                    if let Some(symb) = args[0].get_binding() {
+                        if let Some(val) = args[1].get_const() {
+                            if targets.contains(symb) {
+                                return Ok(ValueRange::upper_bound(val.clone()));
+                            }
+                        }
+                    }
+                    if let Some(symb) = args[1].get_binding() {
+                        if let Some(val) = args[0].get_const() {
+                            if targets.contains(symb) {
+                                return Ok(ValueRange::lower_bound(val.clone()));
+                            }
+                        }
+                    }
+                    ValueRange::default()
+                }
+                n if n == OP_STARTS_WITH.name => {
+                    if let Some(symb) = args[0].get_binding() {
+                        if let Some(val) = args[1].get_const() {
+                            if targets.contains(symb) {
+                                let s = val.get_string().ok_or_else(|| {
+                                    anyhow!("unexpected arg {:?} for OP_STARTS_WITH", val)
+                                })?;
+                                let lower = DataValue::String(SmartString::from(s));
+                                let mut upper = SmartString::from(s);
+                                upper.push(LARGEST_UTF_CHAR);
+                                let upper = DataValue::String(upper);
+                                return Ok(ValueRange::new(lower, upper));
+                            }
+                        }
+                    }
+                    ValueRange::default()
+                }
+                _ => ValueRange::default(),
+            },
+        })
+    }
+}
+
+pub(crate) fn compute_bounds(
+    filters: &[Expr],
+    symbols: &[Vec<Symbol>],
+) -> Result<(Vec<DataValue>, Vec<DataValue>)> {
+    let mut lowers = vec![];
+    let mut uppers = vec![];
+    for current in symbols {
+        let mut cur_bound = ValueRange::default();
+        for filter in filters {
+            let nxt = filter.extract_bound(current)?;
+            cur_bound = cur_bound.merge(nxt);
+        }
+        lowers.push(cur_bound.lower);
+        uppers.push(cur_bound.upper);
+    }
+    if lowers.is_empty() {
+        lowers.push(DataValue::Null);
+    }
+    uppers.push(DataValue::Bottom);
+    Ok((lowers, uppers))
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ValueRange {
+    pub(crate) lower: DataValue,
+    pub(crate) upper: DataValue,
+}
+
+impl ValueRange {
+    fn merge(self, other: Self) -> Self {
+        let lower = max(self.lower, other.lower);
+        let upper = min(self.upper, other.upper);
+        if lower > upper {
+            Self::null()
+        } else {
+            Self { lower, upper }
+        }
+    }
+    fn null() -> Self {
+        Self {
+            lower: DataValue::Bottom,
+            upper: DataValue::Bottom,
+        }
+    }
+    fn new(lower: DataValue, upper: DataValue) -> Self {
+        Self { lower, upper }
+    }
+    fn lower_bound(val: DataValue) -> Self {
+        Self {
+            lower: val,
+            upper: DataValue::Bottom,
+        }
+    }
+    fn upper_bound(val: DataValue) -> Self {
+        Self {
+            lower: DataValue::Null,
+            upper: val,
+        }
+    }
+}
+
+impl Default for ValueRange {
+    fn default() -> Self {
+        Self {
+            lower: DataValue::Null,
+            upper: DataValue::Bottom,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -132,6 +283,14 @@ pub(crate) struct Op {
     pub(crate) is_predicate: bool,
     pub(crate) inner: fn(&[DataValue]) -> Result<DataValue>,
 }
+
+impl PartialEq for Op {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Op {}
 
 impl Debug for Op {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
