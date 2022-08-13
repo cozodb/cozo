@@ -440,6 +440,16 @@ impl SessionTx {
         }
         Ok(false)
     }
+    pub(crate) fn triple_av_range_scan(
+        &self,
+        aid: AttrId,
+        lower: &DataValue,
+        upper_inc: &DataValue,
+    ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
+        let lower = encode_ave_key(aid, lower, EntityId::ZERO, Validity::MAX);
+        let upper = encode_ave_key(aid, &DataValue::Bottom, EntityId::MAX_PERM, Validity::MIN);
+        TripleAttrValueRangeIter::new(self.tx.iterator(), lower, upper, upper_inc.clone())
+    }
     pub(crate) fn triple_av_scan(
         &self,
         aid: AttrId,
@@ -448,6 +458,23 @@ impl SessionTx {
         let lower = encode_ave_key(aid, v, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_key(aid, v, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueIter::new(self.tx.iterator(), lower, upper)
+    }
+    pub(crate) fn triple_av_range_before_scan(
+        &self,
+        aid: AttrId,
+        lower: &DataValue,
+        upper_inc: &DataValue,
+        before: Validity,
+    ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
+        let lower = encode_ave_key(aid, lower, EntityId::ZERO, Validity::MAX);
+        let upper = encode_ave_key(aid, &DataValue::Bottom, EntityId::MAX_PERM, Validity::MIN);
+        TripleAttrValueRangeBeforeIter::new(
+            self.tx.iterator(),
+            lower,
+            upper,
+            upper_inc.clone(),
+            before,
+        )
     }
     pub(crate) fn triple_av_before_scan(
         &self,
@@ -705,6 +732,124 @@ impl TripleAttrEntityBeforeIter {
 
 impl Iterator for TripleAttrEntityBeforeIter {
     type Item = Result<(AttrId, EntityId, DataValue)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
+    }
+}
+
+// normal version
+
+struct TripleAttrValueRangeIter {
+    it: DbIter,
+    started: bool,
+    inc_upper: DataValue,
+}
+
+impl TripleAttrValueRangeIter {
+    fn new(
+        builder: IterBuilder,
+        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
+        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
+        inc_upper: DataValue,
+    ) -> Self {
+        let mut it = builder.upper_bound(&upper_bound).start();
+        it.seek(&lower_bound);
+        Self {
+            it,
+            started: false,
+            inc_upper,
+        }
+    }
+    fn next_inner(&mut self) -> Result<Option<(AttrId, DataValue, EntityId)>> {
+        if self.started {
+            self.it.next();
+        } else {
+            self.started = true;
+        }
+        return match self.it.pair()? {
+            None => Ok(None),
+            Some((k_slice, v_slice)) => {
+                let (aid, mut eid, _tid) = decode_ae_key(k_slice)?;
+                if eid.is_placeholder() {
+                    eid = decode_value_from_val(v_slice)?.get_entity_id()?;
+                }
+                let v = decode_value_from_key(k_slice)?;
+                if v > self.inc_upper {
+                    Ok(None)
+                } else {
+                    Ok(Some((aid, v, eid)))
+                }
+            }
+        };
+    }
+}
+
+impl Iterator for TripleAttrValueRangeIter {
+    type Item = Result<(AttrId, DataValue, EntityId)>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
+    }
+}
+
+// before version
+
+struct TripleAttrValueRangeBeforeIter {
+    it: DbIter,
+    current: EncodedVec<LARGE_VEC_SIZE>,
+    inc_upper: DataValue,
+    before: Validity,
+}
+
+impl TripleAttrValueRangeBeforeIter {
+    fn new(
+        builder: IterBuilder,
+        lower_bound: EncodedVec<LARGE_VEC_SIZE>,
+        upper_bound: EncodedVec<LARGE_VEC_SIZE>,
+        inc_upper: DataValue,
+        before: Validity,
+    ) -> Self {
+        let it = builder.upper_bound(&upper_bound).start();
+        Self {
+            it,
+            current: lower_bound,
+            inc_upper,
+            before,
+        }
+    }
+    fn next_inner(&mut self) -> Result<Option<(AttrId, DataValue, EntityId)>> {
+        loop {
+            self.it.seek(&self.current);
+            match self.it.pair()? {
+                None => return Ok(None),
+                Some((k_slice, v_slice)) => {
+                    let (aid, mut eid, tid) = decode_ae_key(k_slice)?;
+                    if eid.is_placeholder() {
+                        eid = decode_value_from_val(v_slice)?.get_entity_id()?;
+                    }
+                    if tid > self.before {
+                        self.current.encoded_entity_amend_validity(self.before);
+                        continue;
+                    }
+                    let v = decode_value_from_key(k_slice)?;
+                    if v > self.inc_upper {
+                        return Ok(None);
+                    }
+                    self.current.copy_from_slice(k_slice);
+                    self.current.encoded_entity_amend_validity_to_inf_past();
+                    let op = StoreOp::try_from(v_slice[0])?;
+                    if op.is_assert() {
+                        return Ok(Some((aid, v, eid)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for TripleAttrValueRangeBeforeIter {
+    type Item = Result<(AttrId, DataValue, EntityId)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         swap_option_result(self.next_inner())
