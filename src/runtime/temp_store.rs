@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::ops::Bound::{Excluded, Included};
+use std::ops::Bound::Included;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 
@@ -319,7 +319,7 @@ impl TempStore {
         let target = self.mem_db.try_read().unwrap();
         let target = target.get(epoch as usize).unwrap().try_read().unwrap();
         let res = target
-            .range((Included(prefix), Excluded(&upper)))
+            .range((Included(prefix), Included(&upper)))
             .map(|(k, v)| {
                 if v.0.is_empty() {
                     Ok(k.clone())
@@ -338,6 +338,26 @@ impl TempStore {
                     Ok(Tuple(combined))
                 }
             })
+            .collect_vec();
+        res.into_iter()
+    }
+    pub(crate) fn scan_bounded_prefix_for_epoch(
+        &self,
+        prefix: &Tuple,
+        lower: &[DataValue],
+        upper: &[DataValue],
+        epoch: u32,
+    ) -> impl Iterator<Item = Result<Tuple>> {
+        self.ensure_mem_db_for_epoch(epoch);
+        let mut prefix_bound = prefix.clone();
+        prefix_bound.0.extend_from_slice(lower);
+        let mut upper_bound = prefix.clone();
+        upper_bound.0.extend_from_slice(upper);
+        let target = self.mem_db.try_read().unwrap();
+        let target = target.get(epoch as usize).unwrap().try_read().unwrap();
+        let res = target
+            .range((Included(&prefix_bound), Included(&upper_bound)))
+            .map(|(k, _v)| Ok(k.clone()))
             .collect_vec();
         res.into_iter()
     }

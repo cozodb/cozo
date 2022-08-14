@@ -779,7 +779,7 @@ impl SessionTx {
             let eid = self.parse_eid_from_map(o, vld)?;
             return Ok(InputTerm::Const(eid));
         }
-        todo!()
+        bail!("cannot parse {} as entity", entity_rep);
     }
     fn parse_triple_atom_attr(&mut self, attr_rep: &JsonValue) -> Result<Attribute> {
         match attr_rep {

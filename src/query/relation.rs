@@ -8,7 +8,7 @@ use itertools::Itertools;
 use log::error;
 
 use crate::data::attr::Attribute;
-use crate::data::expr::{compute_bounds, Expr};
+use crate::data::expr::{compute_bounds, compute_single_bound, Expr};
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
@@ -714,73 +714,101 @@ impl TripleRelation {
     ) -> Result<TupleIter<'a>> {
         // [f, f] not really a join
         if self.attr.indexing.should_index() && !self.filters.is_empty() {
-            let (l_bound, u_bound) = match compute_bounds(&self.filters, &self.bindings[1..]) {
-                Ok(range) => range,
-                Err(e) => return Ok(Box::new(iter::once(Err(e)))),
-            };
-            let l_bound = l_bound.into_iter().next().unwrap();
-            let u_bound = u_bound.into_iter().next().unwrap();
-            let it = left_iter
-                .map_ok(move |tuple| {
-                    // TODO further optimize this: tuple may contain optimization opportunity
-                    if self.attr.with_history {
-                        Left(
-                            tx.triple_av_range_before_scan(
-                                self.attr.id,
-                                &l_bound,
-                                &u_bound,
-                                self.vld,
-                            )
-                            .map_ok(move |(_, val, e_id)| {
-                                let mut ret = tuple.0.clone();
-                                ret.push(e_id.to_value());
-                                ret.push(val);
-                                Tuple(ret)
-                            }),
-                        )
-                    } else {
-                        Right(
-                            tx.triple_av_range_scan(self.attr.id, &l_bound, &u_bound)
+            if let Some((l_bound, u_bound)) =
+                compute_single_bound(&self.filters, &self.bindings[1])?
+            {
+                let it = left_iter
+                    .map_ok(move |tuple| {
+                        if self.attr.with_history {
+                            Left(
+                                tx.triple_av_range_before_scan(
+                                    self.attr.id,
+                                    &l_bound,
+                                    &u_bound,
+                                    self.vld,
+                                )
                                 .map_ok(move |(_, val, e_id)| {
                                     let mut ret = tuple.0.clone();
                                     ret.push(e_id.to_value());
                                     ret.push(val);
                                     Tuple(ret)
                                 }),
-                        )
-                    }
-                })
-                .flatten_ok()
-                .map(flatten_err);
-            self.return_filtered_iter(it, eliminate_indices)
-        } else {
-            let it = left_iter
-                .map_ok(|tuple| {
-                    if self.attr.with_history {
-                        Left(tx.triple_a_before_scan(self.attr.id, self.vld).map_ok(
-                            move |(_, e_id, val)| {
-                                let mut ret = tuple.0.clone();
-                                ret.push(e_id.to_value());
-                                ret.push(val);
-                                Tuple(ret)
-                            },
-                        ))
-                    } else {
-                        Right(
-                            tx.triple_a_scan(self.attr.id)
-                                .map_ok(move |(_, e_id, val)| {
+                            )
+                        } else {
+                            Right(
+                                tx.triple_av_range_scan(self.attr.id, &l_bound, &u_bound)
+                                    .map_ok(move |(_, val, e_id)| {
+                                        let mut ret = tuple.0.clone();
+                                        ret.push(e_id.to_value());
+                                        ret.push(val);
+                                        Tuple(ret)
+                                    }),
+                            )
+                        }
+                    })
+                    .flatten_ok()
+                    .map(flatten_err);
+                return self.return_filtered_iter(it, eliminate_indices);
+            }
+        }
+        let it = left_iter
+            .map_ok(|tuple| {
+                if self.attr.indexing.should_index() {
+                    if let Ok(Some((l_bound, u_bound))) =
+                        compute_single_bound(&self.filters, &self.bindings[1])
+                    {
+                        return Left(if self.attr.with_history {
+                            Left(
+                                tx.triple_av_range_before_scan(
+                                    self.attr.id,
+                                    &l_bound,
+                                    &u_bound,
+                                    self.vld,
+                                )
+                                .map_ok(move |(_, val, e_id)| {
                                     let mut ret = tuple.0.clone();
                                     ret.push(e_id.to_value());
                                     ret.push(val);
                                     Tuple(ret)
                                 }),
-                        )
+                            )
+                        } else {
+                            Right(
+                                tx.triple_av_range_scan(self.attr.id, &l_bound, &u_bound)
+                                    .map_ok(move |(_, val, e_id)| {
+                                        let mut ret = tuple.0.clone();
+                                        ret.push(e_id.to_value());
+                                        ret.push(val);
+                                        Tuple(ret)
+                                    }),
+                            )
+                        });
                     }
+                }
+                Right(if self.attr.with_history {
+                    Left(tx.triple_a_before_scan(self.attr.id, self.vld).map_ok(
+                        move |(_, e_id, val)| {
+                            let mut ret = tuple.0.clone();
+                            ret.push(e_id.to_value());
+                            ret.push(val);
+                            Tuple(ret)
+                        },
+                    ))
+                } else {
+                    Right(
+                        tx.triple_a_scan(self.attr.id)
+                            .map_ok(move |(_, e_id, val)| {
+                                let mut ret = tuple.0.clone();
+                                ret.push(e_id.to_value());
+                                ret.push(val);
+                                Tuple(ret)
+                            }),
+                    )
                 })
-                .flatten_ok()
-                .map(flatten_err);
-            self.return_filtered_iter(it, eliminate_indices)
-        }
+            })
+            .flatten_ok()
+            .map(flatten_err);
+        self.return_filtered_iter(it, eliminate_indices)
     }
     fn neg_ev_join<'a>(
         &'a self,
@@ -1437,6 +1465,7 @@ impl StoredDerivedRelation {
                 }
             }
         };
+        let mut skip_range_check = false;
         let it = left_iter
             .map_ok(move |tuple| {
                 let prefix = Tuple(
@@ -1445,14 +1474,41 @@ impl StoredDerivedRelation {
                         .map(|i| tuple.0[*i].clone())
                         .collect_vec(),
                 );
-                self.storage
-                    .scan_prefix_for_epoch(&prefix, scan_epoch)
-                    .filter_map_ok(move |found| {
-                        // dbg!("filter", &tuple, &prefix, &found);
-                        let mut ret = tuple.0.clone();
-                        ret.extend(found.0);
-                        Some(Tuple(ret))
-                    })
+
+                if !skip_range_check && !self.filters.is_empty() {
+                    let other_bindings = &self.bindings[right_join_indices.len()..];
+                    let (l_bound, u_bound) = match compute_bounds(&self.filters, other_bindings) {
+                        Ok(b) => b,
+                        _ => (vec![], vec![]),
+                    };
+                    if !l_bound.iter().all(|v| *v == DataValue::Null)
+                        || !u_bound.iter().all(|v| *v == DataValue::Bottom)
+                    {
+                        return Left(
+                            self.storage
+                                .scan_bounded_prefix_for_epoch(
+                                    &prefix, &l_bound, &u_bound, scan_epoch,
+                                )
+                                .filter_map_ok(move |found| {
+                                    // dbg!("filter", &tuple, &prefix, &found);
+                                    let mut ret = tuple.0.clone();
+                                    ret.extend(found.0);
+                                    Some(Tuple(ret))
+                                }),
+                        );
+                    }
+                }
+                skip_range_check = true;
+                Right(
+                    self.storage
+                        .scan_prefix_for_epoch(&prefix, scan_epoch)
+                        .filter_map_ok(move |found| {
+                            // dbg!("filter", &tuple, &prefix, &found);
+                            let mut ret = tuple.0.clone();
+                            ret.extend(found.0);
+                            Some(Tuple(ret))
+                        }),
+                )
             })
             .flatten_ok()
             .map(flatten_err);

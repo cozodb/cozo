@@ -245,14 +245,27 @@ pub(crate) fn compute_bounds(
         lowers.push(cur_bound.lower);
         uppers.push(cur_bound.upper);
     }
-    if lowers.is_empty() {
-        lowers.push(DataValue::Null);
-    }
-    uppers.push(DataValue::Bottom);
+
     Ok((lowers, uppers))
 }
 
-#[derive(Clone, Debug)]
+pub(crate) fn compute_single_bound(
+    filters: &[Expr],
+    symbol: &Symbol,
+) -> Result<Option<(DataValue, DataValue)>> {
+    let mut cur_bound = ValueRange::default();
+    for filter in filters {
+        let nxt = filter.extract_bound(symbol)?;
+        cur_bound = cur_bound.merge(nxt);
+    }
+    Ok(if cur_bound == ValueRange::default() {
+        None
+    } else {
+        Some((cur_bound.lower, cur_bound.upper))
+    })
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ValueRange {
     pub(crate) lower: DataValue,
     pub(crate) upper: DataValue,
