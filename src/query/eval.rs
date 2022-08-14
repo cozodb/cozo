@@ -80,7 +80,7 @@ impl SessionTx {
                             let is_meet = aggr_kind == AggrKind::Meet;
                             for (rule_n, rule) in ruleset.rules.iter().enumerate() {
                                 debug!("initial calculation for rule {:?}.{}", k, rule_n);
-                                for item_res in rule.relation.iter(self, Some(0), &use_delta) {
+                                for item_res in rule.relation.iter(self, Some(0), &use_delta)? {
                                     let item = item_res?;
                                     trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
                                     if is_meet {
@@ -105,7 +105,7 @@ impl SessionTx {
                             for (rule_n, rule) in ruleset.rules.iter().enumerate() {
                                 debug!("Calculation for normal aggr rule {:?}.{}", k, rule_n);
                                 for (serial, item_res) in
-                                    rule.relation.iter(self, Some(0), &use_delta).enumerate()
+                                    rule.relation.iter(self, Some(0), &use_delta)?.enumerate()
                                 {
                                     let item = item_res?;
                                     trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
@@ -161,7 +161,7 @@ impl SessionTx {
 
                             debug!("with delta {:?} for rule {:?}.{}", delta_key, k, rule_n);
                             let use_delta = BTreeSet::from([delta_store.id]);
-                            for item_res in rule.relation.iter(self, Some(epoch), &use_delta) {
+                            for item_res in rule.relation.iter(self, Some(epoch), &use_delta)? {
                                 let item = item_res?;
                                 // improvement: the clauses can actually be evaluated in parallel
                                 if is_meet_aggr {

@@ -7,7 +7,7 @@ use either::{Left, Right};
 use itertools::Itertools;
 
 use crate::data::attr::Attribute;
-use crate::data::expr::Expr;
+use crate::data::expr::{compute_bounds, Expr};
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
@@ -81,14 +81,14 @@ impl UnificationRelation {
         tx: &'a SessionTx,
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         let mut bindings = self.parent.bindings_after_eliminate();
         bindings.push(self.binding.clone());
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
-        if self.is_multi {
+        Ok(if self.is_multi {
             let it = self
                 .parent
-                .iter(tx, epoch, use_delta)
+                .iter(tx, epoch, use_delta)?
                 .map_ok(move |tuple| -> Result<Vec<Tuple>> {
                     let result_list = self.expr.eval(&tuple)?;
                     let result_list = result_list.get_list().ok_or_else(|| {
@@ -110,7 +110,7 @@ impl UnificationRelation {
         } else {
             Box::new(
                 self.parent
-                    .iter(tx, epoch, use_delta)
+                    .iter(tx, epoch, use_delta)?
                     .map_ok(move |tuple| -> Result<Tuple> {
                         let result = self.expr.eval(&tuple)?;
                         let mut ret = tuple.0;
@@ -121,7 +121,7 @@ impl UnificationRelation {
                     })
                     .map(flatten_err),
             )
-        }
+        })
     }
 }
 
@@ -164,12 +164,12 @@ impl FilteredRelation {
         tx: &'a SessionTx,
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         let bindings = self.parent.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
-        Box::new(
+        Ok(Box::new(
             self.parent
-                .iter(tx, epoch, use_delta)
+                .iter(tx, epoch, use_delta)?
                 .filter_map(move |tuple| match tuple {
                     Ok(t) => {
                         for p in self.pred.iter() {
@@ -184,7 +184,7 @@ impl FilteredRelation {
                     }
                     Err(e) => Some(Err(e)),
                 }),
-        )
+        ))
     }
 }
 
@@ -435,7 +435,7 @@ impl ReorderRelation {
         tx: &'a SessionTx,
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         let old_order = self.relation.bindings_after_eliminate();
         let old_order_indices: BTreeMap<_, _> = old_order
             .into_iter()
@@ -451,18 +451,16 @@ impl ReorderRelation {
                     .expect("program logic error: reorder indices mismatch")
             })
             .collect_vec();
-        Box::new(
-            self.relation
-                .iter(tx, epoch, use_delta)
-                .map_ok(move |tuple| {
-                    let old = tuple.0;
-                    let new = reorder_indices
-                        .iter()
-                        .map(|i| old[*i].clone())
-                        .collect_vec();
-                    Tuple(new)
-                }),
-        )
+        Ok(Box::new(self.relation.iter(tx, epoch, use_delta)?.map_ok(
+            move |tuple| {
+                let old = tuple.0;
+                let new = reorder_indices
+                    .iter()
+                    .map(|i| old[*i].clone())
+                    .collect_vec();
+                Tuple(new)
+            },
+        )))
     }
 }
 
@@ -497,8 +495,8 @@ impl InlineFixedRelation {
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
-        if self.data.is_empty() {
+    ) -> Result<TupleIter<'a>> {
+        Ok(if self.data.is_empty() {
             Box::new(iter::empty())
         } else if self.data.len() == 1 {
             let data = self.data[0].clone();
@@ -548,7 +546,7 @@ impl InlineFixedRelation {
                     })
                     .flatten_ok(),
             )
-        }
+        })
     }
 }
 
@@ -623,18 +621,13 @@ impl TripleRelation {
         Ok(())
     }
 
-    fn iter<'a>(&'a self, tx: &'a SessionTx) -> TupleIter<'a> {
-        if self.attr.with_history {
-            let it = tx
-                .triple_a_before_scan(self.attr.id, self.vld)
-                .map_ok(|(_, e_id, y)| Tuple(vec![e_id.to_value(), y]));
-            self.return_filtered_iter(it, Default::default())
-        } else {
-            let it = tx
-                .triple_a_scan(self.attr.id)
-                .map_ok(|(_, e_id, y)| Tuple(vec![e_id.to_value(), y]));
-            self.return_filtered_iter(it, Default::default())
-        }
+    fn iter<'a>(&'a self, tx: &'a SessionTx) -> Result<TupleIter<'a>> {
+        self.join(
+            Box::new(iter::once(Ok(Tuple::default()))),
+            (vec![], vec![]),
+            tx,
+            Default::default(),
+        )
     }
 
     pub(crate) fn neg_join<'a>(
@@ -643,7 +636,7 @@ impl TripleRelation {
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         match right_join_indices.len() {
             2 => {
                 let right_first = *right_join_indices.first().unwrap();
@@ -680,7 +673,7 @@ impl TripleRelation {
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         match right_join_indices.len() {
             0 => self.cartesian_join(left_iter, tx, eliminate_indices),
             2 => {
@@ -717,8 +710,18 @@ impl TripleRelation {
         left_iter: TupleIter<'a>,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         // [f, f] not really a join
+        // if self.attr.indexing.should_index() {
+        // let (l_bound, u_bound) = match compute_bounds(&self.filters, &self.bindings[1..]) {
+        //     Ok(range) => range,
+        //     Err(e) => return Box::new(iter::once(Err(e))),
+        // };
+        // let l_bound = l_bound.into_iter().next().unwrap();
+        // let u_bound = u_bound.into_iter().next().unwrap();
+        // let it = left_iter.map_ok()
+        // todo!()
+        // } else {
         let it = left_iter
             .map_ok(|tuple| {
                 if self.attr.with_history {
@@ -745,6 +748,7 @@ impl TripleRelation {
             .flatten_ok()
             .map(flatten_err);
         self.return_filtered_iter(it, eliminate_indices)
+        // }
     }
     fn neg_ev_join<'a>(
         &'a self,
@@ -753,8 +757,8 @@ impl TripleRelation {
         left_v_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
-        Box::new(
+    ) -> Result<TupleIter<'a>> {
+        Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let eid = tuple
@@ -788,7 +792,7 @@ impl TripleRelation {
                 })
                 .map(flatten_err)
                 .filter_map(invert_option_err),
-        )
+        ))
     }
     fn ev_join<'a>(
         &'a self,
@@ -797,7 +801,7 @@ impl TripleRelation {
         left_v_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         // [b, b] actually a filter
         let it = left_iter
             .map_ok(move |tuple| -> Result<Option<Tuple>> {
@@ -829,8 +833,8 @@ impl TripleRelation {
         left_e_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
-        Box::new(
+    ) -> Result<TupleIter<'a>> {
+        Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let eid = tuple
@@ -869,7 +873,7 @@ impl TripleRelation {
                 })
                 .map(flatten_err)
                 .filter_map(invert_option_err),
-        )
+        ))
     }
     fn e_join<'a>(
         &'a self,
@@ -877,7 +881,8 @@ impl TripleRelation {
         left_e_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
+        // TODO can range scan
         // [b, f]
         let it = left_iter
             .map_ok(move |tuple| {
@@ -915,8 +920,8 @@ impl TripleRelation {
         left_v_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
-        Box::new(
+    ) -> Result<TupleIter<'a>> {
+        Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let v_eid = tuple
@@ -956,7 +961,7 @@ impl TripleRelation {
                 })
                 .map(flatten_err)
                 .filter_map(invert_option_err),
-        )
+        ))
     }
     fn v_ref_join<'a>(
         &'a self,
@@ -964,7 +969,7 @@ impl TripleRelation {
         left_v_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         // [f, b] where b is a ref
         let it = left_iter
             .map_ok(move |tuple| {
@@ -1008,8 +1013,8 @@ impl TripleRelation {
         left_v_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
-        Box::new(
+    ) -> Result<TupleIter<'a>> {
+        Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let val = tuple.0.get(left_v_idx).unwrap();
@@ -1043,7 +1048,7 @@ impl TripleRelation {
                 })
                 .map(flatten_err)
                 .filter_map(invert_option_err),
-        )
+        ))
     }
     fn v_index_join<'a>(
         &'a self,
@@ -1051,7 +1056,7 @@ impl TripleRelation {
         left_v_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         // [f, b] where b is indexed
         let it = left_iter
             .map_ok(move |tuple| {
@@ -1087,8 +1092,8 @@ impl TripleRelation {
         left_v_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
-        Box::new(
+    ) -> Result<TupleIter<'a>> {
+        Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let val = tuple.0.get(left_v_idx).unwrap();
@@ -1124,7 +1129,7 @@ impl TripleRelation {
                 })
                 .map(flatten_err)
                 .filter_map(invert_option_err),
-        )
+        ))
     }
     fn v_no_index_join<'a>(
         &'a self,
@@ -1132,7 +1137,7 @@ impl TripleRelation {
         left_v_idx: usize,
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         // [f, b] where b is not indexed
         let throwaway = tx.new_temp_store();
         let it = if self.attr.with_history {
@@ -1142,11 +1147,11 @@ impl TripleRelation {
         };
         for item in it {
             match item {
-                Err(e) => return Box::new([Err(e)].into_iter()),
+                Err(e) => return Ok(Box::new([Err(e)].into_iter())),
                 Ok((_, eid, val)) => {
                     let t = Tuple(vec![val, eid.to_value()]);
                     if let Err(e) = throwaway.put(t, 0) {
-                        return Box::new([Err(e.into())].into_iter());
+                        return Ok(Box::new([Err(e.into())].into_iter()));
                     }
                 }
             }
@@ -1172,18 +1177,20 @@ impl TripleRelation {
         &'a self,
         it: impl Iterator<Item = Result<Tuple>> + 'a,
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
-        match (self.filters.is_empty(), eliminate_indices.is_empty()) {
-            (true, true) => Box::new(it),
-            (true, false) => {
-                Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
-            }
-            (false, true) => Box::new(filter_iter(self.filters.clone(), it)),
-            (false, false) => Box::new(
-                filter_iter(self.filters.clone(), it)
-                    .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
-            ),
-        }
+    ) -> Result<TupleIter<'a>> {
+        Ok(
+            match (self.filters.is_empty(), eliminate_indices.is_empty()) {
+                (true, true) => Box::new(it),
+                (true, false) => {
+                    Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+                }
+                (false, true) => Box::new(filter_iter(self.filters.clone(), it)),
+                (false, false) => Box::new(
+                    filter_iter(self.filters.clone(), it)
+                        .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
+                ),
+            },
+        )
     }
 }
 
@@ -1236,9 +1243,9 @@ impl StoredDerivedRelation {
         Ok(())
     }
 
-    fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<TempStoreId>) -> TupleIter<'_> {
+    fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<TempStoreId>) -> Result<TupleIter<'_>> {
         if epoch == Some(0) && use_delta.contains(&self.storage.id) {
-            return Box::new(iter::empty());
+            return Ok(Box::new(iter::empty()));
         }
 
         let scan_epoch = match epoch {
@@ -1252,11 +1259,11 @@ impl StoredDerivedRelation {
             }
         };
         let it = self.storage.scan_all_for_epoch(scan_epoch);
-        if self.filters.is_empty() {
+        Ok(if self.filters.is_empty() {
             Box::new(it)
         } else {
             Box::new(filter_iter(self.filters.clone(), it))
-        }
+        })
     }
     fn join_is_prefix(&self, right_join_indices: &[usize]) -> bool {
         let mut indices = right_join_indices.to_vec();
@@ -1269,7 +1276,7 @@ impl StoredDerivedRelation {
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         debug_assert!(!right_join_indices.is_empty());
         let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
         right_invert_indices.sort_by_key(|(_, b)| **b);
@@ -1281,7 +1288,7 @@ impl StoredDerivedRelation {
             left_to_prefix_indices.push(left_join_indices[*idx]);
         }
 
-        Box::new(
+        Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let prefix = Tuple(
@@ -1323,7 +1330,7 @@ impl StoredDerivedRelation {
                 })
                 .map(flatten_err)
                 .filter_map(invert_option_err),
-        )
+        ))
     }
     fn prefix_join<'a>(
         &'a self,
@@ -1332,9 +1339,9 @@ impl StoredDerivedRelation {
         eliminate_indices: BTreeSet<usize>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         if epoch == Some(0) && use_delta.contains(&self.storage.id) {
-            return Box::new(iter::empty());
+            return Ok(Box::new(iter::empty()));
         }
         let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
         right_invert_indices.sort_by_key(|(_, b)| **b);
@@ -1371,17 +1378,19 @@ impl StoredDerivedRelation {
             })
             .flatten_ok()
             .map(flatten_err);
-        match (self.filters.is_empty(), eliminate_indices.is_empty()) {
-            (true, true) => Box::new(it),
-            (true, false) => {
-                Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
-            }
-            (false, true) => Box::new(filter_iter(self.filters.clone(), it)),
-            (false, false) => Box::new(
-                filter_iter(self.filters.clone(), it)
-                    .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
-            ),
-        }
+        Ok(
+            match (self.filters.is_empty(), eliminate_indices.is_empty()) {
+                (true, true) => Box::new(it),
+                (true, false) => {
+                    Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+                }
+                (false, true) => Box::new(filter_iter(self.filters.clone(), it)),
+                (false, false) => Box::new(
+                    filter_iter(self.filters.clone(), it)
+                        .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
+                ),
+            },
+        )
     }
 }
 
@@ -1498,9 +1507,9 @@ impl Relation {
         tx: &'a SessionTx,
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         match self {
-            Relation::Fixed(f) => Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone())))),
+            Relation::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone()))))),
             Relation::Triple(r) => r.iter(tx),
             Relation::Derived(r) => r.iter(epoch, use_delta),
             Relation::Join(j) => j.iter(tx, epoch, use_delta),
@@ -1539,7 +1548,7 @@ impl NegJoin {
         tx: &'a SessionTx,
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         let bindings = self.left.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         match &self.right {
@@ -1552,7 +1561,7 @@ impl NegJoin {
                     )
                     .unwrap();
                 r.neg_join(
-                    self.left.iter(tx, epoch, use_delta),
+                    self.left.iter(tx, epoch, use_delta)?,
                     join_indices,
                     tx,
                     eliminate_indices,
@@ -1567,7 +1576,7 @@ impl NegJoin {
                     )
                     .unwrap();
                 r.neg_join(
-                    self.left.iter(tx, epoch, use_delta),
+                    self.left.iter(tx, epoch, use_delta)?,
                     join_indices,
                     eliminate_indices,
                 )
@@ -1623,7 +1632,7 @@ impl InnerJoin {
         tx: &'a SessionTx,
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         let bindings = self.bindings();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         match &self.right {
@@ -1636,7 +1645,7 @@ impl InnerJoin {
                     )
                     .unwrap();
                 f.join(
-                    self.left.iter(tx, epoch, use_delta),
+                    self.left.iter(tx, epoch, use_delta)?,
                     join_indices,
                     eliminate_indices,
                 )
@@ -1650,7 +1659,7 @@ impl InnerJoin {
                     )
                     .unwrap();
                 r.join(
-                    self.left.iter(tx, epoch, use_delta),
+                    self.left.iter(tx, epoch, use_delta)?,
                     join_indices,
                     tx,
                     eliminate_indices,
@@ -1666,7 +1675,7 @@ impl InnerJoin {
                     .unwrap();
                 if r.join_is_prefix(&join_indices.1) {
                     r.prefix_join(
-                        self.left.iter(tx, epoch, use_delta),
+                        self.left.iter(tx, epoch, use_delta)?,
                         join_indices,
                         eliminate_indices,
                         epoch,
@@ -1693,7 +1702,7 @@ impl InnerJoin {
         eliminate_indices: BTreeSet<usize>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<TempStoreId>,
-    ) -> TupleIter<'a> {
+    ) -> Result<TupleIter<'a>> {
         let right_bindings = self.right.bindings_after_eliminate();
         let (left_join_indices, right_join_indices) = self
             .joiner
@@ -1713,7 +1722,7 @@ impl InnerJoin {
             .map(|(a, _)| a)
             .collect_vec();
         let throwaway = tx.new_temp_store();
-        for item in self.right.iter(tx, epoch, use_delta) {
+        for item in self.right.iter(tx, epoch, use_delta)? {
             match item {
                 Ok(tuple) => {
                     let stored_tuple = Tuple(
@@ -1723,15 +1732,15 @@ impl InnerJoin {
                             .collect_vec(),
                     );
                     if let Err(e) = throwaway.put(stored_tuple, 0) {
-                        return Box::new([Err(e.into())].into_iter());
+                        return Ok(Box::new([Err(e.into())].into_iter()));
                     }
                 }
-                Err(e) => return Box::new([Err(e)].into_iter()),
+                Err(e) => return Ok(Box::new([Err(e)].into_iter())),
             }
         }
-        Box::new(
+        Ok(Box::new(
             self.left
-                .iter(tx, epoch, use_delta)
+                .iter(tx, epoch, use_delta)?
                 .map_ok(move |tuple| {
                     let eliminate_indices = eliminate_indices.clone();
                     let prefix = Tuple(
@@ -1752,6 +1761,6 @@ impl InnerJoin {
                 })
                 .flatten_ok()
                 .map(flatten_err),
-        )
+        ))
     }
 }

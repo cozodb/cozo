@@ -144,21 +144,21 @@ impl Expr {
             v => bail!("predicate must have boolean return type, got {:?}", v),
         }
     }
-    pub(crate) fn extract_bound(&self, targets: &[Symbol]) -> Result<ValueRange> {
+    pub(crate) fn extract_bound(&self, target: &Symbol) -> Result<ValueRange> {
         Ok(match self {
             Expr::Binding(_, _) | Expr::Param(_) | Expr::Const(_) => ValueRange::default(),
             Expr::Apply(op, args) => match op.name {
                 n if n == OP_GE.name || n == OP_GT.name => {
                     if let Some(symb) = args[0].get_binding() {
                         if let Some(val) = args[1].get_const() {
-                            if targets.contains(symb) {
+                            if target == symb {
                                 return Ok(ValueRange::lower_bound(val.clone()));
                             }
                         }
                     }
                     if let Some(symb) = args[1].get_binding() {
                         if let Some(val) = args[0].get_const() {
-                            if targets.contains(symb) {
+                            if target == symb {
                                 return Ok(ValueRange::upper_bound(val.clone()));
                             }
                         }
@@ -168,14 +168,14 @@ impl Expr {
                 n if n == OP_LE.name || n == OP_LT.name => {
                     if let Some(symb) = args[0].get_binding() {
                         if let Some(val) = args[1].get_const() {
-                            if targets.contains(symb) {
+                            if target == symb {
                                 return Ok(ValueRange::upper_bound(val.clone()));
                             }
                         }
                     }
                     if let Some(symb) = args[1].get_binding() {
                         if let Some(val) = args[0].get_const() {
-                            if targets.contains(symb) {
+                            if target == symb {
                                 return Ok(ValueRange::lower_bound(val.clone()));
                             }
                         }
@@ -185,7 +185,7 @@ impl Expr {
                 n if n == OP_STARTS_WITH.name => {
                     if let Some(symb) = args[0].get_binding() {
                         if let Some(val) = args[1].get_const() {
-                            if targets.contains(symb) {
+                            if target == symb {
                                 let s = val.get_string().ok_or_else(|| {
                                     anyhow!("unexpected arg {:?} for OP_STARTS_WITH", val)
                                 })?;
@@ -207,7 +207,7 @@ impl Expr {
 
 pub(crate) fn compute_bounds(
     filters: &[Expr],
-    symbols: &[Vec<Symbol>],
+    symbols: &[Symbol],
 ) -> Result<(Vec<DataValue>, Vec<DataValue>)> {
     let mut lowers = vec![];
     let mut uppers = vec![];
