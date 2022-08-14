@@ -5,6 +5,7 @@ use std::iter;
 use anyhow::{anyhow, bail, Context, Result};
 use either::{Left, Right};
 use itertools::Itertools;
+use log::error;
 
 use crate::data::attr::Attribute;
 use crate::data::expr::{compute_bounds, Expr};
@@ -712,43 +713,74 @@ impl TripleRelation {
         eliminate_indices: BTreeSet<usize>,
     ) -> Result<TupleIter<'a>> {
         // [f, f] not really a join
-        // if self.attr.indexing.should_index() {
-        // let (l_bound, u_bound) = match compute_bounds(&self.filters, &self.bindings[1..]) {
-        //     Ok(range) => range,
-        //     Err(e) => return Box::new(iter::once(Err(e))),
-        // };
-        // let l_bound = l_bound.into_iter().next().unwrap();
-        // let u_bound = u_bound.into_iter().next().unwrap();
-        // let it = left_iter.map_ok()
-        // todo!()
-        // } else {
-        let it = left_iter
-            .map_ok(|tuple| {
-                if self.attr.with_history {
-                    Left(tx.triple_a_before_scan(self.attr.id, self.vld).map_ok(
-                        move |(_, e_id, val)| {
-                            let mut ret = tuple.0.clone();
-                            ret.push(e_id.to_value());
-                            ret.push(val);
-                            Tuple(ret)
-                        },
-                    ))
-                } else {
-                    Right(
-                        tx.triple_a_scan(self.attr.id)
-                            .map_ok(move |(_, e_id, val)| {
+        if self.attr.indexing.should_index() && !self.filters.is_empty() {
+            let (l_bound, u_bound) = match compute_bounds(&self.filters, &self.bindings[1..]) {
+                Ok(range) => range,
+                Err(e) => return Ok(Box::new(iter::once(Err(e)))),
+            };
+            let l_bound = l_bound.into_iter().next().unwrap();
+            let u_bound = u_bound.into_iter().next().unwrap();
+            let it = left_iter
+                .map_ok(move |tuple| {
+                    // TODO further optimize this: tuple may contain optimization opportunity
+                    if self.attr.with_history {
+                        Left(
+                            tx.triple_av_range_before_scan(
+                                self.attr.id,
+                                &l_bound,
+                                &u_bound,
+                                self.vld,
+                            )
+                            .map_ok(move |(_, val, e_id)| {
                                 let mut ret = tuple.0.clone();
                                 ret.push(e_id.to_value());
                                 ret.push(val);
                                 Tuple(ret)
                             }),
-                    )
-                }
-            })
-            .flatten_ok()
-            .map(flatten_err);
-        self.return_filtered_iter(it, eliminate_indices)
-        // }
+                        )
+                    } else {
+                        Right(
+                            tx.triple_av_range_scan(self.attr.id, &l_bound, &u_bound)
+                                .map_ok(move |(_, val, e_id)| {
+                                    let mut ret = tuple.0.clone();
+                                    ret.push(e_id.to_value());
+                                    ret.push(val);
+                                    Tuple(ret)
+                                }),
+                        )
+                    }
+                })
+                .flatten_ok()
+                .map(flatten_err);
+            self.return_filtered_iter(it, eliminate_indices)
+        } else {
+            let it = left_iter
+                .map_ok(|tuple| {
+                    if self.attr.with_history {
+                        Left(tx.triple_a_before_scan(self.attr.id, self.vld).map_ok(
+                            move |(_, e_id, val)| {
+                                let mut ret = tuple.0.clone();
+                                ret.push(e_id.to_value());
+                                ret.push(val);
+                                Tuple(ret)
+                            },
+                        ))
+                    } else {
+                        Right(
+                            tx.triple_a_scan(self.attr.id)
+                                .map_ok(move |(_, e_id, val)| {
+                                    let mut ret = tuple.0.clone();
+                                    ret.push(e_id.to_value());
+                                    ret.push(val);
+                                    Tuple(ret)
+                                }),
+                        )
+                    }
+                })
+                .flatten_ok()
+                .map(flatten_err);
+            self.return_filtered_iter(it, eliminate_indices)
+        }
     }
     fn neg_ev_join<'a>(
         &'a self,
@@ -882,32 +914,77 @@ impl TripleRelation {
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
     ) -> Result<TupleIter<'a>> {
-        // TODO can range scan
         // [b, f]
+        let mut no_bound_found = false;
         let it = left_iter
-            .map_ok(move |tuple| {
-                tuple
+            .map_ok(move |tuple| -> Result<_> {
+                let bounds = if !self.filters.is_empty() && !no_bound_found {
+                    let reduced_filters: Vec<_> = self
+                        .filters
+                        .iter()
+                        .map(|f| f.eval_bound(&tuple))
+                        .try_collect()
+                        .unwrap();
+                    match compute_bounds(&reduced_filters, &self.bindings[1..]) {
+                        Ok((l_bound, r_bound)) => {
+                            let l_bound = l_bound.into_iter().next().unwrap();
+                            let r_bound = r_bound.into_iter().next().unwrap();
+                            if l_bound != DataValue::Null || r_bound != DataValue::Bottom {
+                                Some((l_bound, r_bound))
+                            } else {
+                                None
+                            }
+                        }
+                        Err(e) => {
+                            error!("internel error {}", e);
+                            no_bound_found = true;
+                            None
+                        }
+                    }
+                } else {
+                    None
+                };
+                let eid = tuple
                     .0
                     .get(left_e_idx)
                     .unwrap()
                     .get_entity_id()
-                    .with_context(|| format!("{:?}, {:?}, {}", self, tuple, left_e_idx))
-                    .map(move |eid| {
-                        let clj = move |(eid, _, val): (EntityId, AttrId, DataValue)| {
-                            let mut ret = tuple.0.clone();
-                            ret.push(eid.to_value());
-                            ret.push(val);
-                            Tuple(ret)
-                        };
-                        if self.attr.with_history {
-                            Left(
-                                tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
-                                    .map_ok(clj),
+                    .with_context(|| format!("{:?}, {:?}, {}", self, tuple, left_e_idx))?;
+
+                let clj = move |(eid, _, val): (EntityId, AttrId, DataValue)| {
+                    let mut ret = tuple.0.clone();
+                    ret.push(eid.to_value());
+                    ret.push(val);
+                    Tuple(ret)
+                };
+                Ok(if let Some((l_bound, r_bound)) = bounds {
+                    Left(if self.attr.with_history {
+                        Left(
+                            tx.triple_ea_range_before_scan(
+                                eid,
+                                self.attr.id,
+                                l_bound,
+                                r_bound,
+                                self.vld,
                             )
-                        } else {
-                            Right(tx.triple_ea_scan(eid, self.attr.id).map_ok(clj))
-                        }
+                            .map_ok(clj),
+                        )
+                    } else {
+                        Right(
+                            tx.triple_ea_range_scan(eid, self.attr.id, l_bound, r_bound)
+                                .map_ok(clj),
+                        )
                     })
+                } else {
+                    Right(if self.attr.with_history {
+                        Left(
+                            tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
+                                .map_ok(clj),
+                        )
+                    } else {
+                        Right(tx.triple_ea_scan(eid, self.attr.id).map_ok(clj))
+                    })
+                })
             })
             .map(flatten_err)
             .flatten_ok()
@@ -1215,6 +1292,7 @@ pub(crate) struct StoredDerivedRelation {
     pub(crate) filters: Vec<Expr>,
 }
 
+// TODO range scan for derived relation
 impl StoredDerivedRelation {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self

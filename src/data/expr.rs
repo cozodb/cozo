@@ -127,6 +127,31 @@ impl Expr {
             }
         }
     }
+    pub(crate) fn eval_bound(&self, bindings: &Tuple) -> Result<Self> {
+        Ok(match self {
+            Expr::Binding(b, i) => match bindings.0.get(i.unwrap()) {
+                None => Expr::Binding(b.clone(), i.clone()),
+                Some(v) => Expr::Const(v.clone()),
+            },
+            e @ Expr::Const(_) => e.clone(),
+            Expr::Apply(op, args) => {
+                let args: Box<[Expr]> =
+                    args.iter().map(|v| v.eval_bound(bindings)).try_collect()?;
+                let const_args = args
+                    .iter()
+                    .map(|v| v.get_const().cloned())
+                    .collect::<Option<Box<[DataValue]>>>();
+                match const_args {
+                    None => Expr::Apply(*op, args),
+                    Some(args) => {
+                        let res = (op.inner)(&args)?;
+                        Expr::Const(res)
+                    }
+                }
+            }
+            Expr::Param(s) => bail!("input var {} not bound", s),
+        })
+    }
     pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
         match self {
             Expr::Binding(_, i) => Ok(bindings.0[i.unwrap()].clone()),

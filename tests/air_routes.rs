@@ -66,6 +66,28 @@ fn air_routes() -> Result<()> {
         dbg!(triple_insertion_time.elapsed());
     }
 
+    let starts_with_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?code] := [?_ airport.iata ?code], starts_with(?code, 'US');
+    "#,
+    )?;
+    dbg!(starts_with_time.elapsed());
+    assert_eq!(
+        res,
+        json!([
+            ["USA"],
+            ["USH"],
+            ["USJ"],
+            ["USK"],
+            ["USM"],
+            ["USN"],
+            ["USQ"],
+            ["UST"],
+            ["USU"]
+        ])
+    );
+
     let simple_query_time = Instant::now();
     let res = db.run_script(r#"
         ?[?c, ?code, ?desc] := [?c country.code 'CU'] or ?c <- 10000239, [?c country.code ?code], [?c country.desc ?desc];
