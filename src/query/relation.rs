@@ -1320,7 +1320,6 @@ pub(crate) struct StoredDerivedRelation {
     pub(crate) filters: Vec<Expr>,
 }
 
-// TODO range scan for derived relation
 impl StoredDerivedRelation {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self

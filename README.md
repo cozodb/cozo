@@ -1,14 +1,6 @@
 ## TODO
 
-* [x] predicates
-* [x] negation
-* [x] disjunction
-* [x] stratum
-* [x] magic sets
-* [x] unification
-* [x] aggregation
-* [x] duplicate symbols in rule heads
-* [x] limit, offset
-* [x] public API
-* [x] sorting
-* [ ] range scan
+* [ ] stored relations
+* [ ] more complete functions and aggregations
+* [ ] auto-updating relations?
+* [ ] more complete tx tests
