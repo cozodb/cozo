@@ -77,6 +77,8 @@ fn air_routes() -> Result<()> {
         }
     };
 
+    println!("views: {}", db.list_views()?);
+
     let starts_with_time = Instant::now();
     let res = db.run_script(
         r#"

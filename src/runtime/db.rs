@@ -19,8 +19,8 @@ use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::triple::StoreOp;
-use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
-use crate::data::value::DataValue;
+use crate::data::tuple::{rusty_scratch_cmp, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
+use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::cozoscript::query::parse_query_to_json;
 use crate::parse::cozoscript::schema::parse_schema_to_json;
 use crate::parse::cozoscript::tx::parse_tx_to_json;
@@ -28,6 +28,7 @@ use crate::parse::query::ViewOp;
 use crate::parse::schema::AttrTxItem;
 use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
+use crate::runtime::view::{ViewRelId, ViewRelMetadata};
 
 pub struct Db {
     db: RocksDb,
@@ -385,5 +386,29 @@ impl Db {
         let name = Symbol::from(name);
         let tx = self.transact()?;
         tx.destroy_view_rel(&name)
+    }
+    pub fn list_views(&self) -> Result<JsonValue> {
+        let lower = Tuple(vec![DataValue::String("".into())]).encode_as_key(ViewRelId::SYSTEM);
+        let upper = Tuple(vec![DataValue::String(
+            String::from(LARGEST_UTF_CHAR).into(),
+        )])
+        .encode_as_key(ViewRelId::SYSTEM);
+        let mut it = self
+            .view_db
+            .transact()
+            .start()
+            .iterator()
+            .upper_bound(&upper)
+            .start();
+        it.seek(&lower);
+        let mut collected = vec![];
+        while let Some(v_slice) = it.val()? {
+            let meta: ViewRelMetadata = rmp_serde::from_slice(&v_slice)?;
+            let name = meta.name.0;
+            let arity = meta.arity;
+            collected.push(json!({"name": name, "arity": arity}));
+            it.next();
+        }
+        Ok(json!(collected))
     }
 }
