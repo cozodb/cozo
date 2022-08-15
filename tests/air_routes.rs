@@ -69,7 +69,7 @@ fn air_routes() -> Result<()> {
     let view_time = Instant::now();
     match db.run_script(r#"
         ?[?src, ?dst, ?distance] := [?r route.src ?src], [?r route.dst ?dst], [?r route.distance ?distance];
-        :view create flies_to;
+        :view rederive flies_to;
     "#) {
         Ok(_) => {dbg!(view_time.elapsed());}
         Err(_) => {
@@ -1237,7 +1237,7 @@ fn air_routes() -> Result<()> {
      [11758,["LHR","NRT","AKL","BHE"]],[11751,["LHR","NRT","AKL","NSN"]]]
     "#
         )
-            .unwrap()
+        .unwrap()
     );
 
     Ok(())

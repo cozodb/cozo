@@ -54,6 +54,7 @@ impl TryFrom<&'_ JsonValue> for SortDir {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum ViewOp {
     Create,
+    Rederive,
     Put,
     Retract,
 }
@@ -225,6 +226,8 @@ impl SessionTx {
                     .ok_or_else(|| anyhow!("view options must be an object"))?;
                 let (op, name) = if let Some(name) = opts.get("create") {
                     (ViewOp::Create, name)
+                } else if let Some(name) = opts.get("rederive") {
+                    (ViewOp::Rederive, name)
                 } else if let Some(name) = opts.get("put") {
                     (ViewOp::Put, name)
                 } else if let Some(name) = opts.get("retract") {

@@ -91,12 +91,23 @@ impl SessionTx {
         op: ViewOp,
         meta: &ViewRelMetadata,
     ) -> Result<()> {
-        let view_store = if op == ViewOp::Create {
+        if op == ViewOp::Rederive {
+            let _ = self.destroy_view_rel(&meta.name);
+        }
+        let view_store = if op == ViewOp::Rederive || op == ViewOp::Create {
             self.create_view_rel(meta.clone())?
         } else {
             let found = self.get_view_rel(&meta.name)?;
-            ensure!(found.metadata.arity == meta.arity, "arity mismatch for view {}", meta.name);
-            ensure!(found.metadata.kind == meta.kind, "kind mismatch for view {:?}", meta.kind);
+            ensure!(
+                found.metadata.arity == meta.arity,
+                "arity mismatch for view {}",
+                meta.name
+            );
+            ensure!(
+                found.metadata.kind == meta.kind,
+                "kind mismatch for view {:?}",
+                meta.kind
+            );
             found
         };
         let mut vtx = self.view_db.transact().start();

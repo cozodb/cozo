@@ -313,7 +313,7 @@ impl Db {
                     "view '{}' exists but is required not to be",
                     meta.name
                 )
-            } else {
+            } else if *op != ViewOp::Rederive {
                 ensure!(
                     tx.view_exists(&meta.name)?,
                     "view '{}' does not exist but is required to be",
