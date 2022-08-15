@@ -66,6 +66,17 @@ fn air_routes() -> Result<()> {
         dbg!(triple_insertion_time.elapsed());
     }
 
+    let view_time = Instant::now();
+    match db.run_script(r#"
+        ?[?src, ?dst, ?distance] := [?r route.src ?src], [?r route.dst ?dst], [?r route.distance ?distance];
+        :view create flies_to;
+    "#) {
+        Ok(_) => {dbg!(view_time.elapsed());}
+        Err(_) => {
+            println!("view flies_to exists");
+        }
+    };
+
     let starts_with_time = Instant::now();
     let res = db.run_script(
         r#"
@@ -96,6 +107,15 @@ fn air_routes() -> Result<()> {
     "#,
     )?;
     dbg!(range_check_time.elapsed());
+    assert_eq!(res, json!([[7176], [7270], [7311], [7722]]));
+
+    let range_check_with_view_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        ?[?dist] := [?src airport.iata 'PEK'], :flies_to[?src, ?_, ?dist], ?dist > 7000, ?dist <= 7722;
+    "#,
+    )?;
+    dbg!(range_check_with_view_time.elapsed());
     assert_eq!(res, json!([[7176], [7270], [7311], [7722]]));
 
     let simple_query_time = Instant::now();
@@ -208,7 +228,7 @@ fn air_routes() -> Result<()> {
         ["YYZ",195],["BRU",194],["CPH",194],["DOH",186],["DUB",185],["CLT",184],["SVO",181]
         ]"#
         )
-            .unwrap()
+        .unwrap()
     );
 
     let most_out_routes_time_inv = Instant::now();
@@ -1186,6 +1206,38 @@ fn air_routes() -> Result<()> {
     "#
         )
         .unwrap()
+    );
+
+    let furthest_from_lhr_view = Instant::now();
+    let res = db.run_script(
+        r#"
+        routes[?a2, min_cost(?cost_pair)] := [?a airport.iata 'LHR'], :flies_to[?a, ?a2, ?dist],
+                                             [?a2 airport.iata ?dst],
+                                             ?path <- ['LHR', ?dst],
+                                             ?cost_pair <- [?path, ?dist];
+        routes[?a2, min_cost(?cost_pair)] := routes[?a, ?prev], :flies_to[?a, ?a2, ?dist],
+                                             [?a2 airport.iata ?dst],
+                                             ?path <- append(first(?prev), ?dst),
+                                             ?cost_pair <- [?path, last(?prev) + ?dist];
+        ?[?cost, ?path] := routes[?dst, ?cost_pair], ?cost <- last(?cost_pair), ?path <- first(?cost_pair);
+
+        :order -?cost;
+        :limit 10;
+    "#,
+    )?;
+    dbg!(furthest_from_lhr_view.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"
+    [[12922,["LHR","JNB","HLE","ASI","BZZ"]],[12114,["LHR","PVG","BNE","CHC","IVC"]],
+     [12030,["LHR","PVG","BNE","CHC","DUD"]],[12015,["LHR","NRT","AKL","WLG","TIU"]],
+     [11921,["LHR","PVG","BNE","CHC","HKK"]],[11910,["LHR","NRT","AKL","WLG","WSZ"]],
+     [11826,["LHR","PVG","BNE","CHC"]],[11766,["LHR","PVG","BNE","ZQN"]],
+     [11758,["LHR","NRT","AKL","BHE"]],[11751,["LHR","NRT","AKL","NSN"]]]
+    "#
+        )
+            .unwrap()
     );
 
     Ok(())
