@@ -38,7 +38,7 @@ impl SessionTx {
                 .collect_vec();
             key.push(DataValue::from(idx as i64));
             let key = Tuple(key);
-            ret.put_kv(key, tuple, 0)?;
+            ret.put_kv(key, tuple, 0);
         }
         Ok(ret)
     }

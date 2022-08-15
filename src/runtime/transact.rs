@@ -21,7 +21,7 @@ use crate::runtime::temp_store::{TempStore, TempStoreId};
 
 pub struct SessionTx {
     pub(crate) tx: Tx,
-    pub(crate) temp_store: RawRocksDb,
+    pub(crate) view_db: RawRocksDb,
     pub(crate) temp_store_id: Arc<AtomicU32>,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
@@ -71,19 +71,13 @@ impl SessionTx {
     pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> TempStore {
         let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        TempStore::new(
-            self.temp_store.clone(),
-            TempStoreId(old_count),
-            rule_name,
-            arity,
-        )
+        TempStore::new(TempStoreId(old_count), rule_name, arity)
     }
 
     pub(crate) fn new_temp_store(&self) -> TempStore {
         let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
         TempStore::new(
-            self.temp_store.clone(),
             TempStoreId(old_count),
             MagicSymbol::Muggle {
                 inner: Symbol::from(""),

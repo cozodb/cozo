@@ -7,7 +7,7 @@ pub(crate) mod tx;
 
 #[cxx::bridge]
 pub(crate) mod ffi {
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     struct DbOpts<'a> {
         pub db_path: &'a str,
         pub optimistic: bool,

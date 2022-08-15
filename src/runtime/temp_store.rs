@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock};
 use anyhow::Result;
 use itertools::Itertools;
 
-use cozorocks::{DbIter, RawRocksDb, RocksDbStatus};
+use cozorocks::DbIter;
 
 use crate::data::aggr::Aggregation;
 use crate::data::program::MagicSymbol;
@@ -41,12 +41,7 @@ impl Debug for TempStore {
 }
 
 impl TempStore {
-    pub(crate) fn new(
-        _db: RawRocksDb,
-        id: TempStoreId,
-        rule_name: MagicSymbol,
-        arity: usize,
-    ) -> TempStore {
+    pub(crate) fn new(id: TempStoreId, rule_name: MagicSymbol, arity: usize) -> TempStore {
         Self {
             epoch_size: Default::default(),
             mem_db: Default::default(),
@@ -132,26 +127,24 @@ impl TempStore {
             Ok(true)
         }
     }
-    pub(crate) fn put(&self, tuple: Tuple, epoch: u32) -> Result<(), RocksDbStatus> {
+    pub(crate) fn put(&self, tuple: Tuple, epoch: u32) {
         self.ensure_mem_db_for_epoch(epoch);
         let db = self.mem_db.try_read().unwrap();
         let mut target = db.get(epoch as usize).unwrap().try_write().unwrap();
         target.insert(tuple, Tuple::default());
-        Ok(())
     }
-    pub(crate) fn put_kv(&self, tuple: Tuple, val: Tuple, epoch: u32) -> Result<(), RocksDbStatus> {
+    pub(crate) fn put_kv(&self, tuple: Tuple, val: Tuple, epoch: u32) {
         self.ensure_mem_db_for_epoch(epoch);
         let db = self.mem_db.try_read().unwrap();
         let mut target = db.get(epoch as usize).unwrap().try_write().unwrap();
         target.insert(tuple, val);
-        Ok(())
     }
     pub(crate) fn normal_aggr_put(
         &self,
         tuple: &Tuple,
         aggrs: &[Option<(Aggregation, Vec<DataValue>)>],
         serial: usize,
-    ) -> Result<(), RocksDbStatus> {
+    ) {
         self.ensure_mem_db_for_epoch(0);
         let mut vals = vec![];
         for (idx, agg) in aggrs.iter().enumerate() {
@@ -169,13 +162,12 @@ impl TempStore {
         let target = self.mem_db.try_read().unwrap();
         let mut target = target.get(0).unwrap().try_write().unwrap();
         target.insert(Tuple(vals), Tuple::default());
-        Ok(())
     }
-    pub(crate) fn exists(&self, tuple: &Tuple, epoch: u32) -> Result<bool, RocksDbStatus> {
+    pub(crate) fn exists(&self, tuple: &Tuple, epoch: u32) -> bool {
         self.ensure_mem_db_for_epoch(epoch);
         let target = self.mem_db.try_read().unwrap();
         let target = target.get(epoch as usize).unwrap().try_read().unwrap();
-        Ok(target.contains_key(tuple))
+        target.contains_key(tuple)
     }
 
     pub(crate) fn normal_aggr_scan_and_put(
@@ -251,14 +243,14 @@ impl TempStore {
             }
             let res_tpl = Tuple(aggr_res);
             if let Some(lmt) = limiter.borrow_mut() {
-                if !store.exists(&res_tpl, 0)? {
-                    store.put(res_tpl, 0)?;
+                if !store.exists(&res_tpl, 0) {
+                    store.put(res_tpl, 0);
                     if lmt.incr() {
                         return Ok(true);
                     }
                 }
             } else {
-                store.put(res_tpl, 0)?;
+                store.put(res_tpl, 0);
             }
         }
         Ok(false)

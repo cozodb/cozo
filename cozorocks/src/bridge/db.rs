@@ -6,10 +6,10 @@ use crate::bridge::ffi::*;
 use crate::bridge::tx::TxBuilder;
 use crate::{IterBuilder, PinSlice};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DbBuilder<'a> {
-    cmp_fn: Option<fn(&[u8], &[u8]) -> i8>,
-    opts: DbOpts<'a>,
+    pub cmp_fn: Option<fn(&[u8], &[u8]) -> i8>,
+    pub opts: DbOpts<'a>,
 }
 
 impl<'a> Default for DbOpts<'a> {

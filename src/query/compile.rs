@@ -70,7 +70,7 @@ impl SessionTx {
         for (name, data) in const_rules {
             let store = self.new_rule_store(name.clone(), data[0].0.len());
             for tuple in data {
-                store.put(tuple.clone(), 0)?;
+                store.put(tuple.clone(), 0);
             }
             stores.insert(name.clone(), store);
         }

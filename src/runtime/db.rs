@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::env::temp_dir;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -9,7 +8,6 @@ use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
 use serde_json::json;
-use uuid::Uuid;
 
 use cozorocks::{DbBuilder, DbIter, RawRocksDb, RocksDb};
 
@@ -32,7 +30,7 @@ use crate::runtime::transact::SessionTx;
 
 pub struct Db {
     db: RocksDb,
-    temp_db: RawRocksDb,
+    view_db: RawRocksDb,
     last_attr_id: Arc<AtomicU64>,
     last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,
@@ -53,26 +51,24 @@ impl Debug for Db {
 
 impl Db {
     pub fn build(builder: DbBuilder<'_>) -> Result<Self> {
-        let db = builder
+        let db_builder = builder
             .use_bloom_filter(true, 10., true)
             .use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
-            .use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
-            .build()?;
-        let mut temp_db_location = temp_dir();
-        temp_db_location.push(format!("{}.cozo", Uuid::new_v4()));
-
-        let scratch = DbBuilder::default()
-            .path(temp_db_location.to_str().unwrap())
-            .create_if_missing(true)
-            .destroy_on_exit(true)
-            .use_bloom_filter(true, 10., true)
+            .use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false);
+        let mut temp_path: String = db_builder.opts.db_path.to_string();
+        temp_path.push_str(".cozo_stored");
+        let view_db_builder = db_builder
+            .clone()
+            .path(&temp_path)
             .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
-            .use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false)
-            .build_raw(true)?
-            .ignore_range_deletions(true);
+            .use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false);
+
+        let db = db_builder.build()?;
+        let view_db = view_db_builder.build_raw(true)?;
+
         let ret = Self {
             db,
-            temp_db: scratch,
+            view_db,
             last_attr_id: Arc::new(Default::default()),
             last_ent_id: Arc::new(Default::default()),
             last_tx_id: Arc::new(Default::default()),
@@ -89,7 +85,7 @@ impl Db {
 
         Ok(Self {
             db: self.db.clone(),
-            temp_db: self.temp_db.clone(),
+            view_db: self.view_db.clone(),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
@@ -112,7 +108,7 @@ impl Db {
     pub fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
-            temp_store: self.temp_db.clone(),
+            view_db: self.view_db.clone(),
             temp_store_id: self.temp_store_id.clone(),
             w_tx_id: None,
             last_attr_id: self.last_attr_id.clone(),
@@ -132,7 +128,7 @@ impl Db {
 
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
-            temp_store: self.temp_db.clone(),
+            view_db: self.view_db.clone(),
             temp_store_id: self.temp_store_id.clone(),
             w_tx_id: Some(cur_tx_id),
             last_attr_id: self.last_attr_id.clone(),

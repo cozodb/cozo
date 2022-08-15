@@ -19,7 +19,7 @@ use crate::runtime::transact::SessionTx;
 pub(crate) enum Relation {
     Fixed(InlineFixedRelation),
     Triple(TripleRelation),
-    Derived(StoredDerivedRelation),
+    Derived(DerivedRelation),
     Join(Box<InnerJoin>),
     NegJoin(Box<NegJoin>),
     Reorder(ReorderRelation),
@@ -346,7 +346,7 @@ impl Relation {
         self.join(right, vec![], vec![])
     }
     pub(crate) fn derived(bindings: Vec<Symbol>, storage: TempStore) -> Self {
-        Self::Derived(StoredDerivedRelation {
+        Self::Derived(DerivedRelation {
             bindings,
             storage,
             filters: vec![],
@@ -1255,9 +1255,7 @@ impl TripleRelation {
                 Err(e) => return Ok(Box::new([Err(e)].into_iter())),
                 Ok((_, eid, val)) => {
                     let t = Tuple(vec![val, eid.to_value()]);
-                    if let Err(e) = throwaway.put(t, 0) {
-                        return Ok(Box::new([Err(e.into())].into_iter()));
-                    }
+                    throwaway.put(t, 0);
                 }
             }
         }
@@ -1314,13 +1312,13 @@ fn get_eliminate_indices(bindings: &[Symbol], eliminate: &BTreeSet<Symbol>) -> B
 }
 
 #[derive(Debug)]
-pub(crate) struct StoredDerivedRelation {
+pub(crate) struct DerivedRelation {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: TempStore,
     pub(crate) filters: Vec<Expr>,
 }
 
-impl StoredDerivedRelation {
+impl DerivedRelation {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
@@ -1864,9 +1862,7 @@ impl InnerJoin {
                             .map(|i| tuple.0[*i].clone())
                             .collect_vec(),
                     );
-                    if let Err(e) = throwaway.put(stored_tuple, 0) {
-                        return Ok(Box::new([Err(e.into())].into_iter()));
-                    }
+                    throwaway.put(stored_tuple, 0);
                 }
                 Err(e) => return Ok(Box::new([Err(e)].into_iter())),
             }
