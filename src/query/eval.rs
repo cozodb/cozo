@@ -7,7 +7,7 @@ use log::{debug, log_enabled, trace, Level};
 use crate::data::program::MagicSymbol;
 use crate::data::symb::PROG_ENTRY;
 use crate::query::compile::{AggrKind, CompiledProgram};
-use crate::runtime::temp_store::TempStore;
+use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct QueryLimiter {
@@ -30,9 +30,9 @@ impl SessionTx {
     pub(crate) fn stratified_magic_evaluate(
         &mut self,
         strata: &[CompiledProgram],
-        stores: &BTreeMap<MagicSymbol, TempStore>,
+        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         num_to_take: Option<usize>,
-    ) -> Result<TempStore> {
+    ) -> Result<DerivedRelStore> {
         let ret_area = stores
             .get(&MagicSymbol::Muggle {
                 inner: PROG_ENTRY.clone(),
@@ -49,7 +49,7 @@ impl SessionTx {
     fn semi_naive_magic_evaluate(
         &mut self,
         prog: &CompiledProgram,
-        stores: &BTreeMap<MagicSymbol, TempStore>,
+        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         num_to_take: Option<usize>,
     ) -> Result<()> {
         if log_enabled!(Level::Debug) {

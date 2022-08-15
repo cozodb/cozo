@@ -7,7 +7,7 @@ use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
 
-use cozorocks::{DbIter, RawRocksDb, Tx};
+use cozorocks::{DbIter, RocksDb, Tx};
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
@@ -16,13 +16,16 @@ use crate::data::encode::{
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::program::MagicSymbol;
 use crate::data::symb::Symbol;
+use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::runtime::temp_store::{TempStore, TempStoreId};
+use crate::runtime::derived::{DerivedRelStore, DerivedRelStoreId};
+use crate::runtime::view::ViewRelId;
 
 pub struct SessionTx {
     pub(crate) tx: Tx,
-    pub(crate) view_db: RawRocksDb,
-    pub(crate) temp_store_id: Arc<AtomicU32>,
+    pub(crate) view_db: RocksDb,
+    pub(crate) view_store_id: Arc<AtomicU64>,
+    pub(crate) mem_store_id: Arc<AtomicU32>,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
     pub(crate) last_ent_id: Arc<AtomicU64>,
@@ -68,17 +71,17 @@ impl TxLog {
 }
 
 impl SessionTx {
-    pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> TempStore {
-        let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
+    pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> DerivedRelStore {
+        let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        TempStore::new(TempStoreId(old_count), rule_name, arity)
+        DerivedRelStore::new(DerivedRelStoreId(old_count), rule_name, arity)
     }
 
-    pub(crate) fn new_temp_store(&self) -> TempStore {
-        let old_count = self.temp_store_id.fetch_add(1, Ordering::AcqRel);
+    pub(crate) fn new_temp_store(&self) -> DerivedRelStore {
+        let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        TempStore::new(
-            TempStoreId(old_count),
+        DerivedRelStore::new(
+            DerivedRelStoreId(old_count),
             MagicSymbol::Muggle {
                 inner: Symbol::from(""),
             },
@@ -113,6 +116,17 @@ impl SessionTx {
             None => AttrId::MAX_TEMP,
             Some(data) => AttrId::from_bytes(data),
         })
+    }
+
+    pub(crate) fn load_last_view_store_id(&mut self) -> Result<ViewRelId> {
+        let tuple = Tuple(vec![DataValue::Null]);
+        let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
+        let vtx = self.view_db.transact().start();
+        let found = vtx.get(&t_encoded, false)?;
+        match found {
+            None => Ok(ViewRelId::SYSTEM),
+            Some(slice) => ViewRelId::raw_decode(&slice),
+        }
     }
 
     pub(crate) fn load_last_tx_id(&mut self) -> Result<TxId> {

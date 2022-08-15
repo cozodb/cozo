@@ -8,16 +8,16 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::query::SortDir;
-use crate::runtime::temp_store::TempStore;
+use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
 impl SessionTx {
     pub(crate) fn sort_and_collect(
         &mut self,
-        original: TempStore,
+        original: DerivedRelStore,
         sorters: &[(Symbol, SortDir)],
         head: &[Symbol],
-    ) -> Result<TempStore> {
+    ) -> Result<DerivedRelStore> {
         let head_indices: BTreeMap<_, _> = head.iter().enumerate().map(|(i, k)| (k, i)).collect();
         let idx_sorters = sorters
             .iter()

@@ -10,10 +10,7 @@ use crate::data::attr::Attribute;
 use crate::data::expr::{get_op, Expr, OP_LIST};
 use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::program::{
-    InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm,
-    MagicSymbol, Unification,
-};
+use crate::data::program::{InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm, MagicSymbol, Unification, InputViewApplyAtom};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -517,6 +514,52 @@ impl SessionTx {
             args,
         }))
     }
+    fn parse_input_view_atom(
+        &mut self,
+        payload: &Map<String, JsonValue>,
+        vld: Validity,
+    ) -> Result<InputAtom> {
+        let rule_name = payload
+            .get("view")
+            .ok_or_else(|| anyhow!("expect key 'view' in rule atom"))?
+            .as_str()
+            .ok_or_else(|| anyhow!("expect value for key 'view' to be a string"))?
+            .into();
+        let args = payload
+            .get("args")
+            .ok_or_else(|| anyhow!("expect key 'args' in rule atom"))?
+            .as_array()
+            .ok_or_else(|| anyhow!("expect value for key 'args' to be an array"))?
+            .iter()
+            .map(|value_rep| -> Result<InputTerm<DataValue>> {
+                if let Some(s) = value_rep.as_str() {
+                    let var = Symbol::from(s);
+                    if s.starts_with(['?', '_']) {
+                        return Ok(InputTerm::Var(var));
+                    } else {
+                        ensure!(
+                            !var.is_reserved(),
+                            "{} is a reserved string value and must be quoted",
+                            s
+                        )
+                    }
+                }
+                if let Some(o) = value_rep.as_object() {
+                    return if let Some(c) = o.get("const") {
+                        Ok(InputTerm::Const(c.into()))
+                    } else {
+                        let eid = self.parse_eid_from_map(o, vld)?;
+                        Ok(InputTerm::Const(eid.to_value()))
+                    };
+                }
+                Ok(InputTerm::Const(value_rep.into()))
+            })
+            .try_collect()?;
+        Ok(InputAtom::View(InputViewApplyAtom {
+            name: rule_name,
+            args,
+        }))
+    }
     fn parse_input_rule_definition(
         &mut self,
         payload: &JsonValue,
@@ -627,6 +670,8 @@ impl SessionTx {
             JsonValue::Object(map) => {
                 if map.contains_key("rule") {
                     self.parse_input_rule_atom(map, vld)
+                } else if map.contains_key("view") {
+                    self.parse_input_view_atom(map, vld)
                 } else if map.contains_key("op") {
                     Self::parse_input_predicate_atom(map, params_pool)
                 } else if map.contains_key("unify") {

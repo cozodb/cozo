@@ -107,6 +107,8 @@ struct RocksDbBridge {
 
     [[nodiscard]] virtual unique_ptr<TxBridge> transact() const = 0;
 
+    virtual void del_range(RustBytes start, RustBytes end, RocksDbStatus &status) const = 0;
+
     [[nodiscard]] inline const string &get_db_path() const {
         return db_path;
     }
@@ -121,6 +123,8 @@ struct OptimisticRocksDb : public RocksDbBridge {
         return ret;
     }
 
+    void del_range(RustBytes, RustBytes, RocksDbStatus &status) const override;
+
     virtual ~OptimisticRocksDb();
 };
 
@@ -131,6 +135,21 @@ struct PessimisticRocksDb : public RocksDbBridge {
     [[nodiscard]] inline unique_ptr<TxBridge> transact() const override {
         auto ret = make_unique<TxBridge>(&*this->db);
         return ret;
+    }
+
+    inline void del_range(RustBytes start, RustBytes end, RocksDbStatus &status) const override {
+        WriteBatch batch;
+        auto s = batch.DeleteRange(db->DefaultColumnFamily(), convert_slice(start), convert_slice(end));
+        if (!s.ok()) {
+            write_status(s, status);
+            return;
+        }
+        WriteOptions w_opts;
+        TransactionDBWriteOptimizations optimizations;
+        optimizations.skip_concurrency_control = true;
+        optimizations.skip_duplicate_key_check = true;
+        auto s2 = db->Write(w_opts, optimizations, &batch);
+        write_status(s2, status);
     }
 
     virtual ~PessimisticRocksDb();

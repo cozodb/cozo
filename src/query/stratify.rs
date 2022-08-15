@@ -14,6 +14,8 @@ impl NormalFormAtom {
     fn contained_rules(&self) -> BTreeMap<&Symbol, bool> {
         match self {
             NormalFormAtom::AttrTriple(_)
+            | NormalFormAtom::View(_)
+            | NormalFormAtom::NegatedView(_)
             | NormalFormAtom::Predicate(_)
             | NormalFormAtom::Unification(_)
             | NormalFormAtom::NegatedAttrTriple(_) => Default::default(),

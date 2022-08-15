@@ -256,6 +256,16 @@ impl RocksDb {
             inner: self.inner.transact(),
         }
     }
+    #[inline]
+    pub fn range_del(&self, lower: &[u8], upper: &[u8]) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
+        self.inner.del_range(lower, upper, &mut status);
+        if status.is_ok() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
 }
 
 unsafe impl Send for RocksDb {}

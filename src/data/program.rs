@@ -243,6 +243,7 @@ impl MagicRule {
 pub(crate) enum InputAtom {
     AttrTriple(InputAttrTripleAtom),
     Rule(InputRuleApplyAtom),
+    View(InputViewApplyAtom),
     Predicate(Expr),
     Negation(Box<InputAtom>),
     Conjunction(Vec<InputAtom>),
@@ -254,8 +255,10 @@ pub(crate) enum InputAtom {
 pub(crate) enum NormalFormAtom {
     AttrTriple(NormalFormAttrTripleAtom),
     Rule(NormalFormRuleApplyAtom),
+    View(NormalFormViewApplyAtom),
     NegatedAttrTriple(NormalFormAttrTripleAtom),
     NegatedRule(NormalFormRuleApplyAtom),
+    NegatedView(NormalFormViewApplyAtom),
     Predicate(Expr),
     Unification(Unification),
 }
@@ -264,9 +267,11 @@ pub(crate) enum NormalFormAtom {
 pub(crate) enum MagicAtom {
     AttrTriple(MagicAttrTripleAtom),
     Rule(MagicRuleApplyAtom),
+    View(MagicViewApplyAtom),
     Predicate(Expr),
     NegatedAttrTriple(MagicAttrTripleAtom),
     NegatedRule(MagicRuleApplyAtom),
+    NegatedView(MagicViewApplyAtom),
     Unification(Unification),
 }
 
@@ -298,7 +303,19 @@ pub(crate) struct InputRuleApplyAtom {
 }
 
 #[derive(Clone, Debug)]
+pub(crate) struct InputViewApplyAtom {
+    pub(crate) name: Symbol,
+    pub(crate) args: Vec<InputTerm<DataValue>>,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct NormalFormRuleApplyAtom {
+    pub(crate) name: Symbol,
+    pub(crate) args: Vec<Symbol>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct NormalFormViewApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
 }
@@ -306,6 +323,12 @@ pub(crate) struct NormalFormRuleApplyAtom {
 #[derive(Clone, Debug)]
 pub(crate) struct MagicRuleApplyAtom {
     pub(crate) name: MagicSymbol,
+    pub(crate) args: Vec<Symbol>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct MagicViewApplyAtom {
+    pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
 }
 

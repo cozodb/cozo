@@ -17,31 +17,31 @@ use crate::data::value::DataValue;
 use crate::query::eval::QueryLimiter;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) struct TempStoreId(pub(crate) u32);
+pub(crate) struct DerivedRelStoreId(pub(crate) u32);
 
-impl Debug for TempStoreId {
+impl Debug for DerivedRelStoreId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "t{}", self.0)
     }
 }
 
 #[derive(Clone)]
-pub(crate) struct TempStore {
+pub(crate) struct DerivedRelStore {
     mem_db: Arc<RwLock<Vec<Arc<RwLock<BTreeMap<Tuple, Tuple>>>>>>,
     epoch_size: Arc<AtomicU32>,
-    pub(crate) id: TempStoreId,
+    pub(crate) id: DerivedRelStoreId,
     pub(crate) rule_name: MagicSymbol,
     pub(crate) arity: usize,
 }
 
-impl Debug for TempStore {
+impl Debug for DerivedRelStore {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "TempStore<{}>", self.id.0)
     }
 }
 
-impl TempStore {
-    pub(crate) fn new(id: TempStoreId, rule_name: MagicSymbol, arity: usize) -> TempStore {
+impl DerivedRelStore {
+    pub(crate) fn new(id: DerivedRelStoreId, rule_name: MagicSymbol, arity: usize) -> DerivedRelStore {
         Self {
             epoch_size: Default::default(),
             mem_db: Default::default(),
@@ -173,7 +173,7 @@ impl TempStore {
     pub(crate) fn normal_aggr_scan_and_put(
         &self,
         aggrs: &[Option<(Aggregation, Vec<DataValue>)>],
-        store: &TempStore,
+        store: &DerivedRelStore,
         mut limiter: Option<&mut QueryLimiter>,
     ) -> Result<bool> {
         let db_target = self.mem_db.try_read().unwrap();

@@ -10,7 +10,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::query::ConstRules;
 use crate::query::relation::Relation;
-use crate::runtime::temp_store::TempStore;
+use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type CompiledProgram = BTreeMap<MagicSymbol, CompiledRuleSet>;
@@ -64,8 +64,8 @@ impl SessionTx {
         &mut self,
         prog: &StratifiedMagicProgram,
         const_rules: &ConstRules,
-    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, TempStore>)> {
-        let mut stores: BTreeMap<MagicSymbol, TempStore> = Default::default();
+    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, DerivedRelStore>)> {
+        let mut stores: BTreeMap<MagicSymbol, DerivedRelStore> = Default::default();
 
         for (name, data) in const_rules {
             let store = self.new_rule_store(name.clone(), data[0].0.len());
@@ -132,7 +132,7 @@ impl SessionTx {
         rule: &MagicRule,
         rule_name: &MagicSymbol,
         rule_idx: usize,
-        stores: &BTreeMap<MagicSymbol, TempStore>,
+        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         ret_vars: &[Symbol],
     ) -> Result<Relation> {
         let mut ret = Relation::unit();
@@ -206,6 +206,39 @@ impl SessionTx {
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
+                MagicAtom::View(view_app) => {
+                    todo!()
+                    // let store = stores
+                    //     .get(&rule_app.name)
+                    //     .ok_or_else(|| anyhow!("undefined rule '{:?}' encountered", rule_app.name))?
+                    //     .clone();
+                    // ensure!(
+                    //     store.arity == rule_app.args.len(),
+                    //     "arity mismatch in rule application {:?}, expect {}, found {}",
+                    //     rule_app.name,
+                    //     store.arity,
+                    //     rule_app.args.len()
+                    // );
+                    // let mut prev_joiner_vars = vec![];
+                    // let mut right_joiner_vars = vec![];
+                    // let mut right_vars = vec![];
+                    //
+                    // for var in &rule_app.args {
+                    //     if seen_variables.contains(var) {
+                    //         prev_joiner_vars.push(var.clone());
+                    //         let rk = gen_symb();
+                    //         right_vars.push(rk.clone());
+                    //         right_joiner_vars.push(rk);
+                    //     } else {
+                    //         seen_variables.insert(var.clone());
+                    //         right_vars.push(var.clone());
+                    //     }
+                    // }
+                    //
+                    // let right = Relation::derived(right_vars, store);
+                    // debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                    // ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
+                }
                 MagicAtom::NegatedAttrTriple(a_triple) => {
                     let mut join_left_keys = vec![];
                     let mut join_right_keys = vec![];
@@ -276,6 +309,41 @@ impl SessionTx {
                     let right = Relation::derived(right_vars, store);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
+                }
+                MagicAtom::NegatedView(view_app) => {
+                    todo!()
+                    // let store = stores
+                    //     .get(&rule_app.name)
+                    //     .ok_or_else(|| {
+                    //         anyhow!("undefined rule encountered: '{:?}'", rule_app.name)
+                    //     })?
+                    //     .clone();
+                    // ensure!(
+                    //     store.arity == rule_app.args.len(),
+                    //     "arity mismatch for {:?}, expect {}, got {}",
+                    //     rule_app.name,
+                    //     store.arity,
+                    //     rule_app.args.len()
+                    // );
+                    //
+                    // let mut prev_joiner_vars = vec![];
+                    // let mut right_joiner_vars = vec![];
+                    // let mut right_vars = vec![];
+                    //
+                    // for var in &rule_app.args {
+                    //     if seen_variables.contains(var) {
+                    //         prev_joiner_vars.push(var.clone());
+                    //         let rk = gen_symb();
+                    //         right_vars.push(rk.clone());
+                    //         right_joiner_vars.push(rk);
+                    //     } else {
+                    //         right_vars.push(var.clone());
+                    //     }
+                    // }
+                    //
+                    // let right = Relation::derived(right_vars, store);
+                    // debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                    // ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::Predicate(p) => {
                     if let Some(fs) = ret.get_filters() {

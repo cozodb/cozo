@@ -1,2 +1,2 @@
 pub(crate) mod meta;
-pub(crate) mod exec;
+pub(crate) mod triple;

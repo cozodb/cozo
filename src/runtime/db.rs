@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -9,7 +9,7 @@ use itertools::Itertools;
 use log::debug;
 use serde_json::json;
 
-use cozorocks::{DbBuilder, DbIter, RawRocksDb, RocksDb};
+use cozorocks::{DbBuilder, DbIter, RocksDb};
 
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::encode::{
@@ -30,11 +30,11 @@ use crate::runtime::transact::SessionTx;
 
 pub struct Db {
     db: RocksDb,
-    view_db: RawRocksDb,
+    view_db: RocksDb,
     last_attr_id: Arc<AtomicU64>,
     last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,
-    temp_store_id: Arc<AtomicU32>,
+    view_store_id: Arc<AtomicU64>,
     n_sessions: Arc<AtomicUsize>,
     session_id: usize,
 }
@@ -60,11 +60,12 @@ impl Db {
         let view_db_builder = db_builder
             .clone()
             .path(&temp_path)
+            .optimistic(false)
             .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
             .use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false);
 
         let db = db_builder.build()?;
-        let view_db = view_db_builder.build_raw(true)?;
+        let view_db = view_db_builder.build()?;
 
         let ret = Self {
             db,
@@ -72,7 +73,7 @@ impl Db {
             last_attr_id: Arc::new(Default::default()),
             last_ent_id: Arc::new(Default::default()),
             last_tx_id: Arc::new(Default::default()),
-            temp_store_id: Arc::new(Default::default()),
+            view_store_id: Arc::new(Default::default()),
             n_sessions: Arc::new(Default::default()),
             session_id: Default::default(),
         };
@@ -89,7 +90,7 @@ impl Db {
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
-            temp_store_id: self.temp_store_id.clone(),
+            view_store_id: self.view_store_id.clone(),
             n_sessions: self.n_sessions.clone(),
             session_id: old_count + 1,
         })
@@ -103,13 +104,16 @@ impl Db {
             .store(tx.load_last_attr_id()?.0, Ordering::Release);
         self.last_ent_id
             .store(tx.load_last_entity_id()?.0, Ordering::Release);
+        self.view_store_id
+            .store(tx.load_last_view_store_id()?.0, Ordering::Release);
         Ok(())
     }
     pub fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
             view_db: self.view_db.clone(),
-            temp_store_id: self.temp_store_id.clone(),
+            mem_store_id: Default::default(),
+            view_store_id: self.view_store_id.clone(),
             w_tx_id: None,
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
@@ -129,7 +133,8 @@ impl Db {
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
             view_db: self.view_db.clone(),
-            temp_store_id: self.temp_store_id.clone(),
+            mem_store_id: Default::default(),
+            view_store_id: self.view_store_id.clone(),
             w_tx_id: Some(cur_tx_id),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),

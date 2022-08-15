@@ -51,6 +51,13 @@ impl NormalFormRule {
                     }
                     round_1_collected.push(NormalFormAtom::Rule(r))
                 }
+                NormalFormAtom::View(mut v) => {
+                    for arg in &mut v.args {
+                        process_ignored_symbol(arg);
+                        seen_variables.insert(arg.clone());
+                    }
+                    round_1_collected.push(NormalFormAtom::View(v))
+                }
                 NormalFormAtom::NegatedAttrTriple(mut t) => {
                     process_ignored_symbol(&mut t.value);
                     process_ignored_symbol(&mut t.entity);
@@ -61,6 +68,12 @@ impl NormalFormRule {
                         process_ignored_symbol(arg);
                     }
                     pending.push(NormalFormAtom::NegatedRule(r))
+                }
+                NormalFormAtom::NegatedView(mut v) => {
+                    for arg in &mut v.args {
+                        process_ignored_symbol(arg);
+                    }
+                    pending.push(NormalFormAtom::NegatedView(v))
                 }
                 NormalFormAtom::Predicate(p) => {
                     pending.push(NormalFormAtom::Predicate(p));
@@ -84,8 +97,13 @@ impl NormalFormRule {
                     seen_variables.extend(r.args.iter().cloned());
                     collected.push(NormalFormAtom::Rule(r))
                 }
+                NormalFormAtom::View(v) => {
+                    seen_variables.extend(v.args.iter().cloned());
+                    collected.push(NormalFormAtom::View(v))
+                }
                 NormalFormAtom::NegatedAttrTriple(_)
                 | NormalFormAtom::NegatedRule(_)
+                | NormalFormAtom::NegatedView(_)
                 | NormalFormAtom::Predicate(_) => {
                     unreachable!()
                 }
@@ -96,7 +114,9 @@ impl NormalFormRule {
             }
             for atom in last_pending.iter() {
                 match atom {
-                    NormalFormAtom::AttrTriple(_) | NormalFormAtom::Rule(_) => unreachable!(),
+                    NormalFormAtom::AttrTriple(_)
+                    | NormalFormAtom::Rule(_)
+                    | NormalFormAtom::View(_) => unreachable!(),
                     NormalFormAtom::NegatedAttrTriple(t) => {
                         if seen_variables.contains(&t.value) && seen_variables.contains(&t.entity) {
                             collected.push(NormalFormAtom::NegatedAttrTriple(t.clone()));
@@ -109,6 +129,13 @@ impl NormalFormRule {
                             collected.push(NormalFormAtom::NegatedRule(r.clone()));
                         } else {
                             pending.push(NormalFormAtom::NegatedRule(r.clone()));
+                        }
+                    }
+                    NormalFormAtom::NegatedView(v) => {
+                        if v.args.iter().all(|a| seen_variables.contains(a)) {
+                            collected.push(NormalFormAtom::NegatedView(v.clone()));
+                        } else {
+                            collected.push(NormalFormAtom::NegatedView(v.clone()));
                         }
                     }
                     NormalFormAtom::Predicate(p) => {
@@ -132,7 +159,9 @@ impl NormalFormRule {
         if !pending.is_empty() {
             for atom in pending {
                 match atom {
-                    NormalFormAtom::AttrTriple(_) | NormalFormAtom::Rule(_) => unreachable!(),
+                    NormalFormAtom::AttrTriple(_)
+                    | NormalFormAtom::Rule(_)
+                    | NormalFormAtom::View(_) => unreachable!(),
                     NormalFormAtom::NegatedAttrTriple(t) => {
                         if seen_variables.contains(&t.value) || seen_variables.contains(&t.entity) {
                             collected.push(NormalFormAtom::NegatedAttrTriple(t.clone()));
@@ -145,6 +174,13 @@ impl NormalFormRule {
                             collected.push(NormalFormAtom::NegatedRule(r.clone()));
                         } else {
                             bail!("found unsafe rule application in rule: {:?}", r);
+                        }
+                    }
+                    NormalFormAtom::NegatedView(v) => {
+                        if v.args.iter().any(|a| seen_variables.contains(a)) {
+                            collected.push(NormalFormAtom::NegatedView(v.clone()));
+                        } else {
+                            bail!("found unsafe rule application in view: {:?}", v);
                         }
                     }
                     NormalFormAtom::Predicate(p) => {

@@ -1,12 +1,14 @@
-use std::cmp::{min, Ordering};
+use std::cmp::{max, min, Ordering};
 use std::fmt::{Debug, Formatter};
 
 use anyhow::{ensure, Result};
 use itertools::Itertools;
+use rmp_serde::Serializer;
+use serde::Serialize;
 
 use crate::data::json::JsonValue;
 use crate::data::value::DataValue;
-use crate::runtime::temp_store::TempStoreId;
+use crate::runtime::view::ViewRelId;
 
 pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 6;
 
@@ -30,35 +32,31 @@ impl Debug for Tuple {
 pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
 
 impl Tuple {
-    // pub(crate) fn arity(&self) -> usize {
-    //     self.0.len()
-    // }
-    // pub(crate) fn encode_as_key_for_epoch(&self, prefix: TempStoreId, epoch: u32) -> Vec<u8> {
-    //     let len = self.arity();
-    //     let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
-    //     let prefix_bytes = prefix.0.to_be_bytes();
-    //     let epoch_bytes = epoch.to_be_bytes();
-    //     ret.extend([
-    //         prefix_bytes[1],
-    //         prefix_bytes[2],
-    //         prefix_bytes[3],
-    //         epoch_bytes[1],
-    //         epoch_bytes[2],
-    //         epoch_bytes[3],
-    //     ]);
-    //     ret.extend((len as u16).to_be_bytes());
-    //     ret.resize(max(6, 4 * (len + 1)), 0);
-    //     for (idx, val) in self.0.iter().enumerate() {
-    //         if idx > 0 {
-    //             let pos = (ret.len() as u32).to_be_bytes();
-    //             for (i, u) in pos.iter().enumerate() {
-    //                 ret[4 * (1 + idx) + i] = *u;
-    //             }
-    //         }
-    //         val.serialize(&mut Serializer::new(&mut ret)).unwrap();
-    //     }
-    //     ret
-    // }
+    pub(crate) fn encode_as_key(&self, prefix: ViewRelId) -> Vec<u8> {
+        let len = self.0.len();
+        let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
+        let prefix_bytes = prefix.0.to_be_bytes();
+        ret.extend([
+            prefix_bytes[2],
+            prefix_bytes[3],
+            prefix_bytes[4],
+            prefix_bytes[5],
+            prefix_bytes[6],
+            prefix_bytes[7],
+        ]);
+        ret.extend((len as u16).to_be_bytes());
+        ret.resize(max(6, 4 * (len + 1)), 0);
+        for (idx, val) in self.0.iter().enumerate() {
+            if idx > 0 {
+                let pos = (ret.len() as u32).to_be_bytes();
+                for (i, u) in pos.iter().enumerate() {
+                    ret[4 * (1 + idx) + i] = *u;
+                }
+            }
+            val.serialize(&mut Serializer::new(&mut ret)).unwrap();
+        }
+        ret
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -112,11 +110,12 @@ impl<'a> EncodedTuple<'a> {
     //         ],
     //     )
     // }
-    pub(crate) fn prefix(&self) -> Result<(TempStoreId, u32)> {
+    pub(crate) fn prefix(&self) -> Result<ViewRelId> {
         ensure!(self.0.len() >= 6, "bad data: {:x?}", self.0);
-        let id = u32::from_be_bytes([0, self.0[0], self.0[1], self.0[2]]);
-        let epoch = u32::from_be_bytes([0, self.0[3], self.0[4], self.0[5]]);
-        Ok((TempStoreId(id), epoch))
+        let id = u64::from_be_bytes([
+            0, 0, self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5],
+        ]);
+        Ok(ViewRelId(id))
     }
     pub(crate) fn arity(&self) -> Result<usize> {
         if self.0.len() == 6 {

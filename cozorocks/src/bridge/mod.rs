@@ -145,6 +145,12 @@ pub(crate) mod ffi {
             cmp_impl: fn(&[u8], &[u8]) -> i8,
         ) -> SharedPtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
+        fn del_range(
+            self: &RocksDbBridge,
+            lower: &[u8],
+            upper: &[u8],
+            status: &mut RocksDbStatus,
+        );
 
         type TxBridge;
         // fn get_r_opts(self: Pin<&mut TxBridge>) -> Pin<&mut ReadOptions>;

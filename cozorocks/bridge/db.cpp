@@ -165,3 +165,8 @@ OptimisticRocksDb::~OptimisticRocksDb() {
         }
     }
 }
+
+void OptimisticRocksDb::del_range(RustBytes, RustBytes, RocksDbStatus &status) const {
+    status.code = StatusCode::kInvalidArgument;
+    status.message = rust::String("cannot call 'del_range' on optimistic db");
+}

@@ -4,10 +4,7 @@ use anyhow::{bail, Result};
 use itertools::Itertools;
 
 use crate::data::expr::Expr;
-use crate::data::program::{
-    InputAtom, InputAttrTripleAtom, InputRuleApplyAtom, InputTerm, NormalFormAtom,
-    NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, TempSymbGen, Unification,
-};
+use crate::data::program::{InputAtom, InputAttrTripleAtom, InputRuleApplyAtom, InputTerm, NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, TempSymbGen, Unification, InputViewApplyAtom, NormalFormViewApplyAtom};
 
 #[derive(Debug)]
 pub(crate) struct Disjunction(pub(crate) Vec<Conjunction>);
@@ -42,7 +39,7 @@ pub(crate) struct Conjunction(pub(crate) Vec<NormalFormAtom>);
 impl InputAtom {
     pub(crate) fn negation_normal_form(self) -> Result<Self> {
         Ok(match self {
-            a @ (InputAtom::AttrTriple(_) | InputAtom::Rule(_) | InputAtom::Predicate(_)) => a,
+            a @ (InputAtom::AttrTriple(_) | InputAtom::Rule(_) | InputAtom::Predicate(_) | InputAtom::View(_)) => a,
             InputAtom::Conjunction(args) => InputAtom::Conjunction(
                 args.into_iter()
                     .map(|a| a.negation_normal_form())
@@ -55,7 +52,7 @@ impl InputAtom {
             ),
             InputAtom::Unification(unif) => InputAtom::Unification(unif),
             InputAtom::Negation(arg) => match *arg {
-                a @ (InputAtom::AttrTriple(_) | InputAtom::Rule(_)) => {
+                a @ (InputAtom::AttrTriple(_) | InputAtom::Rule(_) | InputAtom::View(_)) => {
                     InputAtom::Negation(Box::new(a))
                 }
                 InputAtom::Predicate(p) => InputAtom::Predicate(p.negate()),
@@ -106,6 +103,7 @@ impl InputAtom {
             }
             InputAtom::AttrTriple(a) => a.normalize(false, gen),
             InputAtom::Rule(r) => r.normalize(false, gen),
+            InputAtom::View(v) => v.normalize(false, gen),
             InputAtom::Predicate(mut p) => {
                 p.partial_eval(&Default::default())?;
                 Disjunction::singlet(NormalFormAtom::Predicate(p))
@@ -113,6 +111,7 @@ impl InputAtom {
             InputAtom::Negation(n) => match *n {
                 InputAtom::Rule(r) => r.normalize(true, gen),
                 InputAtom::AttrTriple(r) => r.normalize(true, gen),
+                InputAtom::View(v) => v.normalize(true, gen),
                 _ => unreachable!(),
             },
             InputAtom::Unification(u) => Disjunction::singlet(NormalFormAtom::Unification(u)),
@@ -256,5 +255,54 @@ impl InputAttrTripleAtom {
                 }
             }
         })
+    }
+}
+
+impl InputViewApplyAtom {
+    fn normalize(self, is_negated: bool, gen: &mut TempSymbGen) -> Disjunction {
+        let mut ret = Vec::with_capacity(self.args.len() + 1);
+        let mut args = Vec::with_capacity(self.args.len());
+        let mut seen_variables = BTreeSet::new();
+        for arg in self.args {
+            match arg {
+                InputTerm::Var(kw) => {
+                    if seen_variables.insert(kw.clone()) {
+                        args.push(kw);
+                    } else {
+                        let dup = gen.next();
+                        let unif = NormalFormAtom::Unification(Unification {
+                            binding: dup.clone(),
+                            expr: Expr::Binding(kw, None),
+                            one_many_unif: false,
+                        });
+                        ret.push(unif);
+                        args.push(dup);
+                    }
+                }
+                InputTerm::Const(val) => {
+                    let kw = gen.next();
+                    args.push(kw.clone());
+                    let unif = NormalFormAtom::Unification(Unification {
+                        binding: kw,
+                        expr: Expr::Const(val),
+                        one_many_unif: false,
+                    });
+                    ret.push(unif)
+                }
+            }
+        }
+
+        ret.push(if is_negated {
+            NormalFormAtom::NegatedView(NormalFormViewApplyAtom {
+                name: self.name,
+                args,
+            })
+        } else {
+            NormalFormAtom::View(NormalFormViewApplyAtom {
+                name: self.name,
+                args,
+            })
+        });
+        Disjunction::conj(ret)
     }
 }
