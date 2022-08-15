@@ -207,37 +207,33 @@ impl SessionTx {
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::View(view_app) => {
-                    todo!()
-                    // let store = stores
-                    //     .get(&rule_app.name)
-                    //     .ok_or_else(|| anyhow!("undefined rule '{:?}' encountered", rule_app.name))?
-                    //     .clone();
-                    // ensure!(
-                    //     store.arity == rule_app.args.len(),
-                    //     "arity mismatch in rule application {:?}, expect {}, found {}",
-                    //     rule_app.name,
-                    //     store.arity,
-                    //     rule_app.args.len()
-                    // );
-                    // let mut prev_joiner_vars = vec![];
-                    // let mut right_joiner_vars = vec![];
-                    // let mut right_vars = vec![];
-                    //
-                    // for var in &rule_app.args {
-                    //     if seen_variables.contains(var) {
-                    //         prev_joiner_vars.push(var.clone());
-                    //         let rk = gen_symb();
-                    //         right_vars.push(rk.clone());
-                    //         right_joiner_vars.push(rk);
-                    //     } else {
-                    //         seen_variables.insert(var.clone());
-                    //         right_vars.push(var.clone());
-                    //     }
-                    // }
-                    //
-                    // let right = Relation::derived(right_vars, store);
-                    // debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    // ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
+                    let store = self.get_view_rel(&view_app.name)?;
+                    ensure!(
+                        store.metadata.arity == view_app.args.len(),
+                        "arity mismatch in rule application {:?}, expect {}, found {}",
+                        view_app.name,
+                        store.metadata.arity,
+                        view_app.args.len()
+                    );
+                    let mut prev_joiner_vars = vec![];
+                    let mut right_joiner_vars = vec![];
+                    let mut right_vars = vec![];
+
+                    for var in &view_app.args {
+                        if seen_variables.contains(var) {
+                            prev_joiner_vars.push(var.clone());
+                            let rk = gen_symb();
+                            right_vars.push(rk.clone());
+                            right_joiner_vars.push(rk);
+                        } else {
+                            seen_variables.insert(var.clone());
+                            right_vars.push(var.clone());
+                        }
+                    }
+
+                    let right = Relation::view(right_vars, store);
+                    debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                    ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::NegatedAttrTriple(a_triple) => {
                     let mut join_left_keys = vec![];
@@ -311,39 +307,33 @@ impl SessionTx {
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::NegatedView(view_app) => {
-                    todo!()
-                    // let store = stores
-                    //     .get(&rule_app.name)
-                    //     .ok_or_else(|| {
-                    //         anyhow!("undefined rule encountered: '{:?}'", rule_app.name)
-                    //     })?
-                    //     .clone();
-                    // ensure!(
-                    //     store.arity == rule_app.args.len(),
-                    //     "arity mismatch for {:?}, expect {}, got {}",
-                    //     rule_app.name,
-                    //     store.arity,
-                    //     rule_app.args.len()
-                    // );
-                    //
-                    // let mut prev_joiner_vars = vec![];
-                    // let mut right_joiner_vars = vec![];
-                    // let mut right_vars = vec![];
-                    //
-                    // for var in &rule_app.args {
-                    //     if seen_variables.contains(var) {
-                    //         prev_joiner_vars.push(var.clone());
-                    //         let rk = gen_symb();
-                    //         right_vars.push(rk.clone());
-                    //         right_joiner_vars.push(rk);
-                    //     } else {
-                    //         right_vars.push(var.clone());
-                    //     }
-                    // }
-                    //
-                    // let right = Relation::derived(right_vars, store);
-                    // debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    // ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
+                    let store = self.get_view_rel(&view_app.name)?;
+                    ensure!(
+                        store.metadata.arity == view_app.args.len(),
+                        "arity mismatch for {:?}, expect {}, got {}",
+                        view_app.name,
+                        store.metadata.arity,
+                        view_app.args.len()
+                    );
+
+                    let mut prev_joiner_vars = vec![];
+                    let mut right_joiner_vars = vec![];
+                    let mut right_vars = vec![];
+
+                    for var in &view_app.args {
+                        if seen_variables.contains(var) {
+                            prev_joiner_vars.push(var.clone());
+                            let rk = gen_symb();
+                            right_vars.push(rk.clone());
+                            right_joiner_vars.push(rk);
+                        } else {
+                            right_vars.push(var.clone());
+                        }
+                    }
+
+                    let right = Relation::view(right_vars, store);
+                    debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                    ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::Predicate(p) => {
                     if let Some(fs) = ret.get_filters() {

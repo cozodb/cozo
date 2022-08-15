@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashSet};
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use either::{Left, Right};
 use itertools::Itertools;
 use serde_json::{json, Map};
@@ -16,9 +16,10 @@ use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::query::QueryOutOptions;
+use crate::parse::query::{QueryOutOptions, ViewOp};
 use crate::query::relation::flatten_err;
 use crate::runtime::transact::SessionTx;
+use crate::runtime::view::ViewRelMetadata;
 
 pub(crate) type PullSpecs = Vec<PullSpec>;
 
@@ -84,6 +85,37 @@ impl CurrentPath {
 }
 
 impl SessionTx {
+    pub(crate) fn execute_view<'a>(
+        &'a mut self,
+        res_iter: impl Iterator<Item = Result<Tuple>> + 'a,
+        op: ViewOp,
+        meta: &ViewRelMetadata,
+    ) -> Result<()> {
+        let view_store = if op == ViewOp::Create {
+            self.create_view_rel(meta.clone())?
+        } else {
+            let found = self.get_view_rel(&meta.name)?;
+            ensure!(found.metadata.arity == meta.arity, "arity mismatch for view {}", meta.name);
+            ensure!(found.metadata.kind == meta.kind, "kind mismatch for view {:?}", meta.kind);
+            found
+        };
+        let mut vtx = self.view_db.transact().start();
+
+        let is_delete = op == ViewOp::Retract;
+
+        for data in res_iter {
+            let data = data?;
+            let encoded = data.encode_as_key(view_store.metadata.id);
+            if is_delete {
+                vtx.del(&encoded)?;
+            } else {
+                vtx.put(&encoded, &[])?;
+            }
+        }
+
+        vtx.commit()?;
+        Ok(())
+    }
     pub(crate) fn run_pull_on_query_results<'a>(
         &'a mut self,
         res_iter: impl Iterator<Item = Result<Tuple>> + 'a,

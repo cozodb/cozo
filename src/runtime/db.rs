@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
@@ -17,13 +17,14 @@ use crate::data::encode::{
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::symb::PROG_ENTRY;
+use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::triple::StoreOp;
 use crate::data::tuple::{rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::DataValue;
 use crate::parse::cozoscript::query::parse_query_to_json;
 use crate::parse::cozoscript::schema::parse_schema_to_json;
 use crate::parse::cozoscript::tx::parse_tx_to_json;
+use crate::parse::query::ViewOp;
 use crate::parse::schema::AttrTxItem;
 use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
@@ -305,6 +306,21 @@ impl Db {
         let mut tx = self.transact()?;
         let (input_program, out_opts, const_rules) =
             tx.parse_query(payload, &Default::default())?;
+        if let Some((meta, op)) = &out_opts.as_view {
+            if *op == ViewOp::Create {
+                ensure!(
+                    !tx.view_exists(&meta.name)?,
+                    "view '{}' exists but is required not to be",
+                    meta.name
+                )
+            } else {
+                ensure!(
+                    tx.view_exists(&meta.name)?,
+                    "view '{}' does not exist but is required to be",
+                    meta.name
+                )
+            }
+        };
         let entry_head = &input_program.prog.get(&PROG_ENTRY).unwrap()[0].head.clone();
         let program = input_program
             .to_normalized_program()?
@@ -333,15 +349,25 @@ impl Db {
             } else {
                 Right(sorted_iter)
             };
-            let ret: Vec<_> = tx
-                .run_pull_on_query_results(sorted_iter, out_opts)?
-                .try_collect()?;
-            Ok(json!(ret))
+            if let Some((meta, view_op)) = out_opts.as_view {
+                tx.execute_view(sorted_iter, view_op, &meta)?;
+                Ok(json!({"view": "OK"}))
+            } else {
+                let ret: Vec<_> = tx
+                    .run_pull_on_query_results(sorted_iter, out_opts)?
+                    .try_collect()?;
+                Ok(json!(ret))
+            }
         } else {
-            let ret: Vec<_> = tx
-                .run_pull_on_query_results(result.scan_all(), out_opts)?
-                .try_collect()?;
-            Ok(json!(ret))
+            if let Some((meta, view_op)) = out_opts.as_view {
+                tx.execute_view(result.scan_all(), view_op, &meta)?;
+                Ok(json!({"view": "OK"}))
+            } else {
+                let ret: Vec<_> = tx
+                    .run_pull_on_query_results(result.scan_all(), out_opts)?
+                    .try_collect()?;
+                Ok(json!(ret))
+            }
         }
     }
     pub fn explain_query(&self, payload: &JsonValue) -> Result<JsonValue> {
@@ -354,5 +380,10 @@ impl Db {
         let (_compiled_strata, _) = tx.stratified_magic_compile(&magic_program, &const_rules)?;
 
         todo!()
+    }
+    pub fn remove_view(&self, name: &str) -> Result<()> {
+        let name = Symbol::from(name);
+        let tx = self.transact()?;
+        tx.destroy_view_rel(&name)
     }
 }

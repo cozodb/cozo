@@ -149,6 +149,12 @@ impl Iterator for ViewRelIterator {
 }
 
 impl SessionTx {
+    pub(crate) fn view_exists(&self, name: &Symbol) -> Result<bool> {
+        let key = DataValue::String(name.0.clone());
+        let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
+        let vtx = self.view_db.transact().start();
+        Ok(vtx.exists(&encoded, false)?)
+    }
     pub(crate) fn create_view_rel(&self, mut meta: ViewRelMetadata) -> Result<ViewRelStore> {
         let key = DataValue::String(meta.name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
@@ -168,6 +174,7 @@ impl SessionTx {
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
         vtx.put(&name_key, &meta_val)?;
+        vtx.commit()?;
         Ok(ViewRelStore {
             view_db: self.view_db.clone(),
             metadata: meta,
@@ -199,6 +206,7 @@ impl SessionTx {
         let lower_bound = Tuple::default().encode_as_key(store.metadata.id);
         let upper_bound = Tuple::default().encode_as_key(store.metadata.id.next()?);
         self.view_db.range_del(&lower_bound, &upper_bound)?;
+        vtx.commit()?;
         Ok(())
     }
 }

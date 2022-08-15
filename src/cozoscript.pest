@@ -11,6 +11,7 @@ prog_entry = {"?"}
 var = @{"?" ~ (XID_CONTINUE | "_")*}
 param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
+view_ident = @{":" ~ ident}
 compound_ident = {ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"}
@@ -22,10 +23,10 @@ aggr_arg = {ident ~ "(" ~ var ~ ("," ~ expr)* ~ ")"}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
 rule_apply = {ident ~ "[" ~ apply_args ~ "]"}
-
+view_apply = {view_ident ~ "[" ~ apply_args ~ "]"}
 
 disjunction = {(atom ~ "or" )* ~ atom}
-atom = _{grouped | triple | negation | rule_apply | unify_multi | unify | expr }
+atom = _{grouped | triple | negation | view_apply | rule_apply | unify_multi | unify | expr }
 unify = {var ~ ("is" | "<-") ~ expr}
 unify_multi = {var ~ ("is_in" | ("<-" ~ "..")) ~ expr}
 negation = {"not" ~ atom}
@@ -62,11 +63,12 @@ term = _{ var | param | grouping | apply | list | literal }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = _{(limit_option|offset_option|out_option|sort_option)~";"}
+option = _{(limit_option|offset_option|out_option|sort_option|view_option) ~ ";"}
 limit_option = {":limit"  ~ pos_int}
 offset_option = {":offset" ~ pos_int}
 out_option = {":out" ~ out_spec}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
+view_option = {":view" ~ ident ~ ident}
 sort_arg = { sort_dir? ~ var }
 sort_dir = _{ sort_asc | sort_desc }
 sort_asc = {"+"}

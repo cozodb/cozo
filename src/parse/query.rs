@@ -10,12 +10,16 @@ use crate::data::attr::Attribute;
 use crate::data::expr::{get_op, Expr, OP_LIST};
 use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::program::{InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm, MagicSymbol, Unification, InputViewApplyAtom};
+use crate::data::program::{
+    InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm,
+    InputViewApplyAtom, MagicSymbol, Unification,
+};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::query::pull::PullSpecs;
 use crate::runtime::transact::SessionTx;
+use crate::runtime::view::{ViewRelId, ViewRelKind, ViewRelMetadata};
 use crate::utils::swap_result_option;
 
 pub(crate) type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
@@ -47,6 +51,13 @@ impl TryFrom<&'_ JsonValue> for SortDir {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum ViewOp {
+    Create,
+    Put,
+    Retract,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct QueryOutOptions {
     pub(crate) out_spec: Option<OutSpec>,
@@ -54,6 +65,7 @@ pub(crate) struct QueryOutOptions {
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
+    pub(crate) as_view: Option<(ViewRelMetadata, ViewOp)>,
 }
 
 impl QueryOutOptions {
@@ -201,6 +213,44 @@ impl SessionTx {
                 }
             }
         }
+        let as_view = match payload.get("view") {
+            None => None,
+            Some(view_payload) => Some({
+                if out_spec.is_some() {
+                    bail!("cannot use out spec with 'view'");
+                }
+
+                let opts = view_payload
+                    .as_object()
+                    .ok_or_else(|| anyhow!("view options must be an object"))?;
+                let (op, name) = if let Some(name) = opts.get("create") {
+                    (ViewOp::Create, name)
+                } else if let Some(name) = opts.get("put") {
+                    (ViewOp::Put, name)
+                } else if let Some(name) = opts.get("retract") {
+                    (ViewOp::Retract, name)
+                } else {
+                    bail!("cannot parse view options: {}", view_payload);
+                };
+                let name = name.as_str().ok_or_else(|| anyhow!("view name must be a string"))?;
+                let name = Symbol::from(name);
+                ensure!(!name.is_reserved(), "view name {} is reserved", name);
+                let entry = input_prog
+                    .prog
+                    .get(&PROG_ENTRY)
+                    .ok_or_else(|| anyhow!("program entry point not found"))?;
+
+                (
+                    ViewRelMetadata {
+                        name,
+                        id: ViewRelId::SYSTEM,
+                        arity: entry[0].head.len(),
+                        kind: ViewRelKind::Manual,
+                    },
+                    op,
+                )
+            }),
+        };
         Ok((
             input_prog,
             QueryOutOptions {
@@ -209,6 +259,7 @@ impl SessionTx {
                 limit,
                 offset,
                 sorters,
+                as_view,
             },
             const_rules,
         ))

@@ -70,6 +70,12 @@ fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
                     parse_out_option(pair.into_inner().next().unwrap())?,
                 );
             }
+            Rule::view_option => {
+                let mut args = pair.into_inner();
+                let op = args.next().unwrap().as_str();
+                let name = args.next().unwrap().as_str();
+                ret_map.insert("view".to_string(), json!({ op: name }));
+            }
             Rule::EOI => break,
             r => unreachable!("{:?}", r),
         }
@@ -279,6 +285,17 @@ fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
                 .try_collect()?;
             json!({"rule": name, "args": args})
         }
+        Rule::view_apply => {
+            let mut src = src.into_inner();
+            let name = &src.next().unwrap().as_str()[1..];
+            let args: Vec<_> = src
+                .next()
+                .unwrap()
+                .into_inner()
+                .map(build_expr)
+                .try_collect()?;
+            json!({"view": name, "args": args})
+        }
         rule => unreachable!("{:?}", rule),
     })
 }
@@ -428,6 +445,7 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
                         .try_collect()?;
                     json!({"op": ident, "args": args})
                 }
+
                 r => unreachable!("Encountered unknown op {:?}", r),
             })
         }

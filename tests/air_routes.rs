@@ -1152,7 +1152,7 @@ fn air_routes() -> Result<()> {
         .unwrap()
     );
 
-    let furtherest_from_lhr = Instant::now();
+    let furthest_from_lhr = Instant::now();
     let res = db.run_script(
         r#"
         routes[?a2, min_cost(?cost_pair)] := [?a airport.iata 'LHR'], [?r route.src ?a],
@@ -1173,7 +1173,7 @@ fn air_routes() -> Result<()> {
         :limit 10;
     "#,
     )?;
-    dbg!(furtherest_from_lhr.elapsed());
+    dbg!(furthest_from_lhr.elapsed());
     assert_eq!(
         res,
         serde_json::Value::from_str(
