@@ -4,7 +4,7 @@ use std::fmt::{Debug, Formatter};
 use std::mem;
 use std::ops::Rem;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use num_traits::FloatConst;
 use smartstring::SmartString;
@@ -1013,6 +1013,84 @@ fn op_last(args: &[DataValue]) -> Result<DataValue> {
         .unwrap_or(DataValue::Null))
 }
 
+define_op!(OP_CHUNKS, 2, false, false);
+fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
+    let arg = args[0].get_list().ok_or_else(|| {
+        anyhow!(
+            "first argument of 'chunks' must be a list, got {:?}",
+            args[0]
+        )
+    })?;
+    let n = args[1].get_int().ok_or_else(|| {
+        anyhow!(
+            "second argument of 'chunks' must be an integer, got {:?}",
+            args[1]
+        )
+    })?;
+    ensure!(
+        n > 0,
+        "second argument to 'chunks' must be positive, got {}",
+        n
+    );
+    let res = arg
+        .chunks(n as usize)
+        .map(|el| DataValue::List(el.to_vec()))
+        .collect_vec();
+    Ok(DataValue::List(res))
+}
+
+define_op!(OP_CHUNKS_EXACT, 2, false, false);
+fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
+    let arg = args[0].get_list().ok_or_else(|| {
+        anyhow!(
+            "first argument of 'chunks_exact' must be a list, got {:?}",
+            args[0]
+        )
+    })?;
+    let n = args[1].get_int().ok_or_else(|| {
+        anyhow!(
+            "second argument of 'chunks_exact' must be an integer, got {:?}",
+            args[1]
+        )
+    })?;
+    ensure!(
+        n > 0,
+        "second argument to 'chunks_exact' must be positive, got {}",
+        n
+    );
+    let res = arg
+        .chunks_exact(n as usize)
+        .map(|el| DataValue::List(el.to_vec()))
+        .collect_vec();
+    Ok(DataValue::List(res))
+}
+
+define_op!(OP_WINDOWS, 2, false, false);
+fn op_windows(args: &[DataValue]) -> Result<DataValue> {
+    let arg = args[0].get_list().ok_or_else(|| {
+        anyhow!(
+            "first argument of 'windows' must be a list, got {:?}",
+            args[0]
+        )
+    })?;
+    let n = args[1].get_int().ok_or_else(|| {
+        anyhow!(
+            "second argument of 'windows' must be an integer, got {:?}",
+            args[1]
+        )
+    })?;
+    ensure!(
+        n > 0,
+        "second argument to 'windows' must be positive, got {}",
+        n
+    );
+    let res = arg
+        .windows(n as usize)
+        .map(|el| DataValue::List(el.to_vec()))
+        .collect_vec();
+    Ok(DataValue::List(res))
+}
+
 define_op!(OP_NTH, 2, false, false);
 fn op_nth(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
@@ -1111,6 +1189,9 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "nth" => &OP_NTH,
         "first" => &OP_FIRST,
         "last" => &OP_LAST,
+        "chunks" => &OP_CHUNKS,
+        "chunks_exact" => &OP_CHUNKS_EXACT,
+        "windows" => &OP_WINDOW,
         _ => return None,
     })
 }

@@ -391,7 +391,10 @@ fn aggr_min_cost(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]
         }
         (accum @ DataValue::Guard, l @ DataValue::List(_)) => {
             if l.get_list().unwrap().len() != 2 {
-                bail!("'min_cost' requires a list of length 2 as argument, got {:?}", l);
+                bail!(
+                    "'min_cost' requires a list of length 2 as argument, got {:?}",
+                    l
+                );
             }
             *accum = l.clone();
             true
@@ -399,7 +402,10 @@ fn aggr_min_cost(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]
         (_, DataValue::Guard) => false,
         (accum, DataValue::List(l)) => {
             if l.len() != 2 {
-                bail!("'min_cost' requires a list of length 2 as argument, got {:?}", l);
+                bail!(
+                    "'min_cost' requires a list of length 2 as argument, got {:?}",
+                    l
+                );
             }
             let cur_cost = l.get(1).unwrap();
             let prev = accum.get_list().unwrap();
@@ -441,6 +447,31 @@ fn aggr_shortest(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]
     })
 }
 
+define_aggr!(AGGR_COALESCE, true);
+fn aggr_coalesce(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
+    Ok(match (accum, current) {
+        (accum @ DataValue::Guard, DataValue::Guard) => {
+            *accum = DataValue::Null;
+            true
+        }
+        (accum @ DataValue::Guard, v) => {
+            *accum = v.clone();
+            true
+        }
+        (_, DataValue::Guard) => false,
+        (accum, v) => {
+            if *accum == *v {
+                false
+            } else if *accum == DataValue::Null {
+                *accum = v.clone();
+                true
+            } else {
+                false
+            }
+        }
+    })
+}
+
 pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
     Some(match name {
         "count" => &AGGR_COUNT,
@@ -457,6 +488,7 @@ pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
         "intersection" => &AGGR_INTERSECTION,
         "shortest" => &AGGR_SHORTEST,
         "min_cost" => &AGGR_MIN_COST,
+        "coalesce" => &AGGR_COALESCE,
         _ => return None,
     })
 }
