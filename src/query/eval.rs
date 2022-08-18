@@ -6,7 +6,7 @@ use log::{debug, log_enabled, trace, Level};
 
 use crate::data::program::MagicSymbol;
 use crate::data::symb::PROG_ENTRY;
-use crate::query::compile::{AggrKind, CompiledProgram};
+use crate::query::compile::{AggrKind, CompiledProgram, CompiledRuleSet};
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -54,8 +54,15 @@ impl SessionTx {
     ) -> Result<()> {
         if log_enabled!(Level::Debug) {
             for (k, vs) in prog.iter() {
-                for (i, compiled) in vs.rules.iter().enumerate() {
-                    debug!("{:?}.{} {:#?}", k, i, compiled)
+                match vs {
+                    CompiledRuleSet::Rules(vs) => {
+                        for (i, compiled) in vs.iter().enumerate() {
+                            debug!("{:?}.{} {:#?}", k, i, compiled)
+                        }
+                    }
+                    CompiledRuleSet::Algo => {
+                        todo!()
+                    }
                 }
             }
         }
@@ -70,60 +77,86 @@ impl SessionTx {
         for epoch in 0u32.. {
             debug!("epoch {}", epoch);
             if epoch == 0 {
-                for (k, ruleset) in prog.iter() {
-                    let aggr_kind = ruleset.aggr_kind();
-                    let store = stores.get(k).unwrap();
-                    let use_delta = BTreeSet::default();
-                    let should_check_limit = num_to_take.is_some() && k.is_prog_entry();
-                    match aggr_kind {
-                        AggrKind::None | AggrKind::Meet => {
-                            let is_meet = aggr_kind == AggrKind::Meet;
-                            for (rule_n, rule) in ruleset.rules.iter().enumerate() {
-                                debug!("initial calculation for rule {:?}.{}", k, rule_n);
-                                for item_res in rule.relation.iter(self, Some(0), &use_delta)? {
-                                    let item = item_res?;
-                                    trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
-                                    if is_meet {
-                                        store.aggr_meet_put(&item, &rule.aggr, 0)?;
-                                    } else if should_check_limit {
-                                        if !store.exists(&item, 0) {
-                                            store.put(item, 0);
-                                            if limiter.incr() {
-                                                trace!("early stopping due to result count limit exceeded");
-                                                return Ok(());
+                for (k, compiled_ruleset) in prog.iter() {
+                    match compiled_ruleset {
+                        CompiledRuleSet::Rules(ruleset) => {
+                            let aggr_kind = compiled_ruleset.aggr_kind();
+                            let store = stores.get(k).unwrap();
+                            let use_delta = BTreeSet::default();
+                            let should_check_limit = num_to_take.is_some() && k.is_prog_entry();
+                            match aggr_kind {
+                                AggrKind::None | AggrKind::Meet => {
+                                    let is_meet = aggr_kind == AggrKind::Meet;
+                                    for (rule_n, rule) in ruleset.iter().enumerate() {
+                                        debug!("initial calculation for rule {:?}.{}", k, rule_n);
+                                        for item_res in
+                                            rule.relation.iter(self, Some(0), &use_delta)?
+                                        {
+                                            let item = item_res?;
+                                            trace!(
+                                                "item for {:?}.{}: {:?} at {}",
+                                                k,
+                                                rule_n,
+                                                item,
+                                                epoch
+                                            );
+                                            if is_meet {
+                                                store.aggr_meet_put(&item, &rule.aggr, 0)?;
+                                            } else if should_check_limit {
+                                                if !store.exists(&item, 0) {
+                                                    store.put(item, 0);
+                                                    if limiter.incr() {
+                                                        trace!("early stopping due to result count limit exceeded");
+                                                        return Ok(());
+                                                    }
+                                                }
+                                            } else {
+                                                store.put(item, 0);
                                             }
+                                            *changed.get_mut(k).unwrap() = true;
                                         }
-                                    } else {
-                                        store.put(item, 0);
                                     }
-                                    *changed.get_mut(k).unwrap() = true;
+                                }
+                                AggrKind::Normal => {
+                                    let store_to_use = self.new_temp_store();
+                                    for (rule_n, rule) in ruleset.iter().enumerate() {
+                                        debug!(
+                                            "Calculation for normal aggr rule {:?}.{}",
+                                            k, rule_n
+                                        );
+                                        for (serial, item_res) in rule
+                                            .relation
+                                            .iter(self, Some(0), &use_delta)?
+                                            .enumerate()
+                                        {
+                                            let item = item_res?;
+                                            trace!(
+                                                "item for {:?}.{}: {:?} at {}",
+                                                k,
+                                                rule_n,
+                                                item,
+                                                epoch
+                                            );
+                                            store_to_use.normal_aggr_put(&item, &rule.aggr, serial);
+                                            *changed.get_mut(k).unwrap() = true;
+                                        }
+                                    }
+                                    if store_to_use.normal_aggr_scan_and_put(
+                                        &ruleset[0].aggr,
+                                        store,
+                                        if should_check_limit {
+                                            Some(&mut limiter)
+                                        } else {
+                                            None
+                                        },
+                                    )? {
+                                        return Ok(());
+                                    }
                                 }
                             }
                         }
-                        AggrKind::Normal => {
-                            let store_to_use = self.new_temp_store();
-                            for (rule_n, rule) in ruleset.rules.iter().enumerate() {
-                                debug!("Calculation for normal aggr rule {:?}.{}", k, rule_n);
-                                for (serial, item_res) in
-                                    rule.relation.iter(self, Some(0), &use_delta)?.enumerate()
-                                {
-                                    let item = item_res?;
-                                    trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
-                                    store_to_use.normal_aggr_put(&item, &rule.aggr, serial);
-                                    *changed.get_mut(k).unwrap() = true;
-                                }
-                            }
-                            if store_to_use.normal_aggr_scan_and_put(
-                                &ruleset.rules[0].aggr,
-                                store,
-                                if should_check_limit {
-                                    Some(&mut limiter)
-                                } else {
-                                    None
-                                },
-                            )? {
-                                return Ok(());
-                            }
+                        CompiledRuleSet::Algo => {
+                            todo!()
                         }
                     }
                 }
@@ -133,63 +166,80 @@ impl SessionTx {
                     *v = false;
                 }
 
-                for (k, ruleset) in prog.iter() {
-                    let store = stores.get(k).unwrap();
-                    let should_check_limit = num_to_take.is_some() && k.is_prog_entry();
-                    for (rule_n, rule) in ruleset.rules.iter().enumerate() {
-                        let mut should_do_calculation = false;
-                        for d_rule in &rule.contained_rules {
-                            if let Some(changed) = prev_changed.get(d_rule) {
-                                if *changed {
-                                    should_do_calculation = true;
-                                    break;
+                for (k, compiled_ruleset) in prog.iter() {
+                    match compiled_ruleset {
+                        CompiledRuleSet::Rules(ruleset) => {
+                            let store = stores.get(k).unwrap();
+                            let should_check_limit = num_to_take.is_some() && k.is_prog_entry();
+                            for (rule_n, rule) in ruleset.iter().enumerate() {
+                                let mut should_do_calculation = false;
+                                for d_rule in &rule.contained_rules {
+                                    if let Some(changed) = prev_changed.get(d_rule) {
+                                        if *changed {
+                                            should_do_calculation = true;
+                                            break;
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                        if !should_do_calculation {
-                            continue;
-                        }
-                        for (delta_key, delta_store) in stores.iter() {
-                            if !rule.contained_rules.contains(delta_key) {
-                                continue;
-                            }
-                            let is_meet_aggr = match ruleset.aggr_kind() {
-                                AggrKind::None => false,
-                                AggrKind::Normal => unreachable!(),
-                                AggrKind::Meet => true,
-                            };
+                                if !should_do_calculation {
+                                    continue;
+                                }
+                                for (delta_key, delta_store) in stores.iter() {
+                                    if !rule.contained_rules.contains(delta_key) {
+                                        continue;
+                                    }
+                                    let is_meet_aggr = match compiled_ruleset.aggr_kind() {
+                                        AggrKind::None => false,
+                                        AggrKind::Normal => unreachable!(),
+                                        AggrKind::Meet => true,
+                                    };
 
-                            debug!("with delta {:?} for rule {:?}.{}", delta_key, k, rule_n);
-                            let use_delta = BTreeSet::from([delta_store.id]);
-                            for item_res in rule.relation.iter(self, Some(epoch), &use_delta)? {
-                                let item = item_res?;
-                                // improvement: the clauses can actually be evaluated in parallel
-                                if is_meet_aggr {
-                                    let aggr_changed =
-                                        store.aggr_meet_put(&item, &rule.aggr, epoch)?;
-                                    if aggr_changed {
-                                        *changed.get_mut(k).unwrap() = true;
-                                    }
-                                } else if store.exists(&item, 0) {
-                                    trace!(
-                                        "item for {:?}.{}: {:?} at {}, rederived",
-                                        k,
-                                        rule_n,
-                                        item,
-                                        epoch
+                                    debug!(
+                                        "with delta {:?} for rule {:?}.{}",
+                                        delta_key, k, rule_n
                                     );
-                                } else {
-                                    trace!("item for {:?}.{}: {:?} at {}", k, rule_n, item, epoch);
-                                    *changed.get_mut(k).unwrap() = true;
-                                    store.put(item.clone(), epoch);
-                                    store.put(item, 0);
-                                    if should_check_limit && limiter.incr() {
-                                        trace!("early stopping due to result count limit exceeded");
-                                        return Ok(());
+                                    let use_delta = BTreeSet::from([delta_store.id]);
+                                    for item_res in
+                                        rule.relation.iter(self, Some(epoch), &use_delta)?
+                                    {
+                                        let item = item_res?;
+                                        // improvement: the clauses can actually be evaluated in parallel
+                                        if is_meet_aggr {
+                                            let aggr_changed =
+                                                store.aggr_meet_put(&item, &rule.aggr, epoch)?;
+                                            if aggr_changed {
+                                                *changed.get_mut(k).unwrap() = true;
+                                            }
+                                        } else if store.exists(&item, 0) {
+                                            trace!(
+                                                "item for {:?}.{}: {:?} at {}, rederived",
+                                                k,
+                                                rule_n,
+                                                item,
+                                                epoch
+                                            );
+                                        } else {
+                                            trace!(
+                                                "item for {:?}.{}: {:?} at {}",
+                                                k,
+                                                rule_n,
+                                                item,
+                                                epoch
+                                            );
+                                            *changed.get_mut(k).unwrap() = true;
+                                            store.put(item.clone(), epoch);
+                                            store.put(item, 0);
+                                            if should_check_limit && limiter.incr() {
+                                                trace!("early stopping due to result count limit exceeded");
+                                                return Ok(());
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+
+                        CompiledRuleSet::Algo => unreachable!(),
                     }
                 }
             }

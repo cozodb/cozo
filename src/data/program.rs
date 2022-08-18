@@ -1,11 +1,13 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
 use anyhow::{anyhow, ensure, Result};
 use itertools::Itertools;
 use smallvec::SmallVec;
 
+use crate::algo::AlgoImpl;
 use crate::data::aggr::Aggregation;
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
@@ -26,21 +28,21 @@ impl TempSymbGen {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum RulesOrAlgo {
+pub(crate) enum InputRulesOrAlgo {
     Rules(Vec<InputRule>),
     Algo(AlgoApply),
 }
 
-impl RulesOrAlgo {
+impl InputRulesOrAlgo {
     pub(crate) fn get_rules_mut(&mut self) -> Option<&mut Vec<InputRule>> {
         match self {
-            RulesOrAlgo::Rules(r) => Some(r),
-            _ => None
+            InputRulesOrAlgo::Rules(r) => Some(r),
+            _ => None,
         }
     }
     pub(crate) fn get_rules(&self) -> Option<&[InputRule]> {
         match self {
-            RulesOrAlgo::Rules(r) => Some(r),
+            InputRulesOrAlgo::Rules(r) => Some(r),
             _ => None,
         }
     }
@@ -51,6 +53,23 @@ pub(crate) struct AlgoApply {
     pub(crate) algo_name: Symbol,
     pub(crate) rule_args: Vec<AlgoRuleArg>,
     pub(crate) options: BTreeMap<Symbol, Expr>,
+}
+
+#[derive(Clone)]
+pub(crate) struct MagicAlgoApply {
+    pub(crate) algo: Arc<dyn AlgoImpl>,
+    pub(crate) rule_args: Vec<MagicAlgoRuleArg>,
+    pub(crate) options: BTreeMap<Symbol, Expr>,
+}
+
+impl Debug for MagicAlgoApply {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AlgoApply")
+            .field("algo", &self.algo.name())
+            .field("rules", &self.rule_args)
+            .field("options", &self.options)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -67,8 +86,15 @@ pub(crate) enum AlgoRuleArg {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) enum MagicAlgoRuleArg {
+    InMem(MagicSymbol),
+    Stored(Symbol),
+    Triple(Symbol, TripleDir),
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct InputProgram {
-    pub(crate) prog: BTreeMap<Symbol, RulesOrAlgo>,
+    pub(crate) prog: BTreeMap<Symbol, InputRulesOrAlgo>,
 }
 
 impl InputProgram {
@@ -78,13 +104,13 @@ impl InputProgram {
             .get(&PROG_ENTRY)
             .ok_or_else(|| anyhow!("program entry point not found"))?
         {
-            RulesOrAlgo::Rules(r) => {
+            InputRulesOrAlgo::Rules(r) => {
                 ensure!(
                     r.iter().map(|e| &e.head).all_equal(),
                     "program entry point must have equal bindings"
                 );
             }
-            RulesOrAlgo::Algo(_) => {
+            InputRulesOrAlgo::Algo(_) => {
                 todo!()
             }
         }
@@ -96,8 +122,8 @@ impl InputProgram {
             .get(&PROG_ENTRY)
             .ok_or_else(|| anyhow!("program entry point not found"))?
         {
-            RulesOrAlgo::Rules(rules) => Ok(rules[0].head.len()),
-            RulesOrAlgo::Algo(_algo) => {
+            InputRulesOrAlgo::Rules(rules) => Ok(rules[0].head.len()),
+            InputRulesOrAlgo::Algo(_algo) => {
                 todo!()
             }
         }
@@ -108,8 +134,8 @@ impl InputProgram {
             .get(&PROG_ENTRY)
             .ok_or_else(|| anyhow!("program entry point not found"))?
         {
-            RulesOrAlgo::Rules(rules) => Ok(&rules.last().unwrap().head),
-            RulesOrAlgo::Algo(_) => {
+            InputRulesOrAlgo::Rules(rules) => Ok(&rules.last().unwrap().head),
+            InputRulesOrAlgo::Algo(_) => {
                 todo!()
             }
         }
@@ -118,7 +144,7 @@ impl InputProgram {
         let mut prog: BTreeMap<_, _> = Default::default();
         for (k, rules_or_algo) in self.prog {
             match rules_or_algo {
-                RulesOrAlgo::Rules(rules) => {
+                InputRulesOrAlgo::Rules(rules) => {
                     let mut collected_rules = vec![];
                     for rule in rules {
                         let mut counter = -1;
@@ -163,10 +189,10 @@ impl InputProgram {
                             collected_rules.push(normalized_rule.convert_to_well_ordered_rule()?);
                         }
                     }
-                    prog.insert(k, collected_rules);
+                    prog.insert(k, NormalFormAlgoOrRules::Rules(collected_rules));
                 }
-                RulesOrAlgo::Algo(algo_apply) => {
-                    todo!()
+                InputRulesOrAlgo::Algo(algo_apply) => {
+                    prog.insert(k, NormalFormAlgoOrRules::Algo(algo_apply));
                 }
             }
         }
@@ -177,22 +203,65 @@ impl InputProgram {
 #[derive(Debug, Clone)]
 pub(crate) struct StratifiedNormalFormProgram(pub(crate) Vec<NormalFormProgram>);
 
+#[derive(Debug, Clone)]
+pub(crate) enum NormalFormAlgoOrRules {
+    Rules(Vec<NormalFormRule>),
+    Algo(AlgoApply),
+}
+
+impl NormalFormAlgoOrRules {
+    pub(crate) fn rules(&self) -> Option<&[NormalFormRule]> {
+        match self {
+            NormalFormAlgoOrRules::Rules(r) => Some(r),
+            NormalFormAlgoOrRules::Algo(_) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct NormalFormProgram {
-    pub(crate) prog: BTreeMap<Symbol, Vec<NormalFormRule>>,
+    pub(crate) prog: BTreeMap<Symbol, NormalFormAlgoOrRules>,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct StratifiedMagicProgram(pub(crate) Vec<MagicProgram>);
 
-#[derive(Debug, Clone, Default)]
-pub(crate) struct MagicRuleSet {
-    pub(crate) rules: Vec<MagicRule>,
+#[derive(Debug, Clone)]
+pub(crate) enum MagicRulesOrAlgo {
+    Rules(Vec<MagicRule>),
+    Algo(MagicAlgoApply),
+}
+
+impl Default for MagicRulesOrAlgo {
+    fn default() -> Self {
+        Self::Rules(vec![])
+    }
+}
+
+impl MagicRulesOrAlgo {
+    pub(crate) fn arity(&self) -> usize {
+        match self {
+            MagicRulesOrAlgo::Rules(r) => r.first().unwrap().head.len(),
+            MagicRulesOrAlgo::Algo(algo) => algo.algo.arity(),
+        }
+    }
+    pub(crate) fn mut_rules(&mut self) -> Option<&mut Vec<MagicRule>> {
+        match self {
+            MagicRulesOrAlgo::Rules(r) => Some(r),
+            MagicRulesOrAlgo::Algo(_) => None,
+        }
+    }
+    pub(crate) fn rules(&self) -> Option<&[MagicRule]> {
+        match self {
+            MagicRulesOrAlgo::Rules(r) => Some(r),
+            MagicRulesOrAlgo::Algo(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct MagicProgram {
-    pub(crate) prog: BTreeMap<MagicSymbol, MagicRuleSet>,
+    pub(crate) prog: BTreeMap<MagicSymbol, MagicRulesOrAlgo>,
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]

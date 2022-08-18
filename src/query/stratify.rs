@@ -4,7 +4,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{ensure, Result};
 use itertools::Itertools;
 
-use crate::data::program::{NormalFormAtom, NormalFormProgram, StratifiedNormalFormProgram};
+use crate::data::program::{
+    AlgoRuleArg, NormalFormAlgoOrRules, NormalFormAtom, NormalFormProgram,
+    StratifiedNormalFormProgram,
+};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::query::graph::{
     generalized_kahn, reachable_components, strongly_connected_components, Graph, StratifiedGraph,
@@ -31,74 +34,104 @@ fn convert_normal_form_program_to_graph(
     let meet_rules: BTreeSet<_> = nf_prog
         .prog
         .iter()
-        .filter_map(|(k, ruleset)| {
-            let has_aggr = ruleset
-                .iter()
-                .any(|rule| rule.aggr.iter().any(|a| a.is_some()));
-            let is_meet = has_aggr
-                && ruleset.iter().all(|rule| {
-                    rule.aggr.iter().all(|v| match v {
-                        None => true,
-                        Some((v, _)) => v.is_meet,
-                    })
-                });
-            if is_meet {
-                Some(k)
-            } else {
-                None
+        .filter_map(|(k, ruleset)| match ruleset {
+            NormalFormAlgoOrRules::Rules(ruleset) => {
+                let has_aggr = ruleset
+                    .iter()
+                    .any(|rule| rule.aggr.iter().any(|a| a.is_some()));
+                let is_meet = has_aggr
+                    && ruleset.iter().all(|rule| {
+                        rule.aggr.iter().all(|v| match v {
+                            None => true,
+                            Some((v, _)) => v.is_meet,
+                        })
+                    });
+                if is_meet {
+                    Some(k)
+                } else {
+                    None
+                }
             }
+            NormalFormAlgoOrRules::Algo(_) => None,
+        })
+        .collect();
+    let algo_rules: BTreeSet<_> = nf_prog
+        .prog
+        .iter()
+        .filter_map(|(k, ruleset)| match ruleset {
+            NormalFormAlgoOrRules::Rules(_) => None,
+            NormalFormAlgoOrRules::Algo(_) => Some(k),
         })
         .collect();
     nf_prog
         .prog
         .iter()
-        .map(|(k, ruleset)| {
-            let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
-            let has_aggr = ruleset
-                .iter()
-                .any(|rule| rule.aggr.iter().any(|a| a.is_some()));
-            let is_meet = has_aggr
-                && ruleset.iter().all(|rule| {
-                    rule.aggr.iter().all(|v| match v {
-                        None => true,
-                        Some((v, _)) => v.is_meet,
-                    })
-                });
-            for rule in ruleset {
-                for atom in &rule.body {
-                    let contained = atom.contained_rules();
-                    for (found_key, is_negated) in contained {
-                        let found_key_is_meet = meet_rules.contains(found_key) && found_key != k;
-                        match ret.entry(found_key) {
-                            Entry::Vacant(e) => {
-                                if has_aggr {
-                                    if is_meet && k == found_key {
-                                        e.insert(is_negated);
+        .map(|(k, ruleset)| match ruleset {
+            NormalFormAlgoOrRules::Rules(ruleset) => {
+                let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
+                let has_aggr = ruleset
+                    .iter()
+                    .any(|rule| rule.aggr.iter().any(|a| a.is_some()));
+                let is_meet = has_aggr
+                    && ruleset.iter().all(|rule| {
+                        rule.aggr.iter().all(|v| match v {
+                            None => true,
+                            Some((v, _)) => v.is_meet,
+                        })
+                    });
+                for rule in ruleset {
+                    for atom in &rule.body {
+                        let contained = atom.contained_rules();
+                        for (found_key, is_negated) in contained {
+                            let found_key_is_meet =
+                                meet_rules.contains(found_key) && found_key != k;
+                            let found_key_is_algo = algo_rules.contains(found_key);
+                            match ret.entry(found_key) {
+                                Entry::Vacant(e) => {
+                                    if has_aggr {
+                                        if is_meet && k == found_key {
+                                            e.insert(found_key_is_algo || is_negated);
+                                        } else {
+                                            e.insert(true);
+                                        }
                                     } else {
-                                        e.insert(true);
+                                        e.insert(
+                                            found_key_is_algo || found_key_is_meet || is_negated,
+                                        );
                                     }
-                                } else {
-                                    e.insert(found_key_is_meet || is_negated);
                                 }
-                            }
-                            Entry::Occupied(mut e) => {
-                                let old = *e.get();
-                                let new_val = if has_aggr {
-                                    if is_meet && k == found_key {
-                                        found_key_is_meet || is_negated
+                                Entry::Occupied(mut e) => {
+                                    let old = *e.get();
+                                    let new_val = if has_aggr {
+                                        if is_meet && k == found_key {
+                                            found_key_is_algo || found_key_is_meet || is_negated
+                                        } else {
+                                            true
+                                        }
                                     } else {
-                                        true
-                                    }
-                                } else {
-                                    found_key_is_meet || is_negated
-                                };
-                                e.insert(old || new_val);
+                                        found_key_is_algo || found_key_is_meet || is_negated
+                                    };
+                                    e.insert(old || new_val);
+                                }
                             }
                         }
                     }
                 }
+                (k, ret)
             }
-            (k, ret)
+            NormalFormAlgoOrRules::Algo(algo) => {
+                let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
+                for rel in &algo.rule_args {
+                    match rel {
+                        AlgoRuleArg::InMem(r) => {
+                            ret.insert(r, true);
+                        }
+                        AlgoRuleArg::Stored(_) => {}
+                        AlgoRuleArg::Triple(_, _) => {}
+                    }
+                }
+                (k, ret)
+            }
         })
         .collect()
 }

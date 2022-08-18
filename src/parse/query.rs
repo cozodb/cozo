@@ -2,7 +2,6 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, bail, ensure, Result};
-use either::Either;
 use itertools::Itertools;
 use serde_json::{json, Map};
 
@@ -13,7 +12,7 @@ use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{
     AlgoApply, AlgoRuleArg, InputAtom, InputAttrTripleAtom, InputProgram, InputRule,
-    InputRuleApplyAtom, InputTerm, InputViewApplyAtom, MagicSymbol, RulesOrAlgo, TripleDir,
+    InputRuleApplyAtom, InputTerm, InputViewApplyAtom, MagicSymbol, InputRulesOrAlgo, TripleDir,
     Unification,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -177,7 +176,7 @@ impl SessionTx {
                 out_name.validate_not_reserved()?;
                 match input_prog.prog.entry(out_name) {
                     Entry::Vacant(v) => {
-                        v.insert(RulesOrAlgo::Algo(AlgoApply {
+                        v.insert(InputRulesOrAlgo::Algo(AlgoApply {
                             algo_name: Symbol::from(name_symbol),
                             rule_args: relations,
                             options,
@@ -409,9 +408,9 @@ impl SessionTx {
                 }
             }
         }
-        let ret: BTreeMap<Symbol, RulesOrAlgo> = collected
+        let ret: BTreeMap<Symbol, InputRulesOrAlgo> = collected
             .into_iter()
-            .map(|(name, rules)| -> Result<(Symbol, RulesOrAlgo)> {
+            .map(|(name, rules)| -> Result<(Symbol, InputRulesOrAlgo)> {
                 let mut arities = rules.iter().map(|r| r.head.len());
                 let arity = arities.next().unwrap();
                 for other in arities {
@@ -419,21 +418,21 @@ impl SessionTx {
                         bail!("arity mismatch for rules under the name of {}", name);
                     }
                 }
-                Ok((name, RulesOrAlgo::Rules(rules)))
+                Ok((name, InputRulesOrAlgo::Rules(rules)))
             })
             .try_collect()?;
 
         match ret.get(&PROG_ENTRY as &Symbol) {
             None => bail!("no entry defined for datalog program"),
             Some(ruleset) => match ruleset {
-                RulesOrAlgo::Rules(ruleset) => {
+                InputRulesOrAlgo::Rules(ruleset) => {
                     if !ruleset.iter().map(|r| &r.head).all_equal() {
                         bail!("all heads for the entry query must be identical");
                     } else {
                         Ok(InputProgram { prog: ret })
                     }
                 }
-                RulesOrAlgo::Algo(_) => {
+                InputRulesOrAlgo::Algo(_) => {
                     todo!()
                 }
             },

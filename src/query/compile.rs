@@ -5,7 +5,9 @@ use itertools::Itertools;
 
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAtom, MagicRule, MagicSymbol, StratifiedMagicProgram};
+use crate::data::program::{
+    MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram,
+};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::query::ConstRules;
@@ -16,8 +18,9 @@ use crate::runtime::transact::SessionTx;
 pub(crate) type CompiledProgram = BTreeMap<MagicSymbol, CompiledRuleSet>;
 
 #[derive(Debug)]
-pub(crate) struct CompiledRuleSet {
-    pub(crate) rules: Vec<CompiledRule>,
+pub(crate) enum CompiledRuleSet {
+    Rules(Vec<CompiledRule>),
+    Algo,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -29,26 +32,31 @@ pub(crate) enum AggrKind {
 
 impl CompiledRuleSet {
     pub(crate) fn aggr_kind(&self) -> AggrKind {
-        let mut is_aggr = false;
-        for rule in &self.rules {
-            for aggr in &rule.aggr {
-                if aggr.is_some() {
-                    is_aggr = true;
-                    break;
+        match self {
+            CompiledRuleSet::Rules(rules) => {
+                let mut is_aggr = false;
+                for rule in rules {
+                    for aggr in &rule.aggr {
+                        if aggr.is_some() {
+                            is_aggr = true;
+                            break;
+                        }
+                    }
                 }
-            }
-        }
-        if !is_aggr {
-            return AggrKind::None;
-        }
-        for aggr in self.rules[0].aggr.iter() {
-            if let Some((aggr, _args)) = aggr {
-                if !aggr.is_meet {
-                    return AggrKind::Normal;
+                if !is_aggr {
+                    return AggrKind::None;
                 }
+                for aggr in rules[0].aggr.iter() {
+                    if let Some((aggr, _args)) = aggr {
+                        if !aggr.is_meet {
+                            return AggrKind::Normal;
+                        }
+                    }
+                }
+                return AggrKind::Meet;
             }
+            CompiledRuleSet::Algo => AggrKind::None,
         }
-        return AggrKind::Meet;
     }
 }
 
@@ -84,7 +92,7 @@ impl SessionTx {
                 );
                 stores.insert(
                     name.clone(),
-                    self.new_rule_store(name.clone(), ruleset.rules[0].head.len()),
+                    self.new_rule_store(name.clone(), ruleset.arity()),
                 );
             }
         }
@@ -98,29 +106,37 @@ impl SessionTx {
                     .prog
                     .iter()
                     .map(|(k, body)| -> Result<(MagicSymbol, CompiledRuleSet)> {
-                        let mut collected = Vec::with_capacity(body.rules.len());
-                        for (rule_idx, rule) in body.rules.iter().enumerate() {
-                            let header = &rule.head;
-                            let mut relation =
-                                self.compile_magic_rule_body(&rule, k, rule_idx, &stores, &header)?;
-                            relation.fill_normal_binding_indices().with_context(|| {
-                                format!(
-                                    "error encountered when filling binding indices for {:#?}",
-                                    relation
-                                )
-                            })?;
-                            collected.push(CompiledRule {
-                                aggr: rule.aggr.clone(),
-                                relation,
-                                contained_rules: rule.contained_rules(),
-                            })
-                        }
-                        ensure!(
+                        match body {
+                            MagicRulesOrAlgo::Rules(body) => {
+                                let mut collected = Vec::with_capacity(body.len());
+                                for (rule_idx, rule) in body.iter().enumerate() {
+                                    let header = &rule.head;
+                                    let mut relation =
+                                        self.compile_magic_rule_body(&rule, k, rule_idx, &stores, &header)?;
+                                    relation.fill_normal_binding_indices().with_context(|| {
+                                        format!(
+                                            "error encountered when filling binding indices for {:#?}",
+                                            relation
+                                        )
+                                    })?;
+                                    collected.push(CompiledRule {
+                                        aggr: rule.aggr.clone(),
+                                        relation,
+                                        contained_rules: rule.contained_rules(),
+                                    })
+                                }
+                                ensure!(
                             collected.iter().map(|r| &r.aggr).all_equal(),
                             "rule heads must contain identical aggregations: {:?}",
                             collected
                         );
-                        Ok((k.clone(), CompiledRuleSet { rules: collected }))
+                                Ok((k.clone(), CompiledRuleSet::Rules(collected)))
+                            }
+
+                            MagicRulesOrAlgo::Algo(_) => {
+                                todo!()
+                            }
+                        }
                     })
                     .try_collect()
             })

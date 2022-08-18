@@ -5,22 +5,27 @@ use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::data::program::{
-    MagicAtom, MagicAttrTripleAtom, MagicProgram, MagicRule, MagicRuleApplyAtom, MagicRuleSet,
-    MagicSymbol, MagicViewApplyAtom, NormalFormAtom, NormalFormProgram, NormalFormRule,
-    StratifiedMagicProgram, StratifiedNormalFormProgram,
+    AlgoRuleArg, MagicAtom, MagicAttrTripleAtom, MagicProgram, MagicRule, MagicRuleApplyAtom,
+    MagicRulesOrAlgo, MagicSymbol, MagicViewApplyAtom, NormalFormAlgoOrRules, NormalFormAtom,
+    NormalFormProgram, NormalFormRule, StratifiedMagicProgram, StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
 
 impl NormalFormProgram {
-    pub(crate) fn exempt_aggr_rules(&self, exempt_rules: &mut BTreeSet<Symbol>) {
+    pub(crate) fn exempt_aggr_rules_for_magic_sets(&self, exempt_rules: &mut BTreeSet<Symbol>) {
         for (name, rule_set) in self.prog.iter() {
-            'outer: for rule in rule_set.iter() {
-                for aggr in rule.aggr.iter() {
-                    if aggr.is_some() {
-                        exempt_rules.insert(name.clone());
-                        continue 'outer;
+            match rule_set {
+                NormalFormAlgoOrRules::Rules(rule_set) => {
+                    'outer: for rule in rule_set.iter() {
+                        for aggr in rule.aggr.iter() {
+                            if aggr.is_some() {
+                                exempt_rules.insert(name.clone());
+                                continue 'outer;
+                            }
+                        }
                     }
                 }
+                NormalFormAlgoOrRules::Algo(_) => {}
             }
         }
     }
@@ -31,7 +36,7 @@ impl StratifiedNormalFormProgram {
         let mut exempt_rules = BTreeSet::from([PROG_ENTRY.clone()]);
         let mut collected = vec![];
         for prog in self.0 {
-            prog.exempt_aggr_rules(&mut exempt_rules);
+            prog.exempt_aggr_rules_for_magic_sets(&mut exempt_rules);
             let adorned = prog.adorn(&exempt_rules);
             collected.push(adorned.magic_rewrite());
             exempt_rules.extend(prog.get_downstream_rules());
@@ -46,155 +51,178 @@ impl MagicProgram {
             prog: Default::default(),
         };
         for (rule_head, ruleset) in self.prog {
-            // at this point, rule_head must be Muggle or Magic, the remaining options are impossible
-            let rule_name = rule_head.as_plain_symbol();
-            let adornment = rule_head.magic_adornment();
+            match ruleset {
+                MagicRulesOrAlgo::Rules(ruleset) => {
+                    // at this point, rule_head must be Muggle or Magic, the remaining options are impossible
+                    let rule_name = rule_head.as_plain_symbol();
+                    let adornment = rule_head.magic_adornment();
 
-            // can only be true if rule is magic and args are not all free
-            let rule_has_bound_args = rule_head.has_bound_adornment();
+                    // can only be true if rule is magic and args are not all free
+                    let rule_has_bound_args = rule_head.has_bound_adornment();
 
-            for (rule_idx, rule) in ruleset.rules.into_iter().enumerate() {
-                let mut sup_idx = 0;
-                let mut make_sup_kw = || {
-                    let ret = MagicSymbol::Sup {
-                        inner: rule_name.clone(),
-                        adornment: adornment.into(),
-                        rule_idx: rule_idx as u16,
-                        sup_idx,
-                    };
-                    sup_idx += 1;
-                    ret
-                };
-                let mut collected_atoms = vec![];
-                let mut seen_bindings: BTreeSet<Symbol> = Default::default();
+                    for (rule_idx, rule) in ruleset.into_iter().enumerate() {
+                        let mut sup_idx = 0;
+                        let mut make_sup_kw = || {
+                            let ret = MagicSymbol::Sup {
+                                inner: rule_name.clone(),
+                                adornment: adornment.into(),
+                                rule_idx: rule_idx as u16,
+                                sup_idx,
+                            };
+                            sup_idx += 1;
+                            ret
+                        };
+                        let mut collected_atoms = vec![];
+                        let mut seen_bindings: BTreeSet<Symbol> = Default::default();
 
-                // SIP from input rule if rule has any bound args
-                if rule_has_bound_args {
-                    let sup_kw = make_sup_kw();
+                        // SIP from input rule if rule has any bound args
+                        if rule_has_bound_args {
+                            let sup_kw = make_sup_kw();
 
-                    let sup_args = rule
-                        .head
-                        .iter()
-                        .zip(adornment.iter())
-                        .filter_map(
-                            |(arg, is_bound)| if *is_bound { Some(arg.clone()) } else { None },
-                        )
-                        .collect_vec();
-                    let sup_aggr = vec![None; sup_args.len()];
-                    let sup_body = vec![MagicAtom::Rule(MagicRuleApplyAtom {
-                        name: MagicSymbol::Input {
-                            inner: rule_name.clone(),
-                            adornment: adornment.into(),
-                        },
-                        args: sup_args.clone(),
-                    })];
+                            let sup_args = rule
+                                .head
+                                .iter()
+                                .zip(adornment.iter())
+                                .filter_map(
+                                    |(arg, is_bound)| {
+                                        if *is_bound {
+                                            Some(arg.clone())
+                                        } else {
+                                            None
+                                        }
+                                    },
+                                )
+                                .collect_vec();
+                            let sup_aggr = vec![None; sup_args.len()];
+                            let sup_body = vec![MagicAtom::Rule(MagicRuleApplyAtom {
+                                name: MagicSymbol::Input {
+                                    inner: rule_name.clone(),
+                                    adornment: adornment.into(),
+                                },
+                                args: sup_args.clone(),
+                            })];
 
-                    ret_prog.prog.insert(
-                        sup_kw.clone(),
-                        MagicRuleSet {
-                            rules: vec![MagicRule {
-                                head: sup_args.clone(),
-                                aggr: sup_aggr,
-                                body: sup_body,
-                                vld: rule.vld,
-                            }],
-                        },
-                    );
-
-                    seen_bindings.extend(sup_args.iter().cloned());
-
-                    collected_atoms.push(MagicAtom::Rule(MagicRuleApplyAtom {
-                        name: sup_kw,
-                        args: sup_args,
-                    }))
-                }
-                for atom in rule.body {
-                    match atom {
-                        a @ (MagicAtom::Predicate(_)
-                        | MagicAtom::NegatedAttrTriple(_)
-                        | MagicAtom::NegatedRule(_)
-                        | MagicAtom::NegatedView(_)) => {
-                            collected_atoms.push(a);
-                        }
-                        MagicAtom::AttrTriple(t) => {
-                            seen_bindings.insert(t.entity.clone());
-                            seen_bindings.insert(t.value.clone());
-                            collected_atoms.push(MagicAtom::AttrTriple(t));
-                        }
-                        MagicAtom::View(v) => {
-                            seen_bindings.extend(v.args.iter().cloned());
-                            collected_atoms.push(MagicAtom::View(v));
-                        }
-                        MagicAtom::Unification(u) => {
-                            seen_bindings.insert(u.binding.clone());
-                            collected_atoms.push(MagicAtom::Unification(u));
-                        }
-                        MagicAtom::Rule(r_app) => {
-                            if r_app.name.has_bound_adornment() {
-                                // we are guaranteed to have a magic rule application
-                                let sup_kw = make_sup_kw();
-                                let args = seen_bindings.iter().cloned().collect_vec();
-                                let sup_rule_entry =
-                                    ret_prog.prog.entry(sup_kw.clone()).or_default();
-                                let mut sup_rule_atoms = vec![];
-                                mem::swap(&mut sup_rule_atoms, &mut collected_atoms);
-
-                                // add the sup rule to the program, this clears all collected atoms
-                                sup_rule_entry.rules.push(MagicRule {
-                                    head: args.clone(),
-                                    aggr: vec![None; args.len()],
-                                    body: sup_rule_atoms,
+                            ret_prog.prog.insert(
+                                sup_kw.clone(),
+                                MagicRulesOrAlgo::Rules(vec![MagicRule {
+                                    head: sup_args.clone(),
+                                    aggr: sup_aggr,
+                                    body: sup_body,
                                     vld: rule.vld,
-                                });
+                                }]),
+                            );
 
-                                // add the sup rule application to the collected atoms
-                                let sup_rule_app = MagicAtom::Rule(MagicRuleApplyAtom {
-                                    name: sup_kw.clone(),
-                                    args,
-                                });
-                                collected_atoms.push(sup_rule_app.clone());
+                            seen_bindings.extend(sup_args.iter().cloned());
 
-                                // finally add to the input rule application
-                                let inp_kw = MagicSymbol::Input {
-                                    inner: r_app.name.as_plain_symbol().clone(),
-                                    adornment: r_app.name.magic_adornment().into(),
-                                };
-                                let inp_entry = ret_prog.prog.entry(inp_kw.clone()).or_default();
-                                let inp_args = r_app
-                                    .args
-                                    .iter()
-                                    .zip(r_app.name.magic_adornment())
-                                    .filter_map(
-                                        |(kw, is_bound)| {
-                                            if *is_bound {
-                                                Some(kw.clone())
-                                            } else {
-                                                None
-                                            }
-                                        },
-                                    )
-                                    .collect_vec();
-                                let inp_aggr = vec![None; inp_args.len()];
-                                inp_entry.rules.push(MagicRule {
-                                    head: inp_args,
-                                    aggr: inp_aggr,
-                                    body: vec![sup_rule_app],
-                                    vld: rule.vld,
-                                });
+                            collected_atoms.push(MagicAtom::Rule(MagicRuleApplyAtom {
+                                name: sup_kw,
+                                args: sup_args,
+                            }))
+                        }
+                        for atom in rule.body {
+                            match atom {
+                                a @ (MagicAtom::Predicate(_)
+                                | MagicAtom::NegatedAttrTriple(_)
+                                | MagicAtom::NegatedRule(_)
+                                | MagicAtom::NegatedView(_)) => {
+                                    collected_atoms.push(a);
+                                }
+                                MagicAtom::AttrTriple(t) => {
+                                    seen_bindings.insert(t.entity.clone());
+                                    seen_bindings.insert(t.value.clone());
+                                    collected_atoms.push(MagicAtom::AttrTriple(t));
+                                }
+                                MagicAtom::View(v) => {
+                                    seen_bindings.extend(v.args.iter().cloned());
+                                    collected_atoms.push(MagicAtom::View(v));
+                                }
+                                MagicAtom::Unification(u) => {
+                                    seen_bindings.insert(u.binding.clone());
+                                    collected_atoms.push(MagicAtom::Unification(u));
+                                }
+                                MagicAtom::Rule(r_app) => {
+                                    if r_app.name.has_bound_adornment() {
+                                        // we are guaranteed to have a magic rule application
+                                        let sup_kw = make_sup_kw();
+                                        let args = seen_bindings.iter().cloned().collect_vec();
+                                        let sup_rule_entry = ret_prog
+                                            .prog
+                                            .entry(sup_kw.clone())
+                                            .or_default()
+                                            .mut_rules()
+                                            .unwrap();
+                                        let mut sup_rule_atoms = vec![];
+                                        mem::swap(&mut sup_rule_atoms, &mut collected_atoms);
+
+                                        // add the sup rule to the program, this clears all collected atoms
+                                        sup_rule_entry.push(MagicRule {
+                                            head: args.clone(),
+                                            aggr: vec![None; args.len()],
+                                            body: sup_rule_atoms,
+                                            vld: rule.vld,
+                                        });
+
+                                        // add the sup rule application to the collected atoms
+                                        let sup_rule_app = MagicAtom::Rule(MagicRuleApplyAtom {
+                                            name: sup_kw.clone(),
+                                            args,
+                                        });
+                                        collected_atoms.push(sup_rule_app.clone());
+
+                                        // finally add to the input rule application
+                                        let inp_kw = MagicSymbol::Input {
+                                            inner: r_app.name.as_plain_symbol().clone(),
+                                            adornment: r_app.name.magic_adornment().into(),
+                                        };
+                                        let inp_entry = ret_prog
+                                            .prog
+                                            .entry(inp_kw.clone())
+                                            .or_default()
+                                            .mut_rules()
+                                            .unwrap();
+                                        let inp_args = r_app
+                                            .args
+                                            .iter()
+                                            .zip(r_app.name.magic_adornment())
+                                            .filter_map(|(kw, is_bound)| {
+                                                if *is_bound {
+                                                    Some(kw.clone())
+                                                } else {
+                                                    None
+                                                }
+                                            })
+                                            .collect_vec();
+                                        let inp_aggr = vec![None; inp_args.len()];
+                                        inp_entry.push(MagicRule {
+                                            head: inp_args,
+                                            aggr: inp_aggr,
+                                            body: vec![sup_rule_app],
+                                            vld: rule.vld,
+                                        });
+                                    }
+                                    seen_bindings.extend(r_app.args.iter().cloned());
+                                    collected_atoms.push(MagicAtom::Rule(r_app));
+                                }
                             }
-                            seen_bindings.extend(r_app.args.iter().cloned());
-                            collected_atoms.push(MagicAtom::Rule(r_app));
                         }
+
+                        let entry = ret_prog
+                            .prog
+                            .entry(rule_head.clone())
+                            .or_default()
+                            .mut_rules()
+                            .unwrap();
+                        entry.push(MagicRule {
+                            head: rule.head,
+                            aggr: rule.aggr,
+                            body: collected_atoms,
+                            vld: rule.vld,
+                        });
                     }
                 }
-
-                let entry = ret_prog.prog.entry(rule_head.clone()).or_default();
-                entry.rules.push(MagicRule {
-                    head: rule.head,
-                    aggr: rule.aggr,
-                    body: collected_atoms,
-                    vld: rule.vld,
-                });
+                MagicRulesOrAlgo::Algo(_) => {
+                    todo!()
+                }
             }
         }
         ret_prog
@@ -206,15 +234,30 @@ impl NormalFormProgram {
         let own_rules: BTreeSet<_> = self.prog.keys().collect();
         let mut downstream_rules: BTreeSet<Symbol> = Default::default();
         for rules in self.prog.values() {
-            for rule in rules {
-                for atom in rule.body.iter() {
-                    match atom {
-                        NormalFormAtom::Rule(r_app) | NormalFormAtom::NegatedRule(r_app) => {
-                            if !own_rules.contains(&r_app.name) {
-                                downstream_rules.insert(r_app.name.clone());
+            match rules {
+                NormalFormAlgoOrRules::Rules(rules) => {
+                    for rule in rules {
+                        for atom in rule.body.iter() {
+                            match atom {
+                                NormalFormAtom::Rule(r_app)
+                                | NormalFormAtom::NegatedRule(r_app) => {
+                                    if !own_rules.contains(&r_app.name) {
+                                        downstream_rules.insert(r_app.name.clone());
+                                    }
+                                }
+                                _ => {}
                             }
                         }
-                        _ => {}
+                    }
+                }
+                NormalFormAlgoOrRules::Algo(algo) => {
+                    for rel in algo.rule_args.iter() {
+                        match rel {
+                            AlgoRuleArg::InMem(r) => {
+                                downstream_rules.insert(r.clone());
+                            }
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -239,30 +282,38 @@ impl NormalFormProgram {
                 // processing starts with the sets of rules NOT subject to rewrite
                 continue;
             }
-            let mut adorned_rules = Vec::with_capacity(rules.len());
-            for rule in rules {
-                let adorned_rule = rule.adorn(
-                    &mut pending_adornment,
-                    &rules_to_rewrite,
-                    Default::default(),
-                );
-                adorned_rules.push(adorned_rule);
+            match rules {
+                NormalFormAlgoOrRules::Algo(_) => unreachable!(),
+                NormalFormAlgoOrRules::Rules(rules) => {
+                    let mut adorned_rules = Vec::with_capacity(rules.len());
+                    for rule in rules {
+                        let adorned_rule = rule.adorn(
+                            &mut pending_adornment,
+                            &rules_to_rewrite,
+                            Default::default(),
+                        );
+                        adorned_rules.push(adorned_rule);
+                    }
+                    adorned_prog.prog.insert(
+                        MagicSymbol::Muggle {
+                            inner: rule_name.clone(),
+                        },
+                        MagicRulesOrAlgo::Rules(adorned_rules),
+                    );
+                }
             }
-            adorned_prog.prog.insert(
-                MagicSymbol::Muggle {
-                    inner: rule_name.clone(),
-                },
-                MagicRuleSet {
-                    rules: adorned_rules,
-                },
-            );
         }
 
         while let Some(head) = pending_adornment.pop() {
             if adorned_prog.prog.contains_key(&head) {
                 continue;
             }
-            let original_rules = self.prog.get(head.as_plain_symbol()).unwrap();
+            let original_rules = self
+                .prog
+                .get(head.as_plain_symbol())
+                .unwrap()
+                .rules()
+                .unwrap();
             let adornment = head.magic_adornment();
             let mut adorned_rules = Vec::with_capacity(original_rules.len());
             for rule in original_rules {
@@ -276,12 +327,9 @@ impl NormalFormProgram {
                     rule.adorn(&mut pending_adornment, &rules_to_rewrite, seen_bindings);
                 adorned_rules.push(adorned_rule);
             }
-            adorned_prog.prog.insert(
-                head,
-                MagicRuleSet {
-                    rules: adorned_rules,
-                },
-            );
+            adorned_prog
+                .prog
+                .insert(head, MagicRulesOrAlgo::Rules(adorned_rules));
         }
         adorned_prog
     }
