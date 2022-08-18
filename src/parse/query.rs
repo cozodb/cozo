@@ -2,6 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, bail, ensure, Result};
+use either::Either;
 use itertools::Itertools;
 use serde_json::{json, Map};
 
@@ -11,8 +12,9 @@ use crate::data::expr::{get_op, Expr, OP_LIST};
 use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{
-    InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputTerm,
-    InputViewApplyAtom, MagicSymbol, Unification,
+    AlgoApply, AlgoRuleArg, InputAtom, InputAttrTripleAtom, InputProgram, InputRule,
+    InputRuleApplyAtom, InputTerm, InputViewApplyAtom, MagicSymbol, RulesOrAlgo, TripleDir,
+    Unification,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
@@ -98,19 +100,13 @@ impl SessionTx {
             .as_array()
             .ok_or_else(|| anyhow!("expect field 'q' to be an array in query {}", payload))?;
         ensure!(!rules_payload.is_empty(), "no rules in {}", payload);
-        let input_prog = if rules_payload.first().unwrap().is_array() {
+        let mut input_prog = if rules_payload.first().unwrap().is_array() {
             let q = json!([{"rule": "?", "args": rules_payload}]);
             self.parse_input_rule_sets(&q, vld, &params_pool)?
         } else {
             self.parse_input_rule_sets(q, vld, &params_pool)?
         };
-        let entry_bindings = &input_prog
-            .prog
-            .get(&PROG_ENTRY)
-            .ok_or_else(|| anyhow!("program has no entry point"))?
-            .first()
-            .unwrap()
-            .head;
+        let entry_bindings = input_prog.get_entry_head()?;
         let out_spec = payload
             .get("out")
             .map(|spec| self.parse_query_out_spec(spec, entry_bindings));
@@ -125,6 +121,74 @@ impl SessionTx {
                 .map(|v| v as usize)
                 .ok_or_else(|| anyhow!("'offset' must be a positive number"))
         }))?;
+        if let Some(algo_rules) = payload.get("algo_rules") {
+            for algo_rule in algo_rules.as_array().ok_or_else(|| anyhow!("'algo_rules' must be an array"))? {
+                let out_symbol = algo_rule
+                    .get("algo_out")
+                    .ok_or_else(|| anyhow!("algo rule requires field 'algo_out': {}", algo_rule))?
+                    .as_str()
+                    .ok_or_else(|| anyhow!("'algo_out' mut be a string: {}", algo_rule))?;
+                let name_symbol = algo_rule
+                    .get("algo_name")
+                    .ok_or_else(|| anyhow!("algo rule requires field 'algo_name': {}", algo_rule))?
+                    .as_str()
+                    .ok_or_else(|| anyhow!("'algo_name' mut be a string: {}", algo_rule))?;
+                let mut relations = vec![];
+                let mut options = BTreeMap::default();
+                for rel_def in algo_rule
+                    .get("relations")
+                    .ok_or_else(|| anyhow!("'relations' field required in algo rule"))?
+                    .as_array()
+                    .ok_or_else(|| anyhow!("'relations' field must be an array"))?
+                {
+                    if let Some(rule_name) = rel_def.get("rule") {
+                        let rule_name = rule_name
+                            .as_str()
+                            .ok_or_else(|| anyhow!("'rule' must be a string, got {}", rule_name))?;
+                        relations.push(AlgoRuleArg::InMem(Symbol::from(rule_name)));
+                    } else if let Some(view_name) = rel_def.get("view") {
+                        let view_name = view_name
+                            .as_str()
+                            .ok_or_else(|| anyhow!("'view' must be a string, got {}", view_name))?;
+                        relations.push(AlgoRuleArg::Stored(Symbol::from(view_name)));
+                    } else if let Some(triple_name) = rel_def.get("triple") {
+                        let triple_name = triple_name
+                            .as_str()
+                            .ok_or_else(|| anyhow!("'triple' must be a string, got {}", triple_name))?;
+                        let dir = match rel_def.get("backward") {
+                            None => TripleDir::Fwd,
+                            Some(JsonValue::Bool(true)) => TripleDir::Bwd,
+                            Some(JsonValue::Bool(false)) => TripleDir::Fwd,
+                            d => bail!("'backward' must be a boolean, got {}", d.unwrap()),
+                        };
+                        relations.push(AlgoRuleArg::Triple(Symbol::from(triple_name), dir));
+                    }
+                }
+                if let Some(opts) = algo_rule.get("options") {
+                    let opts = opts
+                        .as_object()
+                        .ok_or_else(|| anyhow!("'options' is required to be a map, got {}", opts))?;
+                    for (k, v) in opts.iter() {
+                        let expr = Self::parse_expr_arg(v, params_pool)?;
+                        options.insert(Symbol::from(k as &str), expr);
+                    }
+                }
+                let out_name = Symbol::from(out_symbol);
+                out_name.validate_not_reserved()?;
+                match input_prog.prog.entry(out_name) {
+                    Entry::Vacant(v) => {
+                        v.insert(RulesOrAlgo::Algo(AlgoApply {
+                            algo_name: Symbol::from(name_symbol),
+                            rule_args: relations,
+                            options,
+                        }));
+                    }
+                    Entry::Occupied(_) => {
+                        bail!("algo rule application conflict: {}", out_symbol)
+                    }
+                };
+            }
+        }
         let const_rules = if let Some(rules) = payload.get("const_rules") {
             rules
                 .as_object()
@@ -187,15 +251,8 @@ impl SessionTx {
             })
             .try_collect()?;
         if !sorters.is_empty() {
-            let entry = input_prog
-                .prog
-                .get(&PROG_ENTRY)
-                .ok_or_else(|| anyhow!("program entry point not found"))?;
-            ensure!(
-                entry.iter().map(|e| &e.head).all_equal(),
-                "program entry point must have equal bindings"
-            );
-            let entry_head = &entry[0].head;
+            input_prog.validate_entry()?;
+            let entry_head = input_prog.get_entry_head()?;
             if sorters
                 .iter()
                 .map(|(k, _v)| k)
@@ -235,19 +292,18 @@ impl SessionTx {
                 } else {
                     bail!("cannot parse view options: {}", view_payload);
                 };
-                let name = name.as_str().ok_or_else(|| anyhow!("view name must be a string"))?;
+                let name = name
+                    .as_str()
+                    .ok_or_else(|| anyhow!("view name must be a string"))?;
                 let name = Symbol::from(name);
                 ensure!(!name.is_reserved(), "view name {} is reserved", name);
-                let entry = input_prog
-                    .prog
-                    .get(&PROG_ENTRY)
-                    .ok_or_else(|| anyhow!("program entry point not found"))?;
+                let entry_arity = input_prog.get_entry_arity()?;
 
                 (
                     ViewRelMetadata {
                         name,
                         id: ViewRelId::SYSTEM,
-                        arity: entry[0].head.len(),
+                        arity: entry_arity,
                         kind: ViewRelKind::Manual,
                     },
                     op,
@@ -353,9 +409,9 @@ impl SessionTx {
                 }
             }
         }
-        let ret: BTreeMap<Symbol, Vec<InputRule>> = collected
+        let ret: BTreeMap<Symbol, RulesOrAlgo> = collected
             .into_iter()
-            .map(|(name, rules)| -> Result<(Symbol, Vec<InputRule>)> {
+            .map(|(name, rules)| -> Result<(Symbol, RulesOrAlgo)> {
                 let mut arities = rules.iter().map(|r| r.head.len());
                 let arity = arities.next().unwrap();
                 for other in arities {
@@ -363,19 +419,24 @@ impl SessionTx {
                         bail!("arity mismatch for rules under the name of {}", name);
                     }
                 }
-                Ok((name, rules))
+                Ok((name, RulesOrAlgo::Rules(rules)))
             })
             .try_collect()?;
 
         match ret.get(&PROG_ENTRY as &Symbol) {
             None => bail!("no entry defined for datalog program"),
-            Some(ruleset) => {
-                if !ruleset.iter().map(|r| &r.head).all_equal() {
-                    bail!("all heads for the entry query must be identical");
-                } else {
-                    Ok(InputProgram { prog: ret })
+            Some(ruleset) => match ruleset {
+                RulesOrAlgo::Rules(ruleset) => {
+                    if !ruleset.iter().map(|r| &r.head).all_equal() {
+                        bail!("all heads for the entry query must be identical");
+                    } else {
+                        Ok(InputProgram { prog: ret })
+                    }
                 }
-            }
+                RulesOrAlgo::Algo(_) => {
+                    todo!()
+                }
+            },
         }
     }
     fn parse_input_predicate_atom(

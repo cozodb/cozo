@@ -1191,7 +1191,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "last" => &OP_LAST,
         "chunks" => &OP_CHUNKS,
         "chunks_exact" => &OP_CHUNKS_EXACT,
-        "windows" => &OP_WINDOW,
+        "windows" => &OP_WINDOWS,
         _ => return None,
     })
 }

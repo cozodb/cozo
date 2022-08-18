@@ -2,14 +2,15 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
-use anyhow::Result;
+use anyhow::{anyhow, ensure, Result};
+use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::data::aggr::Aggregation;
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
 use crate::data::id::{EntityId, Validity};
-use crate::data::symb::Symbol;
+use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::DataValue;
 
 #[derive(Default)]
@@ -25,59 +26,149 @@ impl TempSymbGen {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) enum RulesOrAlgo {
+    Rules(Vec<InputRule>),
+    Algo(AlgoApply),
+}
+
+impl RulesOrAlgo {
+    pub(crate) fn get_rules_mut(&mut self) -> Option<&mut Vec<InputRule>> {
+        match self {
+            RulesOrAlgo::Rules(r) => Some(r),
+            _ => None
+        }
+    }
+    pub(crate) fn get_rules(&self) -> Option<&[InputRule]> {
+        match self {
+            RulesOrAlgo::Rules(r) => Some(r),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct AlgoApply {
+    pub(crate) algo_name: Symbol,
+    pub(crate) rule_args: Vec<AlgoRuleArg>,
+    pub(crate) options: BTreeMap<Symbol, Expr>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum TripleDir {
+    Fwd,
+    Bwd,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum AlgoRuleArg {
+    InMem(Symbol),
+    Stored(Symbol),
+    Triple(Symbol, TripleDir),
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct InputProgram {
-    pub(crate) prog: BTreeMap<Symbol, Vec<InputRule>>,
+    pub(crate) prog: BTreeMap<Symbol, RulesOrAlgo>,
 }
 
 impl InputProgram {
+    pub(crate) fn validate_entry(&self) -> Result<()> {
+        match self
+            .prog
+            .get(&PROG_ENTRY)
+            .ok_or_else(|| anyhow!("program entry point not found"))?
+        {
+            RulesOrAlgo::Rules(r) => {
+                ensure!(
+                    r.iter().map(|e| &e.head).all_equal(),
+                    "program entry point must have equal bindings"
+                );
+            }
+            RulesOrAlgo::Algo(_) => {
+                todo!()
+            }
+        }
+        Ok(())
+    }
+    pub(crate) fn get_entry_arity(&self) -> Result<usize> {
+        match self
+            .prog
+            .get(&PROG_ENTRY)
+            .ok_or_else(|| anyhow!("program entry point not found"))?
+        {
+            RulesOrAlgo::Rules(rules) => Ok(rules[0].head.len()),
+            RulesOrAlgo::Algo(_algo) => {
+                todo!()
+            }
+        }
+    }
+    pub(crate) fn get_entry_head(&self) -> Result<&[Symbol]> {
+        match self
+            .prog
+            .get(&PROG_ENTRY)
+            .ok_or_else(|| anyhow!("program entry point not found"))?
+        {
+            RulesOrAlgo::Rules(rules) => Ok(&rules.last().unwrap().head),
+            RulesOrAlgo::Algo(_) => {
+                todo!()
+            }
+        }
+    }
     pub(crate) fn to_normalized_program(self) -> Result<NormalFormProgram> {
         let mut prog: BTreeMap<_, _> = Default::default();
-        for (k, rules) in self.prog {
-            let mut collected_rules = vec![];
-            for rule in rules {
-                let mut counter = -1;
-                let mut gen_symb = || {
-                    counter += 1;
-                    Symbol::from(&format!("***{}", counter) as &str)
-                };
-                let normalized_body =
-                    InputAtom::Conjunction(rule.body).disjunctive_normal_form()?;
-                let mut new_head = Vec::with_capacity(rule.head.len());
-                let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
-                for symb in rule.head.iter() {
-                    match seen.entry(symb) {
-                        Entry::Vacant(e) => {
-                            e.insert(vec![]);
-                            new_head.push(symb.clone());
+        for (k, rules_or_algo) in self.prog {
+            match rules_or_algo {
+                RulesOrAlgo::Rules(rules) => {
+                    let mut collected_rules = vec![];
+                    for rule in rules {
+                        let mut counter = -1;
+                        let mut gen_symb = || {
+                            counter += 1;
+                            Symbol::from(&format!("***{}", counter) as &str)
+                        };
+                        let normalized_body =
+                            InputAtom::Conjunction(rule.body).disjunctive_normal_form()?;
+                        let mut new_head = Vec::with_capacity(rule.head.len());
+                        let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
+                        for symb in rule.head.iter() {
+                            match seen.entry(symb) {
+                                Entry::Vacant(e) => {
+                                    e.insert(vec![]);
+                                    new_head.push(symb.clone());
+                                }
+                                Entry::Occupied(mut e) => {
+                                    let new_symb = gen_symb();
+                                    e.get_mut().push(new_symb.clone());
+                                    new_head.push(new_symb);
+                                }
+                            }
                         }
-                        Entry::Occupied(mut e) => {
-                            let new_symb = gen_symb();
-                            e.get_mut().push(new_symb.clone());
-                            new_head.push(new_symb);
+                        for conj in normalized_body.0 {
+                            let mut body = conj.0;
+                            for (old_symb, new_symbs) in seen.iter() {
+                                for new_symb in new_symbs.iter() {
+                                    body.push(NormalFormAtom::Unification(Unification {
+                                        binding: new_symb.clone(),
+                                        expr: Expr::Binding((*old_symb).clone(), None),
+                                        one_many_unif: false,
+                                    }))
+                                }
+                            }
+                            let normalized_rule = NormalFormRule {
+                                head: new_head.clone(),
+                                aggr: rule.aggr.clone(),
+                                body,
+                                vld: rule.vld,
+                            };
+                            collected_rules.push(normalized_rule.convert_to_well_ordered_rule()?);
                         }
                     }
+                    prog.insert(k, collected_rules);
                 }
-                for conj in normalized_body.0 {
-                    let mut body = conj.0;
-                    for (old_symb, new_symbs) in seen.iter() {
-                        for new_symb in new_symbs.iter() {
-                            body.push(NormalFormAtom::Unification(Unification {
-                                binding: new_symb.clone(),
-                                expr: Expr::Binding((*old_symb).clone(), None),
-                                one_many_unif: false
-                            }))
-                        }
-                    }
-                    let normalized_rule = NormalFormRule {
-                        head: new_head.clone(),
-                        aggr: rule.aggr.clone(),
-                        body,
-                        vld: rule.vld,
-                    };
-                    collected_rules.push(normalized_rule.convert_to_well_ordered_rule()?);
+                RulesOrAlgo::Algo(algo_apply) => {
+                    todo!()
                 }
             }
-            prog.insert(k, collected_rules);
         }
         Ok(NormalFormProgram { prog })
     }
@@ -342,7 +433,7 @@ pub(crate) enum InputTerm<T> {
 pub(crate) struct Unification {
     pub(crate) binding: Symbol,
     pub(crate) expr: Expr,
-    pub(crate) one_many_unif: bool
+    pub(crate) one_many_unif: bool,
 }
 
 impl Unification {

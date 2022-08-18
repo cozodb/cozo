@@ -19,3 +19,4 @@ pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod transact;
 pub(crate) mod utils;
+pub(crate) mod algo;

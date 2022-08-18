@@ -22,9 +22,14 @@ fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
     let mut ret_map = Map::default();
     let mut rules = vec![];
     let mut const_rules = Map::default();
+    let mut algo_applies = vec![];
     for pair in src {
         match pair.as_rule() {
             Rule::rule => rules.push(parse_rule(pair)?),
+            Rule::algo_rule => {
+                let apply = parse_algo_rule(pair)?;
+                algo_applies.push(apply);
+            },
             Rule::const_rule => {
                 let mut src = pair.into_inner();
                 let name = src.next().unwrap().as_str();
@@ -82,6 +87,7 @@ fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
     }
     ret_map.insert("const_rules".to_string(), json!(const_rules));
     ret_map.insert("q".to_string(), json!(rules));
+    ret_map.insert("algo_rules".to_string(), json!(algo_applies));
     Ok(json!(ret_map))
 }
 
@@ -192,6 +198,53 @@ fn parse_limit_or_offset(src: Pair<'_>) -> Result<usize> {
 
 fn str2usize(src: &str) -> Result<usize> {
     Ok(usize::from_str(&src.replace('_', ""))?)
+}
+
+fn parse_algo_rule(src: Pair<'_>) -> Result<JsonValue> {
+    let mut src = src.into_inner();
+    let out_symbol = src.next().unwrap().as_str();
+    let algo_name = &src.next().unwrap().as_str().strip_suffix('!').unwrap();
+    let mut algo_rels = vec![];
+    let mut algo_opts = Map::default();
+    for nxt in src {
+        match nxt.as_rule() {
+            Rule::algo_rel => {
+                let inner = nxt.into_inner().next().unwrap();
+                match inner.as_rule() {
+                    Rule::ident => algo_rels.push(json!({"rule": inner.as_str()})),
+                    Rule::view_ident => {
+                        algo_rels.push(json!({"view": inner.as_str().strip_prefix(':').unwrap()}))
+                    }
+                    Rule::algo_triple_rel => {
+                        let mut inner = inner.into_inner();
+                        let mut backward = false;
+                        let ident = inner.next().unwrap();
+                        let ident = match ident.as_rule() {
+                            Rule::rev_triple_marker => {
+                                backward = true;
+                                inner.next().unwrap()
+                            }
+                            _ => ident,
+                        };
+                        let ident = ident.as_str();
+                        algo_rels.push(json!({"triple": ident, "backward": backward}));
+                    }
+                    _ => unreachable!()
+                }
+            }
+            Rule::algo_opt_pair => {
+                let mut inner = nxt.into_inner();
+                let name = inner.next().unwrap().as_str();
+                let val = inner.next().unwrap();
+                let val = build_expr(val)?;
+                algo_opts.insert(name.to_string(), val);
+            }
+            _ => unreachable!()
+        }
+    }
+    Ok(
+        json!({"algo_out": out_symbol, "algo_name": algo_name, "relations": algo_rels, "options": algo_opts}),
+    )
 }
 
 fn parse_rule(src: Pair<'_>) -> Result<JsonValue> {

@@ -1,4 +1,4 @@
-script = _{SOI ~ (option | rule | const_rule)+ ~ EOI}
+script = _{SOI ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
 schema_script = _{SOI ~ schema_clause+ ~ EOI}
 tx_script = _{SOI ~ tx_clause+ ~ EOI}
 
@@ -11,15 +11,22 @@ prog_entry = {"?"}
 var = @{"?" ~ (XID_CONTINUE | "_")*}
 param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
+algo_ident = @{XID_START ~ ("_" | XID_CONTINUE)* ~ "!"}
 view_ident = @{":" ~ ident}
 compound_ident = {ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"}
 const_rule = {ident ~ "<-" ~ expr ~ ";" }
+algo_rule = {ident ~ "<-" ~ algo_ident ~ "(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")" ~ ";" }
 
 rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
 head_arg = {aggr_arg | var}
 aggr_arg = {ident ~ "(" ~ var ~ ("," ~ expr)* ~ ")"}
+algo_arg = _{algo_rel | algo_opt_pair}
+algo_opt_pair = {ident ~ "=" ~ expr}
+algo_rel = {ident | view_ident | algo_triple_rel}
+algo_triple_rel = { rev_triple_marker? ~ "[" ~ ident ~ "]"}
+rev_triple_marker = {"<"}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
 rule_apply = {ident ~ "[" ~ apply_args ~ "]"}
