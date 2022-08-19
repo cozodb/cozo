@@ -2,12 +2,14 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
+use itertools::Itertools;
 
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
+use crate::data::id::Validity;
+use crate::data::program::{MagicAlgoRuleArg, MagicSymbol, TripleDir};
 use crate::data::symb::Symbol;
-use crate::data::tuple::TupleIter;
+use crate::data::tuple::{Tuple, TupleIter};
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -52,9 +54,34 @@ impl MagicAlgoRuleArg {
                 let view_rel = tx.get_view_rel(s)?;
                 Box::new(view_rel.scan_all()?)
             }
-            MagicAlgoRuleArg::Triple(_attr, _backward) => {
-                todo!()
-            }
+            MagicAlgoRuleArg::Triple(attr, dir) => match dir {
+                TripleDir::Fwd => {
+                    if attr.with_history {
+                        Box::new(
+                            tx.triple_a_before_scan(attr.id, Validity::MAX)
+                                .map_ok(|(_, eid, v)| Tuple(vec![eid.to_value(), v])),
+                        )
+                    } else {
+                        Box::new(
+                            tx.triple_a_scan(attr.id)
+                                .map_ok(|(_, eid, v)| Tuple(vec![eid.to_value(), v])),
+                        )
+                    }
+                }
+                TripleDir::Bwd => {
+                    if attr.with_history {
+                        Box::new(
+                            tx.triple_a_before_scan(attr.id, Validity::MAX)
+                                .map_ok(|(_, eid, v)| Tuple(vec![v, eid.to_value()])),
+                        )
+                    } else {
+                        Box::new(
+                            tx.triple_a_scan(attr.id)
+                                .map_ok(|(_, eid, v)| Tuple(vec![v, eid.to_value()])),
+                        )
+                    }
+                }
+            },
         })
     }
 }
