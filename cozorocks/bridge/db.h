@@ -108,6 +108,7 @@ struct RocksDbBridge {
     [[nodiscard]] virtual unique_ptr<TxBridge> transact() const = 0;
 
     virtual void del_range(RustBytes start, RustBytes end, RocksDbStatus &status) const = 0;
+    virtual void compact_range(RustBytes start, RustBytes end, RocksDbStatus &status) const = 0;
 
     [[nodiscard]] inline const string &get_db_path() const {
         return db_path;
@@ -124,6 +125,13 @@ struct OptimisticRocksDb : public RocksDbBridge {
     }
 
     void del_range(RustBytes, RustBytes, RocksDbStatus &status) const override;
+    void compact_range(RustBytes start, RustBytes end, RocksDbStatus &status) const override {
+        CompactRangeOptions options;
+        auto start_s = convert_slice(start);
+        auto end_s = convert_slice(end);
+        auto s = db->CompactRange(options, &start_s, &end_s);
+        write_status(s, status);
+    }
 
     virtual ~OptimisticRocksDb();
 };
@@ -150,6 +158,14 @@ struct PessimisticRocksDb : public RocksDbBridge {
         optimizations.skip_duplicate_key_check = true;
         auto s2 = db->Write(w_opts, optimizations, &batch);
         write_status(s2, status);
+    }
+
+    void compact_range(RustBytes start, RustBytes end, RocksDbStatus &status) const override {
+        CompactRangeOptions options;
+        auto start_s = convert_slice(start);
+        auto end_s = convert_slice(end);
+        auto s = db->CompactRange(options, &start_s, &end_s);
+        write_status(s, status);
     }
 
     virtual ~PessimisticRocksDb();

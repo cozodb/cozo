@@ -79,6 +79,14 @@ fn air_routes() -> Result<()> {
 
     println!("views: {}", db.list_views()?);
 
+    let compact_main_time = Instant::now();
+    db.compact_main()?;
+    dbg!(compact_main_time.elapsed());
+
+    let compact_view_time = Instant::now();
+    db.compact_view()?;
+    dbg!(compact_view_time.elapsed());
+
     let deg_centrality_time = Instant::now();
     let res = db.run_script(
         r#"

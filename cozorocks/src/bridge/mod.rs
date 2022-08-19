@@ -151,6 +151,12 @@ pub(crate) mod ffi {
             upper: &[u8],
             status: &mut RocksDbStatus,
         );
+        fn compact_range(
+            self: &RocksDbBridge,
+            lower: &[u8],
+            upper: &[u8],
+            status: &mut RocksDbStatus,
+        );
 
         type TxBridge;
         // fn get_r_opts(self: Pin<&mut TxBridge>) -> Pin<&mut ReadOptions>;

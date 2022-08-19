@@ -13,7 +13,8 @@ use cozorocks::{DbBuilder, DbIter, RocksDb};
 
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::encode::{
-    decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, StorageTag,
+    decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, largest_key,
+    smallest_key, StorageTag,
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
@@ -81,6 +82,20 @@ impl Db {
         };
         ret.load_last_ids()?;
         Ok(ret)
+    }
+
+    pub fn compact_main(&self) -> Result<()> {
+        let l = smallest_key();
+        let u = largest_key();
+        self.db.range_compact(&l, &u)?;
+        Ok(())
+    }
+
+    pub fn compact_view(&self) -> Result<()> {
+        let l = Tuple::default().encode_as_key(ViewRelId(0));
+        let u = Tuple(vec![DataValue::Bottom]).encode_as_key(ViewRelId(u64::MAX));
+        self.db.range_compact(&l, &u)?;
+        Ok(())
     }
 
     pub fn new_session(&self) -> Result<Self> {

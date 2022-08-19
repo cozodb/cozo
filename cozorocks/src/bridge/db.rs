@@ -266,6 +266,16 @@ impl RocksDb {
             Err(status)
         }
     }
+    #[inline]
+    pub fn range_compact(&self, lower: &[u8], upper: &[u8]) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
+        self.inner.compact_range(lower, upper, &mut status);
+        if status.is_ok() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
 }
 
 unsafe impl Send for RocksDb {}

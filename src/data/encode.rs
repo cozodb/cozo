@@ -10,7 +10,7 @@ use crate::data::attr::Attribute;
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::runtime::transact::TxLog;
 
 #[repr(u8)]
@@ -250,6 +250,10 @@ pub(crate) fn encode_eav_key(
     ret.into()
 }
 
+pub(crate) fn smallest_key() -> EncodedVec<LARGE_VEC_SIZE> {
+    encode_eav_key(EntityId::ZERO, AttrId(0), &DataValue::Null, Validity::MIN)
+}
+
 #[inline]
 pub(crate) fn decode_ea_key(src: &[u8]) -> Result<(EntityId, AttrId, Validity)> {
     let eid = EntityId::from_bytes(&src[0..VEC_SIZE_8]);
@@ -436,6 +440,12 @@ pub(crate) fn encode_sentinel_attr_by_name(name: &Symbol) -> EncodedVec<LARGE_VE
     ret.push(StorageTag::SentinelAttrByName as u8);
     ret.extend_from_slice(name.0.as_bytes());
     ret.into()
+}
+
+pub(crate) fn largest_key() -> EncodedVec<LARGE_VEC_SIZE> {
+    let name = String::from(LARGEST_UTF_CHAR);
+    let symb = Symbol::from(&name as &str);
+    encode_sentinel_attr_by_name(&symb)
 }
 
 #[inline]
