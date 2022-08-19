@@ -4,7 +4,11 @@ use anyhow::{bail, Result};
 use itertools::Itertools;
 
 use crate::data::expr::Expr;
-use crate::data::program::{InputAtom, InputAttrTripleAtom, InputRuleApplyAtom, InputTerm, NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, TempSymbGen, Unification, InputViewApplyAtom, NormalFormViewApplyAtom};
+use crate::data::program::{
+    InputAtom, InputAttrTripleAtom, InputRuleApplyAtom, InputTerm, InputViewApplyAtom,
+    NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, NormalFormViewApplyAtom,
+    TempSymbGen, Unification,
+};
 
 #[derive(Debug)]
 pub(crate) struct Disjunction(pub(crate) Vec<Conjunction>);
@@ -39,7 +43,10 @@ pub(crate) struct Conjunction(pub(crate) Vec<NormalFormAtom>);
 impl InputAtom {
     pub(crate) fn negation_normal_form(self) -> Result<Self> {
         Ok(match self {
-            a @ (InputAtom::AttrTriple(_) | InputAtom::Rule(_) | InputAtom::Predicate(_) | InputAtom::View(_)) => a,
+            a @ (InputAtom::AttrTriple(_)
+            | InputAtom::Rule(_)
+            | InputAtom::Predicate(_)
+            | InputAtom::View(_)) => a,
             InputAtom::Conjunction(args) => InputAtom::Conjunction(
                 args.into_iter()
                     .map(|a| a.negation_normal_form())

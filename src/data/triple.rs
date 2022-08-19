@@ -1,6 +1,6 @@
-use anyhow::bail;
 use std::fmt::{Display, Formatter};
 
+use anyhow::bail;
 use serde_derive::{Deserialize, Serialize};
 
 #[repr(u8)]

@@ -86,10 +86,7 @@ impl ViewRelStore {
         Ok(ViewRelIterator::new(&self.view_db, &lower, &upper))
     }
 
-    pub(crate) fn scan_prefix(
-        &self,
-        prefix: &Tuple,
-    ) -> impl Iterator<Item = Result<Tuple>> {
+    pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item = Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bottom);
         let prefix_encoded = prefix.encode_as_key(self.metadata.id);
@@ -111,7 +108,6 @@ impl ViewRelStore {
         let upper_encoded = upper_t.encode_as_key(self.metadata.id);
         ViewRelIterator::new(&self.view_db, &lower_encoded, &upper_encoded)
     }
-
 }
 
 struct ViewRelIterator {

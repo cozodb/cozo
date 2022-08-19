@@ -1,7 +1,6 @@
 use anyhow::{bail, Result};
-use serde_json::{json, Map};
-
 use pest::Parser;
+use serde_json::{json, Map};
 
 use crate::data::json::JsonValue;
 use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};

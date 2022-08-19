@@ -266,7 +266,7 @@ impl DataValue {
     pub(crate) fn get_string(&self) -> Option<&str> {
         match self {
             DataValue::String(s) => Some(s),
-            _ => None
+            _ => None,
         }
     }
     pub(crate) fn get_int(&self) -> Option<i64> {
@@ -301,6 +301,7 @@ mod tests {
         dbg!(size_of::<HashMap<String, String>>());
         dbg!(size_of::<BTreeMap<String, String>>());
     }
+
     #[test]
     fn utf8() {
         let c = char::from_u32(0x10FFFF).unwrap();

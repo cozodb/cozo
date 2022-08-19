@@ -41,7 +41,11 @@ impl Debug for DerivedRelStore {
 }
 
 impl DerivedRelStore {
-    pub(crate) fn new(id: DerivedRelStoreId, rule_name: MagicSymbol, arity: usize) -> DerivedRelStore {
+    pub(crate) fn new(
+        id: DerivedRelStoreId,
+        rule_name: MagicSymbol,
+        arity: usize,
+    ) -> DerivedRelStore {
         Self {
             epoch_size: Default::default(),
             mem_db: Default::default(),

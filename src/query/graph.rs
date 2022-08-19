@@ -68,8 +68,8 @@ impl<'a> TarjanScc<'a> {
 pub(crate) type Graph<T> = BTreeMap<T, Vec<T>>;
 
 pub(crate) fn strongly_connected_components<T>(graph: &Graph<T>) -> Vec<Vec<&T>>
-where
-    T: Ord + Debug,
+    where
+        T: Ord + Debug,
 {
     let indices = graph.keys().collect_vec();
     let invert_indices: BTreeMap<_, _> = indices

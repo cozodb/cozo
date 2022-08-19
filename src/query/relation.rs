@@ -367,7 +367,7 @@ impl Relation {
         Self::View(ViewRelation {
             bindings,
             storage,
-            filters: vec![]
+            filters: vec![],
         })
     }
     pub(crate) fn triple(
@@ -1329,7 +1329,6 @@ fn get_eliminate_indices(bindings: &[Symbol], eliminate: &BTreeSet<Symbol>) -> B
         .collect::<BTreeSet<_>>()
 }
 
-
 #[derive(Debug)]
 pub(crate) struct ViewRelation {
     pub(crate) bindings: Vec<Symbol>,
@@ -1386,9 +1385,7 @@ impl ViewRelation {
                     {
                         return Left(
                             self.storage
-                                .scan_bounded_prefix(
-                                    &prefix, &l_bound, &u_bound,
-                                )
+                                .scan_bounded_prefix(&prefix, &l_bound, &u_bound)
                                 .filter_map_ok(move |found| {
                                     // dbg!("filter", &tuple, &prefix, &found);
                                     let mut ret = tuple.0.clone();
@@ -1457,7 +1454,7 @@ impl ViewRelation {
                     'outer: for found in self.storage.scan_prefix(&prefix) {
                         let found = found?;
                         for (left_idx, right_idx) in
-                        left_join_indices.iter().zip(right_join_indices.iter())
+                            left_join_indices.iter().zip(right_join_indices.iter())
                         {
                             if tuple.0[*left_idx] != found.0[*right_idx] {
                                 continue 'outer;
@@ -1540,7 +1537,11 @@ impl DerivedRelation {
         Ok(())
     }
 
-    fn iter(&self, epoch: Option<u32>, use_delta: &BTreeSet<DerivedRelStoreId>) -> Result<TupleIter<'_>> {
+    fn iter(
+        &self,
+        epoch: Option<u32>,
+        use_delta: &BTreeSet<DerivedRelStoreId>,
+    ) -> Result<TupleIter<'_>> {
         if epoch == Some(0) && use_delta.contains(&self.storage.id) {
             return Ok(Box::new(iter::empty()));
         }

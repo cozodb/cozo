@@ -141,7 +141,13 @@ impl SessionTx {
         let out = stores
             .get(rule_symb)
             .ok_or_else(|| anyhow!("cannot find algo store {:?}", rule_symb))?;
-        algo_impl.run(self, &algo_apply.rule_args, &algo_apply.options, stores, out)
+        algo_impl.run(
+            self,
+            &algo_apply.rule_args,
+            &algo_apply.options,
+            stores,
+            out,
+        )
     }
     fn initial_rule_eval(
         &mut self,

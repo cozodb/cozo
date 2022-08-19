@@ -6,9 +6,9 @@ use pest::Parser;
 use serde_json::json;
 
 use crate::data::json::JsonValue;
+use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 use crate::parse::cozoscript::query::build_expr;
 use crate::parse::cozoscript::string::parse_string;
-use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 
 pub(crate) fn parse_tx_to_json(src: &str) -> Result<JsonValue> {
     let parsed = CozoScriptParser::parse(Rule::tx_script, &src)?;

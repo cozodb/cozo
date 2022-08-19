@@ -29,7 +29,7 @@ fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
             Rule::algo_rule => {
                 let apply = parse_algo_rule(pair)?;
                 algo_applies.push(apply);
-            },
+            }
             Rule::const_rule => {
                 let mut src = pair.into_inner();
                 let name = src.next().unwrap().as_str();
@@ -229,7 +229,7 @@ fn parse_algo_rule(src: Pair<'_>) -> Result<JsonValue> {
                         let ident = ident.as_str();
                         algo_rels.push(json!({"triple": ident, "backward": backward}));
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
             Rule::algo_opt_pair => {
@@ -239,7 +239,7 @@ fn parse_algo_rule(src: Pair<'_>) -> Result<JsonValue> {
                 let val = build_expr(val)?;
                 algo_opts.insert(name.to_string(), val);
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
     Ok(
