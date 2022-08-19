@@ -59,12 +59,12 @@ impl MagicAlgoRuleArg {
                     if attr.with_history {
                         Box::new(
                             tx.triple_a_before_scan(attr.id, Validity::MAX)
-                                .map_ok(|(_, eid, v)| Tuple(vec![eid.to_value(), v])),
+                                .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                         )
                     } else {
                         Box::new(
                             tx.triple_a_scan(attr.id)
-                                .map_ok(|(_, eid, v)| Tuple(vec![eid.to_value(), v])),
+                                .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                         )
                     }
                 }
@@ -72,12 +72,12 @@ impl MagicAlgoRuleArg {
                     if attr.with_history {
                         Box::new(
                             tx.triple_a_before_scan(attr.id, Validity::MAX)
-                                .map_ok(|(_, eid, v)| Tuple(vec![v, eid.to_value()])),
+                                .map_ok(|(_, eid, v)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     } else {
                         Box::new(
                             tx.triple_a_scan(attr.id)
-                                .map_ok(|(_, eid, v)| Tuple(vec![v, eid.to_value()])),
+                                .map_ok(|(_, eid, v)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     }
                 }

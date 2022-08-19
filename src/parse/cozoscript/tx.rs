@@ -11,7 +11,7 @@ use crate::parse::cozoscript::query::build_expr;
 use crate::parse::cozoscript::string::parse_string;
 
 pub(crate) fn parse_tx_to_json(src: &str) -> Result<JsonValue> {
-    let parsed = CozoScriptParser::parse(Rule::tx_script, &src)?;
+    let parsed = CozoScriptParser::parse(Rule::tx_script, src)?;
     parsed_to_json(parsed)
 }
 

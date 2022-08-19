@@ -102,9 +102,9 @@ impl SessionTx {
         ensure!(!rules_payload.is_empty(), "no rules in {}", payload);
         let mut input_prog = if rules_payload.first().unwrap().is_array() {
             let q = json!([{"rule": "?", "args": rules_payload}]);
-            self.parse_input_rule_sets(&q, vld, &params_pool)?
+            self.parse_input_rule_sets(&q, vld, params_pool)?
         } else {
-            self.parse_input_rule_sets(q, vld, &params_pool)?
+            self.parse_input_rule_sets(q, vld, params_pool)?
         };
         let out_spec = match payload.get("out") {
             None => None,
@@ -213,7 +213,7 @@ impl SessionTx {
                                     anyhow!("data in rule is expected to be an array, got {}", v)
                                 })?
                                 .iter()
-                                .map(|v| Self::parse_const_expr(v, &params_pool))
+                                .map(|v| Self::parse_const_expr(v, params_pool))
                                 .try_collect()?;
                             Ok(Tuple(tuple))
                         })
@@ -352,7 +352,7 @@ impl SessionTx {
 
     pub(crate) fn parse_pull_specs_for_query_spec(
         &mut self,
-        out_spec: &Vec<JsonValue>,
+        out_spec: &[JsonValue],
         entry_bindings: &[Symbol],
     ) -> Result<Vec<(usize, Option<PullSpecs>)>> {
         let entry_bindings: BTreeMap<_, _> = entry_bindings
@@ -500,7 +500,7 @@ impl SessionTx {
                 .as_str()
                 .ok_or_else(|| anyhow!("input var cannot be specified as {}", name))?;
             ensure!(
-                name.starts_with("$") && name.len() > 1,
+                name.starts_with('$') && name.len() > 1,
                 "wrong input var format: {}",
                 name
             );
@@ -623,7 +623,7 @@ impl SessionTx {
                         Ok(InputTerm::Const(c.into()))
                     } else {
                         let eid = self.parse_eid_from_map(o, vld)?;
-                        Ok(InputTerm::Const(eid.to_value()))
+                        Ok(InputTerm::Const(eid.as_datavalue()))
                     };
                 }
                 Ok(InputTerm::Const(value_rep.into()))
@@ -669,7 +669,7 @@ impl SessionTx {
                         Ok(InputTerm::Const(c.into()))
                     } else {
                         let eid = self.parse_eid_from_map(o, vld)?;
-                        Ok(InputTerm::Const(eid.to_value()))
+                        Ok(InputTerm::Const(eid.as_datavalue()))
                     };
                 }
                 Ok(InputTerm::Const(value_rep.into()))

@@ -440,5 +440,5 @@ pub(crate) fn encode_sentinel_attr_by_name(name: &Symbol) -> EncodedVec<LARGE_VE
 
 #[inline]
 pub(crate) fn decode_sentinel_attr_by_name(src: &[u8]) -> Result<Symbol> {
-    Ok(Symbol::try_from(&src[1..])?)
+    Symbol::try_from(&src[1..])
 }

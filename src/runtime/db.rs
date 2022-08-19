@@ -330,7 +330,7 @@ impl Db {
         let (compiled, mut stores) = tx.stratified_magic_compile(&program, &const_rules)?;
         let result = tx.stratified_magic_evaluate(
             &compiled,
-            &mut stores,
+            &stores,
             if out_opts.sorters.is_empty() {
                 out_opts.num_to_take()
             } else {
@@ -403,7 +403,7 @@ impl Db {
         it.seek(&lower);
         let mut collected = vec![];
         while let Some(v_slice) = it.val()? {
-            let meta: ViewRelMetadata = rmp_serde::from_slice(&v_slice)?;
+            let meta: ViewRelMetadata = rmp_serde::from_slice(v_slice)?;
             let name = meta.name.0;
             let arity = meta.arity;
             collected.push(json!({"name": name, "arity": arity}));

@@ -136,58 +136,58 @@ impl AttributeTyping {
         match self {
             AttributeTyping::Ref | AttributeTyping::Component => match val {
                 DataValue::Number(Number::Int(s)) if s > 0 => Ok(DataValue::Number(Number::Int(s))),
-                val => Err(self.type_err(val).into()),
+                val => Err(self.type_err(val)),
             },
             AttributeTyping::Bool => {
                 if matches!(val, DataValue::Bool(_)) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val).into())
+                    Err(self.type_err(val))
                 }
             }
             AttributeTyping::Int => {
                 if matches!(val, DataValue::Number(Number::Int(_))) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val).into())
+                    Err(self.type_err(val))
                 }
             }
             AttributeTyping::Float => match val {
                 v @ DataValue::Number(Number::Float(_)) => Ok(v),
                 DataValue::Number(Number::Int(i)) => Ok(DataValue::Number(Number::Float(i as f64))),
-                val => Err(self.type_err(val).into()),
+                val => Err(self.type_err(val)),
             },
             AttributeTyping::String => {
                 if matches!(val, DataValue::String(_)) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val).into())
+                    Err(self.type_err(val))
                 }
             }
             AttributeTyping::Uuid => {
                 if matches!(val, DataValue::Uuid(_)) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val).into())
+                    Err(self.type_err(val))
                 }
             }
             AttributeTyping::Timestamp => match val {
                 val @ DataValue::Timestamp(_) => Ok(val),
                 DataValue::Number(Number::Int(i)) => Ok(DataValue::Timestamp(i)),
-                val => Err(self.type_err(val).into()),
+                val => Err(self.type_err(val)),
             },
             AttributeTyping::Bytes => {
                 if matches!(val, DataValue::Bytes(_)) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val).into())
+                    Err(self.type_err(val))
                 }
             }
             AttributeTyping::List => {
                 if matches!(val, DataValue::List(_)) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val).into())
+                    Err(self.type_err(val))
                 }
             }
         }
@@ -287,7 +287,7 @@ impl Attribute {
     pub(crate) fn coerce_value(&self, value: DataValue, ctx: &mut TempIdCtx) -> Result<DataValue> {
         if self.val_type.is_ref_type() {
             if let DataValue::String(s) = value {
-                return Ok(ctx.str2tempid(&s, false).to_value());
+                return Ok(ctx.str2tempid(&s, false).as_datavalue());
             }
         }
         self.val_type.coerce_value(value)

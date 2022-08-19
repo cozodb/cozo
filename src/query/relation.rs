@@ -320,11 +320,8 @@ impl Relation {
         }
         if matches!(self, Relation::Join(_)) {
             let bindings = self.bindings_before_eliminate();
-            match self {
-                Relation::Join(r) => {
-                    r.right.fill_join_binding_indices(bindings)?;
-                }
-                _ => {}
+            if let Relation::Join(r) = self {
+                r.right.fill_join_binding_indices(bindings)?;
             }
         }
         Ok(())
@@ -747,7 +744,7 @@ impl TripleRelation {
                                 )
                                 .map_ok(move |(_, val, e_id)| {
                                     let mut ret = tuple.0.clone();
-                                    ret.push(e_id.to_value());
+                                    ret.push(e_id.as_datavalue());
                                     ret.push(val);
                                     Tuple(ret)
                                 }),
@@ -757,7 +754,7 @@ impl TripleRelation {
                                 tx.triple_av_range_scan(self.attr.id, &l_bound, &u_bound)
                                     .map_ok(move |(_, val, e_id)| {
                                         let mut ret = tuple.0.clone();
-                                        ret.push(e_id.to_value());
+                                        ret.push(e_id.as_datavalue());
                                         ret.push(val);
                                         Tuple(ret)
                                     }),
@@ -785,7 +782,7 @@ impl TripleRelation {
                                 )
                                 .map_ok(move |(_, val, e_id)| {
                                     let mut ret = tuple.0.clone();
-                                    ret.push(e_id.to_value());
+                                    ret.push(e_id.as_datavalue());
                                     ret.push(val);
                                     Tuple(ret)
                                 }),
@@ -795,7 +792,7 @@ impl TripleRelation {
                                 tx.triple_av_range_scan(self.attr.id, &l_bound, &u_bound)
                                     .map_ok(move |(_, val, e_id)| {
                                         let mut ret = tuple.0.clone();
-                                        ret.push(e_id.to_value());
+                                        ret.push(e_id.as_datavalue());
                                         ret.push(val);
                                         Tuple(ret)
                                     }),
@@ -807,7 +804,7 @@ impl TripleRelation {
                     Left(tx.triple_a_before_scan(self.attr.id, self.vld).map_ok(
                         move |(_, e_id, val)| {
                             let mut ret = tuple.0.clone();
-                            ret.push(e_id.to_value());
+                            ret.push(e_id.as_datavalue());
                             ret.push(val);
                             Tuple(ret)
                         },
@@ -817,7 +814,7 @@ impl TripleRelation {
                         tx.triple_a_scan(self.attr.id)
                             .map_ok(move |(_, e_id, val)| {
                                 let mut ret = tuple.0.clone();
-                                ret.push(e_id.to_value());
+                                ret.push(e_id.as_datavalue());
                                 ret.push(val);
                                 Tuple(ret)
                             }),
@@ -894,7 +891,7 @@ impl TripleRelation {
                 if exists {
                     let v = v.clone();
                     let mut ret = tuple.0;
-                    ret.push(eid.to_value());
+                    ret.push(eid.as_datavalue());
                     ret.push(v);
                     Ok(Some(Tuple(ret)))
                 } else {
@@ -999,7 +996,7 @@ impl TripleRelation {
 
                 let clj = move |(eid, _, val): (EntityId, AttrId, DataValue)| {
                     let mut ret = tuple.0.clone();
-                    ret.push(eid.to_value());
+                    ret.push(eid.as_datavalue());
                     ret.push(val);
                     Tuple(ret)
                 };
@@ -1108,8 +1105,8 @@ impl TripleRelation {
                                 tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
                                     .map_ok(move |(_, _, e_id)| {
                                         let mut ret = tuple.0.clone();
-                                        ret.push(e_id.to_value());
-                                        ret.push(v_eid.to_value());
+                                        ret.push(e_id.as_datavalue());
+                                        ret.push(v_eid.as_datavalue());
                                         Tuple(ret)
                                     }),
                             )
@@ -1117,8 +1114,8 @@ impl TripleRelation {
                             Right(tx.triple_vref_a_scan(v_eid, self.attr.id).map_ok(
                                 move |(_, _, e_id)| {
                                     let mut ret = tuple.0.clone();
-                                    ret.push(e_id.to_value());
-                                    ret.push(v_eid.to_value());
+                                    ret.push(e_id.as_datavalue());
+                                    ret.push(v_eid.as_datavalue());
                                     Tuple(ret)
                                 },
                             ))
@@ -1189,7 +1186,7 @@ impl TripleRelation {
                         tx.triple_av_before_scan(self.attr.id, val, self.vld)
                             .map_ok(move |(_, val, eid): (AttrId, DataValue, EntityId)| {
                                 let mut ret = tuple.0.clone();
-                                ret.push(eid.to_value());
+                                ret.push(eid.as_datavalue());
                                 ret.push(val);
                                 Tuple(ret)
                             }),
@@ -1198,7 +1195,7 @@ impl TripleRelation {
                     Right(tx.triple_av_scan(self.attr.id, val).map_ok(
                         move |(_, val, eid): (AttrId, DataValue, EntityId)| {
                             let mut ret = tuple.0.clone();
-                            ret.push(eid.to_value());
+                            ret.push(eid.as_datavalue());
                             ret.push(val);
                             Tuple(ret)
                         },
@@ -1272,7 +1269,7 @@ impl TripleRelation {
             match item {
                 Err(e) => return Ok(Box::new([Err(e)].into_iter())),
                 Ok((_, eid, val)) => {
-                    let t = Tuple(vec![val, eid.to_value()]);
+                    let t = Tuple(vec![val, eid.as_datavalue()]);
                     throwaway.put(t, 0);
                 }
             }
@@ -2115,8 +2112,7 @@ impl InnerJoin {
                         for i in restore_indices.iter() {
                             ret.push(found.0[*i].clone());
                         }
-                        let ret = eliminate_from_tuple(Tuple(ret), &eliminate_indices);
-                        ret
+                        eliminate_from_tuple(Tuple(ret), &eliminate_indices)
                     })
                 })
                 .flatten_ok()

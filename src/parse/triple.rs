@@ -246,7 +246,7 @@ impl SessionTx {
             self.parse_tx_request_obj(comp, true, action, since, temp_id_ctx, collected)?;
         ensure!(has_unique_attr || parent_attr.val_type == AttributeTyping::Component,
             "component shorthand must contain at least one unique/identity field for non-component refs");
-        Ok(eid.to_value())
+        Ok(eid.as_datavalue())
     }
     fn parse_tx_request_arr<'a>(
         &mut self,

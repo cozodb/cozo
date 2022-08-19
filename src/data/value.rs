@@ -161,7 +161,7 @@ impl Ord for Number {
         match (self, other) {
             (Number::Int(i), Number::Float(r)) => {
                 let l = *i as f64;
-                match l.total_cmp(&r) {
+                match l.total_cmp(r) {
                     Ordering::Less => Ordering::Less,
                     Ordering::Equal => Ordering::Less,
                     Ordering::Greater => Ordering::Greater,

@@ -117,8 +117,8 @@ struct ViewRelIterator {
 
 impl ViewRelIterator {
     fn new(db: &RocksDb, lower: &[u8], upper: &[u8]) -> Self {
-        let mut inner = db.transact().start().iterator().upper_bound(&upper).start();
-        inner.seek(&lower);
+        let mut inner = db.transact().start().iterator().upper_bound(upper).start();
+        inner.seek(lower);
         Self {
             inner,
             started: false,

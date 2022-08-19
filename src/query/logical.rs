@@ -196,7 +196,7 @@ impl InputAttrTripleAtom {
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const(eid.to_value()),
+                    expr: Expr::Const(eid.as_datavalue()),
                     one_many_unif: false,
                 });
                 let uv = NormalFormAtom::Unification(Unification {
@@ -231,7 +231,7 @@ impl InputAttrTripleAtom {
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const(eid.to_value()),
+                    expr: Expr::Const(eid.as_datavalue()),
                     one_many_unif: false,
                 });
                 vec![ue, ret]

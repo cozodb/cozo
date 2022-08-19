@@ -164,7 +164,7 @@ impl SessionTx {
                                                     out_opts.vld,
                                                     spec,
                                                     0,
-                                                    &specs,
+                                                    specs,
                                                     CurrentPath::new(idx)?,
                                                     &mut collected,
                                                     &mut recursive_seen,
@@ -483,7 +483,7 @@ impl SessionTx {
                 let (_, _, value) = found?;
                 self.pull_attr_collect(
                     spec,
-                    value.to_value(),
+                    value.as_datavalue(),
                     vld,
                     depth,
                     root,
@@ -508,7 +508,7 @@ impl SessionTx {
             let iter = self.triple_vref_a_before_scan(eid, spec.attr.id, vld);
             for found in iter {
                 let (_, _, value) = found?;
-                collection.push(value.to_value());
+                collection.push(value.as_datavalue());
                 if let Some(n) = spec.take {
                     if n <= collection.len() {
                         break;

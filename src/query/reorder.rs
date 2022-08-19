@@ -135,7 +135,7 @@ impl NormalFormRule {
                         if v.args.iter().all(|a| seen_variables.contains(a)) {
                             collected.push(NormalFormAtom::NegatedView(v.clone()));
                         } else {
-                            collected.push(NormalFormAtom::NegatedView(v.clone()));
+                            pending.push(NormalFormAtom::NegatedView(v.clone()));
                         }
                     }
                     NormalFormAtom::Predicate(p) => {

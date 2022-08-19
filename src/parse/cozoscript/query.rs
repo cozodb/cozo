@@ -14,7 +14,7 @@ use crate::parse::cozoscript::string::parse_string;
 use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 
 pub(crate) fn parse_query_to_json(src: &str) -> Result<JsonValue> {
-    let parsed = CozoScriptParser::parse(Rule::script, &src)?;
+    let parsed = CozoScriptParser::parse(Rule::script, src)?;
     parsed_to_json(parsed)
 }
 
@@ -253,12 +253,9 @@ fn parse_rule(src: Pair<'_>) -> Result<JsonValue> {
     let (name, head) = parse_rule_head(head)?;
     let mut at = None;
     let mut body = src.next().unwrap();
-    match body.as_rule() {
-        Rule::expr => {
-            at = Some(build_expr(body)?);
-            body = src.next().unwrap();
-        }
-        _ => {}
+    if body.as_rule() == Rule::expr {
+        at = Some(build_expr(body)?);
+        body = src.next().unwrap();
     }
     let mut body_clauses = vec![head];
     for atom_src in body.into_inner() {
@@ -286,7 +283,7 @@ fn parse_rule_head_arg(src: Pair<'_>) -> Result<JsonValue> {
             let mut inner = src.into_inner();
             let aggr_name = inner.next().unwrap().as_str();
             let var = inner.next().unwrap().as_str();
-            let args: Vec<_> = inner.map(|a| build_expr(a)).try_collect()?;
+            let args: Vec<_> = inner.map(build_expr).try_collect()?;
             json!({"aggr": aggr_name, "symb": var, "args": args})
         }
         _ => unreachable!(),
@@ -494,7 +491,7 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
                         .next()
                         .unwrap()
                         .into_inner()
-                        .map(|ex| build_expr(ex))
+                        .map(build_expr)
                         .try_collect()?;
                     json!({"op": ident, "args": args})
                 }

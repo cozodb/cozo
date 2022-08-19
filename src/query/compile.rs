@@ -53,7 +53,7 @@ impl CompiledRuleSet {
                         }
                     }
                 }
-                return AggrKind::Meet;
+                AggrKind::Meet;
             }
             CompiledRuleSet::Algo(_) => AggrKind::None,
         }
@@ -112,7 +112,7 @@ impl SessionTx {
                                 for (rule_idx, rule) in body.iter().enumerate() {
                                     let header = &rule.head;
                                     let mut relation =
-                                        self.compile_magic_rule_body(&rule, k, rule_idx, &stores, &header)?;
+                                        self.compile_magic_rule_body(rule, k, rule_idx, &stores, header)?;
                                     relation.fill_normal_binding_indices().with_context(|| {
                                         format!(
                                             "error encountered when filling binding indices for {:#?}",

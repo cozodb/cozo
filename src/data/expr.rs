@@ -130,7 +130,7 @@ impl Expr {
     pub(crate) fn eval_bound(&self, bindings: &Tuple) -> Result<Self> {
         Ok(match self {
             Expr::Binding(b, i) => match bindings.0.get(i.unwrap()) {
-                None => Expr::Binding(b.clone(), i.clone()),
+                None => Expr::Binding(b.clone(), *i),
                 Some(v) => Expr::Const(v.clone()),
             },
             e @ Expr::Const(_) => e.clone(),

@@ -220,10 +220,9 @@ impl DerivedRelStore {
             .sorted_by_key(|(_a, b)| *b)
             .map(|(a, _b)| a)
             .collect_vec();
-        for (_key, group) in grouped.into_iter() {
+        for (_key, mut group_iter) in grouped.into_iter() {
             let mut aggr_res = vec![DataValue::Guard; aggrs.len()];
-            let mut it = group.into_iter();
-            let first_tuple = it.next().unwrap();
+            let first_tuple = group_iter.next().unwrap();
             for (idx, aggr) in aggrs.iter().enumerate() {
                 let val = &first_tuple.0[invert_indices[idx]];
                 if let Some((aggr_op, aggr_args)) = aggr {
@@ -232,7 +231,7 @@ impl DerivedRelStore {
                     aggr_res[idx] = first_tuple.0[invert_indices[idx]].clone();
                 }
             }
-            for tuple in it {
+            for tuple in group_iter {
                 for (idx, aggr) in aggrs.iter().enumerate() {
                     let val = &tuple.0[invert_indices[idx]];
                     if let Some((aggr_op, aggr_args)) = aggr {

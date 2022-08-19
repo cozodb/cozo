@@ -111,7 +111,7 @@ impl SessionTx {
         let it = self.bounded_scan_first(&eav_encoded, &eav_encoded_upper);
         let (k_slice, v_slice) = it.pair()?.ok_or_else(gen_err)?;
         if StoreOp::try_from(v_slice[0])?.is_retract() {
-            return Err(gen_err().into());
+            return Err(gen_err());
         }
         let stored_v = if attr.cardinality.is_one() {
             decode_value_from_val(v_slice)?
@@ -232,7 +232,7 @@ impl SessionTx {
                     );
                 }
             }
-            let e_in_val_encoded = eid.to_value().encode_with_op_and_tx(op, tx_id);
+            let e_in_val_encoded = eid.as_datavalue().encode_with_op_and_tx(op, tx_id);
             if real_delete {
                 self.tx.del(&ave_encoded)?;
             } else {
@@ -285,7 +285,7 @@ impl SessionTx {
                         new_eid
                     }
                 };
-                let new_v = perm_v_eid.to_value();
+                let new_v = perm_v_eid.as_datavalue();
                 return self.write_triple(eid, attr, &new_v, vld, StoreOp::Assert);
             }
         }

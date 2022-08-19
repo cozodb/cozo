@@ -265,11 +265,8 @@ impl NormalFormProgram {
                 }
                 NormalFormAlgoOrRules::Algo(algo) => {
                     for rel in algo.rule_args.iter() {
-                        match rel {
-                            AlgoRuleArg::InMem(r) => {
-                                downstream_rules.insert(r.clone());
-                            }
-                            _ => {}
+                        if let AlgoRuleArg::InMem(r) = rel {
+                            downstream_rules.insert(r.clone());
                         }
                     }
                 }

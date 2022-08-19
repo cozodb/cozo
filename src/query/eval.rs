@@ -42,7 +42,7 @@ impl SessionTx {
 
         for (idx, cur_prog) in strata.iter().enumerate() {
             debug!("stratum {}", idx);
-            self.semi_naive_magic_evaluate(cur_prog, &stores, num_to_take)?;
+            self.semi_naive_magic_evaluate(cur_prog, stores, num_to_take)?;
         }
         Ok(ret_area)
     }

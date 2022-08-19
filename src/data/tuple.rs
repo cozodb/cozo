@@ -186,7 +186,7 @@ impl<'a> Iterator for EncodedTupleIter<'a> {
         if self.size == 0 {
             let arity = match self.tuple.arity() {
                 Ok(a) => a,
-                Err(e) => return Some(Err(e.into())),
+                Err(e) => return Some(Err(e)),
             };
             self.size = arity;
         }

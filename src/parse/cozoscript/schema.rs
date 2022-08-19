@@ -6,7 +6,7 @@ use crate::data::json::JsonValue;
 use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 
 pub(crate) fn parse_schema_to_json(src: &str) -> Result<JsonValue> {
-    let parsed = CozoScriptParser::parse(Rule::schema_script, &src)?;
+    let parsed = CozoScriptParser::parse(Rule::schema_script, src)?;
     parsed_to_json(parsed)
 }
 
