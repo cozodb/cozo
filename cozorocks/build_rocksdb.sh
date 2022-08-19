@@ -8,6 +8,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 fi
 
 mkdir -p deps
+mkdir -p deps/lib
 INSTALL_DIR=$(readlink -f deps)
 echo "$INSTALL_DIR"
 
@@ -31,12 +32,18 @@ export EXTRA_CXXFLAGS='-fPIC'
 #  JEMALLOC_LIB=" $JEMALLOC_BASE/lib/libjemalloc.a" \
 #  JEMALLOC=1 \
 
+DEBUG_LEVEL=0 make libz.a libsnappy.a liblz4.a libzstd.a
+mv ./*.a ../deps/lib || exit
+
+export EXTRA_CFLAGS="-fPIC -I${PWD}/lz4-1.9.3/lib"
+export EXTRA_CXXFLAGS="-fPIC -I${PWD}/lz4-1.9.3/lib"
+
 DEBUG_LEVEL=0 \
   USE_RTTI=1 \
   USE_CLANG=1 \
   PREFIX=$INSTALL_DIR \
   make install-static || exit
 
-DEBUG_LEVEL=0 make libz.a libsnappy.a liblz4.a libzstd.a
 mv ./*.a ../deps/lib || exit
+
 make clean

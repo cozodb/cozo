@@ -1,6 +1,13 @@
 use std::env::var;
 
 fn main() {
+    cxx_build::bridge("src/bridge/mod.rs")
+        .files(["bridge/status.cpp", "bridge/db.cpp", "bridge/tx.cpp"])
+        .include("deps/include")
+        .include("bridge")
+        .flag_if_supported("-std=c++17")
+        .compile("cozorocks");
+
     let manifest_dir = var("CARGO_MANIFEST_DIR").unwrap();
 
     println!("cargo:rustc-link-search={}/deps/lib/", manifest_dir);
@@ -23,11 +30,4 @@ fn main() {
     println!("cargo:rerun-if-changed=bridge/iter.h");
     println!("cargo:rerun-if-changed=bridge/tx.h");
     println!("cargo:rerun-if-changed=bridge/tx.cpp");
-
-    cxx_build::bridge("src/bridge/mod.rs")
-        .files(["bridge/status.cpp", "bridge/db.cpp", "bridge/tx.cpp"])
-        .include("deps/include")
-        .include("bridge")
-        .flag_if_supported("-std=c++17")
-        .compile("cozorocks");
 }

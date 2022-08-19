@@ -7,9 +7,31 @@
 #include "db.h"
 #include "cozorocks/src/bridge/mod.rs.h"
 
+unique_ptr<Options> default_db_options() {
+    auto options = make_unique<Options>();
+    options->compression = kLZ4Compression;
+    options->bottommost_compression = kZSTD;
+    options->level_compaction_dynamic_level_bytes = true;
+    options->max_background_compactions = 4;
+    options->max_background_flushes = 2;
+    options->bytes_per_sync = 1048576;
+    options->compaction_pri = kMinOverlappingRatio;
+    BlockBasedTableOptions table_options;
+    table_options.block_size = 16 * 1024;
+    table_options.cache_index_and_filter_blocks = true;
+    table_options.pin_l0_filter_and_index_blocks_in_cache = true;
+    table_options.format_version = 5;
+
+    auto table_factory = NewBlockBasedTableFactory(table_options);
+    options->table_factory.reset(table_factory);
+
+    return options;
+}
+
 shared_ptr<RawRocksDbBridge>
 open_raw_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl, bool no_wal) {
-    auto options = make_unique<Options>();
+    auto options = default_db_options();
+
     if (opts.prepare_for_bulk_load) {
         options->PrepareForBulkLoad();
     }
@@ -68,7 +90,8 @@ open_raw_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustCompara
 }
 
 shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl) {
-    auto options = make_unique<Options>();
+    auto options = default_db_options();
+
     if (opts.prepare_for_bulk_load) {
         options->PrepareForBulkLoad();
     }
