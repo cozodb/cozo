@@ -79,6 +79,50 @@ fn air_routes() -> Result<()> {
 
     println!("views: {}", db.list_views()?);
 
+    let deg_centrality_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        deg_centrality <- degree_centrality!(:flies_to);
+        ?[?total, ?out, ?in] := deg_centrality[?node, ?total, ?out, ?in];
+        :order -?total;
+        :limit 10;
+    "#,
+    )?;
+
+    dbg!(deg_centrality_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+        [614,307,307],[587,293,294],[566,282,284],[541,270,271],[527,264,263],[502,251,251],
+        [497,248,249],[494,247,247],[484,242,242],[465,232,233]]"#
+        )?
+    );
+
+    let deg_centrality_ad_hoc_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        flies_to[?a, ?b] := [?r route.src ?ac], [?r route.dst ?bc],
+                            [?ac airport.iata ?a], [?bc airport.iata ?b];
+        deg_centrality <- degree_centrality!(flies_to);
+        ?[?node, ?total, ?out, ?in] := deg_centrality[?node, ?total, ?out, ?in];
+        :order -?total;
+        :limit 10;
+    "#,
+    )?;
+
+    dbg!(deg_centrality_ad_hoc_time.elapsed());
+    assert_eq!(
+        res,
+        serde_json::Value::from_str(
+            r#"[
+            ["FRA",614,307,307],["IST",614,307,307],["CDG",587,293,294],["AMS",566,282,284],
+            ["MUC",541,270,271],["ORD",527,264,263],["DFW",502,251,251],["PEK",497,248,249],
+            ["DXB",494,247,247],["ATL",484,242,242]
+            ]"#
+        )?
+    );
+
     let starts_with_time = Instant::now();
     let res = db.run_script(
         r#"

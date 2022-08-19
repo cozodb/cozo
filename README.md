@@ -12,7 +12,7 @@
   * [ ] single-source shortest path
   * [ ] minimum spanning tree
   * [ ] random walking
-  * [ ] degree centrality
+  * [x] degree centrality
   * [ ] closeness centrality
   * [ ] betweenness centrality
   * [ ] pagerank

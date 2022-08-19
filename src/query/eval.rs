@@ -91,7 +91,7 @@ impl SessionTx {
                             )?;
                         }
                         CompiledRuleSet::Algo(algo_apply) => {
-                            self.algo_application_eval(k, algo_apply, stores, &mut limiter)?;
+                            self.algo_application_eval(k, algo_apply, stores)?;
                         }
                     }
                 }
@@ -136,9 +136,12 @@ impl SessionTx {
         rule_symb: &MagicSymbol,
         algo_apply: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
-        limiter: &mut QueryLimiter,
     ) -> Result<()> {
-        todo!()
+        let algo_impl = &algo_apply.algo;
+        let out = stores
+            .get(rule_symb)
+            .ok_or_else(|| anyhow!("cannot find algo store {:?}", rule_symb))?;
+        algo_impl.run(self, &algo_apply.rule_args, &algo_apply.options, stores, out)
     }
     fn initial_rule_eval(
         &mut self,
