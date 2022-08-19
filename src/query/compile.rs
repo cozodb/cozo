@@ -53,7 +53,7 @@ impl CompiledRuleSet {
                         }
                     }
                 }
-                AggrKind::Meet;
+                AggrKind::Meet
             }
             CompiledRuleSet::Algo(_) => AggrKind::None,
         }

@@ -327,7 +327,7 @@ impl Db {
             .stratify()?
             .magic_sets_rewrite();
         debug!("{:#?}", program);
-        let (compiled, mut stores) = tx.stratified_magic_compile(&program, &const_rules)?;
+        let (compiled, stores) = tx.stratified_magic_compile(&program, &const_rules)?;
         let result = tx.stratified_magic_evaluate(
             &compiled,
             &stores,
