@@ -6,7 +6,7 @@ use itertools::Itertools;
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{
-    MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram,
+    MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram,
 };
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -20,7 +20,7 @@ pub(crate) type CompiledProgram = BTreeMap<MagicSymbol, CompiledRuleSet>;
 #[derive(Debug)]
 pub(crate) enum CompiledRuleSet {
     Rules(Vec<CompiledRule>),
-    Algo,
+    Algo(MagicAlgoApply),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -55,7 +55,7 @@ impl CompiledRuleSet {
                 }
                 return AggrKind::Meet;
             }
-            CompiledRuleSet::Algo => AggrKind::None,
+            CompiledRuleSet::Algo(_) => AggrKind::None,
         }
     }
 }
@@ -133,8 +133,8 @@ impl SessionTx {
                                 Ok((k.clone(), CompiledRuleSet::Rules(collected)))
                             }
 
-                            MagicRulesOrAlgo::Algo(_) => {
-                                todo!()
+                            MagicRulesOrAlgo::Algo(algo_apply) => {
+                                Ok((k.clone(), CompiledRuleSet::Algo(algo_apply.clone())))
                             }
                         }
                     })

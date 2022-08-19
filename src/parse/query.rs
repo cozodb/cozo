@@ -5,6 +5,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use serde_json::{json, Map};
 
+use crate::algo::get_algo;
 use crate::data::aggr::get_aggr;
 use crate::data::attr::Attribute;
 use crate::data::expr::{get_op, Expr, OP_LIST};
@@ -12,7 +13,7 @@ use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{
     AlgoApply, AlgoRuleArg, InputAtom, InputAttrTripleAtom, InputProgram, InputRule,
-    InputRuleApplyAtom, InputTerm, InputViewApplyAtom, MagicSymbol, InputRulesOrAlgo, TripleDir,
+    InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputViewApplyAtom, MagicSymbol, TripleDir,
     Unification,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -105,10 +106,13 @@ impl SessionTx {
         } else {
             self.parse_input_rule_sets(q, vld, &params_pool)?
         };
-        let entry_bindings = input_prog.get_entry_head()?;
-        let out_spec = payload
-            .get("out")
-            .map(|spec| self.parse_query_out_spec(spec, entry_bindings));
+        let out_spec = match payload.get("out") {
+            None => None,
+            Some(spec) => {
+                let entry_bindings = input_prog.get_entry_head()?;
+                Some(self.parse_query_out_spec(spec, entry_bindings))
+            }
+        };
         let out_spec = swap_result_option(out_spec)?;
         let limit = swap_result_option(payload.get("limit").map(|v| {
             v.as_u64()
@@ -121,7 +125,10 @@ impl SessionTx {
                 .ok_or_else(|| anyhow!("'offset' must be a positive number"))
         }))?;
         if let Some(algo_rules) = payload.get("algo_rules") {
-            for algo_rule in algo_rules.as_array().ok_or_else(|| anyhow!("'algo_rules' must be an array"))? {
+            for algo_rule in algo_rules
+                .as_array()
+                .ok_or_else(|| anyhow!("'algo_rules' must be an array"))?
+            {
                 let out_symbol = algo_rule
                     .get("algo_out")
                     .ok_or_else(|| anyhow!("algo rule requires field 'algo_out': {}", algo_rule))?
@@ -151,9 +158,9 @@ impl SessionTx {
                             .ok_or_else(|| anyhow!("'view' must be a string, got {}", view_name))?;
                         relations.push(AlgoRuleArg::Stored(Symbol::from(view_name)));
                     } else if let Some(triple_name) = rel_def.get("triple") {
-                        let triple_name = triple_name
-                            .as_str()
-                            .ok_or_else(|| anyhow!("'triple' must be a string, got {}", triple_name))?;
+                        let triple_name = triple_name.as_str().ok_or_else(|| {
+                            anyhow!("'triple' must be a string, got {}", triple_name)
+                        })?;
                         let dir = match rel_def.get("backward") {
                             None => TripleDir::Fwd,
                             Some(JsonValue::Bool(true)) => TripleDir::Bwd,
@@ -164,9 +171,9 @@ impl SessionTx {
                     }
                 }
                 if let Some(opts) = algo_rule.get("options") {
-                    let opts = opts
-                        .as_object()
-                        .ok_or_else(|| anyhow!("'options' is required to be a map, got {}", opts))?;
+                    let opts = opts.as_object().ok_or_else(|| {
+                        anyhow!("'options' is required to be a map, got {}", opts)
+                    })?;
                     for (k, v) in opts.iter() {
                         let expr = Self::parse_expr_arg(v, params_pool)?;
                         options.insert(Symbol::from(k as &str), expr);
@@ -177,7 +184,7 @@ impl SessionTx {
                 match input_prog.prog.entry(out_name) {
                     Entry::Vacant(v) => {
                         v.insert(InputRulesOrAlgo::Algo(AlgoApply {
-                            algo_name: Symbol::from(name_symbol),
+                            algo: get_algo(name_symbol)?,
                             rule_args: relations,
                             options,
                         }));
@@ -433,7 +440,7 @@ impl SessionTx {
                     }
                 }
                 InputRulesOrAlgo::Algo(_) => {
-                    todo!()
+                    Ok(InputProgram { prog: ret })
                 }
             },
         }

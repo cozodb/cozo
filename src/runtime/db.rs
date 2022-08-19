@@ -322,7 +322,6 @@ impl Db {
                 )
             }
         };
-        let entry_head = input_program.get_entry_head()?.to_vec();
         let program = input_program
             .to_normalized_program()?
             .stratify()?
@@ -339,6 +338,7 @@ impl Db {
             },
         )?;
         if !out_opts.sorters.is_empty() {
+            let entry_head = input_program.get_entry_head()?.to_vec();
             let sorted_result = tx.sort_and_collect(result, &out_opts.sorters, &entry_head)?;
             let sorted_iter = if let Some(offset) = out_opts.offset {
                 Left(sorted_result.scan_sorted().skip(offset))

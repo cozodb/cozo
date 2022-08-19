@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use smallvec::SmallVec;
 
@@ -33,26 +33,21 @@ pub(crate) enum InputRulesOrAlgo {
     Algo(AlgoApply),
 }
 
-impl InputRulesOrAlgo {
-    pub(crate) fn get_rules_mut(&mut self) -> Option<&mut Vec<InputRule>> {
-        match self {
-            InputRulesOrAlgo::Rules(r) => Some(r),
-            _ => None,
-        }
-    }
-    pub(crate) fn get_rules(&self) -> Option<&[InputRule]> {
-        match self {
-            InputRulesOrAlgo::Rules(r) => Some(r),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct AlgoApply {
-    pub(crate) algo_name: Symbol,
+    pub(crate) algo: Arc<dyn AlgoImpl>,
     pub(crate) rule_args: Vec<AlgoRuleArg>,
     pub(crate) options: BTreeMap<Symbol, Expr>,
+}
+
+impl Debug for AlgoApply {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AlgoApply")
+            .field("algo", &self.algo.name())
+            .field("rules", &self.rule_args)
+            .field("options", &self.options)
+            .finish()
+    }
 }
 
 #[derive(Clone)]
@@ -110,23 +105,21 @@ impl InputProgram {
                     "program entry point must have equal bindings"
                 );
             }
-            InputRulesOrAlgo::Algo(_) => {
-                todo!()
-            }
+            InputRulesOrAlgo::Algo(_) => {}
         }
         Ok(())
     }
     pub(crate) fn get_entry_arity(&self) -> Result<usize> {
-        match self
-            .prog
-            .get(&PROG_ENTRY)
-            .ok_or_else(|| anyhow!("program entry point not found"))?
-        {
-            InputRulesOrAlgo::Rules(rules) => Ok(rules[0].head.len()),
-            InputRulesOrAlgo::Algo(_algo) => {
-                todo!()
-            }
-        }
+        Ok(
+            match self
+                .prog
+                .get(&PROG_ENTRY)
+                .ok_or_else(|| anyhow!("program entry point not found"))?
+            {
+                InputRulesOrAlgo::Rules(rules) => rules[0].head.len(),
+                InputRulesOrAlgo::Algo(algo_apply) => algo_apply.algo.arity(),
+            },
+        )
     }
     pub(crate) fn get_entry_head(&self) -> Result<&[Symbol]> {
         match self
@@ -136,13 +129,13 @@ impl InputProgram {
         {
             InputRulesOrAlgo::Rules(rules) => Ok(&rules.last().unwrap().head),
             InputRulesOrAlgo::Algo(_) => {
-                todo!()
+                bail!("algo application does not have named entry head")
             }
         }
     }
-    pub(crate) fn to_normalized_program(self) -> Result<NormalFormProgram> {
-        let mut prog: BTreeMap<_, _> = Default::default();
-        for (k, rules_or_algo) in self.prog {
+    pub(crate) fn to_normalized_program(&self) -> Result<NormalFormProgram> {
+        let mut prog: BTreeMap<Symbol, _> = Default::default();
+        for (k, rules_or_algo) in &self.prog {
             match rules_or_algo {
                 InputRulesOrAlgo::Rules(rules) => {
                     let mut collected_rules = vec![];
@@ -153,7 +146,7 @@ impl InputProgram {
                             Symbol::from(&format!("***{}", counter) as &str)
                         };
                         let normalized_body =
-                            InputAtom::Conjunction(rule.body).disjunctive_normal_form()?;
+                            InputAtom::Conjunction(rule.body.clone()).disjunctive_normal_form()?;
                         let mut new_head = Vec::with_capacity(rule.head.len());
                         let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
                         for symb in rule.head.iter() {
@@ -189,10 +182,10 @@ impl InputProgram {
                             collected_rules.push(normalized_rule.convert_to_well_ordered_rule()?);
                         }
                     }
-                    prog.insert(k, NormalFormAlgoOrRules::Rules(collected_rules));
+                    prog.insert(k.clone(), NormalFormAlgoOrRules::Rules(collected_rules));
                 }
                 InputRulesOrAlgo::Algo(algo_apply) => {
-                    prog.insert(k, NormalFormAlgoOrRules::Algo(algo_apply));
+                    prog.insert(k.clone(), NormalFormAlgoOrRules::Algo(algo_apply.clone()));
                 }
             }
         }
@@ -246,12 +239,6 @@ impl MagicRulesOrAlgo {
         }
     }
     pub(crate) fn mut_rules(&mut self) -> Option<&mut Vec<MagicRule>> {
-        match self {
-            MagicRulesOrAlgo::Rules(r) => Some(r),
-            MagicRulesOrAlgo::Algo(_) => None,
-        }
-    }
-    pub(crate) fn rules(&self) -> Option<&[MagicRule]> {
         match self {
             MagicRulesOrAlgo::Rules(r) => Some(r),
             MagicRulesOrAlgo::Algo(_) => None,

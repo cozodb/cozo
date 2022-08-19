@@ -4,7 +4,7 @@ use std::mem;
 use anyhow::{anyhow, Result};
 use log::{debug, log_enabled, trace, Level};
 
-use crate::data::program::MagicSymbol;
+use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::PROG_ENTRY;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::derived::DerivedRelStore;
@@ -60,8 +60,8 @@ impl SessionTx {
                             debug!("{:?}.{} {:#?}", k, i, compiled)
                         }
                     }
-                    CompiledRuleSet::Algo => {
-                        todo!()
+                    CompiledRuleSet::Algo(algo_apply) => {
+                        debug!("{:?} {:?}", k, algo_apply)
                     }
                 }
             }
@@ -90,8 +90,8 @@ impl SessionTx {
                                 &mut limiter,
                             )?;
                         }
-                        CompiledRuleSet::Algo => {
-                            todo!()
+                        CompiledRuleSet::Algo(algo_apply) => {
+                            self.algo_application_eval(k, algo_apply, stores, &mut limiter)?;
                         }
                     }
                 }
@@ -121,7 +121,7 @@ impl SessionTx {
                             )?;
                         }
 
-                        CompiledRuleSet::Algo => unreachable!(),
+                        CompiledRuleSet::Algo(_) => unreachable!(),
                     }
                 }
             }
@@ -130,6 +130,15 @@ impl SessionTx {
             }
         }
         Ok(())
+    }
+    fn algo_application_eval(
+        &mut self,
+        rule_symb: &MagicSymbol,
+        algo_apply: &MagicAlgoApply,
+        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        limiter: &mut QueryLimiter,
+    ) -> Result<()> {
+        todo!()
     }
     fn initial_rule_eval(
         &mut self,
