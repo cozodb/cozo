@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-  export CC=/usr/bin/clang-14
-  export CPP=/usr/bin/clang-cpp-14
-  export CXX=/usr/bin/clang++-14
-  export LD=/usr/bin/ld.lld-14
+  export CC=/usr/bin/clang-12
+  export CPP=/usr/bin/clang-cpp-12
+  export CXX=/usr/bin/clang++-12
+  export LD=/usr/bin/ld.lld-12
 fi
 
 mkdir -p deps
