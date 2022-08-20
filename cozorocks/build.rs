@@ -24,9 +24,9 @@ fn main() {
         println!("cargo:rustc-link-lib=rpcrt4");
         println!("cargo:rustc-link-lib=shlwapi");
     }
-    // else {
-    //     println!("cargo:rustc-link-lib=bz2");
-    // }
+    else if target.contains("darwin") {
+        println!("cargo:rustc-link-lib=bz2");
+    }
 
     println!("cargo:rustc-link-lib=lz4");
     println!("cargo:rustc-link-lib=snappy");
