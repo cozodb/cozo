@@ -32,7 +32,7 @@ export EXTRA_CXXFLAGS='-fPIC'
 #  JEMALLOC_LIB=" $JEMALLOC_BASE/lib/libjemalloc.a" \
 #  JEMALLOC=1 \
 
-DEBUG_LEVEL=0 make libz.a libsnappy.a liblz4.a libzstd.a
+DEBUG_LEVEL=0 make -j 8 libz.a libsnappy.a liblz4.a libzstd.a
 mv ./*.a ../deps/lib || exit
 
 export EXTRA_CFLAGS="-fPIC -I${PWD}/lz4-1.9.3/lib"
@@ -42,7 +42,7 @@ DEBUG_LEVEL=0 \
   USE_RTTI=1 \
   USE_CLANG=1 \
   PREFIX=$INSTALL_DIR \
-  make install-static || exit
+  make -j 8 install-static || exit
 
 mv ./*.a ../deps/lib || exit
 
