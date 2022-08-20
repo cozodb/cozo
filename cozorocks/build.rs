@@ -1,19 +1,32 @@
 use std::env::var;
 
 fn main() {
-    cxx_build::bridge("src/bridge/mod.rs")
-        .files(["bridge/status.cpp", "bridge/db.cpp", "bridge/tx.cpp"])
+    let target = var("TARGET").unwrap();
+
+    let mut builder = cxx_build::bridge("src/bridge/mod.rs");
+    builder.files(["bridge/status.cpp", "bridge/db.cpp", "bridge/tx.cpp"])
         .include("deps/include")
-        .include("bridge")
-        .flag_if_supported("-std=c++17")
-        .compile("cozorocks");
+        .include("bridge");
+    if target.contains("msvc") {
+        builder.flag_if_supported("-std:c++17");
+    } else {
+        builder.flag_if_supported("-std=c++17");
+    };
+    builder.compile("cozorocks");
 
     let manifest_dir = var("CARGO_MANIFEST_DIR").unwrap();
 
     println!("cargo:rustc-link-search={}/deps/lib/", manifest_dir);
     println!("cargo:rustc-link-lib=rocksdb");
     println!("cargo:rustc-link-lib=z");
-    println!("cargo:rustc-link-lib=bz2");
+
+    if target.contains("msvc") {
+        println!("cargo:rustc-link-lib=rpcrt4");
+        println!("cargo:rustc-link-lib=shlwapi");
+    } else {
+        println!("cargo:rustc-link-lib=bz2");
+    }
+
     println!("cargo:rustc-link-lib=lz4");
     println!("cargo:rustc-link-lib=snappy");
     println!("cargo:rustc-link-lib=zstd");

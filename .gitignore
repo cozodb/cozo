@@ -27,7 +27,7 @@ compile_commands.json
 CTestTestfile.cmake
 _deps
 _test*
-
+*.dll
 *.db
 cozorocks/deps/
 .DS_Store
