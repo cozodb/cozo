@@ -32,3 +32,4 @@ _test*
 cozorocks/deps/
 .DS_Store
 flamegraph.svg
+release.zip
