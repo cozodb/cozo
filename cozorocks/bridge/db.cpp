@@ -9,8 +9,8 @@
 
 unique_ptr<Options> default_db_options() {
     auto options = make_unique<Options>();
-    options->compression = kLZ4Compression;
     options->bottommost_compression = kZSTD;
+    options->compression = kLZ4Compression;
     options->level_compaction_dynamic_level_bytes = true;
     options->max_background_compactions = 4;
     options->max_background_flushes = 2;

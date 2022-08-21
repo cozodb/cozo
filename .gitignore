@@ -29,7 +29,6 @@ _deps
 _test*
 *.dll
 *.db
-cozorocks/deps/
 .DS_Store
 flamegraph.svg
 release.zip

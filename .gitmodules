@@ -1,9 +1,12 @@
-[submodule "rocksdb"]
-	path = cozorocks/rocksdb
-	url = https://github.com/facebook/rocksdb
-[submodule "cozorocks/rocksdb"]
-	path = cozorocks/rocksdb
-	url = https://github.com/facebook/rocksdb
-[submodule "cozorocks/jemalloc"]
-	path = cozorocks/jemalloc
-	url = https://github.com/jemalloc/jemalloc
+[submodule "cozorocks/deps/gflags"]
+	path = cozorocks/deps/gflags
+	url = https://github.com/gflags/gflags.git
+[submodule "cozorocks/deps/lz4"]
+	path = cozorocks/deps/lz4
+	url = https://github.com/lz4/lz4.git
+[submodule "cozorocks/deps/zstd"]
+	path = cozorocks/deps/zstd
+	url = https://github.com/facebook/zstd.git
+[submodule "cozorocks/deps/rocksdb"]
+	path = cozorocks/deps/rocksdb
+	url = https://github.com/facebook/rocksdb.git
