@@ -20,9 +20,11 @@ fn main() {
     println!("cargo:rustc-link-search={}/deps/rocksdb/cmake_build/", manifest_dir);
     println!("cargo:rustc-link-search={}/deps/zstd/lib/", manifest_dir);
     println!("cargo:rustc-link-search={}/deps/lz4/lib/", manifest_dir);
+    println!("cargo:rustc-link-search={}/deps/jemalloc/lib/", manifest_dir);
     println!("cargo:rustc-link-lib=static=zstd");
     println!("cargo:rustc-link-lib=static=rocksdb");
     println!("cargo:rustc-link-lib=static=lz4");
+    println!("cargo:rustc-link-lib=static=jemalloc");
     // println!("cargo:rustc-link-lib=z");
     //
     // if target.contains("msvc") {
@@ -33,7 +35,6 @@ fn main() {
     // }
     //
     // println!("cargo:rustc-link-lib=snappy");
-    // println!("cargo:rustc-link-lib=jemalloc");
     println!("cargo:rerun-if-changed=src/bridge/mod.rs");
     println!("cargo:rerun-if-changed=bridge/bridge.h");
     println!("cargo:rerun-if-changed=bridge/common.h");

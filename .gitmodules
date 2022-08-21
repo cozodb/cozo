@@ -10,3 +10,6 @@
 [submodule "cozorocks/deps/rocksdb"]
 	path = cozorocks/deps/rocksdb
 	url = https://github.com/facebook/rocksdb.git
+[submodule "cozorocks/deps/jemalloc"]
+	path = cozorocks/deps/jemalloc
+	url = https://github.com/jemalloc/jemalloc.git
