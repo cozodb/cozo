@@ -13,6 +13,9 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   if [ ! -f ${LD} ]; then echo "${LD} not found"; exit; fi
 fi
 
+export CFLAGS=-fPIE
+export CXXFLAGS=-fPIE
+
 # gflags
 
 cd gflags
@@ -43,9 +46,6 @@ make -j 8
 cd ..
 
 # rocksdb
-
-export CFLAGS=-fPIE
-export CXXFLAGS=-fPIE
 
 cd rocksdb
 rm -fr cmake_build
