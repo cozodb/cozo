@@ -37,7 +37,6 @@ cd jemalloc
 make clean
 ./autogen.sh --with-jemalloc-prefix=''
 make -j 8
-
 cd ..
 
 # rocksdb
@@ -45,7 +44,7 @@ cd ..
 cd rocksdb
 rm -fr cmake_build
 mkdir cmake_build && cd cmake_build
-cp ../../thirdparty.inc ../thirdparty.inc
+# cp ../../thirdparty.inc ../thirdparty.inc
 cmake -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_MODULE_PATH="${PWD}/../../lz4;${PWD}/../../zstd" \
   -DROCKSDB_BUILD_SHARED=0 \
