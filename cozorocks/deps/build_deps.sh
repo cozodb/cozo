@@ -38,11 +38,14 @@ cd ..
 
 # jemalloc
 cd jemalloc
-./autogen.sh --with-jemalloc-prefix=''
+./autogen.sh --disable-debug --with-jemalloc-prefix=''
 make -j 8
 cd ..
 
 # rocksdb
+
+export CFLAGS=-fPIE
+export CXXFLAGS=-fPIE
 
 cd rocksdb
 rm -fr cmake_build
