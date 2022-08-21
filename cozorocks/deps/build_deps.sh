@@ -7,6 +7,10 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   export CPP=/usr/bin/clang-cpp-12
   export CXX=/usr/bin/clang++-12
   export LD=/usr/bin/ld.lld-12
+  if [ ! -f ${CC} ]; then echo "${CC} not found"; exit; fi
+  if [ ! -f ${CPP} ]; then echo "${CPP} not found"; exit; fi
+  if [ ! -f ${CXX} ]; then echo "${CXX} not found"; exit; fi
+  if [ ! -f ${LD} ]; then echo "${LD} not found"; exit; fi
 fi
 
 # gflags
@@ -34,7 +38,6 @@ cd ..
 
 # jemalloc
 cd jemalloc
-make clean
 ./autogen.sh --with-jemalloc-prefix=''
 make -j 8
 cd ..
@@ -48,6 +51,8 @@ mkdir cmake_build && cd cmake_build
 cmake -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_MODULE_PATH="${PWD}/../../lz4;${PWD}/../../zstd" \
   -DROCKSDB_BUILD_SHARED=0 \
+  -DGFLAGS_INCLUDE_DIR=${PWD}/../../gflags/cmake_build/include \
+  -DGFLAGS_LIBRARIES=${PWD}/../../gflags/cmake_build/lib \
   -Dlz4_INCLUDE_DIRS=${PWD}/../../lz4/lib \
   -Dlz4_LIBRARIES=${PWD}/../../lz4/lib \
   -Dzstd_INCLUDE_DIRS=${PWD}/../../zstd/lib \

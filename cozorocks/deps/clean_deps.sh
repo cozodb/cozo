@@ -16,6 +16,7 @@ cd ..
 
 cd jemalloc
 make clean
+rm -f 'configure~'
 cd ..
 
 cd rocksdb
