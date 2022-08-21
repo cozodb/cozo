@@ -14,8 +14,8 @@ set (THIRDPARTY_LIBS "")         # Initialization, don't touch
 #
 set(GFLAGS_HOME $ENV{THIRDPARTY_HOME}/gflags/cmake_build)
 set(GFLAGS_INCLUDE ${GFLAGS_HOME}/include)
-set(GFLAGS_LIB_DEBUG ${GFLAGS_HOME}/lib/libgflags.a)
-set(GFLAGS_LIB_RELEASE ${GFLAGS_HOME}/lib/libgflags.a)
+set(GFLAGS_LIB_DEBUG ${GFLAGS_HOME}/lib/Release/gflags_static.lib)
+set(GFLAGS_LIB_RELEASE ${GFLAGS_HOME}/lib/Release/gflags_static.lib)
 
 # ================================================== GFLAGS ==================================================
 # For compatibility
@@ -91,10 +91,10 @@ endif ()
 #
 # Edit these 4 lines to define paths to LZ4
 #
-set(LZ4_HOME $ENV{THIRDPARTY_HOME}/lz4/lib)
-set(LZ4_INCLUDE ${LZ4_HOME})
-set(LZ4_LIB_DEBUG ${LZ4_HOME}/liblz4.a)
-set(LZ4_LIB_RELEASE ${LZ4_HOME}/liblz4.a)
+set(LZ4_HOME $ENV{THIRDPARTY_HOME}/lz4)
+set(LZ4_INCLUDE ${LZ4_HOME}/lib)
+set(LZ4_LIB_DEBUG ${LZ4_HOME}/build/VS2017/bin/x64_Release/liblz4.lib)
+set(LZ4_LIB_RELEASE ${LZ4_HOME}/build/VS2017/bin/x64_Release/liblz4.lib)
 
 
 # For compatibility
@@ -190,10 +190,10 @@ endif ()
 #
 # Edit these 4 lines to define paths to ZSTD
 #
-set(ZSTD_HOME $ENV{THIRDPARTY_HOME}/zstd/lib)
-set(ZSTD_INCLUDE ${ZSTD_HOME})
-set(ZSTD_LIB_DEBUG ${ZSTD_HOME}/libzstd.a)
-set(ZSTD_LIB_RELEASE ${ZSTD_HOME}/libzstd.a)
+set(ZSTD_HOME $ENV{THIRDPARTY_HOME}/zstd)
+set(ZSTD_INCLUDE ${ZSTD_HOME}/lib)
+set(ZSTD_LIB_DEBUG ${ZSTD_HOME}/build/VS2010/bin/x64_Release/libzstd.lib)
+set(ZSTD_LIB_RELEASE ${ZSTD_HOME}//build/VS2010/bin/x64_Release/libzstd.lib)
 
 # For compatibility
 if (ZSTD)
