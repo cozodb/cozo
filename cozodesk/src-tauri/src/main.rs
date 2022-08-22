@@ -9,6 +9,11 @@ struct CozoAppState {
     db: Mutex<Option<cozo::Db>>,
 }
 
+#[tauri::command]
+fn is_opened(state: tauri::State<CozoAppState>) -> bool {
+    state.db.lock().unwrap().is_some()
+}
+
 #[tauri::command(async)]
 fn open_db(path: String, state: tauri::State<CozoAppState>) -> Result<(), String> {
     let mut cur_db = state.db.lock().unwrap();
@@ -50,7 +55,7 @@ fn main() {
         .manage(CozoAppState {
             db: Mutex::new(None),
         })
-        .invoke_handler(tauri::generate_handler![open_db, close_db, run_query])
+        .invoke_handler(tauri::generate_handler![open_db, close_db, run_query, is_opened])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
