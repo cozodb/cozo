@@ -352,6 +352,10 @@ impl Db {
                 None
             },
         )?;
+        let headers = match input_program.get_entry_head() {
+            Err(_) => JsonValue::Null,
+            Ok(headers) => headers.iter().map(|v| json!(v.0)).collect(),
+        };
         if !out_opts.sorters.is_empty() {
             let entry_head = input_program.get_entry_head()?.to_vec();
             let sorted_result = tx.sort_and_collect(result, &out_opts.sorters, &entry_head)?;
@@ -372,7 +376,7 @@ impl Db {
                 let ret: Vec<_> = tx
                     .run_pull_on_query_results(sorted_iter, out_opts)?
                     .try_collect()?;
-                Ok(json!(ret))
+                Ok(json!({ "rows": ret, "headers": headers }))
             }
         } else {
             if let Some((meta, view_op)) = out_opts.as_view {
@@ -382,7 +386,7 @@ impl Db {
                 let ret: Vec<_> = tx
                     .run_pull_on_query_results(result.scan_all(), out_opts)?
                     .try_collect()?;
-                Ok(json!(ret))
+                Ok(json!({ "rows": ret, "headers": headers }))
             }
         }
     }
