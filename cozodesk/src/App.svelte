@@ -1,6 +1,8 @@
 <script>
+    import { Button } from "carbon-components-svelte";
     import {message, open, save} from '@tauri-apps/api/dialog';
     import {invoke} from '@tauri-apps/api/tauri'
+    import {Folder, FolderAdd, Close, DirectionStraightRight} from "carbon-icons-svelte";
 
     let queryText = '';
     let queryArea;
@@ -69,13 +71,13 @@
 
 <main>
     <div>
-        <button on:click={handleOpen}>Open</button>
-        <button on:click={handleCreate}>Create</button>
-        <button on:click={handleClose}>Close</button>
+        <Button icon={Folder} on:click={handleOpen}>Open</Button>
+        <Button icon={FolderAdd} on:click={handleCreate}>Create</Button>
+        <Button icon={Close} on:click={handleClose}>Close</Button>
     </div>
     <textarea bind:this={queryArea} bind:value={queryText}></textarea>
     <div>
-        <button on:click={handleQuery} disabled={inProgress}>Query</button>
+        <Button icon={DirectionStraightRight} on:click={handleQuery} disabled={inProgress}>Query</Button>
     </div>
     <div>{statusMessage}</div>
     <div class="result-display">

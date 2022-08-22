@@ -252,6 +252,18 @@ builtin-modules@^3.1.0:
   resolved "https://registry.npmmirror.com/builtin-modules/-/builtin-modules-3.3.0.tgz#cae62812b89801e9656336e46223e030386be7b6"
   integrity sha512-zhaCDicdLuWN5UbN5IMnFqNMhNfo919sH85y2/ea+5Yg9TsTkeZxpL+JLbp6cgYFS4sRLp3YV4S6yDuqVWHYOw==
 
+carbon-components-svelte@^0.70.0:
+  version "0.70.0"
+  resolved "https://registry.npmmirror.com/carbon-components-svelte/-/carbon-components-svelte-0.70.0.tgz#dea896494d41e69c80912013c8bf5596603f5e2d"
+  integrity sha512-DplA33JOzb8gPX0fpmLCb3ndKTH05O7nxBax/kIGOuZPGS2kgZpRgiNpTfZdjf8tsQ/mpN7Xgfe1glflGPhH+A==
+  dependencies:
+    flatpickr "4.6.9"
+
+carbon-icons-svelte@^11.2.0:
+  version "11.2.0"
+  resolved "https://registry.npmmirror.com/carbon-icons-svelte/-/carbon-icons-svelte-11.2.0.tgz#4b791c5cdb9b3b8b52758475a5b2e4ca96062639"
+  integrity sha512-nbqCEKoZA5EzT2Lr8vNYnfWcDl5GnFFLnbD861U32g9cNe7D7nmQKx4T+goFp5AoY60OyAgKUNJov8LwNEkhbg==
+
 chalk@^2.0.0:
   version "2.4.2"
   resolved "https://registry.npmmirror.com/chalk/-/chalk-2.4.2.tgz#cd42541677a54333cf541a49108c1432b44c9424"
@@ -339,6 +351,11 @@ fill-range@^7.0.1:
   integrity sha512-qOo9F+dMUmC2Lcb4BbVvnKJxTPjCm+RRpe4gDuGrzkL7mEVl/djYSu2OdQ2Pa302N4oqkSg9ir6jaLWJ2USVpQ==
   dependencies:
     to-regex-range "^5.0.1"
+
+flatpickr@4.6.9:
+  version "4.6.9"
+  resolved "https://registry.npmmirror.com/flatpickr/-/flatpickr-4.6.9.tgz#9a13383e8a6814bda5d232eae3fcdccb97dc1499"
+  integrity sha512-F0azNNi8foVWKSF+8X+ZJzz8r9sE1G4hl06RyceIaLvyltKvDl6vqk9Lm/6AUUCi5HWaIjiUbk7UpeE/fOXOpw==
 
 fs.realpath@^1.0.0:
   version "1.0.0"

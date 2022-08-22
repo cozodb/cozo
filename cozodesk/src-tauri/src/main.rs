@@ -9,7 +9,7 @@ struct CozoAppState {
     db: Mutex<Option<cozo::Db>>,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn open_db(path: String, state: tauri::State<CozoAppState>) -> Result<(), String> {
     let mut cur_db = state.db.lock().unwrap();
     let builder = cozo::DbBuilder::default()
@@ -24,7 +24,7 @@ fn open_db(path: String, state: tauri::State<CozoAppState>) -> Result<(), String
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn close_db(state: tauri::State<CozoAppState>) -> Result<(), String> {
     state.db.lock().unwrap().take();
     Ok(())
