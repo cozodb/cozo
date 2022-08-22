@@ -101,8 +101,8 @@
 </script>
 
 <main>
-    {#if db_opened}
-        <div id="main">
+    <div id="main">
+        {#if db_opened}
             <div id="upper">
                 <TextArea bind:value={queryText} labelText={`Using database ${db_opened}`} rows={10}
                           id="query-area"></TextArea>
@@ -129,23 +129,23 @@
                 <DataTable headers={queryResults.headers} rows={queryResults.rows} zebra
                            size="compact"></DataTable>
             {/if}
-        </div>
-    {:else}
-        <div style="padding: 0.5em 0.5em 1em">
-            <h1 style="padding-bottom: 0.5em">Start</h1>
-            <Button size="xl" icon={Folder} on:click={handleOpen}>Open existing</Button>
-            <Button size="xl" icon={FolderAdd} on:click={handleCreate}>Create new</Button>
+        {:else}
+            <div style="padding: 0.5em 0.5em 1em">
+                <h1 style="padding-bottom: 0.5em">Start</h1>
+                <Button size="xl" icon={Folder} on:click={handleOpen}>Open existing</Button>
+                <Button size="xl" icon={FolderAdd} on:click={handleCreate}>Create new</Button>
 
-            {#if recent.length}
-                <div style="padding-top: 1em; padding-left: 0.5em">
-                    {#each recent as dbPath}
-                        <Link style="cursor: pointer" on:click={() => handleOpenRecent(dbPath)}>{dbPath}</Link>
-                    {/each}
-                </div>
-            {/if}
+                {#if recent.length}
+                    <div style="padding-top: 1em; padding-left: 0.5em">
+                        {#each recent as dbPath}
+                            <Link style="cursor: pointer" on:click={() => handleOpenRecent(dbPath)}>{dbPath}</Link>
+                        {/each}
+                    </div>
+                {/if}
 
-        </div>
-    {/if}
+            </div>
+        {/if}
+    </div>
 </main>
 
 <style>
