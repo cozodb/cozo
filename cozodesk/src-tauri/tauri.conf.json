@@ -3,11 +3,11 @@
   "build": {
     "beforeBuildCommand": "yarn build",
     "beforeDevCommand": "yarn dev",
-    "devPath": "http://localhost:5173",
-    "distDir": "../dist"
+    "devPath": "http://localhost:8080",
+    "distDir": "../public"
   },
   "package": {
-    "productName": "cozoplay",
+    "productName": "cozodesk",
     "version": "0.1.0"
   },
   "tauri": {
@@ -58,7 +58,7 @@
         "fullscreen": false,
         "height": 600,
         "resizable": true,
-        "title": "Cozo Playground",
+        "title": "CozoDesk",
         "width": 800
       }
     ]
