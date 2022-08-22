@@ -59,7 +59,7 @@ impl Db {
             .use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
             .use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false);
         let mut temp_path: String = db_builder.opts.db_path.to_string();
-        temp_path.push_str(".cozo_stored");
+        temp_path.push_str(".relations");
         let view_db_builder = db_builder
             .clone()
             .path(&temp_path)
