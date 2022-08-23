@@ -102,7 +102,7 @@ struct AggrOr {
     accum: bool,
 }
 
-impl Default for AggrAnd {
+impl Default for AggrOr {
     fn default() -> Self {
         Self { accum: false }
     }
