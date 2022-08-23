@@ -1,5 +1,5 @@
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 
 use anyhow::{bail, Result};
@@ -79,8 +79,6 @@ pub(crate) enum DataValue {
     List(Vec<DataValue>),
     #[serde(rename = "y")]
     Set(BTreeSet<DataValue>),
-    #[serde(rename = "w")]
-    Map(BTreeMap<DataValue, DataValue>),
     #[serde(rename = "g")]
     Guard,
     #[serde(rename = "o")]
@@ -210,7 +208,6 @@ impl Debug for DataValue {
             }
             DataValue::List(t) => f.debug_list().entries(t.iter()).finish(),
             DataValue::Set(t) => f.debug_list().entries(t.iter()).finish(),
-            DataValue::Map(m) => f.debug_map().entries(m.iter()).finish(),
             DataValue::DescVal(v) => {
                 write!(f, "desc<{:?}>", v)
             }

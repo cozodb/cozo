@@ -80,9 +80,9 @@ impl From<DataValue> for JsonValue {
             DataValue::Regex(r) => {
                 json!(r.0.as_str())
             }
-            DataValue::Map(m) => {
-                JsonValue::Array(m.into_iter().map(|(k, v)| json!([k, v])).collect())
-            }
+            // DataValue::Map(m) => {
+            //     JsonValue::Array(m.into_iter().map(|(k, v)| json!([k, v])).collect())
+            // }
         }
     }
 }
