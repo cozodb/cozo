@@ -166,11 +166,17 @@ impl SessionTx {
                 let is_meet = aggr_kind == AggrKind::Meet;
                 for (rule_n, rule) in ruleset.iter().enumerate() {
                     debug!("initial calculation for rule {:?}.{}", rule_symb, rule_n);
+                    let mut aggr = rule.aggr.clone();
+                    for el in aggr.iter_mut() {
+                        if let Some((aggr, args)) = el {
+                            aggr.meet_init(&args)?;
+                        }
+                    }
                     for item_res in rule.relation.iter(self, Some(0), &use_delta)? {
                         let item = item_res?;
                         trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
                         if is_meet {
-                            store.aggr_meet_put(&item, &rule.aggr, 0)?;
+                            store.aggr_meet_put(&item, &mut aggr, 0)?;
                         } else if should_check_limit {
                             if !store.exists(&item, 0) {
                                 store.put(item, 0);
@@ -243,6 +249,14 @@ impl SessionTx {
             if !should_do_calculation {
                 continue;
             }
+
+            let mut aggr = rule.aggr.clone();
+            for el in aggr.iter_mut() {
+                if let Some((aggr, args)) = el {
+                    aggr.meet_init(&args)?;
+                }
+            }
+
             for (delta_key, delta_store) in stores.iter() {
                 if !rule.contained_rules.contains(delta_key) {
                     continue;
@@ -256,7 +270,7 @@ impl SessionTx {
                     let item = item_res?;
                     // improvement: the clauses can actually be evaluated in parallel
                     if is_meet_aggr {
-                        let aggr_changed = store.aggr_meet_put(&item, &rule.aggr, epoch)?;
+                        let aggr_changed = store.aggr_meet_put(&item, &mut aggr, epoch)?;
                         if aggr_changed {
                             *changed.get_mut(rule_symb).unwrap() = true;
                         }

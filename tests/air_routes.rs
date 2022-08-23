@@ -652,7 +652,7 @@ fn air_routes() -> Result<()> {
     "#,
     )?;
     dbg!(len_of_names_count_time.elapsed());
-    assert_eq!(*res.get("rows").unwrap(), json!([[866]]));
+    assert_eq!(*res.get("rows").unwrap(), json!([[866.0]]));
 
     let group_count_by_out_time = Instant::now();
     let res = db.run_script(
@@ -1036,7 +1036,7 @@ fn air_routes() -> Result<()> {
     "#,
     )?;
     dbg!(total_distance_from_three_cities_time.elapsed());
-    assert_eq!(*res.get("rows").unwrap(), json!([[2733379]]));
+    assert_eq!(*res.get("rows").unwrap(), json!([[2733379.0]]));
 
     let total_distance_within_three_cities_time = Instant::now();
     let res = db.run_script(
@@ -1047,7 +1047,7 @@ fn air_routes() -> Result<()> {
     "#,
     )?;
     dbg!(total_distance_within_three_cities_time.elapsed());
-    assert_eq!(*res.get("rows").unwrap(), json!([[10282]]));
+    assert_eq!(*res.get("rows").unwrap(), json!([[10282.0]]));
 
     let specific_distance_time = Instant::now();
     let res = db.run_script(

@@ -251,18 +251,18 @@ impl DataValue {
             _ => None,
         }
     }
-    pub(crate) fn get_set(&self) -> Option<&BTreeSet<DataValue>> {
-        match self {
-            DataValue::Set(s) => Some(s),
-            _ => None,
-        }
-    }
-    pub(crate) fn get_map(&self) -> Option<&BTreeMap<DataValue, DataValue>> {
-        match self {
-            DataValue::Map(m) => Some(m),
-            _ => None,
-        }
-    }
+    // pub(crate) fn get_set(&self) -> Option<&BTreeSet<DataValue>> {
+    //     match self {
+    //         DataValue::Set(s) => Some(s),
+    //         _ => None,
+    //     }
+    // }
+    // pub(crate) fn get_map(&self) -> Option<&BTreeMap<DataValue, DataValue>> {
+    //     match self {
+    //         DataValue::Map(m) => Some(m),
+    //         _ => None,
+    //     }
+    // }
     pub(crate) fn get_string(&self) -> Option<&str> {
         match self {
             DataValue::String(s) => Some(s),

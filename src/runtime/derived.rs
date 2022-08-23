@@ -72,7 +72,7 @@ impl DerivedRelStore {
     pub(crate) fn aggr_meet_put(
         &self,
         tuple: &Tuple,
-        aggrs: &[Option<(Aggregation, Vec<DataValue>)>],
+        aggrs: &mut [Option<(Aggregation, Vec<DataValue>)>],
         epoch: u32,
     ) -> Result<bool> {
         self.ensure_mem_db_for_epoch(epoch);
@@ -95,10 +95,10 @@ impl DerivedRelStore {
 
         if let Some(prev_aggr) = prev_aggr {
             let mut changed = false;
-            for (i, aggr) in aggrs.iter().enumerate() {
-                if let Some((aggr_op, aggr_args)) = aggr {
-                    let op = aggr_op.meet_combine;
-                    changed |= op(&mut prev_aggr.0[i], &tuple.0[i], aggr_args)?;
+            for (i, aggr) in aggrs.iter_mut().enumerate() {
+                if let Some((aggr_op, _aggr_args)) = aggr {
+                    let op = aggr_op.meet_op.as_mut().unwrap();
+                    changed |= op.update(&mut prev_aggr.0[i], &tuple.0[i])?;
                 }
             }
             if changed && epoch != 0 {
@@ -112,11 +112,8 @@ impl DerivedRelStore {
                     .iter()
                     .enumerate()
                     .map(|(i, aggr)| -> Result<DataValue> {
-                        if let Some((aggr_op, aggr_args)) = aggr {
-                            let op = aggr_op.meet_combine;
-                            let mut init = DataValue::Guard;
-                            op(&mut init, &tuple.0[i], aggr_args)?;
-                            Ok(init)
+                        if aggr.is_some() {
+                            Ok(tuple.0[i].clone())
                         } else {
                             Ok(DataValue::Guard)
                         }
@@ -200,7 +197,7 @@ impl DerivedRelStore {
                 Tuple(combined)
             }
         });
-        let aggrs = aggrs.to_vec();
+        let mut aggrs = aggrs.to_vec();
         let n_keys = aggrs.iter().filter(|aggr| aggr.is_none()).count();
         let grouped = it.group_by(move |tuple| tuple.0[..n_keys].to_vec());
         let mut invert_indices = vec![];
@@ -221,28 +218,36 @@ impl DerivedRelStore {
             .map(|(a, _b)| a)
             .collect_vec();
         for (_key, mut group_iter) in grouped.into_iter() {
-            // TODO improve normal aggr here
+            for aggr_pair in &mut aggrs {
+                if let Some((aggr, args)) = aggr_pair {
+                    aggr.normal_init(&args)?;
+                }
+            }
             let mut aggr_res = vec![DataValue::Guard; aggrs.len()];
             let first_tuple = group_iter.next().unwrap();
-            for (idx, aggr) in aggrs.iter().enumerate() {
+            for (idx, aggr) in aggrs.iter_mut().enumerate() {
                 let val = &first_tuple.0[invert_indices[idx]];
-                if let Some((aggr_op, aggr_args)) = aggr {
-                    (aggr_op.meet_combine)(&mut aggr_res[idx], val, aggr_args)?;
+                if let Some((aggr_op, _aggr_args)) = aggr {
+                    let op = aggr_op.normal_op.as_mut().unwrap();
+                    op.set(val)?;
                 } else {
                     aggr_res[idx] = first_tuple.0[invert_indices[idx]].clone();
                 }
             }
             for tuple in group_iter {
-                for (idx, aggr) in aggrs.iter().enumerate() {
+                for (idx, aggr) in aggrs.iter_mut().enumerate() {
                     let val = &tuple.0[invert_indices[idx]];
-                    if let Some((aggr_op, aggr_args)) = aggr {
-                        (aggr_op.meet_combine)(&mut aggr_res[idx], val, aggr_args)?;
+                    if let Some((aggr_op, _aggr_args)) = aggr {
+                        let op = aggr_op.normal_op.as_mut().unwrap();
+                        // (aggr_op.meet_combine)(&mut aggr_res[idx], val, aggr_args)?;
+                        op.set(val)?;
                     }
                 }
             }
             for (i, aggr) in aggrs.iter().enumerate() {
-                if let Some((aggr_op, aggr_args)) = aggr {
-                    (aggr_op.meet_combine)(&mut aggr_res[i], &DataValue::Guard, aggr_args)?;
+                if let Some((aggr_op, _aggr_args)) = aggr {
+                    let op = aggr_op.normal_op.as_ref().unwrap();
+                    aggr_res[i] = op.get()?;
                 }
             }
             let res_tpl = Tuple(aggr_res);
