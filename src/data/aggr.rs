@@ -10,8 +10,17 @@ use crate::data::value::{DataValue, Number};
 #[derive(Clone)]
 pub(crate) struct Aggregation {
     pub(crate) name: &'static str,
-    pub(crate) combine: fn(&mut DataValue, &DataValue, &[DataValue]) -> Result<bool>,
+    pub(crate) meet_combine: fn(&mut DataValue, &DataValue, &[DataValue]) -> Result<bool>,
     pub(crate) is_meet: bool,
+}
+
+trait NormalAggrObj {
+    fn set(&mut self, value: &DataValue) -> Result<()>;
+    fn get(&self) -> Result<DataValue>;
+}
+
+trait MeetAggrObj {
+    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool>;
 }
 
 impl PartialEq for Aggregation {
@@ -30,7 +39,7 @@ macro_rules! define_aggr {
     ($name:ident, $is_meet:expr) => {
         const $name: Aggregation = Aggregation {
             name: stringify!($name),
-            combine: ::casey::lower!($name),
+            meet_combine: ::casey::lower!($name),
             is_meet: $is_meet,
         };
     };
@@ -51,6 +60,21 @@ fn aggr_unique(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) 
         (DataValue::Set(l), val) => l.insert(val.clone()),
         _ => unreachable!(),
     })
+}
+
+struct AggrUnique {
+    accum: BTreeSet<DataValue>,
+}
+
+impl NormalAggrObj for AggrUnique {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        self.accum.insert(value.clone());
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::List(self.accum.iter().cloned().collect()))
+    }
 }
 
 define_aggr!(AGGR_GROUP_COUNT, false);
@@ -89,6 +113,27 @@ fn aggr_group_count(
     })
 }
 
+struct AggrGroupCount {
+    accum: BTreeMap<DataValue, i64>,
+}
+
+impl NormalAggrObj for AggrGroupCount {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        let entry = self.accum.entry(value.clone()).or_default();
+        *entry += 1;
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::List(
+            self.accum
+                .iter()
+                .map(|(k, v)| DataValue::List(vec![k.clone(), DataValue::from(*v)]))
+                .collect(),
+        ))
+    }
+}
+
 define_aggr!(AGGR_COUNT_UNIQUE, false);
 fn aggr_count_unique(
     accum: &mut DataValue,
@@ -111,6 +156,25 @@ fn aggr_count_unique(
         (DataValue::Set(l), val) => l.insert(val.clone()),
         _ => unreachable!(),
     })
+}
+
+struct AggrCountUnique {
+    count: i64,
+    accum: BTreeSet<DataValue>,
+}
+
+impl NormalAggrObj for AggrCountUnique {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        if !self.accum.contains(value) {
+            self.accum.insert(value.clone());
+            self.count += 1;
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::from(self.count))
+    }
 }
 
 define_aggr!(AGGR_UNION, true);
@@ -148,6 +212,55 @@ fn aggr_union(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -
         }
         (_, v) => bail!("cannot compute 'union' for value {:?}", v),
     })
+}
+
+struct AggrUnion {
+    accum: BTreeSet<DataValue>,
+}
+
+impl NormalAggrObj for AggrUnion {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::List(v) => self.accum.extend(v.iter().cloned()),
+            v => bail!("cannot compute 'union' for value {:?}", v),
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::List(self.accum.iter().cloned().collect()))
+    }
+}
+
+struct MeetAggrUnion;
+
+impl MeetAggrObj for MeetAggrUnion {
+    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
+        loop {
+            if let DataValue::List(l) = left {
+                let s = l.iter().cloned().collect();
+                *left = DataValue::Set(s);
+                continue;
+            }
+            return Ok(match (left, right) {
+                (DataValue::Set(l), DataValue::Set(s)) => {
+                    let mut inserted = false;
+                    for v in s.iter() {
+                        inserted |= l.insert(v.clone());
+                    }
+                    inserted
+                }
+                (DataValue::Set(l), DataValue::List(s)) => {
+                    let mut inserted = false;
+                    for v in s.iter() {
+                        inserted |= l.insert(v.clone());
+                    }
+                    inserted
+                }
+                (_, v) => bail!("cannot compute 'union' for value {:?}", v),
+            });
+        }
+    }
 }
 
 define_aggr!(AGGR_INTERSECTION, true);
@@ -192,6 +305,58 @@ fn aggr_intersection(
     })
 }
 
+struct AggrIntersection {
+    accum: BTreeSet<DataValue>,
+}
+
+impl NormalAggrObj for AggrIntersection {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::List(v) => {
+                for el in v.iter() {
+                    self.accum.remove(el);
+                }
+            }
+            v => bail!("cannot compute 'intersection' for value {:?}", v),
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::List(self.accum.iter().cloned().collect()))
+    }
+}
+
+struct MeetAggrIntersection;
+impl MeetAggrObj for MeetAggrIntersection {
+    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
+        loop {
+            if let DataValue::List(l) = left {
+                let s = l.iter().cloned().collect();
+                *left = DataValue::Set(s);
+                continue;
+            }
+            return Ok(match (left, right) {
+                (DataValue::Set(l), DataValue::Set(s)) => {
+                    let mut removed = false;
+                    for v in s.iter() {
+                        removed |= l.remove(v);
+                    }
+                    removed
+                }
+                (DataValue::Set(l), DataValue::List(s)) => {
+                    let mut removed = false;
+                    for v in s.iter() {
+                        removed |= l.remove(v);
+                    }
+                    removed
+                }
+                (_, v) => bail!("cannot compute 'union' for value {:?}", v),
+            });
+        }
+    }
+}
+
 define_aggr!(AGGR_COLLECT, false);
 fn aggr_collect(accum: &mut DataValue, current: &DataValue, args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
@@ -229,6 +394,21 @@ fn aggr_collect(accum: &mut DataValue, current: &DataValue, args: &[DataValue]) 
     })
 }
 
+struct AggrCollect {
+    accum: Vec<DataValue>,
+}
+
+impl NormalAggrObj for AggrCollect {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        self.accum.push(value.clone());
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::List(self.accum.clone()))
+    }
+}
+
 define_aggr!(AGGR_COUNT, false);
 fn aggr_count(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
@@ -247,6 +427,21 @@ fn aggr_count(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -
         }
         _ => unreachable!(),
     })
+}
+
+struct AggrCount {
+    count: i64,
+}
+
+impl NormalAggrObj for AggrCount {
+    fn set(&mut self, _value: &DataValue) -> Result<()> {
+        self.count += 1;
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::from(self.count))
+    }
 }
 
 define_aggr!(AGGR_MEAN, false);
@@ -280,6 +475,28 @@ fn aggr_mean(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) ->
             i
         ),
     })
+}
+
+struct AggrMean {
+    count: i64,
+    sum: f64,
+}
+
+impl NormalAggrObj for AggrMean {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::Number(n) => {
+                self.sum += n.get_float();
+                self.count += 1;
+            }
+            v => bail!("cannot compute 'mean': encountered value {:?}", v),
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::from(self.sum / (self.count as f64)))
+    }
 }
 
 define_aggr!(AGGR_SUM, false);
@@ -323,6 +540,26 @@ fn aggr_sum(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> 
     })
 }
 
+struct AggrSum {
+    sum: f64,
+}
+
+impl NormalAggrObj for AggrSum {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::Number(n) => {
+                self.sum += n.get_float();
+            }
+            v => bail!("cannot compute 'mean': encountered value {:?}", v),
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::from(self.sum))
+    }
+}
+
 define_aggr!(AGGR_MIN, true);
 fn aggr_min(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
@@ -345,6 +582,36 @@ fn aggr_min(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> 
             i
         ),
     })
+}
+
+struct AggrMin {
+    found: DataValue,
+}
+
+impl NormalAggrObj for AggrMin {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        if *value < self.found {
+            self.found = value.clone();
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(self.found.clone())
+    }
+}
+
+struct MeetAggrMin;
+
+impl MeetAggrObj for MeetAggrMin {
+    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
+        Ok(if *right < *left {
+            *left = right.clone();
+            true
+        } else {
+            false
+        })
+    }
 }
 
 define_aggr!(AGGR_MAX, true);
@@ -371,6 +638,36 @@ fn aggr_max(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> 
     })
 }
 
+struct AggrMax {
+    found: DataValue,
+}
+
+impl NormalAggrObj for AggrMax {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        if *value > self.found {
+            self.found = value.clone();
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(self.found.clone())
+    }
+}
+
+struct MeetAggrMax;
+
+impl MeetAggrObj for MeetAggrMax {
+    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
+        Ok(if *right > *left {
+            *left = right.clone();
+            true
+        } else {
+            false
+        })
+    }
+}
+
 define_aggr!(AGGR_CHOICE, true);
 fn aggr_choice(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
@@ -380,6 +677,31 @@ fn aggr_choice(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) 
         }
         _ => false,
     })
+}
+
+struct AggrChoice {
+    found: Option<DataValue>,
+}
+
+impl NormalAggrObj for AggrChoice {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        if self.found.is_none() {
+            self.found = Some(value.clone());
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(self.found.clone().ok_or_else(|| anyhow!("empty choice"))?)
+    }
+}
+
+struct MeetAggrChoice;
+
+impl MeetAggrObj for MeetAggrChoice {
+    fn update(&self, _left: &mut DataValue, _right: &DataValue) -> Result<bool> {
+        Ok(false)
+    }
 }
 
 define_aggr!(AGGR_MIN_COST, true);
@@ -422,6 +744,62 @@ fn aggr_min_cost(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]
     })
 }
 
+struct AggrMinCost {
+    found: DataValue,
+    cost: DataValue,
+}
+
+impl NormalAggrObj for AggrMinCost {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::List(l) => {
+                ensure!(
+                    l.len() == 2,
+                    "'min_cost' requires a list of exactly two items as argument"
+                );
+                let c = &l[1];
+                if *c < self.cost {
+                    self.cost = c.clone();
+                    self.found = l[0].clone();
+                }
+                Ok(())
+            }
+            v => bail!("cannot compute 'min_cost' on {:?}", v),
+        }
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::List(vec![self.found.clone(), self.cost.clone()]))
+    }
+}
+
+struct MeetAggrMinCost;
+
+impl MeetAggrObj for MeetAggrMinCost {
+    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
+        Ok(match (left, right) {
+            (DataValue::List(prev), DataValue::List(l)) => {
+                ensure!(
+                    l.len() == 2 && prev.len() == 2,
+                    "'min_cost' requires a list of length 2 as argument, got {:?}, {:?}",
+                    prev,
+                    l
+                );
+                let cur_cost = l.get(1).unwrap();
+                let prev_cost = prev.get(1).unwrap();
+
+                if prev_cost <= cur_cost {
+                    false
+                } else {
+                    *prev = l.clone();
+                    true
+                }
+            }
+            (u, v) => bail!("cannot compute 'min_cost' on {:?}, {:?}", u, v),
+        })
+    }
+}
+
 define_aggr!(AGGR_SHORTEST, true);
 fn aggr_shortest(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
@@ -447,6 +825,44 @@ fn aggr_shortest(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]
     })
 }
 
+struct AggrShortest {
+    found: Vec<DataValue>,
+}
+
+impl NormalAggrObj for AggrShortest {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::List(l) => {
+                if l.len() < self.found.len() {
+                    self.found = l.clone();
+                }
+                Ok(())
+            }
+            v => bail!("cannot compute 'shortest' on {:?}", v),
+        }
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(DataValue::List(self.found.clone()))
+    }
+}
+
+struct MeetAggrShortest;
+
+impl MeetAggrObj for MeetAggrShortest {
+    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
+        match (left, right) {
+            (DataValue::List(l), DataValue::List(r)) => Ok(if r.len() < l.len() {
+                *l = r.clone();
+                true
+            } else {
+                false
+            }),
+            (l, v) => bail!("cannot compute 'shortest' on {:?} and {:?}", l, v),
+        }
+    }
+}
+
 define_aggr!(AGGR_COALESCE, true);
 fn aggr_coalesce(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]) -> Result<bool> {
     Ok(match (accum, current) {
@@ -470,6 +886,36 @@ fn aggr_coalesce(accum: &mut DataValue, current: &DataValue, _args: &[DataValue]
             }
         }
     })
+}
+
+struct AggrCoalesce {
+    found: DataValue,
+}
+
+impl NormalAggrObj for AggrCoalesce {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        if self.found == DataValue::Null {
+            self.found = value.clone();
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(self.found.clone())
+    }
+}
+
+struct MeetAggrCoalesce;
+
+impl MeetAggrObj for MeetAggrCoalesce {
+    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
+        Ok(if *left == DataValue::Null && *right != DataValue::Null {
+            *left = right.clone();
+            true
+        } else {
+            false
+        })
+    }
 }
 
 pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
