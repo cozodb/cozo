@@ -65,14 +65,12 @@ impl From<DataValue> for JsonValue {
             DataValue::Number(Number::Int(i)) => JsonValue::Number(i.into()),
             DataValue::Number(Number::Float(f)) => json!(f),
             DataValue::String(t) => JsonValue::String(t.into()),
-            DataValue::Uuid(uuid) => JsonValue::String(uuid.to_string()),
             DataValue::Bytes(bytes) => JsonValue::String(base64::encode(bytes)),
             DataValue::List(l) => {
                 JsonValue::Array(l.iter().map(|v| JsonValue::from(v.clone())).collect())
             }
             DataValue::DescVal(v) => JsonValue::from(*v.0),
             DataValue::Bottom => JsonValue::Null,
-            DataValue::Timestamp(i) => JsonValue::Number(i.into()),
             DataValue::Guard => JsonValue::Null,
             DataValue::Set(l) => {
                 JsonValue::Array(l.iter().map(|v| JsonValue::from(v.clone())).collect())

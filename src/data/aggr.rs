@@ -397,6 +397,67 @@ impl NormalAggrObj for AggrCount {
     }
 }
 
+define_aggr!(AGGR_VARIANCE, false);
+
+#[derive(Default)]
+struct AggrVariance {
+    count: i64,
+    sum: f64,
+    sum_sq: f64,
+}
+
+impl NormalAggrObj for AggrVariance {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::Number(n) => {
+                let f = n.get_float();
+                self.sum += f;
+                self.sum_sq += f * f;
+                self.count += 1;
+            }
+            v => bail!("cannot compute 'variance': encountered value {:?}", v),
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        let ct = self.count as f64;
+        Ok(DataValue::from(
+            (self.sum_sq - self.sum * self.sum / ct) / (ct - 1.),
+        ))
+    }
+}
+
+define_aggr!(AGGR_STD_DEV, false);
+
+#[derive(Default)]
+struct AggrStdDev {
+    count: i64,
+    sum: f64,
+    sum_sq: f64,
+}
+
+impl NormalAggrObj for AggrStdDev {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::Number(n) => {
+                let f = n.get_float();
+                self.sum += f;
+                self.sum_sq += f * f;
+                self.count += 1;
+            }
+            v => bail!("cannot compute 'std_dev': encountered value {:?}", v),
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        let ct = self.count as f64;
+        let var = (self.sum_sq - self.sum * self.sum / ct) / (ct - 1.);
+        Ok(DataValue::from(var.sqrt()))
+    }
+}
+
 define_aggr!(AGGR_MEAN, false);
 
 #[derive(Default)]
@@ -1049,6 +1110,8 @@ impl Aggregation {
             name if name == AGGR_MIN.name => Box::new(AggrMin::default()),
             name if name == AGGR_MAX.name => Box::new(AggrMax::default()),
             name if name == AGGR_MEAN.name => Box::new(AggrMean::default()),
+            name if name == AGGR_VARIANCE.name => Box::new(AggrVariance::default()),
+            name if name == AGGR_STD_DEV.name => Box::new(AggrStdDev::default()),
             name if name == AGGR_CHOICE.name => Box::new(AggrChoice::default()),
             name if name == AGGR_CHOICE_LAST.name => Box::new(AggrChoiceLast::default()),
             name if name == AGGR_BIT_AND.name => Box::new(AggrBitAnd::default()),

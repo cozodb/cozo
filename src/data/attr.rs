@@ -79,8 +79,6 @@ pub(crate) enum AttributeTyping {
     Int = 4,
     Float = 5,
     String = 6,
-    Uuid = 7,
-    Timestamp = 8,
     Bytes = 9,
     List = 10,
 }
@@ -100,8 +98,6 @@ impl Display for AttributeTyping {
             AttributeTyping::Int => write!(f, "int"),
             AttributeTyping::Float => write!(f, "float"),
             AttributeTyping::String => write!(f, "string"),
-            AttributeTyping::Uuid => write!(f, "uuid"),
-            AttributeTyping::Timestamp => write!(f, "timestamp"),
             AttributeTyping::Bytes => write!(f, "bytes"),
             AttributeTyping::List => write!(f, "list"),
         }
@@ -119,8 +115,6 @@ impl TryFrom<&'_ str> for AttributeTyping {
             "int" => Int,
             "float" => Float,
             "string" => String,
-            "uuid" => Uuid,
-            "timestamp" => Timestamp,
             "bytes" => Bytes,
             "list" => List,
             s => bail!("unknown type {}", s),
@@ -164,18 +158,6 @@ impl AttributeTyping {
                     Err(self.type_err(val))
                 }
             }
-            AttributeTyping::Uuid => {
-                if matches!(val, DataValue::Uuid(_)) {
-                    Ok(val)
-                } else {
-                    Err(self.type_err(val))
-                }
-            }
-            AttributeTyping::Timestamp => match val {
-                val @ DataValue::Timestamp(_) => Ok(val),
-                DataValue::Number(Number::Int(i)) => Ok(DataValue::Timestamp(i)),
-                val => Err(self.type_err(val)),
-            },
             AttributeTyping::Bytes => {
                 if matches!(val, DataValue::Bytes(_)) {
                     Ok(val)

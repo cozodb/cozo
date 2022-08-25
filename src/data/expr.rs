@@ -11,7 +11,7 @@ use smartstring::SmartString;
 
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
-use crate::data::value::{DataValue, Number, LARGEST_UTF_CHAR};
+use crate::data::value::{DataValue, Number, RegexWrapper, LARGEST_UTF_CHAR};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
@@ -954,6 +954,56 @@ fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::String(ret.into()))
 }
 
+define_op!(OP_STR_INCLUDES, 2, false, true);
+fn op_str_includes(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1]) {
+        (DataValue::String(l), DataValue::String(r)) => {
+            Ok(DataValue::Bool(l.find(r as &str).is_some()))
+        }
+        v => bail!("cannot apply 'str_includes' to {:?}", v),
+    }
+}
+
+define_op!(OP_LOWERCASE, 1, false, false);
+fn op_lowercase(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::String(s) => Ok(DataValue::String(s.to_lowercase().into())),
+        v => bail!("cannot apply 'lowercase' to {:?}", v),
+    }
+}
+
+define_op!(OP_UPPERCASE, 1, false, false);
+fn op_uppercase(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::String(s) => Ok(DataValue::String(s.to_uppercase().into())),
+        v => bail!("cannot apply 'uppercase' to {:?}", v),
+    }
+}
+
+define_op!(OP_TRIM, 1, false, false);
+fn op_trim(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::String(s) => Ok(DataValue::String(s.trim().into())),
+        v => bail!("cannot apply 'trim' to {:?}", v),
+    }
+}
+
+define_op!(OP_TRIM_START, 1, false, false);
+fn op_trim_start(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::String(s) => Ok(DataValue::String(s.trim_start().into())),
+        v => bail!("cannot apply 'trim_start' to {:?}", v),
+    }
+}
+
+define_op!(OP_TRIM_END, 1, false, false);
+fn op_trim_end(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::String(s) => Ok(DataValue::String(s.trim_end().into())),
+        v => bail!("cannot apply 'trim_end' to {:?}", v),
+    }
+}
+
 define_op!(OP_STARTS_WITH, 2, false, true);
 fn op_starts_with(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
@@ -978,6 +1028,58 @@ fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
         v => bail!("unexpected arg {:?} for OP_ENDS_WITH", v),
     };
     Ok(DataValue::Bool(a.ends_with(b as &str)))
+}
+
+define_op!(OP_REGEX, 1, false, false);
+fn op_regex(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        r @ DataValue::Regex(_) => r.clone(),
+        DataValue::String(s) => DataValue::Regex(RegexWrapper(regex::Regex::new(s)?)),
+        v => bail!("cannot apply 'regex' to {:?}", v),
+    })
+}
+
+define_op!(OP_REGEX_MATCHES, 2, false, true);
+fn op_regex_matches(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1]) {
+        (DataValue::String(s), DataValue::Regex(r)) => Ok(DataValue::Bool(r.0.is_match(s))),
+        v => bail!("cannot apply 'regex_matches' to {:?}", v),
+    }
+}
+
+define_op!(OP_REGEX_REPLACE, 3, false, false);
+fn op_regex_replace(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1], &args[2]) {
+        (DataValue::String(s), DataValue::Regex(r), DataValue::String(rp)) => {
+            Ok(DataValue::String(r.0.replace(s, rp as &str).into()))
+        }
+        v => bail!("cannot apply 'regex_replace' to {:?}", v),
+    }
+}
+
+define_op!(OP_REGEX_EXTRACT, 2, false, false);
+fn op_regex_extract(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1]) {
+        (DataValue::String(s), DataValue::Regex(r)) => {
+            let found =
+                r.0.find_iter(s)
+                    .map(|v| DataValue::String(v.as_str().into()))
+                    .collect_vec();
+            Ok(DataValue::List(found))
+        }
+        v => bail!("cannot apply 'regex_extract' to {:?}", v),
+    }
+}
+
+define_op!(OP_REGEX_EXTRACT_FIRST, 2, false, false);
+fn op_regex_extract_first(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1]) {
+        (DataValue::String(s), DataValue::Regex(r)) => {
+            let found = r.0.find(s).map(|v| DataValue::String(v.as_str().into()));
+            Ok(found.unwrap_or(DataValue::Null))
+        }
+        v => bail!("cannot apply 'regex_extract_first' to {:?}", v),
+    }
 }
 
 define_op!(OP_IS_NULL, 1, false, true);
@@ -1034,16 +1136,6 @@ fn op_append(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_IS_BYTES, 1, false, true);
 fn op_is_bytes(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::Bytes(_))))
-}
-
-define_op!(OP_IS_UUID, 1, false, true);
-fn op_is_uuid(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(args[0], DataValue::Uuid(_))))
-}
-
-define_op!(OP_IS_TIMESTAMP, 1, false, true);
-fn op_is_timestamp(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(args[0], DataValue::Timestamp(_))))
 }
 
 define_op!(OP_LENGTH, 1, false, false);
@@ -1221,6 +1313,22 @@ fn op_windows(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(res))
 }
 
+fn get_index(mut i: i64, total: usize) -> Result<usize> {
+    if i < 0 {
+        i += total as i64;
+    }
+    Ok(if i >= 0 {
+        let i = i as usize;
+        if i >= total {
+            bail!("index {} out of bound", i)
+        } else {
+            i
+        }
+    } else {
+        bail!("index {} out of bound", i)
+    })
+}
+
 define_op!(OP_NTH, 2, false, false);
 fn op_nth(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
@@ -1232,22 +1340,145 @@ fn op_nth(args: &[DataValue]) -> Result<DataValue> {
             args
         )
     })?;
-    Ok(if n >= 0 {
-        let n = n as usize;
-        if n >= l.len() {
-            DataValue::Null
-        } else {
-            l[n].clone()
-        }
+    let idx = get_index(n, l.len())?;
+    Ok(l[idx].clone())
+}
+
+define_op!(OP_MAYBE_NTH, 2, false, false);
+fn op_maybe_nth(args: &[DataValue]) -> Result<DataValue> {
+    let l = args[0]
+        .get_list()
+        .ok_or_else(|| anyhow!("first argument to 'nth' mut be a list, got args {:?}", args))?;
+    let n = args[1].get_int().ok_or_else(|| {
+        anyhow!(
+            "second argument to 'nth' mut be an integer, got args {:?}",
+            args
+        )
+    })?;
+    if let Ok(idx) = get_index(n, l.len()) {
+        Ok(l[idx].clone())
     } else {
-        let len = l.len() as i64;
-        let idx = len + n;
-        if idx < 0 {
-            DataValue::Null
-        } else {
-            l[idx as usize].clone()
+        Ok(DataValue::Null)
+    }
+}
+
+define_op!(OP_SLICE, 3, false, false);
+fn op_slice(args: &[DataValue]) -> Result<DataValue> {
+    let l = args[0].get_list().ok_or_else(|| {
+        anyhow!(
+            "first argument to 'slice' mut be a list, got args {:?}",
+            args
+        )
+    })?;
+    let m = args[1].get_int().ok_or_else(|| {
+        anyhow!(
+            "second argument to 'slice' mut be an integer, got args {:?}",
+            args
+        )
+    })?;
+    let n = args[2].get_int().ok_or_else(|| {
+        anyhow!(
+            "third argument to 'slice' mut be an integer, got args {:?}",
+            args
+        )
+    })?;
+    let m = get_index(m, l.len())?;
+    let n = get_index(n, l.len())?;
+    Ok(DataValue::List(l[m..n].to_vec()))
+}
+
+define_op!(OP_NTH_CHAR, 2, false, false);
+fn op_nth_char(args: &[DataValue]) -> Result<DataValue> {
+    let l = args[0].get_string().ok_or_else(|| {
+        anyhow!(
+            "first argument to 'nth_char' mut be a string, got args {:?}",
+            args
+        )
+    })?;
+    let n = args[1].get_int().ok_or_else(|| {
+        anyhow!(
+            "second argument to 'nth_char' mut be an integer, got args {:?}",
+            args
+        )
+    })?;
+    let chars = l.chars().collect_vec();
+    let idx = get_index(n, chars.len())?;
+    let mut c = SmartString::new();
+    c.push(chars[idx]);
+    Ok(DataValue::String(c))
+}
+
+define_op!(OP_MAYBE_NTH_CHAR, 2, false, false);
+fn op_maybe_nth_char(args: &[DataValue]) -> Result<DataValue> {
+    let l = args[0].get_string().ok_or_else(|| {
+        anyhow!(
+            "first argument to 'nth_char' mut be a string, got args {:?}",
+            args
+        )
+    })?;
+    let n = args[1].get_int().ok_or_else(|| {
+        anyhow!(
+            "second argument to 'nth_char' mut be an integer, got args {:?}",
+            args
+        )
+    })?;
+    let chars = l.chars().collect_vec();
+    if let Ok(idx) = get_index(n, chars.len()) {
+        let mut c = SmartString::new();
+        c.push(chars[idx]);
+        Ok(DataValue::String(c))
+    } else {
+        Ok(DataValue::Null)
+    }
+}
+
+define_op!(OP_STR_SLICE, 3, false, false);
+fn op_str_slice(args: &[DataValue]) -> Result<DataValue> {
+    let l = args[0].get_string().ok_or_else(|| {
+        anyhow!(
+            "first argument to 'str_slice' mut be a string, got args {:?}",
+            args
+        )
+    })?;
+    let m = args[1].get_int().ok_or_else(|| {
+        anyhow!(
+            "second argument to 'str_slice' mut be an integer, got args {:?}",
+            args
+        )
+    })?;
+    let n = args[2].get_int().ok_or_else(|| {
+        anyhow!(
+            "third argument to 'str_slice' mut be an integer, got args {:?}",
+            args
+        )
+    })?;
+    let l = l.chars().collect_vec();
+    let m = get_index(m, l.len())?;
+    let n = get_index(n, l.len())?;
+    let ret: String = l[m..n].into_iter().collect();
+    Ok(DataValue::String(ret.into()))
+}
+
+define_op!(OP_ENCODE_BASE64, 1, false, false);
+fn op_encode_base64(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::Bytes(b) => {
+            let s = base64::encode(b);
+            Ok(DataValue::String(s.into()))
         }
-    })
+        v => bail!("'encode_base64' can only be applied to bytes, got {:?}", v),
+    }
+}
+
+define_op!(OP_DECODE_BASE64, 1, false, false);
+fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::String(s) => {
+            let b = base64::decode(s)?;
+            Ok(DataValue::Bytes(b.into()))
+        }
+        v => bail!("'decode_base64' can only be applied to string, got {:?}", v),
+    }
 }
 
 pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
@@ -1301,6 +1532,12 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "pack_bits" => &OP_PACK_BITS,
         "unpack_bits" => &OP_UNPACK_BITS,
         "str_cat" => &OP_STR_CAT,
+        "str_includes" => &OP_STR_INCLUDES,
+        "lowercase" => &OP_LOWERCASE,
+        "uppercase" => &OP_UPPERCASE,
+        "trim" => &OP_TRIM,
+        "trim_start" => &OP_TRIM_START,
+        "trim_end" => &OP_TRIM_END,
         "starts_with" => &OP_STARTS_WITH,
         "ends_with" => &OP_ENDS_WITH,
         "is_null" => &OP_IS_NULL,
@@ -1310,8 +1547,6 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "is_string" => &OP_IS_STRING,
         "is_list" => &OP_IS_LIST,
         "is_bytes" => &OP_IS_BYTES,
-        "is_uuid" => &OP_IS_UUID,
-        "is_timestamp" => &OP_IS_TIMESTAMP,
         "is_in" => &OP_IS_IN,
         "length" => &OP_LENGTH,
         "sort" => &OP_SORT,
@@ -1323,6 +1558,18 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "deg_to_rad" => &OP_DEG_TO_RAD,
         "rad_to_deg" => &OP_RAD_TO_DEG,
         "nth" => &OP_NTH,
+        "maybe_nth" => &OP_MAYBE_NTH,
+        "nth_char" => &OP_NTH_CHAR,
+        "maybe_nth_char" => &OP_MAYBE_NTH_CHAR,
+        "slice" => &OP_SLICE,
+        "str_slice" => &OP_STR_SLICE,
+        "regex" => &OP_REGEX,
+        "regex_matches" => &OP_REGEX_MATCHES,
+        "regex_replace" => &OP_REGEX_REPLACE,
+        "regex_extract" => &OP_REGEX_EXTRACT,
+        "regex_extract_first" => &OP_REGEX_EXTRACT_FIRST,
+        "encode_base64" => &OP_ENCODE_BASE64,
+        "decode_base64" => &OP_DECODE_BASE64,
         "first" => &OP_FIRST,
         "last" => &OP_LAST,
         "chunks" => &OP_CHUNKS,
@@ -1330,4 +1577,12 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "windows" => &OP_WINDOWS,
         _ => return None,
     })
+}
+
+impl Op {
+    pub(crate) fn post_process_args(&self, args: &mut Box<[Expr]>) {
+        if self.name.starts_with("OP_REGEX_") {
+            args[1] = Expr::Apply(&OP_REGEX, [args[1].clone()].into())
+        }
+    }
 }

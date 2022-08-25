@@ -8,7 +8,6 @@ use rmp_serde::Serializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
-use uuid::Uuid;
 
 use crate::data::encode::EncodedVec;
 use crate::data::id::{EntityId, TxId};
@@ -67,10 +66,6 @@ pub(crate) enum DataValue {
     Number(Number),
     #[serde(rename = "s")]
     String(SmartString<LazyCompact>),
-    #[serde(rename = "u")]
-    Uuid(Uuid),
-    #[serde(rename = "m")]
-    Timestamp(i64),
     #[serde(rename = "v")]
     Bytes(Box<[u8]>),
     #[serde(rename = "x")]
@@ -196,12 +191,6 @@ impl Debug for DataValue {
             }
             DataValue::Regex(r) => {
                 write!(f, "{:?}", r.0.as_str())
-            }
-            DataValue::Uuid(u) => {
-                write!(f, "{}", u)
-            }
-            DataValue::Timestamp(ts) => {
-                write!(f, "ts@{}", ts)
             }
             DataValue::Bytes(b) => {
                 write!(f, "bytes(len={})", b.len())

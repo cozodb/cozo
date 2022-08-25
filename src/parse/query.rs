@@ -515,7 +515,7 @@ impl SessionTx {
 
         let op = get_op(name).ok_or_else(|| anyhow!("unknown operator {}", name))?;
 
-        let args: Box<[Expr]> = payload
+        let mut args: Box<[Expr]> = payload
             .get("args")
             .ok_or_else(|| anyhow!("expect key 'args' in expression"))?
             .as_array()
@@ -541,6 +541,8 @@ impl SessionTx {
                 args.len()
             );
         }
+
+        op.post_process_args(&mut args);
 
         Ok(Expr::Apply(op, args))
     }
