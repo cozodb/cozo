@@ -2,7 +2,7 @@ use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::mem;
-use std::ops::Rem;
+use std::ops::{Div, Rem};
 
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
@@ -811,6 +811,136 @@ fn op_not(args: &[DataValue]) -> Result<DataValue> {
     }
 }
 
+define_op!(OP_BIT_AND, 2, false, false);
+fn op_bit_and(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1]) {
+        (DataValue::Bytes(left), DataValue::Bytes(right)) => {
+            ensure!(
+                left.len() == right.len(),
+                "operands of 'bit_and' must have the same lengths, got {:x?} and {:x?}",
+                left,
+                right
+            );
+            let mut ret = left.clone();
+            for (l, r) in ret.iter_mut().zip(right.iter()) {
+                *l &= *r;
+            }
+            Ok(DataValue::Bytes(ret))
+        }
+        v => bail!("cannot apply 'bit_and' to {:?}", v),
+    }
+}
+
+define_op!(OP_BIT_OR, 2, false, false);
+fn op_bit_or(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1]) {
+        (DataValue::Bytes(left), DataValue::Bytes(right)) => {
+            ensure!(
+                left.len() == right.len(),
+                "operands of 'bit_or' must have the same lengths, got {:x?} and {:x?}",
+                left,
+                right
+            );
+            let mut ret = left.clone();
+            for (l, r) in ret.iter_mut().zip(right.iter()) {
+                *l |= *r;
+            }
+            Ok(DataValue::Bytes(ret))
+        }
+        v => bail!("cannot apply 'bit_or' to {:?}", v),
+    }
+}
+
+define_op!(OP_BIT_NOT, 1, false, false);
+fn op_bit_not(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::Bytes(arg) => {
+            let mut ret = arg.clone();
+            for l in ret.iter_mut() {
+                *l = !*l;
+            }
+            Ok(DataValue::Bytes(ret))
+        }
+        v => bail!("cannot apply 'bit_not' to {:?}", v),
+    }
+}
+
+define_op!(OP_BIT_XOR, 2, false, false);
+fn op_bit_xor(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1]) {
+        (DataValue::Bytes(left), DataValue::Bytes(right)) => {
+            ensure!(
+                left.len() == right.len(),
+                "operands of 'bit_xor' must have the same lengths, got {:x?} and {:x?}",
+                left,
+                right
+            );
+            let mut ret = left.clone();
+            for (l, r) in ret.iter_mut().zip(right.iter()) {
+                *l ^= *r;
+            }
+            Ok(DataValue::Bytes(ret))
+        }
+        v => bail!("cannot apply 'bit_xor' to {:?}", v),
+    }
+}
+
+define_op!(OP_UNPACK_BITS, 1, false, false);
+fn op_unpack_bits(args: &[DataValue]) -> Result<DataValue> {
+    if let DataValue::Bytes(bs) = &args[0] {
+        let mut ret = vec![false; bs.len() * 8];
+        for (chunk, byte) in bs.iter().enumerate() {
+            ret[chunk * 8 + 0] = (*byte & 0b10000000) != 0;
+            ret[chunk * 8 + 1] = (*byte & 0b01000000) != 0;
+            ret[chunk * 8 + 2] = (*byte & 0b00100000) != 0;
+            ret[chunk * 8 + 3] = (*byte & 0b00010000) != 0;
+            ret[chunk * 8 + 4] = (*byte & 0b00001000) != 0;
+            ret[chunk * 8 + 5] = (*byte & 0b00000100) != 0;
+            ret[chunk * 8 + 6] = (*byte & 0b00000010) != 0;
+            ret[chunk * 8 + 7] = (*byte & 0b00000001) != 0;
+        }
+        Ok(DataValue::List(
+            ret.into_iter().map(|b| DataValue::Bool(b)).collect_vec(),
+        ))
+    } else {
+        bail!("cannot apply 'unpack_bits' to {:?}", args)
+    }
+}
+
+define_op!(OP_PACK_BITS, 1, false, false);
+fn op_pack_bits(args: &[DataValue]) -> Result<DataValue> {
+    if let DataValue::List(v) = &args[0] {
+        let l = (v.len() as f64 / 8.).ceil() as usize;
+        let mut res = vec![0u8; l];
+        for (i, b) in v.iter().enumerate() {
+            match b {
+                DataValue::Bool(b) => {
+                    if *b {
+                        let chunk = i.div(&8);
+                        let idx = i % 8;
+                        let target = res.get_mut(chunk).unwrap();
+                        match idx {
+                            0 => *target |= 0b10000000,
+                            1 => *target |= 0b01000000,
+                            2 => *target |= 0b00100000,
+                            3 => *target |= 0b00010000,
+                            4 => *target |= 0b00001000,
+                            5 => *target |= 0b00000100,
+                            6 => *target |= 0b00000010,
+                            7 => *target |= 0b00000001,
+                            _ => unreachable!(),
+                        }
+                    }
+                }
+                v => bail!("cannot apply 'pack_bits' to {:?}", v),
+            }
+        }
+        Ok(DataValue::Bytes(res.into()))
+    } else {
+        bail!("cannot apply 'pack_bits' to {:?}", args)
+    }
+}
+
 define_op!(OP_STR_CAT, 0, true, false);
 fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
     let mut ret: String = Default::default();
@@ -1164,6 +1294,12 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "or" => &OP_OR,
         "and" => &OP_AND,
         "not" => &OP_NOT,
+        "bit_and" => &OP_BIT_AND,
+        "bit_or" => &OP_BIT_OR,
+        "bit_not" => &OP_BIT_NOT,
+        "bit_xor" => &OP_BIT_XOR,
+        "pack_bits" => &OP_PACK_BITS,
+        "unpack_bits" => &OP_UNPACK_BITS,
         "str_cat" => &OP_STR_CAT,
         "starts_with" => &OP_STARTS_WITH,
         "ends_with" => &OP_ENDS_WITH,
