@@ -1,7 +1,16 @@
-script = _{schema_script | tx_script | query_script}
+script = _{schema_script | tx_script | sys_script | query_script}
 query_script = {SOI ~":query"? ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
 schema_script = {SOI ~":schema" ~ schema_clause+ ~ EOI}
 tx_script = {SOI ~ (":tx" | "\":tx\"") ~ tx_clause+ ~ EOI}
+sys_script = {SOI ~ ":db" ~ (compact_op | list_schema_op | list_relations_op | remove_relations_op) ~ EOI}
+
+compact_op = {"compact" ~ (compact_opt_triples | compact_opt_relations)+}
+compact_opt_triples = {"triples"}
+compact_opt_relations = {"relations"}
+list_schema_op = {"schema"}
+list_relations_op = {"relations"}
+remove_relations_op = {"remove" ~ "relation" ~ ident+ }
+
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 BLOCK_COMMENT = _{ "/*" ~ (BLOCK_COMMENT | !"*/" ~ ANY)* ~ "*/" }

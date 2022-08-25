@@ -14,12 +14,14 @@ use crate::parse::cozoscript::schema::parsed_schema_to_json;
 use crate::parse::cozoscript::string::parse_string;
 use crate::parse::cozoscript::tx::parsed_tx_to_json;
 use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
+use crate::parse::cozoscript::sys::parsed_db_op_to_enum;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum ScriptType {
     Query,
     Schema,
     Tx,
+    Sys
 }
 
 pub(crate) fn parse_query_to_json(src: &str) -> Result<(ScriptType, JsonValue)> {
@@ -34,6 +36,11 @@ pub(crate) fn parse_query_to_json(src: &str) -> Result<(ScriptType, JsonValue)> 
             parsed_schema_to_json(parsed.into_inner())?,
         ),
         Rule::tx_script => (ScriptType::Tx, parsed_tx_to_json(parsed.into_inner())?),
+        Rule::sys_script => {
+            let opts = parsed_db_op_to_enum(parsed.into_inner())?;
+            let opts = serde_json::to_value(&opts)?;
+            (ScriptType::Sys, opts)
+        },
         _ => unreachable!(),
     })
 }

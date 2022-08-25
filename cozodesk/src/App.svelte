@@ -23,16 +23,20 @@
             queryResults = null;
             try {
                 const res = await invoke('run_query', {query});
-                const headers = res.headers.map((h) => ({key: h, value: h}));
-                const rows = res.rows.map((v, idx) => {
-                    let ret = {};
-                    ret.id = idx;
-                    for (let i = 0; i < v.length; i++) {
-                        ret[headers[i].key] = v[i];
-                    }
-                    return ret;
-                });
-                queryResults = {rows, headers}
+                if (res.headers && res.rows) {
+                    const headers = res.headers.map((h) => ({key: h, value: h}));
+                    const rows = res.rows.map((v, idx) => {
+                        let ret = {};
+                        ret.id = idx;
+                        for (let i = 0; i < v.length; i++) {
+                            ret[headers[i].key] = v[i];
+                        }
+                        return ret;
+                    });
+                    queryResults = {rows, headers}
+                } else {
+                    queryResults = res;
+                }
             } catch (e) {
                 errorMessage = '' + e;
             } finally {
@@ -126,8 +130,12 @@
                 <pre id="error-message">{errorMessage}</pre>
             {/if}
             {#if queryResults}
-                <DataTable headers={queryResults.headers} rows={queryResults.rows} zebra
-                           size="compact"></DataTable>
+                {#if queryResults.headers && queryResults.rows}
+                    <DataTable headers={queryResults.headers} rows={queryResults.rows} zebra
+                               size="compact"></DataTable>
+                {:else}
+                    <pre id="other-results">{JSON.stringify(queryResults, null, 2)}</pre>
+                {/if}
             {/if}
         {:else}
             <div style="padding: 0.5em 0.5em 1em">
@@ -168,6 +176,14 @@
     }
 
     #error-message {
+        flex: 1;
+        overflow: scroll;
+        font-family: monospace;
+    }
+
+    #other-results {
+        flex: 1;
+        overflow: scroll;
         font-family: monospace;
     }
 </style>

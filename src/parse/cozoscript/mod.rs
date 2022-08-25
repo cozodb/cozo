@@ -5,6 +5,7 @@ pub(crate) mod query;
 pub(crate) mod string;
 pub(crate) mod tx;
 pub(crate) mod schema;
+pub(crate) mod sys;
 
 #[derive(Parser)]
 #[grammar = "cozoscript.pest"]

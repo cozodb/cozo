@@ -23,6 +23,7 @@ use crate::data::triple::StoreOp;
 use crate::data::tuple::{rusty_scratch_cmp, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::cozoscript::query::{parse_query_to_json, ScriptType};
+use crate::parse::cozoscript::sys::{CompactTarget, SysOp};
 use crate::parse::query::ViewOp;
 use crate::parse::schema::AttrTxItem;
 use crate::query::pull::CurrentPath;
@@ -314,6 +315,33 @@ impl Db {
             ScriptType::Query => self.run_query(&payload),
             ScriptType::Schema => self.transact_attributes(&payload),
             ScriptType::Tx => self.transact_triples(&payload),
+            ScriptType::Sys => self.run_sys_op(payload),
+        }
+    }
+    pub fn run_sys_op(&self, payload: JsonValue) -> Result<JsonValue> {
+        let op: SysOp = serde_json::from_value(payload)?;
+        match op {
+            SysOp::Compact(opts) => {
+                for opt in opts {
+                    match opt {
+                        CompactTarget::Triples => {
+                            self.compact_main()?;
+                        }
+                        CompactTarget::Relations => {
+                            self.compact_view()?;
+                        }
+                    }
+                }
+                Ok(json!({"status": "OK"}))
+            }
+            SysOp::ListSchema => self.current_schema(),
+            SysOp::ListRelations => self.list_views(),
+            SysOp::RemoveRelations(rs) => {
+                for r in rs.iter() {
+                    self.remove_view(&r.0)?;
+                }
+                Ok(json!({"status": "OK"}))
+            }
         }
     }
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
