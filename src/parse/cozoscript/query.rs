@@ -10,15 +10,35 @@ use serde_json::{json, Map};
 
 use crate::data::json::JsonValue;
 use crate::parse::cozoscript::number::parse_int;
+use crate::parse::cozoscript::schema::parsed_schema_to_json;
 use crate::parse::cozoscript::string::parse_string;
+use crate::parse::cozoscript::tx::parsed_tx_to_json;
 use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 
-pub(crate) fn parse_query_to_json(src: &str) -> Result<JsonValue> {
-    let parsed = CozoScriptParser::parse(Rule::script, src)?;
-    parsed_to_json(parsed)
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum ScriptType {
+    Query,
+    Schema,
+    Tx,
 }
 
-fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
+pub(crate) fn parse_query_to_json(src: &str) -> Result<(ScriptType, JsonValue)> {
+    let parsed = CozoScriptParser::parse(Rule::script, src)?.next().unwrap();
+    Ok(match parsed.as_rule() {
+        Rule::query_script => (
+            ScriptType::Query,
+            parsed_query_to_json(parsed.into_inner())?,
+        ),
+        Rule::schema_script => (
+            ScriptType::Schema,
+            parsed_schema_to_json(parsed.into_inner())?,
+        ),
+        Rule::tx_script => (ScriptType::Tx, parsed_tx_to_json(parsed.into_inner())?),
+        _ => unreachable!(),
+    })
+}
+
+fn parsed_query_to_json(src: Pairs<'_>) -> Result<JsonValue> {
     let mut ret_map = Map::default();
     let mut rules = vec![];
     let mut const_rules = Map::default();
@@ -520,7 +540,7 @@ mod tests {
         :limit 20;
         :offset 30;
         "#;
-        let parsed = parse_query_to_json(src).unwrap();
+        let (_, parsed) = parse_query_to_json(src).unwrap();
         // println!("{}", to_string_pretty(&parsed).unwrap());
         println!("{}", parsed);
     }

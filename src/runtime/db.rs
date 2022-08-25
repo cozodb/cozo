@@ -22,9 +22,7 @@ use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::tuple::{rusty_scratch_cmp, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::parse::cozoscript::query::parse_query_to_json;
-use crate::parse::cozoscript::schema::parse_schema_to_json;
-use crate::parse::cozoscript::tx::parse_tx_to_json;
+use crate::parse::cozoscript::query::{parse_query_to_json, ScriptType};
 use crate::parse::query::ViewOp;
 use crate::parse::schema::AttrTxItem;
 use crate::query::pull::CurrentPath;
@@ -193,10 +191,10 @@ impl Db {
         }
         Ok(JsonValue::Object(collected))
     }
-    pub fn run_tx_triples(&self, payload: &str) -> Result<JsonValue> {
-        let payload = parse_tx_to_json(payload)?;
-        self.transact_triples(&payload)
-    }
+    // pub fn run_tx_triples(&self, payload: &str) -> Result<JsonValue> {
+    //     let payload = parse_tx_to_json(payload)?;
+    //     self.transact_triples(&payload)
+    // }
     pub fn transact_triples(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
         let (payloads, comment) = tx.parse_tx_requests(payload)?;
@@ -212,10 +210,10 @@ impl Db {
             "results": res
         }))
     }
-    pub fn run_tx_attributes(&self, payload: &str) -> Result<JsonValue> {
-        let payload = parse_schema_to_json(payload)?;
-        self.transact_attributes(&payload)
-    }
+    // pub fn run_tx_attributes(&self, payload: &str) -> Result<JsonValue> {
+    //     let payload = parse_schema_to_json(payload)?;
+    //     self.transact_attributes(&payload)
+    // }
     pub fn transact_attributes(&self, payload: &JsonValue) -> Result<JsonValue> {
         let (attrs, comment) = AttrTxItem::parse_request(payload)?;
         let mut tx = self.transact_write()?;
@@ -311,12 +309,12 @@ impl Db {
         Ok(json!(collected))
     }
     pub fn run_script(&self, payload: &str) -> Result<JsonValue> {
-        let payload = parse_query_to_json(payload)?;
-        self.run_query(&payload)
-    }
-    pub fn explain_script(&self, payload: &str) -> Result<JsonValue> {
-        let payload = parse_query_to_json(payload)?;
-        self.explain_query(&payload)
+        let (script_type, payload) = parse_query_to_json(payload)?;
+        match script_type {
+            ScriptType::Query => self.run_query(&payload),
+            ScriptType::Schema => self.transact_attributes(&payload),
+            ScriptType::Tx => self.transact_triples(&payload),
+        }
     }
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
@@ -389,17 +387,6 @@ impl Db {
                 Ok(json!({ "rows": ret, "headers": headers }))
             }
         }
-    }
-    pub fn explain_query(&self, payload: &JsonValue) -> Result<JsonValue> {
-        let mut tx = self.transact()?;
-        let (input_program, _out_opts, const_rules) =
-            tx.parse_query(payload, &Default::default())?;
-        let normalized_program = input_program.to_normalized_program()?;
-        let stratified_program = normalized_program.stratify()?;
-        let magic_program = stratified_program.magic_sets_rewrite();
-        let (_compiled_strata, _) = tx.stratified_magic_compile(&magic_program, &const_rules)?;
-
-        todo!()
     }
     pub fn remove_view(&self, name: &str) -> Result<()> {
         let name = Symbol::from(name);

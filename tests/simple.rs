@@ -24,8 +24,9 @@ fn simple() {
     let db = create_db("_test_db", true);
     test_send_sync(&db);
     assert!(db.current_schema().unwrap().as_array().unwrap().is_empty());
-    db.run_tx_attributes(
+    db.run_script(
         r#"
+        :schema
         put person {
             id: string identity,
             first_name: string index,
@@ -42,8 +43,9 @@ fn simple() {
         "{}",
         to_string_pretty(&db.current_schema().unwrap()).unwrap()
     );
-    db.run_tx_triples(
+    db.run_script(
         r#"
+        :tx
         {
             _temp_id: "alice",
             person.first_name: "Alice",

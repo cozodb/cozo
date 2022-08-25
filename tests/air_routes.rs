@@ -25,8 +25,10 @@ fn init_logger() {
 fn air_routes() -> Result<()> {
     init_logger();
     let db = create_db("_test_air_routes", false);
-    let attr_res = db.run_tx_attributes(
+    let attr_res = db.run_script(
         r#"
+        :schema
+
         put country {
             code: string identity,
             desc: string
@@ -62,7 +64,7 @@ fn air_routes() -> Result<()> {
     if attr_res.is_ok() {
         let insertions = read_to_string("tests/air-routes-data.json")?;
         let triple_insertion_time = Instant::now();
-        db.run_tx_triples(&insertions)?;
+        db.run_script(&insertions)?;
         dbg!(triple_insertion_time.elapsed());
     }
 

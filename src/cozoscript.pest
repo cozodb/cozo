@@ -1,6 +1,7 @@
-script = _{SOI ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
-schema_script = _{SOI ~ schema_clause+ ~ EOI}
-tx_script = _{SOI ~ tx_clause+ ~ EOI}
+script = _{schema_script | tx_script | query_script}
+query_script = {SOI ~":query"? ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
+schema_script = {SOI ~":schema" ~ schema_clause+ ~ EOI}
+tx_script = {SOI ~ (":tx" | "\":tx\"") ~ tx_clause+ ~ EOI}
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 BLOCK_COMMENT = _{ "/*" ~ (BLOCK_COMMENT | !"*/" ~ ANY)* ~ "*/" }

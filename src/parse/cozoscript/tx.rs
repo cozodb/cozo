@@ -2,20 +2,15 @@ use std::str::FromStr;
 
 use anyhow::Result;
 use itertools::Itertools;
-use pest::Parser;
 use serde_json::json;
 
 use crate::data::json::JsonValue;
-use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
+use crate::parse::cozoscript::{Pair, Pairs, Rule};
 use crate::parse::cozoscript::query::build_expr;
 use crate::parse::cozoscript::string::parse_string;
 
-pub(crate) fn parse_tx_to_json(src: &str) -> Result<JsonValue> {
-    let parsed = CozoScriptParser::parse(Rule::tx_script, src)?;
-    parsed_to_json(parsed)
-}
 
-fn parsed_to_json(src: Pairs<'_>) -> Result<JsonValue> {
+pub(crate) fn parsed_tx_to_json(src: Pairs<'_>) -> Result<JsonValue> {
     let mut ret = vec![];
     for pair in src {
         if pair.as_rule() == Rule::EOI {
