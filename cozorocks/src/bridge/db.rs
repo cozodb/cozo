@@ -311,6 +311,15 @@ impl SstWriter {
             Err(status)
         }
     }
+    pub fn finish(&mut self) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
+        self.inner.pin_mut().finish(&mut status);
+        if status.is_ok() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
 }
 
 unsafe impl Send for RocksDb {}

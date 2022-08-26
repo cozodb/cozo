@@ -6,6 +6,8 @@ use itertools::Itertools;
 use serde_json::{json, Map};
 use smallvec::{smallvec, SmallVec, ToSmallVec};
 
+use tempfile::NamedTempFile;
+
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeTyping};
 use crate::data::encode::{
     decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, StorageTag,
@@ -110,21 +112,29 @@ impl SessionTx {
             );
             found
         };
-        let mut vtx = self.view_db.transact().start();
+        if op == ViewOp::Retract {
+            let mut vtx = self.view_db.transact().start();
 
-        let is_delete = op == ViewOp::Retract;
-
-        for data in res_iter {
-            let data = data?;
-            let encoded = data.encode_as_key(view_store.metadata.id);
-            if is_delete {
+            for data in res_iter {
+                let data = data?;
+                let encoded = data.encode_as_key(view_store.metadata.id);
                 vtx.del(&encoded)?;
-            } else {
-                vtx.put(&encoded, &[])?;
             }
-        }
 
-        vtx.commit()?;
+            vtx.commit()?;
+        } else {
+            let file = NamedTempFile::new()?;
+            let path = file.into_temp_path();
+            let path = path.to_string_lossy();
+            let mut writer = self.view_db.get_sst_writer(&path)?;
+            for data in res_iter {
+                let data = data?;
+                let encoded = data.encode_as_key(view_store.metadata.id);
+                writer.put(&encoded, &[])?;
+            }
+            writer.finish()?;
+            self.view_db.ingest_sst_file(&path)?;
+        }
         Ok(())
     }
     pub(crate) fn run_pull_on_query_results<'a>(

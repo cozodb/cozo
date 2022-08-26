@@ -162,6 +162,7 @@ pub(crate) mod ffi {
 
         type SstFileWriterBridge;
         fn put(self: Pin<&mut SstFileWriterBridge>, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
+        fn finish(self: Pin<&mut SstFileWriterBridge>, status: &mut RocksDbStatus);
 
         type TxBridge;
         // fn get_r_opts(self: Pin<&mut TxBridge>) -> Pin<&mut ReadOptions>;

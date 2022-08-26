@@ -9,6 +9,7 @@ authors = ["Ziyang Hu"]
 
 [dependencies]
 casey = "0.3.3"
+tempfile = "3.3.0"
 either = "1.7.0"
 rand = "0.8.5"
 anyhow = "1.0"
