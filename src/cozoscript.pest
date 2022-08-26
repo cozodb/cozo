@@ -33,11 +33,11 @@ rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
 head_arg = {aggr_arg | var}
 aggr_arg = {ident ~ "(" ~ var ~ ("," ~ expr)* ~ ")"}
 algo_arg = _{algo_rel | algo_opt_pair}
-algo_opt_pair = {ident ~ "=" ~ expr}
+algo_opt_pair = {ident ~ ":" ~ expr}
 algo_rel = {algo_rule_rel | algo_view_rel | algo_triple_rel}
 algo_rule_rel = {ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
 algo_view_rel = {view_ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
-algo_triple_rel = { "[" ~ var ~ rev_triple_marker? ~ ident ~ var ~ "]"}
+algo_triple_rel = { "[" ~ var ~ rev_triple_marker? ~ compound_ident ~ var ~ "]"}
 rev_triple_marker = {"<"}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}

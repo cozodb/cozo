@@ -87,6 +87,32 @@ pub(crate) enum MagicAlgoRuleArg {
     Triple(Attribute, Vec<Symbol>, TripleDir),
 }
 
+impl MagicAlgoRuleArg {
+    pub(crate) fn get_binding_map(&self) -> BTreeMap<Symbol, usize> {
+        let bindings = match self {
+            MagicAlgoRuleArg::InMem(_, b) => b,
+            MagicAlgoRuleArg::Stored(_, b) => b,
+            MagicAlgoRuleArg::Triple(_, b, dir) => {
+                if *dir == TripleDir::Bwd {
+                    return b
+                        .iter()
+                        .rev()
+                        .enumerate()
+                        .map(|(idx, symb)| (symb.clone(), idx))
+                        .collect();
+                } else {
+                    b
+                }
+            }
+        };
+        bindings
+            .iter()
+            .enumerate()
+            .map(|(idx, symb)| (symb.clone(), idx))
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct InputProgram {
     pub(crate) prog: BTreeMap<Symbol, InputRulesOrAlgo>,

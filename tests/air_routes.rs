@@ -69,15 +69,23 @@ fn air_routes() -> Result<()> {
     }
 
     let view_time = Instant::now();
-    match db.run_script(r#"
+    db.run_script(r#"
         ?[?src, ?dst, ?distance] := [?r route.src ?src], [?r route.dst ?dst], [?r route.distance ?distance];
         :view rederive flies_to;
-    "#) {
-        Ok(_) => {dbg!(view_time.elapsed());}
-        Err(_) => {
-            println!("view flies_to exists");
-        }
-    };
+    "#)?;
+
+    dbg!(view_time.elapsed());
+
+    let view_time2 = Instant::now();
+    db.run_script(
+        r#"
+        ?[?src_c, ?dst_c, ?distance] := [?r route.src ?src], [?r route.dst ?dst],
+                                        [?r route.distance ?distance],
+                                        [?src airport.iata ?src_c], [?dst airport.iata ?dst_c];
+        :view rederive flies_to_code;
+    "#,
+    )?;
+    dbg!(view_time2.elapsed());
 
     println!("views: {}", db.list_views()?);
 
@@ -89,6 +97,15 @@ fn air_routes() -> Result<()> {
     db.compact_view()?;
     dbg!(compact_view_time.elapsed());
 
+    let dfs_time = Instant::now();
+    let res = db.run_script(r#"
+        starting <- [['PEK']];
+        res <- dfs!([?id <airport.iata ?code], :flies_to_code[], starting[], condition: ?code == 'LHR');
+        ?[?path] := res[?path];
+    "#)?;
+    dbg!(dfs_time.elapsed());
+    println!("{}", res);
+    return Ok(());
     let deg_centrality_time = Instant::now();
     let res = db.run_script(
         r#"
