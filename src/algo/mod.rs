@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 
+use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
 use crate::data::expr::Expr;
@@ -15,6 +16,7 @@ use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
+pub(crate) mod bfs;
 mod degree_centrality;
 pub(crate) mod dfs;
 pub(crate) mod page_rank;
@@ -36,6 +38,7 @@ pub(crate) fn get_algo(name: &str) -> Result<Arc<dyn AlgoImpl>> {
     Ok(match name {
         "degree_centrality" => Arc::new(DegreeCentrality),
         "dfs" => Arc::new(Dfs),
+        "bfs" => Arc::new(Bfs),
         "page_rank" => todo!(),
         name => bail!("algorithm '{}' not found", name),
     })

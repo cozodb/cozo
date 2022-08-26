@@ -105,6 +105,16 @@ fn air_routes() -> Result<()> {
     "#)?;
     dbg!(dfs_time.elapsed());
     println!("{}", res);
+
+    let bfs_time = Instant::now();
+    let res = db.run_script(r#"
+        starting <- [['PEK']];
+        res <- bfs!([?id <airport.iata ?code], :flies_to_code[], starting[], condition: ?code == 'SOU');
+        ?[?path] := res[?path];
+    "#)?;
+    dbg!(bfs_time.elapsed());
+    println!("{}", res);
+
     return Ok(());
     let deg_centrality_time = Instant::now();
     let res = db.run_script(
