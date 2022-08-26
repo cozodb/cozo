@@ -157,6 +157,11 @@ pub(crate) mod ffi {
             upper: &[u8],
             status: &mut RocksDbStatus,
         );
+        fn get_sst_writer(self: &RocksDbBridge, path: &str, status: &mut RocksDbStatus) -> UniquePtr<SstFileWriterBridge>;
+        fn ingest_sst(self: &RocksDbBridge, path: &str, status: &mut RocksDbStatus);
+
+        type SstFileWriterBridge;
+        fn put(self: Pin<&mut SstFileWriterBridge>, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
 
         type TxBridge;
         // fn get_r_opts(self: Pin<&mut TxBridge>) -> Pin<&mut ReadOptions>;

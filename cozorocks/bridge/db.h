@@ -99,6 +99,22 @@ struct RawRocksDbBridge {
     }
 };
 
+struct SstFileWriterBridge {
+    SstFileWriter inner;
+
+    SstFileWriterBridge(EnvOptions eopts, Options opts) : inner(eopts, opts) {
+    }
+
+    inline void finish(RocksDbStatus &status) {
+        write_status(inner.Finish(), status);
+    }
+
+    inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) {
+        write_status(inner.Put(convert_slice(key), convert_slice(val)), status);
+    }
+
+};
+
 struct RocksDbBridge {
     unique_ptr<Comparator> comparator;
     unique_ptr<Options> options;
@@ -108,7 +124,28 @@ struct RocksDbBridge {
     [[nodiscard]] virtual unique_ptr<TxBridge> transact() const = 0;
 
     virtual void del_range(RustBytes start, RustBytes end, RocksDbStatus &status) const = 0;
+
     virtual void compact_range(RustBytes start, RustBytes end, RocksDbStatus &status) const = 0;
+
+    [[nodiscard]] virtual DB *get_base_db() const = 0;
+
+
+    inline unique_ptr<SstFileWriterBridge> get_sst_writer(rust::Str path, RocksDbStatus &status) const {
+        DB *db_ = get_base_db();
+        Options options_ = db_->GetOptions();
+        auto sst_file_writer = std::make_unique<SstFileWriterBridge>(EnvOptions(), options_);
+        string path_(path);
+
+        write_status(sst_file_writer->inner.Open(path_), status);
+        return sst_file_writer;
+    }
+
+    inline void ingest_sst(rust::Str path, RocksDbStatus &status) const {
+        IngestExternalFileOptions ifo;
+        DB *db_ = get_base_db();
+        string path_(path);
+        write_status(db_->IngestExternalFile({std::move(path_)}, ifo), status);
+    }
 
     [[nodiscard]] inline const string &get_db_path() const {
         return db_path;
@@ -125,12 +162,17 @@ struct OptimisticRocksDb : public RocksDbBridge {
     }
 
     void del_range(RustBytes, RustBytes, RocksDbStatus &status) const override;
+
     void compact_range(RustBytes start, RustBytes end, RocksDbStatus &status) const override {
         CompactRangeOptions options;
         auto start_s = convert_slice(start);
         auto end_s = convert_slice(end);
         auto s = db->CompactRange(options, &start_s, &end_s);
         write_status(s, status);
+    }
+
+    DB *get_base_db() const override {
+        return db->GetBaseDB();
     }
 
     virtual ~OptimisticRocksDb();
@@ -166,6 +208,10 @@ struct PessimisticRocksDb : public RocksDbBridge {
         auto end_s = convert_slice(end);
         auto s = db->CompactRange(options, &start_s, &end_s);
         write_status(s, status);
+    }
+
+    DB *get_base_db() const override {
+        return db->GetBaseDB();
     }
 
     virtual ~PessimisticRocksDb();

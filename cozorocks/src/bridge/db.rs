@@ -276,6 +276,41 @@ impl RocksDb {
             Err(status)
         }
     }
+    pub fn get_sst_writer(&self, path: &str) -> Result<SstWriter, RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
+        let ret = self.inner.get_sst_writer(path, &mut status);
+        if status.is_ok() {
+            Ok(SstWriter { inner: ret })
+        } else {
+            Err(status)
+        }
+    }
+    pub fn ingest_sst_file(&self, path: &str) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
+        self.inner.ingest_sst(path, &mut status);
+        if status.is_ok() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
+}
+
+pub struct SstWriter {
+    inner: UniquePtr<SstFileWriterBridge>,
+}
+
+impl SstWriter {
+    #[inline]
+    pub fn put(&mut self, key: &[u8], val: &[u8]) -> Result<(), RocksDbStatus> {
+        let mut status = RocksDbStatus::default();
+        self.inner.pin_mut().put(key, val, &mut status);
+        if status.is_ok() {
+            Ok(())
+        } else {
+            Err(status)
+        }
+    }
 }
 
 unsafe impl Send for RocksDb {}
