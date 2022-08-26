@@ -123,11 +123,11 @@ fn convert_normal_form_program_to_graph(
                 let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
                 for rel in &algo.rule_args {
                     match rel {
-                        AlgoRuleArg::InMem(r) => {
+                        AlgoRuleArg::InMem(r, _args) => {
                             ret.insert(r, true);
                         }
-                        AlgoRuleArg::Stored(_) => {}
-                        AlgoRuleArg::Triple(_, _) => {}
+                        AlgoRuleArg::Stored(_, _) => {}
+                        AlgoRuleArg::Triple(_, _, _) => {}
                     }
                 }
                 (k, ret)

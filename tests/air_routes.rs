@@ -92,7 +92,7 @@ fn air_routes() -> Result<()> {
     let deg_centrality_time = Instant::now();
     let res = db.run_script(
         r#"
-        deg_centrality <- degree_centrality!(:flies_to);
+        deg_centrality <- degree_centrality!(:flies_to[?a, ?b]);
         ?[?total, ?out, ?in] := deg_centrality[?node, ?total, ?out, ?in];
         :order -?total;
         :limit 10;
@@ -114,7 +114,7 @@ fn air_routes() -> Result<()> {
         r#"
         flies_to[?a, ?b] := [?r route.src ?ac], [?r route.dst ?bc],
                             [?ac airport.iata ?a], [?bc airport.iata ?b];
-        deg_centrality <- degree_centrality!(flies_to);
+        deg_centrality <- degree_centrality!(flies_to[?a, ?b]);
         ?[?node, ?total, ?out, ?in] := deg_centrality[?node, ?total, ?out, ?in];
         :order -?total;
         :limit 10;

@@ -265,7 +265,7 @@ impl NormalFormProgram {
                 }
                 NormalFormAlgoOrRules::Algo(algo) => {
                     for rel in algo.rule_args.iter() {
-                        if let AlgoRuleArg::InMem(r) = rel {
+                        if let AlgoRuleArg::InMem(r, _args) = rel {
                             downstream_rules.insert(r.clone());
                         }
                     }
@@ -304,14 +304,15 @@ impl NormalFormProgram {
                                 .rule_args
                                 .iter()
                                 .map(|r| match r {
-                                    AlgoRuleArg::InMem(m) => {
-                                        MagicAlgoRuleArg::InMem(MagicSymbol::Muggle {
-                                            inner: m.clone(),
-                                        })
+                                    AlgoRuleArg::InMem(m, args) => MagicAlgoRuleArg::InMem(
+                                        MagicSymbol::Muggle { inner: m.clone() },
+                                        args.clone(),
+                                    ),
+                                    AlgoRuleArg::Stored(s, args) => {
+                                        MagicAlgoRuleArg::Stored(s.clone(), args.clone())
                                     }
-                                    AlgoRuleArg::Stored(s) => MagicAlgoRuleArg::Stored(s.clone()),
-                                    AlgoRuleArg::Triple(t, d) => {
-                                        MagicAlgoRuleArg::Triple(t.clone(), *d)
+                                    AlgoRuleArg::Triple(t, args, d) => {
+                                        MagicAlgoRuleArg::Triple(t.clone(), args.clone(), *d)
                                     }
                                 })
                                 .collect_vec(),

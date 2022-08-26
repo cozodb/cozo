@@ -147,16 +147,31 @@ impl SessionTx {
                     .as_array()
                     .ok_or_else(|| anyhow!("'relations' field must be an array"))?
                 {
+                    let args: Vec<Symbol> = rel_def
+                        .get("rel_args")
+                        .ok_or_else(|| anyhow!("field 'rel_args' required in {}", rel_def))?
+                        .as_array()
+                        .ok_or_else(|| anyhow!("field 'rel_args' must be an array in {}", rel_def))?
+                        .iter()
+                        .map(|v| -> Result<Symbol> {
+                            let s = v.as_str().ok_or_else(|| {
+                                anyhow!("element of 'rel_args' must be string, got {}", v)
+                            })?;
+                            let s = Symbol::from(s);
+                            s.validate_query_var()?;
+                            Ok(s)
+                        })
+                        .try_collect()?;
                     if let Some(rule_name) = rel_def.get("rule") {
                         let rule_name = rule_name
                             .as_str()
                             .ok_or_else(|| anyhow!("'rule' must be a string, got {}", rule_name))?;
-                        relations.push(AlgoRuleArg::InMem(Symbol::from(rule_name)));
+                        relations.push(AlgoRuleArg::InMem(Symbol::from(rule_name), args));
                     } else if let Some(view_name) = rel_def.get("view") {
                         let view_name = view_name
                             .as_str()
                             .ok_or_else(|| anyhow!("'view' must be a string, got {}", view_name))?;
-                        relations.push(AlgoRuleArg::Stored(Symbol::from(view_name)));
+                        relations.push(AlgoRuleArg::Stored(Symbol::from(view_name), args));
                     } else if let Some(triple_name) = rel_def.get("triple") {
                         let attr = self.parse_triple_atom_attr(triple_name)?;
                         // let triple_name = triple_name.as_str().ok_or_else(|| {
@@ -168,7 +183,7 @@ impl SessionTx {
                             Some(JsonValue::Bool(false)) => TripleDir::Fwd,
                             d => bail!("'backward' must be a boolean, got {}", d.unwrap()),
                         };
-                        relations.push(AlgoRuleArg::Triple(attr, dir));
+                        relations.push(AlgoRuleArg::Triple(attr, args, dir));
                     }
                 }
                 if let Some(opts) = algo_rule.get("options") {

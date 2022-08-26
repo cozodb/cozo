@@ -21,4 +21,4 @@
   * [ ] connected components
   * [ ] label propagation
   * [ ] louvain modularity
-* [ ] direct loading of data
+* [x] direct loading of data

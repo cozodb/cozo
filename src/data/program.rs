@@ -75,16 +75,16 @@ pub(crate) enum TripleDir {
 
 #[derive(Debug, Clone)]
 pub(crate) enum AlgoRuleArg {
-    InMem(Symbol),
-    Stored(Symbol),
-    Triple(Attribute, TripleDir),
+    InMem(Symbol, Vec<Symbol>),
+    Stored(Symbol, Vec<Symbol>),
+    Triple(Attribute, Vec<Symbol>, TripleDir),
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum MagicAlgoRuleArg {
-    InMem(MagicSymbol),
-    Stored(Symbol),
-    Triple(Attribute, TripleDir),
+    InMem(MagicSymbol, Vec<Symbol>),
+    Stored(Symbol, Vec<Symbol>),
+    Triple(Attribute, Vec<Symbol>, TripleDir),
 }
 
 #[derive(Debug, Clone)]

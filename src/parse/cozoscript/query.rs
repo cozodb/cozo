@@ -4,24 +4,24 @@ use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use pest::Parser;
+use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use serde_json::{json, Map};
 
 use crate::data::json::JsonValue;
+use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 use crate::parse::cozoscript::number::parse_int;
 use crate::parse::cozoscript::schema::parsed_schema_to_json;
 use crate::parse::cozoscript::string::parse_string;
-use crate::parse::cozoscript::tx::parsed_tx_to_json;
-use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 use crate::parse::cozoscript::sys::parsed_db_op_to_enum;
+use crate::parse::cozoscript::tx::parsed_tx_to_json;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum ScriptType {
     Query,
     Schema,
     Tx,
-    Sys
+    Sys,
 }
 
 pub(crate) fn parse_query_to_json(src: &str) -> Result<(ScriptType, JsonValue)> {
@@ -40,7 +40,7 @@ pub(crate) fn parse_query_to_json(src: &str) -> Result<(ScriptType, JsonValue)> 
             let opts = parsed_db_op_to_enum(parsed.into_inner())?;
             let opts = serde_json::to_value(&opts)?;
             (ScriptType::Sys, opts)
-        },
+        }
         _ => unreachable!(),
     })
 }
@@ -238,23 +238,35 @@ fn parse_algo_rule(src: Pair<'_>) -> Result<JsonValue> {
             Rule::algo_rel => {
                 let inner = nxt.into_inner().next().unwrap();
                 match inner.as_rule() {
-                    Rule::ident => algo_rels.push(json!({"rule": inner.as_str()})),
-                    Rule::view_ident => {
-                        algo_rels.push(json!({"view": inner.as_str().strip_prefix(':').unwrap()}))
+                    Rule::algo_rule_rel => {
+                        let mut els = inner.into_inner();
+                        let name = els.next().unwrap().as_str();
+                        let args = els.map(|v| v.as_str()).collect_vec();
+                        algo_rels.push(json!({"rule": name, "rel_args": args}));
+                    }
+                    Rule::algo_view_rel => {
+                        let mut els = inner.into_inner();
+                        let name = els.next().unwrap().as_str().strip_prefix(':').unwrap();
+                        let args = els.map(|v| v.as_str()).collect_vec();
+                        algo_rels.push(json!({"view": name, "rel_args": args}));
                     }
                     Rule::algo_triple_rel => {
-                        let mut inner = inner.into_inner();
+                        let mut els = inner.into_inner();
+                        let fst = els.next().unwrap().as_str();
+                        let mdl = els.next().unwrap();
                         let mut backward = false;
-                        let ident = inner.next().unwrap();
-                        let ident = match ident.as_rule() {
+                        let ident = match mdl.as_rule() {
                             Rule::rev_triple_marker => {
                                 backward = true;
-                                inner.next().unwrap()
+                                els.next().unwrap().as_str()
                             }
-                            _ => ident,
+                            Rule::ident => {
+                                mdl.as_str()
+                            }
+                            _ => unreachable!()
                         };
-                        let ident = ident.as_str();
-                        algo_rels.push(json!({"triple": ident, "backward": backward}));
+                        let snd = els.next().unwrap().as_str();
+                        algo_rels.push(json!({"triple": ident, "backward": backward, "rel_args": [fst, snd]}))
                     }
                     _ => unreachable!(),
                 }

@@ -44,17 +44,17 @@ impl MagicAlgoRuleArg {
         stores: &'a BTreeMap<MagicSymbol, DerivedRelStore>,
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
-            MagicAlgoRuleArg::InMem(s) => {
+            MagicAlgoRuleArg::InMem(s, _) => {
                 let store = stores
                     .get(s)
                     .ok_or_else(|| anyhow!("rule not found: {:?}", s))?;
                 Box::new(store.scan_all())
             }
-            MagicAlgoRuleArg::Stored(s) => {
+            MagicAlgoRuleArg::Stored(s, _) => {
                 let view_rel = tx.get_view_rel(s)?;
                 Box::new(view_rel.scan_all()?)
             }
-            MagicAlgoRuleArg::Triple(attr, dir) => match dir {
+            MagicAlgoRuleArg::Triple(attr, _, dir) => match dir {
                 TripleDir::Fwd => {
                     if attr.with_history {
                         Box::new(
