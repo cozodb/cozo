@@ -72,6 +72,8 @@ impl AlgoImpl for Bfs {
             .clone();
         let binding_map = nodes.get_binding_map();
         condition.fill_binding_indices(&binding_map)?;
+        let binding_indices = condition.binding_indices();
+        let skip_query_nodes = binding_indices.is_subset(&BTreeSet::from([0]));
 
         let mut visited: BTreeSet<DataValue> = Default::default();
         let mut backtrace: BTreeMap<DataValue, DataValue> = Default::default();
@@ -103,13 +105,16 @@ impl AlgoImpl for Bfs {
                     }
 
                     visited.insert(to_node.clone());
-
-                    let cand_tuple = nodes
-                        .prefix_iter(to_node, tx, stores)?
-                        .next()
-                        .ok_or_else(|| anyhow!("node with id {:?} not found", candidate))??;
-
                     backtrace.insert(to_node.clone(), candidate.clone());
+
+                    let cand_tuple = if skip_query_nodes {
+                        Tuple(vec![to_node.clone()])
+                    } else {
+                        nodes
+                            .prefix_iter(to_node, tx, stores)?
+                            .next()
+                            .ok_or_else(|| anyhow!("node with id {:?} not found", candidate))??
+                    };
 
                     if condition.eval_pred(&cand_tuple)? {
                         found.push((starting_node.clone(), to_node.clone()));

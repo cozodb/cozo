@@ -71,6 +71,26 @@ impl Expr {
         }
         Ok(())
     }
+    pub(crate) fn binding_indices(&self) -> BTreeSet<usize> {
+        let mut ret = BTreeSet::default();
+        self.do_binding_indices(&mut ret);
+        ret
+    }
+    fn do_binding_indices(&self, coll: &mut BTreeSet<usize>) {
+        match self {
+            Expr::Binding(_k, idx) => {
+                if let Some(idx) = idx {
+                    coll.insert(*idx);
+                }
+            }
+            Expr::Const(_) | Expr::Param(_) => {}
+            Expr::Apply(_, args) => {
+                for arg in args.iter() {
+                    arg.do_binding_indices(coll);
+                }
+            }
+        }
+    }
     pub(crate) fn partial_eval(&mut self, param_pool: &BTreeMap<Symbol, DataValue>) -> Result<()> {
         let found_val = if let Expr::Param(s) = self {
             Some(
