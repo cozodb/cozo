@@ -86,26 +86,23 @@ impl AlgoImpl for Bfs {
             if visited.contains(starting_node) {
                 continue;
             }
+            visited.insert(starting_node.clone());
 
             let mut queue: VecDeque<DataValue> = VecDeque::default();
             queue.push_front(starting_node.clone());
 
             while let Some(candidate) = queue.pop_back() {
-                if visited.contains(&candidate) {
-                    continue;
-                }
-
-                visited.insert(candidate.clone());
-
                 for edge in edges.prefix_iter(&candidate, tx, stores)? {
                     let edge = edge?;
                     let to_node = edge
                         .0
                         .get(1)
                         .ok_or_else(|| anyhow!("'edges' relation too short"))?;
-                    if visited.contains(to_node) || backtrace.contains_key(to_node) {
+                    if visited.contains(&to_node) {
                         continue;
                     }
+
+                    visited.insert(to_node.clone());
 
                     let cand_tuple = nodes
                         .prefix_iter(to_node, tx, stores)?
