@@ -100,7 +100,7 @@ fn air_routes() -> Result<()> {
     let dfs_time = Instant::now();
     let res = db.run_script(r#"
         starting <- [['PEK']];
-        res <- dfs!([?id <airport.iata ?code], :flies_to_code[], starting[], condition: ?code == 'LHR');
+        res <- dfs!([?id <airport.iata ?code], :flies_to_code[], starting[], condition: (?code == 'LHR'));
         ?[?path] := res[?path];
     "#)?;
     dbg!(dfs_time.elapsed());
@@ -115,7 +115,6 @@ fn air_routes() -> Result<()> {
     dbg!(bfs_time.elapsed());
     println!("{}", res);
 
-    return Ok(());
     let deg_centrality_time = Instant::now();
     let res = db.run_script(
         r#"

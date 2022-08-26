@@ -534,6 +534,7 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
                         .try_collect()?;
                     json!({"op": ident, "args": args})
                 }
+                Rule::grouping => build_expr(p.into_inner().next().unwrap())?,
 
                 r => unreachable!("Encountered unknown op {:?}", r),
             })
