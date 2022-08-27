@@ -4,7 +4,6 @@ use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 
 use crate::algo::bfs::Bfs;
-use crate::algo::connected_components::ConnectedComponents;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
 use crate::algo::strongly_connected_components::StronglyConnectedComponent;
@@ -19,7 +18,6 @@ use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) mod bfs;
-pub(crate) mod connected_components;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
 pub(crate) mod page_rank;
@@ -67,8 +65,10 @@ impl AlgoHandle {
             "depth_first_search" | "dfs" => Box::new(Dfs),
             "breadth_first_search" | "bfs" => Box::new(Bfs),
             "top_sort" => Box::new(TopSort),
-            "connected_components" => Box::new(ConnectedComponents::default()),
-            "strongly_connected_components" | "scc" => Box::new(StronglyConnectedComponent),
+            "connected_components" => Box::new(StronglyConnectedComponent::new(false)),
+            "strongly_connected_components" | "scc" => {
+                Box::new(StronglyConnectedComponent::new(true))
+            }
             "page_rank" => todo!(),
             name => bail!("algorithm '{}' not found", name),
         })

@@ -115,14 +115,18 @@ fn air_routes() -> Result<()> {
 
     let scc_time = Instant::now();
     let res = db.run_script(r#"
-        ? <- strongly_connected_components!(:flies_to_code[], [?id <airport.iata ?code], mode: 'group_first');
+        res <- strongly_connected_components!(:flies_to_code[], [?id <airport.iata ?code], mode: 'group_first');
+        ?[?grp, ?code] := res[?grp, ?code], ?grp != 0;
     "#)?;
+    println!("{}", res);
     dbg!(scc_time.elapsed());
 
     let cc_time = Instant::now();
     let res = db.run_script(r#"
-        ? <- connected_components!(:flies_to_code[], [?id <airport.iata ?code], mode: 'group_first');
+        res <- connected_components!(:flies_to_code[], [?id <airport.iata ?code], mode: 'group_first');
+        ?[?grp, ?code] := res[?grp, ?code], ?grp != 0;
     "#)?;
+    println!("{}", res);
     dbg!(cc_time.elapsed());
 
     let deg_centrality_time = Instant::now();

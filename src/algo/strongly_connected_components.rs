@@ -13,7 +13,17 @@ use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
-pub(crate) struct StronglyConnectedComponent;
+pub(crate) struct StronglyConnectedComponent {
+    strong: bool
+}
+
+impl StronglyConnectedComponent {
+    pub(crate) fn new(strong: bool) -> Self {
+        Self {
+            strong
+        }
+    }
+}
 
 impl AlgoImpl for StronglyConnectedComponent {
     fn run(
@@ -74,6 +84,10 @@ impl AlgoImpl for StronglyConnectedComponent {
             };
             let from_target = graph.get_mut(from_idx).unwrap();
             from_target.push(to_idx);
+            if !self.strong {
+                let to_target = graph.get_mut(to_idx).unwrap();
+                to_target.push(from_idx);
+            }
         }
 
         let tarjan = TarjanScc::new(&graph).run();
