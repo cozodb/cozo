@@ -36,8 +36,8 @@ cozorocks = { path = "cozorocks" }
 #[target.'cfg(not(target_env = "msvc"))'.dependencies]
 #tikv-jemallocator = { version = "0.5", features = ["disable_initial_exec_tls"] }
 
-#[profile.release]
-#lto = true
+[profile.release]
+lto = true
 
 #[profile.release]
 #debug = true

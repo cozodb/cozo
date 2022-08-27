@@ -6,6 +6,7 @@ use actix_cors::Cors;
 use actix_web::rt::task::spawn_blocking;
 use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use clap::Parser;
+use env_logger::Env;
 use log::info;
 
 use actix_web_static_files::ResourceFiles;
@@ -79,7 +80,7 @@ include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
     if args.temp && Path::new(&args.path).exists() {
         panic!(
@@ -97,7 +98,10 @@ async fn main() -> std::io::Result<()> {
     let app_state = web::Data::new(AppStateWithDb { db });
 
     let addr = (&args.bind as &str, args.port);
-    info!("Serving database {} at {}:{}", args.path, addr.0, addr.1);
+    info!(
+        "Serving database {} at http://{}:{}",
+        args.path, addr.0, addr.1
+    );
 
     HttpServer::new(move || {
         let cors = Cors::permissive();

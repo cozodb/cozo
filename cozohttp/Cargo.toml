@@ -19,3 +19,6 @@ cozo = { path = ".." }
 
 [build-dependencies]
 static-files = "0.2.3"
+
+[profile.release]
+lto = true
