@@ -4,6 +4,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 
 use crate::algo::bfs::Bfs;
+use crate::algo::connected_components::ConnectedComponents;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
 use crate::algo::top_sort::TopSort;
@@ -64,7 +65,7 @@ impl AlgoHandle {
             "depth_first_search" | "dfs" => Box::new(Dfs),
             "breadth_first_search" | "bfs" => Box::new(Bfs),
             "top_sort" => Box::new(TopSort),
-            "connected_components" => todo!(),
+            "connected_components" => Box::new(ConnectedComponents::default()),
             "strongly_connected_components" | "scc" => todo!(),
             "page_rank" => todo!(),
             name => bail!("algorithm '{}' not found", name),

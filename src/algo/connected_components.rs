@@ -12,7 +12,7 @@ use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
 #[derive(Default)]
-struct ConnectedComponents {
+pub(crate) struct ConnectedComponents {
     union_find: BTreeMap<DataValue, DataValue>,
 }
 
@@ -23,8 +23,13 @@ impl ConnectedComponents {
             data.clone()
         } else {
             let mut root = data;
-            while let Some(new_found) = self.union_find.get(root) {
-                root = new_found;
+            loop {
+                let new_root = self.union_find.get(root).unwrap();
+                if new_root == root {
+                    break;
+                } else {
+                    root = new_root;
+                }
             }
 
             let root = root.clone();
@@ -79,16 +84,24 @@ impl AlgoImpl for ConnectedComponents {
 
             let to_root = self.find(&to);
             let from_root = self.find(&from);
-            if to_root != from_root {
-                let from_target = self.union_find.get_mut(&from_root).unwrap();
-                *from_target = to_root
-            }
+
+            let from_target = self.union_find.get_mut(&from_root).unwrap();
+            *from_target = to_root
         }
 
         let mut counter = 0i64;
         let mut seen: BTreeMap<&DataValue, i64> = Default::default();
 
-        for (k, grp) in self.union_find.iter() {
+        for (k, grp_in_map) in self.union_find.iter() {
+            let mut grp = grp_in_map;
+            loop {
+                let new_grp = self.union_find.get(grp).unwrap();
+                if new_grp == grp {
+                    break;
+                } else {
+                    grp = new_grp;
+                }
+            }
             let grp_id = if let Some(grp_id) = seen.get(grp) {
                 *grp_id
             } else {
@@ -111,7 +124,7 @@ impl AlgoImpl for ConnectedComponents {
                 let node = tuple.0.into_iter().next().ok_or_else(|| {
                     anyhow!("nodes relation for 'connected_components' too short")
                 })?;
-                if !seen.contains_key(&node) {
+                if !self.union_find.contains_key(&node) {
                     let tuple = if reverse_mode {
                         Tuple(vec![DataValue::from(counter), node])
                     } else {
