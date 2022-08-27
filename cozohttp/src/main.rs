@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
+use std::time::Instant;
 
 use actix_cors::Cors;
 use actix_web::rt::task::spawn_blocking;
@@ -7,6 +8,7 @@ use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use clap::Parser;
 use log::info;
 
+use actix_web_static_files::ResourceFiles;
 use anyhow::anyhow;
 use cozo::{Db, DbBuilder};
 
@@ -66,10 +68,14 @@ async fn query(body: web::Bytes, data: web::Data<AppStateWithDb>) -> Result<impl
         .map_err(|e| anyhow!(e))?
         .to_string();
     let db = data.db.new_session()?;
+    let start = Instant::now();
     let task = spawn_blocking(move || db.run_script(&text));
     let result = task.await.map_err(|e| anyhow!(e))??;
+    info!("finished query in {:?}", start.elapsed());
     Ok(HttpResponse::Ok().json(result))
 }
+
+include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -95,11 +101,13 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         let cors = Cors::permissive();
+        let generated = generate();
 
         App::new()
             .app_data(app_state.clone())
             .wrap(cors)
             .service(query)
+            .service(ResourceFiles::new("/", generated))
     })
     .bind(addr)?
     .run()
