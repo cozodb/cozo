@@ -14,14 +14,12 @@ use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct StronglyConnectedComponent {
-    strong: bool
+    strong: bool,
 }
 
 impl StronglyConnectedComponent {
     pub(crate) fn new(strong: bool) -> Self {
-        Self {
-            strong
-        }
+        Self { strong }
     }
 }
 
@@ -54,41 +52,8 @@ impl AlgoImpl for StronglyConnectedComponent {
             ),
         };
 
-        let mut graph: Vec<Vec<usize>> = vec![];
-        let mut indices: Vec<DataValue> = vec![];
-        let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
-
-        for tuple in edges.iter(tx, stores)? {
-            let mut tuple = tuple?.0.into_iter();
-            let from = tuple.next().ok_or_else(|| {
-                anyhow!("edges relation for 'strongly_connected_components' too short")
-            })?;
-            let to = tuple.next().ok_or_else(|| {
-                anyhow!("edges relation for 'strongly_connected_components' too short")
-            })?;
-            let from_idx = if let Some(idx) = inv_indices.get(&from) {
-                *idx
-            } else {
-                inv_indices.insert(from.clone(), graph.len());
-                indices.push(from.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let to_idx = if let Some(idx) = inv_indices.get(&to) {
-                *idx
-            } else {
-                inv_indices.insert(to.clone(), graph.len());
-                indices.push(to.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let from_target = graph.get_mut(from_idx).unwrap();
-            from_target.push(to_idx);
-            if !self.strong {
-                let to_target = graph.get_mut(to_idx).unwrap();
-                to_target.push(from_idx);
-            }
-        }
+        let (graph, indices, mut inv_indices) =
+            edges.convert_edge_to_graph(!self.strong, tx, stores)?;
 
         let tarjan = TarjanScc::new(&graph).run();
         for (grp_id, cc) in tarjan.iter().enumerate() {

@@ -76,6 +76,50 @@ impl AlgoHandle {
 }
 
 impl MagicAlgoRuleArg {
+    pub(crate) fn convert_edge_to_graph(
+        &self,
+        bidir: bool,
+        tx: &SessionTx,
+        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+    ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
+        let mut graph: Vec<Vec<usize>> = vec![];
+        let mut indices: Vec<DataValue> = vec![];
+        let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
+
+        for tuple in self.iter(tx, stores)? {
+            let mut tuple = tuple?.0.into_iter();
+            let from = tuple.next().ok_or_else(|| {
+                anyhow!("edges relation too short")
+            })?;
+            let to = tuple.next().ok_or_else(|| {
+                anyhow!("edges relation too short")
+            })?;
+            let from_idx = if let Some(idx) = inv_indices.get(&from) {
+                *idx
+            } else {
+                inv_indices.insert(from.clone(), graph.len());
+                indices.push(from.clone());
+                graph.push(vec![]);
+                graph.len() - 1
+            };
+            let to_idx = if let Some(idx) = inv_indices.get(&to) {
+                *idx
+            } else {
+                inv_indices.insert(to.clone(), graph.len());
+                indices.push(to.clone());
+                graph.push(vec![]);
+                graph.len() - 1
+            };
+            let from_target = graph.get_mut(from_idx).unwrap();
+            from_target.push(to_idx);
+            if bidir {
+                let to_target = graph.get_mut(to_idx).unwrap();
+                to_target.push(from_idx);
+            }
+        }
+        Ok((graph, indices, inv_indices))
+    }
+
     pub(crate) fn prefix_iter<'a>(
         &'a self,
         prefix: &DataValue,
