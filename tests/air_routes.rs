@@ -113,6 +113,12 @@ fn air_routes() -> Result<()> {
     dbg!(bfs_time.elapsed());
     println!("{}", res);
 
+    let scc_time = Instant::now();
+    let res = db.run_script(r#"
+        ? <- strongly_connected_components!(:flies_to_code[], [?id <airport.iata ?code], mode: 'group_first');
+    "#)?;
+    dbg!(scc_time.elapsed());
+
     let cc_time = Instant::now();
     let res = db.run_script(r#"
         ? <- connected_components!(:flies_to_code[], [?id <airport.iata ?code], mode: 'group_first');

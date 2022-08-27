@@ -125,6 +125,7 @@ impl AlgoImpl for ConnectedComponents {
                     anyhow!("nodes relation for 'connected_components' too short")
                 })?;
                 if !self.union_find.contains_key(&node) {
+                    self.union_find.insert(node.clone(), DataValue::Bottom);
                     let tuple = if reverse_mode {
                         Tuple(vec![DataValue::from(counter), node])
                     } else {

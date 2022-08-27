@@ -1,69 +1,8 @@
-use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 
 use itertools::Itertools;
-
-struct TarjanScc<'a> {
-    graph: &'a [Vec<usize>],
-    id: usize,
-    ids: Vec<Option<usize>>,
-    low: Vec<usize>,
-    on_stack: Vec<bool>,
-    stack: Vec<usize>,
-}
-
-impl<'a> TarjanScc<'a> {
-    pub(crate) fn new(graph: &'a [Vec<usize>]) -> Self {
-        Self {
-            graph,
-            id: 0,
-            ids: vec![None; graph.len()],
-            low: vec![0; graph.len()],
-            on_stack: vec![false; graph.len()],
-            stack: vec![],
-        }
-    }
-    pub(crate) fn run(mut self) -> Vec<Vec<usize>> {
-        for i in 0..self.graph.len() {
-            if self.ids[i].is_none() {
-                self.dfs(i);
-            }
-        }
-
-        let mut low_map: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-        for (idx, grp) in self.low.into_iter().enumerate() {
-            low_map.entry(grp).or_default().push(idx);
-        }
-
-        low_map.into_iter().map(|(_, vs)| vs).collect_vec()
-    }
-    fn dfs(&mut self, at: usize) {
-        self.stack.push(at);
-        self.on_stack[at] = true;
-        self.id += 1;
-        self.ids[at] = Some(self.id);
-        self.low[at] = self.id;
-        for to in &self.graph[at] {
-            let to = *to;
-            if self.ids[to].is_none() {
-                self.dfs(to);
-            }
-            if self.on_stack[to] {
-                self.low[at] = min(self.low[at], self.low[to]);
-            }
-        }
-        if self.ids[at].unwrap() == self.low[at] {
-            while let Some(node) = self.stack.pop() {
-                self.on_stack[node] = false;
-                self.low[node] = self.ids[at].unwrap();
-                if node == at {
-                    break;
-                }
-            }
-        }
-    }
-}
+use crate::algo::strongly_connected_components::TarjanScc;
 
 pub(crate) type Graph<T> = BTreeMap<T, Vec<T>>;
 

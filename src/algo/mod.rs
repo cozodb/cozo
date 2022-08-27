@@ -7,6 +7,7 @@ use crate::algo::bfs::Bfs;
 use crate::algo::connected_components::ConnectedComponents;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
+use crate::algo::strongly_connected_components::StronglyConnectedComponent;
 use crate::algo::top_sort::TopSort;
 use crate::data::expr::Expr;
 use crate::data::id::{EntityId, Validity};
@@ -22,6 +23,7 @@ pub(crate) mod connected_components;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
 pub(crate) mod page_rank;
+pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
 
 pub(crate) trait AlgoImpl {
@@ -66,7 +68,7 @@ impl AlgoHandle {
             "breadth_first_search" | "bfs" => Box::new(Bfs),
             "top_sort" => Box::new(TopSort),
             "connected_components" => Box::new(ConnectedComponents::default()),
-            "strongly_connected_components" | "scc" => todo!(),
+            "strongly_connected_components" | "scc" => Box::new(StronglyConnectedComponent),
             "page_rank" => todo!(),
             name => bail!("algorithm '{}' not found", name),
         })

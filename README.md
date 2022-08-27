@@ -17,8 +17,8 @@
   * [ ] betweenness centrality
   * [ ] pagerank
   * [ ] triangle counting
-  * [ ] strongly connected components
-  * [ ] connected components
+  * [x] strongly connected components
+  * [x] connected components
   * [ ] label propagation
   * [ ] louvain modularity
 * [x] direct loading of data
