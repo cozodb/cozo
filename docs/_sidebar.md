@@ -1,0 +1,2 @@
+* [Home](/)
+* [Guide](datatypes.md)
