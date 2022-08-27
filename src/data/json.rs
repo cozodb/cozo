@@ -63,7 +63,21 @@ impl From<DataValue> for JsonValue {
             DataValue::Null => JsonValue::Null,
             DataValue::Bool(b) => JsonValue::Bool(b),
             DataValue::Number(Number::Int(i)) => JsonValue::Number(i.into()),
-            DataValue::Number(Number::Float(f)) => json!(f),
+            DataValue::Number(Number::Float(f)) => {
+                if f.is_finite() {
+                    json!(f)
+                } else if f.is_nan() {
+                    json!(())
+                } else if f.is_infinite() {
+                    if f.is_sign_negative() {
+                        json!("NEGATIVE_INFINITY")
+                    } else {
+                        json!("INFINITY")
+                    }
+                } else {
+                    unreachable!()
+                }
+            }
             DataValue::String(t) => JsonValue::String(t.into()),
             DataValue::Bytes(bytes) => JsonValue::String(base64::encode(bytes)),
             DataValue::List(l) => {
@@ -77,10 +91,9 @@ impl From<DataValue> for JsonValue {
             }
             DataValue::Regex(r) => {
                 json!(r.0.as_str())
-            }
-            // DataValue::Map(m) => {
-            //     JsonValue::Array(m.into_iter().map(|(k, v)| json!([k, v])).collect())
-            // }
+            } // DataValue::Map(m) => {
+              //     JsonValue::Array(m.into_iter().map(|(k, v)| json!([k, v])).collect())
+              // }
         }
     }
 }
@@ -213,5 +226,21 @@ impl TryFrom<&'_ JsonValue> for TxId {
             .as_u64()
             .ok_or_else(|| anyhow!("cannot convert {} to tx id", value))?;
         Ok(TxId(v))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use crate::data::json::JsonValue;
+
+    use crate::data::value::DataValue;
+
+    #[test]
+    fn bad_values() {
+        println!("{}", json!(f64::INFINITY));
+        println!("{}", JsonValue::from(DataValue::from(f64::INFINITY)));
+        println!("{}", JsonValue::from(DataValue::from(f64::NEG_INFINITY)));
+        println!("{}", JsonValue::from(DataValue::from(f64::NAN)));
     }
 }

@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::mem;
 use std::ops::{Div, Rem};
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
@@ -1501,6 +1502,20 @@ fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
     }
 }
 
+define_op!(OP_TO_FLOAT, 1, false, false);
+fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Number(n) => n.get_float().into(),
+        DataValue::String(t) => match t as &str {
+            "NAN" => f64::NAN.into(),
+            "INFINITY" => f64::INFINITY.into(),
+            "NEGATIVE_INFINITY" => f64::NEG_INFINITY.into(),
+            s => f64::from_str(s)?.into(),
+        },
+        v => bail!("'to_float' cannot be applied to {:?}", v),
+    })
+}
+
 pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
     Some(match name {
         "list" => &OP_LIST,
@@ -1595,6 +1610,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "chunks" => &OP_CHUNKS,
         "chunks_exact" => &OP_CHUNKS_EXACT,
         "windows" => &OP_WINDOWS,
+        "to_float" => &OP_TO_FLOAT,
         _ => return None,
     })
 }

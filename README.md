@@ -5,7 +5,7 @@
 * [ ] graph algorithms
   * [x] bfs
   * [x] dfs
-  * [ ] shortest path
+  * [ ] shortest path, SSSP
   * [ ] A*
   * [ ] Yen's k-shortest
   * [ ] all-pairs shortest path
