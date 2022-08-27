@@ -2,16 +2,18 @@ use std::fmt::{Debug, Display, Formatter};
 use std::path::Path;
 
 use actix_cors::Cors;
-use actix_web::{App, HttpResponse, HttpServer, post, Responder, web};
+use actix_web::rt::task::spawn_blocking;
+use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
 use clap::Parser;
 use log::info;
 
+use anyhow::anyhow;
 use cozo::{Db, DbBuilder};
 
 type Result<T> = std::result::Result<T, RespError>;
 
 struct RespError {
-    err: cozo::Error,
+    err: anyhow::Error,
 }
 
 impl Debug for RespError {
@@ -58,31 +60,15 @@ struct AppStateWithDb {
     db: Db,
 }
 
-#[post("/tx")]
-async fn transact(
-    body: web::Json<serde_json::Value>,
-    data: web::Data<AppStateWithDb>,
-) -> Result<impl Responder> {
-    data.db.transact_triples(&body)?;
-    Ok(HttpResponse::Ok().body("transact"))
-}
-
-#[post("/txa")]
-async fn transact_attr(
-    body: web::Json<serde_json::Value>,
-    data: web::Data<AppStateWithDb>,
-) -> Result<impl Responder> {
-    data.db.transact_attributes(&body)?;
-    Ok(HttpResponse::Ok().body("transact-attr success"))
-}
-
-#[post("/q")]
-async fn query(
-    body: web::Json<serde_json::Value>,
-    data: web::Data<AppStateWithDb>,
-) -> Result<impl Responder> {
-    dbg!(&body, &data.db);
-    Ok(HttpResponse::Ok().body("query"))
+#[post("/text-query")]
+async fn query(body: web::Bytes, data: web::Data<AppStateWithDb>) -> Result<impl Responder> {
+    let text = std::str::from_utf8(&body)
+        .map_err(|e| anyhow!(e))?
+        .to_string();
+    let db = data.db.new_session()?;
+    let task = spawn_blocking(move || db.run_script(&text));
+    let result = task.await.map_err(|e| anyhow!(e))??;
+    Ok(HttpResponse::Ok().json(result))
 }
 
 #[actix_web::main]
@@ -114,10 +100,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_state.clone())
             .wrap(cors)
             .service(query)
-            .service(transact)
-            .service(transact_attr)
     })
-        .bind(addr)?
-        .run()
-        .await
+    .bind(addr)?
+    .run()
+    .await
 }
