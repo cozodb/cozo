@@ -14,16 +14,8 @@ use crate::runtime::transact::SessionTx;
 pub(crate) struct Bfs;
 
 impl AlgoImpl for Bfs {
-    fn name(&self) -> Symbol {
-        Symbol::from("bfs")
-    }
-
-    fn arity(&self) -> usize {
-        1
-    }
-
     fn run(
-        &self,
+        &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
         opts: &BTreeMap<Symbol, Expr>,

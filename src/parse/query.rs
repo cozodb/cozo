@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use serde_json::{json, Map};
 
-use crate::algo::get_algo;
+use crate::algo::AlgoHandle;
 use crate::data::aggr::get_aggr;
 use crate::data::attr::Attribute;
 use crate::data::expr::{get_op, Expr, OP_LIST};
@@ -99,8 +99,11 @@ impl SessionTx {
         let rules_payload = q
             .as_array()
             .ok_or_else(|| anyhow!("expect field 'q' to be an array in query {}", payload))?;
-        ensure!(!rules_payload.is_empty(), "no rules in {}", payload);
-        let mut input_prog = if rules_payload.first().unwrap().is_array() {
+        let mut input_prog = if rules_payload.is_empty() {
+            InputProgram {
+                prog: Default::default(),
+            }
+        } else if rules_payload.first().unwrap().is_array() {
             let q = json!([{"rule": "?", "args": rules_payload}]);
             self.parse_input_rule_sets(&q, vld, params_pool)?
         } else {
@@ -196,11 +199,13 @@ impl SessionTx {
                     }
                 }
                 let out_name = Symbol::from(out_symbol);
-                out_name.validate_not_reserved()?;
+                if !out_name.is_prog_entry() {
+                    out_name.validate_not_reserved()?;
+                }
                 match input_prog.prog.entry(out_name) {
                     Entry::Vacant(v) => {
                         v.insert(InputRulesOrAlgo::Algo(AlgoApply {
-                            algo: get_algo(name_symbol)?,
+                            algo: AlgoHandle::new(name_symbol),
                             rule_args: relations,
                             options,
                         }));

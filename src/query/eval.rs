@@ -137,7 +137,7 @@ impl SessionTx {
         algo_apply: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
     ) -> Result<()> {
-        let algo_impl = &algo_apply.algo;
+        let mut algo_impl = algo_apply.algo.get_impl()?;
         let out = stores
             .get(rule_symb)
             .ok_or_else(|| anyhow!("cannot find algo store {:?}", rule_symb))?;

@@ -26,8 +26,8 @@ view_ident = @{":" ~ ident}
 compound_ident = {ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"}
-const_rule = {ident ~ "<-" ~ expr ~ ";" }
-algo_rule = {ident ~ "<-" ~ algo_ident ~ "(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")" ~ ";" }
+const_rule = {(prog_entry | ident) ~ "<-" ~ expr ~ ";" }
+algo_rule = {(prog_entry | ident) ~ "<-" ~ algo_ident ~ "(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")" ~ ";" }
 
 rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
 head_arg = {aggr_arg | var}

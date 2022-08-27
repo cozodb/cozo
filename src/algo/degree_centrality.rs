@@ -14,16 +14,8 @@ use crate::runtime::transact::SessionTx;
 pub(crate) struct DegreeCentrality;
 
 impl AlgoImpl for DegreeCentrality {
-    fn name(&self) -> Symbol {
-        Symbol::from("degree_centrality")
-    }
-
-    fn arity(&self) -> usize {
-        4
-    }
-
     fn run(
-        &self,
+        &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
         _opts: &BTreeMap<Symbol, Expr>,

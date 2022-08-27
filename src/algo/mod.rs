@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
@@ -7,6 +6,7 @@ use itertools::Itertools;
 use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
+use crate::algo::top_sort::TopSort;
 use crate::data::expr::Expr;
 use crate::data::id::{EntityId, Validity};
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol, TripleDir};
@@ -17,15 +17,15 @@ use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) mod bfs;
-mod degree_centrality;
+pub(crate) mod connected_components;
+pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
 pub(crate) mod page_rank;
+pub(crate) mod top_sort;
 
 pub(crate) trait AlgoImpl {
-    fn name(&self) -> Symbol;
-    fn arity(&self) -> usize;
     fn run(
-        &self,
+        &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
         opts: &BTreeMap<Symbol, Expr>,
@@ -34,14 +34,42 @@ pub(crate) trait AlgoImpl {
     ) -> Result<()>;
 }
 
-pub(crate) fn get_algo(name: &str) -> Result<Arc<dyn AlgoImpl>> {
-    Ok(match name {
-        "degree_centrality" => Arc::new(DegreeCentrality),
-        "dfs" => Arc::new(Dfs),
-        "bfs" => Arc::new(Bfs),
-        "page_rank" => todo!(),
-        name => bail!("algorithm '{}' not found", name),
-    })
+#[derive(Clone, Debug)]
+pub(crate) struct AlgoHandle {
+    pub(crate) name: Symbol,
+}
+
+impl AlgoHandle {
+    pub(crate) fn new(name: &str) -> Self {
+        AlgoHandle {
+            name: Symbol::from(name),
+        }
+    }
+    pub(crate) fn arity(&self) -> Result<usize> {
+        Ok(match &self.name.0 as &str {
+            "degree_centrality" => 4,
+            "depth_first_search" | "dfs" => 1,
+            "breadth_first_search" | "bfs" => 1,
+            "top_sort" => 2,
+            "connected_components" => 2,
+            "strongly_connected_components" | "scc" => 2,
+            "page_rank" => todo!(),
+            name => bail!("algorithm '{}' not found", name),
+        })
+    }
+
+    pub(crate) fn get_impl(&self) -> Result<Box<dyn AlgoImpl>> {
+        Ok(match &self.name.0 as &str {
+            "degree_centrality" => Box::new(DegreeCentrality),
+            "depth_first_search" | "dfs" => Box::new(Dfs),
+            "breadth_first_search" | "bfs" => Box::new(Bfs),
+            "top_sort" => Box::new(TopSort),
+            "connected_components" => todo!(),
+            "strongly_connected_components" | "scc" => todo!(),
+            "page_rank" => todo!(),
+            name => bail!("algorithm '{}' not found", name),
+        })
+    }
 }
 
 impl MagicAlgoRuleArg {

@@ -1,13 +1,12 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
-use std::sync::Arc;
 
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use smallvec::SmallVec;
 
-use crate::algo::AlgoImpl;
+use crate::algo::AlgoHandle;
 use crate::data::aggr::Aggregation;
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
@@ -35,7 +34,7 @@ pub(crate) enum InputRulesOrAlgo {
 
 #[derive(Clone)]
 pub(crate) struct AlgoApply {
-    pub(crate) algo: Arc<dyn AlgoImpl>,
+    pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<AlgoRuleArg>,
     pub(crate) options: BTreeMap<Symbol, Expr>,
 }
@@ -43,7 +42,7 @@ pub(crate) struct AlgoApply {
 impl Debug for AlgoApply {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AlgoApply")
-            .field("algo", &self.algo.name())
+            .field("algo", &self.algo.name)
             .field("rules", &self.rule_args)
             .field("options", &self.options)
             .finish()
@@ -52,7 +51,7 @@ impl Debug for AlgoApply {
 
 #[derive(Clone)]
 pub(crate) struct MagicAlgoApply {
-    pub(crate) algo: Arc<dyn AlgoImpl>,
+    pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<MagicAlgoRuleArg>,
     pub(crate) options: BTreeMap<Symbol, Expr>,
 }
@@ -60,7 +59,7 @@ pub(crate) struct MagicAlgoApply {
 impl Debug for MagicAlgoApply {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AlgoApply")
-            .field("algo", &self.algo.name())
+            .field("algo", &self.algo.name)
             .field("rules", &self.rule_args)
             .field("options", &self.options)
             .finish()
@@ -143,7 +142,7 @@ impl InputProgram {
                 .ok_or_else(|| anyhow!("program entry point not found"))?
             {
                 InputRulesOrAlgo::Rules(rules) => rules[0].head.len(),
-                InputRulesOrAlgo::Algo(algo_apply) => algo_apply.algo.arity(),
+                InputRulesOrAlgo::Algo(algo_apply) => algo_apply.algo.arity()?,
             },
         )
     }
@@ -258,11 +257,11 @@ impl Default for MagicRulesOrAlgo {
 }
 
 impl MagicRulesOrAlgo {
-    pub(crate) fn arity(&self) -> usize {
-        match self {
+    pub(crate) fn arity(&self) -> Result<usize> {
+        Ok(match self {
             MagicRulesOrAlgo::Rules(r) => r.first().unwrap().head.len(),
-            MagicRulesOrAlgo::Algo(algo) => algo.algo.arity(),
-        }
+            MagicRulesOrAlgo::Algo(algo) => algo.algo.arity()?,
+        })
     }
     pub(crate) fn mut_rules(&mut self) -> Option<&mut Vec<MagicRule>> {
         match self {

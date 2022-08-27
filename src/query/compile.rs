@@ -92,7 +92,7 @@ impl SessionTx {
                 );
                 stores.insert(
                     name.clone(),
-                    self.new_rule_store(name.clone(), ruleset.arity()),
+                    self.new_rule_store(name.clone(), ruleset.arity()?),
                 );
             }
         }
