@@ -34,8 +34,8 @@ impl AlgoImpl for Dfs {
             rels.len() == 2 || rels.len() == 3,
             "'dfs' requires two or three input relations"
         );
-        let nodes = rels.get(0).unwrap();
-        let edges = rels.get(1).unwrap();
+        let edges = rels.get(0).unwrap();
+        let nodes = rels.get(1).unwrap();
         let starting_nodes = if rels.len() == 3 {
             rels.get(2).unwrap()
         } else {

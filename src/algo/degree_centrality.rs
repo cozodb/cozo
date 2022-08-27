@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::ensure;
+use anyhow::{anyhow, ensure};
 
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
@@ -30,12 +30,12 @@ impl AlgoImpl for DegreeCentrality {
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
     ) -> anyhow::Result<()> {
-        ensure!(
-            rels.len() == 1,
-            "'degree_centrality' requires a single input relation, got {}",
-            rels.len()
-        );
-        let it = rels[0].iter(tx, stores)?;
+        let it = rels
+            .get(0)
+            .ok_or_else(|| anyhow!(
+                "'degree_centrality' requires at least an edge relation to proceed"
+            ))?
+            .iter(tx, stores)?;
         let mut counter: BTreeMap<DataValue, (usize, usize, usize)> = BTreeMap::new();
         for tuple in it {
             let tuple = tuple?;
@@ -52,6 +52,18 @@ impl AlgoImpl for DegreeCentrality {
             let (to_total, _, to_in) = counter.entry(to).or_default();
             *to_total += 1;
             *to_in += 1;
+        }
+        if let Some(nodes) = rels.get(1) {
+            for tuple in nodes.iter(tx, stores)? {
+                let tuple = tuple?;
+                let id = tuple
+                    .0
+                    .get(0)
+                    .ok_or_else(|| anyhow!("nodes relation to 'degree_centrality' too short"))?;
+                if !counter.contains_key(id) {
+                    counter.insert(id.clone(), (0, 0, 0));
+                }
+            }
         }
         for (k, (total_d, out_d, in_d)) in counter.into_iter() {
             let tuple = Tuple(vec![
