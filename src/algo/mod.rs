@@ -9,6 +9,7 @@ use crate::algo::dfs::Dfs;
 use crate::algo::shortest_path_dijkstra::ShortestPathDijkstra;
 use crate::algo::strongly_connected_components::StronglyConnectedComponent;
 use crate::algo::top_sort::TopSort;
+use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
 use crate::data::id::{EntityId, Validity};
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol, TripleDir};
@@ -25,6 +26,7 @@ pub(crate) mod page_rank;
 pub(crate) mod shortest_path_dijkstra;
 pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
+pub(crate) mod yen;
 
 pub(crate) trait AlgoImpl {
     fn run(
@@ -54,6 +56,7 @@ impl AlgoHandle {
             "depth_first_search" | "dfs" => 1,
             "breadth_first_search" | "bfs" => 1,
             "shortest_path_dijkstra" => 4,
+            "k_shortest_path_yen" => 4,
             "top_sort" => 2,
             "connected_components" => 2,
             "strongly_connected_components" | "scc" => 2,
@@ -68,6 +71,7 @@ impl AlgoHandle {
             "depth_first_search" | "dfs" => Box::new(Dfs),
             "breadth_first_search" | "bfs" => Box::new(Bfs),
             "shortest_path_dijkstra" => Box::new(ShortestPathDijkstra),
+            "k_shortest_path_yen" => Box::new(KShortestPathYen),
             "top_sort" => Box::new(TopSort),
             "connected_components" => Box::new(StronglyConnectedComponent::new(false)),
             "strongly_connected_components" | "scc" => {

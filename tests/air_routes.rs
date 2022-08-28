@@ -186,6 +186,19 @@ fn air_routes() -> Result<()> {
     dbg!(dijkstra_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[["JFK", "CTU", "KUL"]]]));
 
+    let yen_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        starting <- [['PEK']];
+        ending <- [['SIN']];
+        ? <- k_shortest_path_yen!(:flies_to_code[], starting[], ending[], k: 5);
+    "#,
+    )?;
+
+    dbg!(yen_time.elapsed());
+    println!("{}", res);
+    return Ok(());
+
     let starts_with_time = Instant::now();
     let res = db.run_script(
         r#"

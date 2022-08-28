@@ -122,7 +122,7 @@ impl Ord for HeapState {
 
 impl Eq for HeapState {}
 
-trait ForbiddenEdge {
+pub(crate) trait ForbiddenEdge {
     fn is_forbidden(&self, src: usize, dst: usize) -> bool;
 }
 
@@ -138,7 +138,7 @@ impl ForbiddenEdge for BTreeSet<(usize, usize)> {
     }
 }
 
-trait ForbiddenNode {
+pub(crate) trait ForbiddenNode {
     fn is_forbidden(&self, node: usize) -> bool;
 }
 
@@ -154,7 +154,7 @@ impl ForbiddenNode for BTreeSet<usize> {
     }
 }
 
-trait Goal {
+pub(crate) trait Goal {
     fn is_exhausted(&self) -> bool;
     fn visit(&mut self, node: usize);
     fn iter(&self, total: usize) -> Box<dyn Iterator<Item = usize> + '_>;
@@ -208,7 +208,7 @@ impl Goal for BTreeSet<usize> {
     }
 }
 
-fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
+pub(crate) fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
     edges: &[Vec<(usize, f64)>],
     start: usize,
     goals: &G,
