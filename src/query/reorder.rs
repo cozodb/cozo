@@ -4,26 +4,16 @@ use std::mem;
 use anyhow::{bail, Result};
 
 use crate::data::program::{NormalFormAtom, NormalFormRule};
-use crate::data::symb::Symbol;
 
 impl NormalFormRule {
     pub(crate) fn convert_to_well_ordered_rule(self) -> Result<Self> {
         let mut seen_variables = BTreeSet::default();
         let mut round_1_collected = vec![];
         let mut pending = vec![];
-        let mut symb_count = 0;
-        let mut process_ignored_symbol = |symb: &mut Symbol| {
-            if symb.is_ignored_var() {
-                symb_count += 1;
-                let mut new_symb = Symbol::from(&format!("_{}", symb_count) as &str);
-                mem::swap(&mut new_symb, symb);
-            }
-        };
 
         for atom in self.body {
             match atom {
-                NormalFormAtom::Unification(mut u) => {
-                    process_ignored_symbol(&mut u.binding);
+                NormalFormAtom::Unification(u) => {
                     if u.is_const() {
                         seen_variables.insert(u.binding.clone());
                         round_1_collected.push(NormalFormAtom::Unification(u));
@@ -37,42 +27,30 @@ impl NormalFormRule {
                         }
                     }
                 }
-                NormalFormAtom::AttrTriple(mut t) => {
-                    process_ignored_symbol(&mut t.value);
-                    process_ignored_symbol(&mut t.entity);
+                NormalFormAtom::AttrTriple(t) => {
                     seen_variables.insert(t.value.clone());
                     seen_variables.insert(t.entity.clone());
                     round_1_collected.push(NormalFormAtom::AttrTriple(t));
                 }
                 NormalFormAtom::Rule(mut r) => {
                     for arg in &mut r.args {
-                        process_ignored_symbol(arg);
                         seen_variables.insert(arg.clone());
                     }
                     round_1_collected.push(NormalFormAtom::Rule(r))
                 }
                 NormalFormAtom::View(mut v) => {
                     for arg in &mut v.args {
-                        process_ignored_symbol(arg);
                         seen_variables.insert(arg.clone());
                     }
                     round_1_collected.push(NormalFormAtom::View(v))
                 }
-                NormalFormAtom::NegatedAttrTriple(mut t) => {
-                    process_ignored_symbol(&mut t.value);
-                    process_ignored_symbol(&mut t.entity);
+                NormalFormAtom::NegatedAttrTriple(t) => {
                     pending.push(NormalFormAtom::NegatedAttrTriple(t))
                 }
-                NormalFormAtom::NegatedRule(mut r) => {
-                    for arg in &mut r.args {
-                        process_ignored_symbol(arg);
-                    }
+                NormalFormAtom::NegatedRule(r) => {
                     pending.push(NormalFormAtom::NegatedRule(r))
                 }
-                NormalFormAtom::NegatedView(mut v) => {
-                    for arg in &mut v.args {
-                        process_ignored_symbol(arg);
-                    }
+                NormalFormAtom::NegatedView(v) => {
                     pending.push(NormalFormAtom::NegatedView(v))
                 }
                 NormalFormAtom::Predicate(p) => {

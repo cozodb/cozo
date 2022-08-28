@@ -5,11 +5,11 @@
 * [ ] graph algorithms
   * [x] bfs
   * [x] dfs
-  * [ ] shortest path, SSSP
+  * [x] shortest path
   * [ ] A*
   * [ ] Yen's k-shortest
   * [ ] all-pairs shortest path
-  * [ ] single-source shortest path
+  * [x] single-source shortest path
   * [ ] minimum spanning tree
   * [ ] random walking
   * [x] degree centrality

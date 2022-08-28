@@ -32,11 +32,6 @@ impl AlgoImpl for ShortestPathDijkstra {
             anyhow!("'shortest_path_dijkstra' requires starting relation as second argument")
         })?;
         let termination = rels.get(2);
-        let allow_negative_edges = match opts.get(&Symbol::from("allow_negative_edges")) {
-            None => false,
-            Some(Expr::Const(DataValue::Bool(b))) => *b,
-            Some(v) => bail!("option 'allow_negative_edges' for 'shortest_path_dijkstra' requires a boolean, got {:?}", v)
-        };
         let undirected = match opts.get(&Symbol::from("undirected")) {
             None => false,
             Some(Expr::Const(DataValue::Bool(b))) => *b,
@@ -46,8 +41,8 @@ impl AlgoImpl for ShortestPathDijkstra {
             ),
         };
 
-        let (graph, indices, inv_indices) =
-            edges.convert_edge_to_weighted_graph(undirected, allow_negative_edges, tx, stores)?;
+        let (graph, indices, inv_indices, _) =
+            edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
 
         let mut starting_nodes = BTreeSet::new();
         for tuple in starting.iter(tx, stores)? {
@@ -79,7 +74,7 @@ impl AlgoImpl for ShortestPathDijkstra {
         };
 
         for start in starting_nodes {
-            let res = dijkstra(&graph, start, &termination_nodes);
+            let res = dijkstra(&graph, start, &termination_nodes, ());
             for (target, cost, path) in res {
                 let t = vec![
                     indices[start].clone(),
@@ -118,10 +113,27 @@ impl Ord for HeapState {
 
 impl Eq for HeapState {}
 
-fn dijkstra(
+trait ForbiddenEdge {
+    fn is_forbidden(&self, src: usize, dst: usize) -> bool;
+}
+
+impl ForbiddenEdge for () {
+    fn is_forbidden(&self, _src: usize, _dst: usize) -> bool {
+        false
+    }
+}
+
+impl ForbiddenEdge for BTreeSet<(usize, usize)> {
+    fn is_forbidden(&self, src: usize, dst: usize) -> bool {
+        self.contains(&(src, dst))
+    }
+}
+
+fn dijkstra<T: ForbiddenEdge>(
     edges: &[Vec<(usize, f64)>],
     start: usize,
     maybe_goals: &Option<BTreeSet<usize>>,
+    forbidden: T,
 ) -> Vec<(usize, f64, Vec<usize>)> {
     let mut distance = vec![f64::INFINITY; edges.len()];
     let mut heap = BinaryHeap::new();
@@ -139,6 +151,9 @@ fn dijkstra(
         }
 
         for (nxt_node, path_weight) in &edges[state.node] {
+            if forbidden.is_forbidden(state.node, *nxt_node) {
+                continue;
+            }
             let nxt_cost = state.cost + *path_weight;
             if nxt_cost < distance[*nxt_node] {
                 heap.push(HeapState {

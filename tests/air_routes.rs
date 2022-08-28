@@ -173,6 +173,19 @@ fn air_routes() -> Result<()> {
         )?
     );
 
+    let dijkstra_time = Instant::now();
+    let res = db.run_script(
+        r#"
+        starting <- [['JFK']];
+        ending <- [['KUL']];
+        res <- shortest_path_dijkstra!(:flies_to_code[], starting[], ending[]);
+        ?[?path] := res[?src, ?dst, ?cost, ?path];
+    "#,
+    )?;
+
+    dbg!(dijkstra_time.elapsed());
+    assert_eq!(*res.get("rows").unwrap(), json!([[["JFK", "CTU", "KUL"]]]));
+
     let starts_with_time = Instant::now();
     let res = db.run_script(
         r#"

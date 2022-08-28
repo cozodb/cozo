@@ -83,17 +83,19 @@ impl MagicAlgoRuleArg {
     pub(crate) fn convert_edge_to_weighted_graph(
         &self,
         undirected: bool,
-        allow_negative_edge: bool,
+        allow_negative_edges: bool,
         tx: &SessionTx,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
     ) -> Result<(
         Vec<Vec<(usize, f64)>>,
         Vec<DataValue>,
         BTreeMap<DataValue, usize>,
+        bool
     )> {
         let mut graph: Vec<Vec<(usize, f64)>> = vec![];
         let mut indices: Vec<DataValue> = vec![];
         let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
+        let mut has_neg_edge = false;
 
         for tuple in self.iter(tx, stores)? {
             let mut tuple = tuple?.0.into_iter();
@@ -108,8 +110,11 @@ impl MagicAlgoRuleArg {
                 Some(d) => match d.get_float() {
                     Some(f) => {
                         ensure!(f.is_finite(), "edge weight must be finite, got {}", f);
-                        if !allow_negative_edge {
-                            ensure!(f >= 0., "edge weight must be non-negative, got {}", f);
+                        if f < 0. {
+                            if !allow_negative_edges {
+                                bail!("edge weight must be non-negative, got {}", f);
+                            }
+                            has_neg_edge = true;
                         }
                         f
                     }
@@ -139,7 +144,7 @@ impl MagicAlgoRuleArg {
                 to_target.push((from_idx, weight));
             }
         }
-        Ok((graph, indices, inv_indices))
+        Ok((graph, indices, inv_indices, has_neg_edge))
     }
     pub(crate) fn convert_edge_to_graph(
         &self,
