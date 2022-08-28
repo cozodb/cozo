@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::iter;
 
 use anyhow::{anyhow, bail, Result};
-use either::{Left, Right};
 use itertools::Itertools;
 
 use crate::algo::AlgoImpl;
@@ -74,7 +74,16 @@ impl AlgoImpl for ShortestPathDijkstra {
         };
 
         for start in starting_nodes {
-            let res = dijkstra(&graph, start, &termination_nodes, ());
+            let res = if let Some(tn) = &termination_nodes {
+                if tn.len() == 1 {
+                    let single = Some(*tn.iter().next().unwrap());
+                    dijkstra(&graph, start, &single, &(), &())
+                } else {
+                    dijkstra(&graph, start, tn, &(), &())
+                }
+            } else {
+                dijkstra(&graph, start, &(), &(), &())
+            };
             for (target, cost, path) in res {
                 let t = vec![
                     indices[start].clone(),
@@ -129,11 +138,82 @@ impl ForbiddenEdge for BTreeSet<(usize, usize)> {
     }
 }
 
-fn dijkstra<T: ForbiddenEdge>(
+trait ForbiddenNode {
+    fn is_forbidden(&self, node: usize) -> bool;
+}
+
+impl ForbiddenNode for () {
+    fn is_forbidden(&self, _node: usize) -> bool {
+        false
+    }
+}
+
+impl ForbiddenNode for BTreeSet<usize> {
+    fn is_forbidden(&self, node: usize) -> bool {
+        self.contains(&node)
+    }
+}
+
+trait Goal {
+    fn is_exhausted(&self) -> bool;
+    fn visit(&mut self, node: usize);
+    fn iter(&self, total: usize) -> Box<dyn Iterator<Item = usize> + '_>;
+}
+
+impl Goal for () {
+    fn is_exhausted(&self) -> bool {
+        false
+    }
+
+    fn visit(&mut self, _node: usize) {}
+
+    fn iter(&self, total: usize) -> Box<dyn Iterator<Item = usize> + '_> {
+        Box::new(0..total)
+    }
+}
+
+impl Goal for Option<usize> {
+    fn is_exhausted(&self) -> bool {
+        self.is_none()
+    }
+
+    fn visit(&mut self, node: usize) {
+        if let Some(u) = &self {
+            if *u == node {
+                self.take();
+            }
+        }
+    }
+
+    fn iter(&self, _total: usize) -> Box<dyn Iterator<Item = usize> + '_> {
+        if let Some(u) = self {
+            Box::new(iter::once(*u))
+        } else {
+            Box::new(iter::empty())
+        }
+    }
+}
+
+impl Goal for BTreeSet<usize> {
+    fn is_exhausted(&self) -> bool {
+        self.is_empty()
+    }
+
+    fn visit(&mut self, node: usize) {
+        self.remove(&node);
+    }
+
+    fn iter(&self, _total: usize) -> Box<dyn Iterator<Item = usize> + '_> {
+        Box::new(self.iter().cloned())
+    }
+}
+
+fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
     edges: &[Vec<(usize, f64)>],
     start: usize,
-    maybe_goals: &Option<BTreeSet<usize>>,
-    forbidden: T,
+    goals: &G,
+    forbidden_edges: &FE,
+    forbidden_nodes: &FN,
 ) -> Vec<(usize, f64, Vec<usize>)> {
     let mut distance = vec![f64::INFINITY; edges.len()];
     let mut heap = BinaryHeap::new();
@@ -143,7 +223,7 @@ fn dijkstra<T: ForbiddenEdge>(
         cost: 0.,
         node: start,
     });
-    let mut goals_remaining = maybe_goals.clone();
+    let mut goals_remaining = goals.clone();
 
     while let Some(state) = heap.pop() {
         if state.cost > distance[state.node] {
@@ -151,7 +231,10 @@ fn dijkstra<T: ForbiddenEdge>(
         }
 
         for (nxt_node, path_weight) in &edges[state.node] {
-            if forbidden.is_forbidden(state.node, *nxt_node) {
+            if forbidden_nodes.is_forbidden(*nxt_node) {
+                continue;
+            }
+            if forbidden_edges.is_forbidden(state.node, *nxt_node) {
                 continue;
             }
             let nxt_cost = state.cost + *path_weight;
@@ -165,21 +248,14 @@ fn dijkstra<T: ForbiddenEdge>(
             }
         }
 
-        if let Some(goals) = &mut goals_remaining {
-            if goals.remove(&state.node) {
-                if goals.is_empty() {
-                    break;
-                }
-            }
+        goals_remaining.visit(state.node);
+        if goals_remaining.is_exhausted() {
+            break;
         }
     }
 
-    let targets = if let Some(goals) = maybe_goals {
-        Left(goals.iter().cloned())
-    } else {
-        Right(0..edges.len())
-    };
-    let ret = targets
+    let ret = goals
+        .iter(edges.len())
         .map(|target| {
             let cost = distance[target];
             if !cost.is_finite() {
