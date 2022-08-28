@@ -6,6 +6,7 @@ use itertools::Itertools;
 use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
+use crate::algo::shortest_path_dijkstra::ShortestPathDijkstra;
 use crate::algo::strongly_connected_components::StronglyConnectedComponent;
 use crate::algo::top_sort::TopSort;
 use crate::data::expr::Expr;
@@ -21,6 +22,7 @@ pub(crate) mod bfs;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
 pub(crate) mod page_rank;
+pub(crate) mod shortest_path_dijkstra;
 pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
 
@@ -51,6 +53,7 @@ impl AlgoHandle {
             "degree_centrality" => 4,
             "depth_first_search" | "dfs" => 1,
             "breadth_first_search" | "bfs" => 1,
+            "shortest_path_dijkstra" => 4,
             "top_sort" => 2,
             "connected_components" => 2,
             "strongly_connected_components" | "scc" => 2,
@@ -64,6 +67,7 @@ impl AlgoHandle {
             "degree_centrality" => Box::new(DegreeCentrality),
             "depth_first_search" | "dfs" => Box::new(Dfs),
             "breadth_first_search" | "bfs" => Box::new(Bfs),
+            "shortest_path_dijkstra" => Box::new(ShortestPathDijkstra),
             "top_sort" => Box::new(TopSort),
             "connected_components" => Box::new(StronglyConnectedComponent::new(false)),
             "strongly_connected_components" | "scc" => {
@@ -76,9 +80,70 @@ impl AlgoHandle {
 }
 
 impl MagicAlgoRuleArg {
+    pub(crate) fn convert_edge_to_weighted_graph(
+        &self,
+        undirected: bool,
+        allow_negative_edge: bool,
+        tx: &SessionTx,
+        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+    ) -> Result<(
+        Vec<Vec<(usize, f64)>>,
+        Vec<DataValue>,
+        BTreeMap<DataValue, usize>,
+    )> {
+        let mut graph: Vec<Vec<(usize, f64)>> = vec![];
+        let mut indices: Vec<DataValue> = vec![];
+        let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
+
+        for tuple in self.iter(tx, stores)? {
+            let mut tuple = tuple?.0.into_iter();
+            let from = tuple
+                .next()
+                .ok_or_else(|| anyhow!("edges relation too short"))?;
+            let to = tuple
+                .next()
+                .ok_or_else(|| anyhow!("edges relation too short"))?;
+            let weight = match tuple.next() {
+                None => 1.0,
+                Some(d) => match d.get_float() {
+                    Some(f) => {
+                        ensure!(f.is_finite(), "edge weight must be finite, got {}", f);
+                        if !allow_negative_edge {
+                            ensure!(f >= 0., "edge weight must be non-negative, got {}", f);
+                        }
+                        f
+                    }
+                    None => bail!("edge weight must be a number, got {:?}", d),
+                },
+            };
+            let from_idx = if let Some(idx) = inv_indices.get(&from) {
+                *idx
+            } else {
+                inv_indices.insert(from.clone(), graph.len());
+                indices.push(from.clone());
+                graph.push(vec![]);
+                graph.len() - 1
+            };
+            let to_idx = if let Some(idx) = inv_indices.get(&to) {
+                *idx
+            } else {
+                inv_indices.insert(to.clone(), graph.len());
+                indices.push(to.clone());
+                graph.push(vec![]);
+                graph.len() - 1
+            };
+            let from_target = graph.get_mut(from_idx).unwrap();
+            from_target.push((to_idx, weight));
+            if undirected {
+                let to_target = graph.get_mut(to_idx).unwrap();
+                to_target.push((from_idx, weight));
+            }
+        }
+        Ok((graph, indices, inv_indices))
+    }
     pub(crate) fn convert_edge_to_graph(
         &self,
-        bidir: bool,
+        undirected: bool,
         tx: &SessionTx,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
     ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
@@ -88,12 +153,12 @@ impl MagicAlgoRuleArg {
 
         for tuple in self.iter(tx, stores)? {
             let mut tuple = tuple?.0.into_iter();
-            let from = tuple.next().ok_or_else(|| {
-                anyhow!("edges relation too short")
-            })?;
-            let to = tuple.next().ok_or_else(|| {
-                anyhow!("edges relation too short")
-            })?;
+            let from = tuple
+                .next()
+                .ok_or_else(|| anyhow!("edges relation too short"))?;
+            let to = tuple
+                .next()
+                .ok_or_else(|| anyhow!("edges relation too short"))?;
             let from_idx = if let Some(idx) = inv_indices.get(&from) {
                 *idx
             } else {
@@ -112,7 +177,7 @@ impl MagicAlgoRuleArg {
             };
             let from_target = graph.get_mut(from_idx).unwrap();
             from_target.push(to_idx);
-            if bidir {
+            if undirected {
                 let to_target = graph.get_mut(to_idx).unwrap();
                 to_target.push(from_idx);
             }
