@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
 use anyhow::Result;
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
-use crate::data::symb::Symbol;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -16,7 +16,7 @@ impl AlgoImpl for ClusteringCoefficient {
         &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<Symbol, Expr>,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
     ) -> Result<()> {
@@ -31,7 +31,7 @@ impl AlgoImpl for Triangles {
         &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<Symbol, Expr>,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
     ) -> Result<()> {

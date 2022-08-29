@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use anyhow::{anyhow, ensure, Result};
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
-use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
@@ -18,7 +18,7 @@ impl AlgoImpl for Bfs {
         &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<Symbol, Expr>,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
     ) -> Result<()> {
@@ -33,7 +33,7 @@ impl AlgoImpl for Bfs {
         } else {
             nodes
         };
-        let limit = if let Some(expr) = opts.get(&Symbol::from("limit")) {
+        let limit = if let Some(expr) = opts.get("limit") {
             let l = expr
                 .get_const()
                 .ok_or_else(|| {
@@ -59,7 +59,7 @@ impl AlgoImpl for Bfs {
             1
         };
         let mut condition = opts
-            .get(&Symbol::from("condition"))
+            .get("condition")
             .ok_or_else(|| anyhow!("terminating 'condition' required for 'bfs'"))?
             .clone();
         let binding_map = nodes.get_binding_map();

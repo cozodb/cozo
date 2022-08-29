@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 
 use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
-use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
@@ -28,7 +28,7 @@ impl AlgoImpl for StronglyConnectedComponent {
         &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<Symbol, Expr>,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
     ) -> Result<()> {
@@ -36,7 +36,7 @@ impl AlgoImpl for StronglyConnectedComponent {
             .get(0)
             .ok_or_else(|| anyhow!("'strongly_connected_components' missing edges relation"))?;
 
-        let reverse_mode = match opts.get(&Symbol::from("mode")) {
+        let reverse_mode = match opts.get("mode") {
             None => false,
             Some(Expr::Const(DataValue::String(s))) => match s as &str {
                 "group_first" => true,

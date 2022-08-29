@@ -195,7 +195,7 @@ impl SessionTx {
                     })?;
                     for (k, v) in opts.iter() {
                         let expr = Self::parse_expr_arg(v, params_pool)?;
-                        options.insert(Symbol::from(k as &str), expr);
+                        options.insert(k.into(), expr);
                     }
                 }
                 let out_name = Symbol::from(out_symbol);

@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::shortest_path_dijkstra::dijkstra;
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
-use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
@@ -20,7 +20,7 @@ impl AlgoImpl for KShortestPathYen {
         &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<Symbol, Expr>,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
     ) -> Result<()> {
@@ -33,7 +33,7 @@ impl AlgoImpl for KShortestPathYen {
         let termination = rels.get(2).ok_or_else(|| {
             anyhow!("'k_shortest_path_yen' requires termination relation as third argument")
         })?;
-        let undirected = match opts.get(&Symbol::from("undirected")) {
+        let undirected = match opts.get("undirected") {
             None => false,
             Some(Expr::Const(DataValue::Bool(b))) => *b,
             Some(v) => bail!(
@@ -42,7 +42,7 @@ impl AlgoImpl for KShortestPathYen {
             ),
         };
         let k = opts
-            .get(&Symbol::from("k"))
+            .get("k")
             .ok_or_else(|| anyhow!("option 'k' required for 'k_shortest_path_yen'"))?
             .get_const()
             .ok_or_else(|| anyhow!("option 'k' for 'k_shortest_path_yen' must be a constant"))?

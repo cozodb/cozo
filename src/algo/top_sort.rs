@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
 use anyhow::{anyhow, Result};
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
-use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
@@ -18,7 +18,7 @@ impl AlgoImpl for TopSort {
         &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
-        _opts: &BTreeMap<Symbol, Expr>,
+        _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
     ) -> Result<()> {

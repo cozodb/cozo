@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
@@ -28,13 +29,14 @@ pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
 pub(crate) mod yen;
 pub(crate) mod triangles;
+pub(crate) mod astar;
 
 pub(crate) trait AlgoImpl {
     fn run(
         &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<Symbol, Expr>,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
     ) -> Result<()>;

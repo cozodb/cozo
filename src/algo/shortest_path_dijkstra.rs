@@ -4,6 +4,7 @@ use std::iter;
 
 use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
+use smartstring::{LazyCompact, SmartString};
 
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
@@ -11,7 +12,6 @@ use priority_queue::PriorityQueue;
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
-use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
@@ -24,7 +24,7 @@ impl AlgoImpl for ShortestPathDijkstra {
         &mut self,
         tx: &mut SessionTx,
         rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<Symbol, Expr>,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
     ) -> Result<()> {
@@ -35,7 +35,7 @@ impl AlgoImpl for ShortestPathDijkstra {
             anyhow!("'shortest_path_dijkstra' requires starting relation as second argument")
         })?;
         let termination = rels.get(2);
-        let undirected = match opts.get(&Symbol::from("undirected")) {
+        let undirected = match opts.get("undirected") {
             None => false,
             Some(Expr::Const(DataValue::Bool(b))) => *b,
             Some(v) => bail!(

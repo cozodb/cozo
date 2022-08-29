@@ -5,6 +5,7 @@ use std::fmt::{Debug, Formatter};
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use smallvec::SmallVec;
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoHandle;
 use crate::data::aggr::Aggregation;
@@ -36,7 +37,7 @@ pub(crate) enum InputRulesOrAlgo {
 pub(crate) struct AlgoApply {
     pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<AlgoRuleArg>,
-    pub(crate) options: BTreeMap<Symbol, Expr>,
+    pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
 }
 
 impl Debug for AlgoApply {
@@ -53,7 +54,7 @@ impl Debug for AlgoApply {
 pub(crate) struct MagicAlgoApply {
     pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<MagicAlgoRuleArg>,
-    pub(crate) options: BTreeMap<Symbol, Expr>,
+    pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
 }
 
 impl Debug for MagicAlgoApply {
