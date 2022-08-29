@@ -87,8 +87,10 @@ impl ViewRelStore {
     }
 
     pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item = Result<Tuple>> {
+        dbg!(&prefix);
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bottom);
+        dbg!(&upper);
         let prefix_encoded = prefix.encode_as_key(self.metadata.id);
         let upper_encoded = Tuple(upper).encode_as_key(self.metadata.id);
         ViewRelIterator::new(&self.view_db, &prefix_encoded, &upper_encoded)

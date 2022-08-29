@@ -143,6 +143,7 @@ fn astar(
                 back_trace.insert(edge_dst.clone(), node.clone());
                 g_score.insert(edge_dst.clone(), tentative_cost_to_dst);
 
+                dbg!(1);
                 let edge_dst_tuple = nodes
                     .prefix_iter(edge_dst, tx, stores)?
                     .next()
@@ -152,6 +153,7 @@ fn astar(
                             edge_dst
                         )
                     })??;
+                dbg!(2);
                 let heuristic_cost = eval_heuristic(&edge_dst_tuple)?;
                 sub_priority += 1;
                 open_set.push_increase(
@@ -164,5 +166,6 @@ fn astar(
             }
         }
     }
+    dbg!(3);
     Ok((f64::INFINITY, vec![]))
 }
