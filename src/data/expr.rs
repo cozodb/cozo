@@ -175,7 +175,12 @@ impl Expr {
     }
     pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
         match self {
-            Expr::Binding(_, i) => Ok(bindings.0[i.unwrap()].clone()),
+            Expr::Binding(b, None) => bail!("binding '{}' is unbound", b),
+            Expr::Binding(b, Some(i)) => Ok(bindings
+                .0
+                .get(*i)
+                .ok_or_else(|| anyhow!("binding '{}' not found in tuple (too short)", b))?
+                .clone()),
             Expr::Const(d) => Ok(d.clone()),
             Expr::Apply(op, args) => {
                 let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings)).try_collect()?;
@@ -1193,31 +1198,31 @@ fn op_e(_args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_HAVERSINE, 4, false, false);
 fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);
-    let x1 = args[0].get_float().ok_or_else(gen_err)?;
-    let y1 = args[1].get_float().ok_or_else(gen_err)?;
-    let x2 = args[2].get_float().ok_or_else(gen_err)?;
-    let y2 = args[3].get_float().ok_or_else(gen_err)?;
+    let lat1 = args[0].get_float().ok_or_else(gen_err)?;
+    let lon1 = args[1].get_float().ok_or_else(gen_err)?;
+    let lat2 = args[2].get_float().ok_or_else(gen_err)?;
+    let lon2 = args[3].get_float().ok_or_else(gen_err)?;
     let ret = 2.
         * f64::acos(f64::sqrt(
-            f64::sin((x1 - y1) / 2.).powi(2)
-                + f64::cos(x1) * f64::cos(y1) * f64::sin((x2 - y2) / 2.).powi(2),
+        f64::sin((lat1 - lon1) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lon1) * f64::sin((lat2 - lon2) / 2.).powi(2),
         ));
     Ok(DataValue::from(ret))
 }
 
-define_op!(OP_HAVERSINE_DEG, 4, false, false);
-fn op_haversine_deg(args: &[DataValue]) -> Result<DataValue> {
+define_op!(OP_HAVERSINE_DEG_INPUT, 4, false, false);
+fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
     let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);
-    let x1 = args[0].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
-    let y1 = args[1].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
-    let x2 = args[2].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
-    let y2 = args[3].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
+    let lat1 = args[0].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
+    let lon1 = args[1].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
+    let lat2 = args[2].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
+    let lon2 = args[3].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let ret = 2.
         * f64::acos(f64::sqrt(
-            f64::sin((x1 - y1) / 2.).powi(2)
-                + f64::cos(x1) * f64::cos(y1) * f64::sin((x2 - y2) / 2.).powi(2),
+        f64::sin((lat1 - lon1) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lon1) * f64::sin((lat2 - lon2) / 2.).powi(2),
         ));
-    Ok(DataValue::from(ret * 180. / f64::PI()))
+    Ok(DataValue::from(ret))
 }
 
 define_op!(OP_DEG_TO_RAD, 1, false, false);
@@ -1589,7 +1594,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "pi" => &OP_PI,
         "e" => &OP_E,
         "haversine" => &OP_HAVERSINE,
-        "haversine_deg" => &OP_HAVERSINE_DEG,
+        "haversine_deg_input" => &OP_HAVERSINE_DEG_INPUT,
         "deg_to_rad" => &OP_DEG_TO_RAD,
         "rad_to_deg" => &OP_RAD_TO_DEG,
         "nth" => &OP_NTH,

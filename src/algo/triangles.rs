@@ -14,7 +14,7 @@ pub(crate) struct ClusteringCoefficient;
 impl AlgoImpl for ClusteringCoefficient {
     fn run(
         &mut self,
-        tx: &mut SessionTx,
+        tx: &SessionTx,
         rels: &[MagicAlgoRuleArg],
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
@@ -29,7 +29,7 @@ pub(crate) struct Triangles;
 impl AlgoImpl for Triangles {
     fn run(
         &mut self,
-        tx: &mut SessionTx,
+        tx: &SessionTx,
         rels: &[MagicAlgoRuleArg],
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,

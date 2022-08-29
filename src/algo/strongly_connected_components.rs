@@ -26,7 +26,7 @@ impl StronglyConnectedComponent {
 impl AlgoImpl for StronglyConnectedComponent {
     fn run(
         &mut self,
-        tx: &mut SessionTx,
+        tx: &SessionTx,
         rels: &[MagicAlgoRuleArg],
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,

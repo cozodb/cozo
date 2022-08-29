@@ -16,7 +16,7 @@ pub(crate) struct TopSort;
 impl AlgoImpl for TopSort {
     fn run(
         &mut self,
-        tx: &mut SessionTx,
+        tx: &SessionTx,
         rels: &[MagicAlgoRuleArg],
         _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,

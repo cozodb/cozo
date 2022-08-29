@@ -18,7 +18,7 @@ pub(crate) struct KShortestPathYen;
 impl AlgoImpl for KShortestPathYen {
     fn run(
         &mut self,
-        tx: &mut SessionTx,
+        tx: &SessionTx,
         rels: &[MagicAlgoRuleArg],
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,

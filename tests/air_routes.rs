@@ -87,6 +87,15 @@ fn air_routes() -> Result<()> {
     )?;
     dbg!(view_time2.elapsed());
 
+    let view_time3 = Instant::now();
+    db.run_script(
+        r#"
+            ?[?code, ?lat, ?lon] := [?n airport.iata ?code], [?n airport.lat ?lat], [?n airport.lon ?lon];
+            :view rederive code_lat_lon;
+        "#
+    )?;
+    dbg!(view_time3.elapsed());
+
     println!("views: {}", db.list_views()?);
 
     let compact_main_time = Instant::now();
@@ -128,6 +137,15 @@ fn air_routes() -> Result<()> {
     "#)?;
     println!("{}", res);
     dbg!(cc_time.elapsed());
+
+    let astar_time = Instant::now();
+    let res = db.run_script(r#"
+        starting[?code, ?lat, ?lon] := ?code <- 'HFE', :code_lat_lon[?code, ?lat, ?lon];
+        goal[?code, ?lat, ?lon] := ?code <- 'LHR', :code_lat_lon[?code, ?lat, ?lon];
+        ? <- shortest_path_astar!(:flies_to_code[], :code_lat_lon[?node, ?lat1, ?lon1], starting[], goal[?goal, ?lat2, ?lon2], heuristic: haversine_deg_input(?lat1, ?lon1, ?lat2, ?lon2) * 3963);
+    "#)?;
+    println!("{}", res);
+    dbg!(astar_time.elapsed());
 
     let deg_centrality_time = Instant::now();
     let res = db.run_script(
@@ -1246,11 +1264,11 @@ fn air_routes() -> Result<()> {
         r#"
         ?[?deg_diff] := [?a airport.iata 'SFO'], [?a airport.lat ?a_lat], [?a airport.lon ?a_lon],
                         [?b airport.iata 'NRT'], [?b airport.lat ?b_lat], [?b airport.lon ?b_lon],
-                        ?deg_diff <- round(haversine_deg(?a_lat, ?a_lon, ?b_lat, ?b_lon));
+                        ?deg_diff <- round(haversine_deg_input(?a_lat, ?a_lon, ?b_lat, ?b_lon));
     "#,
     )?;
     dbg!(great_circle_distance.elapsed());
-    assert_eq!(*res.get("rows").unwrap(), json!([[66.0]]));
+    assert_eq!(*res.get("rows").unwrap(), json!([[1.0]]));
 
     let aus_to_edi_time = Instant::now();
     let res = db.run_script(

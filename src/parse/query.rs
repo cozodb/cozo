@@ -451,7 +451,7 @@ impl SessionTx {
             .try_collect()?;
 
         match ret.get(&PROG_ENTRY as &Symbol) {
-            None => bail!("no entry defined for datalog program"),
+            None => Ok(InputProgram { prog: ret }),
             Some(ruleset) => match ruleset {
                 InputRulesOrAlgo::Rules(ruleset) => {
                     if !ruleset.iter().map(|r| &r.head).all_equal() {

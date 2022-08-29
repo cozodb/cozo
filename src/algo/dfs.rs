@@ -16,7 +16,7 @@ pub(crate) struct Dfs;
 impl AlgoImpl for Dfs {
     fn run(
         &mut self,
-        tx: &mut SessionTx,
+        tx: &SessionTx,
         rels: &[MagicAlgoRuleArg],
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
@@ -62,7 +62,7 @@ impl AlgoImpl for Dfs {
             .get("condition")
             .ok_or_else(|| anyhow!("terminating 'condition' required for 'dfs'"))?
             .clone();
-        let binding_map = nodes.get_binding_map();
+        let binding_map = nodes.get_binding_map(0);
         condition.fill_binding_indices(&binding_map)?;
         let binding_indices = condition.binding_indices();
         let skip_query_nodes = binding_indices.is_subset(&BTreeSet::from([0]));

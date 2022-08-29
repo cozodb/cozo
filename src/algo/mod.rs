@@ -4,6 +4,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use smartstring::{LazyCompact, SmartString};
 
+use crate::algo::astar::ShortestPathAStar;
 use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
@@ -20,6 +21,7 @@ use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
+pub(crate) mod astar;
 pub(crate) mod bfs;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
@@ -27,14 +29,13 @@ pub(crate) mod page_rank;
 pub(crate) mod shortest_path_dijkstra;
 pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
-pub(crate) mod yen;
 pub(crate) mod triangles;
-pub(crate) mod astar;
+pub(crate) mod yen;
 
 pub(crate) trait AlgoImpl {
     fn run(
         &mut self,
-        tx: &mut SessionTx,
+        tx: &SessionTx,
         rels: &[MagicAlgoRuleArg],
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
@@ -59,6 +60,7 @@ impl AlgoHandle {
             "depth_first_search" | "dfs" => 1,
             "breadth_first_search" | "bfs" => 1,
             "shortest_path_dijkstra" => 4,
+            "shortest_path_astar" => 4,
             "k_shortest_path_yen" => 4,
             "top_sort" => 2,
             "connected_components" => 2,
@@ -74,6 +76,7 @@ impl AlgoHandle {
             "depth_first_search" | "dfs" => Box::new(Dfs),
             "breadth_first_search" | "bfs" => Box::new(Bfs),
             "shortest_path_dijkstra" => Box::new(ShortestPathDijkstra),
+            "shortest_path_astar" => Box::new(ShortestPathAStar),
             "k_shortest_path_yen" => Box::new(KShortestPathYen),
             "top_sort" => Box::new(TopSort),
             "connected_components" => Box::new(StronglyConnectedComponent::new(false)),
@@ -97,7 +100,7 @@ impl MagicAlgoRuleArg {
         Vec<Vec<(usize, f64)>>,
         Vec<DataValue>,
         BTreeMap<DataValue, usize>,
-        bool
+        bool,
     )> {
         let mut graph: Vec<Vec<(usize, f64)>> = vec![];
         let mut indices: Vec<DataValue> = vec![];
@@ -273,6 +276,25 @@ impl MagicAlgoRuleArg {
                     }
                 }
             }
+        })
+    }
+    pub(crate) fn arity(
+        &self,
+        tx: &SessionTx,
+        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+    ) -> Result<usize> {
+        Ok(match self {
+            MagicAlgoRuleArg::InMem(s, _) => {
+                let store = stores
+                    .get(s)
+                    .ok_or_else(|| anyhow!("rule not found: {:?}", s))?;
+                store.arity
+            }
+            MagicAlgoRuleArg::Stored(s, _) => {
+                let view_rel = tx.get_view_rel(s)?;
+                view_rel.metadata.arity
+            }
+            MagicAlgoRuleArg::Triple(_, _, _) => 2,
         })
     }
     pub(crate) fn iter<'a>(

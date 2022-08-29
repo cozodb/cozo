@@ -88,7 +88,7 @@ pub(crate) enum MagicAlgoRuleArg {
 }
 
 impl MagicAlgoRuleArg {
-    pub(crate) fn get_binding_map(&self) -> BTreeMap<Symbol, usize> {
+    pub(crate) fn get_binding_map(&self, starting: usize) -> BTreeMap<Symbol, usize> {
         let bindings = match self {
             MagicAlgoRuleArg::InMem(_, b) => b,
             MagicAlgoRuleArg::Stored(_, b) => b,
@@ -108,7 +108,7 @@ impl MagicAlgoRuleArg {
         bindings
             .iter()
             .enumerate()
-            .map(|(idx, symb)| (symb.clone(), idx))
+            .map(|(idx, symb)| (symb.clone(), idx + starting))
             .collect()
     }
 }

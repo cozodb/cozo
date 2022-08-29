@@ -22,7 +22,7 @@ pub(crate) struct ShortestPathDijkstra;
 impl AlgoImpl for ShortestPathDijkstra {
     fn run(
         &mut self,
-        tx: &mut SessionTx,
+        tx: &SessionTx,
         rels: &[MagicAlgoRuleArg],
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
