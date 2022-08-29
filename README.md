@@ -7,7 +7,7 @@
   * [x] dfs
   * [x] shortest path
   * [ ] A*
-  * [ ] Yen's k-shortest
+  * [x] Yen's k-shortest
   * [ ] all-pairs shortest path
   * [x] single-source shortest path
   * [ ] minimum spanning tree

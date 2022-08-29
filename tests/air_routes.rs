@@ -197,7 +197,6 @@ fn air_routes() -> Result<()> {
 
     dbg!(yen_time.elapsed());
     println!("{}", res);
-    return Ok(());
 
     let starts_with_time = Instant::now();
     let res = db.run_script(

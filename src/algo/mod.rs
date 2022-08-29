@@ -27,6 +27,7 @@ pub(crate) mod shortest_path_dijkstra;
 pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
 pub(crate) mod yen;
+pub(crate) mod triangles;
 
 pub(crate) trait AlgoImpl {
     fn run(

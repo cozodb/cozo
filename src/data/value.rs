@@ -1,6 +1,7 @@
 use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 use anyhow::{bail, Result};
 use regex::Regex;
@@ -9,12 +10,20 @@ use serde::{Deserialize, Deserializer, Serialize};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 
+use ordered_float::OrderedFloat;
+
 use crate::data::encode::EncodedVec;
 use crate::data::id::{EntityId, TxId};
 use crate::data::triple::StoreOp;
 
 #[derive(Clone)]
 pub(crate) struct RegexWrapper(pub(crate) Regex);
+
+impl Hash for RegexWrapper {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.as_str().hash(state)
+    }
+}
 
 impl Serialize for RegexWrapper {
     fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error>
@@ -55,7 +64,7 @@ impl PartialOrd for RegexWrapper {
 }
 
 #[derive(
-    Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize,
+    Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
 pub(crate) enum DataValue {
     #[serde(rename = "n")]
@@ -100,6 +109,15 @@ pub(crate) enum Number {
     Int(i64),
     #[serde(rename = "f")]
     Float(f64),
+}
+
+impl Hash for Number {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Number::Int(i) => i.hash(state),
+            Number::Float(f) => OrderedFloat(*f).hash(state),
+        }
+    }
 }
 
 impl Number {

@@ -1,9 +1,12 @@
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::cmp::{Ordering, Reverse};
+use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
 
 use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
+
+use ordered_float::OrderedFloat;
+use priority_queue::PriorityQueue;
 
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
@@ -216,39 +219,33 @@ pub(crate) fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
     forbidden_nodes: &FN,
 ) -> Vec<(usize, f64, Vec<usize>)> {
     let mut distance = vec![f64::INFINITY; edges.len()];
-    let mut heap = BinaryHeap::new();
+    let mut pq = PriorityQueue::new();
     let mut back_pointers = vec![usize::MAX; edges.len()];
     distance[start] = 0.;
-    heap.push(HeapState {
-        cost: 0.,
-        node: start,
-    });
+    pq.push(start, Reverse(OrderedFloat(0.)));
     let mut goals_remaining = goals.clone();
 
-    while let Some(state) = heap.pop() {
-        if state.cost > distance[state.node] {
+    while let Some((node, Reverse(OrderedFloat(cost)))) = pq.pop() {
+        if cost > distance[node] {
             continue;
         }
 
-        for (nxt_node, path_weight) in &edges[state.node] {
+        for (nxt_node, path_weight) in &edges[node] {
             if forbidden_nodes.is_forbidden(*nxt_node) {
                 continue;
             }
-            if forbidden_edges.is_forbidden(state.node, *nxt_node) {
+            if forbidden_edges.is_forbidden(node, *nxt_node) {
                 continue;
             }
-            let nxt_cost = state.cost + *path_weight;
+            let nxt_cost = cost + *path_weight;
             if nxt_cost < distance[*nxt_node] {
-                heap.push(HeapState {
-                    cost: nxt_cost,
-                    node: *nxt_node,
-                });
+                pq.push_increase(*nxt_node, Reverse(OrderedFloat(nxt_cost)));
                 distance[*nxt_node] = nxt_cost;
-                back_pointers[*nxt_node] = state.node;
+                back_pointers[*nxt_node] = node;
             }
         }
 
-        goals_remaining.visit(state.node);
+        goals_remaining.visit(node);
         if goals_remaining.is_exhausted() {
             break;
         }
