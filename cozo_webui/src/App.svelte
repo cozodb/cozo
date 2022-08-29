@@ -25,13 +25,12 @@
                     body: query
                 });
 
-                let time = Math.round(performance.now() - started);
-                statusMessage = `finished in ${time}ms`
-
                 if (!response.ok) {
                     throw await response.text();
                 }
                 let res = await response.json();
+                statusMessage = `finished in ${res.time_taken}ms`
+
                 if (res.rows) {
                     if (!res.headers) {
                         res.headers = [];

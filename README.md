@@ -6,11 +6,11 @@
   * [x] bfs
   * [x] dfs
   * [x] shortest path
-  * [ ] A*
+  * [x] A*
   * [x] Yen's k-shortest
   * [ ] all-pairs shortest path
   * [x] single-source shortest path
-  * [ ] minimum spanning tree
+  * [x] minimum spanning tree
   * [ ] random walking
   * [x] degree centrality
   * [ ] closeness centrality

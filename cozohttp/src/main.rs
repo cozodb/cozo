@@ -5,12 +5,13 @@ use std::time::Instant;
 use actix_cors::Cors;
 use actix_web::rt::task::spawn_blocking;
 use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web_static_files::ResourceFiles;
+use anyhow::anyhow;
 use clap::Parser;
 use env_logger::Env;
 use log::info;
+use serde_json::json;
 
-use actix_web_static_files::ResourceFiles;
-use anyhow::anyhow;
 use cozo::{Db, DbBuilder};
 
 type Result<T> = std::result::Result<T, RespError>;
@@ -71,8 +72,10 @@ async fn query(body: web::Bytes, data: web::Data<AppStateWithDb>) -> Result<impl
     let db = data.db.new_session()?;
     let start = Instant::now();
     let task = spawn_blocking(move || db.run_script(&text));
-    let result = task.await.map_err(|e| anyhow!(e))??;
-    info!("finished query in {:?}", start.elapsed());
+    let mut result = task.await.map_err(|e| anyhow!(e))??;
+    if let Some(obj) = result.as_object_mut() {
+        obj.insert("time_taken".to_string(), json!(start.elapsed().as_millis() as u64));
+    }
     Ok(HttpResponse::Ok().json(result))
 }
 

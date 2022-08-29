@@ -8,6 +8,8 @@ use crate::algo::astar::ShortestPathAStar;
 use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
+use crate::algo::kruskal::MinimumSpanningTreeKruskal;
+use crate::algo::prim::MinimumSpanningTreePrim;
 use crate::algo::shortest_path_dijkstra::ShortestPathDijkstra;
 use crate::algo::strongly_connected_components::StronglyConnectedComponent;
 use crate::algo::top_sort::TopSort;
@@ -25,7 +27,9 @@ pub(crate) mod astar;
 pub(crate) mod bfs;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
+pub(crate) mod kruskal;
 pub(crate) mod page_rank;
+pub(crate) mod prim;
 pub(crate) mod shortest_path_dijkstra;
 pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
@@ -62,6 +66,8 @@ impl AlgoHandle {
             "shortest_path_dijkstra" => 4,
             "shortest_path_astar" => 4,
             "k_shortest_path_yen" => 4,
+            "minimum_spanning_tree_prim" => 3,
+            "minimum_spanning_tree_kruskal" => 3,
             "top_sort" => 2,
             "connected_components" => 2,
             "strongly_connected_components" | "scc" => 2,
@@ -78,6 +84,8 @@ impl AlgoHandle {
             "shortest_path_dijkstra" => Box::new(ShortestPathDijkstra),
             "shortest_path_astar" => Box::new(ShortestPathAStar),
             "k_shortest_path_yen" => Box::new(KShortestPathYen),
+            "minimum_spanning_tree_prim" => Box::new(MinimumSpanningTreePrim),
+            "minimum_spanning_tree_kruskal" => Box::new(MinimumSpanningTreeKruskal),
             "top_sort" => Box::new(TopSort),
             "connected_components" => Box::new(StronglyConnectedComponent::new(false)),
             "strongly_connected_components" | "scc" => {
