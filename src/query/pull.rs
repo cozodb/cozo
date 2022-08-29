@@ -123,26 +123,26 @@ impl SessionTx {
 
             vtx.commit()?;
         } else {
-            let mut vtx = self.view_db.transact().start();
-
-            for data in res_iter {
-                let data = data?;
-                let encoded = data.encode_as_key(view_store.metadata.id);
-                vtx.put(&encoded, &[])?;
-            }
-
-            vtx.commit()?;
-            // let file = NamedTempFile::new()?;
-            // let path = file.into_temp_path();
-            // let path = path.to_string_lossy();
-            // let mut writer = self.view_db.get_sst_writer(&path)?;
+            // let mut vtx = self.view_db.transact().start();
+            //
             // for data in res_iter {
             //     let data = data?;
             //     let encoded = data.encode_as_key(view_store.metadata.id);
-            //     writer.put(&encoded, &[])?;
+            //     vtx.put(&encoded, &[])?;
             // }
-            // writer.finish()?;
-            // self.view_db.ingest_sst_file(&path)?;
+            //
+            // vtx.commit()?;
+            let file = NamedTempFile::new()?;
+            let path = file.into_temp_path();
+            let path = path.to_string_lossy();
+            let mut writer = self.view_db.get_sst_writer(&path)?;
+            for data in res_iter {
+                let data = data?;
+                let encoded = data.encode_as_key(view_store.metadata.id);
+                writer.put(&encoded, &[])?;
+            }
+            writer.finish()?;
+            self.view_db.ingest_sst_file(&path)?;
         }
         Ok(())
     }

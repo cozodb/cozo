@@ -503,7 +503,7 @@ fn op_mul(args: &[DataValue]) -> Result<DataValue> {
     if f_accum == 1.0f64 {
         Ok(DataValue::Number(Number::Int(i_accum)))
     } else {
-        Ok(DataValue::Number(Number::Float(i_accum as f64 + f_accum)))
+        Ok(DataValue::Number(Number::Float(i_accum as f64 * f_accum)))
     }
 }
 
@@ -1203,9 +1203,9 @@ fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let lat2 = args[2].get_float().ok_or_else(gen_err)?;
     let lon2 = args[3].get_float().ok_or_else(gen_err)?;
     let ret = 2.
-        * f64::acos(f64::sqrt(
-        f64::sin((lat1 - lon1) / 2.).powi(2)
-                + f64::cos(lat1) * f64::cos(lon1) * f64::sin((lat2 - lon2) / 2.).powi(2),
+        * f64::asin(f64::sqrt(
+            f64::sin((lat1 - lat2) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
         ));
     Ok(DataValue::from(ret))
 }
@@ -1218,9 +1218,9 @@ fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
     let lat2 = args[2].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let lon2 = args[3].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let ret = 2.
-        * f64::acos(f64::sqrt(
-        f64::sin((lat1 - lon1) / 2.).powi(2)
-                + f64::cos(lat1) * f64::cos(lon1) * f64::sin((lat2 - lon2) / 2.).powi(2),
+        * f64::asin(f64::sqrt(
+            f64::sin((lat1 - lat2) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
         ));
     Ok(DataValue::from(ret))
 }

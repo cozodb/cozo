@@ -95,7 +95,6 @@ fn astar(
             !cost.is_nan(),
             "got cost NaN for heuristic function of 'shortest_path_astar'"
         );
-        // println!("{:?}: {}", t, cost);
         Ok(cost)
     };
     let mut back_trace: BTreeMap<DataValue, DataValue> = Default::default();
@@ -106,7 +105,7 @@ fn astar(
     let mut sub_priority: usize = 0;
     // let mut f_score: BTreeMap<DataValue, f64> =
     //     BTreeMap::from([(start_node.clone(), eval_heuristic(starting)?)]);
-    while let Some((node, _)) = open_set.pop() {
+    while let Some((node, (Reverse(OrderedFloat(cost)), _))) = open_set.pop() {
         if node == *goal_node {
             let mut current = node;
             let mut ret = vec![];
@@ -117,8 +116,7 @@ fn astar(
             }
             ret.push(current);
             ret.reverse();
-            let cost = g_score.get(goal_node).unwrap();
-            return Ok((*cost, ret));
+            return Ok((cost, ret));
         }
 
         for edge in edges.prefix_iter(&node, tx, stores)? {
@@ -143,7 +141,6 @@ fn astar(
                 back_trace.insert(edge_dst.clone(), node.clone());
                 g_score.insert(edge_dst.clone(), tentative_cost_to_dst);
 
-                dbg!(1);
                 let edge_dst_tuple = nodes
                     .prefix_iter(edge_dst, tx, stores)?
                     .next()
@@ -153,7 +150,7 @@ fn astar(
                             edge_dst
                         )
                     })??;
-                dbg!(2);
+
                 let heuristic_cost = eval_heuristic(&edge_dst_tuple)?;
                 sub_priority += 1;
                 open_set.push_increase(
@@ -166,6 +163,5 @@ fn astar(
             }
         }
     }
-    dbg!(3);
     Ok((f64::INFINITY, vec![]))
 }
