@@ -4,10 +4,10 @@ use std::iter;
 
 use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
-use smartstring::{LazyCompact, SmartString};
-
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
+use smallvec::{smallvec, SmallVec};
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
@@ -40,6 +40,14 @@ impl AlgoImpl for ShortestPathDijkstra {
             Some(Expr::Const(DataValue::Bool(b))) => *b,
             Some(v) => bail!(
                 "option 'undirected' for 'shortest_path_dijkstra' requires a boolean, got {:?}",
+                v
+            ),
+        };
+        let keep_ties = match opts.get("keep_ties") {
+            None => false,
+            Some(Expr::Const(DataValue::Bool(b))) => *b,
+            Some(v) => bail!(
+                "option 'keep_ties' for 'shortest_path_dijkstra' requires a boolean, got {:?}",
                 v
             ),
         };
@@ -80,9 +88,17 @@ impl AlgoImpl for ShortestPathDijkstra {
             let res = if let Some(tn) = &termination_nodes {
                 if tn.len() == 1 {
                     let single = Some(*tn.iter().next().unwrap());
-                    dijkstra(&graph, start, &single, &(), &())
+                    if keep_ties {
+                        dijkstra_keep_ties(&graph, start, &single, &(), &())
+                    } else {
+                        dijkstra(&graph, start, &single, &(), &())
+                    }
                 } else {
-                    dijkstra(&graph, start, tn, &(), &())
+                    if keep_ties {
+                        dijkstra_keep_ties(&graph, start, tn, &(), &())
+                    } else {
+                        dijkstra(&graph, start, tn, &(), &())
+                    }
                 }
             } else {
                 dijkstra(&graph, start, &(), &(), &())
@@ -267,6 +283,94 @@ pub(crate) fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
                 path.push(start);
                 path.reverse();
                 (target, cost, path)
+            }
+        })
+        .collect_vec();
+
+    ret
+}
+
+pub(crate) fn dijkstra_keep_ties<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
+    edges: &[Vec<(usize, f64)>],
+    start: usize,
+    goals: &G,
+    forbidden_edges: &FE,
+    forbidden_nodes: &FN,
+) -> Vec<(usize, f64, Vec<usize>)> {
+    let mut distance = vec![f64::INFINITY; edges.len()];
+    let mut pq = PriorityQueue::new();
+    let mut back_pointers: Vec<SmallVec<[usize; 1]>> = vec![smallvec![]; edges.len()];
+    distance[start] = 0.;
+    pq.push(start, Reverse(OrderedFloat(0.)));
+    let mut goals_remaining = goals.clone();
+
+    while let Some((node, Reverse(OrderedFloat(cost)))) = pq.pop() {
+        if cost > distance[node] {
+            continue;
+        }
+
+        for (nxt_node, path_weight) in &edges[node] {
+            if forbidden_nodes.is_forbidden(*nxt_node) {
+                continue;
+            }
+            if forbidden_edges.is_forbidden(node, *nxt_node) {
+                continue;
+            }
+            let nxt_cost = cost + *path_weight;
+            if nxt_cost < distance[*nxt_node] {
+                pq.push_increase(*nxt_node, Reverse(OrderedFloat(nxt_cost)));
+                distance[*nxt_node] = nxt_cost;
+                back_pointers[*nxt_node].clear();
+                back_pointers[*nxt_node].push(node);
+            } else if nxt_cost == distance[*nxt_node] {
+                pq.push_increase(*nxt_node, Reverse(OrderedFloat(nxt_cost)));
+                back_pointers[*nxt_node].push(node);
+            }
+        }
+
+        goals_remaining.visit(node);
+        if goals_remaining.is_exhausted() {
+            break;
+        }
+    }
+
+    let ret = goals
+        .iter(edges.len())
+        .flat_map(|target| {
+            let cost = distance[target];
+            if !cost.is_finite() {
+                vec![(target, cost, vec![])]
+            } else {
+                struct CollectPath {
+                    collected: Vec<(usize, f64, Vec<usize>)>,
+                }
+
+                impl CollectPath {
+                    fn collect(
+                        &mut self,
+                        chain: &[usize],
+                        start: usize,
+                        target: usize,
+                        cost: f64,
+                        back_pointers: &[SmallVec<[usize; 1]>],
+                    ) {
+                        let last = chain.last().unwrap();
+                        let prevs = &back_pointers[*last];
+                        for nxt in prevs {
+                            let mut ret = chain.to_vec();
+                            ret.push(*nxt);
+                            if *nxt == start {
+                                ret.reverse();
+                                self.collected.push((target, cost, ret));
+                            } else {
+                                self.collect(&ret, start, target, cost, back_pointers)
+                            }
+                        }
+                    }
+                }
+                let mut cp = CollectPath { collected: vec![] };
+                cp.collect(&[target], start, target, cost, &back_pointers);
+                cp.collected
             }
         })
         .collect_vec();

@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use smartstring::{LazyCompact, SmartString};
+use crate::algo::all_pairs_shortest_path::ClosenessCentrality;
 
 use crate::algo::astar::ShortestPathAStar;
 use crate::algo::bfs::Bfs;
@@ -62,6 +63,7 @@ impl AlgoHandle {
     pub(crate) fn arity(&self) -> Result<usize> {
         Ok(match &self.name.0 as &str {
             "degree_centrality" => 4,
+            "closeness_centrality" => 2,
             "depth_first_search" | "dfs" => 1,
             "breadth_first_search" | "bfs" => 1,
             "shortest_path_dijkstra" => 4,
@@ -80,6 +82,7 @@ impl AlgoHandle {
     pub(crate) fn get_impl(&self) -> Result<Box<dyn AlgoImpl>> {
         Ok(match &self.name.0 as &str {
             "degree_centrality" => Box::new(DegreeCentrality),
+            "closeness_centrality" => Box::new(ClosenessCentrality),
             "depth_first_search" | "dfs" => Box::new(Dfs),
             "breadth_first_search" | "bfs" => Box::new(Bfs),
             "shortest_path_dijkstra" => Box::new(ShortestPathDijkstra),

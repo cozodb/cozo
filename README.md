@@ -8,12 +8,12 @@
   * [x] shortest path
   * [x] A*
   * [x] Yen's k-shortest
-  * [ ] all-pairs shortest path
+  * [x] all-pairs shortest path
   * [x] single-source shortest path
   * [x] minimum spanning tree
   * [ ] random walking
   * [x] degree centrality
-  * [ ] closeness centrality
+  * [x] closeness centrality
   * [ ] betweenness centrality
   * [ ] pagerank
   * [ ] triangle counting
