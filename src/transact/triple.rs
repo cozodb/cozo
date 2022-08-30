@@ -14,7 +14,7 @@ use crate::data::encode::{
 };
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::triple::StoreOp;
-use crate::data::value::{DataValue, INLINE_VAL_SIZE_LIMIT};
+use crate::data::value::DataValue;
 use crate::parse::triple::{Quintuple, TxAction};
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
@@ -158,12 +158,6 @@ impl SessionTx {
         } else {
             self.tx.put(&aev_encoded, &val_encoded)?;
         }
-        // elide value in data for aev if it is big
-        let val_encoded = if val_encoded.len() > INLINE_VAL_SIZE_LIMIT {
-            DataValue::Guard.encode_with_op_and_tx(op, tx_id)
-        } else {
-            val_encoded
-        };
 
         let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, vld_in_key);
         if real_delete {

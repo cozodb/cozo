@@ -50,7 +50,7 @@ impl AlgoImpl for PageRank {
             theta
         );
         let epsilon = match opts.get("epsilon") {
-            None => 0.1f32,
+            None => 0.001f32,
             Some(Expr::Const(DataValue::Number(n))) => n.get_float() as f32,
             Some(v) => bail!(
                 "option 'epsilon' for 'pagerank' requires a float, got {:?}",
@@ -107,12 +107,15 @@ fn pagerank(
         }
     }
     let mut pi_vec = OMatrix::<f32, Dynamic, U1>::repeat(edges.len(), 1.);
+    let scale_target = (n as f32).sqrt();
     let mut last_pi_vec = pi_vec.clone();
     for _ in 0..iterations {
         mem::swap(&mut pi_vec, &mut last_pi_vec);
         pi_vec = g_mat.tr_mul(&last_pi_vec);
         pi_vec.normalize_mut();
-        pi_vec *= n as f32;
+        let f = pi_vec.norm() / scale_target;
+        pi_vec.unscale_mut(f);
+
         if pi_vec.abs_diff_eq(&last_pi_vec, epsilon) {
             break;
         }

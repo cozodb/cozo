@@ -5,7 +5,6 @@ use either::{Left, Right};
 use itertools::Itertools;
 use serde_json::{json, Map};
 use smallvec::{smallvec, SmallVec, ToSmallVec};
-
 use tempfile::NamedTempFile;
 
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeTyping};
