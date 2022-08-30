@@ -15,7 +15,7 @@
   * [x] degree centrality
   * [x] closeness centrality
   * [x] betweenness centrality
-  * [ ] pagerank
+  * [x] pagerank
   * [ ] triangle counting
   * [x] strongly connected components
   * [x] connected components

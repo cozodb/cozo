@@ -34,6 +34,8 @@ regex = "1.6.0"
 pest = "2.2.1"
 pest_derive = "2.2.1"
 rayon = "1.5.3"
+nalgebra = "0.31.1"
+approx = "0.5.1"
 cozorocks = { path = "cozorocks" }
 
 #[target.'cfg(not(target_env = "msvc"))'.dependencies]

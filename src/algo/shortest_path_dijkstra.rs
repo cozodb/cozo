@@ -84,6 +84,7 @@ impl AlgoImpl for ShortestPathDijkstra {
             }
         };
 
+        // can be made parallel
         for start in starting_nodes {
             let res = if let Some(tn) = &termination_nodes {
                 if tn.len() == 1 {
