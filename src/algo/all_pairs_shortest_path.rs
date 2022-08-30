@@ -2,18 +2,90 @@ use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
 use anyhow::{anyhow, bail};
+use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
+use crate::algo::shortest_path_dijkstra::dijkstra_keep_ties;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
+
+pub(crate) struct BetweennessCentrality;
+
+impl AlgoImpl for BetweennessCentrality {
+    fn run(
+        &mut self,
+        tx: &SessionTx,
+        rels: &[MagicAlgoRuleArg],
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        out: &DerivedRelStore,
+    ) -> anyhow::Result<()> {
+        let edges = rels
+            .get(0)
+            .ok_or_else(|| anyhow!("'betweenness_centrality' requires edges relation"))?;
+        let undirected = match opts.get("undirected") {
+            None => false,
+            Some(Expr::Const(DataValue::Bool(b))) => *b,
+            Some(v) => bail!(
+                "option 'undirected' for 'betweenness_centrality' requires a boolean, got {:?}",
+                v
+            ),
+        };
+
+        let (graph, indices, _inv_indices, _) =
+            edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
+
+        let n = graph.len();
+        if n == 0 {
+            return Ok(());
+        }
+
+        let centrality_segs: Vec<_> = (0..n)
+            .into_par_iter()
+            .map(|start| {
+                let res_for_start = dijkstra_keep_ties(&graph, start, &(), &(), &());
+                let mut ret: BTreeMap<usize, f64> = Default::default();
+                let grouped = res_for_start.into_iter().group_by(|(n, _, _)| *n);
+                for (_, grp) in grouped.into_iter() {
+                    let grp = grp.collect_vec();
+                    let l = grp.len() as f64;
+                    for (_, _, path) in grp {
+                        if path.len() < 3 {
+                            continue;
+                        }
+                        for i in 1..(path.len() - 1) {
+                            let middle = path[i];
+                            let entry = ret.entry(middle).or_default();
+                            *entry += 1. / l;
+                        }
+                    }
+                }
+                ret
+            })
+            .collect();
+        let mut centrality: Vec<f64> = vec![0.; graph.len()];
+        for m in centrality_segs {
+            for (k, v) in m {
+                centrality[k] += v;
+            }
+        }
+
+        for (i, s) in centrality.into_iter().enumerate() {
+            let node = indices[i].clone();
+            out.put(Tuple(vec![node, s.into()]), 0);
+        }
+
+        Ok(())
+    }
+}
 
 pub(crate) struct ClosenessCentrality;
 

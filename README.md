@@ -14,7 +14,7 @@
   * [ ] random walking
   * [x] degree centrality
   * [x] closeness centrality
-  * [ ] betweenness centrality
+  * [x] betweenness centrality
   * [ ] pagerank
   * [ ] triangle counting
   * [x] strongly connected components

@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use smartstring::{LazyCompact, SmartString};
-use crate::algo::all_pairs_shortest_path::ClosenessCentrality;
 
+use crate::algo::all_pairs_shortest_path::{BetweennessCentrality, ClosenessCentrality};
 use crate::algo::astar::ShortestPathAStar;
 use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
@@ -24,6 +24,7 @@ use crate::data::value::DataValue;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
+pub(crate) mod all_pairs_shortest_path;
 pub(crate) mod astar;
 pub(crate) mod bfs;
 pub(crate) mod degree_centrality;
@@ -36,7 +37,6 @@ pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
 pub(crate) mod triangles;
 pub(crate) mod yen;
-pub(crate) mod all_pairs_shortest_path;
 
 pub(crate) trait AlgoImpl {
     fn run(
@@ -64,6 +64,7 @@ impl AlgoHandle {
         Ok(match &self.name.0 as &str {
             "degree_centrality" => 4,
             "closeness_centrality" => 2,
+            "betweenness_centrality" => 2,
             "depth_first_search" | "dfs" => 1,
             "breadth_first_search" | "bfs" => 1,
             "shortest_path_dijkstra" => 4,
@@ -83,6 +84,7 @@ impl AlgoHandle {
         Ok(match &self.name.0 as &str {
             "degree_centrality" => Box::new(DegreeCentrality),
             "closeness_centrality" => Box::new(ClosenessCentrality),
+            "betweenness_centrality" => Box::new(BetweennessCentrality),
             "depth_first_search" | "dfs" => Box::new(Dfs),
             "breadth_first_search" | "bfs" => Box::new(Bfs),
             "shortest_path_dijkstra" => Box::new(ShortestPathDijkstra),
