@@ -926,7 +926,7 @@ fn op_unpack_bits(args: &[DataValue]) -> Result<DataValue> {
             ret[chunk * 8 + 7] = (*byte & 0b00000001) != 0;
         }
         Ok(DataValue::List(
-            ret.into_iter().map(|b| DataValue::Bool(b)).collect_vec(),
+            ret.into_iter().map(DataValue::Bool).collect_vec(),
         ))
     } else {
         bail!("cannot apply 'unpack_bits' to {:?}", args)
@@ -1481,7 +1481,7 @@ fn op_str_slice(args: &[DataValue]) -> Result<DataValue> {
     let l = l.chars().collect_vec();
     let m = get_index(m, l.len())?;
     let n = get_index(n, l.len())?;
-    let ret: String = l[m..n].into_iter().collect();
+    let ret: String = l[m..n].iter().collect();
     Ok(DataValue::String(ret.into()))
 }
 

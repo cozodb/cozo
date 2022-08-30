@@ -98,14 +98,9 @@ impl MeetAggrObj for MeetAggrAnd {
 
 define_aggr!(AGGR_OR, true);
 
+#[derive(Default)]
 struct AggrOr {
     accum: bool,
-}
-
-impl Default for AggrOr {
-    fn default() -> Self {
-        Self { accum: false }
-    }
 }
 
 impl NormalAggrObj for AggrOr {
@@ -625,7 +620,7 @@ impl NormalAggrObj for AggrChoice {
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(self.found.clone().ok_or_else(|| anyhow!("empty choice"))?)
+        self.found.clone().ok_or_else(|| anyhow!("empty choice"))
     }
 }
 
@@ -909,7 +904,7 @@ impl NormalAggrObj for AggrBitAnd {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
             DataValue::Bytes(bs) => {
-                if self.res.len() == 0 {
+                if self.res.is_empty() {
                     self.res = bs.to_vec();
                 } else {
                     ensure!(
@@ -970,7 +965,7 @@ impl NormalAggrObj for AggrBitOr {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
             DataValue::Bytes(bs) => {
-                if self.res.len() == 0 {
+                if self.res.is_empty() {
                     self.res = bs.to_vec();
                 } else {
                     ensure!(
@@ -1031,7 +1026,7 @@ impl NormalAggrObj for AggrBitXor {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
             DataValue::Bytes(bs) => {
-                if self.res.len() == 0 {
+                if self.res.is_empty() {
                     self.res = bs.to_vec();
                 } else {
                     ensure!(
@@ -1125,7 +1120,7 @@ impl Aggregation {
             name if name == AGGR_MAX_COST.name => Box::new(AggrMaxCost::default()),
             name if name == AGGR_COALESCE.name => Box::new(AggrCoalesce::default()),
             name if name == AGGR_STR_JOIN.name => Box::new({
-                if args.len() == 0 {
+                if args.is_empty() {
                     AggrStrJoin::default()
                 } else {
                     let arg = args[0].get_string().ok_or_else(|| {
@@ -1138,7 +1133,7 @@ impl Aggregation {
                 }
             }),
             name if name == AGGR_COLLECT.name => Box::new({
-                if args.len() == 0 {
+                if args.is_empty() {
                     AggrCollect::default()
                 } else {
                     let arg = args[0].get_int().ok_or_else(|| {

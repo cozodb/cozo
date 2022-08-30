@@ -169,7 +169,7 @@ impl SessionTx {
                     let mut aggr = rule.aggr.clone();
                     for el in aggr.iter_mut() {
                         if let Some((aggr, args)) = el {
-                            aggr.meet_init(&args)?;
+                            aggr.meet_init(args)?;
                         }
                     }
                     for item_res in rule.relation.iter(self, Some(0), &use_delta)? {
@@ -253,7 +253,7 @@ impl SessionTx {
             let mut aggr = rule.aggr.clone();
             for el in aggr.iter_mut() {
                 if let Some((aggr, args)) = el {
-                    aggr.meet_init(&args)?;
+                    aggr.meet_init(args)?;
                 }
             }
 

@@ -60,7 +60,7 @@ fn prim(graph: &[Vec<(usize, f64)>]) -> Vec<(usize, usize, f64)> {
             if visited[*to_node] {
                 continue;
             }
-            pq.push_increase(to_node.clone(), (Reverse(OrderedFloat(*cost)), node));
+            pq.push_increase(*to_node, (Reverse(OrderedFloat(*cost)), node));
         }
     };
 

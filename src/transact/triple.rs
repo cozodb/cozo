@@ -580,7 +580,7 @@ impl TripleEntityAttrIter {
         } else {
             self.it.next();
         }
-        return match self.it.pair()? {
+        match self.it.pair()? {
             None => Ok(None),
             Some((k_slice, v_slice)) => {
                 let (eid, aid, _tid) = decode_ea_key(k_slice)?;
@@ -590,7 +590,7 @@ impl TripleEntityAttrIter {
                 }
                 Ok(Some((eid, aid, v)))
             }
-        };
+        }
     }
 }
 
@@ -688,7 +688,7 @@ impl TripleEntityAttrRangeIter {
         } else {
             self.it.next();
         }
-        return match self.it.pair()? {
+        match self.it.pair()? {
             None => Ok(None),
             Some((k_slice, v_slice)) => {
                 let (eid, aid, _tid) = decode_ea_key(k_slice)?;
@@ -702,7 +702,7 @@ impl TripleEntityAttrRangeIter {
                     Ok(Some((eid, aid, v)))
                 }
             }
-        };
+        }
     }
 }
 
@@ -908,7 +908,7 @@ impl TripleAttrValueRangeIter {
         } else {
             self.started = true;
         }
-        return match self.it.pair()? {
+        match self.it.pair()? {
             None => Ok(None),
             Some((k_slice, v_slice)) => {
                 let (aid, mut eid, _tid) = decode_ae_key(k_slice)?;
@@ -922,7 +922,7 @@ impl TripleAttrValueRangeIter {
                     Ok(Some((aid, v, eid)))
                 }
             }
-        };
+        }
     }
 }
 
@@ -1020,7 +1020,7 @@ impl TripleAttrValueIter {
         } else {
             self.started = true;
         }
-        return match self.it.pair()? {
+        match self.it.pair()? {
             None => Ok(None),
             Some((k_slice, v_slice)) => {
                 let (aid, mut eid, _tid) = decode_ae_key(k_slice)?;
@@ -1030,7 +1030,7 @@ impl TripleAttrValueIter {
                 let v = decode_value_from_key(k_slice)?;
                 Ok(Some((aid, v, eid)))
             }
-        };
+        }
     }
 }
 
@@ -1181,13 +1181,13 @@ impl TripleValueRefAttrIter {
         } else {
             self.started = true;
         }
-        return match self.it.key()? {
+        match self.it.key()? {
             None => Ok(None),
             Some(k_slice) => {
                 let (v_eid, aid, eid, _) = decode_vae_key(k_slice)?;
                 Ok(Some((v_eid, aid, eid)))
             }
-        };
+        }
     }
 }
 

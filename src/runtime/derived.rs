@@ -220,7 +220,7 @@ impl DerivedRelStore {
         for (_key, mut group_iter) in grouped.into_iter() {
             for aggr_pair in &mut aggrs {
                 if let Some((aggr, args)) = aggr_pair {
-                    aggr.normal_init(&args)?;
+                    aggr.normal_init(args)?;
                 }
             }
             let mut aggr_res = vec![DataValue::Guard; aggrs.len()];

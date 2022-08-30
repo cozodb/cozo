@@ -92,7 +92,7 @@ impl AlgoImpl for Bfs {
                         .0
                         .get(1)
                         .ok_or_else(|| anyhow!("'edges' relation too short"))?;
-                    if visited.contains(&to_node) {
+                    if visited.contains(to_node) {
                         continue;
                     }
 
