@@ -6,6 +6,7 @@ use anyhow::{anyhow, bail, Result};
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
+use rayon::prelude::*;
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 
@@ -84,34 +85,73 @@ impl AlgoImpl for ShortestPathDijkstra {
             }
         };
 
-        // can be made parallel
-        for start in starting_nodes {
-            let res = if let Some(tn) = &termination_nodes {
-                if tn.len() == 1 {
-                    let single = Some(*tn.iter().next().unwrap());
-                    if keep_ties {
-                        dijkstra_keep_ties(&graph, start, &single, &(), &())
+        if starting_nodes.len() <= 1 {
+            for start in starting_nodes {
+                let res = if let Some(tn) = &termination_nodes {
+                    if tn.len() == 1 {
+                        let single = Some(*tn.iter().next().unwrap());
+                        if keep_ties {
+                            dijkstra_keep_ties(&graph, start, &single, &(), &())
+                        } else {
+                            dijkstra(&graph, start, &single, &(), &())
+                        }
                     } else {
-                        dijkstra(&graph, start, &single, &(), &())
+                        if keep_ties {
+                            dijkstra_keep_ties(&graph, start, tn, &(), &())
+                        } else {
+                            dijkstra(&graph, start, tn, &(), &())
+                        }
                     }
                 } else {
-                    if keep_ties {
-                        dijkstra_keep_ties(&graph, start, tn, &(), &())
-                    } else {
-                        dijkstra(&graph, start, tn, &(), &())
-                    }
+                    dijkstra(&graph, start, &(), &(), &())
+                };
+                for (target, cost, path) in res {
+                    let t = vec![
+                        indices[start].clone(),
+                        indices[target].clone(),
+                        DataValue::from(cost),
+                        DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
+                    ];
+                    out.put(Tuple(t), 0)
                 }
-            } else {
-                dijkstra(&graph, start, &(), &(), &())
-            };
-            for (target, cost, path) in res {
-                let t = vec![
-                    indices[start].clone(),
-                    indices[target].clone(),
-                    DataValue::from(cost),
-                    DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
-                ];
-                out.put(Tuple(t), 0)
+            }
+        } else {
+            let all_res: Vec<_> = starting_nodes
+                .into_par_iter()
+                .map(|start| {
+                    (
+                        start,
+                        if let Some(tn) = &termination_nodes {
+                            if tn.len() == 1 {
+                                let single = Some(*tn.iter().next().unwrap());
+                                if keep_ties {
+                                    dijkstra_keep_ties(&graph, start, &single, &(), &())
+                                } else {
+                                    dijkstra(&graph, start, &single, &(), &())
+                                }
+                            } else {
+                                if keep_ties {
+                                    dijkstra_keep_ties(&graph, start, tn, &(), &())
+                                } else {
+                                    dijkstra(&graph, start, tn, &(), &())
+                                }
+                            }
+                        } else {
+                            dijkstra(&graph, start, &(), &(), &())
+                        },
+                    )
+                })
+                .collect();
+            for (start, res) in all_res {
+                for (target, cost, path) in res {
+                    let t = vec![
+                        indices[start].clone(),
+                        indices[target].clone(),
+                        DataValue::from(cost),
+                        DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
+                    ];
+                    out.put(Tuple(t), 0)
+                }
             }
         }
 

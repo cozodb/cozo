@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
+use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::shortest_path_dijkstra::dijkstra;
@@ -78,12 +79,40 @@ impl AlgoImpl for KShortestPathYen {
                 termination_nodes.insert(*idx);
             }
         }
-        for start in starting_nodes {
-            for goal in &termination_nodes {
-                for (cost, path) in k_shortest_path_yen(k as usize, &graph, start, *goal) {
+        if starting_nodes.len() <= 1 && termination_nodes.len() <= 1 {
+            for start in starting_nodes {
+                for goal in &termination_nodes {
+                    for (cost, path) in k_shortest_path_yen(k as usize, &graph, start, *goal) {
+                        let t = vec![
+                            indices[start].clone(),
+                            indices[*goal].clone(),
+                            DataValue::from(cost),
+                            DataValue::List(
+                                path.into_iter().map(|u| indices[u].clone()).collect_vec(),
+                            ),
+                        ];
+                        out.put(Tuple(t), 0)
+                    }
+                }
+            }
+        } else {
+            let res_all: Vec<_> = starting_nodes
+                .iter()
+                .flat_map(|start| termination_nodes.iter().map(|goal| (*start, *goal)))
+                .par_bridge()
+                .map(|(start, goal)| {
+                    (
+                        start,
+                        goal,
+                        k_shortest_path_yen(k as usize, &graph, start, goal),
+                    )
+                })
+                .collect();
+            for (start, goal, res) in res_all {
+                for (cost, path) in res {
                     let t = vec![
                         indices[start].clone(),
-                        indices[*goal].clone(),
+                        indices[goal].clone(),
                         DataValue::from(cost),
                         DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
                     ];
