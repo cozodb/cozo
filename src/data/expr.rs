@@ -379,9 +379,15 @@ pub(crate) fn op_list(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(args.to_vec()))
 }
 
-define_op!(OP_EQ, 0, true, true);
+define_op!(OP_EQ, 2, false, true);
 pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(args.iter().all_equal()))
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
+        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
+            *i as f64 == *f
+        }
+        (a, b) => a == b,
+    }))
 }
 
 define_op!(OP_IS_IN, 2, false, true);
@@ -393,9 +399,15 @@ pub(crate) fn op_is_in(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(right.contains(left)))
 }
 
-define_op!(OP_NEQ, 0, true, true);
+define_op!(OP_NEQ, 2, false, true);
 fn op_neq(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(!args.iter().all_equal()))
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
+        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
+            *i as f64 != *f
+        }
+        (a, b) => a != b,
+    }))
 }
 
 define_op!(OP_GT, 2, false, true);
