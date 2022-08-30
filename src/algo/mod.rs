@@ -15,6 +15,7 @@ use crate::algo::prim::MinimumSpanningTreePrim;
 use crate::algo::shortest_path_dijkstra::ShortestPathDijkstra;
 use crate::algo::strongly_connected_components::StronglyConnectedComponent;
 use crate::algo::top_sort::TopSort;
+use crate::algo::triangles::ClusteringCoefficients;
 use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
 use crate::data::id::{EntityId, Validity};
@@ -63,6 +64,7 @@ impl AlgoHandle {
     }
     pub(crate) fn arity(&self) -> Result<usize> {
         Ok(match &self.name.0 as &str {
+            "clustering_coefficients" => 4,
             "degree_centrality" => 4,
             "closeness_centrality" => 2,
             "betweenness_centrality" => 2,
@@ -83,6 +85,7 @@ impl AlgoHandle {
 
     pub(crate) fn get_impl(&self) -> Result<Box<dyn AlgoImpl>> {
         Ok(match &self.name.0 as &str {
+            "clustering_coefficients" => Box::new(ClusteringCoefficients),
             "degree_centrality" => Box::new(DegreeCentrality),
             "closeness_centrality" => Box::new(ClosenessCentrality),
             "betweenness_centrality" => Box::new(BetweennessCentrality),

@@ -9,7 +9,6 @@
 
     import {Button, DataTable, InlineLoading, TextArea} from "carbon-components-svelte";
     import {DirectionStraightRight} from "carbon-icons-svelte";
-    import {onMount} from "svelte";
 
     async function handleQuery() {
         const query = queryText.trim();
@@ -29,9 +28,8 @@
                     throw await response.text();
                 }
                 let res = await response.json();
-                statusMessage = `finished in ${res.time_taken}ms`
-
                 if (res.rows) {
+                    statusMessage = `finished ${res.rows.length} rows in ${res.time_taken}ms`
                     if (!res.headers) {
                         res.headers = [];
                         if (res.rows.length) {
@@ -51,6 +49,7 @@
                     });
                     queryResults = {rows, headers}
                 } else {
+                    statusMessage = `finished in ${res.time_taken}ms`
                     queryResults = res;
                 }
             } catch (e) {

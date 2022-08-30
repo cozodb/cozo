@@ -16,7 +16,7 @@
   * [x] closeness centrality
   * [x] betweenness centrality
   * [x] pagerank
-  * [ ] triangle counting
+  * [x] triangle counting
   * [x] strongly connected components
   * [x] connected components
   * [ ] label propagation
