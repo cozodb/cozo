@@ -28,7 +28,7 @@ impl QueryLimiter {
 
 impl SessionTx {
     pub(crate) fn stratified_magic_evaluate(
-        &mut self,
+        &self,
         strata: &[CompiledProgram],
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         num_to_take: Option<usize>,
@@ -47,7 +47,7 @@ impl SessionTx {
         Ok(ret_area)
     }
     fn semi_naive_magic_evaluate(
-        &mut self,
+        &self,
         prog: &CompiledProgram,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         num_to_take: Option<usize>,
@@ -132,7 +132,7 @@ impl SessionTx {
         Ok(())
     }
     fn algo_application_eval(
-        &mut self,
+        &self,
         rule_symb: &MagicSymbol,
         algo_apply: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
@@ -150,7 +150,7 @@ impl SessionTx {
         )
     }
     fn initial_rule_eval(
-        &mut self,
+        &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         aggr_kind: AggrKind,
@@ -224,7 +224,7 @@ impl SessionTx {
         Ok(())
     }
     fn incremental_rule_eval(
-        &mut self,
+        &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         epoch: u32,

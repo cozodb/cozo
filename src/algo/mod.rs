@@ -35,6 +35,7 @@ pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
 pub(crate) mod triangles;
 pub(crate) mod yen;
+pub(crate) mod all_pairs_shortest_path;
 
 pub(crate) trait AlgoImpl {
     fn run(
