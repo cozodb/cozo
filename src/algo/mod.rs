@@ -10,6 +10,7 @@ use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
 use crate::algo::kruskal::MinimumSpanningTreeKruskal;
+use crate::algo::louvain::CommunityDetectionLouvain;
 use crate::algo::pagerank::PageRank;
 use crate::algo::prim::MinimumSpanningTreePrim;
 use crate::algo::shortest_path_dijkstra::ShortestPathDijkstra;
@@ -32,6 +33,7 @@ pub(crate) mod bfs;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
 pub(crate) mod kruskal;
+pub(crate) mod louvain;
 pub(crate) mod pagerank;
 pub(crate) mod prim;
 pub(crate) mod shortest_path_dijkstra;
@@ -79,6 +81,7 @@ impl AlgoHandle {
             "connected_components" => 2,
             "strongly_connected_components" | "scc" => 2,
             "pagerank" => 2,
+            "community_detection_louvain" => 2,
             name => bail!("algorithm '{}' not found", name),
         })
     }
@@ -102,6 +105,7 @@ impl AlgoHandle {
                 Box::new(StronglyConnectedComponent::new(true))
             }
             "pagerank" => Box::new(PageRank),
+            "community_detection_louvain" => Box::new(CommunityDetectionLouvain),
             name => bail!("algorithm '{}' not found", name),
         })
     }
