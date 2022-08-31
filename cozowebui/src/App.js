@@ -20,8 +20,16 @@ function App() {
     }
 
     const renderCell = (colIdx) => (rowIdx) => <Cell>
-        {queryResults.rows[rowIdx][colIdx]}
+        {displayValue(queryResults.rows[rowIdx][colIdx])}
     </Cell>
+
+    function displayValue(v) {
+        if (v.constructor === Array) {
+            return '[' + v.map(el => displayValue(el)).join(', ') + ']'
+        } else {
+            return '' + v
+        }
+    }
 
     async function handleQuery() {
         const query = queryText.trim();
@@ -80,7 +88,7 @@ function App() {
                 />
                 <div/>
                 <div style={{paddingTop: 10, display: 'flex', flexDirection: 'row', justifyContent: 'space-between'}}>
-                    <Button intent={Intent.PRIMARY} text="Query" onClick={handleQuery} disabled={inProgress}/>
+                    <Button intent={Intent.PRIMARY} text="Query (SHIFT + Enter)" onClick={handleQuery} disabled={inProgress}/>
                     <div>
                         {statusMessage ? <Tag intent={errorMessage ? Intent.DANGER : Intent.SUCCESS}>
                             {statusMessage}
