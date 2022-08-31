@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
+use log::debug;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
@@ -34,6 +35,43 @@ impl AlgoImpl for CommunityDetectionLouvain {
                 v
             ),
         };
+        let max_iter = match opts.get("max_iter") {
+            None => 10,
+            Some(Expr::Const(DataValue::Number(n))) => {
+                let i = n.get_int().ok_or_else(|| {
+                    anyhow!(
+                    "'max_iter' for 'community_detection_louvain' requires an integer, got {:?}",
+                    n
+                )
+                })?;
+                ensure!(
+                    i >= 0,
+                    "'max_iter' for 'community_detection_louvain' must be positive, got {}",
+                    i
+                );
+                i as usize
+            }
+            Some(n) => bail!(
+                "'max_iter' for 'community_detection_louvain' requires an integer, got {:?}",
+                n
+            ),
+        };
+        let delta = match opts.get("delta") {
+            None => 0.0001,
+            Some(Expr::Const(DataValue::Number(n))) => {
+                let i = n.get_float();
+                ensure!(
+                    i > 0.,
+                    "'delta' for 'community_detection_louvain' must be positive, got {}",
+                    i
+                );
+                i
+            }
+            Some(n) => bail!(
+                "'delta' for 'community_detection_louvain' requires a float, got {:?}",
+                n
+            ),
+        };
         let keep_depth = match opts.get("keep_depth") {
             None => None,
             Some(Expr::Const(DataValue::Number(n))) => Some({
@@ -55,7 +93,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
                 n
             ),
         };
-        let (graph, indices, _, _) =
+        let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
         let graph = graph
             .into_iter()
@@ -67,7 +105,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
                 m
             })
             .collect_vec();
-        let result = louvain(&graph);
+        let result = louvain(&graph, delta, max_iter);
         for (idx, node) in indices.into_iter().enumerate() {
             let mut labels = vec![];
             let mut cur_idx = idx;
@@ -87,11 +125,16 @@ impl AlgoImpl for CommunityDetectionLouvain {
     }
 }
 
-fn louvain(graph: &[BTreeMap<usize, f64>]) -> Vec<Vec<usize>> {
+fn louvain(graph: &[BTreeMap<usize, f64>], delta: f64, max_iter: usize) -> Vec<Vec<usize>> {
     let mut current = graph;
     let mut collected = vec![];
-    loop {
-        let (node2comm, new_graph) = louvain_step(current);
+    while current.len() > 2 {
+        let (node2comm, new_graph) = louvain_step(current, delta, max_iter);
+        debug!(
+            "before size: {}, after size: {}",
+            current.len(),
+            new_graph.len()
+        );
         if new_graph.len() == current.len() {
             break;
         }
@@ -101,36 +144,96 @@ fn louvain(graph: &[BTreeMap<usize, f64>]) -> Vec<Vec<usize>> {
     collected.into_iter().map(|(a, _)| a).collect_vec()
 }
 
-fn louvain_step(graph: &[BTreeMap<usize, f64>]) -> (Vec<usize>, Vec<BTreeMap<usize, f64>>) {
+fn calculate_delta(
+    node: usize,
+    target_community: usize,
+    graph: &[BTreeMap<usize, f64>],
+    comm2nodes: &[BTreeSet<usize>],
+    out_weights: &[f64],
+    in_weights: &[f64],
+    total_weight: f64,
+) -> f64 {
+    let mut sigma_out_total = 0.;
+    let mut sigma_in_total = 0.;
+    let mut d2comm = 0.;
+    let target_community_members = &comm2nodes[target_community];
+    for member in target_community_members.iter() {
+        if *member == node {
+            continue;
+        }
+        sigma_out_total += out_weights[*member];
+        sigma_in_total += in_weights[*member];
+        if let Some(weight) = graph[node].get(member) {
+            d2comm += *weight;
+        }
+        if let Some(weight) = graph[*member].get(&node) {
+            d2comm += *weight;
+        }
+    }
+    d2comm
+        - (sigma_out_total * in_weights[node] + sigma_in_total * out_weights[node]) / total_weight
+}
+
+fn louvain_step(
+    graph: &[BTreeMap<usize, f64>],
+    delta: f64,
+    max_iter: usize,
+) -> (Vec<usize>, Vec<BTreeMap<usize, f64>>) {
     let n_nodes = graph.len();
     let mut total_weight = 0.;
     let mut out_weights = vec![0.; n_nodes];
     let mut in_weights = vec![0.; n_nodes];
-    let mut back_graph = vec![BTreeMap::default(); n_nodes];
 
     for (from, edges) in graph.iter().enumerate() {
         for (to, weight) in edges {
             total_weight += *weight;
             out_weights[from] += *weight;
             in_weights[*to] += *weight;
-            *back_graph[*to].entry(from).or_default() += *weight;
         }
     }
 
     let mut node2comm = (0..n_nodes).collect_vec();
     let mut comm2nodes = (0..n_nodes).map(|i| BTreeSet::from([i])).collect_vec();
 
-    let mut last_loop_changed = true;
+    let mut last_modurality = f64::NEG_INFINITY;
 
-    while last_loop_changed {
-        last_loop_changed = false;
+    for _ in 0..max_iter {
+        let modularity = {
+            let mut modularity = 0.;
+            for from in 0..n_nodes {
+                for to in &comm2nodes[node2comm[from]] {
+                    if let Some(weight) = graph[from].get(to) {
+                        modularity += *weight;
+                    }
+                    modularity -= in_weights[from] * out_weights[*to] / total_weight;
+                }
+            }
+            modularity /= total_weight;
+            debug!("modurality {}", modularity);
+            modularity
+        };
+        if modularity <= last_modurality + delta {
+            break;
+        } else {
+            last_modurality = modularity;
+        }
+
+        let mut moved = false;
         for (node, edges) in graph.iter().enumerate() {
-            let d_in = in_weights[node];
-            let d_out = out_weights[node];
             let community_for_node = node2comm[node];
+            let original_delta_q = calculate_delta(
+                node,
+                community_for_node,
+                graph,
+                &comm2nodes,
+                &out_weights,
+                &in_weights,
+                total_weight,
+            );
             let mut candidate_community = community_for_node;
             let mut best_improvement = 0.;
-            let mut considered_communities = BTreeSet::new();
+
+            let mut considered_communities = BTreeSet::from([community_for_node]);
             for to_node in edges.keys() {
                 let target_community = node2comm[*to_node];
                 if target_community == community_for_node
@@ -140,45 +243,40 @@ fn louvain_step(graph: &[BTreeMap<usize, f64>]) -> (Vec<usize>, Vec<BTreeMap<usi
                 }
                 considered_communities.insert(target_community);
 
-                let target_community_members = &comm2nodes[*to_node];
-                let mut sigma_in_total = 0.;
-                let mut sigma_out_total = 0.;
-                let mut d_comm = 0.;
-                for member in target_community_members {
-                    sigma_in_total += in_weights[*member];
-                    sigma_out_total += out_weights[*member];
-                    if let Some(weight) = graph[node].get(member) {
-                        d_comm += weight;
-                    }
-                    if let Some(weight) = back_graph[node].get(member) {
-                        d_comm += weight;
-                    }
-                }
-                let delta_q = d_comm / total_weight
-                    - (d_out * sigma_in_total + d_in * sigma_out_total)
-                        / (total_weight * total_weight);
-                if delta_q > best_improvement {
-                    best_improvement = delta_q;
+                let delta_q = calculate_delta(
+                    node,
+                    target_community,
+                    graph,
+                    &comm2nodes,
+                    &out_weights,
+                    &in_weights,
+                    total_weight,
+                );
+                if delta_q - original_delta_q > best_improvement {
+                    best_improvement = delta_q - original_delta_q;
                     candidate_community = target_community;
                 }
             }
             if best_improvement > 0. {
-                // last_loop_changed = true;
-
+                moved = true;
                 node2comm[node] = candidate_community;
                 comm2nodes[community_for_node].remove(&node);
                 comm2nodes[candidate_community].insert(node);
             }
         }
+        if !moved {
+            break;
+        }
     }
     let mut new_comm_indices: BTreeMap<usize, usize> = Default::default();
     let mut new_comm_count: usize = 0;
+
     for temp_comm_idx in node2comm.iter_mut() {
         if let Some(new_comm_idx) = new_comm_indices.get(temp_comm_idx) {
             *temp_comm_idx = *new_comm_idx;
         } else {
-            *temp_comm_idx = new_comm_count;
             new_comm_indices.insert(*temp_comm_idx, new_comm_count);
+            *temp_comm_idx = new_comm_count;
             new_comm_count += 1;
         }
     }
@@ -192,4 +290,38 @@ fn louvain_step(graph: &[BTreeMap<usize, f64>]) -> (Vec<usize>, Vec<BTreeMap<usi
         }
     }
     (node2comm, new_graph)
+}
+
+#[cfg(test)]
+mod tests {
+    use itertools::Itertools;
+
+    use crate::algo::louvain::louvain;
+
+    #[test]
+    fn sample() {
+        let graph: Vec<Vec<usize>> = vec![
+            vec![2, 3, 5],           // 0
+            vec![2, 4, 7],           // 1
+            vec![0, 1, 4, 5, 6],     // 2
+            vec![0, 7],              // 3
+            vec![1, 2, 10],          // 4
+            vec![0, 2, 7, 11],       // 5
+            vec![2, 7, 11],          // 6
+            vec![1, 3, 5, 6],        // 7
+            vec![9, 10, 11, 12, 15], // 8
+            vec![8, 12, 14],         // 9
+            vec![4, 8, 12, 13, 14],  // 10
+            vec![5, 6, 8, 13],       // 11
+            vec![9, 10],             // 12
+            vec![10, 11],            // 13
+            vec![8, 9, 10],          // 14
+            vec![8],                 // 15
+        ];
+        let graph = graph
+            .into_iter()
+            .map(|edges| edges.into_iter().map(|n| (n, 1.)).collect())
+            .collect_vec();
+        louvain(&graph, 0., 100);
+    }
 }
