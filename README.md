@@ -19,8 +19,8 @@
   * [x] triangle counting
   * [x] strongly connected components
   * [x] connected components
-  * [ ] label propagation
-  * [ ] louvain modularity
+  * [x] label propagation
+  * [x] louvain modularity
 * [x] direct loading of data
 * [ ] serial agg function
 * [ ] random function

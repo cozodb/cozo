@@ -10,6 +10,7 @@ use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
 use crate::algo::kruskal::MinimumSpanningTreeKruskal;
+use crate::algo::label_propagation::LabelPropagation;
 use crate::algo::louvain::CommunityDetectionLouvain;
 use crate::algo::pagerank::PageRank;
 use crate::algo::prim::MinimumSpanningTreePrim;
@@ -41,6 +42,7 @@ pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
 pub(crate) mod triangles;
 pub(crate) mod yen;
+pub(crate) mod label_propagation;
 
 pub(crate) trait AlgoImpl {
     fn run(
@@ -82,6 +84,7 @@ impl AlgoHandle {
             "strongly_connected_components" | "scc" => 2,
             "pagerank" => 2,
             "community_detection_louvain" => 2,
+            "label_propagation" => 2,
             name => bail!("algorithm '{}' not found", name),
         })
     }
@@ -106,6 +109,7 @@ impl AlgoHandle {
             }
             "pagerank" => Box::new(PageRank),
             "community_detection_louvain" => Box::new(CommunityDetectionLouvain),
+            "label_propagation" => Box::new(LabelPropagation),
             name => bail!("algorithm '{}' not found", name),
         })
     }

@@ -1,6 +1,6 @@
 use static_files::resource_dir;
 
 fn main() -> std::io::Result<()> {
-    println!("cargo:rerun-if-changed=../cozo_webui/src/App.svelte");
-    resource_dir("../cozo_webui/dist").build()
+    println!("cargo:rerun-if-changed=../cozowebui/build/asset-manifest.json");
+    resource_dir("../cozowebui/build").build()
 }

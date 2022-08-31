@@ -118,7 +118,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
             if let Some(l) = keep_depth {
                 labels.truncate(l);
             }
-            out.put(Tuple(vec![node, DataValue::List(labels)]), 0);
+            out.put(Tuple(vec![DataValue::List(labels), node]), 0);
         }
 
         Ok(())
