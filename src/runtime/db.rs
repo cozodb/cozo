@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
@@ -369,6 +371,12 @@ impl Db {
             .magic_sets_rewrite();
         debug!("{:#?}", program);
         let (compiled, stores) = tx.stratified_magic_compile(&program, &const_rules)?;
+
+        let poison = Poison::default();
+        if let Some(secs) = out_opts.timeout {
+            poison.set_timeout(secs);
+        }
+
         let result = tx.stratified_magic_evaluate(
             &compiled,
             &stores,
@@ -377,6 +385,7 @@ impl Db {
             } else {
                 None
             },
+            poison,
         )?;
         let headers = match input_program.get_entry_head() {
             Err(_) => JsonValue::Null,
@@ -444,5 +453,25 @@ impl Db {
             it.next();
         }
         Ok(json!(collected))
+    }
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct Poison(pub(crate) Arc<AtomicBool>);
+
+impl Poison {
+    #[inline(always)]
+    pub(crate) fn check(&self) -> Result<()> {
+        if self.0.load(Ordering::Relaxed) {
+            bail!("killed")
+        }
+        Ok(())
+    }
+    pub(crate) fn set_timeout(&self, secs: u64) {
+        let pill = self.0.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(secs));
+            pill.store(true, Ordering::Relaxed);
+        });
     }
 }

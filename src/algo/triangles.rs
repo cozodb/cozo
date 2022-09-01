@@ -9,6 +9,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -22,6 +23,7 @@ impl AlgoImpl for ClusteringCoefficients {
         _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -29,7 +31,7 @@ impl AlgoImpl for ClusteringCoefficients {
         let (graph, indices, _) = edges.convert_edge_to_graph(true, tx, stores)?;
         let graph: Vec<BTreeSet<usize>> =
             graph.into_iter().map(|e| e.into_iter().collect()).collect();
-        let coefficients = clustering_coefficients(&graph);
+        let coefficients = clustering_coefficients(&graph, poison)?;
         for (idx, (cc, n_triangles, degree)) in coefficients.into_iter().enumerate() {
             out.put(
                 Tuple(vec![
@@ -46,13 +48,16 @@ impl AlgoImpl for ClusteringCoefficients {
     }
 }
 
-fn clustering_coefficients(graph: &[BTreeSet<usize>]) -> Vec<(f64, usize, usize)> {
-    graph
+fn clustering_coefficients(
+    graph: &[BTreeSet<usize>],
+    poison: Poison,
+) -> Result<Vec<(f64, usize, usize)>> {
+    Ok(graph
         .par_iter()
-        .map(|edges| {
+        .map(|edges| -> Result<(f64, usize, usize)> {
             let degree = edges.len();
             if degree < 2 {
-                (0., 0, degree)
+                Ok((0., 0, degree))
             } else {
                 let n_triangles = edges
                     .iter()
@@ -64,8 +69,9 @@ fn clustering_coefficients(graph: &[BTreeSet<usize>]) -> Vec<(f64, usize, usize)
                     })
                     .sum();
                 let cc = 2. * n_triangles as f64 / ((degree as f64) * ((degree as f64) - 1.));
-                (cc, n_triangles, degree)
+                poison.check()?;
+                Ok((cc, n_triangles, degree))
             }
         })
-        .collect()
+        .collect::<Result<_>>()?)
 }

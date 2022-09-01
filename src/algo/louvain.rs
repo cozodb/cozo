@@ -10,6 +10,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -23,6 +24,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -103,7 +105,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
                 m
             })
             .collect_vec();
-        let result = louvain(&graph, delta, max_iter);
+        let result = louvain(&graph, delta, max_iter, poison)?;
         for (idx, node) in indices.into_iter().enumerate() {
             let mut labels = vec![];
             let mut cur_idx = idx;
@@ -123,11 +125,11 @@ impl AlgoImpl for CommunityDetectionLouvain {
     }
 }
 
-fn louvain(graph: &[BTreeMap<usize, f64>], delta: f64, max_iter: usize) -> Vec<Vec<usize>> {
+fn louvain(graph: &[BTreeMap<usize, f64>], delta: f64, max_iter: usize, poison: Poison) -> Result<Vec<Vec<usize>>> {
     let mut current = graph;
     let mut collected = vec![];
     while current.len() > 2 {
-        let (node2comm, new_graph) = louvain_step(current, delta, max_iter);
+        let (node2comm, new_graph) = louvain_step(current, delta, max_iter, poison.clone())?;
         debug!(
             "before size: {}, after size: {}",
             current.len(),
@@ -139,7 +141,7 @@ fn louvain(graph: &[BTreeMap<usize, f64>], delta: f64, max_iter: usize) -> Vec<V
         collected.push((node2comm, new_graph));
         current = &collected.last().unwrap().1;
     }
-    collected.into_iter().map(|(a, _)| a).collect_vec()
+    Ok(collected.into_iter().map(|(a, _)| a).collect_vec())
 }
 
 fn calculate_delta(
@@ -176,7 +178,8 @@ fn louvain_step(
     graph: &[BTreeMap<usize, f64>],
     delta: f64,
     max_iter: usize,
-) -> (Vec<usize>, Vec<BTreeMap<usize, f64>>) {
+    poison: Poison,
+) -> Result<(Vec<usize>, Vec<BTreeMap<usize, f64>>)> {
     let n_nodes = graph.len();
     let mut total_weight = 0.;
     let mut out_weights = vec![0.; n_nodes];
@@ -261,6 +264,7 @@ fn louvain_step(
                 comm2nodes[community_for_node].remove(&node);
                 comm2nodes[candidate_community].insert(node);
             }
+            poison.check()?;
         }
         if !moved {
             break;
@@ -287,7 +291,7 @@ fn louvain_step(
             *target.entry(to_comm).or_default() += weight;
         }
     }
-    (node2comm, new_graph)
+    Ok((node2comm, new_graph))
 }
 
 #[cfg(test)]
@@ -295,6 +299,7 @@ mod tests {
     use itertools::Itertools;
 
     use crate::algo::louvain::louvain;
+    use crate::runtime::db::Poison;
 
     #[test]
     fn sample() {
@@ -320,6 +325,6 @@ mod tests {
             .into_iter()
             .map(|edges| edges.into_iter().map(|n| (n, 1.)).collect())
             .collect_vec();
-        louvain(&graph, 0., 100);
+        louvain(&graph, 0., 100, Poison::default()).unwrap();
     }
 }

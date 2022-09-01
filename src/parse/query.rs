@@ -67,6 +67,7 @@ pub(crate) struct QueryOutOptions {
     pub(crate) vld: Validity,
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
+    pub(crate) timeout: Option<u64>,
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
     pub(crate) as_view: Option<(ViewRelMetadata, ViewOp)>,
 }
@@ -127,6 +128,22 @@ impl SessionTx {
                 .map(|v| v as usize)
                 .ok_or_else(|| anyhow!("'offset' must be a positive number"))
         }))?;
+        let timeout = match payload.get("timeout") {
+            None => None,
+            Some(v) => {
+                let expr = Self::parse_expr_arg(v, params_pool)?;
+                match expr.eval(&Tuple::default())? {
+                    DataValue::Number(n) => {
+                        let i = n.get_int().ok_or_else(|| {
+                            anyhow!(":timeout requires seconds as argument, got {}", n)
+                        })?;
+                        ensure!(i > 0, ":timeout must be positive, got {}", i);
+                        Some(i as u64)
+                    }
+                    v => bail!(":timeout requires seconds as argument, got {:?}", v),
+                }
+            }
+        };
         if let Some(algo_rules) = payload.get("algo_rules") {
             for algo_rule in algo_rules
                 .as_array()
@@ -346,6 +363,7 @@ impl SessionTx {
                 offset,
                 sorters,
                 as_view,
+                timeout
             },
             const_rules,
         ))

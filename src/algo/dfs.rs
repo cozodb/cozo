@@ -8,6 +8,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -21,6 +22,7 @@ impl AlgoImpl for Dfs {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         ensure!(
             rels.len() == 2 || rels.len() == 3,
@@ -118,6 +120,7 @@ impl AlgoImpl for Dfs {
                     }
                     backtrace.insert(to_node.clone(), candidate.clone());
                     stack.push(to_node.clone());
+                    poison.check()?;
                 }
             }
         }
@@ -133,6 +136,7 @@ impl AlgoImpl for Dfs {
             route.reverse();
             let tuple = Tuple(route);
             out.put(tuple, 0);
+            poison.check()?;
         }
         Ok(())
     }

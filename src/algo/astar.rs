@@ -11,6 +11,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -24,6 +25,7 @@ impl AlgoImpl for ShortestPathAStar {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -50,7 +52,7 @@ impl AlgoImpl for ShortestPathAStar {
             let start = start?;
             for goal in goals.iter(tx, stores)? {
                 let goal = goal?;
-                let (cost, path) = astar(&start, &goal, edges, nodes, &heuristic, tx, stores)?;
+                let (cost, path) = astar(&start, &goal, edges, nodes, &heuristic, tx, stores, poison.clone())?;
                 out.put(
                     Tuple(vec![
                         start.0[0].clone(),
@@ -75,6 +77,7 @@ fn astar(
     heuristic: &Expr,
     tx: &SessionTx,
     stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+    poison: Poison,
 ) -> Result<(f64, Vec<DataValue>)> {
     let start_node = starting
         .0
@@ -161,6 +164,7 @@ fn astar(
                     ),
                 );
             }
+            poison.check()?;
         }
     }
     Ok((f64::INFINITY, vec![]))

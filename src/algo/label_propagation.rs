@@ -10,6 +10,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -23,6 +24,7 @@ impl AlgoImpl for LabelPropagation {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -52,7 +54,7 @@ impl AlgoImpl for LabelPropagation {
         };
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, true, tx, stores)?;
-        let labels = label_propagation(&graph, max_iter);
+        let labels = label_propagation(&graph, max_iter, poison)?;
         for (idx, label) in labels.into_iter().enumerate() {
             let node = indices[idx].clone();
             out.put(Tuple(vec![DataValue::from(label as i64), node]), 0);
@@ -61,7 +63,7 @@ impl AlgoImpl for LabelPropagation {
     }
 }
 
-fn label_propagation(graph: &[Vec<(usize, f64)>], max_iter: usize) -> Vec<usize> {
+fn label_propagation(graph: &[Vec<(usize, f64)>], max_iter: usize, poison: Poison) -> Result<Vec<usize>> {
     let n_nodes = graph.len();
     let mut labels = (0..n_nodes).collect_vec();
     let mut rng = thread_rng();
@@ -92,10 +94,11 @@ fn label_propagation(graph: &[Vec<(usize, f64)>], max_iter: usize) -> Vec<usize>
                 changed = true;
                 labels[*node] = new_label;
             }
+            poison.check()?;
         }
         if !changed {
             break;
         }
     }
-    labels
+    Ok(labels)
 }

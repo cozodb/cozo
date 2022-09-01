@@ -8,6 +8,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -21,6 +22,7 @@ impl AlgoImpl for DegreeCentrality {
         _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> anyhow::Result<()> {
         let it = rels
             .get(0)
@@ -44,6 +46,7 @@ impl AlgoImpl for DegreeCentrality {
             let (to_total, _, to_in) = counter.entry(to).or_default();
             *to_total += 1;
             *to_in += 1;
+            poison.check()?;
         }
         if let Some(nodes) = rels.get(1) {
             for tuple in nodes.iter(tx, stores)? {
@@ -55,6 +58,7 @@ impl AlgoImpl for DegreeCentrality {
                 if !counter.contains_key(id) {
                     counter.insert(id.clone(), (0, 0, 0));
                 }
+                poison.check()?;
             }
         }
         for (k, (total_d, out_d, in_d)) in counter.into_iter() {
@@ -65,6 +69,7 @@ impl AlgoImpl for DegreeCentrality {
                 DataValue::from(in_d as i64),
             ]);
             out.put(tuple, 0);
+            poison.check()?;
         }
         Ok(())
     }

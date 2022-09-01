@@ -11,6 +11,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -24,6 +25,7 @@ impl AlgoImpl for KShortestPathYen {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -76,7 +78,7 @@ impl AlgoImpl for KShortestPathYen {
         if starting_nodes.len() <= 1 && termination_nodes.len() <= 1 {
             for start in starting_nodes {
                 for goal in &termination_nodes {
-                    for (cost, path) in k_shortest_path_yen(k as usize, &graph, start, *goal) {
+                    for (cost, path) in k_shortest_path_yen(k as usize, &graph, start, *goal, poison.clone())? {
                         let t = vec![
                             indices[start].clone(),
                             indices[*goal].clone(),
@@ -94,14 +96,14 @@ impl AlgoImpl for KShortestPathYen {
                 .iter()
                 .flat_map(|start| termination_nodes.iter().map(|goal| (*start, *goal)))
                 .par_bridge()
-                .map(|(start, goal)| {
-                    (
+                .map(|(start, goal)| -> Result<(usize, usize, Vec<(f64, Vec<usize>)>)> {
+                    Ok((
                         start,
                         goal,
-                        k_shortest_path_yen(k as usize, &graph, start, goal),
-                    )
+                        k_shortest_path_yen(k as usize, &graph, start, goal, poison.clone())?,
+                    ))
                 })
-                .collect();
+                .collect::<Result<_>>()?;
             for (start, goal, res) in res_all {
                 for (cost, path) in res {
                     let t = vec![
@@ -123,7 +125,8 @@ fn k_shortest_path_yen(
     edges: &[Vec<(usize, f64)>],
     start: usize,
     goal: usize,
-) -> Vec<(f64, Vec<usize>)> {
+    poison: Poison
+) -> Result<Vec<(f64, Vec<usize>)>> {
     let mut k_shortest: Vec<(f64, Vec<usize>)> = Vec::with_capacity(k);
     let mut candidates: Vec<(f64, Vec<usize>)> = vec![];
 
@@ -131,7 +134,7 @@ fn k_shortest_path_yen(
         .into_iter()
         .next()
     {
-        None => return k_shortest,
+        None => return Ok(k_shortest),
         Some((_, cost, path)) => k_shortest.push((cost, path)),
     }
 
@@ -182,6 +185,7 @@ fn k_shortest_path_yen(
                 if candidates.iter().all(|(_, v)| *v != total_path) {
                     candidates.push((total_cost, total_path));
                 }
+                poison.check()?;
             }
         }
         if candidates.is_empty() {
@@ -191,5 +195,5 @@ fn k_shortest_path_yen(
         let shortest = candidates.pop().unwrap();
         k_shortest.push(shortest);
     }
-    k_shortest
+    Ok(k_shortest)
 }

@@ -4,17 +4,17 @@ use std::str::FromStr;
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use pest::Parser;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
+use pest::Parser;
 use serde_json::{json, Map};
 
 use crate::data::json::JsonValue;
-use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 use crate::parse::cozoscript::number::parse_int;
 use crate::parse::cozoscript::schema::parsed_schema_to_json;
 use crate::parse::cozoscript::string::parse_string;
 use crate::parse::cozoscript::sys::parsed_db_op_to_enum;
 use crate::parse::cozoscript::tx::parsed_tx_to_json;
+use crate::parse::cozoscript::{CozoScriptParser, Pair, Pairs, Rule};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum ScriptType {
@@ -70,6 +70,10 @@ fn parsed_query_to_json(src: Pairs<'_>) -> Result<JsonValue> {
                     .borrow_mut();
                 let entries = entries.as_array_mut().unwrap();
                 entries.extend_from_slice(data);
+            }
+            Rule::timeout_option => {
+                let timeout = build_expr(pair)?;
+                ret_map.insert("timeout".to_string(), timeout);
             }
             Rule::limit_option => {
                 let limit = parse_limit_or_offset(pair)?;
@@ -260,13 +264,13 @@ fn parse_algo_rule(src: Pair<'_>) -> Result<JsonValue> {
                                 backward = true;
                                 els.next().unwrap().as_str()
                             }
-                            Rule::ident => {
-                                mdl.as_str()
-                            }
-                            _ => unreachable!()
+                            Rule::ident => mdl.as_str(),
+                            _ => unreachable!(),
                         };
                         let snd = els.next().unwrap().as_str();
-                        algo_rels.push(json!({"triple": ident, "backward": backward, "rel_args": [fst, snd]}))
+                        algo_rels.push(
+                            json!({"triple": ident, "backward": backward, "rel_args": [fst, snd]}),
+                        )
                     }
                     _ => unreachable!(),
                 }

@@ -12,6 +12,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -25,6 +26,7 @@ impl AlgoImpl for MinimumSpanningTreeKruskal {
         _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -34,7 +36,7 @@ impl AlgoImpl for MinimumSpanningTreeKruskal {
         if graph.is_empty() {
             return Ok(());
         }
-        let msp = kruskal(&graph);
+        let msp = kruskal(&graph, poison)?;
         for (src, dst, cost) in msp {
             out.put(
                 Tuple(vec![
@@ -50,7 +52,7 @@ impl AlgoImpl for MinimumSpanningTreeKruskal {
     }
 }
 
-fn kruskal(edges: &[Vec<(usize, f64)>]) -> Vec<(usize, usize, f64)> {
+fn kruskal(edges: &[Vec<(usize, f64)>], poison: Poison) -> Result<Vec<(usize, usize, f64)>> {
     let mut pq = PriorityQueue::new();
     let mut uf = UnionFind::new(edges.len());
     let mut mst = Vec::with_capacity(edges.len() - 1);
@@ -58,6 +60,7 @@ fn kruskal(edges: &[Vec<(usize, f64)>]) -> Vec<(usize, usize, f64)> {
         for (to, cost) in tos {
             pq.push((from, *to), Reverse(OrderedFloat(*cost)));
         }
+        poison.check()?;
     }
     while let Some(((from, to), Reverse(OrderedFloat(cost)))) = pq.pop() {
         if uf.connected(from, to) {
@@ -69,8 +72,9 @@ fn kruskal(edges: &[Vec<(usize, f64)>]) -> Vec<(usize, usize, f64)> {
         if uf.szs[0] == edges.len() {
             break;
         }
+        poison.check()?;
     }
-    mst
+    Ok(mst)
 }
 
 struct UnionFind {

@@ -1,14 +1,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 
+use anyhow::Result;
 use itertools::Itertools;
+
 use crate::algo::strongly_connected_components::TarjanScc;
+use crate::runtime::db::Poison;
 
 pub(crate) type Graph<T> = BTreeMap<T, Vec<T>>;
 
-pub(crate) fn strongly_connected_components<T>(graph: &Graph<T>) -> Vec<Vec<&T>>
-    where
-        T: Ord + Debug,
+pub(crate) fn strongly_connected_components<T>(graph: &Graph<T>) -> Result<Vec<Vec<&T>>>
+where
+    T: Ord + Debug,
 {
     let indices = graph.keys().collect_vec();
     let invert_indices: BTreeMap<_, _> = indices
@@ -24,11 +27,11 @@ pub(crate) fn strongly_connected_components<T>(graph: &Graph<T>) -> Vec<Vec<&T>>
                 .collect_vec()
         })
         .collect_vec();
-    TarjanScc::new(&idx_graph)
-        .run()
+    Ok(TarjanScc::new(&idx_graph)
+        .run(Poison::default())?
         .into_iter()
         .map(|vs| vs.into_iter().map(|i| indices[i]).collect_vec())
-        .collect_vec()
+        .collect_vec())
 }
 
 struct Reachable<'a, T> {

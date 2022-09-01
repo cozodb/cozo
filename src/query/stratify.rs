@@ -221,7 +221,7 @@ impl NormalFormProgram {
             .filter(|(k, _)| reachable.contains(k))
             .collect();
         // 3. find SCC of the clauses
-        let sccs: Vec<BTreeSet<&Symbol>> = strongly_connected_components(&graph)
+        let sccs: Vec<BTreeSet<&Symbol>> = strongly_connected_components(&graph)?
             .into_iter()
             .map(|scc| scc.into_iter().cloned().collect())
             .collect_vec();

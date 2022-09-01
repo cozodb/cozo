@@ -15,6 +15,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -28,6 +29,7 @@ impl AlgoImpl for ShortestPathDijkstra {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -79,13 +81,13 @@ impl AlgoImpl for ShortestPathDijkstra {
                     if tn.len() == 1 {
                         let single = Some(*tn.iter().next().unwrap());
                         if keep_ties {
-                            dijkstra_keep_ties(&graph, start, &single, &(), &())
+                            dijkstra_keep_ties(&graph, start, &single, &(), &(), poison.clone())?
                         } else {
                             dijkstra(&graph, start, &single, &(), &())
                         }
                     } else {
                         if keep_ties {
-                            dijkstra_keep_ties(&graph, start, tn, &(), &())
+                            dijkstra_keep_ties(&graph, start, tn, &(), &(), poison.clone())?
                         } else {
                             dijkstra(&graph, start, tn, &(), &())
                         }
@@ -106,20 +108,27 @@ impl AlgoImpl for ShortestPathDijkstra {
         } else {
             let all_res: Vec<_> = starting_nodes
                 .into_par_iter()
-                .map(|start| {
-                    (
+                .map(|start| -> Result<(usize, Vec<(usize, f64, Vec<usize>)>)> {
+                    Ok((
                         start,
                         if let Some(tn) = &termination_nodes {
                             if tn.len() == 1 {
                                 let single = Some(*tn.iter().next().unwrap());
                                 if keep_ties {
-                                    dijkstra_keep_ties(&graph, start, &single, &(), &())
+                                    dijkstra_keep_ties(
+                                        &graph,
+                                        start,
+                                        &single,
+                                        &(),
+                                        &(),
+                                        poison.clone(),
+                                    )?
                                 } else {
                                     dijkstra(&graph, start, &single, &(), &())
                                 }
                             } else {
                                 if keep_ties {
-                                    dijkstra_keep_ties(&graph, start, tn, &(), &())
+                                    dijkstra_keep_ties(&graph, start, tn, &(), &(), poison.clone())?
                                 } else {
                                     dijkstra(&graph, start, tn, &(), &())
                                 }
@@ -127,9 +136,9 @@ impl AlgoImpl for ShortestPathDijkstra {
                         } else {
                             dijkstra(&graph, start, &(), &(), &())
                         },
-                    )
+                    ))
                 })
-                .collect();
+                .collect::<Result<_>>()?;
             for (start, res) in all_res {
                 for (target, cost, path) in res {
                     let t = vec![
@@ -325,7 +334,8 @@ pub(crate) fn dijkstra_keep_ties<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal +
     goals: &G,
     forbidden_edges: &FE,
     forbidden_nodes: &FN,
-) -> Vec<(usize, f64, Vec<usize>)> {
+    poison: Poison,
+) -> Result<Vec<(usize, f64, Vec<usize>)>> {
     let mut distance = vec![f64::INFINITY; edges.len()];
     let mut pq = PriorityQueue::new();
     let mut back_pointers: Vec<SmallVec<[usize; 1]>> = vec![smallvec![]; edges.len()];
@@ -355,6 +365,7 @@ pub(crate) fn dijkstra_keep_ties<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal +
                 pq.push_increase(*nxt_node, Reverse(OrderedFloat(nxt_cost)));
                 back_pointers[*nxt_node].push(node);
             }
+            poison.check()?;
         }
 
         goals_remaining.visit(node);
@@ -404,5 +415,5 @@ pub(crate) fn dijkstra_keep_ties<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal +
         })
         .collect_vec();
 
-    ret
+    Ok(ret)
 }

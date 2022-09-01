@@ -11,6 +11,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, Number};
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -24,6 +25,7 @@ impl AlgoImpl for PageRank {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -65,7 +67,7 @@ impl AlgoImpl for PageRank {
         );
         let iterations = iterations as usize;
         let (graph, indices, _) = edges.convert_edge_to_graph(undirected, tx, stores)?;
-        let res = pagerank(&graph, theta, epsilon, iterations);
+        let res = pagerank(&graph, theta, epsilon, iterations, poison)?;
         for (idx, score) in res.iter().enumerate() {
             out.put(
                 Tuple(vec![indices[idx].clone(), DataValue::from(*score as f64)]),
@@ -81,7 +83,8 @@ fn pagerank(
     theta: f32,
     epsilon: f32,
     iterations: usize,
-) -> OMatrix<f32, Dynamic, U1> {
+    poison: Poison,
+) -> Result<OMatrix<f32, Dynamic, U1>> {
     let init_val = (1. - theta) / edges.len() as f32;
     let mut g_mat = OMatrix::<f32, Dynamic, Dynamic>::repeat(edges.len(), edges.len(), init_val);
     let n = edges.len();
@@ -112,6 +115,7 @@ fn pagerank(
         if pi_vec.abs_diff_eq(&last_pi_vec, epsilon) {
             break;
         }
+        poison.check()?;
     }
-    pi_vec
+    Ok(pi_vec)
 }

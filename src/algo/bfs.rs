@@ -8,6 +8,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -21,6 +22,7 @@ impl AlgoImpl for Bfs {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         ensure!(
             rels.len() == 2 || rels.len() == 3,
@@ -116,6 +118,7 @@ impl AlgoImpl for Bfs {
                     }
 
                     queue.push_front(to_node.clone());
+                    poison.check()?;
                 }
             }
         }

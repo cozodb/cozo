@@ -2,6 +2,7 @@ use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
 use anyhow::anyhow;
+use anyhow::Result;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
@@ -14,6 +15,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -27,6 +29,7 @@ impl AlgoImpl for BetweennessCentrality {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> anyhow::Result<()> {
         let edges = rels
             .get(0)
@@ -44,8 +47,9 @@ impl AlgoImpl for BetweennessCentrality {
 
         let centrality_segs: Vec<_> = (0..n)
             .into_par_iter()
-            .map(|start| {
-                let res_for_start = dijkstra_keep_ties(&graph, start, &(), &(), &());
+            .map(|start| -> Result<BTreeMap<usize, f64>> {
+                let res_for_start =
+                    dijkstra_keep_ties(&graph, start, &(), &(), &(), poison.clone())?;
                 let mut ret: BTreeMap<usize, f64> = Default::default();
                 let grouped = res_for_start.into_iter().group_by(|(n, _, _)| *n);
                 for (_, grp) in grouped.into_iter() {
@@ -62,9 +66,9 @@ impl AlgoImpl for BetweennessCentrality {
                         }
                     }
                 }
-                ret
+                Ok(ret)
             })
-            .collect();
+            .collect::<Result<_>>()?;
         let mut centrality: Vec<f64> = vec![0.; graph.len()];
         for m in centrality_segs {
             for (k, v) in m {
@@ -91,6 +95,7 @@ impl AlgoImpl for ClosenessCentrality {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> anyhow::Result<()> {
         let edges = rels
             .get(0)
@@ -107,24 +112,25 @@ impl AlgoImpl for ClosenessCentrality {
         }
         let res: Vec<_> = (0..n)
             .into_par_iter()
-            .map(|start| -> f64 {
-                let distances = dijkstra_cost_only(&graph, start);
+            .map(|start| -> Result<f64> {
+                let distances = dijkstra_cost_only(&graph, start, poison.clone())?;
                 let total_dist: f64 = distances.iter().filter(|d| d.is_finite()).cloned().sum();
                 let nc: f64 = distances.iter().filter(|d| d.is_finite()).count() as f64;
-                nc * nc / total_dist / (n - 1) as f64
+                Ok(nc * nc / total_dist / (n - 1) as f64)
             })
-            .collect();
+            .collect::<Result<_>>()?;
         for (idx, centrality) in res.into_iter().enumerate() {
             out.put(
                 Tuple(vec![indices[idx].clone(), DataValue::from(centrality)]),
                 0,
             );
+            poison.check()?;
         }
         Ok(())
     }
 }
 
-pub(crate) fn dijkstra_cost_only(edges: &[Vec<(usize, f64)>], start: usize) -> Vec<f64> {
+pub(crate) fn dijkstra_cost_only(edges: &[Vec<(usize, f64)>], start: usize, poison: Poison) -> Result<Vec<f64>> {
     let mut distance = vec![f64::INFINITY; edges.len()];
     let mut pq = PriorityQueue::new();
     let mut back_pointers = vec![usize::MAX; edges.len()];
@@ -144,7 +150,8 @@ pub(crate) fn dijkstra_cost_only(edges: &[Vec<(usize, f64)>], start: usize) -> V
                 back_pointers[*nxt_node] = node;
             }
         }
+        poison.check()?;
     }
 
-    distance
+    Ok(distance)
 }

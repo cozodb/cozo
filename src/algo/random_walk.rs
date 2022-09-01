@@ -11,6 +11,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -24,6 +25,7 @@ impl AlgoImpl for RandomWalk {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -140,6 +142,7 @@ impl AlgoImpl for RandomWalk {
                         .ok_or_else(|| {
                             anyhow!("node with key '{:?}' not found", start_node_key)
                         })??;
+                    poison.check()?;
                 }
                 out.put(
                     Tuple(vec![

@@ -10,6 +10,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -31,6 +32,7 @@ impl AlgoImpl for StronglyConnectedComponent {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -55,7 +57,7 @@ impl AlgoImpl for StronglyConnectedComponent {
         let (graph, indices, mut inv_indices) =
             edges.convert_edge_to_graph(!self.strong, tx, stores)?;
 
-        let tarjan = TarjanScc::new(&graph).run();
+        let tarjan = TarjanScc::new(&graph).run(poison)?;
         for (grp_id, cc) in tarjan.iter().enumerate() {
             for idx in cc {
                 let val = indices.get(*idx).unwrap();
@@ -113,10 +115,11 @@ impl<'a> TarjanScc<'a> {
             stack: vec![],
         }
     }
-    pub(crate) fn run(mut self) -> Vec<Vec<usize>> {
+    pub(crate) fn run(mut self, poison: Poison) -> Result<Vec<Vec<usize>>> {
         for i in 0..self.graph.len() {
             if self.ids[i].is_none() {
                 self.dfs(i);
+                poison.check()?;
             }
         }
 
@@ -125,7 +128,7 @@ impl<'a> TarjanScc<'a> {
             low_map.entry(grp).or_default().push(idx);
         }
 
-        low_map.into_iter().map(|(_, vs)| vs).collect_vec()
+        Ok(low_map.into_iter().map(|(_, vs)| vs).collect_vec())
     }
     fn dfs(&mut self, at: usize) {
         self.stack.push(at);

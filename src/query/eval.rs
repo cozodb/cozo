@@ -7,6 +7,7 @@ use log::{debug, log_enabled, trace, Level};
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::PROG_ENTRY;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -32,6 +33,7 @@ impl SessionTx {
         strata: &[CompiledProgram],
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         num_to_take: Option<usize>,
+        poison: Poison,
     ) -> Result<DerivedRelStore> {
         let ret_area = stores
             .get(&MagicSymbol::Muggle {
@@ -42,7 +44,7 @@ impl SessionTx {
 
         for (idx, cur_prog) in strata.iter().enumerate() {
             debug!("stratum {}", idx);
-            self.semi_naive_magic_evaluate(cur_prog, stores, num_to_take)?;
+            self.semi_naive_magic_evaluate(cur_prog, stores, num_to_take, poison.clone())?;
         }
         Ok(ret_area)
     }
@@ -51,6 +53,7 @@ impl SessionTx {
         prog: &CompiledProgram,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         num_to_take: Option<usize>,
+        poison: Poison,
     ) -> Result<()> {
         if log_enabled!(Level::Debug) {
             for (k, vs) in prog.iter() {
@@ -88,10 +91,11 @@ impl SessionTx {
                                 stores,
                                 &mut changed,
                                 &mut limiter,
+                                poison.clone(),
                             )?;
                         }
                         CompiledRuleSet::Algo(algo_apply) => {
-                            self.algo_application_eval(k, algo_apply, stores)?;
+                            self.algo_application_eval(k, algo_apply, stores, poison.clone())?;
                         }
                     }
                 }
@@ -118,6 +122,7 @@ impl SessionTx {
                                 &prev_changed,
                                 &mut changed,
                                 &mut limiter,
+                                poison.clone(),
                             )?;
                         }
 
@@ -136,6 +141,7 @@ impl SessionTx {
         rule_symb: &MagicSymbol,
         algo_apply: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        poison: Poison,
     ) -> Result<()> {
         let mut algo_impl = algo_apply.algo.get_impl()?;
         let out = stores
@@ -147,6 +153,7 @@ impl SessionTx {
             &algo_apply.options,
             stores,
             out,
+            poison
         )
     }
     fn initial_rule_eval(
@@ -157,6 +164,7 @@ impl SessionTx {
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
+        poison: Poison,
     ) -> Result<()> {
         let store = stores.get(rule_symb).unwrap();
         let use_delta = BTreeSet::default();
@@ -189,6 +197,7 @@ impl SessionTx {
                             store.put(item, 0);
                         }
                         *changed.get_mut(rule_symb).unwrap() = true;
+                        poison.check()?;
                     }
                 }
             }
@@ -206,6 +215,7 @@ impl SessionTx {
                         trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
                         store_to_use.normal_aggr_put(&item, &rule.aggr, serial);
                         *changed.get_mut(rule_symb).unwrap() = true;
+                        poison.check()?;
                     }
                 }
                 if store_to_use.normal_aggr_scan_and_put(
@@ -216,6 +226,7 @@ impl SessionTx {
                     } else {
                         None
                     },
+                    poison.clone()
                 )? {
                     return Ok(());
                 }
@@ -233,6 +244,7 @@ impl SessionTx {
         prev_changed: &BTreeMap<&MagicSymbol, bool>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
+        poison: Poison,
     ) -> Result<()> {
         let store = stores.get(rule_symb).unwrap();
         let should_check_limit = limiter.limit.is_some() && rule_symb.is_prog_entry();
@@ -298,6 +310,7 @@ impl SessionTx {
                             return Ok(());
                         }
                     }
+                    poison.check()?;
                 }
             }
         }

@@ -15,6 +15,7 @@ use crate::data::program::MagicSymbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 use crate::query::eval::QueryLimiter;
+use crate::runtime::db::Poison;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) struct DerivedRelStoreId(pub(crate) u32);
@@ -176,6 +177,7 @@ impl DerivedRelStore {
         aggrs: &[Option<(Aggregation, Vec<DataValue>)>],
         store: &DerivedRelStore,
         mut limiter: Option<&mut QueryLimiter>,
+        poison: Poison,
     ) -> Result<bool> {
         let db_target = self.mem_db.try_read().unwrap();
         let target = db_target.get(0).unwrap().try_read().unwrap();
@@ -243,6 +245,7 @@ impl DerivedRelStore {
                         op.set(val)?;
                     }
                 }
+                poison.check()?;
             }
             for (i, aggr) in aggrs.iter().enumerate() {
                 if let Some((aggr_op, _aggr_args)) = aggr {

@@ -28,6 +28,7 @@ use crate::data::program::{AlgoRuleArg, MagicAlgoRuleArg, MagicSymbol, TripleDir
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -59,6 +60,7 @@ pub(crate) trait AlgoImpl {
         opts: &AlgoOptions,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()>;
 }
 

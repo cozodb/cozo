@@ -11,6 +11,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -24,6 +25,7 @@ impl AlgoImpl for MinimumSpanningTreePrim {
         _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -33,7 +35,7 @@ impl AlgoImpl for MinimumSpanningTreePrim {
         if graph.is_empty() {
             return Ok(());
         }
-        let msp = prim(&graph);
+        let msp = prim(&graph, poison)?;
         for (src, dst, cost) in msp {
             out.put(
                 Tuple(vec![
@@ -48,7 +50,7 @@ impl AlgoImpl for MinimumSpanningTreePrim {
     }
 }
 
-fn prim(graph: &[Vec<(usize, f64)>]) -> Vec<(usize, usize, f64)> {
+fn prim(graph: &[Vec<(usize, f64)>], poison: Poison) -> Result<Vec<(usize, usize, f64)>> {
     let mut visited = vec![false; graph.len()];
     let mut mst_edges = Vec::with_capacity(graph.len() - 1);
     let mut pq = PriorityQueue::new();
@@ -72,7 +74,8 @@ fn prim(graph: &[Vec<(usize, f64)>]) -> Vec<(usize, usize, f64)> {
         }
         mst_edges.push((from_node, to_node, cost));
         relax_edges_at_node(to_node, &mut pq);
+        poison.check()?;
     }
 
-    mst_edges
+    Ok(mst_edges)
 }

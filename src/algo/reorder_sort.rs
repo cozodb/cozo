@@ -9,6 +9,7 @@ use crate::data::expr::{Expr, OP_LIST};
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -22,6 +23,7 @@ impl AlgoImpl for ReorderSort {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let in_rel = rels
             .get(0)
@@ -97,6 +99,7 @@ impl AlgoImpl for ReorderSort {
             let mut s_tuple: Vec<_> = out_list.iter().map(|ex| ex.eval(&tuple)).try_collect()?;
             s_tuple.push(sorter);
             buffer.push(s_tuple);
+            poison.check()?;
         }
         if sort_descending {
             buffer.sort_by(|l, r| r.last().cmp(&l.last()));
@@ -130,6 +133,7 @@ impl AlgoImpl for ReorderSort {
             let mut out_t = vec![DataValue::from(if break_ties { count } else { rank } as i64)];
             out_t.extend_from_slice(&val[0..val.len() - 1]);
             out.put(Tuple(out_t), 0);
+            poison.check()?;
         }
         Ok(())
     }

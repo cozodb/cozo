@@ -82,12 +82,13 @@ term = _{ var | param | grouping | apply | list | literal }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = _{(limit_option|offset_option|out_option|sort_option|view_option) ~ ";"}
+option = _{(limit_option|offset_option|out_option|sort_option|view_option|timeout_option) ~ ";"}
 limit_option = {":limit"  ~ pos_int}
 offset_option = {":offset" ~ pos_int}
 out_option = {":out" ~ out_spec}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
 view_option = {":view" ~ ident ~ ident}
+timeout_option = {":timeout" ~ expr }
 sort_arg = { sort_dir? ~ var }
 sort_dir = _{ sort_asc | sort_desc }
 sort_asc = {"+"}

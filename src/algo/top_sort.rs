@@ -8,6 +8,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -21,6 +22,7 @@ impl AlgoImpl for TopSort {
         _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
+        poison: Poison,
     ) -> Result<()> {
         let edges = rels
             .get(0)
@@ -28,7 +30,7 @@ impl AlgoImpl for TopSort {
 
         let (graph, indices, _) = edges.convert_edge_to_graph(false, tx, stores)?;
 
-        let sorted = kahn(&graph);
+        let sorted = kahn(&graph, poison)?;
 
         for (idx, val_id) in sorted.iter().enumerate() {
             let val = indices.get(*val_id).unwrap();
@@ -40,7 +42,7 @@ impl AlgoImpl for TopSort {
     }
 }
 
-pub(crate) fn kahn(graph: &[Vec<usize>]) -> Vec<usize> {
+pub(crate) fn kahn(graph: &[Vec<usize>], poison: Poison) -> Result<Vec<usize>> {
     let mut in_degree = vec![0; graph.len()];
     for tos in graph {
         for to in tos {
@@ -67,7 +69,8 @@ pub(crate) fn kahn(graph: &[Vec<usize>]) -> Vec<usize> {
                 }
             }
         }
+        poison.check()?;
     }
 
-    sorted
+    Ok(sorted)
 }
