@@ -74,9 +74,43 @@ async fn query(body: web::Bytes, data: web::Data<AppStateWithDb>) -> Result<impl
     let task = spawn_blocking(move || db.run_script(&text));
     let mut result = task.await.map_err(|e| anyhow!(e))??;
     if let Some(obj) = result.as_object_mut() {
-        obj.insert("time_taken".to_string(), json!(start.elapsed().as_millis() as u64));
+        obj.insert(
+            "time_taken".to_string(),
+            json!(start.elapsed().as_millis() as u64),
+        );
     }
     Ok(HttpResponse::Ok().json(result))
+}
+
+#[post("/json-query")]
+async fn json_query(
+    body: web::Json<serde_json::Value>,
+    data: web::Data<AppStateWithDb>,
+) -> Result<impl Responder> {
+    let db = data.db.new_session()?;
+    let start = Instant::now();
+    let task = spawn_blocking(move || db.run_json_query(&body));
+    let mut result = task.await.map_err(|e| anyhow!(e))??;
+    if let Some(obj) = result.as_object_mut() {
+        obj.insert(
+            "time_taken".to_string(),
+            json!(start.elapsed().as_millis() as u64),
+        );
+    }
+    Ok(HttpResponse::Ok().json(result))
+}
+
+#[post("/script-to-json")]
+async fn to_json_query(
+    body: web::Bytes,
+    data: web::Data<AppStateWithDb>,
+) -> Result<impl Responder> {
+    let text = std::str::from_utf8(&body)
+        .map_err(|e| anyhow!(e))?
+        .to_string();
+    let db = data.db.new_session()?;
+    let res = db.convert_to_json_query(&text)?;
+    Ok(HttpResponse::Ok().json(res))
 }
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
@@ -114,6 +148,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_state.clone())
             .wrap(cors)
             .service(query)
+            .service(json_query)
+            .service(to_json_query)
             .service(ResourceFiles::new("/", generated))
     })
     .bind(addr)?

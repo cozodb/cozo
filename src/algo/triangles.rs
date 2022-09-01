@@ -52,7 +52,7 @@ fn clustering_coefficients(
     graph: &[BTreeSet<usize>],
     poison: Poison,
 ) -> Result<Vec<(f64, usize, usize)>> {
-    Ok(graph
+    graph
         .par_iter()
         .map(|edges| -> Result<(f64, usize, usize)> {
             let degree = edges.len();
@@ -73,5 +73,5 @@ fn clustering_coefficients(
                 Ok((cc, n_triangles, degree))
             }
         })
-        .collect::<Result<_>>()?)
+        .collect::<Result<_>>()
 }

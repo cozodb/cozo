@@ -96,7 +96,7 @@ fn air_routes() -> Result<()> {
     )?;
     dbg!(view_time3.elapsed());
 
-    println!("views: {}", db.list_views()?);
+    println!("views: {}", db.list_relations()?);
 
     let compact_main_time = Instant::now();
     db.compact_main()?;

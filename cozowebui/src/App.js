@@ -15,7 +15,7 @@ function App() {
         if (e.key === 'Enter' && e.shiftKey) {
             e.preventDefault();
             e.stopPropagation();
-            handleQuery();
+            handleQuery('script');
         }
     }
 
@@ -31,7 +31,7 @@ function App() {
         }
     }
 
-    async function handleQuery() {
+    async function handleQuery(type) {
         const query = queryText.trim();
         if (query) {
             let started = performance.now();
@@ -40,22 +40,38 @@ function App() {
             setStatusMessage('');
             setQueryResults(null);
             try {
-                let url = '/text-query';
+                let url;
+                if (type === 'json') {
+                    url = '/json-query'
+                } else if (type === 'convert') {
+                    url = '/script-to-json'
+                } else {
+                    url = '/text-query';
+                }
                 if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
                     url = 'http://127.0.0.1:9070' + url;
                 }
 
-                const response = await fetch(url, {
-                    method: 'POST',
-                    body: query
-                });
+                let response;
+                if (type === 'json') {
+                    response = await fetch(url, {
+                        method: 'POST',
+                        body: query,
+                        headers: new Headers({'content-type': 'application/json'}),
+                    });
+                } else {
+                    response = await fetch(url, {
+                        method: 'POST',
+                        body: query
+                    });
+                }
 
                 if (!response.ok) {
                     throw await response.text();
                 }
                 let res = await response.json();
                 if (res.rows) {
-                    setStatusMessage(`finished with ${res.rows.length} rows in ${res.time_taken}ms`);
+                    setStatusMessage(`finished with ${res.rows.length} rows in ${res.time_taken || 0}ms`);
                     if (!res.headers) {
                         res.headers = [];
                         if (res.rows.length) {
@@ -65,7 +81,7 @@ function App() {
                         }
                     }
                 } else {
-                    setStatusMessage(`finished in ${res.time_taken}ms`);
+                    setStatusMessage(`finished in ${res.time_taken || 0}ms`);
                 }
                 setQueryResults(res);
             } catch (e) {
@@ -94,8 +110,13 @@ function App() {
                 />
                 <div/>
                 <div style={{paddingTop: 10, display: 'flex', flexDirection: 'row'}}>
-                    <Button text="Run" onClick={handleQuery}
+                    <Button text="Run script" onClick={() => handleQuery('script')}
                             disabled={inProgress}/>
+                    <Button text="Run JSON" onClick={() => handleQuery('json')}
+                            disabled={inProgress} style={{marginLeft: 5}}/>
+                    <Button text="Convert script to JSON" onClick={() => handleQuery('convert')}
+                            disabled={inProgress} style={{marginLeft: 5}}/>
+
                     <div style={{marginLeft: 10, marginTop: 5}}>
                         {statusMessage ? <Tag intent={errorMessage ? Intent.DANGER : Intent.SUCCESS} minimal>
                             {statusMessage}

@@ -13,4 +13,5 @@
     font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
     font-size: 100%;
     min-height: 200px;
+    max-height: 40vh;
 }

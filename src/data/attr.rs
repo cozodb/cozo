@@ -3,12 +3,10 @@ use std::fmt::{Display, Formatter};
 use anyhow::{anyhow, bail, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
-use serde_json::json;
 use smallvec::SmallVec;
 
 use crate::data::encode::EncodedVec;
 use crate::data::id::{AttrId, TxId};
-use crate::data::json::JsonValue;
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, Number};
@@ -255,16 +253,6 @@ impl Attribute {
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
         Ok(rmp_serde::from_slice(data)?)
-    }
-    pub(crate) fn to_json(&self) -> JsonValue {
-        json!({
-            "id": self.id.0,
-            "name": self.name.to_string(),
-            "cardinality": self.cardinality.to_string(),
-            "type": self.val_type.to_string(),
-            "index": self.indexing.to_string(),
-            "history": self.with_history
-        })
     }
     pub(crate) fn coerce_value(&self, value: DataValue, ctx: &mut TempIdCtx) -> Result<DataValue> {
         if self.val_type.is_ref_type() {

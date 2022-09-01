@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{bail, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
@@ -259,7 +259,22 @@ impl Db {
     }
     pub fn current_schema(&self) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        tx.all_attrs().map_ok(|v| v.to_json()).try_collect()
+        let rows: Vec<_> = tx
+            .all_attrs()
+            .map_ok(|v| {
+                vec![
+                    json!(v.id.0),
+                    json!(v.name),
+                    json!(v.val_type.to_string()),
+                    json!(v.cardinality.to_string()),
+                    json!(v.indexing.to_string()),
+                    json!(v.with_history),
+                ]
+            })
+            .try_collect()?;
+        Ok(
+            json!({"rows": rows, "headers": ["id", "name", "type", "cardinality", "index", "history"]}),
+        )
     }
     pub fn entities_at(&self, vld: &JsonValue) -> Result<JsonValue> {
         let vld = match vld {
@@ -345,6 +360,31 @@ impl Db {
             ScriptType::Sys => self.run_sys_op(payload),
         }
     }
+    pub fn convert_to_json_query(&self, payload: &str) -> Result<JsonValue> {
+        let (script_type, payload) = parse_query_to_json(payload)?;
+        let key = match script_type {
+            ScriptType::Query => "query",
+            ScriptType::Schema => "schema",
+            ScriptType::Tx => "tx",
+            ScriptType::Sys => "sys",
+        };
+        Ok(json!({ key: payload }))
+    }
+    pub fn run_json_query(&self, payload: &JsonValue) -> Result<JsonValue> {
+        let (k, v) = payload
+            .as_object()
+            .ok_or_else(|| anyhow!("json query must be an object"))?
+            .iter()
+            .next()
+            .ok_or_else(|| anyhow!("json query must be an object with keys"))?;
+        match k as &str {
+            "query" => self.run_query(v),
+            "schema" => self.transact_attributes(v),
+            "tx" => self.transact_triples(v),
+            "sys" => self.run_sys_op(v.clone()),
+            v => bail!("unexpected key in json query: {}", v),
+        }
+    }
     pub fn run_sys_op(&self, payload: JsonValue) -> Result<JsonValue> {
         let op: SysOp = serde_json::from_value(payload)?;
         match op {
@@ -362,7 +402,7 @@ impl Db {
                 Ok(json!({"status": "OK"}))
             }
             SysOp::ListSchema => self.current_schema(),
-            SysOp::ListRelations => self.list_views(),
+            SysOp::ListRelations => self.list_relations(),
             SysOp::RemoveRelations(rs) => {
                 for r in rs.iter() {
                     self.remove_view(&r.0)?;
@@ -488,7 +528,7 @@ impl Db {
             .collect_vec();
         Ok(json!({"rows": res, "headers": ["?id", "?started_at"]}))
     }
-    pub fn list_views(&self) -> Result<JsonValue> {
+    pub fn list_relations(&self) -> Result<JsonValue> {
         let lower = Tuple(vec![DataValue::String("".into())]).encode_as_key(ViewRelId::SYSTEM);
         let upper = Tuple(vec![DataValue::String(
             String::from(LARGEST_UTF_CHAR).into(),
@@ -507,10 +547,10 @@ impl Db {
             let meta: ViewRelMetadata = rmp_serde::from_slice(v_slice)?;
             let name = meta.name.0;
             let arity = meta.arity;
-            collected.push(json!({"name": name, "arity": arity}));
+            collected.push(json!([name, arity]));
             it.next();
         }
-        Ok(json!(collected))
+        Ok(json!({"rows": collected, "headers": ["name", "arity"]}))
     }
 }
 

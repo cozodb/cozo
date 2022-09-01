@@ -226,7 +226,7 @@ impl SessionTx {
                     } else {
                         None
                     },
-                    poison.clone()
+                    poison
                 )? {
                     return Ok(());
                 }
