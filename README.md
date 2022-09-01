@@ -23,4 +23,4 @@
   * [x] louvain modularity
 * [x] direct loading of data
 * [ ] serial agg function
-* [ ] random function
+* [x] random function
