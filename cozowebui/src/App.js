@@ -40,7 +40,12 @@ function App() {
             setStatusMessage('');
             setQueryResults(null);
             try {
-                const response = await fetch('/text-query', {
+                let url = '/text-query';
+                if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+                    url = 'http://127.0.0.1:9070' + url;
+                }
+
+                const response = await fetch(url, {
                     method: 'POST',
                     body: query
                 });
@@ -50,7 +55,7 @@ function App() {
                 }
                 let res = await response.json();
                 if (res.rows) {
-                    setStatusMessage(`finished ${res.rows.length} rows in ${res.time_taken}ms`);
+                    setStatusMessage(`finished with ${res.rows.length} rows in ${res.time_taken}ms`);
                     if (!res.headers) {
                         res.headers = [];
                         if (res.rows.length) {
@@ -65,7 +70,7 @@ function App() {
                 setQueryResults(res);
             } catch (e) {
                 let time = Math.round(performance.now() - started);
-                setStatusMessage(`finished in ${time}ms`);
+                setStatusMessage(`finished with error in ${time}ms`);
                 setErrorMessage('' + e);
             } finally {
                 setInProgress(false);
@@ -77,6 +82,7 @@ function App() {
         <div style={{width: "100vw", height: "100vh", display: 'flex', flexDirection: 'column'}}>
             <div style={{padding: 10}}>
                 <TextArea
+                    placeholder="Input CozoScript here, SHIFT + Enter to run"
                     id="query-box"
                     className="bp4-fill"
                     growVertically={true}
@@ -87,10 +93,11 @@ function App() {
                     value={queryText}
                 />
                 <div/>
-                <div style={{paddingTop: 10, display: 'flex', flexDirection: 'row', justifyContent: 'space-between'}}>
-                    <Button intent={Intent.PRIMARY} text="Query (SHIFT + Enter)" onClick={handleQuery} disabled={inProgress}/>
-                    <div>
-                        {statusMessage ? <Tag intent={errorMessage ? Intent.DANGER : Intent.SUCCESS}>
+                <div style={{paddingTop: 10, display: 'flex', flexDirection: 'row'}}>
+                    <Button text="Run" onClick={handleQuery}
+                            disabled={inProgress}/>
+                    <div style={{marginLeft: 10, marginTop: 5}}>
+                        {statusMessage ? <Tag intent={errorMessage ? Intent.DANGER : Intent.SUCCESS} minimal>
                             {statusMessage}
                         </Tag> : null}
                     </div>
