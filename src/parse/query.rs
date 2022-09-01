@@ -8,7 +8,8 @@ use serde_json::{json, Map};
 use crate::algo::AlgoHandle;
 use crate::data::aggr::get_aggr;
 use crate::data::attr::Attribute;
-use crate::data::expr::{get_op, Expr, OP_LIST};
+use crate::data::expr::{get_op, Expr};
+use crate::data::functions::OP_LIST;
 use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{

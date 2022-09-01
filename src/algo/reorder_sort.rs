@@ -5,7 +5,8 @@ use itertools::Itertools;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::{get_bool_option_required, AlgoImpl};
-use crate::data::expr::{Expr, OP_LIST};
+use crate::data::expr::Expr;
+use crate::data::functions::OP_LIST;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;

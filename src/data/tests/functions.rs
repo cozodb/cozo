@@ -1,4 +1,4 @@
-use crate::data::expr::{op_add, op_div, op_mul, op_sub};
+use crate::data::functions::*;
 use crate::data::value::DataValue;
 
 #[test]
