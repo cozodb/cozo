@@ -1,15 +1,15 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::AlgoImpl;
 use crate::algo::shortest_path_dijkstra::dijkstra_keep_ties;
+use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
@@ -31,14 +31,8 @@ impl AlgoImpl for BetweennessCentrality {
         let edges = rels
             .get(0)
             .ok_or_else(|| anyhow!("'betweenness_centrality' requires edges relation"))?;
-        let undirected = match opts.get("undirected") {
-            None => false,
-            Some(Expr::Const(DataValue::Bool(b))) => *b,
-            Some(v) => bail!(
-                "option 'undirected' for 'betweenness_centrality' requires a boolean, got {:?}",
-                v
-            ),
-        };
+        let undirected =
+            get_bool_option_required("undirected", opts, Some(false), "betweenness_centrality")?;
 
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
@@ -101,14 +95,8 @@ impl AlgoImpl for ClosenessCentrality {
         let edges = rels
             .get(0)
             .ok_or_else(|| anyhow!("'closeness_centrality' requires edges relation"))?;
-        let undirected = match opts.get("undirected") {
-            None => false,
-            Some(Expr::Const(DataValue::Bool(b))) => *b,
-            Some(v) => bail!(
-                "option 'undirected' for 'closeness_centrality' requires a boolean, got {:?}",
-                v
-            ),
-        };
+        let undirected =
+            get_bool_option_required("undirected", opts, Some(false), "closeness_centrality")?;
 
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;

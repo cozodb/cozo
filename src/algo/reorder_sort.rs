@@ -4,7 +4,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use itertools::Itertools;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::AlgoImpl;
+use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::{Expr, OP_LIST};
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
@@ -44,22 +44,9 @@ impl AlgoImpl for ReorderSort {
             .get("sort_by")
             .cloned()
             .unwrap_or(Expr::Const(DataValue::Null));
-        let sort_descending = match opts.get("descending") {
-            None => false,
-            Some(Expr::Const(DataValue::Bool(b))) => *b,
-            Some(v) => bail!(
-                "option 'descending' of 'reorder_sort' must be a bool, got {:?}",
-                v
-            ),
-        };
-        let break_ties = match opts.get("break_ties") {
-            None => false,
-            Some(Expr::Const(DataValue::Bool(b))) => *b,
-            Some(v) => bail!(
-                "option 'break_ties' of 'reorder_sort' must be a bool, got {:?}",
-                v
-            ),
-        };
+        let sort_descending =
+            get_bool_option_required("descending", opts, Some(false), "reorder_sort")?;
+        let break_ties = get_bool_option_required("break_ties", opts, Some(false), "reorder_sort")?;
         let skip = match opts.get("skip") {
             None => 0,
             Some(Expr::Const(v)) => v.get_int().ok_or_else(|| {

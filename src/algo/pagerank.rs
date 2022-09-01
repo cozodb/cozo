@@ -6,7 +6,7 @@ use approx::AbsDiffEq;
 use nalgebra::{Dynamic, OMatrix, U1};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::AlgoImpl;
+use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
@@ -28,14 +28,7 @@ impl AlgoImpl for PageRank {
         let edges = rels
             .get(0)
             .ok_or_else(|| anyhow!("'pagerank' requires edges relation"))?;
-        let undirected = match opts.get("undirected") {
-            None => false,
-            Some(Expr::Const(DataValue::Bool(b))) => *b,
-            Some(v) => bail!(
-                "option 'undirected' for 'pagerank' requires a boolean, got {:?}",
-                v
-            ),
-        };
+        let undirected = get_bool_option_required("undirected", opts, Some(false), "pagerank")?;
         let theta = match opts.get("theta") {
             None => 0.8f32,
             Some(Expr::Const(DataValue::Number(n))) => n.get_float() as f32,

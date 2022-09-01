@@ -2,7 +2,7 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::AlgoImpl;
+use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
@@ -36,22 +36,10 @@ impl AlgoImpl for ShortestPathDijkstra {
             anyhow!("'shortest_path_dijkstra' requires starting relation as second argument")
         })?;
         let termination = rels.get(2);
-        let undirected = match opts.get("undirected") {
-            None => false,
-            Some(Expr::Const(DataValue::Bool(b))) => *b,
-            Some(v) => bail!(
-                "option 'undirected' for 'shortest_path_dijkstra' requires a boolean, got {:?}",
-                v
-            ),
-        };
-        let keep_ties = match opts.get("keep_ties") {
-            None => false,
-            Some(Expr::Const(DataValue::Bool(b))) => *b,
-            Some(v) => bail!(
-                "option 'keep_ties' for 'shortest_path_dijkstra' requires a boolean, got {:?}",
-                v
-            ),
-        };
+        let undirected =
+            get_bool_option_required("undirected", opts, Some(false), "shortest_path_dijkstra")?;
+        let keep_ties =
+            get_bool_option_required("keep_ties", opts, Some(false), "shortest_path_dijkstra")?;
 
         let (graph, indices, inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;

@@ -1,12 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, ensure, Result};
 use itertools::Itertools;
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::shortest_path_dijkstra::dijkstra;
-use crate::algo::AlgoImpl;
+use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
@@ -34,14 +34,8 @@ impl AlgoImpl for KShortestPathYen {
         let termination = rels.get(2).ok_or_else(|| {
             anyhow!("'k_shortest_path_yen' requires termination relation as third argument")
         })?;
-        let undirected = match opts.get("undirected") {
-            None => false,
-            Some(Expr::Const(DataValue::Bool(b))) => *b,
-            Some(v) => bail!(
-                "option 'undirected' for 'k_shortest_path_yen' requires a boolean, got {:?}",
-                v
-            ),
-        };
+        let undirected =
+            get_bool_option_required("undirected", opts, Some(false), "k_shortest_path_yen")?;
         let k = opts
             .get("k")
             .ok_or_else(|| anyhow!("option 'k' required for 'k_shortest_path_yen'"))?
