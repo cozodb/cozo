@@ -15,6 +15,7 @@ use crate::algo::label_propagation::LabelPropagation;
 use crate::algo::louvain::CommunityDetectionLouvain;
 use crate::algo::pagerank::PageRank;
 use crate::algo::prim::MinimumSpanningTreePrim;
+use crate::algo::random_walk::RandomWalk;
 use crate::algo::reorder_sort::ReorderSort;
 use crate::algo::shortest_path_dijkstra::ShortestPathDijkstra;
 use crate::algo::strongly_connected_components::StronglyConnectedComponent;
@@ -40,8 +41,9 @@ pub(crate) mod label_propagation;
 pub(crate) mod louvain;
 pub(crate) mod pagerank;
 pub(crate) mod prim;
-pub(crate) mod shortest_path_dijkstra;
+pub(crate) mod random_walk;
 pub(crate) mod reorder_sort;
+pub(crate) mod shortest_path_dijkstra;
 pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
 pub(crate) mod triangles;
@@ -92,6 +94,7 @@ impl AlgoHandle {
             "pagerank" => 2,
             "community_detection_louvain" => 2,
             "label_propagation" => 2,
+            "random_walk" => 3,
             "reorder_sort" => {
                 let out_opts = opts
                     .get("out")
@@ -129,6 +132,7 @@ impl AlgoHandle {
             "pagerank" => Box::new(PageRank),
             "community_detection_louvain" => Box::new(CommunityDetectionLouvain),
             "label_propagation" => Box::new(LabelPropagation),
+            "random_walk" => Box::new(RandomWalk),
             "reorder_sort" => Box::new(ReorderSort),
             name => bail!("algorithm '{}' not found", name),
         })
