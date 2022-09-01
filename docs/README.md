@@ -4,6 +4,6 @@
 
 Today we start. It is a great start,
 
-```rust
-let x = y
+```
+let x = 1;
 ```

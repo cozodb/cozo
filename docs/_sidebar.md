@@ -1,2 +1,4 @@
 * [Home](/)
-* [Guide](datatypes.md)
+* Manual
+  * [Datatypes](datatypes.md)
+  * [Functions](functions.md)

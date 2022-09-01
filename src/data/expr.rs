@@ -401,7 +401,7 @@ pub(crate) fn op_is_in(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_NEQ, 2, false, true);
-fn op_neq(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_neq(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
         | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
@@ -412,27 +412,27 @@ fn op_neq(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_GT, 2, false, true);
-fn op_gt(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(args[0] > args[1]))
 }
 
 define_op!(OP_GE, 2, false, true);
-fn op_ge(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(args[0] >= args[1]))
 }
 
 define_op!(OP_LT, 2, false, true);
-fn op_lt(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(args[0] < args[1]))
 }
 
 define_op!(OP_LE, 2, false, true);
-fn op_le(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_le(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(args[0] <= args[1]))
 }
 
 define_op!(OP_ADD, 0, true, false);
-fn op_add(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_add(args: &[DataValue]) -> Result<DataValue> {
     let mut i_accum = 0i64;
     let mut f_accum = 0.0f64;
     for arg in args {
@@ -450,7 +450,7 @@ fn op_add(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_MAX, 0, true, false);
-fn op_max(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_max(args: &[DataValue]) -> Result<DataValue> {
     let res = args
         .iter()
         .try_fold(None, |accum, nxt| match (accum, nxt) {
@@ -467,7 +467,7 @@ fn op_max(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_MIN, 0, true, false);
-fn op_min(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_min(args: &[DataValue]) -> Result<DataValue> {
     let res = args
         .iter()
         .try_fold(None, |accum, nxt| match (accum, nxt) {
@@ -484,7 +484,7 @@ fn op_min(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_SUB, 2, false, false);
-fn op_sub(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_sub(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
         (DataValue::Number(Number::Int(a)), DataValue::Number(Number::Int(b))) => {
             DataValue::Number(Number::Int(*a - *b))
@@ -503,7 +503,7 @@ fn op_sub(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_MUL, 0, true, false);
-fn op_mul(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_mul(args: &[DataValue]) -> Result<DataValue> {
     let mut i_accum = 1i64;
     let mut f_accum = 1.0f64;
     for arg in args {
@@ -521,7 +521,7 @@ fn op_mul(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_DIV, 2, false, false);
-fn op_div(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_div(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
         (DataValue::Number(Number::Int(a)), DataValue::Number(Number::Int(b))) => {
             DataValue::Number(Number::Float((*a as f64) / (*b as f64)))
@@ -540,7 +540,7 @@ fn op_div(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_MINUS, 1, false, false);
-fn op_minus(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_minus(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Number(Number::Int(i)) => DataValue::Number(Number::Int(-(*i))),
         DataValue::Number(Number::Float(f)) => DataValue::Number(Number::Float(-(*f))),
@@ -549,7 +549,7 @@ fn op_minus(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ABS, 1, false, false);
-fn op_abs(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_abs(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Number(Number::Int(i)) => DataValue::Number(Number::Int(i.abs())),
         DataValue::Number(Number::Float(f)) => DataValue::Number(Number::Float(f.abs())),
@@ -558,7 +558,7 @@ fn op_abs(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_SIGNUM, 1, false, false);
-fn op_signum(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_signum(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Number(Number::Int(i)) => DataValue::Number(Number::Int(i.signum())),
         DataValue::Number(Number::Float(f)) => DataValue::Number(Number::Float(f.signum())),
@@ -567,7 +567,7 @@ fn op_signum(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_FLOOR, 1, false, false);
-fn op_floor(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_floor(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Number(Number::Int(i)) => DataValue::Number(Number::Int(*i)),
         DataValue::Number(Number::Float(f)) => DataValue::Number(Number::Float(f.floor())),
@@ -576,7 +576,7 @@ fn op_floor(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_CEIL, 1, false, false);
-fn op_ceil(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_ceil(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Number(Number::Int(i)) => DataValue::Number(Number::Int(*i)),
         DataValue::Number(Number::Float(f)) => DataValue::Number(Number::Float(f.ceil())),
@@ -585,7 +585,7 @@ fn op_ceil(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ROUND, 1, false, false);
-fn op_round(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_round(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Number(Number::Int(i)) => DataValue::Number(Number::Int(*i)),
         DataValue::Number(Number::Float(f)) => DataValue::Number(Number::Float(f.round())),
@@ -594,7 +594,7 @@ fn op_round(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_EXP, 1, false, false);
-fn op_exp(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_exp(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -604,7 +604,7 @@ fn op_exp(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_EXP2, 1, false, false);
-fn op_exp2(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_exp2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -614,7 +614,7 @@ fn op_exp2(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_LN, 1, false, false);
-fn op_ln(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_ln(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -624,7 +624,7 @@ fn op_ln(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_LOG2, 1, false, false);
-fn op_log2(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_log2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -634,7 +634,7 @@ fn op_log2(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_LOG10, 1, false, false);
-fn op_log10(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_log10(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -644,7 +644,7 @@ fn op_log10(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_SIN, 1, false, false);
-fn op_sin(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_sin(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -654,7 +654,7 @@ fn op_sin(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_COS, 1, false, false);
-fn op_cos(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_cos(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -664,7 +664,7 @@ fn op_cos(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_TAN, 1, false, false);
-fn op_tan(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_tan(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -674,7 +674,7 @@ fn op_tan(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ASIN, 1, false, false);
-fn op_asin(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_asin(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -684,7 +684,7 @@ fn op_asin(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ACOS, 1, false, false);
-fn op_acos(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_acos(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -694,7 +694,7 @@ fn op_acos(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ATAN, 1, false, false);
-fn op_atan(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_atan(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -704,7 +704,7 @@ fn op_atan(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ATAN2, 2, false, false);
-fn op_atan2(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_atan2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -720,7 +720,7 @@ fn op_atan2(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_SINH, 1, false, false);
-fn op_sinh(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_sinh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -730,7 +730,7 @@ fn op_sinh(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_COSH, 1, false, false);
-fn op_cosh(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_cosh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -740,7 +740,7 @@ fn op_cosh(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_TANH, 1, false, false);
-fn op_tanh(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_tanh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -750,7 +750,7 @@ fn op_tanh(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ASINH, 1, false, false);
-fn op_asinh(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_asinh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -760,7 +760,7 @@ fn op_asinh(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ACOSH, 1, false, false);
-fn op_acosh(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_acosh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -770,7 +770,7 @@ fn op_acosh(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ATANH, 1, false, false);
-fn op_atanh(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_atanh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -780,7 +780,7 @@ fn op_atanh(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_POW, 2, false, false);
-fn op_pow(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_pow(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Number(Number::Int(i)) => *i as f64,
         DataValue::Number(Number::Float(f)) => *f,
@@ -795,7 +795,7 @@ fn op_pow(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_MOD, 2, false, false);
-fn op_mod(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_mod(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
         (DataValue::Number(Number::Int(a)), DataValue::Number(Number::Int(b))) => {
             DataValue::Number(Number::Int(a.rem(b)))
@@ -814,7 +814,7 @@ fn op_mod(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_AND, 0, true, true);
-fn op_and(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_and(args: &[DataValue]) -> Result<DataValue> {
     for arg in args {
         if let DataValue::Bool(b) = arg {
             if !b {
@@ -828,7 +828,7 @@ fn op_and(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_OR, 0, true, true);
-fn op_or(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_or(args: &[DataValue]) -> Result<DataValue> {
     for arg in args {
         if let DataValue::Bool(b) = arg {
             if *b {
@@ -842,7 +842,7 @@ fn op_or(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_NOT, 1, false, true);
-fn op_not(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_not(args: &[DataValue]) -> Result<DataValue> {
     if let DataValue::Bool(b) = &args[0] {
         Ok(DataValue::Bool(!*b))
     } else {
@@ -851,7 +851,7 @@ fn op_not(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_BIT_AND, 2, false, false);
-fn op_bit_and(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_bit_and(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::Bytes(left), DataValue::Bytes(right)) => {
             ensure!(
@@ -871,7 +871,7 @@ fn op_bit_and(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_BIT_OR, 2, false, false);
-fn op_bit_or(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_bit_or(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::Bytes(left), DataValue::Bytes(right)) => {
             ensure!(
@@ -891,7 +891,7 @@ fn op_bit_or(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_BIT_NOT, 1, false, false);
-fn op_bit_not(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_bit_not(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Bytes(arg) => {
             let mut ret = arg.clone();
@@ -905,7 +905,7 @@ fn op_bit_not(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_BIT_XOR, 2, false, false);
-fn op_bit_xor(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_bit_xor(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::Bytes(left), DataValue::Bytes(right)) => {
             ensure!(
@@ -925,7 +925,7 @@ fn op_bit_xor(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_UNPACK_BITS, 1, false, false);
-fn op_unpack_bits(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_unpack_bits(args: &[DataValue]) -> Result<DataValue> {
     if let DataValue::Bytes(bs) = &args[0] {
         let mut ret = vec![false; bs.len() * 8];
         for (chunk, byte) in bs.iter().enumerate() {
@@ -947,7 +947,7 @@ fn op_unpack_bits(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_PACK_BITS, 1, false, false);
-fn op_pack_bits(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_pack_bits(args: &[DataValue]) -> Result<DataValue> {
     if let DataValue::List(v) = &args[0] {
         let l = (v.len() as f64 / 8.).ceil() as usize;
         let mut res = vec![0u8; l];
@@ -981,7 +981,7 @@ fn op_pack_bits(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_STR_CAT, 0, true, false);
-fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
     let mut ret: String = Default::default();
     for arg in args {
         if let DataValue::String(s) = arg {
@@ -994,7 +994,7 @@ fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_STR_INCLUDES, 2, false, true);
-fn op_str_includes(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_str_includes(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::String(l), DataValue::String(r)) => {
             Ok(DataValue::Bool(l.find(r as &str).is_some()))
@@ -1004,7 +1004,7 @@ fn op_str_includes(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_LOWERCASE, 1, false, false);
-fn op_lowercase(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_lowercase(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::String(s) => Ok(DataValue::String(s.to_lowercase().into())),
         v => bail!("cannot apply 'lowercase' to {:?}", v),
@@ -1012,7 +1012,7 @@ fn op_lowercase(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_UPPERCASE, 1, false, false);
-fn op_uppercase(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_uppercase(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::String(s) => Ok(DataValue::String(s.to_uppercase().into())),
         v => bail!("cannot apply 'uppercase' to {:?}", v),
@@ -1020,7 +1020,7 @@ fn op_uppercase(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_TRIM, 1, false, false);
-fn op_trim(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_trim(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::String(s) => Ok(DataValue::String(s.trim().into())),
         v => bail!("cannot apply 'trim' to {:?}", v),
@@ -1028,7 +1028,7 @@ fn op_trim(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_TRIM_START, 1, false, false);
-fn op_trim_start(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_trim_start(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::String(s) => Ok(DataValue::String(s.trim_start().into())),
         v => bail!("cannot apply 'trim_start' to {:?}", v),
@@ -1036,7 +1036,7 @@ fn op_trim_start(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_TRIM_END, 1, false, false);
-fn op_trim_end(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_trim_end(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::String(s) => Ok(DataValue::String(s.trim_end().into())),
         v => bail!("cannot apply 'trim_end' to {:?}", v),
@@ -1044,7 +1044,7 @@ fn op_trim_end(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_STARTS_WITH, 2, false, true);
-fn op_starts_with(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_starts_with(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::String(s) => s,
         v => bail!("unexpected arg {:?} for OP_STARTS_WITH", v),
@@ -1057,7 +1057,7 @@ fn op_starts_with(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ENDS_WITH, 2, false, true);
-fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::String(s) => s,
         v => bail!("unexpected arg {:?} for OP_ENDS_WITH", v),
@@ -1070,7 +1070,7 @@ fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_REGEX, 1, false, false);
-fn op_regex(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_regex(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         r @ DataValue::Regex(_) => r.clone(),
         DataValue::String(s) => DataValue::Regex(RegexWrapper(regex::Regex::new(s)?)),
@@ -1079,7 +1079,7 @@ fn op_regex(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_REGEX_MATCHES, 2, false, true);
-fn op_regex_matches(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_regex_matches(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::String(s), DataValue::Regex(r)) => Ok(DataValue::Bool(r.0.is_match(s))),
         v => bail!("cannot apply 'regex_matches' to {:?}", v),
@@ -1087,7 +1087,7 @@ fn op_regex_matches(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_REGEX_REPLACE, 3, false, false);
-fn op_regex_replace(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_regex_replace(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1], &args[2]) {
         (DataValue::String(s), DataValue::Regex(r), DataValue::String(rp)) => {
             Ok(DataValue::String(r.0.replace(s, rp as &str).into()))
@@ -1097,7 +1097,7 @@ fn op_regex_replace(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_REGEX_EXTRACT, 2, false, false);
-fn op_regex_extract(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_regex_extract(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::String(s), DataValue::Regex(r)) => {
             let found =
@@ -1111,7 +1111,7 @@ fn op_regex_extract(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_REGEX_EXTRACT_FIRST, 2, false, false);
-fn op_regex_extract_first(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_regex_extract_first(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::String(s), DataValue::Regex(r)) => {
             let found = r.0.find(s).map(|v| DataValue::String(v.as_str().into()));
@@ -1122,12 +1122,12 @@ fn op_regex_extract_first(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_IS_NULL, 1, false, true);
-fn op_is_null(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_is_null(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::Null)))
 }
 
 define_op!(OP_IS_INT, 1, false, true);
-fn op_is_int(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_is_int(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(
         args[0],
         DataValue::Number(Number::Int(_))
@@ -1135,7 +1135,7 @@ fn op_is_int(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_IS_FLOAT, 1, false, true);
-fn op_is_float(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_is_float(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(
         args[0],
         DataValue::Number(Number::Float(_))
@@ -1143,7 +1143,7 @@ fn op_is_float(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_IS_NUM, 1, false, true);
-fn op_is_num(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_is_num(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(
         args[0],
         DataValue::Number(Number::Int(_)) | DataValue::Number(Number::Float(_))
@@ -1151,17 +1151,17 @@ fn op_is_num(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_IS_STRING, 1, false, true);
-fn op_is_string(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_is_string(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::String(_))))
 }
 
 define_op!(OP_IS_LIST, 1, false, true);
-fn op_is_list(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_is_list(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::List(_))))
 }
 
 define_op!(OP_APPEND, 2, false, false);
-fn op_append(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_append(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::List(l) => {
             let mut l = l.clone();
@@ -1173,12 +1173,12 @@ fn op_append(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_IS_BYTES, 1, false, true);
-fn op_is_bytes(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_is_bytes(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::Bytes(_))))
 }
 
 define_op!(OP_LENGTH, 1, false, false);
-fn op_length(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_length(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::from(match &args[0] {
         DataValue::Set(s) => s.len() as i64,
         DataValue::List(l) => l.len() as i64,
@@ -1189,7 +1189,7 @@ fn op_length(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_SORT, 1, false, false);
-fn op_sort(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_sort(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
         .get_list()
         .ok_or_else(|| anyhow!("cannot apply 'sort' to {:?}", args))?
@@ -1199,17 +1199,17 @@ fn op_sort(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_PI, 0, false, false);
-fn op_pi(_args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_pi(_args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::from(f64::PI()))
 }
 
 define_op!(OP_E, 0, false, false);
-fn op_e(_args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_e(_args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::from(f64::E()))
 }
 
 define_op!(OP_HAVERSINE, 4, false, false);
-fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);
     let lat1 = args[0].get_float().ok_or_else(gen_err)?;
     let lon1 = args[1].get_float().ok_or_else(gen_err)?;
@@ -1224,7 +1224,7 @@ fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_HAVERSINE_DEG_INPUT, 4, false, false);
-fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
     let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);
     let lat1 = args[0].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let lon1 = args[1].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
@@ -1239,7 +1239,7 @@ fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_DEG_TO_RAD, 1, false, false);
-fn op_deg_to_rad(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_deg_to_rad(args: &[DataValue]) -> Result<DataValue> {
     let x = args[0]
         .get_float()
         .ok_or_else(|| anyhow!("cannot convert to radian: {:?}", args))?;
@@ -1247,7 +1247,7 @@ fn op_deg_to_rad(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_RAD_TO_DEG, 1, false, false);
-fn op_rad_to_deg(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_rad_to_deg(args: &[DataValue]) -> Result<DataValue> {
     let x = args[0]
         .get_float()
         .ok_or_else(|| anyhow!("cannot convert to degrees: {:?}", args))?;
@@ -1255,7 +1255,7 @@ fn op_rad_to_deg(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_FIRST, 1, false, false);
-fn op_first(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_first(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
         .get_list()
         .ok_or_else(|| anyhow!("cannot compute 'first' of {:?}", args))?
@@ -1265,7 +1265,7 @@ fn op_first(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_LAST, 1, false, false);
-fn op_last(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_last(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
         .get_list()
         .ok_or_else(|| anyhow!("cannot compute 'last' of {:?}", args))?
@@ -1275,7 +1275,7 @@ fn op_last(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_CHUNKS, 2, false, false);
-fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0].get_list().ok_or_else(|| {
         anyhow!(
             "first argument of 'chunks' must be a list, got {:?}",
@@ -1301,7 +1301,7 @@ fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_CHUNKS_EXACT, 2, false, false);
-fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0].get_list().ok_or_else(|| {
         anyhow!(
             "first argument of 'chunks_exact' must be a list, got {:?}",
@@ -1327,7 +1327,7 @@ fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_WINDOWS, 2, false, false);
-fn op_windows(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_windows(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0].get_list().ok_or_else(|| {
         anyhow!(
             "first argument of 'windows' must be a list, got {:?}",
@@ -1369,7 +1369,7 @@ fn get_index(mut i: i64, total: usize) -> Result<usize> {
 }
 
 define_op!(OP_NTH, 2, false, false);
-fn op_nth(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_nth(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
         .get_list()
         .ok_or_else(|| anyhow!("first argument to 'nth' mut be a list, got args {:?}", args))?;
@@ -1384,7 +1384,7 @@ fn op_nth(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_MAYBE_NTH, 2, false, false);
-fn op_maybe_nth(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_maybe_nth(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
         .get_list()
         .ok_or_else(|| anyhow!("first argument to 'nth' mut be a list, got args {:?}", args))?;
@@ -1402,7 +1402,7 @@ fn op_maybe_nth(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_SLICE, 3, false, false);
-fn op_slice(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_slice(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0].get_list().ok_or_else(|| {
         anyhow!(
             "first argument to 'slice' mut be a list, got args {:?}",
@@ -1427,7 +1427,7 @@ fn op_slice(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_CHARS, 1, false, false);
-fn op_chars(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_chars(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(
         args[0]
             .get_string()
@@ -1443,7 +1443,7 @@ fn op_chars(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_NTH_CHAR, 2, false, false);
-fn op_nth_char(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_nth_char(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0].get_string().ok_or_else(|| {
         anyhow!(
             "first argument to 'nth_char' mut be a string, got args {:?}",
@@ -1464,7 +1464,7 @@ fn op_nth_char(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_MAYBE_NTH_CHAR, 2, false, false);
-fn op_maybe_nth_char(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_maybe_nth_char(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0].get_string().ok_or_else(|| {
         anyhow!(
             "first argument to 'nth_char' mut be a string, got args {:?}",
@@ -1488,7 +1488,7 @@ fn op_maybe_nth_char(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_STR_SLICE, 3, false, false);
-fn op_str_slice(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_str_slice(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0].get_string().ok_or_else(|| {
         anyhow!(
             "first argument to 'str_slice' mut be a string, got args {:?}",
@@ -1515,7 +1515,7 @@ fn op_str_slice(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_ENCODE_BASE64, 1, false, false);
-fn op_encode_base64(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_encode_base64(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Bytes(b) => {
             let s = base64::encode(b);
@@ -1526,7 +1526,7 @@ fn op_encode_base64(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_DECODE_BASE64, 1, false, false);
-fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::String(s) => {
             let b = base64::decode(s)?;
@@ -1537,7 +1537,7 @@ fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_TO_FLOAT, 1, false, false);
-fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Number(n) => n.get_float().into(),
         DataValue::String(t) => match t as &str {
@@ -1551,12 +1551,12 @@ fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_RAND_FLOAT, 0, false, false);
-fn op_rand_float(_args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_rand_float(_args: &[DataValue]) -> Result<DataValue> {
     Ok(thread_rng().gen::<f64>().into())
 }
 
 define_op!(OP_RAND_BERNOULLI, 0, true, false);
-fn op_rand_bernoulli(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_rand_bernoulli(args: &[DataValue]) -> Result<DataValue> {
     let prob = match args.get(0) {
         None => 0.5,
         Some(DataValue::Number(n)) => {
@@ -1577,7 +1577,7 @@ fn op_rand_bernoulli(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_RAND_INT, 2, false, false);
-fn op_rand_int(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_rand_int(args: &[DataValue]) -> Result<DataValue> {
     let lower = &args[0].get_int().ok_or_else(|| {
         anyhow!(
             "first argument to 'rand_int' must be an integer, got args {:?}",
@@ -1594,7 +1594,7 @@ fn op_rand_int(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_RAND_CHOOSE, 1, false, true);
-fn op_rand_choose(args: &[DataValue]) -> Result<DataValue> {
+pub(crate) fn op_rand_choose(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::List(l) => Ok(l
             .choose(&mut thread_rng())
