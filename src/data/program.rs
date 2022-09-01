@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
 use anyhow::{anyhow, bail, ensure, Result};
+use either::{Left, Right};
 use itertools::Itertools;
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
@@ -40,6 +41,12 @@ pub(crate) struct AlgoApply {
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
 }
 
+impl AlgoApply {
+    pub(crate) fn arity(&self) -> Result<usize> {
+        self.algo.arity(Left(&self.rule_args), &self.options)
+    }
+}
+
 impl Debug for AlgoApply {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AlgoApply")
@@ -55,6 +62,12 @@ pub(crate) struct MagicAlgoApply {
     pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<MagicAlgoRuleArg>,
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
+}
+
+impl MagicAlgoApply {
+    pub(crate) fn arity(&self) -> Result<usize> {
+        self.algo.arity(Right(&self.rule_args), &self.options)
+    }
 }
 
 impl Debug for MagicAlgoApply {
@@ -143,7 +156,7 @@ impl InputProgram {
                 .ok_or_else(|| anyhow!("program entry point not found"))?
             {
                 InputRulesOrAlgo::Rules(rules) => rules[0].head.len(),
-                InputRulesOrAlgo::Algo(algo_apply) => algo_apply.algo.arity()?,
+                InputRulesOrAlgo::Algo(algo_apply) => algo_apply.arity()?,
             },
         )
     }
@@ -261,7 +274,7 @@ impl MagicRulesOrAlgo {
     pub(crate) fn arity(&self) -> Result<usize> {
         Ok(match self {
             MagicRulesOrAlgo::Rules(r) => r.first().unwrap().head.len(),
-            MagicRulesOrAlgo::Algo(algo) => algo.algo.arity()?,
+            MagicRulesOrAlgo::Algo(algo) => algo.arity()?,
         })
     }
     pub(crate) fn mut_rules(&mut self) -> Option<&mut Vec<MagicRule>> {

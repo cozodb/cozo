@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{anyhow, bail, ensure, Result};
+use either::Either;
 use itertools::Itertools;
 use smartstring::{LazyCompact, SmartString};
 
@@ -14,14 +15,15 @@ use crate::algo::label_propagation::LabelPropagation;
 use crate::algo::louvain::CommunityDetectionLouvain;
 use crate::algo::pagerank::PageRank;
 use crate::algo::prim::MinimumSpanningTreePrim;
+use crate::algo::reorder_sort::ReorderSort;
 use crate::algo::shortest_path_dijkstra::ShortestPathDijkstra;
 use crate::algo::strongly_connected_components::StronglyConnectedComponent;
 use crate::algo::top_sort::TopSort;
 use crate::algo::triangles::ClusteringCoefficients;
 use crate::algo::yen::KShortestPathYen;
-use crate::data::expr::Expr;
+use crate::data::expr::{Expr, OP_LIST};
 use crate::data::id::{EntityId, Validity};
-use crate::data::program::{MagicAlgoRuleArg, MagicSymbol, TripleDir};
+use crate::data::program::{AlgoRuleArg, MagicAlgoRuleArg, MagicSymbol, TripleDir};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
@@ -34,15 +36,16 @@ pub(crate) mod bfs;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
 pub(crate) mod kruskal;
+pub(crate) mod label_propagation;
 pub(crate) mod louvain;
 pub(crate) mod pagerank;
 pub(crate) mod prim;
 pub(crate) mod shortest_path_dijkstra;
+pub(crate) mod reorder_sort;
 pub(crate) mod strongly_connected_components;
 pub(crate) mod top_sort;
 pub(crate) mod triangles;
 pub(crate) mod yen;
-pub(crate) mod label_propagation;
 
 pub(crate) trait AlgoImpl {
     fn run(
@@ -66,7 +69,11 @@ impl AlgoHandle {
             name: Symbol::from(name),
         }
     }
-    pub(crate) fn arity(&self) -> Result<usize> {
+    pub(crate) fn arity(
+        &self,
+        _args: Either<&[AlgoRuleArg], &[MagicAlgoRuleArg]>,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+    ) -> Result<usize> {
         Ok(match &self.name.0 as &str {
             "clustering_coefficients" => 4,
             "degree_centrality" => 4,
@@ -85,6 +92,18 @@ impl AlgoHandle {
             "pagerank" => 2,
             "community_detection_louvain" => 2,
             "label_propagation" => 2,
+            "reorder_sort" => {
+                let out_opts = opts
+                    .get("out")
+                    .ok_or_else(|| anyhow!("'reorder_sort' requires the option 'out'"))?;
+                match out_opts {
+                    Expr::Const(DataValue::List(l)) => l.len() + 1,
+                    Expr::Apply(op, args) if **op == OP_LIST => args.len() + 1,
+                    v => {
+                        bail!("option 'out' of 'reorder_sort' must be a list, got {:?}", v)
+                    }
+                }
+            }
             name => bail!("algorithm '{}' not found", name),
         })
     }
@@ -110,6 +129,7 @@ impl AlgoHandle {
             "pagerank" => Box::new(PageRank),
             "community_detection_louvain" => Box::new(CommunityDetectionLouvain),
             "label_propagation" => Box::new(LabelPropagation),
+            "reorder_sort" => Box::new(ReorderSort),
             name => bail!("algorithm '{}' not found", name),
         })
     }
