@@ -342,7 +342,6 @@ pub(crate) struct Op {
     pub(crate) name: &'static str,
     pub(crate) min_arity: usize,
     pub(crate) vararg: bool,
-    pub(crate) is_predicate: bool,
     pub(crate) inner: fn(&[DataValue]) -> Result<DataValue>,
 }
 

@@ -364,7 +364,7 @@ impl SessionTx {
                 offset,
                 sorters,
                 as_view,
-                timeout
+                timeout,
             },
             const_rules,
         ))
@@ -488,13 +488,6 @@ impl SessionTx {
         param_pool: &BTreeMap<Symbol, DataValue>,
     ) -> Result<InputAtom> {
         let mut pred = Self::parse_apply_expr(payload, param_pool)?;
-        if let Expr::Apply(op, _) = &pred {
-            ensure!(
-                op.is_predicate,
-                "non-predicate expression in predicate position: {}",
-                op.name
-            );
-        }
         pred.partial_eval(param_pool)?;
         Ok(InputAtom::Predicate(pred))
     }

@@ -23,7 +23,6 @@ fn simple() {
     init_logger();
     let db = create_db("_test_db", true);
     test_send_sync(&db);
-    assert!(db.current_schema().unwrap().as_array().unwrap().is_empty());
     db.run_script(
         r#"
         :schema
@@ -38,7 +37,6 @@ fn simple() {
     "#,
     )
     .unwrap();
-    assert_eq!(db.current_schema().unwrap().as_array().unwrap().len(), 6);
     info!(
         "{}",
         to_string_pretty(&db.current_schema().unwrap()).unwrap()
