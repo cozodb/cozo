@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -32,6 +32,25 @@ use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::{ViewRelId, ViewRelMetadata};
 
+struct RunningQueryHandle {
+    started_at: Validity,
+    poison: Poison,
+}
+
+struct RunningQueryCleanup {
+    id: u64,
+    running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
+}
+
+impl Drop for RunningQueryCleanup {
+    fn drop(&mut self) {
+        let mut map = self.running_queries.lock().unwrap();
+        if let Some(handle) = map.remove(&self.id) {
+            handle.poison.0.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
 pub struct Db {
     db: RocksDb,
     view_db: RocksDb,
@@ -40,6 +59,8 @@ pub struct Db {
     last_tx_id: Arc<AtomicU64>,
     view_store_id: Arc<AtomicU64>,
     n_sessions: Arc<AtomicUsize>,
+    queries_count: Arc<AtomicU64>,
+    running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
     session_id: usize,
 }
 
@@ -79,6 +100,8 @@ impl Db {
             last_tx_id: Arc::new(Default::default()),
             view_store_id: Arc::new(Default::default()),
             n_sessions: Arc::new(Default::default()),
+            queries_count: Arc::new(Default::default()),
+            running_queries: Arc::new(Mutex::new(Default::default())),
             session_id: Default::default(),
         };
         ret.load_last_ids()?;
@@ -110,6 +133,8 @@ impl Db {
             last_tx_id: self.last_tx_id.clone(),
             view_store_id: self.view_store_id.clone(),
             n_sessions: self.n_sessions.clone(),
+            queries_count: self.queries_count.clone(),
+            running_queries: self.running_queries.clone(),
             session_id: old_count + 1,
         })
     }
@@ -344,6 +369,19 @@ impl Db {
                 }
                 Ok(json!({"status": "OK"}))
             }
+            SysOp::ListRunning => self.list_running(),
+            SysOp::KillRunning(id) => {
+                let queries = self.running_queries.lock().unwrap();
+                Ok(match queries.get(&id) {
+                    None => {
+                        json!({"status": "NOT_FOUND"})
+                    }
+                    Some(handle) => {
+                        handle.poison.0.store(true, Ordering::Relaxed);
+                        json!({"status": "KILLING"})
+                    }
+                })
+            }
         }
     }
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
@@ -376,6 +414,16 @@ impl Db {
         if let Some(secs) = out_opts.timeout {
             poison.set_timeout(secs);
         }
+        let id = self.queries_count.fetch_add(1, Ordering::AcqRel);
+        let handle = RunningQueryHandle {
+            started_at: Validity::current(),
+            poison: poison.clone(),
+        };
+        self.running_queries.lock().unwrap().insert(id, handle);
+        let _guard = RunningQueryCleanup {
+            id,
+            running_queries: self.running_queries.clone(),
+        };
 
         let result = tx.stratified_magic_evaluate(
             &compiled,
@@ -429,6 +477,16 @@ impl Db {
         let name = Symbol::from(name);
         let tx = self.transact()?;
         tx.destroy_view_rel(&name)
+    }
+    pub fn list_running(&self) -> Result<JsonValue> {
+        let res = self
+            .running_queries
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| json!([k, format!("{:?}", v.started_at)]))
+            .collect_vec();
+        Ok(json!({"rows": res, "headers": ["?id", "?started_at"]}))
     }
     pub fn list_views(&self) -> Result<JsonValue> {
         let lower = Tuple(vec![DataValue::String("".into())]).encode_as_key(ViewRelId::SYSTEM);

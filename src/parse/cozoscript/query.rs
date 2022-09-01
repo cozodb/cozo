@@ -264,7 +264,7 @@ fn parse_algo_rule(src: Pair<'_>) -> Result<JsonValue> {
                                 backward = true;
                                 els.next().unwrap().as_str()
                             }
-                            Rule::ident => mdl.as_str(),
+                            Rule::compound_ident => mdl.as_str(),
                             _ => unreachable!(),
                         };
                         let snd = els.next().unwrap().as_str();

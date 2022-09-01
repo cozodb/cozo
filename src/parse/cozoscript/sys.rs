@@ -3,9 +3,19 @@ use std::collections::BTreeSet;
 use anyhow::Result;
 
 use crate::data::symb::Symbol;
-use crate::parse::cozoscript::{Rule, Pairs};
+use crate::parse::cozoscript::{Pairs, Rule};
 
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Copy, Clone, serde_derive::Serialize, serde_derive::Deserialize)]
+#[derive(
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Copy,
+    Clone,
+    serde_derive::Serialize,
+    serde_derive::Deserialize,
+)]
 pub(crate) enum CompactTarget {
     Triples,
     Relations,
@@ -16,6 +26,8 @@ pub(crate) enum SysOp {
     Compact(BTreeSet<CompactTarget>),
     ListSchema,
     ListRelations,
+    ListRunning,
+    KillRunning(u64),
     RemoveRelations(Vec<Symbol>),
 }
 
@@ -33,6 +45,12 @@ pub(crate) fn parsed_db_op_to_enum(mut src: Pairs<'_>) -> Result<SysOp> {
                 .collect();
             SysOp::Compact(ops)
         }
+        Rule::running_op => SysOp::ListRunning,
+        Rule::kill_op => {
+            let i_str = inner.into_inner().next().unwrap().as_str();
+            let i = u64::from_str_radix(i_str, 10)?;
+            SysOp::KillRunning(i)
+        }
         Rule::list_schema_op => SysOp::ListSchema,
         Rule::list_relations_op => SysOp::ListRelations,
         Rule::remove_relations_op => {
@@ -42,6 +60,6 @@ pub(crate) fn parsed_db_op_to_enum(mut src: Pairs<'_>) -> Result<SysOp> {
                 .collect();
             SysOp::RemoveRelations(rels)
         }
-        _ => unreachable!()
+        _ => unreachable!(),
     })
 }
