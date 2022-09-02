@@ -140,6 +140,15 @@ fn test_comparators() {
         DataValue::Bool(true)
     );
     assert_eq!(
+        op_ge(&[DataValue::from(2.), DataValue::from(1)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_ge(&[DataValue::from(2), DataValue::from(1.)]).unwrap(),
+        DataValue::Bool(true)
+    );
+
+    assert_eq!(
         op_ge(&[DataValue::from(1), DataValue::from(1)]).unwrap(),
         DataValue::Bool(true)
     );
@@ -154,6 +163,14 @@ fn test_comparators() {
     assert!(op_ge(&[DataValue::Null, DataValue::Bool(true)]).is_err());
     assert_eq!(
         op_gt(&[DataValue::from(2), DataValue::from(1)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_gt(&[DataValue::from(2.), DataValue::from(1)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_gt(&[DataValue::from(2), DataValue::from(1.)]).unwrap(),
         DataValue::Bool(true)
     );
     assert_eq!(
@@ -174,6 +191,14 @@ fn test_comparators() {
         DataValue::Bool(false)
     );
     assert_eq!(
+        op_le(&[DataValue::from(2.), DataValue::from(1)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_le(&[DataValue::from(2), DataValue::from(1.)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
         op_le(&[DataValue::from(1), DataValue::from(1)]).unwrap(),
         DataValue::Bool(true)
     );
@@ -188,6 +213,14 @@ fn test_comparators() {
     assert!(op_le(&[DataValue::Null, DataValue::Bool(true)]).is_err());
     assert_eq!(
         op_lt(&[DataValue::from(2), DataValue::from(1)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_lt(&[DataValue::from(2.), DataValue::from(1)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_lt(&[DataValue::from(2), DataValue::from(1.)]).unwrap(),
         DataValue::Bool(false)
     );
     assert_eq!(

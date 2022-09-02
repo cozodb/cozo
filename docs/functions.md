@@ -1,5 +1,7 @@
 # Functions
 
+This page describes all functions that can be used in expressions in Cozo.
+
 All function arguments in Cozo are immutable. 
 
 All functions except those having names starting with `rand_` are deterministic.
