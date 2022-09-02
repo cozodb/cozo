@@ -4,13 +4,12 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
 use anyhow::{bail, Result};
+use ordered_float::OrderedFloat;
 use regex::Regex;
 use rmp_serde::Serializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
-
-use ordered_float::OrderedFloat;
 
 use crate::data::encode::EncodedVec;
 use crate::data::id::{EntityId, TxId};
@@ -89,6 +88,24 @@ pub(crate) enum DataValue {
     DescVal(Reverse<Box<DataValue>>),
     #[serde(rename = "r")]
     Bottom,
+}
+
+pub(crate) fn same_value_type(a: &DataValue, b: &DataValue) -> bool {
+    use DataValue::*;
+    match (a, b) {
+        (Null, Null)
+        | (Bool(_), Bool(_))
+        | (Number(_), Number(_))
+        | (String(_), String(_))
+        | (Bytes(_), Bytes(_))
+        | (Regex(_), Regex(_))
+        | (List(_), List(_))
+        | (Set(_), Set(_))
+        | (Guard, Guard)
+        | (DescVal(_), DescVal(_))
+        | (Bottom, Bottom) => true,
+        _ => false,
+    }
 }
 
 impl From<i64> for DataValue {

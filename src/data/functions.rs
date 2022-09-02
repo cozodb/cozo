@@ -8,7 +8,7 @@ use rand::prelude::*;
 use smartstring::SmartString;
 
 use crate::data::expr::Op;
-use crate::data::value::{DataValue, Number, RegexWrapper};
+use crate::data::value::{DataValue, Number, RegexWrapper, same_value_type};
 
 macro_rules! define_op {
     ($name:ident, $min_arity:expr, $vararg:expr) => {
@@ -59,22 +59,50 @@ pub(crate) fn op_neq(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_GT, 2, false);
 pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(args[0] > args[1]))
+    ensure!(same_value_type(&args[0], &args[1]), "comparison between different datatypes: {:?}", args);
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
+        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
+            *i as f64 > *f
+        }
+        (a, b) => a > b,
+    }))
 }
 
 define_op!(OP_GE, 2, false);
 pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(args[0] >= args[1]))
+    ensure!(same_value_type(&args[0], &args[1]), "comparison between different datatypes: {:?}", args);
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
+        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
+            *i as f64 >= *f
+        }
+        (a, b) => a >= b,
+    }))
 }
 
 define_op!(OP_LT, 2, false);
 pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(args[0] < args[1]))
+    ensure!(same_value_type(&args[0], &args[1]), "comparison between different datatypes: {:?}", args);
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
+        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
+            (*i as f64) < *f
+        }
+        (a, b) => a < b,
+    }))
 }
 
 define_op!(OP_LE, 2, false);
 pub(crate) fn op_le(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(args[0] <= args[1]))
+    ensure!(same_value_type(&args[0], &args[1]), "comparison between different datatypes: {:?}", args);
+    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
+        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
+            (*i as f64) <= *f
+        }
+        (a, b) => a <= b,
+    }))
 }
 
 define_op!(OP_ADD, 0, true);
@@ -97,6 +125,7 @@ pub(crate) fn op_add(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_MAX, 0, true);
 pub(crate) fn op_max(args: &[DataValue]) -> Result<DataValue> {
+    ensure!(!args.is_empty(), "'max' called on no arguments");
     let res = args
         .iter()
         .try_fold(None, |accum, nxt| match (accum, nxt) {
@@ -114,6 +143,7 @@ pub(crate) fn op_max(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_MIN, 0, true);
 pub(crate) fn op_min(args: &[DataValue]) -> Result<DataValue> {
+    ensure!(!args.is_empty(), "'min' called on no arguments");
     let res = args
         .iter()
         .try_fold(None, |accum, nxt| match (accum, nxt) {
@@ -207,7 +237,17 @@ define_op!(OP_SIGNUM, 1, false);
 pub(crate) fn op_signum(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Number(Number::Int(i)) => DataValue::Number(Number::Int(i.signum())),
-        DataValue::Number(Number::Float(f)) => DataValue::Number(Number::Float(f.signum())),
+        DataValue::Number(Number::Float(f)) => {
+            if f.signum() < 0. {
+                DataValue::from(-1)
+            } else if *f == 0. {
+                DataValue::from(0)
+            } else if *f > 0. {
+                DataValue::from(1)
+            } else {
+                DataValue::from(f64::NAN)
+            }
+        },
         v => bail!("unexpected arg {:?} for OP_SIGNUM", v),
     })
 }
@@ -487,12 +527,12 @@ pub(crate) fn op_or(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(false))
 }
 
-define_op!(OP_NOT, 1, false);
-pub(crate) fn op_not(args: &[DataValue]) -> Result<DataValue> {
+define_op!(OP_NEGATE, 1, false);
+pub(crate) fn op_negate(args: &[DataValue]) -> Result<DataValue> {
     if let DataValue::Bool(b) = &args[0] {
         Ok(DataValue::Bool(!*b))
     } else {
-        bail!("unexpected arg {:?} for OP_NOT", args);
+        bail!("unexpected arg {:?} for OP_NEGATE", args);
     }
 }
 
@@ -844,16 +884,6 @@ pub(crate) fn op_sort(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(arg))
 }
 
-define_op!(OP_PI, 0, false);
-pub(crate) fn op_pi(_args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::from(f64::PI()))
-}
-
-define_op!(OP_E, 0, false);
-pub(crate) fn op_e(_args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::from(f64::E()))
-}
-
 define_op!(OP_HAVERSINE, 4, false);
 pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);
@@ -1187,6 +1217,8 @@ pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Number(n) => n.get_float().into(),
         DataValue::String(t) => match t as &str {
+            "PI" => f64::PI().into(),
+            "E" => f64::E().into(),
             "NAN" => f64::NAN.into(),
             "INFINITY" => f64::INFINITY.into(),
             "NEGATIVE_INFINITY" => f64::NEG_INFINITY.into(),

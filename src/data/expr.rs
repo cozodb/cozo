@@ -42,7 +42,7 @@ impl Expr {
         Expr::Apply(&OP_IS_IN, exprs.into())
     }
     pub(crate) fn negate(self) -> Self {
-        Expr::Apply(&OP_NOT, Box::new([self]))
+        Expr::Apply(&OP_NEGATE, Box::new([self]))
     }
     pub(crate) fn to_conjunction(&self) -> Vec<Self> {
         match self {
@@ -116,9 +116,9 @@ impl Expr {
             }
             // nested not's can accumulate during conversion to normal form
             if let Expr::Apply(op1, arg1) = self {
-                if op1.name == OP_NOT.name {
+                if op1.name == OP_NEGATE.name {
                     if let Some(Expr::Apply(op2, arg2)) = arg1.first() {
-                        if op2.name == OP_NOT.name {
+                        if op2.name == OP_NEGATE.name {
                             let mut new_self = arg2[0].clone();
                             mem::swap(self, &mut new_self);
                         }
@@ -402,7 +402,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "le" => &OP_LE,
         "or" => &OP_OR,
         "and" => &OP_AND,
-        "not" => &OP_NOT,
+        "negate" => &OP_NEGATE,
         "bit_and" => &OP_BIT_AND,
         "bit_or" => &OP_BIT_OR,
         "bit_not" => &OP_BIT_NOT,
@@ -429,8 +429,6 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "length" => &OP_LENGTH,
         "sort" => &OP_SORT,
         "append" => &OP_APPEND,
-        "pi" => &OP_PI,
-        "e" => &OP_E,
         "haversine" => &OP_HAVERSINE,
         "haversine_deg_input" => &OP_HAVERSINE_DEG_INPUT,
         "deg_to_rad" => &OP_DEG_TO_RAD,
