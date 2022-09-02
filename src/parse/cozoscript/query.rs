@@ -518,7 +518,7 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
                 Rule::boolean => JsonValue::Bool(s == "true"),
                 Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
                     let s = parse_string(p)?;
-                    json!(s)
+                    json!({ "const": s })
                 }
                 Rule::list => {
                     let mut collected = vec![];

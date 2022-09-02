@@ -1,8 +1,9 @@
 use approx::AbsDiffEq;
 use num_traits::FloatConst;
+use regex::Regex;
 
 use crate::data::functions::*;
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, RegexWrapper};
 
 #[test]
 fn test_add() {
@@ -494,6 +495,369 @@ fn test_pow() {
 fn test_mod() {
     assert_eq!(
         op_mod(&[DataValue::from(-10), DataValue::from(7)]).unwrap(),
-        DataValue::from(3)
+        DataValue::from(-3)
+    );
+}
+
+#[test]
+fn test_boolean() {
+    assert_eq!(op_and(&[]).unwrap(), DataValue::Bool(true));
+    assert_eq!(
+        op_and(&[DataValue::Bool(true), DataValue::Bool(false)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(op_or(&[]).unwrap(), DataValue::Bool(false));
+    assert_eq!(
+        op_or(&[DataValue::Bool(true), DataValue::Bool(false)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_negate(&[DataValue::Bool(false)]).unwrap(),
+        DataValue::Bool(true)
+    );
+}
+
+#[test]
+fn test_bits() {
+    assert_eq!(
+        op_bit_and(&[
+            DataValue::Bytes([0b111000].into()),
+            DataValue::Bytes([0b010101].into())
+        ])
+        .unwrap(),
+        DataValue::Bytes([0b010000].into())
+    );
+    assert_eq!(
+        op_bit_or(&[
+            DataValue::Bytes([0b111000].into()),
+            DataValue::Bytes([0b010101].into())
+        ])
+        .unwrap(),
+        DataValue::Bytes([0b111101].into())
+    );
+    assert_eq!(
+        op_bit_not(&[DataValue::Bytes([0b00111000].into())]).unwrap(),
+        DataValue::Bytes([0b11000111].into())
+    );
+    assert_eq!(
+        op_bit_xor(&[
+            DataValue::Bytes([0b111000].into()),
+            DataValue::Bytes([0b010101].into())
+        ])
+        .unwrap(),
+        DataValue::Bytes([0b101101].into())
+    );
+}
+
+#[test]
+fn test_pack_bits() {
+    assert_eq!(
+        op_pack_bits(&[DataValue::List(vec![DataValue::Bool(true)])]).unwrap(),
+        DataValue::Bytes([0b10000000].into())
+    )
+}
+
+#[test]
+fn test_unpack_bits() {
+    assert_eq!(
+        op_unpack_bits(&[DataValue::Bytes([0b10101010].into())]).unwrap(),
+        DataValue::List(
+            [true, false, true, false, true, false, true, false]
+                .into_iter()
+                .map(DataValue::Bool)
+                .collect()
+        )
+    )
+}
+
+#[test]
+fn test_str_cat() {
+    assert_eq!(
+        op_str_cat(&[
+            DataValue::String("abc".into()),
+            DataValue::String("def".into())
+        ])
+        .unwrap(),
+        DataValue::String("abcdef".into())
+    );
+}
+
+#[test]
+fn test_str_includes() {
+    assert_eq!(
+        op_str_includes(&[
+            DataValue::String("abcdef".into()),
+            DataValue::String("bcd".into())
+        ])
+        .unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_str_includes(&[
+            DataValue::String("abcdef".into()),
+            DataValue::String("bd".into())
+        ])
+        .unwrap(),
+        DataValue::Bool(false)
+    );
+}
+
+#[test]
+fn test_casings() {
+    assert_eq!(
+        op_lowercase(&[DataValue::String("NAÏVE".into())]).unwrap(),
+        DataValue::String("naïve".into())
+    );
+    assert_eq!(
+        op_uppercase(&[DataValue::String("naïve".into())]).unwrap(),
+        DataValue::String("NAÏVE".into())
+    );
+}
+
+#[test]
+fn test_trim() {
+    assert_eq!(
+        op_trim(&[DataValue::String(" a ".into())]).unwrap(),
+        DataValue::String("a".into())
+    );
+    assert_eq!(
+        op_trim_start(&[DataValue::String(" a ".into())]).unwrap(),
+        DataValue::String("a ".into())
+    );
+    assert_eq!(
+        op_trim_end(&[DataValue::String(" a ".into())]).unwrap(),
+        DataValue::String(" a".into())
+    );
+}
+
+#[test]
+fn test_starts_ends_with() {
+    assert_eq!(
+        op_starts_with(&[
+            DataValue::String("abcdef".into()),
+            DataValue::String("abc".into())
+        ])
+        .unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_starts_with(&[
+            DataValue::String("abcdef".into()),
+            DataValue::String("bc".into())
+        ])
+        .unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_ends_with(&[
+            DataValue::String("abcdef".into()),
+            DataValue::String("def".into())
+        ])
+        .unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_ends_with(&[
+            DataValue::String("abcdef".into()),
+            DataValue::String("bc".into())
+        ])
+        .unwrap(),
+        DataValue::Bool(false)
+    );
+}
+
+#[test]
+fn test_regex() {
+    assert_eq!(
+        op_regex_matches(&[
+            DataValue::String("abcdef".into()),
+            DataValue::Regex(RegexWrapper(Regex::new("c.e").unwrap()))
+        ])
+        .unwrap(),
+        DataValue::Bool(true)
+    );
+
+    assert_eq!(
+        op_regex_matches(&[
+            DataValue::String("abcdef".into()),
+            DataValue::Regex(RegexWrapper(Regex::new("c.ef$").unwrap()))
+        ])
+        .unwrap(),
+        DataValue::Bool(true)
+    );
+
+    assert_eq!(
+        op_regex_matches(&[
+            DataValue::String("abcdef".into()),
+            DataValue::Regex(RegexWrapper(Regex::new("c.e$").unwrap()))
+        ])
+        .unwrap(),
+        DataValue::Bool(false)
+    );
+
+    assert_eq!(
+        op_regex_replace(&[
+            DataValue::String("abcdef".into()),
+            DataValue::Regex(RegexWrapper(Regex::new("[be]").unwrap())),
+            DataValue::String("x".into())
+        ])
+        .unwrap(),
+        DataValue::String("axcdef".into())
+    );
+
+    assert_eq!(
+        op_regex_replace_all(&[
+            DataValue::String("abcdef".into()),
+            DataValue::Regex(RegexWrapper(Regex::new("[be]").unwrap())),
+            DataValue::String("x".into())
+        ])
+        .unwrap(),
+        DataValue::String("axcdxf".into())
+    );
+    assert_eq!(
+        op_regex_extract(&[
+            DataValue::String("abCDefGH".into()),
+            DataValue::Regex(RegexWrapper(Regex::new("[xayef]|(GH)").unwrap()))
+        ])
+        .unwrap(),
+        DataValue::List(vec![
+            DataValue::String("a".into()),
+            DataValue::String("e".into()),
+            DataValue::String("f".into()),
+            DataValue::String("GH".into()),
+        ])
+    );
+    assert_eq!(
+        op_regex_extract_first(&[
+            DataValue::String("abCDefGH".into()),
+            DataValue::Regex(RegexWrapper(Regex::new("[xayef]|(GH)").unwrap()))
+        ])
+        .unwrap(),
+        DataValue::String("a".into()),
+    );
+    assert_eq!(
+        op_regex_extract(&[
+            DataValue::String("abCDefGH".into()),
+            DataValue::Regex(RegexWrapper(Regex::new("xyz").unwrap()))
+        ])
+        .unwrap(),
+        DataValue::List(vec![])
+    );
+
+    assert_eq!(
+        op_regex_extract_first(&[
+            DataValue::String("abCDefGH".into()),
+            DataValue::Regex(RegexWrapper(Regex::new("xyz").unwrap()))
+        ])
+        .unwrap(),
+        DataValue::Null
+    );
+}
+
+#[test]
+fn test_predicates() {
+    assert_eq!(
+        op_is_null(&[DataValue::Null]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_null(&[DataValue::Bottom]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_int(&[DataValue::from(1)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_int(&[DataValue::from(1.0)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_float(&[DataValue::from(1)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_float(&[DataValue::from(1.0)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_num(&[DataValue::from(1)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_num(&[DataValue::from(1.0)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_num(&[DataValue::Null]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_bytes(&[DataValue::Bytes([0b1].into())]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_bytes(&[DataValue::Null]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_list(&[DataValue::List(vec![])]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_list(&[DataValue::Null]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_string(&[DataValue::String("".into())]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_string(&[DataValue::Null]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_finite(&[DataValue::from(1.0)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_finite(&[DataValue::from(f64::INFINITY)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_finite(&[DataValue::from(f64::NAN)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_infinite(&[DataValue::from(1.0)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_infinite(&[DataValue::from(f64::INFINITY)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_infinite(&[DataValue::from(f64::NEG_INFINITY)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_is_infinite(&[DataValue::from(f64::NAN)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_nan(&[DataValue::from(1.0)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_nan(&[DataValue::from(f64::INFINITY)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_nan(&[DataValue::from(f64::NEG_INFINITY)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_is_nan(&[DataValue::from(f64::NAN)]).unwrap(),
+        DataValue::Bool(true)
     );
 }

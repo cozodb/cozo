@@ -59,7 +59,11 @@ pub(crate) fn op_neq(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_GT, 2, false);
 pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(same_value_type(&args[0], &args[1]), "comparison between different datatypes: {:?}", args);
+    ensure!(
+        same_value_type(&args[0], &args[1]),
+        "comparison between different datatypes: {:?}",
+        args
+    );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
         | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
@@ -71,7 +75,11 @@ pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_GE, 2, false);
 pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(same_value_type(&args[0], &args[1]), "comparison between different datatypes: {:?}", args);
+    ensure!(
+        same_value_type(&args[0], &args[1]),
+        "comparison between different datatypes: {:?}",
+        args
+    );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
         | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
@@ -83,7 +91,11 @@ pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_LT, 2, false);
 pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(same_value_type(&args[0], &args[1]), "comparison between different datatypes: {:?}", args);
+    ensure!(
+        same_value_type(&args[0], &args[1]),
+        "comparison between different datatypes: {:?}",
+        args
+    );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
         | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
@@ -95,7 +107,11 @@ pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_LE, 2, false);
 pub(crate) fn op_le(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(same_value_type(&args[0], &args[1]), "comparison between different datatypes: {:?}", args);
+    ensure!(
+        same_value_type(&args[0], &args[1]),
+        "comparison between different datatypes: {:?}",
+        args
+    );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
         | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
@@ -247,7 +263,7 @@ pub(crate) fn op_signum(args: &[DataValue]) -> Result<DataValue> {
             } else {
                 DataValue::from(f64::NAN)
             }
-        },
+        }
         v => bail!("unexpected arg {:?} for OP_SIGNUM", v),
     })
 }
@@ -748,7 +764,7 @@ pub(crate) fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
         DataValue::String(s) => s,
         v => bail!("unexpected arg {:?} for OP_ENDS_WITH", v),
     };
-    let b = match &args[0] {
+    let b = match &args[1] {
         DataValue::String(s) => s,
         v => bail!("unexpected arg {:?} for OP_ENDS_WITH", v),
     };
@@ -777,6 +793,16 @@ pub(crate) fn op_regex_replace(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1], &args[2]) {
         (DataValue::String(s), DataValue::Regex(r), DataValue::String(rp)) => {
             Ok(DataValue::String(r.0.replace(s, rp as &str).into()))
+        }
+        v => bail!("cannot apply 'regex_replace' to {:?}", v),
+    }
+}
+
+define_op!(OP_REGEX_REPLACE_ALL, 3, false);
+pub(crate) fn op_regex_replace_all(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1], &args[2]) {
+        (DataValue::String(s), DataValue::Regex(r), DataValue::String(rp)) => {
+            Ok(DataValue::String(r.0.replace_all(s, rp as &str).into()))
         }
         v => bail!("cannot apply 'regex_replace' to {:?}", v),
     }
@@ -836,6 +862,33 @@ pub(crate) fn op_is_num(args: &[DataValue]) -> Result<DataValue> {
     )))
 }
 
+define_op!(OP_IS_FINITE, 1, false);
+pub(crate) fn op_is_finite(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(match &args[0] {
+        DataValue::Number(Number::Int(_)) => true,
+        DataValue::Number(Number::Float(f)) => f.is_finite(),
+        _ => false
+    }))
+}
+
+define_op!(OP_IS_INFINITE, 1, false);
+pub(crate) fn op_is_infinite(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(match &args[0] {
+        DataValue::Number(Number::Float(f)) => f.is_infinite(),
+        _ => false
+    }))
+}
+
+
+define_op!(OP_IS_NAN, 1, false);
+pub(crate) fn op_is_nan(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(match &args[0] {
+        DataValue::Number(Number::Float(f)) => f.is_nan(),
+        _ => false
+    }))
+}
+
+
 define_op!(OP_IS_STRING, 1, false);
 pub(crate) fn op_is_string(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::String(_))))
@@ -874,8 +927,8 @@ pub(crate) fn op_length(args: &[DataValue]) -> Result<DataValue> {
     }))
 }
 
-define_op!(OP_SORT, 1, false);
-pub(crate) fn op_sort(args: &[DataValue]) -> Result<DataValue> {
+define_op!(OP_SORTED, 1, false);
+pub(crate) fn op_sorted(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
         .get_list()
         .ok_or_else(|| anyhow!("cannot apply 'sort' to {:?}", args))?
