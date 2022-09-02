@@ -435,7 +435,7 @@ lazy_static! {
             Operator::new(Rule::op_eq, Left) | Operator::new(Rule::op_ne, Left),
             Operator::new(Rule::op_add, Left)
                 | Operator::new(Rule::op_sub, Left)
-                | Operator::new(Rule::op_str_cat, Left),
+                | Operator::new(Rule::op_concat, Left),
             Operator::new(Rule::op_mul, Left) | Operator::new(Rule::op_div, Left),
             Operator::new(Rule::op_pow, Assoc::Right),
         ])
@@ -461,7 +461,7 @@ fn build_expr_infix(
         Rule::op_ge => "ge",
         Rule::op_lt => "lt",
         Rule::op_le => "le",
-        Rule::op_str_cat => "str_cat",
+        Rule::op_concat => "concat",
         Rule::op_or => "or",
         Rule::op_and => "and",
         _ => unreachable!(),

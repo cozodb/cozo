@@ -6,9 +6,10 @@ use itertools::Itertools;
 use num_traits::FloatConst;
 use rand::prelude::*;
 use smartstring::SmartString;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::data::expr::Op;
-use crate::data::value::{DataValue, Number, RegexWrapper, same_value_type};
+use crate::data::value::{same_value_type, DataValue, Number, RegexWrapper};
 
 macro_rules! define_op {
     ($name:ident, $min_arity:expr, $vararg:expr) => {
@@ -682,17 +683,33 @@ pub(crate) fn op_pack_bits(args: &[DataValue]) -> Result<DataValue> {
     }
 }
 
-define_op!(OP_STR_CAT, 0, true);
-pub(crate) fn op_str_cat(args: &[DataValue]) -> Result<DataValue> {
-    let mut ret: String = Default::default();
-    for arg in args {
-        if let DataValue::String(s) = arg {
-            ret += s;
-        } else {
-            bail!("unexpected arg {:?} for OP_ADD", arg);
+define_op!(OP_CONCAT, 1, true);
+pub(crate) fn op_concat(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::String(_) => {
+            let mut ret: String = Default::default();
+            for arg in args {
+                if let DataValue::String(s) = arg {
+                    ret += s;
+                } else {
+                    bail!("unexpected arg {:?} for OP_CAT", arg);
+                }
+            }
+            Ok(DataValue::String(ret.into()))
         }
+        DataValue::List(_) => {
+            let mut ret = vec![];
+            for arg in args {
+                if let DataValue::List(l) = arg {
+                    ret.extend_from_slice(l);
+                } else {
+                    bail!("unexpected arg {:?} for OP_CAT", arg);
+                }
+            }
+            Ok(DataValue::List(ret.into()))
+        }
+        arg => bail!("unexpected arg {:?} for OP_CAT", arg),
     }
-    Ok(DataValue::String(ret.into()))
 }
 
 define_op!(OP_STR_INCLUDES, 2, false);
@@ -867,7 +884,7 @@ pub(crate) fn op_is_finite(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match &args[0] {
         DataValue::Number(Number::Int(_)) => true,
         DataValue::Number(Number::Float(f)) => f.is_finite(),
-        _ => false
+        _ => false,
     }))
 }
 
@@ -875,19 +892,17 @@ define_op!(OP_IS_INFINITE, 1, false);
 pub(crate) fn op_is_infinite(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match &args[0] {
         DataValue::Number(Number::Float(f)) => f.is_infinite(),
-        _ => false
+        _ => false,
     }))
 }
-
 
 define_op!(OP_IS_NAN, 1, false);
 pub(crate) fn op_is_nan(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match &args[0] {
         DataValue::Number(Number::Float(f)) => f.is_nan(),
-        _ => false
+        _ => false,
     }))
 }
-
 
 define_op!(OP_IS_STRING, 1, false);
 pub(crate) fn op_is_string(args: &[DataValue]) -> Result<DataValue> {
@@ -911,6 +926,18 @@ pub(crate) fn op_append(args: &[DataValue]) -> Result<DataValue> {
     }
 }
 
+define_op!(OP_PREPEND, 2, false);
+pub(crate) fn op_prepend(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::List(pl) => {
+            let mut l = vec![args[1].clone()];
+            l.extend_from_slice(pl);
+            Ok(DataValue::List(l))
+        }
+        v => bail!("cannot prepend to {:?}", v),
+    }
+}
+
 define_op!(OP_IS_BYTES, 1, false);
 pub(crate) fn op_is_bytes(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(args[0], DataValue::Bytes(_))))
@@ -925,6 +952,20 @@ pub(crate) fn op_length(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Bytes(b) => b.len() as i64,
         v => bail!("cannot apply 'length' to {:?}", v),
     }))
+}
+
+define_op!(OP_UNICODE_NORMALIZE, 2, false);
+pub(crate) fn op_unicode_normalize(args: &[DataValue]) -> Result<DataValue> {
+    match (&args[0], &args[1]) {
+        (DataValue::String(s), DataValue::String(n)) => Ok(DataValue::String(match n as &str {
+            "nfc" => s.nfc().collect(),
+            "nfd" => s.nfd().collect(),
+            "nfkc" => s.nfkc().collect(),
+            "nfkd" => s.nfkd().collect(),
+            u => bail!("unknown normalization {} for 'unicode_normalize'", u),
+        })),
+        v => bail!("'unicode_normalize' requires string argument, got {:?}", v),
+    }
 }
 
 define_op!(OP_SORTED, 1, false);
@@ -1097,14 +1138,14 @@ fn get_index(mut i: i64, total: usize) -> Result<usize> {
     })
 }
 
-define_op!(OP_NTH, 2, false);
-pub(crate) fn op_nth(args: &[DataValue]) -> Result<DataValue> {
+define_op!(OP_GET, 2, false);
+pub(crate) fn op_get(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
         .get_list()
-        .ok_or_else(|| anyhow!("first argument to 'nth' mut be a list, got args {:?}", args))?;
+        .ok_or_else(|| anyhow!("first argument to 'get' mut be a list, got args {:?}", args))?;
     let n = args[1].get_int().ok_or_else(|| {
         anyhow!(
-            "second argument to 'nth' mut be an integer, got args {:?}",
+            "second argument to 'get' mut be an integer, got args {:?}",
             args
         )
     })?;
@@ -1112,14 +1153,17 @@ pub(crate) fn op_nth(args: &[DataValue]) -> Result<DataValue> {
     Ok(l[idx].clone())
 }
 
-define_op!(OP_MAYBE_NTH, 2, false);
-pub(crate) fn op_maybe_nth(args: &[DataValue]) -> Result<DataValue> {
-    let l = args[0]
-        .get_list()
-        .ok_or_else(|| anyhow!("first argument to 'nth' mut be a list, got args {:?}", args))?;
+define_op!(OP_MAYBE_GET, 2, false);
+pub(crate) fn op_maybe_get(args: &[DataValue]) -> Result<DataValue> {
+    let l = args[0].get_list().ok_or_else(|| {
+        anyhow!(
+            "first argument to 'maybe_get' mut be a list, got args {:?}",
+            args
+        )
+    })?;
     let n = args[1].get_int().ok_or_else(|| {
         anyhow!(
-            "second argument to 'nth' mut be an integer, got args {:?}",
+            "second argument to 'maybe_get' mut be an integer, got args {:?}",
             args
         )
     })?;
@@ -1171,75 +1215,21 @@ pub(crate) fn op_chars(args: &[DataValue]) -> Result<DataValue> {
     ))
 }
 
-define_op!(OP_NTH_CHAR, 2, false);
-pub(crate) fn op_nth_char(args: &[DataValue]) -> Result<DataValue> {
-    let l = args[0].get_string().ok_or_else(|| {
-        anyhow!(
-            "first argument to 'nth_char' mut be a string, got args {:?}",
-            args
-        )
-    })?;
-    let n = args[1].get_int().ok_or_else(|| {
-        anyhow!(
-            "second argument to 'nth_char' mut be an integer, got args {:?}",
-            args
-        )
-    })?;
-    let chars = l.chars().collect_vec();
-    let idx = get_index(n, chars.len())?;
-    let mut c = SmartString::new();
-    c.push(chars[idx]);
-    Ok(DataValue::String(c))
-}
-
-define_op!(OP_MAYBE_NTH_CHAR, 2, false);
-pub(crate) fn op_maybe_nth_char(args: &[DataValue]) -> Result<DataValue> {
-    let l = args[0].get_string().ok_or_else(|| {
-        anyhow!(
-            "first argument to 'nth_char' mut be a string, got args {:?}",
-            args
-        )
-    })?;
-    let n = args[1].get_int().ok_or_else(|| {
-        anyhow!(
-            "second argument to 'nth_char' mut be an integer, got args {:?}",
-            args
-        )
-    })?;
-    let chars = l.chars().collect_vec();
-    if let Ok(idx) = get_index(n, chars.len()) {
-        let mut c = SmartString::new();
-        c.push(chars[idx]);
-        Ok(DataValue::String(c))
-    } else {
-        Ok(DataValue::Null)
+define_op!(OP_FROM_SUBSTRINGS, 1, false);
+pub(crate) fn op_from_substrings(args: &[DataValue]) -> Result<DataValue> {
+    let mut ret = String::new();
+    match &args[0] {
+        DataValue::List(ss) => {
+            for arg in ss {
+                if let DataValue::String(s) = arg {
+                    ret.push_str(s);
+                } else {
+                    bail!("cannot add {:?} to string", arg)
+                }
+            }
+        }
+        v => bail!("cannot apply 'from_substring' to {:?}", v),
     }
-}
-
-define_op!(OP_STR_SLICE, 3, false);
-pub(crate) fn op_str_slice(args: &[DataValue]) -> Result<DataValue> {
-    let l = args[0].get_string().ok_or_else(|| {
-        anyhow!(
-            "first argument to 'str_slice' mut be a string, got args {:?}",
-            args
-        )
-    })?;
-    let m = args[1].get_int().ok_or_else(|| {
-        anyhow!(
-            "second argument to 'str_slice' mut be an integer, got args {:?}",
-            args
-        )
-    })?;
-    let n = args[2].get_int().ok_or_else(|| {
-        anyhow!(
-            "third argument to 'str_slice' mut be an integer, got args {:?}",
-            args
-        )
-    })?;
-    let l = l.chars().collect_vec();
-    let m = get_index(m, l.len())?;
-    let n = get_index(n, l.len())?;
-    let ret: String = l[m..n].iter().collect();
     Ok(DataValue::String(ret.into()))
 }
 
@@ -1273,8 +1263,8 @@ pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
             "PI" => f64::PI().into(),
             "E" => f64::E().into(),
             "NAN" => f64::NAN.into(),
-            "INFINITY" => f64::INFINITY.into(),
-            "NEGATIVE_INFINITY" => f64::NEG_INFINITY.into(),
+            "INF" => f64::INFINITY.into(),
+            "NEG_INF" => f64::NEG_INFINITY.into(),
             s => f64::from_str(s)?.into(),
         },
         v => bail!("'to_float' cannot be applied to {:?}", v),
@@ -1286,11 +1276,10 @@ pub(crate) fn op_rand_float(_args: &[DataValue]) -> Result<DataValue> {
     Ok(thread_rng().gen::<f64>().into())
 }
 
-define_op!(OP_RAND_BERNOULLI, 0, true);
+define_op!(OP_RAND_BERNOULLI, 1, false);
 pub(crate) fn op_rand_bernoulli(args: &[DataValue]) -> Result<DataValue> {
-    let prob = match args.get(0) {
-        None => 0.5,
-        Some(DataValue::Number(n)) => {
+    let prob = match &args[0] {
+        DataValue::Number(n) => {
             let f = n.get_float();
             ensure!(
                 f >= 0. && f <= 1.,
@@ -1299,7 +1288,7 @@ pub(crate) fn op_rand_bernoulli(args: &[DataValue]) -> Result<DataValue> {
             );
             f
         }
-        Some(v) => bail!(
+        v => bail!(
             "'rand_bernoulli' requires number between 0. and 1., got {:?}",
             v
         ),

@@ -36,7 +36,7 @@ The four _basic arithmetic operators_ `+`, `-`, `*`, and `/` do what you expect,
 
 !> `negate(...)` is not the same as `not ...`, the former denotes the negation of a boolean expression, whereas the latter denotes the negation of a Horn clause.
 
-## Maths functions
+## Mathematical functions
 
 `add(...)`, `sub(x, y)`, `mul(...)`, `div(x, y)`: the function forms of `+`, `-`, `*`, `/`. `add` and `mul` can take multiple arguments (or no arguments).
 
@@ -68,9 +68,19 @@ The four _basic arithmetic operators_ `+`, `-`, `*`, and `/` do what you expect,
 
 `sinh(x)`, `cosh(x)`, `tanh(x)`, `asinh(x)`, `acosh(x)`, `atanh(x)`: the hyperbolic sine, cosine, tangent and their inverses.
 
+`deg_to_rad(x)`: converts degrees to radians.
+
+`rad_to_deg(x)`: converts radians to degrees.
+
+`haversine(a_lat, a_lon, b_lat, b_lon)`: returns the spherical distance measured on a unit sphere in radians between two points specified by their latitudes and longitudes. The inputs are in radians as well. If you want to calculate spherical distance on earth, you probably want the next function. See [Haversine formula](https://en.wikipedia.org/wiki/Haversine_formula) for more details.
+
+`haversine_deg_input(a_lat, a_lon, b_lat, b_lon)`: same as the previous function, but the inputs are in degrees instead of radians. The return value is still in radians. If you want approximate distance measured on the surface of the earth instead of spherical distance, multiply the result by the radius of the earth, which is about `6371` kilometres, `3959` miles, or `3440` nautical miles.
+
 ## Functions on strings
 
-`str_cat(...)` concatenates strings. Takes any number of arguments. The operator form `x ++ y` is also available for binary arguments.
+`length(str)` returns the number of Unicode characters in the string. See the caveat at the end of this section.
+
+`concat(x, ...)` concatenates strings. Takes any number of arguments. The operator form `x ++ y` is also available for binary arguments.
 
 `str_includes(x, y)` returns `true` if `x` contains the substring `y`, `false` otherwise.
 
@@ -81,6 +91,86 @@ The four _basic arithmetic operators_ `+`, `-`, `*`, and `/` do what you expect,
 `starts_with(x, y)`, `ends_with(x, y)`: tests if `x` starts / ends with `y`.
 
 ?> `starts_with(?var, str)` is prefered over equivalent (e.g. regex) conditions, since the compiler may more easily compile the clause into a range scan.
+
+`unicode_normalize(str, norm)`: converts `str` to the normalization specified by `norm`. The valid values of `norm` are `'nfc'`, `'nfd'`, `'nfkc'` and `'nfkd'`. See [Unicode equivalence](https://en.wikipedia.org/wiki/Unicode_equivalence).
+
+!> `length(str)` does not return the number of bytes of the string representation. Also, what is returned depends on the normalization of the string. So if such details are important, apply `unicode_normalize` before `length`.
+
+`chars(str)` returns Unicode characters of the string as a list of substrings.
+
+`from_substrings(list)` combines the strings in `list` into a big string. In a sense, it is the inverse function of `chars`.
+
+!> If you want substring slices, indexing strings, etc., first convert the string to a list with `chars`, do the manipulation on the list, and then recombine with `from_substring`. Hopefully, the omission of functions doing such things directly can make people more aware of the complexities involved in manipulating strings (and getting the _correct_ result).
+
+## Functions on lists
+
+`list(x ...)` constructs a list from its argument, e.g. `list(1, 2, 3)`. You may prefer to use the literal form `[1, 2, 3]`.
+
+`is_in(el, list)` tests the membership of an element in a list, e.g. `is_in(1, [1, 2, 3])` is true, whereas `is_in(5, [1, 2, 3])` is false.
+
+`first(l)`, `last(l)` returns the first / last element of the list respectively.
+
+`get(l, n)` returns the element at index `n` in the list `l`. This function will error if the access is out of bounds. Indices start with 0.
+
+`maybe_get(l, n)` returns the element at index `n` in the list `l`. This function will return `null` if the access is out of bounds. Indices start with 0.
+
+`length(list)` returns the length of the list.
+
+`slice(l, start, end)` returns the slice of list between the index `start` (inclusive) and `end` (exclusive). Negative numbers may be used, which is interpreted as counting from the end of the list. E.g. `slice([1, 2, 3, 4], 1, 3) == [2, 3]`, `slice([1, 2, 3, 4], 1, -1) == [2, 3]`.
+
+?> The spread-unify operator `?var <- ..[1, 2, 3]` is equivalent to `is_in(?var, [1, 2, 3])` if `?var` is bound.
+
+`concat(x, ...)` concatenates lists. Takes any number of arguments. The operator form `x ++ y` is also available for binary arguments.
+
+`prepend(l, x)`, `append(l, x)`: prepends / appends the element `x` to the list `l`.
+
+`sorted(l)`: returns the sorted list as defined by the total order detailed in [datatypes](datatypes.md).
+
+`chunks(l, n)`: splits the list `l` into chunks of `n`, e.g. `chunks([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]`.
+
+`chunks_exact(l, n)`: splits the list `l` into chunks of `n`, discarding any trailing elements, e.g. `chunks([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4]]`.
+
+`windows(l, n)`: splits the list `l` into overlapping windows of length `n`. e.g. `windows([1, 2, 3, 4, 5], 3) == [[1, 2, 3], [2, 3, 4], [3, 4, 5]]`.
+
+## Functions on bytes
+
+`length(bytes)` returns the length of the byte array.
+
+`bit_and(x, y)`, `bit_or(x, y)`, `bit_not(x)`, `bit_xor(x, y)`: calculate the respective boolean functions on bytes regarded as bit arrays. The two bytes must have the same lengths.
+
+`pack_bits([x, ...])` packs a list of booleans into a byte array; if the list is not divisible by 8, it is padded with `false`. `unpack_bits(x)` does the reverse. E.g. `unpack_bits(pack_bits([false, true, true])) == [false, true, true, false, false, false, false, false]`.
+
+`encode_base64(b)` encodes the byte array `b` into the [Base64](https://en.wikipedia.org/wiki/Base64) encoded string. Note that this is automatically done on output to JSON since JSON cannot represent bytes natively.
+
+`decode_base64(str)` tries to decode the `str` as a Base64-encoded byte array.
+
+## Type checking and conversion functions
+
+`to_float(x)` tries to convert `x` to a float. Conversion from `Number` always succeeds. Conversion from `String` has the following special cases in addition to the usual string representation:
+
+* `INF` is converted to infinity;
+* `NEG_INF` is converted to negative infinity;
+* `NAN` is converted to NAN (but don't compare NAN by equality, use `is_nan` instead);
+* `PI` is converted to pi (3.14159...);
+* `E` is converted to the base of natural logarithms, or Euler's constant (2.71828...).
+
+The obvious conversion functions: `is_null(x)`, `is_int(x)`, `is_float(x)`, `is_num(x)`, `is_bytes(x)`, `is_list(x)`, `is_string(x)`.
+
+`is_finite(x)` returns `true` if `x` is `Int` or a finite `Float`.
+
+`is_infinite(x)` returns `true` if `x` is infinity or negative infinity.
+
+`is_nan(x)` returns `true` if `x` is the special float `NAN`
+
+## Random functions
+
+`rand_float()` generates a float in the interval [0, 1], sampled uniformly.
+
+`rand_bernoulli(p)` generates a boolean with probability `p` of being `true`.
+
+`rand_int(lower, upper)` generates an integer within the given bounds, both bounds are inclusive.
+
+`rand_choose(list)` randomly chooses an element from `list` and returns it. If the list is empty, it returns `null`.
 
 ## Regex functions
 
@@ -160,31 +250,3 @@ $     the end of the text
 \b    a Unicode word boundary (\w on one side and \W, \A, or \z on the other)
 \B    not a Unicode word boundary
 ```
-
-## Functions on lists
-
-`list` constructs a list from its argument, e.g. `list(1, 2, 3)`. You may prefer to use the literal form `[1, 2, 3]`.
-
-`is_in` tests the membership of an element in a list, e.g. `is_in(1, [1, 2, 3])` is true, whereas `is_in(5, [1, 2, 3])` is false.
-
-?> The spread-unify operator `?var <- ..[1, 2, 3]` is equivalent to `is_in(?var, [1, 2, 3])` if `?var` is bound.
-
-## Functions on bytes
-
-`bit_and(x, y)`, `bit_or(x, y)`, `bit_not(x)`, `bit_xor(x, y)`: calculate the respective boolean functions on bytes regarded as bit arrays. The two bytes must have the same lengths.
-
-`pack_bits([x, ...])` packs a list of booleans into a byte array; if the list is not divisible by 8, it is padded with `false`. `unpack_bits(x)` does the reverse. E.g. `unpack_bits(pack_bits([false, true, true])) == [false, true, true, false, false, false, false, false]`.
-
-## Random functions
-
-## Type checking functions
-
-The usual ones: `is_null(x)`, `is_int(x)`, `is_float(x)`, `is_num(x)`, `is_bytes(x)`, `is_list(x)`, `is_string(x)`.
-
-`is_finite(x)` returns `true` if `x` is `Int` or a finite `Float`.
-
-`is_infinite(x)` returns `true` if `x` is infinity or negative infinity.
-
-`is_nan(x)` returns `true` if `x` is the special float `NAN`
-
-## Conversion functions

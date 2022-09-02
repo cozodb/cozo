@@ -571,14 +571,27 @@ fn test_unpack_bits() {
 }
 
 #[test]
-fn test_str_cat() {
+fn test_concat() {
     assert_eq!(
-        op_str_cat(&[
+        op_concat(&[
             DataValue::String("abc".into()),
             DataValue::String("def".into())
         ])
         .unwrap(),
         DataValue::String("abcdef".into())
+    );
+
+    assert_eq!(
+        op_concat(&[
+            DataValue::List(vec![DataValue::Bool(true), DataValue::Bool(false)]),
+            DataValue::List(vec![DataValue::Bool(true)])
+        ])
+        .unwrap(),
+        DataValue::List(vec![
+            DataValue::Bool(true),
+            DataValue::Bool(false),
+            DataValue::Bool(true)
+        ])
     );
 }
 
@@ -859,5 +872,367 @@ fn test_predicates() {
     assert_eq!(
         op_is_nan(&[DataValue::from(f64::NAN)]).unwrap(),
         DataValue::Bool(true)
+    );
+}
+
+#[test]
+fn test_prepend_append() {
+    assert_eq!(
+        op_prepend(&[
+            DataValue::List(vec![DataValue::from(1), DataValue::from(2)]),
+            DataValue::Null,
+        ])
+        .unwrap(),
+        DataValue::List(vec![
+            DataValue::Null,
+            DataValue::from(1),
+            DataValue::from(2)
+        ]),
+    );
+    assert_eq!(
+        op_append(&[
+            DataValue::List(vec![DataValue::from(1), DataValue::from(2)]),
+            DataValue::Null,
+        ])
+        .unwrap(),
+        DataValue::List(vec![
+            DataValue::from(1),
+            DataValue::from(2),
+            DataValue::Null,
+        ]),
+    );
+}
+
+#[test]
+fn test_length() {
+    assert_eq!(
+        op_length(&[DataValue::String("abc".into())]).unwrap(),
+        DataValue::from(3)
+    );
+    assert_eq!(
+        op_length(&[DataValue::List(vec![])]).unwrap(),
+        DataValue::from(0)
+    );
+    assert_eq!(
+        op_length(&[DataValue::Bytes([].into())]).unwrap(),
+        DataValue::from(0)
+    );
+}
+
+#[test]
+fn test_unicode_normalize() {
+    assert_eq!(
+        op_unicode_normalize(&[
+            DataValue::String("abc".into()),
+            DataValue::String("nfc".into())
+        ])
+        .unwrap(),
+        DataValue::String("abc".into())
+    )
+}
+
+#[test]
+fn test_sort() {
+    assert_eq!(
+        op_sorted(&[DataValue::List(vec![
+            DataValue::from(2.0),
+            DataValue::from(1),
+            DataValue::from(2),
+            DataValue::Null
+        ])])
+        .unwrap(),
+        DataValue::List(vec![
+            DataValue::Null,
+            DataValue::from(1),
+            DataValue::from(2),
+            DataValue::from(2.0),
+        ])
+    )
+}
+
+#[test]
+fn test_haversine() {
+    let d = op_haversine_deg_input(&[
+        DataValue::from(0),
+        DataValue::from(0),
+        DataValue::from(0),
+        DataValue::from(180),
+    ])
+    .unwrap()
+    .get_float()
+    .unwrap();
+    assert!(d.abs_diff_eq(&f64::PI(), 1e-5));
+
+    let d = op_haversine_deg_input(&[
+        DataValue::from(90),
+        DataValue::from(0),
+        DataValue::from(0),
+        DataValue::from(123),
+    ])
+    .unwrap()
+    .get_float()
+    .unwrap();
+    assert!(d.abs_diff_eq(&(f64::PI() / 2.), 1e-5));
+
+    let d = op_haversine(&[
+        DataValue::from(0),
+        DataValue::from(0),
+        DataValue::from(0),
+        DataValue::from(f64::PI()),
+    ])
+    .unwrap()
+    .get_float()
+    .unwrap();
+    assert!(d.abs_diff_eq(&f64::PI(), 1e-5));
+}
+
+#[test]
+fn test_deg_rad() {
+    assert_eq!(
+        op_deg_to_rad(&[DataValue::from(180)]).unwrap(),
+        DataValue::from(f64::PI())
+    );
+    assert_eq!(
+        op_rad_to_deg(&[DataValue::from(f64::PI())]).unwrap(),
+        DataValue::from(180.0)
+    );
+}
+
+#[test]
+fn test_first_last() {
+    assert_eq!(
+        op_first(&[DataValue::List(vec![])]).unwrap(),
+        DataValue::Null,
+    );
+    assert_eq!(
+        op_last(&[DataValue::List(vec![])]).unwrap(),
+        DataValue::Null,
+    );
+    assert_eq!(
+        op_first(&[DataValue::List(vec![
+            DataValue::from(1),
+            DataValue::from(2)
+        ])])
+        .unwrap(),
+        DataValue::from(1),
+    );
+    assert_eq!(
+        op_last(&[DataValue::List(vec![
+            DataValue::from(1),
+            DataValue::from(2)
+        ])])
+        .unwrap(),
+        DataValue::from(2),
+    );
+}
+
+#[test]
+fn test_chunks() {
+    assert_eq!(
+        op_chunks(&[
+            DataValue::List(vec![
+                DataValue::from(1),
+                DataValue::from(2),
+                DataValue::from(3),
+                DataValue::from(4),
+                DataValue::from(5),
+            ]),
+            DataValue::from(2),
+        ])
+        .unwrap(),
+        DataValue::List(vec![
+            DataValue::List(vec![DataValue::from(1), DataValue::from(2),]),
+            DataValue::List(vec![DataValue::from(3), DataValue::from(4),]),
+            DataValue::List(vec![DataValue::from(5)]),
+        ])
+    );
+    assert_eq!(
+        op_chunks_exact(&[
+            DataValue::List(vec![
+                DataValue::from(1),
+                DataValue::from(2),
+                DataValue::from(3),
+                DataValue::from(4),
+                DataValue::from(5),
+            ]),
+            DataValue::from(2),
+        ])
+        .unwrap(),
+        DataValue::List(vec![
+            DataValue::List(vec![DataValue::from(1), DataValue::from(2),]),
+            DataValue::List(vec![DataValue::from(3), DataValue::from(4),]),
+        ])
+    );
+    assert_eq!(
+        op_windows(&[
+            DataValue::List(vec![
+                DataValue::from(1),
+                DataValue::from(2),
+                DataValue::from(3),
+                DataValue::from(4),
+                DataValue::from(5),
+            ]),
+            DataValue::from(3),
+        ])
+        .unwrap(),
+        DataValue::List(vec![
+            DataValue::List(vec![
+                DataValue::from(1),
+                DataValue::from(2),
+                DataValue::from(3)
+            ]),
+            DataValue::List(vec![
+                DataValue::from(2),
+                DataValue::from(3),
+                DataValue::from(4)
+            ]),
+            DataValue::List(vec![
+                DataValue::from(3),
+                DataValue::from(4),
+                DataValue::from(5)
+            ]),
+        ])
+    )
+}
+
+#[test]
+fn test_get() {
+    assert!(op_get(&[DataValue::List(vec![]), DataValue::from(0)]).is_err());
+    assert_eq!(
+        op_get(&[
+            DataValue::List(vec![
+                DataValue::from(1),
+                DataValue::from(2),
+                DataValue::from(3)
+            ]),
+            DataValue::from(1)
+        ])
+        .unwrap(),
+        DataValue::from(2)
+    );
+    assert_eq!(
+        op_maybe_get(&[DataValue::List(vec![]), DataValue::from(0)]).unwrap(),
+        DataValue::Null
+    );
+    assert_eq!(
+        op_maybe_get(&[
+            DataValue::List(vec![
+                DataValue::from(1),
+                DataValue::from(2),
+                DataValue::from(3)
+            ]),
+            DataValue::from(1)
+        ])
+        .unwrap(),
+        DataValue::from(2)
+    );
+}
+
+#[test]
+fn test_slice() {
+    assert!(op_slice(&[
+        DataValue::List(vec![
+            DataValue::from(1),
+            DataValue::from(2),
+            DataValue::from(3)
+        ]),
+        DataValue::from(1),
+        DataValue::from(4)
+    ])
+    .is_err());
+
+    assert_eq!(
+        op_slice(&[
+            DataValue::List(vec![
+                DataValue::from(1),
+                DataValue::from(2),
+                DataValue::from(3)
+            ]),
+            DataValue::from(1),
+            DataValue::from(-1)
+        ])
+        .unwrap(),
+        DataValue::List(vec![DataValue::from(2)])
+    );
+}
+
+#[test]
+fn test_chars() {
+    assert_eq!(
+        op_from_substrings(&[op_chars(&[DataValue::String("abc".into())]).unwrap()]).unwrap(),
+        DataValue::String("abc".into())
+    )
+}
+
+#[test]
+fn test_encode_decode() {
+    assert_eq!(
+        op_decode_base64(&[op_encode_base64(&[DataValue::Bytes([1, 2, 3].into())]).unwrap()])
+            .unwrap(),
+        DataValue::Bytes([1, 2, 3].into())
+    )
+}
+
+#[test]
+fn test_to_float() {
+    assert_eq!(
+        op_to_float(&[DataValue::from(1)]).unwrap(),
+        DataValue::from(1.0)
+    );
+    assert_eq!(
+        op_to_float(&[DataValue::from(1.0)]).unwrap(),
+        DataValue::from(1.0)
+    );
+    assert!(op_to_float(&[DataValue::String("NAN".into())])
+        .unwrap()
+        .get_float()
+        .unwrap()
+        .is_nan());
+    assert!(op_to_float(&[DataValue::String("INF".into())])
+        .unwrap()
+        .get_float()
+        .unwrap()
+        .is_infinite());
+    assert!(op_to_float(&[DataValue::String("NEG_INF".into())])
+        .unwrap()
+        .get_float()
+        .unwrap()
+        .is_infinite());
+    assert_eq!(
+        op_to_float(&[DataValue::String("3".into())])
+            .unwrap()
+            .get_float()
+            .unwrap(),
+        3.
+    );
+}
+
+#[test]
+fn test_rand() {
+    let n = op_rand_float(&[]).unwrap().get_float().unwrap();
+    assert!(n >= 0.);
+    assert!(n <= 1.);
+    assert_eq!(
+        op_rand_bernoulli(&[DataValue::from(0)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_rand_bernoulli(&[DataValue::from(1)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert!(op_rand_bernoulli(&[DataValue::from(2)]).is_err());
+    let n = op_rand_int(&[DataValue::from(100), DataValue::from(200)])
+        .unwrap()
+        .get_int()
+        .unwrap();
+    assert!(n >= 100);
+    assert!(n <= 200);
+    assert_eq!(
+        op_rand_choose(&[DataValue::List(vec![])]).unwrap(),
+        DataValue::Null
+    );
+    assert_eq!(
+        op_rand_choose(&[DataValue::List(vec![DataValue::from(123)])]).unwrap(),
+        DataValue::from(123)
     );
 }
