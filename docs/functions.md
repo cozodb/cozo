@@ -124,6 +124,8 @@ The four _basic arithmetic operators_ `+`, `-`, `*`, and `/` do what you expect,
 
 `prepend(l, x)`, `append(l, x)`: prepends / appends the element `x` to the list `l`.
 
+`reverse(l)` reverses the list.
+
 `sorted(l)`: returns the sorted list as defined by the total order detailed in [datatypes](datatypes.md).
 
 `chunks(l, n)`: splits the list `l` into chunks of `n`, e.g. `chunks([1, 2, 3, 4, 5], 2) == [[1, 2], [3, 4], [5]]`.

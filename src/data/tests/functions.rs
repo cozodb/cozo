@@ -932,7 +932,7 @@ fn test_unicode_normalize() {
 }
 
 #[test]
-fn test_sort() {
+fn test_sort_reverse() {
     assert_eq!(
         op_sorted(&[DataValue::List(vec![
             DataValue::from(2.0),
@@ -945,6 +945,21 @@ fn test_sort() {
             DataValue::Null,
             DataValue::from(1),
             DataValue::from(2),
+            DataValue::from(2.0),
+        ])
+    );
+    assert_eq!(
+        op_reverse(&[DataValue::List(vec![
+            DataValue::from(2.0),
+            DataValue::from(1),
+            DataValue::from(2),
+            DataValue::Null
+        ])])
+        .unwrap(),
+        DataValue::List(vec![
+            DataValue::Null,
+            DataValue::from(2),
+            DataValue::from(1),
             DataValue::from(2.0),
         ])
     )

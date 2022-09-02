@@ -978,6 +978,16 @@ pub(crate) fn op_sorted(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(arg))
 }
 
+define_op!(OP_REVERSE, 1, false);
+pub(crate) fn op_reverse(args: &[DataValue]) -> Result<DataValue> {
+    let mut arg = args[0]
+        .get_list()
+        .ok_or_else(|| anyhow!("cannot apply 'reverse' to {:?}", args))?
+        .to_vec();
+    arg.reverse();
+    Ok(DataValue::List(arg))
+}
+
 define_op!(OP_HAVERSINE, 4, false);
 pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);

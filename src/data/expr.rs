@@ -431,6 +431,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "is_nan" => &OP_IS_NAN,
         "length" => &OP_LENGTH,
         "sorted" => &OP_SORTED,
+        "reverse" => &OP_REVERSE,
         "append" => &OP_APPEND,
         "prepend" => &OP_PREPEND,
         "unicode_normalize" => &OP_UNICODE_NORMALIZE,
