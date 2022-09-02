@@ -66,9 +66,11 @@ pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
         args
     );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
-        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
-            *i as f64 > *f
+        (DataValue::Number(Number::Float(l)), DataValue::Number(Number::Int(r))) => {
+            *l as f64 > *r as f64
+        }
+        (DataValue::Number(Number::Int(l)), DataValue::Number(Number::Float(r))) => {
+            *l as f64 > *r as f64
         }
         (a, b) => a > b,
     }))
@@ -82,9 +84,11 @@ pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
         args
     );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
-        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
-            *i as f64 >= *f
+        (DataValue::Number(Number::Float(l)), DataValue::Number(Number::Int(r))) => {
+            *l as f64 >= *r as f64
+        }
+        (DataValue::Number(Number::Int(l)), DataValue::Number(Number::Float(r))) => {
+            *l as f64 >= *r as f64
         }
         (a, b) => a >= b,
     }))
@@ -98,9 +102,11 @@ pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
         args
     );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
-        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
-            (*i as f64) < *f
+        (DataValue::Number(Number::Float(l)), DataValue::Number(Number::Int(r))) => {
+            (*l as f64) < (*r as f64)
+        }
+        (DataValue::Number(Number::Int(l)), DataValue::Number(Number::Float(r))) => {
+            (*l as f64) < (*r as f64)
         }
         (a, b) => a < b,
     }))
@@ -114,9 +120,11 @@ pub(crate) fn op_le(args: &[DataValue]) -> Result<DataValue> {
         args
     );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Number(Number::Float(f)), DataValue::Number(Number::Int(i)))
-        | (DataValue::Number(Number::Int(i)), DataValue::Number(Number::Float(f))) => {
-            (*i as f64) <= *f
+        (DataValue::Number(Number::Float(l)), DataValue::Number(Number::Int(r))) => {
+            (*l as f64) <= (*r as f64)
+        }
+        (DataValue::Number(Number::Int(l)), DataValue::Number(Number::Float(r))) => {
+            (*l as f64) <= (*r as f64)
         }
         (a, b) => a <= b,
     }))

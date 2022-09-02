@@ -60,7 +60,7 @@ fn parsed_query_to_json(src: Pairs<'_>) -> Result<JsonValue> {
             Rule::const_rule => {
                 let mut src = pair.into_inner();
                 let name = src.next().unwrap().as_str();
-                let data = build_expr(src.next().unwrap())?;
+                let data = build_expr::<WrapConst>(src.next().unwrap())?;
                 let data = data
                     .as_array()
                     .ok_or_else(|| anyhow!("expect const rules to be specified as an array"))?;
@@ -72,7 +72,7 @@ fn parsed_query_to_json(src: Pairs<'_>) -> Result<JsonValue> {
                 entries.extend_from_slice(data);
             }
             Rule::timeout_option => {
-                let timeout = build_expr(pair)?;
+                let timeout = build_expr::<WrapConst>(pair)?;
                 ret_map.insert("timeout".to_string(), timeout);
             }
             Rule::limit_option => {
@@ -205,11 +205,11 @@ fn parse_pull_arg(src: Pair<'_>) -> Result<JsonValue> {
                 inner_map.insert("offset".to_string(), json!(str2usize(n)?));
             }
             Rule::pull_default => {
-                let d = build_expr(modifier.into_inner().next().unwrap())?;
+                let d = build_expr::<NoWrapConst>(modifier.into_inner().next().unwrap())?;
                 inner_map.insert("default".to_string(), d);
             }
             Rule::pull_recurse => {
-                let d = build_expr(modifier.into_inner().next().unwrap())?;
+                let d = build_expr::<NoWrapConst>(modifier.into_inner().next().unwrap())?;
                 inner_map.insert("recurse".to_string(), d);
             }
             Rule::pull_depth => {
@@ -279,7 +279,7 @@ fn parse_algo_rule(src: Pair<'_>) -> Result<JsonValue> {
                 let mut inner = nxt.into_inner();
                 let name = inner.next().unwrap().as_str();
                 let val = inner.next().unwrap();
-                let val = build_expr(val)?;
+                let val = build_expr::<WrapConst>(val)?;
                 algo_opts.insert(name.to_string(), val);
             }
             _ => unreachable!(),
@@ -297,7 +297,7 @@ fn parse_rule(src: Pair<'_>) -> Result<JsonValue> {
     let mut at = None;
     let mut body = src.next().unwrap();
     if body.as_rule() == Rule::expr {
-        at = Some(build_expr(body)?);
+        at = Some(build_expr::<WrapConst>(body)?);
         body = src.next().unwrap();
     }
     let mut body_clauses = vec![head];
@@ -326,7 +326,7 @@ fn parse_rule_head_arg(src: Pair<'_>) -> Result<JsonValue> {
             let mut inner = src.into_inner();
             let aggr_name = inner.next().unwrap().as_str();
             let var = inner.next().unwrap().as_str();
-            let args: Vec<_> = inner.map(build_expr).try_collect()?;
+            let args: Vec<_> = inner.map(build_expr::<WrapConst>).try_collect()?;
             json!({"aggr": aggr_name, "symb": var, "args": args})
         }
         _ => unreachable!(),
@@ -354,17 +354,17 @@ fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
             let inner = parse_atom(src.into_inner().next().unwrap())?;
             json!({ "not_exists": inner })
         }
-        Rule::expr => build_expr(src)?,
+        Rule::expr => build_expr::<WrapConst>(src)?,
         Rule::unify => {
             let mut src = src.into_inner();
             let var = src.next().unwrap().as_str();
-            let expr = build_expr(src.next().unwrap())?;
+            let expr = build_expr::<WrapConst>(src.next().unwrap())?;
             json!({"unify": var, "expr": expr})
         }
         Rule::unify_multi => {
             let mut src = src.into_inner();
             let var = src.next().unwrap().as_str();
-            let expr = build_expr(src.next().unwrap())?;
+            let expr = build_expr::<WrapConst>(src.next().unwrap())?;
             json!({"unify": var, "expr": expr, "multi": true})
         }
         Rule::rule_apply => {
@@ -374,7 +374,7 @@ fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
                 .next()
                 .unwrap()
                 .into_inner()
-                .map(build_expr)
+                .map(build_expr::<WrapConst>)
                 .try_collect()?;
             json!({"rule": name, "args": args})
         }
@@ -385,7 +385,7 @@ fn parse_atom(src: Pair<'_>) -> Result<JsonValue> {
                 .next()
                 .unwrap()
                 .into_inner()
-                .map(build_expr)
+                .map(build_expr::<WrapConst>)
                 .try_collect()?;
             json!({"view": name, "args": args})
         }
@@ -404,11 +404,11 @@ fn parse_triple(src: Pair<'_>) -> Result<JsonValue> {
 
 fn parse_triple_arg(src: Pair<'_>) -> Result<JsonValue> {
     match src.as_rule() {
-        Rule::expr => build_expr(src),
+        Rule::expr => build_expr::<WrapConst>(src),
         Rule::triple_pull => {
             let mut src = src.into_inner();
             let attr = src.next().unwrap();
-            let val = build_expr(src.next().unwrap())?;
+            let val = build_expr::<NoWrapConst>(src.next().unwrap())?;
             Ok(json!({ attr.as_str(): val }))
         }
         _ => unreachable!(),
@@ -469,29 +469,48 @@ fn build_expr_infix(
     Ok(json!({"op": name, "args": args}))
 }
 
-pub(crate) fn build_expr(pair: Pair<'_>) -> Result<JsonValue> {
-    PREC_CLIMBER.climb(pair.into_inner(), build_unary, build_expr_infix)
+pub(crate) trait ShouldWrap {
+    fn should_wrap() -> bool;
 }
 
-fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
+pub(crate) struct WrapConst;
+pub(crate) struct NoWrapConst;
+
+impl ShouldWrap for WrapConst {
+    fn should_wrap() -> bool {
+        true
+    }
+}
+
+impl ShouldWrap for NoWrapConst {
+    fn should_wrap() -> bool {
+        false
+    }
+}
+
+pub(crate) fn build_expr<T: ShouldWrap>(pair: Pair<'_>) -> Result<JsonValue> {
+    PREC_CLIMBER.climb(pair.into_inner(), build_unary::<T>, build_expr_infix)
+}
+
+fn build_unary<W: ShouldWrap>(pair: Pair<'_>) -> Result<JsonValue> {
     match pair.as_rule() {
-        Rule::expr => build_unary(pair.into_inner().next().unwrap()),
-        Rule::grouping => build_expr(pair.into_inner().next().unwrap()),
+        Rule::expr => build_unary::<W>(pair.into_inner().next().unwrap()),
+        Rule::grouping => build_expr::<W>(pair.into_inner().next().unwrap()),
         Rule::unary => {
             let s = pair.as_str();
             let mut inner = pair.into_inner();
             let p = inner.next().unwrap();
             let op = p.as_rule();
             Ok(match op {
-                Rule::term => build_unary(p)?,
+                Rule::term => build_unary::<W>(p)?,
                 Rule::var => json!(s),
                 Rule::param => json!({ "param": s }),
                 Rule::minus => {
-                    let inner = build_unary(inner.next().unwrap())?;
+                    let inner = build_unary::<W>(inner.next().unwrap())?;
                     json!({"op": "minus", "args": [inner]})
                 }
                 Rule::negate => {
-                    let inner = build_unary(inner.next().unwrap())?;
+                    let inner = build_unary::<W>(inner.next().unwrap())?;
                     json!({"op": "negate", "args": [inner]})
                 }
                 Rule::pos_int => {
@@ -518,12 +537,16 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
                 Rule::boolean => JsonValue::Bool(s == "true"),
                 Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
                     let s = parse_string(p)?;
-                    json!({ "const": s })
+                    if W::should_wrap() {
+                        json!({ "const": s })
+                    } else {
+                        json!(s)
+                    }
                 }
                 Rule::list => {
                     let mut collected = vec![];
                     for p in p.into_inner() {
-                        collected.push(build_expr(p)?)
+                        collected.push(build_expr::<W>(p)?)
                     }
                     json!(collected)
                 }
@@ -534,11 +557,11 @@ fn build_unary(pair: Pair<'_>) -> Result<JsonValue> {
                         .next()
                         .unwrap()
                         .into_inner()
-                        .map(build_expr)
+                        .map(build_expr::<W>)
                         .try_collect()?;
                     json!({"op": ident, "args": args})
                 }
-                Rule::grouping => build_expr(p.into_inner().next().unwrap())?,
+                Rule::grouping => build_expr::<W>(p.into_inner().next().unwrap())?,
 
                 r => unreachable!("Encountered unknown op {:?}", r),
             })

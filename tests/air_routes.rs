@@ -838,7 +838,7 @@ fn air_routes() -> Result<()> {
         eng_aps[?a] := [?a airport.region 'GB-ENG'];
         ?[?pair] := eng_aps[?a1], [?r route.src ?a1], [?r route.dst ?a2], eng_aps[?a2],
                          [?a1 airport.iata ?src], [?a2 airport.iata ?dst],
-                         ?pair <- sort([?src, ?dst]);
+                         ?pair <- sorted([?src, ?dst]);
     "#,
     )?;
     dbg!(routes_within_england_time_no_dup.elapsed());

@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::data::json::JsonValue;
 use crate::parse::cozoscript::{Pair, Pairs, Rule};
-use crate::parse::cozoscript::query::build_expr;
+use crate::parse::cozoscript::query::{build_expr, NoWrapConst};
 use crate::parse::cozoscript::string::parse_string;
 
 
@@ -49,20 +49,20 @@ fn parse_tx_pair(src: Pair<'_>) -> Result<(String, JsonValue)> {
         Rule::tx_special_ident | Rule::compound_ident => name.as_str().to_string(),
         _ => parse_string(name)?,
     };
-    let el = parse_el(src.next().unwrap())?;
+    let el = parse_tx_el(src.next().unwrap())?;
     Ok((name, el))
 }
 
-fn parse_el(src: Pair<'_>) -> Result<JsonValue> {
+fn parse_tx_el(src: Pair<'_>) -> Result<JsonValue> {
     match src.as_rule() {
         Rule::tx_map => parse_tx_map(src),
         Rule::tx_list => parse_tx_list(src),
-        Rule::expr => build_expr(src),
+        Rule::expr => build_expr::<NoWrapConst>(src),
         Rule::neg_num => Ok(JsonValue::from_str(src.as_str())?),
         _ => unreachable!(),
     }
 }
 
 fn parse_tx_list(src: Pair<'_>) -> Result<JsonValue> {
-    src.into_inner().map(parse_el).try_collect()
+    src.into_inner().map(parse_tx_el).try_collect()
 }
