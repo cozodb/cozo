@@ -69,7 +69,7 @@ struct AppStateWithDb {
     seed: Box<[u8]>,
 }
 
-const PASSWORD_KEY: &str = "USER_PASSWORD";
+const PASSWORD_KEY: &str = "WEB_USER_PASSWORD";
 
 impl AppStateWithDb {
     async fn verify_password(&self, req: &HttpRequest) -> anyhow::Result<()> {
@@ -285,8 +285,8 @@ async fn main() -> std::io::Result<()> {
     match db.meta_range_scan(&[PASSWORD_KEY]).next() {
         None => {
             let (username, password) = match (
-                env::var("COZO_INITIAL_USERNAME"),
-                env::var("COZO_INITIAL_PASSWORD"),
+                env::var("COZO_INITIAL_WEB_USERNAME"),
+                env::var("COZO_INITIAL_WEB_PASSWORD"),
             ) {
                 (Ok(username), Ok(password)) => (username, password),
                 _ => {
