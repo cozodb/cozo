@@ -10,7 +10,7 @@ use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
-use crate::data::value::{DataValue, Number};
+use crate::data::value::{DataValue, Num};
 use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
@@ -33,7 +33,7 @@ impl AlgoImpl for PageRank {
         let undirected = get_bool_option_required("undirected", opts, Some(false), "pagerank")?;
         let theta = match opts.get("theta") {
             None => 0.8f32,
-            Some(Expr::Const(DataValue::Number(n))) => n.get_float() as f32,
+            Some(Expr::Const(DataValue::Num(n))) => n.get_float() as f32,
             Some(v) => bail!(
                 "option 'theta' for 'pagerank' requires a float, got {:?}",
                 v
@@ -46,7 +46,7 @@ impl AlgoImpl for PageRank {
         );
         let epsilon = match opts.get("epsilon") {
             None => 0.001f32,
-            Some(Expr::Const(DataValue::Number(n))) => n.get_float() as f32,
+            Some(Expr::Const(DataValue::Num(n))) => n.get_float() as f32,
             Some(v) => bail!(
                 "option 'epsilon' for 'pagerank' requires a float, got {:?}",
                 v
@@ -54,7 +54,7 @@ impl AlgoImpl for PageRank {
         };
         let iterations = match opts.get("iterations") {
             None => 20,
-            Some(Expr::Const(DataValue::Number(Number::Int(i)))) => *i,
+            Some(Expr::Const(DataValue::Num(Num::I(i)))) => *i,
             Some(v) => bail!(
                 "option 'iterations' for 'pagerank' requires an integer, got {:?}",
                 v

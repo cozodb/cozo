@@ -31,7 +31,7 @@ impl SessionTx {
                 .map(|(idx, dir)| {
                     let mut val = tuple.0[*idx].clone();
                     if *dir == SortDir::Dsc {
-                        val = DataValue::DescVal(Reverse(Box::new(val)));
+                        val = DataValue::Rev(Reverse(Box::new(val)));
                     }
                     val
                 })

@@ -21,6 +21,7 @@ smartstring = { version = "1.0.1", features = ["serde"] }
 serde_json = "1.0.81"
 serde = { version = "1.0.137" }
 serde_derive = "1.0.137"
+serde_bytes = "0.11.7"
 rmp = "0.8.11"
 rmp-serde = "1.1.0"
 rmpv = "1.0.0"

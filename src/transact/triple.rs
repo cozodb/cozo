@@ -319,12 +319,12 @@ impl SessionTx {
         vld: Validity,
     ) -> Result<isize> {
         let lower_bound = encode_eav_key(eid, attr.id, &DataValue::Null, Validity::MAX);
-        let upper_bound = encode_eav_key(eid, attr.id, &DataValue::Bottom, Validity::MIN);
+        let upper_bound = encode_eav_key(eid, attr.id, &DataValue::Bot, Validity::MIN);
         self.batch_retract_triple(lower_bound, upper_bound, vld)
     }
     pub(crate) fn retract_entity(&mut self, eid: EntityId, vld: Validity) -> Result<isize> {
         let lower_bound = encode_eav_key(eid, AttrId::MIN_PERM, &DataValue::Null, Validity::MAX);
-        let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &DataValue::Bottom, Validity::MAX);
+        let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &DataValue::Bot, Validity::MAX);
         self.batch_retract_triple(lower_bound, upper_bound, vld)
     }
     fn batch_retract_triple(
@@ -406,7 +406,7 @@ impl SessionTx {
         aid: AttrId,
     ) -> impl Iterator<Item = Result<(EntityId, AttrId, DataValue)>> {
         let lower = encode_eav_key(eid, aid, &DataValue::Null, Validity::MAX);
-        let upper = encode_eav_key(eid, aid, &DataValue::Bottom, Validity::MIN);
+        let upper = encode_eav_key(eid, aid, &DataValue::Bot, Validity::MIN);
         TripleEntityAttrIter::new(self.tx.iterator(), lower, upper)
     }
     pub(crate) fn triple_ea_range_scan(
@@ -417,7 +417,7 @@ impl SessionTx {
         v_upper: DataValue,
     ) -> impl Iterator<Item = Result<(EntityId, AttrId, DataValue)>> {
         let lower = encode_eav_key(eid, aid, &v_lower, Validity::MAX);
-        let upper = encode_eav_key(eid, aid, &DataValue::Bottom, Validity::MIN);
+        let upper = encode_eav_key(eid, aid, &DataValue::Bot, Validity::MIN);
         TripleEntityAttrRangeIter::new(self.tx.iterator(), lower, upper, v_upper)
     }
     pub(crate) fn triple_ea_before_scan(
@@ -427,7 +427,7 @@ impl SessionTx {
         before: Validity,
     ) -> impl Iterator<Item = Result<(EntityId, AttrId, DataValue)>> {
         let lower = encode_eav_key(eid, aid, &DataValue::Null, Validity::MAX);
-        let upper = encode_eav_key(eid, aid, &DataValue::Bottom, Validity::MIN);
+        let upper = encode_eav_key(eid, aid, &DataValue::Bot, Validity::MIN);
         TripleEntityAttrBeforeIter::new(self.tx.iterator(), lower, upper, before)
     }
     pub(crate) fn triple_ea_range_before_scan(
@@ -439,7 +439,7 @@ impl SessionTx {
         before: Validity,
     ) -> impl Iterator<Item = Result<(EntityId, AttrId, DataValue)>> {
         let lower = encode_eav_key(eid, aid, &v_lower, Validity::MAX);
-        let upper = encode_eav_key(eid, aid, &DataValue::Bottom, Validity::MIN);
+        let upper = encode_eav_key(eid, aid, &DataValue::Bot, Validity::MIN);
         TripleEntityAttrRangeBeforeIter::new(self.tx.iterator(), lower, upper, v_upper, before)
     }
     pub(crate) fn eav_exists(
@@ -464,7 +464,7 @@ impl SessionTx {
         upper_inc: &DataValue,
     ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
         let lower = encode_ave_key(aid, lower, EntityId::ZERO, Validity::MAX);
-        let upper = encode_ave_key(aid, &DataValue::Bottom, EntityId::MAX_PERM, Validity::MIN);
+        let upper = encode_ave_key(aid, &DataValue::Bot, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueRangeIter::new(self.tx.iterator(), lower, upper, upper_inc.clone())
     }
     pub(crate) fn triple_av_scan(
@@ -484,7 +484,7 @@ impl SessionTx {
         before: Validity,
     ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
         let lower = encode_ave_key(aid, lower, EntityId::ZERO, Validity::MAX);
-        let upper = encode_ave_key(aid, &DataValue::Bottom, EntityId::MAX_PERM, Validity::MIN);
+        let upper = encode_ave_key(aid, &DataValue::Bot, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueRangeBeforeIter::new(
             self.tx.iterator(),
             lower,
@@ -537,7 +537,7 @@ impl SessionTx {
         aid: AttrId,
     ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
         let lower = encode_aev_key(aid, EntityId::ZERO, &DataValue::Null, Validity::MAX);
-        let upper = encode_aev_key(aid, EntityId::MAX_PERM, &DataValue::Bottom, Validity::MIN);
+        let upper = encode_aev_key(aid, EntityId::MAX_PERM, &DataValue::Bot, Validity::MIN);
         TripleAttrEntityIter::new(self.tx.iterator(), lower, upper)
     }
     pub(crate) fn triple_a_before_scan(
@@ -546,7 +546,7 @@ impl SessionTx {
         before: Validity,
     ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
         let lower = encode_aev_key(aid, EntityId::ZERO, &DataValue::Null, Validity::MAX);
-        let upper = encode_aev_key(aid, EntityId::MAX_PERM, &DataValue::Bottom, Validity::MIN);
+        let upper = encode_aev_key(aid, EntityId::MAX_PERM, &DataValue::Bot, Validity::MIN);
         TripleAttrEntityBeforeIter::new(self.tx.iterator(), lower, upper, before)
     }
 }

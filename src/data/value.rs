@@ -66,28 +66,28 @@ impl PartialOrd for RegexWrapper {
     Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
 pub(crate) enum DataValue {
-    #[serde(rename = "n")]
+    #[serde(rename = "0", alias = "Null")]
     Null,
-    #[serde(rename = "b")]
+    #[serde(rename = "B", alias = "Bool")]
     Bool(bool),
-    #[serde(rename = "i")]
-    Number(Number),
-    #[serde(rename = "s")]
-    String(SmartString<LazyCompact>),
-    #[serde(rename = "v")]
-    Bytes(Box<[u8]>),
-    #[serde(rename = "x")]
+    #[serde(rename = "N", alias = "Num")]
+    Num(Num),
+    #[serde(rename = "S", alias = "Str")]
+    Str(SmartString<LazyCompact>),
+    #[serde(rename = "X", alias = "Bytes", with = "serde_bytes")]
+    Bytes(Vec<u8>),
+    #[serde(rename = "R", alias = "Regex")]
     Regex(RegexWrapper),
-    #[serde(rename = "z")]
+    #[serde(rename = "L", alias = "List")]
     List(Vec<DataValue>),
-    #[serde(rename = "y")]
+    #[serde(rename = "H", alias = "Set")]
     Set(BTreeSet<DataValue>),
-    #[serde(rename = "g")]
+    #[serde(rename = "R", alias = "Rev")]
+    Rev(Reverse<Box<DataValue>>),
+    #[serde(rename = "G", alias = "Guard")]
     Guard,
-    #[serde(rename = "o")]
-    DescVal(Reverse<Box<DataValue>>),
-    #[serde(rename = "r")]
-    Bottom,
+    #[serde(rename = "_", alias = "Bot")]
+    Bot,
 }
 
 pub(crate) fn same_value_type(a: &DataValue, b: &DataValue) -> bool {
@@ -95,99 +95,99 @@ pub(crate) fn same_value_type(a: &DataValue, b: &DataValue) -> bool {
     match (a, b) {
         (Null, Null)
         | (Bool(_), Bool(_))
-        | (Number(_), Number(_))
-        | (String(_), String(_))
+        | (Num(_), Num(_))
+        | (Str(_), Str(_))
         | (Bytes(_), Bytes(_))
         | (Regex(_), Regex(_))
         | (List(_), List(_))
         | (Set(_), Set(_))
+        | (Rev(_), Rev(_))
         | (Guard, Guard)
-        | (DescVal(_), DescVal(_))
-        | (Bottom, Bottom) => true,
+        | (Bot, Bot) => true,
         _ => false,
     }
 }
 
 impl From<i64> for DataValue {
     fn from(v: i64) -> Self {
-        DataValue::Number(Number::Int(v))
+        DataValue::Num(Num::I(v))
     }
 }
 
 impl From<f64> for DataValue {
     fn from(v: f64) -> Self {
-        DataValue::Number(Number::Float(v))
+        DataValue::Num(Num::F(v))
     }
 }
 
 #[derive(Copy, Clone, serde_derive::Deserialize, serde_derive::Serialize)]
-pub(crate) enum Number {
-    #[serde(rename = "i")]
-    Int(i64),
-    #[serde(rename = "f")]
-    Float(f64),
+pub(crate) enum Num {
+    #[serde(alias = "Int")]
+    I(i64),
+    #[serde(alias = "Float")]
+    F(f64),
 }
 
-impl Hash for Number {
+impl Hash for Num {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Number::Int(i) => i.hash(state),
-            Number::Float(f) => OrderedFloat(*f).hash(state),
+            Num::I(i) => i.hash(state),
+            Num::F(f) => OrderedFloat(*f).hash(state),
         }
     }
 }
 
-impl Number {
+impl Num {
     pub(crate) fn get_int(&self) -> Option<i64> {
         match self {
-            Number::Int(i) => Some(*i),
+            Num::I(i) => Some(*i),
             _ => None,
         }
     }
     pub(crate) fn get_float(&self) -> f64 {
         match self {
-            Number::Int(i) => *i as f64,
-            Number::Float(f) => *f,
+            Num::I(i) => *i as f64,
+            Num::F(f) => *f,
         }
     }
 }
 
-impl PartialEq for Number {
+impl PartialEq for Num {
     fn eq(&self, other: &Self) -> bool {
         self.cmp(other) == Ordering::Equal
     }
 }
 
-impl Eq for Number {}
+impl Eq for Num {}
 
-impl Display for Number {
+impl Display for Num {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Number::Int(i) => write!(f, "{}", i),
-            Number::Float(n) => write!(f, "{}", n),
+            Num::I(i) => write!(f, "{}", i),
+            Num::F(n) => write!(f, "{}", n),
         }
     }
 }
 
-impl Debug for Number {
+impl Debug for Num {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Number::Int(i) => write!(f, "{}", i),
-            Number::Float(n) => write!(f, "{}", n),
+            Num::I(i) => write!(f, "{}", i),
+            Num::F(n) => write!(f, "{}", n),
         }
     }
 }
 
-impl PartialOrd for Number {
+impl PartialOrd for Num {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for Number {
+impl Ord for Num {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Number::Int(i), Number::Float(r)) => {
+            (Num::I(i), Num::F(r)) => {
                 let l = *i as f64;
                 match l.total_cmp(r) {
                     Ordering::Less => Ordering::Less,
@@ -195,7 +195,7 @@ impl Ord for Number {
                     Ordering::Greater => Ordering::Greater,
                 }
             }
-            (Number::Float(l), Number::Int(i)) => {
+            (Num::F(l), Num::I(i)) => {
                 let r = *i as f64;
                 match l.total_cmp(&r) {
                     Ordering::Less => Ordering::Less,
@@ -203,8 +203,8 @@ impl Ord for Number {
                     Ordering::Greater => Ordering::Greater,
                 }
             }
-            (Number::Int(l), Number::Int(r)) => l.cmp(r),
-            (Number::Float(l), Number::Float(r)) => l.total_cmp(r),
+            (Num::I(l), Num::I(r)) => l.cmp(r),
+            (Num::F(l), Num::F(r)) => l.total_cmp(r),
         }
     }
 }
@@ -218,10 +218,10 @@ impl Debug for DataValue {
             DataValue::Bool(b) => {
                 write!(f, "{}", b)
             }
-            DataValue::Number(i) => {
+            DataValue::Num(i) => {
                 write!(f, "{}", i)
             }
-            DataValue::String(s) => {
+            DataValue::Str(s) => {
                 write!(f, "{:?}", s)
             }
             DataValue::Regex(r) => {
@@ -232,10 +232,10 @@ impl Debug for DataValue {
             }
             DataValue::List(t) => f.debug_list().entries(t.iter()).finish(),
             DataValue::Set(t) => f.debug_list().entries(t.iter()).finish(),
-            DataValue::DescVal(v) => {
+            DataValue::Rev(v) => {
                 write!(f, "desc<{:?}>", v)
             }
-            DataValue::Bottom => {
+            DataValue::Bot => {
                 write!(f, "bottom")
             }
             DataValue::Guard => {
@@ -248,6 +248,24 @@ impl Debug for DataValue {
 pub(crate) const INLINE_VAL_SIZE_LIMIT: usize = 60;
 
 impl DataValue {
+    pub(crate) fn check_input_allowed(&self) -> Result<()> {
+        match self {
+            DataValue::List(l) => {
+                for el in l {
+                    el.check_input_allowed()?;
+                }
+            }
+            DataValue::Regex(_)
+            | DataValue::Set(_)
+            | DataValue::Guard
+            | DataValue::Rev(_)
+            | DataValue::Bot => {
+                bail!("encountered internal datatypes in input")
+            }
+            _ => {}
+        }
+        Ok(())
+    }
     pub(crate) fn encode_with_op_and_tx(
         &self,
         op: StoreOp,
@@ -262,7 +280,7 @@ impl DataValue {
 
     pub(crate) fn get_entity_id(&self) -> Result<EntityId> {
         match self {
-            DataValue::Number(Number::Int(id)) => Ok(EntityId(*id as u64)),
+            DataValue::Num(Num::I(id)) => Ok(EntityId(*id as u64)),
             _ => bail!("type mismatch: expect type EntId, got value {:?}", self),
         }
     }
@@ -286,19 +304,19 @@ impl DataValue {
     // }
     pub(crate) fn get_string(&self) -> Option<&str> {
         match self {
-            DataValue::String(s) => Some(s),
+            DataValue::Str(s) => Some(s),
             _ => None,
         }
     }
     pub(crate) fn get_int(&self) -> Option<i64> {
         match self {
-            DataValue::Number(n) => n.get_int(),
+            DataValue::Num(n) => n.get_int(),
             _ => None,
         }
     }
     pub(crate) fn get_float(&self) -> Option<f64> {
         match self {
-            DataValue::Number(n) => Some(n.get_float()),
+            DataValue::Num(n) => Some(n.get_float()),
             _ => None,
         }
     }

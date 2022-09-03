@@ -110,7 +110,7 @@ impl AlgoImpl for ReorderSort {
 
         let mut count = 0usize;
         let mut rank = 0usize;
-        let mut last = &DataValue::Bottom;
+        let mut last = &DataValue::Bot;
         let skip = skip as usize;
         let take_plus_skip = (take as usize).saturating_add(skip);
         for val in &buffer {

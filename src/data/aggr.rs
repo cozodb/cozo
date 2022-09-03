@@ -328,7 +328,7 @@ impl NormalAggrObj for AggrStrJoin {
                 self.accum.push_str(sep)
             }
         }
-        if let DataValue::String(s) = value {
+        if let DataValue::Str(s) = value {
             self.accum.push_str(s);
             Ok(())
         } else {
@@ -404,7 +404,7 @@ struct AggrVariance {
 impl NormalAggrObj for AggrVariance {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
-            DataValue::Number(n) => {
+            DataValue::Num(n) => {
                 let f = n.get_float();
                 self.sum += f;
                 self.sum_sq += f * f;
@@ -435,7 +435,7 @@ struct AggrStdDev {
 impl NormalAggrObj for AggrStdDev {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
-            DataValue::Number(n) => {
+            DataValue::Num(n) => {
                 let f = n.get_float();
                 self.sum += f;
                 self.sum_sq += f * f;
@@ -464,7 +464,7 @@ struct AggrMean {
 impl NormalAggrObj for AggrMean {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
-            DataValue::Number(n) => {
+            DataValue::Num(n) => {
                 self.sum += n.get_float();
                 self.count += 1;
             }
@@ -488,7 +488,7 @@ struct AggrSum {
 impl NormalAggrObj for AggrSum {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
-            DataValue::Number(n) => {
+            DataValue::Num(n) => {
                 self.sum += n.get_float();
             }
             v => bail!("cannot compute 'sum': encountered value {:?}", v),
@@ -511,7 +511,7 @@ struct AggrProduct {
 impl NormalAggrObj for AggrProduct {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
-            DataValue::Number(n) => {
+            DataValue::Num(n) => {
                 self.product *= n.get_float();
             }
             v => bail!("cannot compute 'product': encountered value {:?}", v),
@@ -533,7 +533,7 @@ struct AggrMin {
 impl Default for AggrMin {
     fn default() -> Self {
         Self {
-            found: DataValue::Bottom,
+            found: DataValue::Bot,
         }
     }
 }
@@ -681,7 +681,7 @@ impl Default for AggrMinCost {
     fn default() -> Self {
         Self {
             found: DataValue::Null,
-            cost: DataValue::Bottom,
+            cost: DataValue::Bot,
         }
     }
 }

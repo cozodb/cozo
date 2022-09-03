@@ -43,12 +43,9 @@ pub struct SessionTx {
     Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
 )]
 pub(crate) struct TxLog {
-    #[serde(rename = "i")]
     pub(crate) id: TxId,
-    #[serde(rename = "c")]
     pub(crate) comment: String,
-    #[serde(rename = "t")]
-    pub(crate) timestamp: Validity,
+    pub(crate) ts: Validity,
 }
 
 impl TxLog {
@@ -57,7 +54,7 @@ impl TxLog {
         Self {
             id,
             comment: comment.to_string(),
-            timestamp,
+            ts: timestamp,
         }
     }
     pub(crate) fn encode(&self) -> EncodedVec<64> {

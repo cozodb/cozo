@@ -38,7 +38,7 @@ impl AlgoImpl for RandomWalk {
             .ok_or_else(|| anyhow!("'random_walk' requires starting relation as third argument"))?;
         let iterations = match opts.get("iterations") {
             None => 1usize,
-            Some(Expr::Const(DataValue::Number(n))) => {
+            Some(Expr::Const(DataValue::Num(n))) => {
                 let n = n.get_int().ok_or_else(|| {
                     anyhow!(
                         "'iterations' for 'random_walk' requires an integer, got {}",
@@ -61,7 +61,7 @@ impl AlgoImpl for RandomWalk {
             .get("steps")
             .ok_or_else(|| anyhow!("'random_walk' requires option 'steps'"))?
         {
-            Expr::Const(DataValue::Number(n)) => {
+            Expr::Const(DataValue::Num(n)) => {
                 let n = n.get_int().ok_or_else(|| {
                     anyhow!("'steps' for 'random_walk' requires an integer, got {}", n)
                 })?;
@@ -118,7 +118,7 @@ impl AlgoImpl for RandomWalk {
                            let mut cand = current_tuple.clone();
                             cand.0.extend_from_slice(&t.0);
                             Ok(match weight_expr.eval(&cand)? {
-                                DataValue::Number(n) => {
+                                DataValue::Num(n) => {
                                     let f = n.get_float();
                                     ensure!(f >= 0., "'weight' for 'random_walk' needs to be non-negative, got {:?}", f);
                                     f

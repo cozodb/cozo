@@ -33,7 +33,7 @@ impl AlgoImpl for LabelPropagation {
             get_bool_option_required("undirected", opts, Some(false), "label_propagation")?;
         let max_iter = match opts.get("max_iter") {
             None => 10,
-            Some(Expr::Const(DataValue::Number(n))) => {
+            Some(Expr::Const(DataValue::Num(n))) => {
                 let i = n.get_int().ok_or_else(|| {
                     anyhow!(
                         "'max_iter' for 'label_propagation' requires an integer, got {:?}",

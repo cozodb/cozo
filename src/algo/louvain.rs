@@ -37,7 +37,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
         )?;
         let max_iter = match opts.get("max_iter") {
             None => 10,
-            Some(Expr::Const(DataValue::Number(n))) => {
+            Some(Expr::Const(DataValue::Num(n))) => {
                 let i = n.get_int().ok_or_else(|| {
                     anyhow!(
                     "'max_iter' for 'community_detection_louvain' requires an integer, got {:?}",
@@ -58,7 +58,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
         };
         let delta = match opts.get("delta") {
             None => 0.0001,
-            Some(Expr::Const(DataValue::Number(n))) => {
+            Some(Expr::Const(DataValue::Num(n))) => {
                 let i = n.get_float();
                 ensure!(
                     i > 0.,
@@ -74,7 +74,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
         };
         let keep_depth = match opts.get("keep_depth") {
             None => None,
-            Some(Expr::Const(DataValue::Number(n))) => Some({
+            Some(Expr::Const(DataValue::Num(n))) => Some({
                 let i = n.get_int().ok_or_else(|| {
                     anyhow!(
                     "'keep_depth' for 'community_detection_louvain' requires an integer, got {:?}",

@@ -317,7 +317,7 @@ impl DerivedRelStore {
         epoch: u32,
     ) -> impl Iterator<Item = Result<Tuple>> {
         let mut upper = prefix.0.clone();
-        upper.push(DataValue::Bottom);
+        upper.push(DataValue::Bot);
         let upper = Tuple(upper);
         self.ensure_mem_db_for_epoch(epoch);
         let target = self.mem_db.try_read().unwrap();

@@ -607,11 +607,11 @@ fn test_unpack_bits() {
 fn test_concat() {
     assert_eq!(
         op_concat(&[
-            DataValue::String("abc".into()),
-            DataValue::String("def".into())
+            DataValue::Str("abc".into()),
+            DataValue::Str("def".into())
         ])
         .unwrap(),
-        DataValue::String("abcdef".into())
+        DataValue::Str("abcdef".into())
     );
 
     assert_eq!(
@@ -632,16 +632,16 @@ fn test_concat() {
 fn test_str_includes() {
     assert_eq!(
         op_str_includes(&[
-            DataValue::String("abcdef".into()),
-            DataValue::String("bcd".into())
+            DataValue::Str("abcdef".into()),
+            DataValue::Str("bcd".into())
         ])
         .unwrap(),
         DataValue::Bool(true)
     );
     assert_eq!(
         op_str_includes(&[
-            DataValue::String("abcdef".into()),
-            DataValue::String("bd".into())
+            DataValue::Str("abcdef".into()),
+            DataValue::Str("bd".into())
         ])
         .unwrap(),
         DataValue::Bool(false)
@@ -651,28 +651,28 @@ fn test_str_includes() {
 #[test]
 fn test_casings() {
     assert_eq!(
-        op_lowercase(&[DataValue::String("NAÏVE".into())]).unwrap(),
-        DataValue::String("naïve".into())
+        op_lowercase(&[DataValue::Str("NAÏVE".into())]).unwrap(),
+        DataValue::Str("naïve".into())
     );
     assert_eq!(
-        op_uppercase(&[DataValue::String("naïve".into())]).unwrap(),
-        DataValue::String("NAÏVE".into())
+        op_uppercase(&[DataValue::Str("naïve".into())]).unwrap(),
+        DataValue::Str("NAÏVE".into())
     );
 }
 
 #[test]
 fn test_trim() {
     assert_eq!(
-        op_trim(&[DataValue::String(" a ".into())]).unwrap(),
-        DataValue::String("a".into())
+        op_trim(&[DataValue::Str(" a ".into())]).unwrap(),
+        DataValue::Str("a".into())
     );
     assert_eq!(
-        op_trim_start(&[DataValue::String(" a ".into())]).unwrap(),
-        DataValue::String("a ".into())
+        op_trim_start(&[DataValue::Str(" a ".into())]).unwrap(),
+        DataValue::Str("a ".into())
     );
     assert_eq!(
-        op_trim_end(&[DataValue::String(" a ".into())]).unwrap(),
-        DataValue::String(" a".into())
+        op_trim_end(&[DataValue::Str(" a ".into())]).unwrap(),
+        DataValue::Str(" a".into())
     );
 }
 
@@ -680,32 +680,32 @@ fn test_trim() {
 fn test_starts_ends_with() {
     assert_eq!(
         op_starts_with(&[
-            DataValue::String("abcdef".into()),
-            DataValue::String("abc".into())
+            DataValue::Str("abcdef".into()),
+            DataValue::Str("abc".into())
         ])
         .unwrap(),
         DataValue::Bool(true)
     );
     assert_eq!(
         op_starts_with(&[
-            DataValue::String("abcdef".into()),
-            DataValue::String("bc".into())
+            DataValue::Str("abcdef".into()),
+            DataValue::Str("bc".into())
         ])
         .unwrap(),
         DataValue::Bool(false)
     );
     assert_eq!(
         op_ends_with(&[
-            DataValue::String("abcdef".into()),
-            DataValue::String("def".into())
+            DataValue::Str("abcdef".into()),
+            DataValue::Str("def".into())
         ])
         .unwrap(),
         DataValue::Bool(true)
     );
     assert_eq!(
         op_ends_with(&[
-            DataValue::String("abcdef".into()),
-            DataValue::String("bc".into())
+            DataValue::Str("abcdef".into()),
+            DataValue::Str("bc".into())
         ])
         .unwrap(),
         DataValue::Bool(false)
@@ -716,7 +716,7 @@ fn test_starts_ends_with() {
 fn test_regex() {
     assert_eq!(
         op_regex_matches(&[
-            DataValue::String("abcdef".into()),
+            DataValue::Str("abcdef".into()),
             DataValue::Regex(RegexWrapper(Regex::new("c.e").unwrap()))
         ])
         .unwrap(),
@@ -725,7 +725,7 @@ fn test_regex() {
 
     assert_eq!(
         op_regex_matches(&[
-            DataValue::String("abcdef".into()),
+            DataValue::Str("abcdef".into()),
             DataValue::Regex(RegexWrapper(Regex::new("c.ef$").unwrap()))
         ])
         .unwrap(),
@@ -734,7 +734,7 @@ fn test_regex() {
 
     assert_eq!(
         op_regex_matches(&[
-            DataValue::String("abcdef".into()),
+            DataValue::Str("abcdef".into()),
             DataValue::Regex(RegexWrapper(Regex::new("c.e$").unwrap()))
         ])
         .unwrap(),
@@ -743,47 +743,47 @@ fn test_regex() {
 
     assert_eq!(
         op_regex_replace(&[
-            DataValue::String("abcdef".into()),
+            DataValue::Str("abcdef".into()),
             DataValue::Regex(RegexWrapper(Regex::new("[be]").unwrap())),
-            DataValue::String("x".into())
+            DataValue::Str("x".into())
         ])
         .unwrap(),
-        DataValue::String("axcdef".into())
+        DataValue::Str("axcdef".into())
     );
 
     assert_eq!(
         op_regex_replace_all(&[
-            DataValue::String("abcdef".into()),
+            DataValue::Str("abcdef".into()),
             DataValue::Regex(RegexWrapper(Regex::new("[be]").unwrap())),
-            DataValue::String("x".into())
+            DataValue::Str("x".into())
         ])
         .unwrap(),
-        DataValue::String("axcdxf".into())
+        DataValue::Str("axcdxf".into())
     );
     assert_eq!(
         op_regex_extract(&[
-            DataValue::String("abCDefGH".into()),
+            DataValue::Str("abCDefGH".into()),
             DataValue::Regex(RegexWrapper(Regex::new("[xayef]|(GH)").unwrap()))
         ])
         .unwrap(),
         DataValue::List(vec![
-            DataValue::String("a".into()),
-            DataValue::String("e".into()),
-            DataValue::String("f".into()),
-            DataValue::String("GH".into()),
+            DataValue::Str("a".into()),
+            DataValue::Str("e".into()),
+            DataValue::Str("f".into()),
+            DataValue::Str("GH".into()),
         ])
     );
     assert_eq!(
         op_regex_extract_first(&[
-            DataValue::String("abCDefGH".into()),
+            DataValue::Str("abCDefGH".into()),
             DataValue::Regex(RegexWrapper(Regex::new("[xayef]|(GH)").unwrap()))
         ])
         .unwrap(),
-        DataValue::String("a".into()),
+        DataValue::Str("a".into()),
     );
     assert_eq!(
         op_regex_extract(&[
-            DataValue::String("abCDefGH".into()),
+            DataValue::Str("abCDefGH".into()),
             DataValue::Regex(RegexWrapper(Regex::new("xyz").unwrap()))
         ])
         .unwrap(),
@@ -792,7 +792,7 @@ fn test_regex() {
 
     assert_eq!(
         op_regex_extract_first(&[
-            DataValue::String("abCDefGH".into()),
+            DataValue::Str("abCDefGH".into()),
             DataValue::Regex(RegexWrapper(Regex::new("xyz").unwrap()))
         ])
         .unwrap(),
@@ -807,7 +807,7 @@ fn test_predicates() {
         DataValue::Bool(true)
     );
     assert_eq!(
-        op_is_null(&[DataValue::Bottom]).unwrap(),
+        op_is_null(&[DataValue::Bot]).unwrap(),
         DataValue::Bool(false)
     );
     assert_eq!(
@@ -855,7 +855,7 @@ fn test_predicates() {
         DataValue::Bool(false)
     );
     assert_eq!(
-        op_is_string(&[DataValue::String("".into())]).unwrap(),
+        op_is_string(&[DataValue::Str("".into())]).unwrap(),
         DataValue::Bool(true)
     );
     assert_eq!(
@@ -939,7 +939,7 @@ fn test_prepend_append() {
 #[test]
 fn test_length() {
     assert_eq!(
-        op_length(&[DataValue::String("abc".into())]).unwrap(),
+        op_length(&[DataValue::Str("abc".into())]).unwrap(),
         DataValue::from(3)
     );
     assert_eq!(
@@ -956,11 +956,11 @@ fn test_length() {
 fn test_unicode_normalize() {
     assert_eq!(
         op_unicode_normalize(&[
-            DataValue::String("abc".into()),
-            DataValue::String("nfc".into())
+            DataValue::Str("abc".into()),
+            DataValue::Str("nfc".into())
         ])
         .unwrap(),
-        DataValue::String("abc".into())
+        DataValue::Str("abc".into())
     )
 }
 
@@ -1207,8 +1207,8 @@ fn test_slice() {
 #[test]
 fn test_chars() {
     assert_eq!(
-        op_from_substrings(&[op_chars(&[DataValue::String("abc".into())]).unwrap()]).unwrap(),
-        DataValue::String("abc".into())
+        op_from_substrings(&[op_chars(&[DataValue::Str("abc".into())]).unwrap()]).unwrap(),
+        DataValue::Str("abc".into())
     )
 }
 
@@ -1231,23 +1231,23 @@ fn test_to_float() {
         op_to_float(&[DataValue::from(1.0)]).unwrap(),
         DataValue::from(1.0)
     );
-    assert!(op_to_float(&[DataValue::String("NAN".into())])
+    assert!(op_to_float(&[DataValue::Str("NAN".into())])
         .unwrap()
         .get_float()
         .unwrap()
         .is_nan());
-    assert!(op_to_float(&[DataValue::String("INF".into())])
+    assert!(op_to_float(&[DataValue::Str("INF".into())])
         .unwrap()
         .get_float()
         .unwrap()
         .is_infinite());
-    assert!(op_to_float(&[DataValue::String("NEG_INF".into())])
+    assert!(op_to_float(&[DataValue::Str("NEG_INF".into())])
         .unwrap()
         .get_float()
         .unwrap()
         .is_infinite());
     assert_eq!(
-        op_to_float(&[DataValue::String("3".into())])
+        op_to_float(&[DataValue::Str("3".into())])
             .unwrap()
             .get_float()
             .unwrap(),

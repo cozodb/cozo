@@ -238,10 +238,12 @@ impl Expr {
                                 let s = val.get_string().ok_or_else(|| {
                                     anyhow!("unexpected arg {:?} for OP_STARTS_WITH", val)
                                 })?;
-                                let lower = DataValue::String(SmartString::from(s));
+                                let lower = DataValue::Str(SmartString::from(s));
+                                // let lower = DataValue::Str(s.to_string());
                                 let mut upper = SmartString::from(s);
+                                // let mut upper = s.to_string();
                                 upper.push(LARGEST_UTF_CHAR);
-                                let upper = DataValue::String(upper);
+                                let upper = DataValue::Str(upper);
                                 return Ok(ValueRange::new(lower, upper));
                             }
                         }
@@ -307,8 +309,8 @@ impl ValueRange {
     }
     fn null() -> Self {
         Self {
-            lower: DataValue::Bottom,
-            upper: DataValue::Bottom,
+            lower: DataValue::Bot,
+            upper: DataValue::Bot,
         }
     }
     fn new(lower: DataValue, upper: DataValue) -> Self {
@@ -317,7 +319,7 @@ impl ValueRange {
     fn lower_bound(val: DataValue) -> Self {
         Self {
             lower: val,
-            upper: DataValue::Bottom,
+            upper: DataValue::Bot,
         }
     }
     fn upper_bound(val: DataValue) -> Self {
@@ -332,7 +334,7 @@ impl Default for ValueRange {
     fn default() -> Self {
         Self {
             lower: DataValue::Null,
-            upper: DataValue::Bottom,
+            upper: DataValue::Bot,
         }
     }
 }

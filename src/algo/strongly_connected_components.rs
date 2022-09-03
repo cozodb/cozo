@@ -40,7 +40,7 @@ impl AlgoImpl for StronglyConnectedComponent {
 
         let reverse_mode = match opts.get("mode") {
             None => false,
-            Some(Expr::Const(DataValue::String(s))) => match s as &str {
+            Some(Expr::Const(DataValue::Str(s))) => match s as &str {
                 "group_first" => true,
                 "key_first" => false,
                 v => bail!(

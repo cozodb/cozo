@@ -5,7 +5,7 @@ pub(crate) use serde_json::Value as JsonValue;
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::symb::Symbol;
-use crate::data::value::{DataValue, Number};
+use crate::data::value::{DataValue, Num};
 
 impl From<JsonValue> for DataValue {
     fn from(v: JsonValue) -> Self {
@@ -16,15 +16,15 @@ impl From<JsonValue> for DataValue {
                 Some(i) => DataValue::from(i),
                 None => match n.as_f64() {
                     Some(f) => DataValue::from(f),
-                    None => DataValue::String(n.to_string().into()),
+                    None => DataValue::Str(n.to_string().into()),
                 },
             },
-            JsonValue::String(s) => DataValue::String(s.into()),
+            JsonValue::String(s) => DataValue::Str(s.into()),
             JsonValue::Array(arr) => DataValue::List(arr.iter().map(DataValue::from).collect()),
             JsonValue::Object(d) => DataValue::List(
                 d.into_iter()
                     .map(|(k, v)| {
-                        DataValue::List([DataValue::String(k.into()), DataValue::from(v)].into())
+                        DataValue::List([DataValue::Str(k.into()), DataValue::from(v)].into())
                     })
                     .collect(),
             ),
@@ -41,15 +41,15 @@ impl<'a> From<&'a JsonValue> for DataValue {
                 Some(i) => DataValue::from(i),
                 None => match n.as_f64() {
                     Some(f) => DataValue::from(f),
-                    None => DataValue::String(n.to_string().into()),
+                    None => DataValue::Str(n.to_string().into()),
                 },
             },
-            JsonValue::String(s) => DataValue::String(s.into()),
+            JsonValue::String(s) => DataValue::Str(s.into()),
             JsonValue::Array(arr) => DataValue::List(arr.iter().map(DataValue::from).collect()),
             JsonValue::Object(d) => DataValue::List(
                 d.into_iter()
                     .map(|(k, v)| {
-                        DataValue::List([DataValue::String(k.into()), DataValue::from(v)].into())
+                        DataValue::List([DataValue::Str(k.into()), DataValue::from(v)].into())
                     })
                     .collect(),
             ),
@@ -62,8 +62,8 @@ impl From<DataValue> for JsonValue {
         match v {
             DataValue::Null => JsonValue::Null,
             DataValue::Bool(b) => JsonValue::Bool(b),
-            DataValue::Number(Number::Int(i)) => JsonValue::Number(i.into()),
-            DataValue::Number(Number::Float(f)) => {
+            DataValue::Num(Num::I(i)) => JsonValue::Number(i.into()),
+            DataValue::Num(Num::F(f)) => {
                 if f.is_finite() {
                     json!(f)
                 } else if f.is_nan() {
@@ -78,13 +78,13 @@ impl From<DataValue> for JsonValue {
                     unreachable!()
                 }
             }
-            DataValue::String(t) => JsonValue::String(t.into()),
+            DataValue::Str(t) => JsonValue::String(t.into()),
             DataValue::Bytes(bytes) => JsonValue::String(base64::encode(bytes)),
             DataValue::List(l) => {
                 JsonValue::Array(l.iter().map(|v| JsonValue::from(v.clone())).collect())
             }
-            DataValue::DescVal(v) => JsonValue::from(*v.0),
-            DataValue::Bottom => panic!("found bottom"),
+            DataValue::Rev(v) => JsonValue::from(*v.0),
+            DataValue::Bot => panic!("found bottom"),
             DataValue::Guard => panic!("found guard"),
             DataValue::Set(l) => {
                 JsonValue::Array(l.iter().map(|v| JsonValue::from(v.clone())).collect())

@@ -24,7 +24,7 @@ var = @{"?" ~ (XID_CONTINUE | "_")*}
 param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 algo_ident = @{XID_START ~ ("_" | XID_CONTINUE)* ~ "!"}
-view_ident = @{":" ~ ident}
+view_ident = @{":" ~ compound_ident}
 compound_ident = {ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"}
@@ -89,7 +89,7 @@ limit_option = {":limit"  ~ pos_int}
 offset_option = {":offset" ~ pos_int}
 out_option = {":out" ~ out_spec}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
-view_option = {":view" ~ ident ~ ident}
+view_option = {":view" ~ ident ~ compound_ident}
 timeout_option = {":timeout" ~ expr }
 sort_arg = { sort_dir? ~ var }
 sort_dir = _{ sort_asc | sort_desc }

@@ -134,7 +134,7 @@ impl SessionTx {
             Some(v) => {
                 let expr = Self::parse_expr_arg(v, params_pool)?;
                 match expr.eval(&Tuple::default())? {
-                    DataValue::Number(n) => {
+                    DataValue::Num(n) => {
                         let i = n.get_int().ok_or_else(|| {
                             anyhow!(":timeout requires seconds as argument, got {}", n)
                         })?;
@@ -598,7 +598,7 @@ impl SessionTx {
                 if symb.is_reserved() {
                     Ok(Expr::Binding(symb, None))
                 } else {
-                    Ok(Expr::Const(DataValue::String(s.into())))
+                    Ok(Expr::Const(DataValue::Str(s.into())))
                 }
             }
             JsonValue::Object(map) => {

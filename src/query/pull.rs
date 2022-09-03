@@ -554,7 +554,7 @@ impl SessionTx {
         pull_all_seen: &mut HashSet<EntityId>,
     ) -> Result<()> {
         let mut current = encode_eav_key(eid, AttrId::MIN_PERM, &DataValue::Null, Validity::MAX);
-        let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &DataValue::Bottom, Validity::MIN);
+        let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &DataValue::Bot, Validity::MIN);
 
         let mut it = self.tx.iterator().upper_bound(&upper_bound).start();
         it.seek(&current);

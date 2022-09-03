@@ -9,7 +9,7 @@ use crate::data::encode::EncodedVec;
 use crate::data::id::{AttrId, TxId};
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
-use crate::data::value::{DataValue, Number};
+use crate::data::value::{DataValue, Num};
 use crate::parse::triple::TempIdCtx;
 
 #[repr(u8)]
@@ -127,7 +127,7 @@ impl AttributeTyping {
     pub(crate) fn coerce_value(&self, val: DataValue) -> Result<DataValue> {
         match self {
             AttributeTyping::Ref | AttributeTyping::Component => match val {
-                DataValue::Number(Number::Int(s)) if s > 0 => Ok(DataValue::Number(Number::Int(s))),
+                DataValue::Num(Num::I(s)) if s > 0 => Ok(DataValue::Num(Num::I(s))),
                 val => Err(self.type_err(val)),
             },
             AttributeTyping::Bool => {
@@ -138,19 +138,19 @@ impl AttributeTyping {
                 }
             }
             AttributeTyping::Int => {
-                if matches!(val, DataValue::Number(Number::Int(_))) {
+                if matches!(val, DataValue::Num(Num::I(_))) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val))
                 }
             }
             AttributeTyping::Float => match val {
-                v @ DataValue::Number(Number::Float(_)) => Ok(v),
-                DataValue::Number(Number::Int(i)) => Ok(DataValue::Number(Number::Float(i as f64))),
+                v @ DataValue::Num(Num::F(_)) => Ok(v),
+                DataValue::Num(Num::I(i)) => Ok(DataValue::Num(Num::F(i as f64))),
                 val => Err(self.type_err(val)),
             },
             AttributeTyping::String => {
-                if matches!(val, DataValue::String(_)) {
+                if matches!(val, DataValue::Str(_)) {
                     Ok(val)
                 } else {
                     Err(self.type_err(val))
@@ -223,17 +223,11 @@ impl TryFrom<&'_ str> for AttributeIndex {
     Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
 )]
 pub(crate) struct Attribute {
-    #[serde(rename = "i")]
     pub(crate) id: AttrId,
-    #[serde(rename = "n")]
     pub(crate) name: Symbol,
-    #[serde(rename = "c")]
     pub(crate) cardinality: AttributeCardinality,
-    #[serde(rename = "t")]
     pub(crate) val_type: AttributeTyping,
-    #[serde(rename = "u")]
     pub(crate) indexing: AttributeIndex,
-    #[serde(rename = "h")]
     pub(crate) with_history: bool,
 }
 
@@ -256,7 +250,7 @@ impl Attribute {
     }
     pub(crate) fn coerce_value(&self, value: DataValue, ctx: &mut TempIdCtx) -> Result<DataValue> {
         if self.val_type.is_ref_type() {
-            if let DataValue::String(s) = value {
+            if let DataValue::Str(s) = value {
                 return Ok(ctx.str2tempid(&s, false).as_datavalue());
             }
         }

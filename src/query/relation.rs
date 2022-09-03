@@ -972,7 +972,7 @@ impl TripleRelation {
                         Ok((l_bound, r_bound)) => {
                             let l_bound = l_bound.into_iter().next().unwrap();
                             let r_bound = r_bound.into_iter().next().unwrap();
-                            if l_bound != DataValue::Null || r_bound != DataValue::Bottom {
+                            if l_bound != DataValue::Null || r_bound != DataValue::Bot {
                                 Some((l_bound, r_bound))
                             } else {
                                 None
@@ -1378,7 +1378,7 @@ impl ViewRelation {
                         _ => (vec![], vec![]),
                     };
                     if !l_bound.iter().all(|v| *v == DataValue::Null)
-                        || !u_bound.iter().all(|v| *v == DataValue::Bottom)
+                        || !u_bound.iter().all(|v| *v == DataValue::Bot)
                     {
                         return Left(
                             self.storage
@@ -1671,7 +1671,7 @@ impl DerivedRelation {
                         _ => (vec![], vec![]),
                     };
                     if !l_bound.iter().all(|v| *v == DataValue::Null)
-                        || !u_bound.iter().all(|v| *v == DataValue::Bottom)
+                        || !u_bound.iter().all(|v| *v == DataValue::Bot)
                     {
                         return Left(
                             self.storage

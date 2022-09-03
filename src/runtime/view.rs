@@ -88,7 +88,7 @@ impl ViewRelStore {
 
     pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item = Result<Tuple>> {
         let mut upper = prefix.0.clone();
-        upper.push(DataValue::Bottom);
+        upper.push(DataValue::Bot);
         let prefix_encoded = prefix.encode_as_key(self.metadata.id);
         let upper_encoded = Tuple(upper).encode_as_key(self.metadata.id);
         ViewRelIterator::new(&self.view_db, &prefix_encoded, &upper_encoded)
@@ -103,7 +103,7 @@ impl ViewRelStore {
         lower_t.0.extend_from_slice(lower);
         let mut upper_t = prefix.clone();
         upper_t.0.extend_from_slice(upper);
-        upper_t.0.push(DataValue::Bottom);
+        upper_t.0.push(DataValue::Bot);
         let lower_encoded = lower_t.encode_as_key(self.metadata.id);
         let upper_encoded = upper_t.encode_as_key(self.metadata.id);
         ViewRelIterator::new(&self.view_db, &lower_encoded, &upper_encoded)
@@ -146,13 +146,13 @@ impl Iterator for ViewRelIterator {
 
 impl SessionTx {
     pub(crate) fn view_exists(&self, name: &Symbol) -> Result<bool> {
-        let key = DataValue::String(name.0.clone());
+        let key = DataValue::Str(name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
         Ok(vtx.exists(&encoded, false)?)
     }
     pub(crate) fn create_view_rel(&self, mut meta: ViewRelMetadata) -> Result<ViewRelStore> {
-        let key = DataValue::String(meta.name.0.clone());
+        let key = DataValue::Str(meta.name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
 
         let mut vtx = self.view_db.transact().set_snapshot(true).start();
@@ -166,7 +166,8 @@ impl SessionTx {
         meta.id = ViewRelId::new(last_id + 1)?;
         vtx.put(&encoded, &meta.id.raw_encode())?;
         let name_key =
-            Tuple(vec![DataValue::String(meta.name.0.clone())]).encode_as_key(ViewRelId::SYSTEM);
+            Tuple(vec![DataValue::Str(meta.name.0.clone())]).encode_as_key(ViewRelId::SYSTEM);
+
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
         vtx.put(&name_key, &meta_val)?;
@@ -185,7 +186,7 @@ impl SessionTx {
         self.do_get_view_rel(name, &vtx)
     }
     fn do_get_view_rel(&self, name: &Symbol, vtx: &Tx) -> Result<ViewRelStore> {
-        let key = DataValue::String(name.0.clone());
+        let key = DataValue::Str(name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
 
         let found = vtx
@@ -200,7 +201,7 @@ impl SessionTx {
     pub(crate) fn destroy_view_rel(&self, name: &Symbol) -> Result<()> {
         let mut vtx = self.view_db.transact().start();
         let store = self.do_get_view_rel(name, &vtx)?;
-        let key = DataValue::String(name.0.clone());
+        let key = DataValue::Str(name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
         vtx.del(&encoded)?;
         let lower_bound = Tuple::default().encode_as_key(store.metadata.id);

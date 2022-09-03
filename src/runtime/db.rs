@@ -85,16 +85,16 @@ impl Db {
         let mut triple_path = path_buf.clone();
         triple_path.push("triple");
         let db_builder = builder
-            .use_bloom_filter(true, 10., true)
             .use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
+            .optimistic(false)
             .use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
             .path(triple_path.to_str().unwrap());
         let mut rel_path = path_buf;
         rel_path.push("rel");
         let view_db_builder = db_builder
             .clone()
-            .path(rel_path.to_str().unwrap())
             .optimistic(false)
+            .path(rel_path.to_str().unwrap())
             .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
             .use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false);
 
@@ -126,7 +126,7 @@ impl Db {
 
     pub fn compact_view(&self) -> Result<()> {
         let l = Tuple::default().encode_as_key(ViewRelId(0));
-        let u = Tuple(vec![DataValue::Bottom]).encode_as_key(ViewRelId(u64::MAX));
+        let u = Tuple(vec![DataValue::Bot]).encode_as_key(ViewRelId(u64::MAX));
         self.db.range_compact(&l, &u)?;
         Ok(())
     }
@@ -300,7 +300,7 @@ impl Db {
         let upper_bound = encode_eav_key(
             EntityId::MAX_PERM,
             AttrId::MAX_PERM,
-            &DataValue::Bottom,
+            &DataValue::Bot,
             Validity::MIN,
         );
         let mut it = tx
@@ -540,7 +540,7 @@ impl Db {
     pub fn put_meta_kv(&self, k: &[&str], v: &[u8]) -> Result<()> {
         let mut ks = vec![DataValue::Guard];
         for el in k {
-            ks.push(DataValue::String(SmartString::from(*el)));
+            ks.push(DataValue::Str(SmartString::from(*el)));
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let mut vtx = self.view_db.transact().start();
@@ -551,7 +551,7 @@ impl Db {
     pub fn remove_meta_kv(&self, k: &[&str]) -> Result<()> {
         let mut ks = vec![DataValue::Guard];
         for el in k {
-            ks.push(DataValue::String(SmartString::from(*el)));
+            ks.push(DataValue::Str(SmartString::from(*el)));
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let mut vtx = self.view_db.transact().start();
@@ -562,7 +562,7 @@ impl Db {
     pub fn get_meta_kv(&self, k: &[&str]) -> Result<Option<Vec<u8>>> {
         let mut ks = vec![DataValue::Guard];
         for el in k {
-            ks.push(DataValue::String(SmartString::from(*el)));
+            ks.push(DataValue::Str(SmartString::from(*el)));
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
@@ -577,9 +577,9 @@ impl Db {
     ) -> impl Iterator<Item = Result<(Vec<String>, Vec<u8>)>> {
         let mut lower_bound = Tuple(vec![DataValue::Guard]);
         for p in prefix {
-            lower_bound.0.push(DataValue::String((*p).into()));
+            lower_bound.0.push(DataValue::Str(SmartString::from(*p)));
         }
-        let upper_bound = Tuple(vec![DataValue::Bottom]);
+        let upper_bound = Tuple(vec![DataValue::Bot]);
         let mut it = self
             .view_db
             .transact()
@@ -632,11 +632,9 @@ impl Db {
         CustomIter { it, started: false }
     }
     pub fn list_relations(&self) -> Result<JsonValue> {
-        let lower = Tuple(vec![DataValue::String("".into())]).encode_as_key(ViewRelId::SYSTEM);
-        let upper = Tuple(vec![DataValue::String(
-            String::from(LARGEST_UTF_CHAR).into(),
-        )])
-        .encode_as_key(ViewRelId::SYSTEM);
+        let lower = Tuple(vec![DataValue::Str(SmartString::from(""))]).encode_as_key(ViewRelId::SYSTEM);
+        let upper = Tuple(vec![DataValue::Str(SmartString::from(String::from(LARGEST_UTF_CHAR)))])
+            .encode_as_key(ViewRelId::SYSTEM);
         let mut it = self
             .view_db
             .transact()
