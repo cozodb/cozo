@@ -85,12 +85,52 @@ impl QueryOutOptions {
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, Vec<Tuple>>;
 
+fn get_entry_head(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<&[Symbol]> {
+    match prog
+        .get(&PROG_ENTRY)
+        .ok_or_else(|| anyhow!("program entry point not found"))?
+    {
+        InputRulesOrAlgo::Rules(rules) => Ok(&rules.last().unwrap().head),
+        InputRulesOrAlgo::Algo(_) => {
+            bail!("algo application does not have named entry head")
+        }
+    }
+}
+
+fn validate_entry(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<()> {
+    match prog
+        .get(&PROG_ENTRY)
+        .ok_or_else(|| anyhow!("program entry point not found"))?
+    {
+        InputRulesOrAlgo::Rules(r) => {
+            ensure!(
+                r.iter().map(|e| &e.head).all_equal(),
+                "program entry point must have equal bindings"
+            );
+        }
+        InputRulesOrAlgo::Algo(_) => {}
+    }
+    Ok(())
+}
+
+fn get_entry_arity(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<usize> {
+    Ok(
+        match prog
+            .get(&PROG_ENTRY)
+            .ok_or_else(|| anyhow!("program entry point not found"))?
+        {
+            InputRulesOrAlgo::Rules(rules) => rules[0].head.len(),
+            InputRulesOrAlgo::Algo(algo_apply) => algo_apply.arity()?,
+        },
+    )
+}
+
 impl SessionTx {
     pub(crate) fn parse_query(
         &mut self,
         payload: &JsonValue,
         params_pool: &BTreeMap<Symbol, DataValue>,
-    ) -> Result<(InputProgram, QueryOutOptions, ConstRules)> {
+    ) -> Result<InputProgram> {
         let vld = match payload.get("since") {
             None => Validity::current(),
             Some(v) => Validity::try_from(v)?,
@@ -101,10 +141,8 @@ impl SessionTx {
         let rules_payload = q
             .as_array()
             .ok_or_else(|| anyhow!("expect field 'q' to be an array in query {}", payload))?;
-        let mut input_prog = if rules_payload.is_empty() {
-            InputProgram {
-                prog: Default::default(),
-            }
+        let mut prog = if rules_payload.is_empty() {
+            Default::default()
         } else if rules_payload.first().unwrap().is_array() {
             let q = json!([{"rule": "?", "args": rules_payload}]);
             self.parse_input_rule_sets(&q, vld, params_pool)?
@@ -114,7 +152,7 @@ impl SessionTx {
         let out_spec = match payload.get("out") {
             None => None,
             Some(spec) => {
-                let entry_bindings = input_prog.get_entry_head()?;
+                let entry_bindings = get_entry_head(&prog)?;
                 Some(self.parse_query_out_spec(spec, entry_bindings))
             }
         };
@@ -220,7 +258,7 @@ impl SessionTx {
                 if !out_name.is_prog_entry() {
                     out_name.validate_not_reserved()?;
                 }
-                match input_prog.prog.entry(out_name) {
+                match prog.entry(out_name) {
                     Entry::Vacant(v) => {
                         v.insert(InputRulesOrAlgo::Algo(AlgoApply {
                             algo: AlgoHandle::new(name_symbol),
@@ -296,8 +334,8 @@ impl SessionTx {
             })
             .try_collect()?;
         if !sorters.is_empty() {
-            input_prog.validate_entry()?;
-            let entry_head = input_prog.get_entry_head()?;
+            validate_entry(&prog)?;
+            let entry_head = get_entry_head(&prog)?;
             if sorters
                 .iter()
                 .map(|(k, _v)| k)
@@ -342,7 +380,7 @@ impl SessionTx {
                     .ok_or_else(|| anyhow!("view name must be a string"))?;
                 let name = Symbol::from(name);
                 ensure!(!name.is_reserved(), "view name {} is reserved", name);
-                let entry_arity = input_prog.get_entry_arity()?;
+                let entry_arity = get_entry_arity(&prog)?;
 
                 (
                     ViewRelMetadata {
@@ -355,9 +393,10 @@ impl SessionTx {
                 )
             }),
         };
-        Ok((
-            input_prog,
-            QueryOutOptions {
+        Ok(InputProgram {
+            prog,
+            const_rules,
+            out_opts: QueryOutOptions {
                 out_spec,
                 vld,
                 limit,
@@ -366,8 +405,7 @@ impl SessionTx {
                 as_view,
                 timeout,
             },
-            const_rules,
-        ))
+        })
     }
     fn parse_query_out_spec(
         &mut self,
@@ -437,7 +475,7 @@ impl SessionTx {
         payload: &JsonValue,
         default_vld: Validity,
         params_pool: &BTreeMap<Symbol, DataValue>,
-    ) -> Result<InputProgram> {
+    ) -> Result<BTreeMap<Symbol, InputRulesOrAlgo>> {
         let rules = payload
             .as_array()
             .ok_or_else(|| anyhow!("expect array for rules, got {}", payload))?
@@ -470,16 +508,16 @@ impl SessionTx {
             .try_collect()?;
 
         match ret.get(&PROG_ENTRY as &Symbol) {
-            None => Ok(InputProgram { prog: ret }),
+            None => Ok(ret),
             Some(ruleset) => match ruleset {
                 InputRulesOrAlgo::Rules(ruleset) => {
                     if !ruleset.iter().map(|r| &r.head).all_equal() {
                         bail!("all heads for the entry query must be identical");
                     } else {
-                        Ok(InputProgram { prog: ret })
+                        Ok(ret)
                     }
                 }
-                InputRulesOrAlgo::Algo(_) => Ok(InputProgram { prog: ret }),
+                InputRulesOrAlgo::Algo(_) => Ok(ret),
             },
         }
     }

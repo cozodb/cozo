@@ -2,9 +2,8 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, bail, Result};
 use either::{Left, Right};
-use itertools::Itertools;
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 
@@ -15,6 +14,7 @@ use crate::data::expr::Expr;
 use crate::data::id::{EntityId, Validity};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::DataValue;
+use crate::parse::query::{ConstRules, QueryOutOptions};
 
 #[derive(Default)]
 pub(crate) struct TempSymbGen {
@@ -129,37 +129,11 @@ impl MagicAlgoRuleArg {
 #[derive(Debug, Clone)]
 pub(crate) struct InputProgram {
     pub(crate) prog: BTreeMap<Symbol, InputRulesOrAlgo>,
+    pub(crate) const_rules: ConstRules,
+    pub(crate) out_opts: QueryOutOptions,
 }
 
 impl InputProgram {
-    pub(crate) fn validate_entry(&self) -> Result<()> {
-        match self
-            .prog
-            .get(&PROG_ENTRY)
-            .ok_or_else(|| anyhow!("program entry point not found"))?
-        {
-            InputRulesOrAlgo::Rules(r) => {
-                ensure!(
-                    r.iter().map(|e| &e.head).all_equal(),
-                    "program entry point must have equal bindings"
-                );
-            }
-            InputRulesOrAlgo::Algo(_) => {}
-        }
-        Ok(())
-    }
-    pub(crate) fn get_entry_arity(&self) -> Result<usize> {
-        Ok(
-            match self
-                .prog
-                .get(&PROG_ENTRY)
-                .ok_or_else(|| anyhow!("program entry point not found"))?
-            {
-                InputRulesOrAlgo::Rules(rules) => rules[0].head.len(),
-                InputRulesOrAlgo::Algo(algo_apply) => algo_apply.arity()?,
-            },
-        )
-    }
     pub(crate) fn get_entry_head(&self) -> Result<&[Symbol]> {
         match self
             .prog

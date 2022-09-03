@@ -435,9 +435,8 @@ impl Db {
     }
     pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let (input_program, out_opts, const_rules) =
-            tx.parse_query(payload, &Default::default())?;
-        if let Some((meta, op)) = &out_opts.as_view {
+        let input_program = tx.parse_query(payload, &Default::default())?;
+        if let Some((meta, op)) = &input_program.out_opts.as_view {
             if *op == ViewOp::Create {
                 ensure!(
                     !tx.view_exists(&meta.name)?,
@@ -457,10 +456,11 @@ impl Db {
             .stratify()?
             .magic_sets_rewrite();
         debug!("{:#?}", program);
-        let (compiled, stores) = tx.stratified_magic_compile(&program, &const_rules)?;
+        let (compiled, stores) =
+            tx.stratified_magic_compile(&program, &input_program.const_rules)?;
 
         let poison = Poison::default();
-        if let Some(secs) = out_opts.timeout {
+        if let Some(secs) = input_program.out_opts.timeout {
             poison.set_timeout(secs);
         }
         let id = self.queries_count.fetch_add(1, Ordering::AcqRel);
@@ -477,8 +477,8 @@ impl Db {
         let result = tx.stratified_magic_evaluate(
             &compiled,
             &stores,
-            if out_opts.sorters.is_empty() {
-                out_opts.num_to_take()
+            if input_program.out_opts.sorters.is_empty() {
+                input_program.out_opts.num_to_take()
             } else {
                 None
             },
@@ -488,35 +488,35 @@ impl Db {
             Err(_) => JsonValue::Null,
             Ok(headers) => headers.iter().map(|v| json!(v.0)).collect(),
         };
-        if !out_opts.sorters.is_empty() {
+        if !input_program.out_opts.sorters.is_empty() {
             let entry_head = input_program.get_entry_head()?.to_vec();
-            let sorted_result = tx.sort_and_collect(result, &out_opts.sorters, &entry_head)?;
-            let sorted_iter = if let Some(offset) = out_opts.offset {
+            let sorted_result = tx.sort_and_collect(result, &input_program.out_opts.sorters, &entry_head)?;
+            let sorted_iter = if let Some(offset) = input_program.out_opts.offset {
                 Left(sorted_result.scan_sorted().skip(offset))
             } else {
                 Right(sorted_result.scan_sorted())
             };
-            let sorted_iter = if let Some(limit) = out_opts.limit {
+            let sorted_iter = if let Some(limit) = input_program.out_opts.limit {
                 Left(sorted_iter.take(limit))
             } else {
                 Right(sorted_iter)
             };
-            if let Some((meta, view_op)) = out_opts.as_view {
+            if let Some((meta, view_op)) = input_program.out_opts.as_view {
                 tx.execute_view(sorted_iter, view_op, &meta)?;
                 Ok(json!({"view": "OK"}))
             } else {
                 let ret: Vec<_> = tx
-                    .run_pull_on_query_results(sorted_iter, out_opts)?
+                    .run_pull_on_query_results(sorted_iter, input_program.out_opts)?
                     .try_collect()?;
                 Ok(json!({ "rows": ret, "headers": headers }))
             }
         } else {
-            if let Some((meta, view_op)) = out_opts.as_view {
+            if let Some((meta, view_op)) = input_program.out_opts.as_view {
                 tx.execute_view(result.scan_all(), view_op, &meta)?;
                 Ok(json!({"view": "OK"}))
             } else {
                 let ret: Vec<_> = tx
-                    .run_pull_on_query_results(result.scan_all(), out_opts)?
+                    .run_pull_on_query_results(result.scan_all(), input_program.out_opts)?
                     .try_collect()?;
                 Ok(json!({ "rows": ret, "headers": headers }))
             }
@@ -632,9 +632,12 @@ impl Db {
         CustomIter { it, started: false }
     }
     pub fn list_relations(&self) -> Result<JsonValue> {
-        let lower = Tuple(vec![DataValue::Str(SmartString::from(""))]).encode_as_key(ViewRelId::SYSTEM);
-        let upper = Tuple(vec![DataValue::Str(SmartString::from(String::from(LARGEST_UTF_CHAR)))])
-            .encode_as_key(ViewRelId::SYSTEM);
+        let lower =
+            Tuple(vec![DataValue::Str(SmartString::from(""))]).encode_as_key(ViewRelId::SYSTEM);
+        let upper = Tuple(vec![DataValue::Str(SmartString::from(String::from(
+            LARGEST_UTF_CHAR,
+        )))])
+        .encode_as_key(ViewRelId::SYSTEM);
         let mut it = self
             .view_db
             .transact()
