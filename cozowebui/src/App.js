@@ -1,15 +1,59 @@
-import {Button, Intent, Tag, TextArea} from "@blueprintjs/core";
+import {Button, InputGroup, Intent, Tag, TextArea, Toaster} from "@blueprintjs/core";
 import React, {useState} from 'react';
 import './App.css';
 import {Cell, Column, Table2} from "@blueprintjs/table";
 
 function App() {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [validating, setValidating] = useState(false);
+    const [usernameInput, setUsernameInput] = useState('');
+    const [passwordInput, setPasswordInput] = useState('');
     const [queryText, setQueryText] = useState('');
     const [inProgress, setInProgress] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState('');
     const [queryResults, setQueryResults] = useState(null);
 
+
+    async function validateCredentials() {
+        if (validating || !usernameInput || !passwordInput) {
+            return
+        }
+        let url = '/text-query';
+
+        if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+            url = 'http://127.0.0.1:9070' + url;
+        }
+
+        try {
+            setValidating(true);
+            const response = await fetch(url, {
+                method: 'POST',
+                body: '?[?ok] := ?ok <- true;',
+                headers: new Headers({
+                    'content-type': 'application/json',
+                    'x-cozo-username': usernameInput,
+                    'x-cozo-password': passwordInput
+                }),
+            });
+            if (!response.ok) {
+                throw Error(response);
+            }
+            let json = await response.json();
+            if (json.rows[0][0]) {
+                setUsername(usernameInput);
+                setPassword(passwordInput);
+            } else {
+                throw Error(json)
+            }
+        } catch (e) {
+            Toaster.create().show({message: 'Cannot authenticate', intent: Intent.DANGER});
+            console.error(e);
+        } finally {
+            setValidating(false);
+        }
+    }
 
     function handleKeyDown(e) {
         if (e.key === 'Enter' && e.shiftKey) {
@@ -57,12 +101,21 @@ function App() {
                     response = await fetch(url, {
                         method: 'POST',
                         body: query,
-                        headers: new Headers({'content-type': 'application/json'}),
+                        headers: new Headers({
+                            'content-type': 'application/json',
+                            'x-cozo-username': username,
+                            'x-cozo-password': password
+                        }),
                     });
                 } else {
                     response = await fetch(url, {
                         method: 'POST',
-                        body: query
+                        body: query,
+                        headers: new Headers({
+                            'content-type': 'text/plain',
+                            'x-cozo-username': username,
+                            'x-cozo-password': password
+                        }),
                     });
                 }
 
@@ -94,11 +147,40 @@ function App() {
         }
     }
 
+    if (!(username && password)) {
+        return <div
+            style={{display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100vw', height: '100vh'}}>
+            <div style={{
+                width: 250,
+                height: 100,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between'
+            }}>
+                <InputGroup placeholder="Username" value={usernameInput}
+                            onChange={v => setUsernameInput(v.target.value)}
+                            autoFocus
+                />
+                <InputGroup placeholder="Password" value={passwordInput}
+                            onChange={v => setPasswordInput(v.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                    validateCredentials();
+                                }
+                            }}
+                            type="password"/>
+                <Button disabled={validating} intent={Intent.PRIMARY}
+                        onClick={validateCredentials}>Authenticate</Button>
+            </div>
+        </div>
+    }
+
     return (
         <div style={{width: "100vw", height: "100vh", display: 'flex', flexDirection: 'column'}}>
             <div style={{padding: 10}}>
                 <TextArea
-                    placeholder="Input CozoScript here, SHIFT + Enter to run"
+                    autoFocus
+                    placeholder="Type query here, SHIFT + Enter to run as script"
                     id="query-box"
                     className="bp4-fill"
                     growVertically={true}
@@ -112,9 +194,9 @@ function App() {
                 <div style={{paddingTop: 10, display: 'flex', flexDirection: 'row'}}>
                     <Button text="Run script" onClick={() => handleQuery('script')}
                             disabled={inProgress}/>
-                    <Button text="Run JSON" onClick={() => handleQuery('json')}
-                            disabled={inProgress} style={{marginLeft: 5}}/>
                     <Button text="Convert script to JSON" onClick={() => handleQuery('convert')}
+                            disabled={inProgress} style={{marginLeft: 5}}/>
+                    <Button text="Run JSON" onClick={() => handleQuery('json')}
                             disabled={inProgress} style={{marginLeft: 5}}/>
 
                     <div style={{marginLeft: 10, marginTop: 5}}>

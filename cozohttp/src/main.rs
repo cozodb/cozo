@@ -1,16 +1,23 @@
+use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
-use std::path::Path;
-use std::time::Instant;
+use std::io::{stdin, stdout, Write};
+use std::str::from_utf8;
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
+use std::{env, thread};
 
 use actix_cors::Cors;
+use actix_web::http::header::HeaderName;
 use actix_web::rt::task::spawn_blocking;
-use actix_web::{post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_static_files::ResourceFiles;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use clap::Parser;
 use env_logger::Env;
-use log::info;
+use log::debug;
+use rand::Rng;
 use serde_json::json;
+use sha3::Digest;
 
 use cozo::{Db, DbBuilder};
 
@@ -54,18 +61,103 @@ struct Args {
     /// Port to use
     #[clap(short, long, default_value_t = 9070)]
     port: u16,
-
-    /// Temporary database, i.e. will be deleted when the program exits
-    #[clap(short, long, default_value_t = false, action)]
-    temp: bool,
 }
 
 struct AppStateWithDb {
     db: Db,
+    pass_cache: Arc<RwLock<HashMap<String, Box<[u8]>>>>,
+    seed: Box<[u8]>,
+}
+
+const PASSWORD_KEY: &str = "USER_PASSWORD";
+
+impl AppStateWithDb {
+    async fn verify_password(&self, req: &HttpRequest) -> anyhow::Result<()> {
+        let username = req
+            .headers()
+            .get(&HeaderName::from_static("x-cozo-username"))
+            .ok_or_else(|| anyhow!("not authenticated"))?
+            .to_str()?;
+        let password = req
+            .headers()
+            .get(&HeaderName::from_static("x-cozo-password"))
+            .ok_or_else(|| anyhow!("not authenticated"))?
+            .to_str()?;
+        if let Some(stored) = self.pass_cache.read().unwrap().get(username).cloned() {
+            let mut seed = self.seed.to_vec();
+            seed.extend_from_slice(password.as_bytes());
+            let digest: &[u8] = &sha3::Sha3_256::digest(&seed);
+            if *stored == *digest {
+                return Ok(());
+            } else {
+                self.pass_cache.write().unwrap().remove(username);
+                bail!("invalid password")
+            }
+        }
+        let pass_cache = self.pass_cache.clone();
+        let mut seed = self.seed.to_vec();
+        let db = self.db.new_session()?;
+        let password = password.to_string();
+        let username = username.to_string();
+        spawn_blocking(move || -> anyhow::Result<()> {
+            if let Some(hashed) = db.get_meta_kv(&[PASSWORD_KEY, &username])? {
+                let hashed = from_utf8(&hashed)?;
+                if argon2::verify_encoded(&hashed, password.as_bytes())? {
+                    seed.extend_from_slice(password.as_bytes());
+                    let easy_digest: &[u8] = &sha3::Sha3_256::digest(&seed);
+                    pass_cache
+                        .write()
+                        .unwrap()
+                        .insert(username, easy_digest.into());
+                    return Ok(());
+                }
+            }
+            thread::sleep(Duration::from_millis(1234));
+            bail!("invalid password")
+        })
+        .await?
+    }
+
+    async fn reset_password(&self, user: &str, new_pass: &str) -> anyhow::Result<()> {
+        let pass_cache = self.pass_cache.clone();
+        let db = self.db.new_session()?;
+        let username = user.to_string();
+        let new_pass = new_pass.to_string();
+        spawn_blocking(move || -> anyhow::Result<()> {
+            pass_cache.write().unwrap().remove(&username);
+            let salt = rand::thread_rng().gen::<[u8; 32]>();
+            let config = argon2config();
+            let hash = argon2::hash_encoded(new_pass.as_bytes(), &salt, &config)?;
+            db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())?;
+            Ok(())
+        })
+        .await?
+    }
+
+    async fn remove_user(&self, user: &str) -> anyhow::Result<()> {
+        self.pass_cache.write().unwrap().remove(user);
+        self.db.remove_meta_kv(&[PASSWORD_KEY, &user])?;
+        Ok(())
+    }
+}
+
+fn argon2config() -> argon2::Config<'static> {
+    argon2::Config {
+        variant: argon2::Variant::Argon2id,
+        mem_cost: 65536,
+        time_cost: 10,
+        ..argon2::Config::default()
+    }
 }
 
 #[post("/text-query")]
-async fn query(body: web::Bytes, data: web::Data<AppStateWithDb>) -> Result<impl Responder> {
+async fn query(
+    body: web::Bytes,
+    data: web::Data<AppStateWithDb>,
+    req: HttpRequest,
+) -> Result<impl Responder> {
+    data.verify_password(&req).await?;
+
     let text = std::str::from_utf8(&body)
         .map_err(|e| anyhow!(e))?
         .to_string();
@@ -82,11 +174,73 @@ async fn query(body: web::Bytes, data: web::Data<AppStateWithDb>) -> Result<impl
     Ok(HttpResponse::Ok().json(result))
 }
 
+#[post("/change-password")]
+async fn change_password(
+    body: web::Json<serde_json::Value>,
+    data: web::Data<AppStateWithDb>,
+    req: HttpRequest,
+) -> Result<impl Responder> {
+    data.verify_password(&req).await?;
+    let username = req
+        .headers()
+        .get(&HeaderName::from_static("x-cozo-username"))
+        .ok_or_else(|| anyhow!("not authenticated"))?
+        .to_str()
+        .map_err(|e| anyhow!(e))?;
+    let new_pass = body
+        .get("new_pass")
+        .ok_or_else(|| anyhow!("required 'new_pass' field"))?
+        .as_str()
+        .ok_or_else(|| anyhow!("'new_pass' field required to be a string"))?;
+    data.reset_password(username, new_pass).await?;
+    Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
+}
+
+#[post("/assert-user")]
+async fn assert_user(
+    body: web::Json<serde_json::Value>,
+    data: web::Data<AppStateWithDb>,
+    req: HttpRequest,
+) -> Result<impl Responder> {
+    data.verify_password(&req).await?;
+    let new_user = body
+        .get("username")
+        .ok_or_else(|| anyhow!("required 'username' field"))?
+        .as_str()
+        .ok_or_else(|| anyhow!("'username' field required to be a string"))?;
+    let new_pass = body
+        .get("new_pass")
+        .ok_or_else(|| anyhow!("required 'new_pass' field"))?
+        .as_str()
+        .ok_or_else(|| anyhow!("'new_pass' field required to be a string"))?;
+    data.reset_password(new_user, new_pass).await?;
+    Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
+}
+
+#[post("/remove-user")]
+async fn remove_user(
+    body: web::Json<serde_json::Value>,
+    data: web::Data<AppStateWithDb>,
+    req: HttpRequest,
+) -> Result<impl Responder> {
+    data.verify_password(&req).await?;
+    let user = body
+        .get("username")
+        .ok_or_else(|| anyhow!("required 'username' field"))?
+        .as_str()
+        .ok_or_else(|| anyhow!("'username' field required to be a string"))?;
+    data.remove_user(&user).await?;
+    Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
+}
+
 #[post("/json-query")]
 async fn json_query(
     body: web::Json<serde_json::Value>,
     data: web::Data<AppStateWithDb>,
+    req: HttpRequest,
 ) -> Result<impl Responder> {
+    data.verify_password(&req).await?;
+
     let db = data.db.new_session()?;
     let start = Instant::now();
     let task = spawn_blocking(move || db.run_json_query(&body));
@@ -104,7 +258,10 @@ async fn json_query(
 async fn to_json_query(
     body: web::Bytes,
     data: web::Data<AppStateWithDb>,
+    req: HttpRequest,
 ) -> Result<impl Responder> {
+    data.verify_password(&req).await?;
+
     let text = std::str::from_utf8(&body)
         .map_err(|e| anyhow!(e))?
         .to_string();
@@ -119,24 +276,73 @@ include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 async fn main() -> std::io::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
-    if args.temp && Path::new(&args.path).exists() {
-        panic!(
-            "cannot open database at '{}' as temporary since it already exists",
-            args.path
-        );
-    }
 
     let builder = DbBuilder::default()
         .path(&args.path)
-        .create_if_missing(true)
-        .destroy_on_exit(args.temp);
+        .create_if_missing(true);
     let db = Db::build(builder).unwrap();
 
-    let app_state = web::Data::new(AppStateWithDb { db });
+    match db.meta_range_scan(&[PASSWORD_KEY]).next() {
+        None => {
+            let (username, password) = match (
+                env::var("COZO_INITIAL_USERNAME"),
+                env::var("COZO_INITIAL_PASSWORD"),
+            ) {
+                (Ok(username), Ok(password)) => (username, password),
+                _ => {
+                    println!("Welcome to Cozo!");
+                    println!();
+                    println!(
+                        "This is the first time you are running this database at {},",
+                        args.path
+                    );
+                    println!("so let's create a username and password.");
+
+                    loop {
+                        println!();
+                        print!("Enter a username: ");
+
+                        let _ = stdout().flush();
+                        let mut username = String::new();
+                        stdin().read_line(&mut username).unwrap();
+                        let username = username.trim().to_string();
+                        if username.is_empty() {
+                            continue;
+                        }
+                        let password = rpassword::prompt_password("Enter your password: ").unwrap();
+                        let confpass = rpassword::prompt_password("Again to confirm it: ").unwrap();
+
+                        if password.trim() != confpass.trim() {
+                            println!("Password mismatch. Try again.");
+                            continue;
+                        }
+                        println!("Done, you can now log in with your new username/password in the WebUI!");
+                        break (username, password.trim().to_string());
+                    }
+                }
+            };
+
+            let salt = rand::thread_rng().gen::<[u8; 32]>();
+            let config = argon2config();
+            let hash = argon2::hash_encoded(password.trim().as_bytes(), &salt, &config).unwrap();
+            db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())
+                .unwrap();
+        }
+        Some(Err(err)) => panic!("{}", err),
+        Some(Ok((user, _))) => {
+            debug!("User {:?}", user[1]);
+        }
+    }
+
+    let app_state = web::Data::new(AppStateWithDb {
+        db,
+        pass_cache: Arc::new(Default::default()),
+        seed: Box::new(rand::thread_rng().gen::<[u8; 32]>()),
+    });
 
     let addr = (&args.bind as &str, args.port);
-    info!(
-        "Serving database {} at http://{}:{}",
+    println!(
+        "Access WebUI for {} at http://{}:{}",
         args.path, addr.0, addr.1
     );
 
@@ -150,6 +356,9 @@ async fn main() -> std::io::Result<()> {
             .service(query)
             .service(json_query)
             .service(to_json_query)
+            .service(change_password)
+            .service(assert_user)
+            .service(remove_user)
             .service(ResourceFiles::new("/", generated))
     })
     .bind(addr)?

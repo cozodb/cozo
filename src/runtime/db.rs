@@ -1,15 +1,17 @@
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::Duration;
+use std::{fs, thread};
 
 use anyhow::{anyhow, bail, ensure, Result};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
 use serde_json::json;
+use smartstring::SmartString;
 
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 
@@ -22,7 +24,7 @@ use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
-use crate::data::tuple::{rusty_scratch_cmp, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
+use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::cozoscript::query::{parse_query_to_json, ScriptType};
 use crate::parse::cozoscript::sys::{CompactTarget, SysOp};
@@ -31,6 +33,7 @@ use crate::parse::schema::AttrTxItem;
 use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::{ViewRelId, ViewRelMetadata};
+use crate::utils::swap_option_result;
 
 struct RunningQueryHandle {
     started_at: Validity,
@@ -76,15 +79,21 @@ impl Debug for Db {
 
 impl Db {
     pub fn build(builder: DbBuilder<'_>) -> Result<Self> {
+        let path = builder.opts.db_path;
+        fs::create_dir_all(path)?;
+        let path_buf = PathBuf::from(path);
+        let mut triple_path = path_buf.clone();
+        triple_path.push("triple");
         let db_builder = builder
             .use_bloom_filter(true, 10., true)
             .use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
-            .use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false);
-        let mut temp_path: String = db_builder.opts.db_path.to_string();
-        temp_path.push_str(".relations");
+            .use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
+            .path(triple_path.to_str().unwrap());
+        let mut rel_path = path_buf;
+        rel_path.push("rel");
         let view_db_builder = db_builder
             .clone()
-            .path(&temp_path)
+            .path(rel_path.to_str().unwrap())
             .optimistic(false)
             .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
             .use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false);
@@ -527,6 +536,100 @@ impl Db {
             .map(|(k, v)| json!([k, format!("{:?}", v.started_at)]))
             .collect_vec();
         Ok(json!({"rows": res, "headers": ["?id", "?started_at"]}))
+    }
+    pub fn put_meta_kv(&self, k: &[&str], v: &[u8]) -> Result<()> {
+        let mut ks = vec![DataValue::Guard];
+        for el in k {
+            ks.push(DataValue::String(SmartString::from(*el)));
+        }
+        let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
+        let mut vtx = self.view_db.transact().start();
+        vtx.put(&key, v)?;
+        vtx.commit()?;
+        Ok(())
+    }
+    pub fn remove_meta_kv(&self, k: &[&str]) -> Result<()> {
+        let mut ks = vec![DataValue::Guard];
+        for el in k {
+            ks.push(DataValue::String(SmartString::from(*el)));
+        }
+        let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
+        let mut vtx = self.view_db.transact().start();
+        vtx.del(&key)?;
+        vtx.commit()?;
+        Ok(())
+    }
+    pub fn get_meta_kv(&self, k: &[&str]) -> Result<Option<Vec<u8>>> {
+        let mut ks = vec![DataValue::Guard];
+        for el in k {
+            ks.push(DataValue::String(SmartString::from(*el)));
+        }
+        let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
+        let vtx = self.view_db.transact().start();
+        Ok(match vtx.get(&key, false)? {
+            None => None,
+            Some(slice) => Some(slice.to_vec()),
+        })
+    }
+    pub fn meta_range_scan(
+        &self,
+        prefix: &[&str],
+    ) -> impl Iterator<Item = Result<(Vec<String>, Vec<u8>)>> {
+        let mut lower_bound = Tuple(vec![DataValue::Guard]);
+        for p in prefix {
+            lower_bound.0.push(DataValue::String((*p).into()));
+        }
+        let upper_bound = Tuple(vec![DataValue::Bottom]);
+        let mut it = self
+            .view_db
+            .transact()
+            .start()
+            .iterator()
+            .upper_bound(&upper_bound.encode_as_key(ViewRelId::SYSTEM))
+            .start();
+        it.seek(&lower_bound.encode_as_key(ViewRelId::SYSTEM));
+
+        struct CustomIter {
+            it: DbIter,
+            started: bool,
+        }
+
+        impl CustomIter {
+            fn next_inner(&mut self) -> Result<Option<(Vec<String>, Vec<u8>)>> {
+                if self.started {
+                    self.it.next()
+                } else {
+                    self.started = true;
+                }
+                match self.it.pair()? {
+                    None => Ok(None),
+                    Some((k_slice, v_slice)) => {
+                        let encoded = EncodedTuple(k_slice).decode()?;
+                        let ks: Vec<_> = encoded
+                            .0
+                            .into_iter()
+                            .skip(1)
+                            .map(|v| {
+                                v.get_string()
+                                    .map(|s| s.to_string())
+                                    .ok_or_else(|| anyhow!("bad key in meta store"))
+                            })
+                            .try_collect()?;
+                        Ok(Some((ks, v_slice.to_vec())))
+                    }
+                }
+            }
+        }
+
+        impl Iterator for CustomIter {
+            type Item = Result<(Vec<String>, Vec<u8>)>;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                swap_option_result(self.next_inner())
+            }
+        }
+
+        CustomIter { it, started: false }
     }
     pub fn list_relations(&self) -> Result<JsonValue> {
         let lower = Tuple(vec![DataValue::String("".into())]).encode_as_key(ViewRelId::SYSTEM);

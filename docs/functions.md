@@ -74,9 +74,9 @@ The four _basic arithmetic operators_ `+`, `-`, `*`, and `/` do what you expect,
 
 `rad_to_deg(x)`: converts radians to degrees.
 
-`haversine(a_lat, a_lon, b_lat, b_lon)`: returns the spherical distance measured on a unit sphere in radians between two points specified by their latitudes and longitudes. The inputs are in radians as well. If you want to calculate spherical distance on earth, you probably want the next function. See [Haversine formula](https://en.wikipedia.org/wiki/Haversine_formula) for more details.
+`haversine(a_lat, a_lon, b_lat, b_lon)`: returns the angle measured in radians between two points on a sphere specified by their latitudes and longitudes. The inputs are in radians. You probably want the next function since most maps measure angles in radians. See [Haversine formula](https://en.wikipedia.org/wiki/Haversine_formula) for more details.
 
-`haversine_deg_input(a_lat, a_lon, b_lat, b_lon)`: same as the previous function, but the inputs are in degrees instead of radians. The return value is still in radians. If you want approximate distance measured on the surface of the earth instead of spherical distance, multiply the result by the radius of the earth, which is about `6371` kilometres, `3959` miles, or `3440` nautical miles.
+`haversine_deg_input(a_lat, a_lon, b_lat, b_lon)`: same as the previous function, but the inputs are in degrees instead of radians. The return value is still in radians. If you want the approximate distance measured on the surface of the earth instead of the angle between two points, multiply the result by the radius of the earth, which is about `6371` kilometres, `3959` miles, or `3440` nautical miles.
 
 ## Functions on strings
 

@@ -15,6 +15,10 @@ log = "0.4.16"
 anyhow = "1.0.62"
 env_logger = "0.9.0"
 serde_json = "1.0.81"
+rust-argon2 = "1.0.0"
+sha3 = "0.10.4"
+rand = "0.8.5"
+rpassword = "7.0.0"
 cozo = { path = ".." }
 
 [build-dependencies]
