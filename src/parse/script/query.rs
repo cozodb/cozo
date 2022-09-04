@@ -5,21 +5,28 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 use miette::{bail, ensure, miette, IntoDiagnostic, Result};
+use smartstring::{LazyCompact, SmartString};
 
+use crate::algo::AlgoHandle;
 use crate::data::aggr::{get_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
-use crate::data::program::{AlgoApply, InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRulesOrAlgo, MagicSymbol};
+use crate::data::program::{
+    AlgoApply, AlgoRuleArg, InputAtom, InputAttrTripleAtom, InputProgram, InputRule,
+    InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputViewApplyAtom, MagicSymbol, TripleDir,
+    Unification,
+};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::query::{ConstRules, OutSpec, QueryOutOptions, SortDir, ViewOp};
 use crate::parse::script::{Pair, Pairs, Rule};
+use crate::parse::script::expr::build_expr;
 use crate::runtime::view::{ViewRelId, ViewRelKind, ViewRelMetadata};
 
 pub(crate) fn parse_query(
     src: Pairs<'_>,
-    param_pool: &BTreeMap<Symbol, DataValue>,
+    param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputRulesOrAlgo> = Default::default();
     let mut const_rules: ConstRules = Default::default();
@@ -43,7 +50,7 @@ pub(crate) fn parse_query(
                 }
             }
             Rule::algo_rule => {
-                let (name, apply) = parse_algo_rule(pair)?;
+                let (name, apply) = parse_algo_rule(pair, param_pool)?;
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
                         e.insert(InputRulesOrAlgo::Algo(apply));
@@ -54,8 +61,8 @@ pub(crate) fn parse_query(
             Rule::const_rule => {
                 let mut src = pair.into_inner();
                 let name = src.next().unwrap().as_str();
-                let data = build_expr(src.next().unwrap())?;
-                let data = data.eval_to_const(param_pool)?;
+                let data = build_expr(src.next().unwrap(), param_pool)?;
+                let data = data.eval_to_const()?;
                 let data = match data {
                     DataValue::List(l) => l,
                     d => bail!(
@@ -92,8 +99,8 @@ pub(crate) fn parse_query(
                 }
             }
             Rule::timeout_option => {
-                let timeout = build_expr(pair)?
-                    .eval_to_const(param_pool)?
+                let timeout = build_expr(pair, param_pool)?
+                    .eval_to_const()?
                     .get_int()
                     .ok_or_else(|| miette!("timeout option must be an integer"))?;
                 ensure!(timeout > 0, "timeout must be positive");
@@ -181,7 +188,7 @@ fn get_entry_arity(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<usize> {
 
 fn parse_rule(
     src: Pair<'_>,
-    param_pool: &BTreeMap<Symbol, DataValue>,
+    param_pool: &BTreeMap<String, DataValue>,
     default_vld: Validity,
 ) -> Result<(Symbol, InputRule)> {
     let mut src = src.into_inner();
@@ -190,7 +197,7 @@ fn parse_rule(
     let mut at = default_vld;
     let mut body = src.next().unwrap();
     if body.as_rule() == Rule::expr {
-        let vld = build_expr(body)?.eval_to_const(param_pool)?;
+        let vld = build_expr(body, param_pool)?.eval_to_const()?;
         let vld = Validity::try_from(vld)?;
         at = vld;
         body = src.next().unwrap();
@@ -213,7 +220,7 @@ fn parse_rule(
 
 fn parse_disjunction(
     pair: Pair<'_>,
-    param_pool: &BTreeMap<Symbol, DataValue>,
+    param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<InputAtom> {
     let res: Vec<_> = pair
         .into_inner()
@@ -226,7 +233,7 @@ fn parse_disjunction(
     })
 }
 
-fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<Symbol, DataValue>) -> Result<InputAtom> {
+fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<InputAtom> {
     Ok(match src.as_rule() {
         Rule::rule_body => {
             let grouped: Vec<_> = src
@@ -237,84 +244,99 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<Symbol, DataValue>) -> Result
         }
         Rule::disjunction => parse_disjunction(src, param_pool)?,
         Rule::triple => parse_triple(src, param_pool)?,
-        //     Rule::negation => {
-        //         let inner = parse_atom(src.into_inner().next().unwrap())?;
-        //         json!({ "not_exists": inner })
-        //     }
-        //     Rule::expr => build_expr::<WrapConst>(src)?,
-        //     Rule::unify => {
-        //         let mut src = src.into_inner();
-        //         let var = src.next().unwrap().as_str();
-        //         let expr = build_expr::<WrapConst>(src.next().unwrap())?;
-        //         json!({"unify": var, "expr": expr})
-        //     }
-        //     Rule::unify_multi => {
-        //         let mut src = src.into_inner();
-        //         let var = src.next().unwrap().as_str();
-        //         let expr = build_expr::<WrapConst>(src.next().unwrap())?;
-        //         json!({"unify": var, "expr": expr, "multi": true})
-        //     }
-        //     Rule::rule_apply => {
-        //         let mut src = src.into_inner();
-        //         let name = src.next().unwrap().as_str();
-        //         let args: Vec<_> = src
-        //             .next()
-        //             .unwrap()
-        //             .into_inner()
-        //             .map(build_expr::<WrapConst>)
-        //             .try_collect()?;
-        //         json!({"rule": name, "args": args})
-        //     }
-        //     Rule::view_apply => {
-        //         let mut src = src.into_inner();
-        //         let name = &src.next().unwrap().as_str()[1..];
-        //         let args: Vec<_> = src
-        //             .next()
-        //             .unwrap()
-        //             .into_inner()
-        //             .map(build_expr::<WrapConst>)
-        //             .try_collect()?;
-        //         json!({"view": name, "args": args})
-        //     }
+        Rule::negation => {
+            let inner = parse_atom(src.into_inner().next().unwrap(), param_pool)?;
+            InputAtom::Negation(inner.into())
+        }
+        Rule::expr => {
+            let expr = build_expr(src, param_pool)?;
+            InputAtom::Predicate(expr)
+        }
+        Rule::unify => {
+            let mut src = src.into_inner();
+            let var = src.next().unwrap().as_str();
+            let expr = build_expr(src.next().unwrap(), param_pool)?;
+            InputAtom::Unification(Unification {
+                binding: Symbol::from(var),
+                expr,
+                one_many_unif: false,
+            })
+        }
+        Rule::unify_multi => {
+            let mut src = src.into_inner();
+            let var = src.next().unwrap().as_str();
+            let expr = build_expr(src.next().unwrap(), param_pool)?;
+            InputAtom::Unification(Unification {
+                binding: Symbol::from(var),
+                expr,
+                one_many_unif: true,
+            })
+        }
+        Rule::rule_apply => {
+            let mut src = src.into_inner();
+            let name = src.next().unwrap().as_str();
+            let args: Vec<_> = src
+                .next()
+                .unwrap()
+                .into_inner()
+                .map(|v| parse_rule_arg(v, param_pool))
+                .try_collect()?;
+            InputAtom::Rule(InputRuleApplyAtom {
+                name: Symbol::from(name),
+                args,
+            })
+        }
+        Rule::view_apply => {
+            let mut src = src.into_inner();
+            let name = &src.next().unwrap().as_str()[1..];
+            let args: Vec<_> = src
+                .next()
+                .unwrap()
+                .into_inner()
+                .map(|v| parse_rule_arg(v, param_pool))
+                .try_collect()?;
+            InputAtom::View(InputViewApplyAtom {
+                name: Symbol::from(name),
+                args,
+            })
+        }
         rule => unreachable!("{:?}", rule),
     })
 }
 
-fn parse_triple(src: Pair<'_>, param_pool: &BTreeMap<Symbol, DataValue>) -> Result<InputAtom> {
+fn parse_triple(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<InputAtom> {
     let mut src = src.into_inner();
-    // Ok(json!([
-    //     parse_triple_arg(src.next().unwrap())?,
-    //     parse_triple_attr(src.next().unwrap())?,
-    //     parse_triple_arg(src.next().unwrap())?
-    // ]))
+    let e_p = src.next().unwrap();
+    let attr_p = src.next().unwrap();
+    let v_p = src.next().unwrap();
     Ok(InputAtom::AttrTriple(InputAttrTripleAtom {
-        attr: todo!(),
-        entity: todo!(),
-        value: todo!()
+        attr: Symbol::from(attr_p.as_str()),
+        entity: parse_rule_arg(e_p, param_pool)?,
+        value: parse_rule_arg(v_p, param_pool)?,
     }))
 }
 
-// fn parse_triple_arg(src: Pair<'_>) -> Result<JsonValue> {
-//     match src.as_rule() {
-//         Rule::expr => build_expr::<WrapConst>(src),
-//         Rule::triple_pull => {
-//             let mut src = src.into_inner();
-//             let attr = src.next().unwrap();
-//             let val = build_expr::<NoWrapConst>(src.next().unwrap())?;
-//             Ok(json!({ attr.as_str(): val }))
-//         }
-//         _ => unreachable!(),
-//     }
-// }
-//
-// fn parse_triple_attr(src: Pair<'_>) -> Result<JsonValue> {
-//     let s = src.into_inner().map(|p| p.as_str()).join(".");
-//     Ok(json!(s))
-// }
+fn parse_rule_arg(
+    src: Pair<'_>,
+    param_pool: &BTreeMap<String, DataValue>,
+) -> Result<InputTerm<DataValue>> {
+    Ok(match src.as_rule() {
+        Rule::expr => {
+            let mut p = build_expr(src, param_pool)?;
+            p.partial_eval()?;
+            match p {
+                Expr::Binding(b, _) => InputTerm::Var(b),
+                Expr::Const(c) => InputTerm::Const(c),
+                _ => bail!("triple arg must either evaluate to a constant or a variable"),
+            }
+        }
+        _ => unreachable!(),
+    })
+}
 
 fn parse_rule_head(
     src: Pair<'_>,
-    param_pool: &BTreeMap<Symbol, DataValue>,
+    param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<(
     Symbol,
     Vec<Symbol>,
@@ -334,7 +356,7 @@ fn parse_rule_head(
 
 fn parse_rule_head_arg(
     src: Pair<'_>,
-    param_pool: &BTreeMap<Symbol, DataValue>,
+    param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<(Symbol, Option<(Aggregation, Vec<DataValue>)>)> {
     let src = src.into_inner().next().unwrap();
     Ok(match src.as_rule() {
@@ -344,7 +366,7 @@ fn parse_rule_head_arg(
             let aggr_name = inner.next().unwrap().as_str();
             let var = inner.next().unwrap().as_str();
             let args: Vec<_> = inner
-                .map(|v| -> Result<DataValue> { build_expr(v)?.eval_to_const(param_pool) })
+                .map(|v| -> Result<DataValue> { build_expr(v, param_pool)?.eval_to_const() })
                 .try_collect()?;
             (
                 Symbol::from(var),
@@ -360,70 +382,79 @@ fn parse_rule_head_arg(
     })
 }
 
-fn parse_algo_rule(src: Pair<'_>) -> Result<(Symbol, AlgoApply)> {
-    todo!()
-    // let mut src = src.into_inner();
-    // let out_symbol = src.next().unwrap().as_str();
-    // let algo_name = &src.next().unwrap().as_str().strip_suffix('!').unwrap();
-    // let mut algo_rels = vec![];
-    // let mut algo_opts = Map::default();
-    // for nxt in src {
-    //     match nxt.as_rule() {
-    //         Rule::algo_rel => {
-    //             let inner = nxt.into_inner().next().unwrap();
-    //             match inner.as_rule() {
-    //                 Rule::algo_rule_rel => {
-    //                     let mut els = inner.into_inner();
-    //                     let name = els.next().unwrap().as_str();
-    //                     let args = els.map(|v| v.as_str()).collect_vec();
-    //                     algo_rels.push(json!({"rule": name, "rel_args": args}));
-    //                 }
-    //                 Rule::algo_view_rel => {
-    //                     let mut els = inner.into_inner();
-    //                     let name = els.next().unwrap().as_str().strip_prefix(':').unwrap();
-    //                     let args = els.map(|v| v.as_str()).collect_vec();
-    //                     algo_rels.push(json!({"view": name, "rel_args": args}));
-    //                 }
-    //                 Rule::algo_triple_rel => {
-    //                     let mut els = inner.into_inner();
-    //                     let fst = els.next().unwrap().as_str();
-    //                     let mdl = els.next().unwrap();
-    //                     let mut backward = false;
-    //                     let ident = match mdl.as_rule() {
-    //                         Rule::rev_triple_marker => {
-    //                             backward = true;
-    //                             els.next().unwrap().as_str()
-    //                         }
-    //                         Rule::compound_ident => mdl.as_str(),
-    //                         _ => unreachable!(),
-    //                     };
-    //                     let snd = els.next().unwrap().as_str();
-    //                     algo_rels.push(
-    //                         json!({"triple": ident, "backward": backward, "rel_args": [fst, snd]}),
-    //                     )
-    //                 }
-    //                 _ => unreachable!(),
-    //             }
-    //         }
-    //         Rule::algo_opt_pair => {
-    //             let mut inner = nxt.into_inner();
-    //             let name = inner.next().unwrap().as_str();
-    //             let val = inner.next().unwrap();
-    //             let val = build_expr::<WrapConst>(val)?;
-    //             algo_opts.insert(name.to_string(), val);
-    //         }
-    //         _ => unreachable!(),
-    //     }
-    // }
-    // Ok(
-    //     json!({"algo_out": out_symbol, "algo_name": algo_name, "relations": algo_rels, "options": algo_opts}),
-    // )
+fn parse_algo_rule(
+    src: Pair<'_>,
+    param_pool: &BTreeMap<String, DataValue>,
+) -> Result<(Symbol, AlgoApply)> {
+    let mut src = src.into_inner();
+    let out_symbol = src.next().unwrap().as_str();
+    let algo_name = &src.next().unwrap().as_str().strip_suffix('!').unwrap();
+    let mut rule_args: Vec<AlgoRuleArg> = vec![];
+    let mut options: BTreeMap<SmartString<LazyCompact>, Expr> = Default::default();
+
+    for nxt in src {
+        match nxt.as_rule() {
+            Rule::algo_rel => {
+                let inner = nxt.into_inner().next().unwrap();
+                match inner.as_rule() {
+                    Rule::algo_rule_rel => {
+                        let mut els = inner.into_inner();
+                        let name = els.next().unwrap().as_str();
+                        let args = els.map(|v| Symbol::from(v.as_str())).collect_vec();
+                        rule_args.push(AlgoRuleArg::InMem(Symbol::from(name), args))
+                    }
+                    Rule::algo_view_rel => {
+                        let mut els = inner.into_inner();
+                        let name = els.next().unwrap().as_str();
+                        let args = els.map(|v| Symbol::from(v.as_str())).collect_vec();
+                        rule_args.push(AlgoRuleArg::Stored(Symbol::from(name), args))
+                    }
+                    Rule::algo_triple_rel => {
+                        let mut els = inner.into_inner();
+                        let fst = els.next().unwrap().as_str();
+                        let mdl = els.next().unwrap();
+                        let mut dir = TripleDir::Fwd;
+                        let ident = match mdl.as_rule() {
+                            Rule::rev_triple_marker => {
+                                dir = TripleDir::Bwd;
+                                els.next().unwrap().as_str()
+                            }
+                            Rule::compound_ident => mdl.as_str(),
+                            _ => unreachable!(),
+                        };
+                        let snd = els.next().unwrap().as_str();
+                        rule_args.push(AlgoRuleArg::Triple(
+                            Symbol::from(ident),
+                            vec![Symbol::from(fst), Symbol::from(snd)],
+                            dir,
+                        ));
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            Rule::algo_opt_pair => {
+                let mut inner = nxt.into_inner();
+                let name = inner.next().unwrap().as_str();
+                let val = inner.next().unwrap();
+                let val = build_expr(val, param_pool)?;
+                options.insert(SmartString::from(name), val);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    Ok((
+        Symbol::from(out_symbol),
+        AlgoApply {
+            algo: AlgoHandle {
+                name: Symbol::from(*algo_name),
+            },
+            rule_args: vec![],
+            options: Default::default(),
+        },
+    ))
 }
 
-pub(crate) fn build_expr(pair: Pair<'_>) -> Result<Expr> {
-    // PREC_CLIMBER.climb(pair.into_inner(), build_unary::<T>, build_expr_infix)
-    todo!()
-}
 
 fn parse_limit_or_offset(src: Pair<'_>) -> Result<usize> {
     let src = src.into_inner().next().unwrap().as_str();

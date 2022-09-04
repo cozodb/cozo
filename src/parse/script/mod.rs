@@ -4,11 +4,11 @@ use miette::{IntoDiagnostic, Result};
 use pest::Parser;
 
 use crate::data::program::InputProgram;
-use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::script::query::parse_query;
 
 pub(crate) mod query;
+pub(crate) mod expr;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "cozoscript.pest"]
@@ -23,7 +23,7 @@ pub(crate) enum CozoScript {
 
 pub(crate) fn parse_script(
     src: &str,
-    param_pool: &BTreeMap<Symbol, DataValue>,
+    param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<CozoScript> {
     let parsed = CozoScriptParser::parse(Rule::script, src)
         .into_diagnostic()?

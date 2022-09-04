@@ -540,7 +540,7 @@ impl SessionTx {
         param_pool: &BTreeMap<Symbol, DataValue>,
     ) -> Result<InputAtom> {
         let mut pred = Self::parse_apply_expr(payload, param_pool)?;
-        pred.partial_eval(param_pool)?;
+        pred.partial_eval()?;
         Ok(InputAtom::Predicate(pred))
     }
     fn parse_unification(
@@ -562,7 +562,7 @@ impl SessionTx {
             .get("expr")
             .ok_or_else(|| miette!("expect unify map to have field 'expr'"))?;
         let mut expr = Self::parse_expr_arg(expr, params_pool)?;
-        expr.partial_eval(params_pool)?;
+        expr.partial_eval()?;
         let one_many_unif = match payload.get("multi") {
             None => false,
             Some(v) => v
@@ -588,7 +588,8 @@ impl SessionTx {
                 "wrong input var format: {}",
                 name
             );
-            return Ok(Expr::Param(Symbol::from(name)));
+            todo!()
+            // return Ok(Expr::Param(Symbol::from(name)));
         }
 
         let name = payload
@@ -658,7 +659,7 @@ impl SessionTx {
                     Ok(Expr::Const(v.into()))
                 } else if map.contains_key("op") || map.contains_key("param") {
                     let mut ret = Self::parse_apply_expr(map, params_pool)?;
-                    ret.partial_eval(params_pool)?;
+                    ret.partial_eval()?;
                     Ok(ret)
                 } else {
                     bail!("expression object must contain either 'const' or 'pred' key");
@@ -1015,7 +1016,7 @@ impl SessionTx {
         &mut self,
         entity_rep: &JsonValue,
         vld: Validity,
-    ) -> Result<InputTerm<EntityId>> {
+    ) -> Result<InputTerm<DataValue>> {
         if let Some(s) = entity_rep.as_str() {
             let var = Symbol::from(s);
             if s.starts_with(['?', '_']) {
@@ -1025,11 +1026,12 @@ impl SessionTx {
             }
         }
         if let Some(u) = entity_rep.as_u64() {
-            return Ok(InputTerm::Const(EntityId(u)));
+            return Ok(InputTerm::Const(DataValue::from(u as i64)));
         }
         if let Some(o) = entity_rep.as_object() {
-            let eid = self.parse_eid_from_map(o, vld)?;
-            return Ok(InputTerm::Const(eid));
+            todo!()
+            // let eid = self.parse_eid_from_map(o, vld)?;
+            // return Ok(InputTerm::Const(eid));
         }
         bail!("cannot parse {} as entity", entity_rep);
     }

@@ -405,12 +405,12 @@ fn parse_triple(src: Pair<'_>) -> Result<JsonValue> {
 fn parse_triple_arg(src: Pair<'_>) -> Result<JsonValue> {
     match src.as_rule() {
         Rule::expr => build_expr::<WrapConst>(src),
-        Rule::triple_pull => {
-            let mut src = src.into_inner();
-            let attr = src.next().unwrap();
-            let val = build_expr::<NoWrapConst>(src.next().unwrap())?;
-            Ok(json!({ attr.as_str(): val }))
-        }
+        // Rule::triple_pull => {
+        //     let mut src = src.into_inner();
+        //     let attr = src.next().unwrap();
+        //     let val = build_expr::<NoWrapConst>(src.next().unwrap())?;
+        //     Ok(json!({ attr.as_str(): val }))
+        // }
         _ => unreachable!(),
     }
 }

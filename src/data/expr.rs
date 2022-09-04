@@ -15,7 +15,6 @@ use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
     Binding(Symbol, Option<usize>),
-    Param(Symbol),
     Const(DataValue),
     Apply(&'static Op, Box<[Expr]>),
 }
@@ -61,7 +60,7 @@ impl Expr {
                 })?;
                 *idx = Some(found_idx)
             }
-            Expr::Const(_) | Expr::Param(_) => {}
+            Expr::Const(_) => {}
             Expr::Apply(_, args) => {
                 for arg in args.iter_mut() {
                     arg.fill_binding_indices(binding_map)?;
@@ -82,7 +81,7 @@ impl Expr {
                     coll.insert(*idx);
                 }
             }
-            Expr::Const(_) | Expr::Param(_) => {}
+            Expr::Const(_) => {}
             Expr::Apply(_, args) => {
                 for arg in args.iter() {
                     arg.do_binding_indices(coll);
@@ -90,32 +89,19 @@ impl Expr {
             }
         }
     }
-    pub(crate) fn eval_to_const(mut self, param_pool: &BTreeMap<Symbol, DataValue>) -> Result<DataValue> {
-        self.partial_eval(param_pool)?;
+    pub(crate) fn eval_to_const(mut self) -> Result<DataValue> {
+        self.partial_eval()?;
         match self {
             Expr::Const(c) => Ok(c),
             v => bail!("expect expression to be completed evaluated at this point: {:?}", v)
 
         }
     }
-    pub(crate) fn partial_eval(&mut self, param_pool: &BTreeMap<Symbol, DataValue>) -> Result<()> {
-        let found_val = if let Expr::Param(s) = self {
-            Some(
-                param_pool
-                    .get(s)
-                    .ok_or_else(|| miette!("input parameter {} not found", s))?,
-            )
-        } else {
-            None
-        };
-        if let Some(found_val) = found_val {
-            *self = Expr::Const(found_val.clone());
-            return Ok(());
-        }
+    pub(crate) fn partial_eval(&mut self) -> Result<()> {
         if let Expr::Apply(_, args) = self {
             let mut all_evaluated = true;
             for arg in args.iter_mut() {
-                arg.partial_eval(param_pool)?;
+                arg.partial_eval()?;
                 all_evaluated = all_evaluated && matches!(arg, Expr::Const(_));
             }
             if all_evaluated {
@@ -146,7 +132,7 @@ impl Expr {
             Expr::Binding(b, _) => {
                 coll.insert(b.clone());
             }
-            Expr::Const(_) | Expr::Param(_) => {}
+            Expr::Const(_) => {}
             Expr::Apply(_, args) => {
                 for arg in args.iter() {
                     arg.collect_bindings(coll)
@@ -176,7 +162,6 @@ impl Expr {
                     }
                 }
             }
-            Expr::Param(s) => bail!("input var {} not bound", s),
         })
     }
     pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
@@ -192,7 +177,6 @@ impl Expr {
                 let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings)).try_collect()?;
                 (op.inner)(&args)
             }
-            Expr::Param(s) => bail!("input var {} not bound", s),
         }
     }
     pub(crate) fn eval_pred(&self, bindings: &Tuple) -> Result<bool> {
@@ -203,7 +187,7 @@ impl Expr {
     }
     pub(crate) fn extract_bound(&self, target: &Symbol) -> Result<ValueRange> {
         Ok(match self {
-            Expr::Binding(_, _) | Expr::Param(_) | Expr::Const(_) => ValueRange::default(),
+            Expr::Binding(_, _) | Expr::Const(_) => ValueRange::default(),
             Expr::Apply(op, args) => match op.name {
                 n if n == OP_GE.name || n == OP_GT.name => {
                     if let Some(symb) = args[0].get_binding() {

@@ -119,7 +119,7 @@ impl InputAtom {
             InputAtom::Rule(r) => r.normalize(false, gen),
             InputAtom::View(v) => v.normalize(false, gen),
             InputAtom::Predicate(mut p) => {
-                p.partial_eval(&Default::default())?;
+                p.partial_eval()?;
                 Disjunction::singlet(NormalFormAtom::Predicate(p))
             }
             InputAtom::Negation(n) => match *n {
@@ -211,7 +211,7 @@ impl InputAttrTripleAtom {
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const(eid.as_datavalue()),
+                    expr: Expr::Const(eid),
                     one_many_unif: false,
                 });
                 let uv = NormalFormAtom::Unification(Unification {
@@ -246,7 +246,7 @@ impl InputAttrTripleAtom {
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const(eid.as_datavalue()),
+                    expr: Expr::Const(eid),
                     one_many_unif: false,
                 });
                 vec![ue, ret]

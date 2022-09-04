@@ -2,8 +2,8 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
-use miette::{miette, bail, Result};
 use either::{Left, Right};
+use miette::{bail, miette, Result};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 
@@ -11,7 +11,7 @@ use crate::algo::AlgoHandle;
 use crate::data::aggr::Aggregation;
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
-use crate::data::id::{EntityId, Validity};
+use crate::data::id::Validity;
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::DataValue;
 use crate::parse::query::{ConstRules, QueryOutOptions};
@@ -159,8 +159,8 @@ impl InputProgram {
                             counter += 1;
                             Symbol::from(&format!("***{}", counter) as &str)
                         };
-                        let normalized_body =
-                            InputAtom::Conjunction(rule.body.clone()).disjunctive_normal_form(tx)?;
+                        let normalized_body = InputAtom::Conjunction(rule.body.clone())
+                            .disjunctive_normal_form(tx)?;
                         let mut new_head = Vec::with_capacity(rule.head.len());
                         let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
                         for symb in rule.head.iter() {
@@ -439,7 +439,7 @@ pub(crate) enum MagicAtom {
 #[derive(Clone, Debug)]
 pub(crate) struct InputAttrTripleAtom {
     pub(crate) attr: Symbol,
-    pub(crate) entity: InputTerm<EntityId>,
+    pub(crate) entity: InputTerm<DataValue>,
     pub(crate) value: InputTerm<DataValue>,
 }
 
