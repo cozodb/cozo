@@ -11,15 +11,11 @@ use crate::data::value::DataValue;
 use crate::parse::expr::{build_expr, parse_string};
 use crate::parse::{Pair, Pairs, Rule};
 
-
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub(crate) enum TxAction {
     Put,
     Retract,
-    // RetractAllEA,
-    // RetractAllE,
-    // Ensure,
 }
 
 impl Display for TxAction {
@@ -27,7 +23,6 @@ impl Display for TxAction {
         write!(f, "{:?}", self)
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub(crate) enum EntityRep {
@@ -116,7 +111,6 @@ fn parse_tx_clause(
     let identifier = identifier.unwrap_or_else(|| {
         *temp_id_serial += 1;
         EntityRep::SysTempId(*temp_id_serial)
-
     });
     let mut coll = vec![];
     for (attr, val) in entities {
@@ -187,17 +181,3 @@ fn parse_tx_pair(
         _ => unreachable!(),
     })
 }
-//
-// fn parse_tx_el(src: Pair<'_>) -> Result<JsonValue> {
-//     match src.as_rule() {
-//         Rule::tx_map => parse_tx_map(src),
-//         Rule::tx_list => parse_tx_list(src),
-//         Rule::expr => build_expr::<NoWrapConst>(src),
-//         Rule::neg_num => Ok(JsonValue::from_str(src.as_str()).into_diagnostic()?),
-//         _ => unreachable!(),
-//     }
-// }
-//
-// fn parse_tx_list(src: Pair<'_>) -> Result<JsonValue> {
-//     src.into_inner().map(parse_tx_el).try_collect()
-// }
