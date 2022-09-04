@@ -18,7 +18,7 @@ use crate::data::encode::{
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::triple::StoreOp;
 use crate::data::value::DataValue;
-use crate::parse::script::tx::{EntityRep, Quintuple, TxAction};
+use crate::parse::tx::{EntityRep, Quintuple, TxAction};
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
@@ -46,12 +46,13 @@ impl SessionTx {
         }
 
         for payload in payloads {
+            let vld = payload.validity.unwrap_or(default_vld);
             match payload.action {
                 TxAction::Put => {
                     let attr = self
                         .attr_by_name(&payload.attr_name)?
                         .ok_or_else(|| miette!("attribute {} not found", payload.attr_name))?;
-                    let val = attr.coerce_value(payload.value, &mut str_temp_to_perm_ids)?;
+                    let val = attr.coerce_value(payload.value, &mut str_temp_to_perm_ids, self, vld)?;
                     match payload.entity {
                         EntityRep::Id(perm) => {
                             ret.push((
@@ -59,7 +60,7 @@ impl SessionTx {
                                     perm,
                                     &attr,
                                     &val,
-                                    payload.validity.unwrap_or(default_vld),
+                                    payload.validity.unwrap_or(vld),
                                 )?,
                                 1,
                             ));
@@ -81,7 +82,7 @@ impl SessionTx {
                                     eid,
                                     &attr,
                                     &val,
-                                    payload.validity.unwrap_or(default_vld),
+                                    vld,
                                 )?,
                                 1,
                             ));
@@ -95,13 +96,12 @@ impl SessionTx {
                                     eid,
                                     &attr,
                                     &val,
-                                    payload.validity.unwrap_or(default_vld),
+                                    vld,
                                 )?,
                                 1,
                             ));
                         }
                         EntityRep::PullByKey(symb, val) => {
-                            let vld = payload.validity.unwrap_or(default_vld);
                             let attr = self
                                 .attr_by_name(&symb)?
                                 .ok_or_else(|| miette!("required attribute {} not found", symb))?;
@@ -285,21 +285,6 @@ impl SessionTx {
         v: &DataValue,
         vld: Validity,
     ) -> Result<EntityId> {
-        if attr.val_type.is_ref_type() {
-            let v_eid = v.get_entity_id()?;
-            if !v_eid.is_perm() {
-                let perm_v_eid = match self.temp_entity_to_perm.get(&v_eid) {
-                    Some(id) => *id,
-                    None => {
-                        let new_eid = EntityId(self.last_ent_id.fetch_add(1, Ordering::AcqRel) + 1);
-                        self.temp_entity_to_perm.insert(v_eid, new_eid);
-                        new_eid
-                    }
-                };
-                let new_v = perm_v_eid.as_datavalue();
-                return self.write_triple(eid, attr, &new_v, vld, StoreOp::Assert);
-            }
-        }
         self.write_triple(eid, attr, v, vld, StoreOp::Assert)
     }
 
@@ -379,12 +364,12 @@ impl SessionTx {
         }
     }
     pub(crate) fn eid_by_unique_av(
-        &mut self,
+        &self,
         attr: &Attribute,
         v: &DataValue,
         vld: Validity,
     ) -> Result<Option<EntityId>> {
-        if let Some(inner) = self.eid_by_attr_val_cache.get(v) {
+        if let Some(inner) = self.eid_by_attr_val_cache.borrow_mut().get(v) {
             if let Some(found) = inner.get(&(attr.id, vld)) {
                 return Ok(*found);
             }
@@ -404,13 +389,14 @@ impl SessionTx {
                     let eid = decode_value(&v_slice[8..])?.get_entity_id()?;
                     // }
                     let ret = Some(eid);
-                    self.eid_by_attr_val_cache
+                    self.eid_by_attr_val_cache.borrow_mut()
                         .entry(v.clone())
                         .or_default()
                         .insert((attr.id, vld), ret);
                     ret
                 } else {
                     self.eid_by_attr_val_cache
+                        .borrow_mut()
                         .entry(v.clone())
                         .or_default()
                         .insert((attr.id, vld), None);

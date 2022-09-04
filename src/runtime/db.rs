@@ -23,12 +23,10 @@ use crate::data::program::{InputProgram, ViewOp};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-// use crate::parse::cozoscript::query::{parse_query_to_json, ScriptType};
-use crate::parse::script::schema::AttrTxItem;
-use crate::parse::script::sys::{CompactTarget, SysOp};
-use crate::parse::script::tx::Quintuple;
-use crate::parse::script::{parse_script, CozoScript};
-// use crate::query::pull::CurrentPath;
+use crate::parse::{parse_script, CozoScript};
+use crate::parse::schema::AttrTxItem;
+use crate::parse::sys::{CompactTarget, SysOp};
+use crate::parse::tx::Quintuple;
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::{ViewRelId, ViewRelMetadata};
 use crate::utils::swap_option_result;
@@ -147,7 +145,7 @@ impl Db {
     }
 
     fn load_last_ids(&self) -> Result<()> {
-        let mut tx = self.transact()?;
+        let tx = self.transact()?;
         self.last_tx_id
             .store(tx.load_last_tx_id()?.0, Ordering::Release);
         self.last_attr_id
@@ -170,9 +168,7 @@ impl Db {
             last_tx_id: self.last_tx_id.clone(),
             attr_by_id_cache: Default::default(),
             attr_by_kw_cache: Default::default(),
-            temp_entity_to_perm: Default::default(),
             eid_by_attr_val_cache: Default::default(),
-            touched_eids: Default::default(),
         };
         Ok(ret)
     }
@@ -191,9 +187,7 @@ impl Db {
             last_tx_id: self.last_tx_id.clone(),
             attr_by_id_cache: Default::default(),
             attr_by_kw_cache: Default::default(),
-            temp_entity_to_perm: Default::default(),
             eid_by_attr_val_cache: Default::default(),
-            touched_eids: Default::default(),
         };
         Ok(ret)
     }
@@ -232,7 +226,6 @@ impl Db {
     // }
     fn transact_triples(&self, payloads: Vec<Quintuple>) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
-        // let (payloads, comment) = tx.parse_tx_requests(payload)?;
         let res: JsonValue = tx
             .tx_triples(payloads)?
             .iter()
@@ -245,10 +238,6 @@ impl Db {
             "results": res
         }))
     }
-    // pub fn run_tx_attributes(&self, payload: &str) -> Result<JsonValue> {
-    //     let payload = parse_schema_to_json(payload)?;
-    //     self.transact_attributes(&payload)
-    // }
     fn transact_attributes(&self, attrs: Vec<AttrTxItem>) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
         let res: JsonValue = tx

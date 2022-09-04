@@ -11,7 +11,7 @@ use crate::data::encode::{
 use crate::data::id::AttrId;
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
-use crate::parse::script::schema::AttrTxItem;
+use crate::parse::schema::AttrTxItem;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
@@ -32,21 +32,21 @@ impl SessionTx {
             } else {
                 ret.push((item.op, self.new_attr(item.attr)?));
             }
-            self.attr_by_id_cache.write().unwrap().remove(&id);
-            self.attr_by_kw_cache.write().unwrap().remove(&kw);
+            self.attr_by_id_cache.borrow_mut().remove(&id);
+            self.attr_by_kw_cache.borrow_mut().remove(&kw);
         }
         Ok(ret)
     }
 
     pub(crate) fn attr_by_id(&self, aid: AttrId) -> Result<Option<Attribute>> {
-        if let Some(res) = self.attr_by_id_cache.read().unwrap().get(&aid) {
+        if let Some(res) = self.attr_by_id_cache.borrow().get(&aid) {
             return Ok(res.clone());
         }
 
         let anchor = encode_sentinel_attr_by_id(aid);
         Ok(match self.tx.get(&anchor, false).into_diagnostic()? {
             None => {
-                self.attr_by_id_cache.write().unwrap().insert(aid, None);
+                self.attr_by_id_cache.borrow_mut().insert(aid, None);
                 None
             }
             Some(v_slice) => {
@@ -54,20 +54,15 @@ impl SessionTx {
                 let op = StoreOp::try_from(data[0])?;
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
-                    self.attr_by_id_cache.write().unwrap().insert(attr.id, None);
-                    self.attr_by_kw_cache
-                        .write()
-                        .unwrap()
-                        .insert(attr.name, None);
+                    self.attr_by_id_cache.borrow_mut().insert(attr.id, None);
+                    self.attr_by_kw_cache.borrow_mut().insert(attr.name, None);
                     None
                 } else {
                     self.attr_by_id_cache
-                        .write()
-                        .unwrap()
+                        .borrow_mut()
                         .insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
-                        .write()
-                        .unwrap()
+                        .borrow_mut()
                         .insert(attr.name.clone(), Some(attr.clone()));
                     Some(attr)
                 }
@@ -76,7 +71,7 @@ impl SessionTx {
     }
 
     pub(crate) fn attr_by_name(&self, name: &Symbol) -> Result<Option<Attribute>> {
-        if let Some(res) = self.attr_by_kw_cache.read().unwrap().get(name) {
+        if let Some(res) = self.attr_by_kw_cache.borrow().get(name) {
             return Ok(res.clone());
         }
 
@@ -84,8 +79,7 @@ impl SessionTx {
         Ok(match self.tx.get(&anchor, false).into_diagnostic()? {
             None => {
                 self.attr_by_kw_cache
-                    .write()
-                    .unwrap()
+                    .borrow_mut()
                     .insert(name.clone(), None);
                 None
             }
@@ -95,20 +89,17 @@ impl SessionTx {
                 debug_assert!(data.len() > 8);
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
-                    self.attr_by_id_cache.write().unwrap().insert(attr.id, None);
+                    self.attr_by_id_cache.borrow_mut().insert(attr.id, None);
                     self.attr_by_kw_cache
-                        .write()
-                        .unwrap()
+                        .borrow_mut()
                         .insert(name.clone(), None);
                     None
                 } else {
                     self.attr_by_id_cache
-                        .write()
-                        .unwrap()
+                        .borrow_mut()
                         .insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
-                        .write()
-                        .unwrap()
+                        .borrow_mut()
                         .insert(attr.name.clone(), Some(attr.clone()));
                     Some(attr)
                 }

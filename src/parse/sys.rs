@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use miette::{IntoDiagnostic, Result};
 
 use crate::data::symb::Symbol;
-use crate::parse::script::{Pairs, Rule};
+use crate::parse::{Pairs, Rule};
 
 #[derive(
     Debug,

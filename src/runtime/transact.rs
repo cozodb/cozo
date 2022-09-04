@@ -1,8 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
-use miette::{IntoDiagnostic, miette, Result};
+use miette::{miette, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -30,13 +31,11 @@ pub struct SessionTx {
     pub(crate) last_attr_id: Arc<AtomicU64>,
     pub(crate) last_ent_id: Arc<AtomicU64>,
     pub(crate) last_tx_id: Arc<AtomicU64>,
-    pub(crate) attr_by_id_cache: RwLock<BTreeMap<AttrId, Option<Attribute>>>,
-    pub(crate) attr_by_kw_cache: RwLock<BTreeMap<Symbol, Option<Attribute>>>,
-    pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
+    pub(crate) attr_by_id_cache: RefCell<BTreeMap<AttrId, Option<Attribute>>>,
+    pub(crate) attr_by_kw_cache: RefCell<BTreeMap<Symbol, Option<Attribute>>>,
     pub(crate) eid_by_attr_val_cache:
-        BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
+        RefCell<BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>>,
     // "touched" requires the id to exist prior to the transaction, and something related to it has changed
-    pub(crate) touched_eids: BTreeSet<EntityId>,
 }
 
 #[derive(
@@ -86,15 +85,13 @@ impl SessionTx {
         )
     }
 
-    pub(crate) fn clear_cache(&mut self) {
-        self.attr_by_id_cache.write().unwrap().clear();
-        self.attr_by_kw_cache.write().unwrap().clear();
-        self.temp_entity_to_perm.clear();
-        self.touched_eids.clear();
-        self.eid_by_attr_val_cache.clear();
+    pub(crate) fn clear_cache(&self) {
+        self.attr_by_id_cache.borrow_mut().clear();
+        self.attr_by_kw_cache.borrow_mut().clear();
+        self.eid_by_attr_val_cache.borrow_mut().clear();
     }
 
-    pub(crate) fn load_last_entity_id(&mut self) -> Result<EntityId> {
+    pub(crate) fn load_last_entity_id(&self) -> Result<EntityId> {
         let e_lower = encode_sentinel_entity_attr(EntityId::MIN_PERM, AttrId::MIN_PERM);
         let e_upper = encode_sentinel_entity_attr(EntityId::MAX_PERM, AttrId::MIN_PERM);
         let it = self.bounded_scan_last(&e_lower, &e_upper);
@@ -105,7 +102,7 @@ impl SessionTx {
         })
     }
 
-    pub(crate) fn load_last_attr_id(&mut self) -> Result<AttrId> {
+    pub(crate) fn load_last_attr_id(&self) -> Result<AttrId> {
         let e_lower = encode_sentinel_attr_by_id(AttrId::MIN_PERM);
         let e_upper = encode_sentinel_attr_by_id(AttrId::MAX_PERM);
         let it = self.bounded_scan_last(&e_lower, &e_upper);
@@ -115,7 +112,7 @@ impl SessionTx {
         })
     }
 
-    pub(crate) fn load_last_view_store_id(&mut self) -> Result<ViewRelId> {
+    pub(crate) fn load_last_view_store_id(&self) -> Result<ViewRelId> {
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
@@ -126,7 +123,7 @@ impl SessionTx {
         }
     }
 
-    pub(crate) fn load_last_tx_id(&mut self) -> Result<TxId> {
+    pub(crate) fn load_last_tx_id(&self) -> Result<TxId> {
         let e_lower = encode_tx(TxId::MAX_USER);
         let e_upper = encode_tx(TxId::MAX_SYS);
         let it = self.bounded_scan_first(&e_lower, &e_upper);
@@ -156,21 +153,21 @@ impl SessionTx {
         self.w_tx_id
             .ok_or_else(|| miette!("attempting to write in read-only transaction"))
     }
-    pub(crate) fn bounded_scan(&mut self, lower: &[u8], upper: &[u8]) -> DbIter {
+    pub(crate) fn bounded_scan(&self, lower: &[u8], upper: &[u8]) -> DbIter {
         self.tx
             .iterator()
             .lower_bound(lower)
             .lower_bound(upper)
             .start()
     }
-    pub(crate) fn bounded_scan_first(&mut self, lower: &[u8], upper: &[u8]) -> DbIter {
+    pub(crate) fn bounded_scan_first(&self, lower: &[u8], upper: &[u8]) -> DbIter {
         // this is tricky, must be written like this!
         let mut it = self.tx.iterator().upper_bound(upper).start();
         it.seek(lower);
         it
     }
 
-    pub(crate) fn bounded_scan_last(&mut self, lower: &[u8], upper: &[u8]) -> DbIter {
+    pub(crate) fn bounded_scan_last(&self, lower: &[u8], upper: &[u8]) -> DbIter {
         // this is tricky, must be written like this!
         let mut it = self
             .tx

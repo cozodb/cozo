@@ -194,10 +194,10 @@ function App() {
                 <div style={{paddingTop: 10, display: 'flex', flexDirection: 'row'}}>
                     <Button text="Run script" onClick={() => handleQuery('script')}
                             disabled={inProgress}/>
-                    <Button text="Convert script to JSON" onClick={() => handleQuery('convert')}
-                            disabled={inProgress} style={{marginLeft: 5}}/>
-                    <Button text="Run JSON" onClick={() => handleQuery('json')}
-                            disabled={inProgress} style={{marginLeft: 5}}/>
+                    {/*<Button text="Convert script to JSON" onClick={() => handleQuery('convert')}*/}
+                    {/*        disabled={inProgress} style={{marginLeft: 5}}/>*/}
+                    {/*<Button text="Run JSON" onClick={() => handleQuery('json')}*/}
+                    {/*        disabled={inProgress} style={{marginLeft: 5}}/>*/}
 
                     <div style={{marginLeft: 10, marginTop: 5}}>
                         {statusMessage ? <Tag intent={errorMessage ? Intent.DANGER : Intent.SUCCESS} minimal>

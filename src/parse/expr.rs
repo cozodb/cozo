@@ -10,7 +10,7 @@ use crate::data::expr::{get_op, Expr};
 use crate::data::functions::{OP_LIST, OP_MINUS, OP_NEGATE};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
-use crate::parse::script::{Pair, Rule};
+use crate::parse::{Pair, Rule};
 
 lazy_static! {
     static ref PREC_CLIMBER: PrecClimber<Rule> = {

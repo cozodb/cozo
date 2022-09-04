@@ -191,3 +191,82 @@
 //         }))
 //     }
 // }
+
+
+// fn parse_pull_spec(src: Pair<'_>) -> Result<JsonValue> {
+//     let mut src = src.into_inner();
+//     let name = src.next().unwrap().as_str();
+//     let args: Vec<_> = src
+//         .next()
+//         .unwrap()
+//         .into_inner()
+//         .map(parse_pull_arg)
+//         .try_collect()?;
+//     Ok(json!({"pull": name, "spec": args}))
+// }
+//
+// fn parse_pull_arg(src: Pair<'_>) -> Result<JsonValue> {
+//     let mut src = src.into_inner();
+//     let pull_def = src.next().unwrap();
+//     let mut ret = match pull_def.as_rule() {
+//         Rule::pull_all => {
+//             json!("*")
+//         }
+//         Rule::pull_id => {
+//             json!("_id")
+//         }
+//         Rule::pull_attr => {
+//             let mut pull_def = pull_def.into_inner();
+//             let mut ret = json!(pull_def.next().unwrap().as_str());
+//             if let Some(args) = pull_def.next() {
+//                 let args: Vec<_> = args.into_inner().map(parse_pull_arg).try_collect()?;
+//                 if !args.is_empty() {
+//                     if !ret.is_object() {
+//                         ret = json!({ "pull": ret });
+//                     }
+//                     ret.as_object_mut()
+//                         .unwrap()
+//                         .insert("spec".to_string(), json!(args));
+//                 }
+//             }
+//             ret
+//         }
+//         _ => unreachable!(),
+//     };
+//     for modifier in src {
+//         if !ret.is_object() {
+//             ret = json!({ "pull": ret });
+//         }
+//         let inner_map = ret.as_object_mut().unwrap();
+//         match modifier.as_rule() {
+//             Rule::pull_as => {
+//                 inner_map.insert(
+//                     "as".to_string(),
+//                     json!(modifier.into_inner().next().unwrap().as_str()),
+//                 );
+//             }
+//             Rule::pull_limit => {
+//                 let n = modifier.into_inner().next().unwrap().as_str();
+//                 inner_map.insert("limit".to_string(), json!(str2usize(n)?));
+//             }
+//             Rule::pull_offset => {
+//                 let n = modifier.into_inner().next().unwrap().as_str();
+//                 inner_map.insert("offset".to_string(), json!(str2usize(n)?));
+//             }
+//             Rule::pull_default => {
+//                 let d = build_expr::<NoWrapConst>(modifier.into_inner().next().unwrap())?;
+//                 inner_map.insert("default".to_string(), d);
+//             }
+//             Rule::pull_recurse => {
+//                 let d = build_expr::<NoWrapConst>(modifier.into_inner().next().unwrap())?;
+//                 inner_map.insert("recurse".to_string(), d);
+//             }
+//             Rule::pull_depth => {
+//                 let n = modifier.into_inner().next().unwrap().as_str();
+//                 inner_map.insert("depth".to_string(), json!(str2usize(n)?));
+//             }
+//             _ => unreachable!(),
+//         }
+//     }
+//     Ok(json!(ret))
+// }

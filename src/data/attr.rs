@@ -1,19 +1,20 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use miette::{bail, miette, IntoDiagnostic, Result};
+use miette::{bail, ensure, miette, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::data::encode::EncodedVec;
-use crate::data::id::{AttrId, EntityId, TxId};
+use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, Num};
-// use crate::parse::triple::TempIdCtx;
+use crate::runtime::transact::SessionTx;
 
+// use crate::parse::triple::TempIdCtx;
 
 #[repr(u8)]
 #[derive(
@@ -264,12 +265,43 @@ impl Attribute {
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
         Ok(rmp_serde::from_slice(data).into_diagnostic()?)
     }
-    pub(crate) fn coerce_value(&self, value: DataValue, ctx: &BTreeMap<SmartString<LazyCompact>, EntityId>) -> Result<DataValue> {
+    pub(crate) fn coerce_value(
+        &self,
+        value: DataValue,
+        temp_ids: &BTreeMap<SmartString<LazyCompact>, EntityId>,
+        tx: &SessionTx,
+        vld: Validity,
+    ) -> Result<DataValue> {
         if self.val_type.is_ref_type() {
-            if let DataValue::Str(s) = &value {
-                return Ok(ctx.get(s)
-                    .ok_or_else(|| miette!("required tempid {} not found", s))?.as_datavalue());
-
+            match &value {
+                DataValue::Str(s) => {
+                    return Ok(temp_ids
+                        .get(s)
+                        .ok_or_else(|| miette!("required tempid {} not found", s))?
+                        .as_datavalue());
+                }
+                DataValue::List(ls) => {
+                    ensure!(
+                        ls.len() == 2,
+                        "list specifier for ref types must have length 2"
+                    );
+                    let attr_name = ls[0]
+                        .get_string()
+                        .ok_or_else(|| miette!("list specifier requires first argument string"))?;
+                    let attr = tx
+                        .attr_by_name(&Symbol::from(attr_name))?
+                        .ok_or_else(|| miette!("attribute not found: {}", attr_name))?;
+                    ensure!(
+                        attr.indexing.is_unique_index(),
+                        "ref type list specifier requires unique index"
+                    );
+                    let val = attr.coerce_value(ls[1].clone(), temp_ids, tx, vld)?;
+                    let eid = tx.eid_by_unique_av(&attr, &val, vld)?.ok_or_else(|| {
+                        miette!("entity not found for attr val {} {:?}", attr_name, val)
+                    })?;
+                    return Ok(eid.as_datavalue());
+                }
+                _ => {}
             }
         }
         self.val_type.coerce_value(value)

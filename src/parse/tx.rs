@@ -8,8 +8,8 @@ use smartstring::{LazyCompact, SmartString};
 use crate::data::id::{EntityId, Validity};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
-use crate::parse::script::expr::{build_expr, parse_string};
-use crate::parse::script::{Pair, Pairs, Rule};
+use crate::parse::expr::{build_expr, parse_string};
+use crate::parse::{Pair, Pairs, Rule};
 
 
 #[repr(u8)]
