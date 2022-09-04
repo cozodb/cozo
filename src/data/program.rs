@@ -13,9 +13,66 @@ use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
 use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::query::{ConstRules, QueryOutOptions};
+use crate::query::pull::PullSpecs;
 use crate::runtime::transact::SessionTx;
+use crate::runtime::view::ViewRelMetadata;
+
+pub(crate) type ConstRules = BTreeMap<MagicSymbol, Vec<Tuple>>;
+
+pub(crate) type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) struct QueryOutOptions {
+    pub(crate) out_spec: Option<OutSpec>,
+    pub(crate) vld: Validity,
+    pub(crate) limit: Option<usize>,
+    pub(crate) offset: Option<usize>,
+    pub(crate) timeout: Option<u64>,
+    pub(crate) sorters: Vec<(Symbol, SortDir)>,
+    pub(crate) as_view: Option<(ViewRelMetadata, ViewOp)>,
+}
+
+
+impl Default for QueryOutOptions {
+    fn default() -> Self {
+        Self {
+            out_spec: None,
+            vld: Validity::current(),
+            limit: None,
+            offset: None,
+            timeout: None,
+            sorters: vec![],
+            as_view: None,
+        }
+    }
+}
+
+
+impl QueryOutOptions {
+    pub(crate) fn num_to_take(&self) -> Option<usize> {
+        match (self.limit, self.offset) {
+            (None, _) => None,
+            (Some(i), None) => Some(i),
+            (Some(i), Some(j)) => Some(i + j),
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum SortDir {
+    Asc,
+    Dsc,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum ViewOp {
+    Create,
+    Rederive,
+    Put,
+    Retract,
+}
 
 #[derive(Default)]
 pub(crate) struct TempSymbGen {
@@ -148,6 +205,7 @@ impl InputProgram {
         }
     }
     pub(crate) fn to_normalized_program(&self, tx: &SessionTx) -> Result<NormalFormProgram> {
+        let default_vld = Validity::current();
         let mut prog: BTreeMap<Symbol, _> = Default::default();
         for (k, rules_or_algo) in &self.prog {
             match rules_or_algo {
@@ -191,7 +249,7 @@ impl InputProgram {
                                 head: new_head.clone(),
                                 aggr: rule.aggr.clone(),
                                 body,
-                                vld: rule.vld,
+                                vld: rule.vld.unwrap_or(default_vld),
                             };
                             collected_rules.push(normalized_rule.convert_to_well_ordered_rule()?);
                         }
@@ -366,7 +424,7 @@ pub(crate) struct InputRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<InputAtom>,
-    pub(crate) vld: Validity,
+    pub(crate) vld: Option<Validity>,
 }
 
 #[derive(Debug, Clone)]

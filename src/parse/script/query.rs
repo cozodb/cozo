@@ -11,15 +11,10 @@ use crate::algo::AlgoHandle;
 use crate::data::aggr::{get_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
-use crate::data::program::{
-    AlgoApply, AlgoRuleArg, InputAtom, InputAttrTripleAtom, InputProgram, InputRule,
-    InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputViewApplyAtom, MagicSymbol, TripleDir,
-    Unification,
-};
+use crate::data::program::{AlgoApply, AlgoRuleArg, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputViewApplyAtom, MagicSymbol, OutSpec, QueryOutOptions, SortDir, TripleDir, Unification, ViewOp};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::query::{ConstRules, OutSpec, QueryOutOptions, SortDir, ViewOp};
 use crate::parse::script::expr::build_expr;
 use crate::parse::script::{Pair, Pairs, Rule};
 use crate::runtime::view::{ViewRelId, ViewRelKind, ViewRelMetadata};
@@ -31,12 +26,11 @@ pub(crate) fn parse_query(
     let mut progs: BTreeMap<Symbol, InputRulesOrAlgo> = Default::default();
     let mut const_rules: ConstRules = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
-    let default_vld = Validity::current();
 
     for pair in src {
         match pair.as_rule() {
             Rule::rule => {
-                let (name, rule) = parse_rule(pair, param_pool, default_vld)?;
+                let (name, rule) = parse_rule(pair, param_pool)?;
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
                         e.insert(InputRulesOrAlgo::Rules(vec![rule]));
@@ -189,17 +183,16 @@ fn get_entry_arity(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<usize> {
 fn parse_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    default_vld: Validity,
 ) -> Result<(Symbol, InputRule)> {
     let mut src = src.into_inner();
     let head = src.next().unwrap();
     let (name, head, aggr) = parse_rule_head(head, param_pool)?;
-    let mut at = default_vld;
+    let mut at = None;
     let mut body = src.next().unwrap();
     if body.as_rule() == Rule::expr {
         let vld = build_expr(body, param_pool)?.eval_to_const()?;
         let vld = Validity::try_from(vld)?;
-        at = vld;
+        at = Some(vld);
         body = src.next().unwrap();
     }
     let mut body_clauses = vec![];
@@ -467,7 +460,7 @@ fn str2usize(src: &str) -> Result<usize> {
     Ok(usize::from_str(&src.replace('_', "")).into_diagnostic()?)
 }
 
-fn parse_out_option(src: Pair<'_>) -> Result<OutSpec> {
+fn parse_out_option(_src: Pair<'_>) -> Result<OutSpec> {
     // Ok(match src.as_rule() {
     //     Rule::out_list_spec => {
     //         let l: Vec<_> = src.into_inner().map(parse_pull_spec).try_collect()?;

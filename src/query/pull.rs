@@ -13,11 +13,11 @@ use crate::data::encode::{
 };
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::json::JsonValue;
+use crate::data::program::{QueryOutOptions, ViewOp};
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::query::{QueryOutOptions, ViewOp};
 use crate::query::relation::flatten_err;
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::ViewRelMetadata;

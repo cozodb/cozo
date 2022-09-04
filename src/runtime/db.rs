@@ -22,13 +22,13 @@ use crate::data::encode::{
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
+use crate::data::program::ViewOp;
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::cozoscript::query::{parse_query_to_json, ScriptType};
 use crate::parse::cozoscript::sys::{CompactTarget, SysOp};
-use crate::parse::query::ViewOp;
 use crate::parse::schema::AttrTxItem;
 use crate::parse::script::{parse_script, CozoScript};
 use crate::query::pull::CurrentPath;
@@ -380,7 +380,7 @@ impl Db {
         };
         Ok(json!({ key: payload }))
     }
-    pub fn run_json_query(&self, payload: &JsonValue) -> Result<JsonValue> {
+    pub fn run_json_query(&self, _payload: &JsonValue) -> Result<JsonValue> {
         todo!()
         // let (k, v) = payload
         //     .as_object()

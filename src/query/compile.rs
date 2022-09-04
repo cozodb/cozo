@@ -5,12 +5,9 @@ use itertools::Itertools;
 
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
-use crate::data::program::{
-    MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram,
-};
+use crate::data::program::{ConstRules, MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
-use crate::parse::query::ConstRules;
 use crate::query::relation::Relation;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;

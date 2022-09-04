@@ -3,11 +3,11 @@ use std::collections::BTreeMap;
 
 use miette::Result;
 use itertools::Itertools;
+use crate::data::program::SortDir;
 
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::query::SortDir;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
