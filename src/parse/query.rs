@@ -1,8 +1,8 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
-use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
+use miette::{bail, ensure, miette, Result};
 use serde_json::{json, Map};
 
 use crate::algo::AlgoHandle;
@@ -71,6 +71,20 @@ pub(crate) struct QueryOutOptions {
     pub(crate) timeout: Option<u64>,
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
     pub(crate) as_view: Option<(ViewRelMetadata, ViewOp)>,
+}
+
+impl Default for QueryOutOptions {
+    fn default() -> Self {
+        Self {
+            out_spec: None,
+            vld: Validity::current(),
+            limit: None,
+            offset: None,
+            timeout: None,
+            sorters: vec![],
+            as_view: None,
+        }
+    }
 }
 
 impl QueryOutOptions {

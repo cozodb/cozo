@@ -90,6 +90,14 @@ impl Expr {
             }
         }
     }
+    pub(crate) fn eval_to_const(mut self, param_pool: &BTreeMap<Symbol, DataValue>) -> Result<DataValue> {
+        self.partial_eval(param_pool)?;
+        match self {
+            Expr::Const(c) => Ok(c),
+            v => bail!("expect expression to be completed evaluated at this point: {:?}", v)
+
+        }
+    }
     pub(crate) fn partial_eval(&mut self, param_pool: &BTreeMap<Symbol, DataValue>) -> Result<()> {
         let found_val = if let Expr::Param(s) = self {
             Some(

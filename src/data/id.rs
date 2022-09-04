@@ -1,8 +1,8 @@
 use std::fmt::{Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use miette::{bail, IntoDiagnostic};
 use chrono::{DateTime, TimeZone, Utc};
+use miette::{bail, IntoDiagnostic};
 use serde_derive::{Deserialize, Serialize};
 
 use crate::data::json::JsonValue;
@@ -43,8 +43,9 @@ impl TryFrom<&str> for Validity {
     type Error = miette::Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let dt =
-            DateTime::parse_from_rfc2822(value).or_else(|_| DateTime::parse_from_rfc3339(value)).into_diagnostic()?;
+        let dt = DateTime::parse_from_rfc2822(value)
+            .or_else(|_| DateTime::parse_from_rfc3339(value))
+            .into_diagnostic()?;
         let sysdt: SystemTime = dt.into();
         let timestamp = sysdt.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64;
         Ok(Self(timestamp))
@@ -62,6 +63,20 @@ impl TryFrom<&JsonValue> for Validity {
             return s.try_into();
         }
         bail!("cannot convert {} to validity", value);
+    }
+}
+
+impl TryFrom<DataValue> for Validity {
+    type Error = miette::Error;
+
+    fn try_from(value: DataValue) -> Result<Self, Self::Error> {
+        if let Some(v) = value.get_int() {
+            return Ok(v.into());
+        }
+        if let Some(s) = value.get_string() {
+            return s.try_into();
+        }
+        bail!("cannot convert {:?} to validity", value);
     }
 }
 
