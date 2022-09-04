@@ -1,6 +1,6 @@
 #![warn(rust_2018_idioms, future_incompatible)]
 
-pub use anyhow::Error;
+pub use miette::Error;
 
 pub use cozorocks::DbBuilder;
 pub use data::encode::EncodedVec;

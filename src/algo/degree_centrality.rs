@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, ensure};
+use miette::{miette, ensure};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
@@ -23,10 +23,10 @@ impl AlgoImpl for DegreeCentrality {
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
-    ) -> anyhow::Result<()> {
+    ) -> miette::Result<()> {
         let it = rels
             .get(0)
-            .ok_or_else(|| anyhow!(
+            .ok_or_else(|| miette!(
                 "'degree_centrality' requires at least an edge relation to proceed"
             ))?
             .iter(tx, stores)?;
@@ -54,7 +54,7 @@ impl AlgoImpl for DegreeCentrality {
                 let id = tuple
                     .0
                     .get(0)
-                    .ok_or_else(|| anyhow!("nodes relation to 'degree_centrality' too short"))?;
+                    .ok_or_else(|| miette!("nodes relation to 'degree_centrality' too short"))?;
                 if !counter.contains_key(id) {
                     counter.insert(id.clone(), (0, 0, 0));
                 }

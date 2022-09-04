@@ -1,7 +1,7 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{ensure, Result};
+use miette::{ensure, Result};
 use itertools::Itertools;
 
 use crate::data::program::{

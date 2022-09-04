@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result, IntoDiagnostic};
 
 use cozorocks::{DbIter, IterBuilder};
 
@@ -44,7 +44,7 @@ impl SessionTx {
         }
 
         let anchor = encode_sentinel_attr_by_id(aid);
-        Ok(match self.tx.get(&anchor, false)? {
+        Ok(match self.tx.get(&anchor, false).into_diagnostic()? {
             None => {
                 self.attr_by_id_cache.insert(aid, None);
                 None
@@ -73,7 +73,7 @@ impl SessionTx {
         }
 
         let anchor = encode_sentinel_attr_by_name(name);
-        Ok(match self.tx.get(&anchor, false)? {
+        Ok(match self.tx.get(&anchor, false).into_diagnostic()? {
             None => {
                 self.attr_by_kw_cache.insert(name.clone(), None);
                 None
@@ -125,7 +125,7 @@ impl SessionTx {
     pub(crate) fn amend_attr(&mut self, attr: Attribute) -> Result<AttrId> {
         let existing = self
             .attr_by_id(attr.id)?
-            .ok_or_else(|| anyhow!("expected attribute id {:?} not found", attr.id))?;
+            .ok_or_else(|| miette!("expected attribute id {:?} not found", attr.id))?;
         let tx_id = self.get_write_tx_id()?;
         if existing.name != attr.name {
             ensure!(
@@ -143,7 +143,7 @@ impl SessionTx {
             );
             let kw_sentinel = encode_sentinel_attr_by_name(&existing.name);
             let attr_data = existing.encode_with_op_and_tx(StoreOp::Retract, tx_id);
-            self.tx.put(&kw_sentinel, &attr_data)?;
+            self.tx.put(&kw_sentinel, &attr_data).into_diagnostic()?;
         }
         self.put_attr(&attr, StoreOp::Assert)
     }
@@ -152,11 +152,11 @@ impl SessionTx {
         let tx_id = self.get_write_tx_id()?;
         let attr_data = attr.encode_with_op_and_tx(op, tx_id);
         let id_encoded = encode_attr_by_id(attr.id, tx_id);
-        self.tx.put(&id_encoded, &attr_data)?;
+        self.tx.put(&id_encoded, &attr_data).into_diagnostic()?;
         let id_sentinel = encode_sentinel_attr_by_id(attr.id);
-        self.tx.put(&id_sentinel, &attr_data)?;
+        self.tx.put(&id_sentinel, &attr_data).into_diagnostic()?;
         let kw_sentinel = encode_sentinel_attr_by_name(&attr.name);
-        self.tx.put(&kw_sentinel, &attr_data)?;
+        self.tx.put(&kw_sentinel, &attr_data).into_diagnostic()?;
         Ok(attr.id)
     }
 
@@ -174,7 +174,7 @@ impl SessionTx {
     pub(crate) fn retract_attr_by_kw(&mut self, kw: &Symbol) -> Result<AttrId> {
         let attr = self
             .attr_by_name(kw)?
-            .ok_or_else(|| anyhow!("attribute not found: {}", kw))?;
+            .ok_or_else(|| miette!("attribute not found: {}", kw))?;
         self.retract_attr(attr.id)
     }
 }
@@ -200,7 +200,7 @@ impl AttrIter {
             self.it.next();
         }
         loop {
-            match self.it.val()? {
+            match self.it.val().into_diagnostic()? {
                 None => return Ok(None),
                 Some(v) => {
                     let found_op = StoreOp::try_from(v[0])?;

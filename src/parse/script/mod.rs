@@ -1,4 +1,4 @@
-use anyhow::Result;
+use miette::{Result, IntoDiagnostic};
 use pest::Parser;
 
 use crate::data::program::InputProgram;
@@ -15,7 +15,7 @@ pub(crate) enum CozoScript {
 }
 
 pub(crate) fn parse_script(src: &str) -> Result<CozoScript> {
-    let parsed = CozoScriptParser::parse(Rule::script, src)?.next().unwrap();
+    let parsed = CozoScriptParser::parse(Rule::script, src).into_diagnostic()?.next().unwrap();
     Ok(match parsed.as_rule() {
         Rule::query_script => CozoScript::Query(parse_query(parsed.into_inner())?),
         Rule::schema_script => todo!(),

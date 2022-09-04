@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display, Formatter};
 
-use anyhow::{ensure, Result};
+use miette::{ensure, IntoDiagnostic, Result};
 use lazy_static::lazy_static;
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
@@ -27,9 +27,9 @@ impl From<&str> for Symbol {
 }
 
 impl TryFrom<&[u8]> for Symbol {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        Ok(std::str::from_utf8(value)?.into())
+        Ok(Symbol::from(std::str::from_utf8(value).into_diagnostic()?))
     }
 }
 

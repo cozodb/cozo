@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use miette::{bail, Result};
 use serde_json::{json, Map};
 
 use crate::data::json::JsonValue;

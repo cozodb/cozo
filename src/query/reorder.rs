@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::mem;
 
-use anyhow::{bail, Result};
+use miette::{bail, Result};
 
 use crate::data::program::{NormalFormAtom, NormalFormRule};
 

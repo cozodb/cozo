@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, Result};
+use miette::{miette, Result};
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
@@ -30,7 +30,7 @@ impl AlgoImpl for MinimumSpanningTreeKruskal {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'minimum_spanning_tree_kruskal' requires edge relation"))?;
+            .ok_or_else(|| miette!("'minimum_spanning_tree_kruskal' requires edge relation"))?;
         let (graph, indices, _, _) =
             edges.convert_edge_to_weighted_graph(true, true, tx, stores)?;
         if graph.is_empty() {

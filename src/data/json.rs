@@ -1,4 +1,4 @@
-use anyhow::{anyhow, ensure};
+use miette::{miette, ensure};
 use serde_json::json;
 pub(crate) use serde_json::Value as JsonValue;
 
@@ -99,42 +99,42 @@ impl From<DataValue> for JsonValue {
 }
 
 impl TryFrom<&'_ JsonValue> for Symbol {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let s = value
             .as_str()
-            .ok_or_else(|| anyhow!("failed to convert {} to a symbol", value))?;
+            .ok_or_else(|| miette!("failed to convert {} to a symbol", value))?;
         Ok(Symbol::from(s))
     }
 }
 
 impl TryFrom<&'_ JsonValue> for Attribute {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
 
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let map = value
             .as_object()
-            .ok_or_else(|| anyhow!("expect object in attribute definition, got {}", value))?;
+            .ok_or_else(|| miette!("expect object in attribute definition, got {}", value))?;
         let id = match map.get("id") {
             None => AttrId(0),
             Some(v) => AttrId::try_from(v)?,
         };
         let name = map
             .get("name")
-            .ok_or_else(|| anyhow!("expect field 'name' in attribute definition, got {}", value))?;
+            .ok_or_else(|| miette!("expect field 'name' in attribute definition, got {}", value))?;
         let symb = Symbol::try_from(name)?;
         ensure!(!symb.is_reserved(), "cannot use reserved symbol {}", symb);
         let cardinality = map
             .get("cardinality")
-            .ok_or_else(|| anyhow!("expect field 'cardinality' in {}", value))?
+            .ok_or_else(|| miette!("expect field 'cardinality' in {}", value))?
             .as_str()
-            .ok_or_else(|| anyhow!("expect field 'cardinality' to be a string, got {}", value))?;
+            .ok_or_else(|| miette!("expect field 'cardinality' to be a string, got {}", value))?;
         let cardinality = AttributeCardinality::try_from(cardinality)?;
         let val_type = map
             .get("type")
-            .ok_or_else(|| anyhow!("expect field 'type' in {}", value))?
+            .ok_or_else(|| miette!("expect field 'type' in {}", value))?
             .as_str()
-            .ok_or_else(|| anyhow!("expect field 'type' in {} to be a string", value))?;
+            .ok_or_else(|| miette!("expect field 'type' in {} to be a string", value))?;
         let val_type = AttributeTyping::try_from(val_type)?;
 
         let indexing = match map.get("index") {
@@ -143,7 +143,7 @@ impl TryFrom<&'_ JsonValue> for Attribute {
             Some(JsonValue::Bool(false)) => AttributeIndex::None,
             Some(v) => AttributeIndex::try_from(
                 v.as_str()
-                    .ok_or_else(|| anyhow!("cannot convert {} to attribute indexing", v))?,
+                    .ok_or_else(|| miette!("cannot convert {} to attribute indexing", v))?,
             )?,
         };
 
@@ -151,7 +151,7 @@ impl TryFrom<&'_ JsonValue> for Attribute {
             None => false,
             Some(v) => v
                 .as_bool()
-                .ok_or_else(|| anyhow!("cannot convert {} to attribute with history flag", v))?,
+                .ok_or_else(|| miette!("cannot convert {} to attribute with history flag", v))?,
         };
 
         Ok(Attribute {
@@ -185,12 +185,12 @@ impl From<AttrId> for JsonValue {
 }
 
 impl TryFrom<&'_ JsonValue> for AttrId {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
 
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let v = value
             .as_u64()
-            .ok_or_else(|| anyhow!("cannot convert {} to attr id", value))?;
+            .ok_or_else(|| miette!("cannot convert {} to attr id", value))?;
         Ok(AttrId(v))
     }
 }
@@ -202,12 +202,12 @@ impl From<EntityId> for JsonValue {
 }
 
 impl TryFrom<&'_ JsonValue> for EntityId {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
 
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let v = value
             .as_u64()
-            .ok_or_else(|| anyhow!("cannot convert {} to entity id", value))?;
+            .ok_or_else(|| miette!("cannot convert {} to entity id", value))?;
         Ok(EntityId(v))
     }
 }
@@ -219,12 +219,12 @@ impl From<TxId> for JsonValue {
 }
 
 impl TryFrom<&'_ JsonValue> for TxId {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
 
     fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
         let v = value
             .as_u64()
-            .ok_or_else(|| anyhow!("cannot convert {} to tx id", value))?;
+            .ok_or_else(|| miette!("cannot convert {} to tx id", value))?;
         Ok(TxId(v))
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use anyhow::{bail, Result};
+use miette::{bail, Result};
 use itertools::Itertools;
 
 use crate::data::expr::Expr;

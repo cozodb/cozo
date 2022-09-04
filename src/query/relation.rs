@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::iter;
 
-use anyhow::{anyhow, bail, Context, Result};
+use miette::{miette, bail, Context, Result};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::error;
@@ -95,7 +95,7 @@ impl UnificationRelation {
                 .map_ok(move |tuple| -> Result<Vec<Tuple>> {
                     let result_list = self.expr.eval(&tuple)?;
                     let result_list = result_list.get_list().ok_or_else(|| {
-                        anyhow!("multi unification encountered non-list {:?}", result_list)
+                        miette!("multi unification encountered non-list {:?}", result_list)
                     })?;
                     let mut coll = vec![];
                     for result in result_list {
@@ -574,7 +574,7 @@ pub(crate) struct TripleRelation {
     pub(crate) filters: Vec<Expr>,
 }
 
-pub(crate) fn flatten_err<T, E1: Into<anyhow::Error>, E2: Into<anyhow::Error>>(
+pub(crate) fn flatten_err<T, E1: Into<miette::Error>, E2: Into<miette::Error>>(
     v: std::result::Result<std::result::Result<T, E2>, E1>,
 ) -> Result<T> {
     match v {

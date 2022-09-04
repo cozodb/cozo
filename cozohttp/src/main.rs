@@ -11,7 +11,7 @@ use actix_web::http::header::HeaderName;
 use actix_web::rt::task::spawn_blocking;
 use actix_web::{post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_static_files::ResourceFiles;
-use anyhow::{anyhow, bail};
+use miette::{miette, bail, IntoDiagnostic};
 use clap::Parser;
 use env_logger::Env;
 use log::debug;
@@ -24,7 +24,7 @@ use cozo::{Db, DbBuilder};
 type Result<T> = std::result::Result<T, RespError>;
 
 struct RespError {
-    err: anyhow::Error,
+    err: miette::Error,
 }
 
 impl Debug for RespError {
@@ -72,17 +72,17 @@ struct AppStateWithDb {
 const PASSWORD_KEY: &str = "WEB_USER_PASSWORD";
 
 impl AppStateWithDb {
-    async fn verify_password(&self, req: &HttpRequest) -> anyhow::Result<()> {
+    async fn verify_password(&self, req: &HttpRequest) -> miette::Result<()> {
         let username = req
             .headers()
             .get(&HeaderName::from_static("x-cozo-username"))
-            .ok_or_else(|| anyhow!("not authenticated"))?
-            .to_str()?;
+            .ok_or_else(|| miette!("not authenticated"))?
+            .to_str().into_diagnostic()?;
         let password = req
             .headers()
             .get(&HeaderName::from_static("x-cozo-password"))
-            .ok_or_else(|| anyhow!("not authenticated"))?
-            .to_str()?;
+            .ok_or_else(|| miette!("not authenticated"))?
+            .to_str().into_diagnostic()?;
         if let Some(stored) = self.pass_cache.read().unwrap().get(username).cloned() {
             let mut seed = self.seed.to_vec();
             seed.extend_from_slice(password.as_bytes());
@@ -99,10 +99,10 @@ impl AppStateWithDb {
         let db = self.db.new_session()?;
         let password = password.to_string();
         let username = username.to_string();
-        spawn_blocking(move || -> anyhow::Result<()> {
+        spawn_blocking(move || -> miette::Result<()> {
             if let Some(hashed) = db.get_meta_kv(&[PASSWORD_KEY, &username])? {
-                let hashed = from_utf8(&hashed)?;
-                if argon2::verify_encoded(&hashed, password.as_bytes())? {
+                let hashed = from_utf8(&hashed).into_diagnostic()?;
+                if argon2::verify_encoded(&hashed, password.as_bytes()).into_diagnostic()? {
                     seed.extend_from_slice(password.as_bytes());
                     let easy_digest: &[u8] = &sha3::Sha3_256::digest(&seed);
                     pass_cache
@@ -115,26 +115,26 @@ impl AppStateWithDb {
             thread::sleep(Duration::from_millis(1234));
             bail!("invalid password")
         })
-        .await?
+        .await.into_diagnostic()?
     }
 
-    async fn reset_password(&self, user: &str, new_pass: &str) -> anyhow::Result<()> {
+    async fn reset_password(&self, user: &str, new_pass: &str) -> miette::Result<()> {
         let pass_cache = self.pass_cache.clone();
         let db = self.db.new_session()?;
         let username = user.to_string();
         let new_pass = new_pass.to_string();
-        spawn_blocking(move || -> anyhow::Result<()> {
+        spawn_blocking(move || -> miette::Result<()> {
             pass_cache.write().unwrap().remove(&username);
             let salt = rand::thread_rng().gen::<[u8; 32]>();
             let config = argon2config();
-            let hash = argon2::hash_encoded(new_pass.as_bytes(), &salt, &config)?;
+            let hash = argon2::hash_encoded(new_pass.as_bytes(), &salt, &config).into_diagnostic()?;
             db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())?;
             Ok(())
         })
-        .await?
+        .await.into_diagnostic()?
     }
 
-    async fn remove_user(&self, user: &str) -> anyhow::Result<()> {
+    async fn remove_user(&self, user: &str) -> miette::Result<()> {
         self.pass_cache.write().unwrap().remove(user);
         self.db.remove_meta_kv(&[PASSWORD_KEY, &user])?;
         Ok(())
@@ -159,12 +159,12 @@ async fn query(
     data.verify_password(&req).await?;
 
     let text = std::str::from_utf8(&body)
-        .map_err(|e| anyhow!(e))?
+        .map_err(|e| miette!(e))?
         .to_string();
     let db = data.db.new_session()?;
     let start = Instant::now();
     let task = spawn_blocking(move || db.run_script(&text));
-    let mut result = task.await.map_err(|e| anyhow!(e))??;
+    let mut result = task.await.map_err(|e| miette!(e))??;
     if let Some(obj) = result.as_object_mut() {
         obj.insert(
             "time_taken".to_string(),
@@ -184,14 +184,14 @@ async fn change_password(
     let username = req
         .headers()
         .get(&HeaderName::from_static("x-cozo-username"))
-        .ok_or_else(|| anyhow!("not authenticated"))?
+        .ok_or_else(|| miette!("not authenticated"))?
         .to_str()
-        .map_err(|e| anyhow!(e))?;
+        .map_err(|e| miette!(e))?;
     let new_pass = body
         .get("new_pass")
-        .ok_or_else(|| anyhow!("required 'new_pass' field"))?
+        .ok_or_else(|| miette!("required 'new_pass' field"))?
         .as_str()
-        .ok_or_else(|| anyhow!("'new_pass' field required to be a string"))?;
+        .ok_or_else(|| miette!("'new_pass' field required to be a string"))?;
     data.reset_password(username, new_pass).await?;
     Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
 }
@@ -205,14 +205,14 @@ async fn assert_user(
     data.verify_password(&req).await?;
     let new_user = body
         .get("username")
-        .ok_or_else(|| anyhow!("required 'username' field"))?
+        .ok_or_else(|| miette!("required 'username' field"))?
         .as_str()
-        .ok_or_else(|| anyhow!("'username' field required to be a string"))?;
+        .ok_or_else(|| miette!("'username' field required to be a string"))?;
     let new_pass = body
         .get("new_pass")
-        .ok_or_else(|| anyhow!("required 'new_pass' field"))?
+        .ok_or_else(|| miette!("required 'new_pass' field"))?
         .as_str()
-        .ok_or_else(|| anyhow!("'new_pass' field required to be a string"))?;
+        .ok_or_else(|| miette!("'new_pass' field required to be a string"))?;
     data.reset_password(new_user, new_pass).await?;
     Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
 }
@@ -226,9 +226,9 @@ async fn remove_user(
     data.verify_password(&req).await?;
     let user = body
         .get("username")
-        .ok_or_else(|| anyhow!("required 'username' field"))?
+        .ok_or_else(|| miette!("required 'username' field"))?
         .as_str()
-        .ok_or_else(|| anyhow!("'username' field required to be a string"))?;
+        .ok_or_else(|| miette!("'username' field required to be a string"))?;
     data.remove_user(&user).await?;
     Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
 }
@@ -244,7 +244,7 @@ async fn json_query(
     let db = data.db.new_session()?;
     let start = Instant::now();
     let task = spawn_blocking(move || db.run_json_query(&body));
-    let mut result = task.await.map_err(|e| anyhow!(e))??;
+    let mut result = task.await.map_err(|e| miette!(e))??;
     if let Some(obj) = result.as_object_mut() {
         obj.insert(
             "time_taken".to_string(),
@@ -263,7 +263,7 @@ async fn to_json_query(
     data.verify_password(&req).await?;
 
     let text = std::str::from_utf8(&body)
-        .map_err(|e| anyhow!(e))?
+        .map_err(|e| miette!(e))?
         .to_string();
     let db = data.db.new_session()?;
     let res = db.convert_to_json_query(&text)?;

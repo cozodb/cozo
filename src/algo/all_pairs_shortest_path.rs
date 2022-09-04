@@ -1,8 +1,8 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use anyhow::anyhow;
-use anyhow::Result;
+use miette::miette;
+use miette::Result;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
@@ -30,10 +30,10 @@ impl AlgoImpl for BetweennessCentrality {
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
-    ) -> anyhow::Result<()> {
+    ) -> miette::Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'betweenness_centrality' requires edges relation"))?;
+            .ok_or_else(|| miette!("'betweenness_centrality' requires edges relation"))?;
         let undirected =
             get_bool_option_required("undirected", opts, Some(false), "betweenness_centrality")?;
 
@@ -96,10 +96,10 @@ impl AlgoImpl for ClosenessCentrality {
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
-    ) -> anyhow::Result<()> {
+    ) -> miette::Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'closeness_centrality' requires edges relation"))?;
+            .ok_or_else(|| miette!("'closeness_centrality' requires edges relation"))?;
         let undirected =
             get_bool_option_required("undirected", opts, Some(false), "closeness_centrality")?;
 

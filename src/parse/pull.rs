@@ -1,6 +1,6 @@
 use std::cmp::max;
 
-use anyhow::{anyhow, bail, Result};
+use miette::{miette, bail, Result};
 use itertools::Itertools;
 use serde_json::Map;
 
@@ -43,7 +43,7 @@ impl SessionTx {
                 };
                 let attr = self
                     .attr_by_name(&symb)?
-                    .ok_or_else(|| anyhow!("attribute {} not found", symb))?;
+                    .ok_or_else(|| miette!("attribute {} not found", symb))?;
                 let cardinality = attr.cardinality;
                 Ok(PullSpec::Attr(AttrPullSpec {
                     attr,
@@ -83,25 +83,25 @@ impl SessionTx {
                 "as" => {
                     as_override =
                         Some(Symbol::from(v.as_str().ok_or_else(|| {
-                            anyhow!("expect 'as' field to be string, got {}", v)
+                            miette!("expect 'as' field to be string, got {}", v)
                         })?))
                 }
                 "limit" => {
                     take = Some(v.as_u64().ok_or_else(|| {
-                        anyhow!("expect 'limit field to be non-negative integer, got {}", v)
+                        miette!("expect 'limit field to be non-negative integer, got {}", v)
                     })? as usize)
                 }
                 "cardinality" => {
                     cardinality_override =
                         Some(AttributeCardinality::try_from(v.as_str().ok_or_else(
-                            || anyhow!("expect 'cardinality' field to be string, got {}", v),
+                            || miette!("expect 'cardinality' field to be string, got {}", v),
                         )?)?)
                 }
                 "default" => default_val = DataValue::from(v),
                 "pull" => {
                     let v = v
                         .as_str()
-                        .ok_or_else(|| anyhow!("expect 'pull' field to be string, got {}", v))?;
+                        .ok_or_else(|| miette!("expect 'pull' field to be string, got {}", v))?;
                     if v == "_id" {
                         pull_id = true
                     } else {
@@ -125,7 +125,7 @@ impl SessionTx {
                 }
                 "depth" => {
                     recursion_depth = v.as_u64().ok_or_else(|| {
-                        anyhow!("expect 'depth' field to be non-negative integer, got {}", v)
+                        miette!("expect 'depth' field to be non-negative integer, got {}", v)
                     })? as usize
                 }
                 "spec" => {
@@ -163,7 +163,7 @@ impl SessionTx {
         };
         let attr = self
             .attr_by_name(&symb)?
-            .ok_or_else(|| anyhow!("attribute not found: {}", symb))?;
+            .ok_or_else(|| miette!("attribute not found: {}", symb))?;
         let cardinality = cardinality_override.unwrap_or(attr.cardinality);
         let nested = self.parse_pull(&JsonValue::Array(sub_target), depth + 1)?;
 

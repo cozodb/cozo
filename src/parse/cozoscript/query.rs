@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Result};
+use miette::{miette, Result, IntoDiagnostic};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
@@ -25,7 +25,7 @@ pub(crate) enum ScriptType {
 }
 
 pub(crate) fn parse_query_to_json(src: &str) -> Result<(ScriptType, JsonValue)> {
-    let parsed = CozoScriptParser::parse(Rule::script, src)?.next().unwrap();
+    let parsed = CozoScriptParser::parse(Rule::script, src).into_diagnostic()?.next().unwrap();
     Ok(match parsed.as_rule() {
         Rule::query_script => (
             ScriptType::Query,
@@ -38,7 +38,7 @@ pub(crate) fn parse_query_to_json(src: &str) -> Result<(ScriptType, JsonValue)> 
         Rule::tx_script => (ScriptType::Tx, parsed_tx_to_json(parsed.into_inner())?),
         Rule::sys_script => {
             let opts = parsed_db_op_to_enum(parsed.into_inner())?;
-            let opts = serde_json::to_value(&opts)?;
+            let opts = serde_json::to_value(&opts).into_diagnostic()?;
             (ScriptType::Sys, opts)
         }
         _ => unreachable!(),
@@ -63,7 +63,7 @@ fn parsed_query_to_json(src: Pairs<'_>) -> Result<JsonValue> {
                 let data = build_expr::<WrapConst>(src.next().unwrap())?;
                 let data = data
                     .as_array()
-                    .ok_or_else(|| anyhow!("expect const rules to be specified as an array"))?;
+                    .ok_or_else(|| miette!("expect const rules to be specified as an array"))?;
                 let entries = const_rules
                     .entry(name.to_string())
                     .or_insert_with(|| json!([]))
@@ -228,7 +228,7 @@ fn parse_limit_or_offset(src: Pair<'_>) -> Result<usize> {
 }
 
 fn str2usize(src: &str) -> Result<usize> {
-    Ok(usize::from_str(&src.replace('_', ""))?)
+    Ok(usize::from_str(&src.replace('_', "")).into_diagnostic()?)
 }
 
 fn parse_algo_rule(src: Pair<'_>) -> Result<JsonValue> {
@@ -514,7 +514,7 @@ fn build_unary<W: ShouldWrap>(pair: Pair<'_>) -> Result<JsonValue> {
                     json!({"op": "negate", "args": [inner]})
                 }
                 Rule::pos_int => {
-                    let i = s.replace('_', "").parse::<i64>()?;
+                    let i = s.replace('_', "").parse::<i64>().into_diagnostic()?;
                     json!(i)
                 }
                 Rule::hex_pos_int => {
@@ -530,7 +530,7 @@ fn build_unary<W: ShouldWrap>(pair: Pair<'_>) -> Result<JsonValue> {
                     json!(i)
                 }
                 Rule::dot_float | Rule::sci_float => {
-                    let f = s.replace('_', "").parse::<f64>()?;
+                    let f = s.replace('_', "").parse::<f64>().into_diagnostic()?;
                     json!(f)
                 }
                 Rule::null => JsonValue::Null,

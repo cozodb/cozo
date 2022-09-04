@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use miette::{IntoDiagnostic, miette, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -63,7 +63,7 @@ impl TxLog {
         EncodedVec { inner: store }
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
-        Ok(rmp_serde::from_slice(data)?)
+        Ok(rmp_serde::from_slice(data).into_diagnostic()?)
     }
 }
 
@@ -99,7 +99,7 @@ impl SessionTx {
         let e_upper = encode_sentinel_entity_attr(EntityId::MAX_PERM, AttrId::MIN_PERM);
         let it = self.bounded_scan_last(&e_lower, &e_upper);
 
-        Ok(match it.key()? {
+        Ok(match it.key().into_diagnostic()? {
             None => EntityId::MAX_TEMP,
             Some(data) => EntityId::from_bytes(data),
         })
@@ -109,7 +109,7 @@ impl SessionTx {
         let e_lower = encode_sentinel_attr_by_id(AttrId::MIN_PERM);
         let e_upper = encode_sentinel_attr_by_id(AttrId::MAX_PERM);
         let it = self.bounded_scan_last(&e_lower, &e_upper);
-        Ok(match it.key()? {
+        Ok(match it.key().into_diagnostic()? {
             None => AttrId::MAX_TEMP,
             Some(data) => AttrId::from_bytes(data),
         })
@@ -119,7 +119,7 @@ impl SessionTx {
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
-        let found = vtx.get(&t_encoded, false)?;
+        let found = vtx.get(&t_encoded, false).into_diagnostic()?;
         match found {
             None => Ok(ViewRelId::SYSTEM),
             Some(slice) => ViewRelId::raw_decode(&slice),
@@ -130,7 +130,7 @@ impl SessionTx {
         let e_lower = encode_tx(TxId::MAX_USER);
         let e_upper = encode_tx(TxId::MAX_SYS);
         let it = self.bounded_scan_first(&e_lower, &e_upper);
-        Ok(match it.key()? {
+        Ok(match it.key().into_diagnostic()? {
             None => TxId::MAX_SYS,
             Some(data) => TxId::from_bytes(data),
         })
@@ -141,8 +141,8 @@ impl SessionTx {
         let encoded = encode_tx(tx_id);
 
         let log = TxLog::new(tx_id, comment);
-        self.tx.put(&encoded, &log.encode())?;
-        self.tx.commit()?;
+        self.tx.put(&encoded, &log.encode()).into_diagnostic()?;
+        self.tx.commit().into_diagnostic()?;
         if refresh {
             let new_tx_id = TxId(self.last_tx_id.fetch_add(1, Ordering::AcqRel) + 1);
             self.tx.set_snapshot();
@@ -154,7 +154,7 @@ impl SessionTx {
 
     pub(crate) fn get_write_tx_id(&self) -> Result<TxId> {
         self.w_tx_id
-            .ok_or_else(|| anyhow!("attempting to write in read-only transaction"))
+            .ok_or_else(|| miette!("attempting to write in read-only transaction"))
     }
     pub(crate) fn bounded_scan(&mut self, lower: &[u8], upper: &[u8]) -> DbIter {
         self.tx

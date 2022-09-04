@@ -1,7 +1,7 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, bail, Result};
+use miette::{miette, bail, Result};
 use itertools::Itertools;
 use smartstring::{LazyCompact, SmartString};
 
@@ -36,7 +36,7 @@ impl AlgoImpl for StronglyConnectedComponent {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'strongly_connected_components' missing edges relation"))?;
+            .ok_or_else(|| miette!("'strongly_connected_components' missing edges relation"))?;
 
         let reverse_mode = match opts.get("mode") {
             None => false,
@@ -76,7 +76,7 @@ impl AlgoImpl for StronglyConnectedComponent {
             for tuple in nodes.iter(tx, stores)? {
                 let tuple = tuple?;
                 let node = tuple.0.into_iter().next().ok_or_else(|| {
-                    anyhow!("nodes relation for 'strongly_connected_components' too short")
+                    miette!("nodes relation for 'strongly_connected_components' too short")
                 })?;
                 if !inv_indices.contains_key(&node) {
                     inv_indices.insert(node.clone(), usize::MAX);

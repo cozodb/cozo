@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::mem;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result};
 use approx::AbsDiffEq;
 use nalgebra::{Dynamic, OMatrix, U1};
 use smartstring::{LazyCompact, SmartString};
@@ -29,7 +29,7 @@ impl AlgoImpl for PageRank {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'pagerank' requires edges relation"))?;
+            .ok_or_else(|| miette!("'pagerank' requires edges relation"))?;
         let undirected = get_bool_option_required("undirected", opts, Some(false), "pagerank")?;
         let theta = match opts.get("theta") {
             None => 0.8f32,

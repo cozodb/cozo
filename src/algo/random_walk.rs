@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
@@ -29,18 +29,18 @@ impl AlgoImpl for RandomWalk {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'random_walk' requires edges relation as first argument"))?;
+            .ok_or_else(|| miette!("'random_walk' requires edges relation as first argument"))?;
         let nodes = rels
             .get(1)
-            .ok_or_else(|| anyhow!("'random_walk' requires nodes relation as second argument"))?;
+            .ok_or_else(|| miette!("'random_walk' requires nodes relation as second argument"))?;
         let starting = rels
             .get(2)
-            .ok_or_else(|| anyhow!("'random_walk' requires starting relation as third argument"))?;
+            .ok_or_else(|| miette!("'random_walk' requires starting relation as third argument"))?;
         let iterations = match opts.get("iterations") {
             None => 1usize,
             Some(Expr::Const(DataValue::Num(n))) => {
                 let n = n.get_int().ok_or_else(|| {
-                    anyhow!(
+                    miette!(
                         "'iterations' for 'random_walk' requires an integer, got {}",
                         n
                     )
@@ -59,11 +59,11 @@ impl AlgoImpl for RandomWalk {
         };
         let steps = match opts
             .get("steps")
-            .ok_or_else(|| anyhow!("'random_walk' requires option 'steps'"))?
+            .ok_or_else(|| miette!("'random_walk' requires option 'steps'"))?
         {
             Expr::Const(DataValue::Num(n)) => {
                 let n = n.get_int().ok_or_else(|| {
-                    anyhow!("'steps' for 'random_walk' requires an integer, got {}", n)
+                    miette!("'steps' for 'random_walk' requires an integer, got {}", n)
                 })?;
                 ensure!(
                     n > 0,
@@ -94,11 +94,11 @@ impl AlgoImpl for RandomWalk {
             let start_node_key = start_node
                 .0
                 .get(0)
-                .ok_or_else(|| anyhow!("starting node relation too short"))?;
+                .ok_or_else(|| miette!("starting node relation too short"))?;
             let starting_tuple = nodes
                 .prefix_iter(start_node_key, tx, stores)?
                 .next()
-                .ok_or_else(|| anyhow!("node with key '{:?}' not found", start_node_key))??;
+                .ok_or_else(|| miette!("node with key '{:?}' not found", start_node_key))??;
             for _ in 0..iterations {
                 counter += 1;
                 let mut current_tuple = starting_tuple.clone();
@@ -107,7 +107,7 @@ impl AlgoImpl for RandomWalk {
                     let cur_node_key = current_tuple
                         .0
                         .get(0)
-                        .ok_or_else(|| anyhow!("node tuple too short"))?;
+                        .ok_or_else(|| miette!("node tuple too short"))?;
                     let candidate_steps: Vec<_> =
                         edges.prefix_iter(cur_node_key, tx, stores)?.try_collect()?;
                     if candidate_steps.is_empty() {
@@ -134,13 +134,13 @@ impl AlgoImpl for RandomWalk {
                     let next_node = next_step
                         .0
                         .get(1)
-                        .ok_or_else(|| anyhow!("edges relation for 'random_walk' too short"))?;
+                        .ok_or_else(|| miette!("edges relation for 'random_walk' too short"))?;
                     path.push(next_node.clone());
                     current_tuple = nodes
                         .prefix_iter(next_node, tx, stores)?
                         .next()
                         .ok_or_else(|| {
-                            anyhow!("node with key '{:?}' not found", start_node_key)
+                            miette!("node with key '{:?}' not found", start_node_key)
                         })??;
                     poison.check()?;
                 }

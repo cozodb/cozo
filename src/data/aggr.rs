@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result};
 
 use crate::data::value::DataValue;
 
@@ -620,7 +620,7 @@ impl NormalAggrObj for AggrChoice {
     }
 
     fn get(&self) -> Result<DataValue> {
-        self.found.clone().ok_or_else(|| anyhow!("empty choice"))
+        self.found.clone().ok_or_else(|| miette!("empty choice"))
     }
 }
 
@@ -1124,7 +1124,7 @@ impl Aggregation {
                     AggrStrJoin::default()
                 } else {
                     let arg = args[0].get_string().ok_or_else(|| {
-                        anyhow!(
+                        miette!(
                             "the argument to 'str_join' must be a string, got {:?}",
                             args[0]
                         )
@@ -1137,7 +1137,7 @@ impl Aggregation {
                     AggrCollect::default()
                 } else {
                     let arg = args[0].get_int().ok_or_else(|| {
-                        anyhow!(
+                        miette!(
                             "the argument to 'collect' must be an integer, got {:?}",
                             args[0]
                         )

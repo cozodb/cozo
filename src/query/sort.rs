@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use anyhow::Result;
+use miette::Result;
 use itertools::Itertools;
 
 use crate::data::symb::Symbol;

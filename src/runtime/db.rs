@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{fs, thread};
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result, IntoDiagnostic};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
@@ -80,7 +80,7 @@ impl Debug for Db {
 impl Db {
     pub fn build(builder: DbBuilder<'_>) -> Result<Self> {
         let path = builder.opts.db_path;
-        fs::create_dir_all(path)?;
+        fs::create_dir_all(path).into_diagnostic()?;
         let path_buf = PathBuf::from(path);
         let mut triple_path = path_buf.clone();
         triple_path.push("triple");
@@ -98,8 +98,8 @@ impl Db {
             .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
             .use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false);
 
-        let db = db_builder.build()?;
-        let view_db = view_db_builder.build()?;
+        let db = db_builder.build().into_diagnostic()?;
+        let view_db = view_db_builder.build().into_diagnostic()?;
 
         let ret = Self {
             db,
@@ -120,14 +120,14 @@ impl Db {
     pub fn compact_main(&self) -> Result<()> {
         let l = smallest_key();
         let u = largest_key();
-        self.db.range_compact(&l, &u)?;
+        self.db.range_compact(&l, &u).into_diagnostic()?;
         Ok(())
     }
 
     pub fn compact_view(&self) -> Result<()> {
         let l = Tuple::default().encode_as_key(ViewRelId(0));
         let u = Tuple(vec![DataValue::Bot]).encode_as_key(ViewRelId(u64::MAX));
-        self.db.range_compact(&l, &u)?;
+        self.db.range_compact(&l, &u).into_diagnostic()?;
         Ok(())
     }
 
@@ -311,7 +311,7 @@ impl Db {
             .start();
         let mut collected: BTreeMap<EntityId, JsonValue> = BTreeMap::default();
         it.seek(&current);
-        while let Some((k_slice, v_slice)) = it.pair()? {
+        while let Some((k_slice, v_slice)) = it.pair().into_diagnostic()? {
             debug_assert_eq!(
                 StorageTag::try_from(k_slice[0])?,
                 StorageTag::TripleEntityAttrValue
@@ -382,10 +382,10 @@ impl Db {
     pub fn run_json_query(&self, payload: &JsonValue) -> Result<JsonValue> {
         let (k, v) = payload
             .as_object()
-            .ok_or_else(|| anyhow!("json query must be an object"))?
+            .ok_or_else(|| miette!("json query must be an object"))?
             .iter()
             .next()
-            .ok_or_else(|| anyhow!("json query must be an object with keys"))?;
+            .ok_or_else(|| miette!("json query must be an object with keys"))?;
         match k as &str {
             "query" => self.run_query(v),
             "schema" => self.transact_attributes(v),
@@ -395,7 +395,7 @@ impl Db {
         }
     }
     pub fn run_sys_op(&self, payload: JsonValue) -> Result<JsonValue> {
-        let op: SysOp = serde_json::from_value(payload)?;
+        let op: SysOp = serde_json::from_value(payload).into_diagnostic()?;
         match op {
             SysOp::Compact(opts) => {
                 for opt in opts {
@@ -544,8 +544,8 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let mut vtx = self.view_db.transact().start();
-        vtx.put(&key, v)?;
-        vtx.commit()?;
+        vtx.put(&key, v).into_diagnostic()?;
+        vtx.commit().into_diagnostic()?;
         Ok(())
     }
     pub fn remove_meta_kv(&self, k: &[&str]) -> Result<()> {
@@ -555,8 +555,8 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let mut vtx = self.view_db.transact().start();
-        vtx.del(&key)?;
-        vtx.commit()?;
+        vtx.del(&key).into_diagnostic()?;
+        vtx.commit().into_diagnostic()?;
         Ok(())
     }
     pub fn get_meta_kv(&self, k: &[&str]) -> Result<Option<Vec<u8>>> {
@@ -566,7 +566,7 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
-        Ok(match vtx.get(&key, false)? {
+        Ok(match vtx.get(&key, false).into_diagnostic()? {
             None => None,
             Some(slice) => Some(slice.to_vec()),
         })
@@ -601,7 +601,7 @@ impl Db {
                 } else {
                     self.started = true;
                 }
-                match self.it.pair()? {
+                match self.it.pair().into_diagnostic()? {
                     None => Ok(None),
                     Some((k_slice, v_slice)) => {
                         let encoded = EncodedTuple(k_slice).decode()?;
@@ -612,7 +612,7 @@ impl Db {
                             .map(|v| {
                                 v.get_string()
                                     .map(|s| s.to_string())
-                                    .ok_or_else(|| anyhow!("bad key in meta store"))
+                                    .ok_or_else(|| miette!("bad key in meta store"))
                             })
                             .try_collect()?;
                         Ok(Some((ks, v_slice.to_vec())))
@@ -647,8 +647,8 @@ impl Db {
             .start();
         it.seek(&lower);
         let mut collected = vec![];
-        while let Some(v_slice) = it.val()? {
-            let meta: ViewRelMetadata = rmp_serde::from_slice(v_slice)?;
+        while let Some(v_slice) = it.val().into_diagnostic()? {
+            let meta: ViewRelMetadata = rmp_serde::from_slice(v_slice).into_diagnostic()?;
             let name = meta.name.0;
             let arity = meta.arity;
             collected.push(json!([name, arity]));

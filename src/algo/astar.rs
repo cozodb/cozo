@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, ensure, Result};
+use miette::{miette, ensure, Result};
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use smartstring::{LazyCompact, SmartString};
@@ -29,19 +29,19 @@ impl AlgoImpl for ShortestPathAStar {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'shortest_path_astar' requires edges relation"))?;
+            .ok_or_else(|| miette!("'shortest_path_astar' requires edges relation"))?;
         let nodes = rels.get(1).ok_or_else(|| {
-            anyhow!("'shortest_path_astar' requires nodes relation as second argument")
+            miette!("'shortest_path_astar' requires nodes relation as second argument")
         })?;
         let starting = rels.get(2).ok_or_else(|| {
-            anyhow!("'shortest_path_astar' requires starting relation as third argument")
+            miette!("'shortest_path_astar' requires starting relation as third argument")
         })?;
         let goals = rels.get(3).ok_or_else(|| {
-            anyhow!("'shortest_path_astar' requires goal relation as fourth argument")
+            miette!("'shortest_path_astar' requires goal relation as fourth argument")
         })?;
         let mut heuristic = opts
             .get("heuristic")
-            .ok_or_else(|| anyhow!("'heuristic' option required for 'shortest_path_astar'"))?
+            .ok_or_else(|| miette!("'heuristic' option required for 'shortest_path_astar'"))?
             .clone();
 
         let mut binding_map = nodes.get_binding_map(0);
@@ -82,17 +82,17 @@ fn astar(
     let start_node = starting
         .0
         .get(0)
-        .ok_or_else(|| anyhow!("starting node too short"))?;
+        .ok_or_else(|| miette!("starting node too short"))?;
     let goal_node = goal
         .0
         .get(0)
-        .ok_or_else(|| anyhow!("goal node too short"))?;
+        .ok_or_else(|| miette!("goal node too short"))?;
     let eval_heuristic = |node: &Tuple| -> Result<f64> {
         let mut v = node.0.clone();
         v.extend_from_slice(&goal.0);
         let t = Tuple(v);
         let cost = heuristic.eval(&t)?.get_float().ok_or_else(|| {
-            anyhow!("heuristic function of 'shortest_path_astar' must return a float")
+            miette!("heuristic function of 'shortest_path_astar' must return a float")
         })?;
         ensure!(
             !cost.is_nan(),
@@ -131,7 +131,7 @@ fn astar(
             let edge_dst = &edge.0[1];
             let edge_cost = edge.0[2]
                 .get_float()
-                .ok_or_else(|| anyhow!("cost on edge for 'astar' must be a number"))?;
+                .ok_or_else(|| miette!("cost on edge for 'astar' must be a number"))?;
             ensure!(
                 !edge_cost.is_nan(),
                 "got cost NaN for edge of 'shortest_path_astar'"
@@ -148,7 +148,7 @@ fn astar(
                     .prefix_iter(edge_dst, tx, stores)?
                     .next()
                     .ok_or_else(|| {
-                        anyhow!(
+                        miette!(
                             "node {:?} not found in nodes relation of 'shortest_path_astar'",
                             edge_dst
                         )

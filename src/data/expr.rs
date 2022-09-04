@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::mem;
 
-use anyhow::{anyhow, bail, Result};
+use miette::{miette, bail, Result};
 use itertools::Itertools;
 use smartstring::SmartString;
 
@@ -57,7 +57,7 @@ impl Expr {
         match self {
             Expr::Binding(k, idx) => {
                 let found_idx = *binding_map.get(k).ok_or_else(|| {
-                    anyhow!("cannot find binding {}, this indicates a system error", k)
+                    miette!("cannot find binding {}, this indicates a system error", k)
                 })?;
                 *idx = Some(found_idx)
             }
@@ -95,7 +95,7 @@ impl Expr {
             Some(
                 param_pool
                     .get(s)
-                    .ok_or_else(|| anyhow!("input parameter {} not found", s))?,
+                    .ok_or_else(|| miette!("input parameter {} not found", s))?,
             )
         } else {
             None
@@ -177,7 +177,7 @@ impl Expr {
             Expr::Binding(b, Some(i)) => Ok(bindings
                 .0
                 .get(*i)
-                .ok_or_else(|| anyhow!("binding '{}' not found in tuple (too short)", b))?
+                .ok_or_else(|| miette!("binding '{}' not found in tuple (too short)", b))?
                 .clone()),
             Expr::Const(d) => Ok(d.clone()),
             Expr::Apply(op, args) => {
@@ -236,7 +236,7 @@ impl Expr {
                         if let Some(val) = args[1].get_const() {
                             if target == symb {
                                 let s = val.get_string().ok_or_else(|| {
-                                    anyhow!("unexpected arg {:?} for OP_STARTS_WITH", val)
+                                    miette!("unexpected arg {:?} for OP_STARTS_WITH", val)
                                 })?;
                                 let lower = DataValue::Str(SmartString::from(s));
                                 // let lower = DataValue::Str(s.to_string());

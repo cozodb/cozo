@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
-use anyhow::{anyhow, bail, Result};
+use miette::{miette, bail, Result};
 use either::{Left, Right};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
@@ -138,7 +138,7 @@ impl InputProgram {
         match self
             .prog
             .get(&PROG_ENTRY)
-            .ok_or_else(|| anyhow!("program entry point not found"))?
+            .ok_or_else(|| miette!("program entry point not found"))?
         {
             InputRulesOrAlgo::Rules(rules) => Ok(&rules.last().unwrap().head),
             InputRulesOrAlgo::Algo(_) => {

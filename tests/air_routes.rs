@@ -2,7 +2,7 @@ use std::fs::read_to_string;
 use std::str::FromStr;
 use std::time::Instant;
 
-use anyhow::Result;
+use miette::{IntoDiagnostic, Result};
 use num_traits::abs;
 use serde_json::json;
 
@@ -62,7 +62,7 @@ fn air_routes() -> Result<()> {
     );
 
     if attr_res.is_ok() {
-        let insertions = read_to_string("tests/air-routes-data.json")?;
+        let insertions = read_to_string("tests/air-routes-data.json").into_diagnostic()?;
         let triple_insertion_time = Instant::now();
         db.run_script(&insertions)?;
         dbg!(triple_insertion_time.elapsed());
@@ -164,7 +164,7 @@ fn air_routes() -> Result<()> {
             r#"[
         [614,307,307],[587,293,294],[566,282,284],[541,270,271],[527,264,263],[502,251,251],
         [497,248,249],[494,247,247],[484,242,242],[465,232,233]]"#
-        )?
+        ).into_diagnostic()?
     );
 
     let deg_centrality_ad_hoc_time = Instant::now();
@@ -188,7 +188,7 @@ fn air_routes() -> Result<()> {
             ["MUC",541,270,271],["ORD",527,264,263],["DFW",502,251,251],["PEK",497,248,249],
             ["DXB",494,247,247],["ATL",484,242,242]
             ]"#
-        )?
+        ).into_diagnostic()?
     );
 
     let dijkstra_time = Instant::now();

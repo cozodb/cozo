@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result};
 use either::Either;
 use itertools::Itertools;
 use smartstring::{LazyCompact, SmartString};
@@ -103,7 +103,7 @@ impl AlgoHandle {
             "reorder_sort" => {
                 let out_opts = opts
                     .get("out")
-                    .ok_or_else(|| anyhow!("'reorder_sort' requires the option 'out'"))?;
+                    .ok_or_else(|| miette!("'reorder_sort' requires the option 'out'"))?;
                 match out_opts {
                     Expr::Const(DataValue::List(l)) => l.len() + 1,
                     Expr::Apply(op, args) if **op == OP_LIST => args.len() + 1,
@@ -166,10 +166,10 @@ impl MagicAlgoRuleArg {
             let mut tuple = tuple?.0.into_iter();
             let from = tuple
                 .next()
-                .ok_or_else(|| anyhow!("edges relation too short"))?;
+                .ok_or_else(|| miette!("edges relation too short"))?;
             let to = tuple
                 .next()
-                .ok_or_else(|| anyhow!("edges relation too short"))?;
+                .ok_or_else(|| miette!("edges relation too short"))?;
             let weight = match tuple.next() {
                 None => 1.0,
                 Some(d) => match d.get_float() {
@@ -225,10 +225,10 @@ impl MagicAlgoRuleArg {
             let mut tuple = tuple?.0.into_iter();
             let from = tuple
                 .next()
-                .ok_or_else(|| anyhow!("edges relation too short"))?;
+                .ok_or_else(|| miette!("edges relation too short"))?;
             let to = tuple
                 .next()
-                .ok_or_else(|| anyhow!("edges relation too short"))?;
+                .ok_or_else(|| miette!("edges relation too short"))?;
             let from_idx = if let Some(idx) = inv_indices.get(&from) {
                 *idx
             } else {
@@ -265,7 +265,7 @@ impl MagicAlgoRuleArg {
             MagicAlgoRuleArg::InMem(s, _) => {
                 let store = stores
                     .get(s)
-                    .ok_or_else(|| anyhow!("rule not found: {:?}", s))?;
+                    .ok_or_else(|| miette!("rule not found: {:?}", s))?;
                 let t = Tuple(vec![prefix.clone()]);
                 Box::new(store.scan_prefix(&t))
             }
@@ -294,7 +294,7 @@ impl MagicAlgoRuleArg {
                     }
                 } else {
                     let id = prefix.get_int().ok_or_else(|| {
-                        anyhow!(
+                        miette!(
                             "prefix scanning of triple requires integer id, got {:?}",
                             prefix
                         )
@@ -342,7 +342,7 @@ impl MagicAlgoRuleArg {
             MagicAlgoRuleArg::InMem(s, _) => {
                 let store = stores
                     .get(s)
-                    .ok_or_else(|| anyhow!("rule not found: {:?}", s))?;
+                    .ok_or_else(|| miette!("rule not found: {:?}", s))?;
                 store.arity
             }
             MagicAlgoRuleArg::Stored(s, _) => {
@@ -361,7 +361,7 @@ impl MagicAlgoRuleArg {
             MagicAlgoRuleArg::InMem(s, _) => {
                 let store = stores
                     .get(s)
-                    .ok_or_else(|| anyhow!("rule not found: {:?}", s))?;
+                    .ok_or_else(|| miette!("rule not found: {:?}", s))?;
                 Box::new(store.scan_all())
             }
             MagicAlgoRuleArg::Stored(s, _) => {
@@ -427,7 +427,7 @@ pub(crate) fn get_bool_option_required(
     algo_name: &str,
 ) -> Result<bool> {
     get_bool_option(name, opts, default, algo_name)?.ok_or_else(|| {
-        anyhow!(
+        miette!(
             "boolean option '{}' required for algorithm '{}'",
             name,
             algo_name

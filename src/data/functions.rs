@@ -1,7 +1,7 @@
 use std::ops::{Div, Rem};
 use std::str::FromStr;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result, IntoDiagnostic};
 use itertools::Itertools;
 use num_traits::FloatConst;
 use rand::prelude::*;
@@ -43,7 +43,7 @@ pub(crate) fn op_is_in(args: &[DataValue]) -> Result<DataValue> {
     let left = &args[0];
     let right = args[1]
         .get_list()
-        .ok_or_else(|| anyhow!("right hand side of 'is_in' is not a list"))?;
+        .ok_or_else(|| miette!("right hand side of 'is_in' is not a list"))?;
     Ok(DataValue::Bool(right.contains(left)))
 }
 
@@ -800,7 +800,7 @@ define_op!(OP_REGEX, 1, false);
 pub(crate) fn op_regex(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         r @ DataValue::Regex(_) => r.clone(),
-        DataValue::Str(s) => DataValue::Regex(RegexWrapper(regex::Regex::new(s)?)),
+        DataValue::Str(s) => DataValue::Regex(RegexWrapper(regex::Regex::new(s).into_diagnostic()?)),
         v => bail!("cannot apply 'regex' to {:?}", v),
     })
 }
@@ -980,7 +980,7 @@ define_op!(OP_SORTED, 1, false);
 pub(crate) fn op_sorted(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
         .get_list()
-        .ok_or_else(|| anyhow!("cannot apply 'sort' to {:?}", args))?
+        .ok_or_else(|| miette!("cannot apply 'sort' to {:?}", args))?
         .to_vec();
     arg.sort();
     Ok(DataValue::List(arg))
@@ -990,7 +990,7 @@ define_op!(OP_REVERSE, 1, false);
 pub(crate) fn op_reverse(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
         .get_list()
-        .ok_or_else(|| anyhow!("cannot apply 'reverse' to {:?}", args))?
+        .ok_or_else(|| miette!("cannot apply 'reverse' to {:?}", args))?
         .to_vec();
     arg.reverse();
     Ok(DataValue::List(arg))
@@ -998,7 +998,7 @@ pub(crate) fn op_reverse(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_HAVERSINE, 4, false);
 pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
-    let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);
+    let gen_err = || miette!("cannot computer haversine distance for {:?}", args);
     let lat1 = args[0].get_float().ok_or_else(gen_err)?;
     let lon1 = args[1].get_float().ok_or_else(gen_err)?;
     let lat2 = args[2].get_float().ok_or_else(gen_err)?;
@@ -1013,7 +1013,7 @@ pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_HAVERSINE_DEG_INPUT, 4, false);
 pub(crate) fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
-    let gen_err = || anyhow!("cannot computer haversine distance for {:?}", args);
+    let gen_err = || miette!("cannot computer haversine distance for {:?}", args);
     let lat1 = args[0].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let lon1 = args[1].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let lat2 = args[2].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
@@ -1030,7 +1030,7 @@ define_op!(OP_DEG_TO_RAD, 1, false);
 pub(crate) fn op_deg_to_rad(args: &[DataValue]) -> Result<DataValue> {
     let x = args[0]
         .get_float()
-        .ok_or_else(|| anyhow!("cannot convert to radian: {:?}", args))?;
+        .ok_or_else(|| miette!("cannot convert to radian: {:?}", args))?;
     Ok(DataValue::from(x * f64::PI() / 180.))
 }
 
@@ -1038,7 +1038,7 @@ define_op!(OP_RAD_TO_DEG, 1, false);
 pub(crate) fn op_rad_to_deg(args: &[DataValue]) -> Result<DataValue> {
     let x = args[0]
         .get_float()
-        .ok_or_else(|| anyhow!("cannot convert to degrees: {:?}", args))?;
+        .ok_or_else(|| miette!("cannot convert to degrees: {:?}", args))?;
     Ok(DataValue::from(x * 180. / f64::PI()))
 }
 
@@ -1046,7 +1046,7 @@ define_op!(OP_FIRST, 1, false);
 pub(crate) fn op_first(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
         .get_list()
-        .ok_or_else(|| anyhow!("cannot compute 'first' of {:?}", args))?
+        .ok_or_else(|| miette!("cannot compute 'first' of {:?}", args))?
         .first()
         .cloned()
         .unwrap_or(DataValue::Null))
@@ -1056,7 +1056,7 @@ define_op!(OP_LAST, 1, false);
 pub(crate) fn op_last(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
         .get_list()
-        .ok_or_else(|| anyhow!("cannot compute 'last' of {:?}", args))?
+        .ok_or_else(|| miette!("cannot compute 'last' of {:?}", args))?
         .last()
         .cloned()
         .unwrap_or(DataValue::Null))
@@ -1065,13 +1065,13 @@ pub(crate) fn op_last(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_CHUNKS, 2, false);
 pub(crate) fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0].get_list().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "first argument of 'chunks' must be a list, got {:?}",
             args[0]
         )
     })?;
     let n = args[1].get_int().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "second argument of 'chunks' must be an integer, got {:?}",
             args[1]
         )
@@ -1091,13 +1091,13 @@ pub(crate) fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_CHUNKS_EXACT, 2, false);
 pub(crate) fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0].get_list().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "first argument of 'chunks_exact' must be a list, got {:?}",
             args[0]
         )
     })?;
     let n = args[1].get_int().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "second argument of 'chunks_exact' must be an integer, got {:?}",
             args[1]
         )
@@ -1117,13 +1117,13 @@ pub(crate) fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_WINDOWS, 2, false);
 pub(crate) fn op_windows(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0].get_list().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "first argument of 'windows' must be a list, got {:?}",
             args[0]
         )
     })?;
     let n = args[1].get_int().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "second argument of 'windows' must be an integer, got {:?}",
             args[1]
         )
@@ -1160,9 +1160,9 @@ define_op!(OP_GET, 2, false);
 pub(crate) fn op_get(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
         .get_list()
-        .ok_or_else(|| anyhow!("first argument to 'get' mut be a list, got args {:?}", args))?;
+        .ok_or_else(|| miette!("first argument to 'get' mut be a list, got args {:?}", args))?;
     let n = args[1].get_int().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "second argument to 'get' mut be an integer, got args {:?}",
             args
         )
@@ -1174,13 +1174,13 @@ pub(crate) fn op_get(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_MAYBE_GET, 2, false);
 pub(crate) fn op_maybe_get(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0].get_list().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "first argument to 'maybe_get' mut be a list, got args {:?}",
             args
         )
     })?;
     let n = args[1].get_int().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "second argument to 'maybe_get' mut be an integer, got args {:?}",
             args
         )
@@ -1195,19 +1195,19 @@ pub(crate) fn op_maybe_get(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_SLICE, 3, false);
 pub(crate) fn op_slice(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0].get_list().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "first argument to 'slice' mut be a list, got args {:?}",
             args
         )
     })?;
     let m = args[1].get_int().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "second argument to 'slice' mut be an integer, got args {:?}",
             args
         )
     })?;
     let n = args[2].get_int().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "third argument to 'slice' mut be an integer, got args {:?}",
             args
         )
@@ -1222,7 +1222,7 @@ pub(crate) fn op_chars(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(
         args[0]
             .get_string()
-            .ok_or_else(|| anyhow!("'chars' can only be applied to string, got {:?}", args))?
+            .ok_or_else(|| miette!("'chars' can only be applied to string, got {:?}", args))?
             .chars()
             .map(|c| {
                 let mut s = SmartString::new();
@@ -1267,7 +1267,7 @@ define_op!(OP_DECODE_BASE64, 1, false);
 pub(crate) fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Str(s) => {
-            let b = base64::decode(s)?;
+            let b = base64::decode(s).into_diagnostic()?;
             Ok(DataValue::Bytes(b.into()))
         }
         v => bail!("'decode_base64' can only be applied to string, got {:?}", v),
@@ -1284,7 +1284,7 @@ pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
             "NAN" => f64::NAN.into(),
             "INF" => f64::INFINITY.into(),
             "NEG_INF" => f64::NEG_INFINITY.into(),
-            s => f64::from_str(s)?.into(),
+            s => f64::from_str(s).into_diagnostic()?.into(),
         },
         v => bail!("'to_float' cannot be applied to {:?}", v),
     })
@@ -1318,13 +1318,13 @@ pub(crate) fn op_rand_bernoulli(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_RAND_INT, 2, false);
 pub(crate) fn op_rand_int(args: &[DataValue]) -> Result<DataValue> {
     let lower = &args[0].get_int().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "first argument to 'rand_int' must be an integer, got args {:?}",
             args
         )
     })?;
     let upper = &args[1].get_int().ok_or_else(|| {
-        anyhow!(
+        miette!(
             "second argument to 'rand_int' must be an integer, got args {:?}",
             args
         )

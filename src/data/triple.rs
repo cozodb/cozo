@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use anyhow::bail;
+use miette::bail;
 use serde_derive::{Deserialize, Serialize};
 
 #[repr(u8)]
@@ -29,7 +29,7 @@ impl StoreOp {
 }
 
 impl TryFrom<u8> for StoreOp {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
 
     fn try_from(u: u8) -> Result<Self, Self::Error> {
         Ok(match u {

@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use anyhow::{anyhow, bail, Result};
+use miette::{miette, bail, Result, IntoDiagnostic};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -48,7 +48,7 @@ impl Display for AttributeCardinality {
 }
 
 impl TryFrom<&'_ str> for AttributeCardinality {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
     fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
         Ok(match value {
             "one" => AttributeCardinality::One,
@@ -103,7 +103,7 @@ impl Display for AttributeTyping {
 }
 
 impl TryFrom<&'_ str> for AttributeTyping {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
     fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
         use AttributeTyping::*;
         Ok(match value {
@@ -121,8 +121,8 @@ impl TryFrom<&'_ str> for AttributeTyping {
 }
 
 impl AttributeTyping {
-    fn type_err(&self, val: DataValue) -> anyhow::Error {
-        anyhow!("cannot coerce {:?} to {:?}", val, self)
+    fn type_err(&self, val: DataValue) -> miette::Error {
+        miette!("cannot coerce {:?} to {:?}", val, self)
     }
     pub(crate) fn coerce_value(&self, val: DataValue) -> Result<DataValue> {
         match self {
@@ -206,7 +206,7 @@ impl Display for AttributeIndex {
 }
 
 impl TryFrom<&'_ str> for AttributeIndex {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
     fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
         use AttributeIndex::*;
         Ok(match value {
@@ -246,7 +246,7 @@ impl Attribute {
         EncodedVec { inner }
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
-        Ok(rmp_serde::from_slice(data)?)
+        Ok(rmp_serde::from_slice(data).into_diagnostic()?)
     }
     pub(crate) fn coerce_value(&self, value: DataValue, ctx: &mut TempIdCtx) -> Result<DataValue> {
         if self.val_type.is_ref_type() {

@@ -1,7 +1,7 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
 use serde_json::{json, Map};
 
@@ -34,7 +34,7 @@ pub(crate) enum SortDir {
 }
 
 impl TryFrom<&'_ JsonValue> for SortDir {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
 
     fn try_from(value: &'_ JsonValue) -> std::result::Result<Self, Self::Error> {
         match value {
@@ -88,7 +88,7 @@ pub(crate) type ConstRules = BTreeMap<MagicSymbol, Vec<Tuple>>;
 fn get_entry_head(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<&[Symbol]> {
     match prog
         .get(&PROG_ENTRY)
-        .ok_or_else(|| anyhow!("program entry point not found"))?
+        .ok_or_else(|| miette!("program entry point not found"))?
     {
         InputRulesOrAlgo::Rules(rules) => Ok(&rules.last().unwrap().head),
         InputRulesOrAlgo::Algo(_) => {
@@ -100,7 +100,7 @@ fn get_entry_head(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<&[Symbol]
 fn validate_entry(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<()> {
     match prog
         .get(&PROG_ENTRY)
-        .ok_or_else(|| anyhow!("program entry point not found"))?
+        .ok_or_else(|| miette!("program entry point not found"))?
     {
         InputRulesOrAlgo::Rules(r) => {
             ensure!(
@@ -117,7 +117,7 @@ fn get_entry_arity(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<usize> {
     Ok(
         match prog
             .get(&PROG_ENTRY)
-            .ok_or_else(|| anyhow!("program entry point not found"))?
+            .ok_or_else(|| miette!("program entry point not found"))?
         {
             InputRulesOrAlgo::Rules(rules) => rules[0].head.len(),
             InputRulesOrAlgo::Algo(algo_apply) => algo_apply.arity()?,
@@ -137,10 +137,10 @@ impl SessionTx {
         };
         let q = payload
             .get("q")
-            .ok_or_else(|| anyhow!("expect field 'q' in query {}", payload))?;
+            .ok_or_else(|| miette!("expect field 'q' in query {}", payload))?;
         let rules_payload = q
             .as_array()
-            .ok_or_else(|| anyhow!("expect field 'q' to be an array in query {}", payload))?;
+            .ok_or_else(|| miette!("expect field 'q' to be an array in query {}", payload))?;
         let mut prog = if rules_payload.is_empty() {
             Default::default()
         } else if rules_payload.first().unwrap().is_array() {
@@ -160,12 +160,12 @@ impl SessionTx {
         let limit = swap_result_option(payload.get("limit").map(|v| {
             v.as_u64()
                 .map(|v| v as usize)
-                .ok_or_else(|| anyhow!("'limit' must be a positive number"))
+                .ok_or_else(|| miette!("'limit' must be a positive number"))
         }))?;
         let offset = swap_result_option(payload.get("offset").map(|v| {
             v.as_u64()
                 .map(|v| v as usize)
-                .ok_or_else(|| anyhow!("'offset' must be a positive number"))
+                .ok_or_else(|| miette!("'offset' must be a positive number"))
         }))?;
         let timeout = match payload.get("timeout") {
             None => None,
@@ -174,7 +174,7 @@ impl SessionTx {
                 match expr.eval(&Tuple::default())? {
                     DataValue::Num(n) => {
                         let i = n.get_int().ok_or_else(|| {
-                            anyhow!(":timeout requires seconds as argument, got {}", n)
+                            miette!(":timeout requires seconds as argument, got {}", n)
                         })?;
                         ensure!(i > 0, ":timeout must be positive, got {}", i);
                         Some(i as u64)
@@ -186,35 +186,35 @@ impl SessionTx {
         if let Some(algo_rules) = payload.get("algo_rules") {
             for algo_rule in algo_rules
                 .as_array()
-                .ok_or_else(|| anyhow!("'algo_rules' must be an array"))?
+                .ok_or_else(|| miette!("'algo_rules' must be an array"))?
             {
                 let out_symbol = algo_rule
                     .get("algo_out")
-                    .ok_or_else(|| anyhow!("algo rule requires field 'algo_out': {}", algo_rule))?
+                    .ok_or_else(|| miette!("algo rule requires field 'algo_out': {}", algo_rule))?
                     .as_str()
-                    .ok_or_else(|| anyhow!("'algo_out' mut be a string: {}", algo_rule))?;
+                    .ok_or_else(|| miette!("'algo_out' mut be a string: {}", algo_rule))?;
                 let name_symbol = algo_rule
                     .get("algo_name")
-                    .ok_or_else(|| anyhow!("algo rule requires field 'algo_name': {}", algo_rule))?
+                    .ok_or_else(|| miette!("algo rule requires field 'algo_name': {}", algo_rule))?
                     .as_str()
-                    .ok_or_else(|| anyhow!("'algo_name' mut be a string: {}", algo_rule))?;
+                    .ok_or_else(|| miette!("'algo_name' mut be a string: {}", algo_rule))?;
                 let mut relations = vec![];
                 let mut options = BTreeMap::default();
                 for rel_def in algo_rule
                     .get("relations")
-                    .ok_or_else(|| anyhow!("'relations' field required in algo rule"))?
+                    .ok_or_else(|| miette!("'relations' field required in algo rule"))?
                     .as_array()
-                    .ok_or_else(|| anyhow!("'relations' field must be an array"))?
+                    .ok_or_else(|| miette!("'relations' field must be an array"))?
                 {
                     let args: Vec<Symbol> = rel_def
                         .get("rel_args")
-                        .ok_or_else(|| anyhow!("field 'rel_args' required in {}", rel_def))?
+                        .ok_or_else(|| miette!("field 'rel_args' required in {}", rel_def))?
                         .as_array()
-                        .ok_or_else(|| anyhow!("field 'rel_args' must be an array in {}", rel_def))?
+                        .ok_or_else(|| miette!("field 'rel_args' must be an array in {}", rel_def))?
                         .iter()
                         .map(|v| -> Result<Symbol> {
                             let s = v.as_str().ok_or_else(|| {
-                                anyhow!("element of 'rel_args' must be string, got {}", v)
+                                miette!("element of 'rel_args' must be string, got {}", v)
                             })?;
                             let s = Symbol::from(s);
                             s.validate_query_var()?;
@@ -224,17 +224,17 @@ impl SessionTx {
                     if let Some(rule_name) = rel_def.get("rule") {
                         let rule_name = rule_name
                             .as_str()
-                            .ok_or_else(|| anyhow!("'rule' must be a string, got {}", rule_name))?;
+                            .ok_or_else(|| miette!("'rule' must be a string, got {}", rule_name))?;
                         relations.push(AlgoRuleArg::InMem(Symbol::from(rule_name), args));
                     } else if let Some(view_name) = rel_def.get("view") {
                         let view_name = view_name
                             .as_str()
-                            .ok_or_else(|| anyhow!("'view' must be a string, got {}", view_name))?;
+                            .ok_or_else(|| miette!("'view' must be a string, got {}", view_name))?;
                         relations.push(AlgoRuleArg::Stored(Symbol::from(view_name), args));
                     } else if let Some(triple_name) = rel_def.get("triple") {
                         let attr = self.parse_triple_atom_attr(triple_name)?;
                         // let triple_name = triple_name.as_str().ok_or_else(|| {
-                        //     anyhow!("'triple' must be a string, got {}", triple_name)
+                        //     miette!("'triple' must be a string, got {}", triple_name)
                         // })?;
                         let dir = match rel_def.get("backward") {
                             None => TripleDir::Fwd,
@@ -247,7 +247,7 @@ impl SessionTx {
                 }
                 if let Some(opts) = algo_rule.get("options") {
                     let opts = opts.as_object().ok_or_else(|| {
-                        anyhow!("'options' is required to be a map, got {}", opts)
+                        miette!("'options' is required to be a map, got {}", opts)
                     })?;
                     for (k, v) in opts.iter() {
                         let expr = Self::parse_expr_arg(v, params_pool)?;
@@ -275,18 +275,18 @@ impl SessionTx {
         let const_rules = if let Some(rules) = payload.get("const_rules") {
             rules
                 .as_object()
-                .ok_or_else(|| anyhow!("const rules is expected to be an object"))?
+                .ok_or_else(|| miette!("const rules is expected to be an object"))?
                 .iter()
                 .map(|(k, v)| -> Result<(MagicSymbol, Vec<Tuple>)> {
                     let data: Vec<Tuple> = v
                         .as_array()
-                        .ok_or_else(|| anyhow!("rules spec is expected to be an array"))?
+                        .ok_or_else(|| miette!("rules spec is expected to be an array"))?
                         .iter()
                         .map(|v| -> Result<Tuple> {
                             let tuple = v
                                 .as_array()
                                 .ok_or_else(|| {
-                                    anyhow!("data in rule is expected to be an array, got {}", v)
+                                    miette!("data in rule is expected to be an array, got {}", v)
                                 })?
                                 .iter()
                                 .map(|v| Self::parse_const_expr(v, params_pool))
@@ -316,12 +316,12 @@ impl SessionTx {
             .get("sort")
             .unwrap_or(&json!([]))
             .as_array()
-            .ok_or_else(|| anyhow!("'sort' is expected to be an array"))?
+            .ok_or_else(|| miette!("'sort' is expected to be an array"))?
             .iter()
             .map(|sorter| -> Result<(Symbol, SortDir)> {
                 let sorter = sorter
                     .as_object()
-                    .ok_or_else(|| anyhow!("'sort' must be an array of objects"))?;
+                    .ok_or_else(|| miette!("'sort' must be an array of objects"))?;
                 ensure!(
                     sorter.len() == 1,
                     "'sort' spec must be an object of a single pair"
@@ -363,7 +363,7 @@ impl SessionTx {
 
                 let opts = view_payload
                     .as_object()
-                    .ok_or_else(|| anyhow!("view options must be an object"))?;
+                    .ok_or_else(|| miette!("view options must be an object"))?;
                 let (op, name) = if let Some(name) = opts.get("create") {
                     (ViewOp::Create, name)
                 } else if let Some(name) = opts.get("rederive") {
@@ -377,7 +377,7 @@ impl SessionTx {
                 };
                 let name = name
                     .as_str()
-                    .ok_or_else(|| anyhow!("view name must be a string"))?;
+                    .ok_or_else(|| miette!("view name must be a string"))?;
                 let name = Symbol::from(name);
                 ensure!(!name.is_reserved(), "view name {} is reserved", name);
                 let entry_arity = get_entry_arity(&prog)?;
@@ -445,22 +445,22 @@ impl SessionTx {
                         let symb = Symbol::from(s as &str);
                         let idx = *entry_bindings
                             .get(&symb)
-                            .ok_or_else(|| anyhow!("binding {} not found", symb))?;
+                            .ok_or_else(|| miette!("binding {} not found", symb))?;
                         Ok((idx, None))
                     }
                     JsonValue::Object(m) => {
                         let symb = m
                             .get("pull")
-                            .ok_or_else(|| anyhow!("expect field 'pull' in {:?}", m))?
+                            .ok_or_else(|| miette!("expect field 'pull' in {:?}", m))?
                             .as_str()
-                            .ok_or_else(|| anyhow!("expect 'pull' to be a binding in {:?}", m))?;
+                            .ok_or_else(|| miette!("expect 'pull' to be a binding in {:?}", m))?;
                         let symb = Symbol::from(symb);
                         let idx = *entry_bindings
                             .get(&symb)
-                            .ok_or_else(|| anyhow!("binding {} not found", symb))?;
+                            .ok_or_else(|| miette!("binding {} not found", symb))?;
                         let spec = m
                             .get("spec")
-                            .ok_or_else(|| anyhow!("expect field 'spec' in {:?}", m))?;
+                            .ok_or_else(|| miette!("expect field 'spec' in {:?}", m))?;
                         let specs = self.parse_pull(spec, 0)?;
                         Ok((idx, Some(specs)))
                     }
@@ -478,7 +478,7 @@ impl SessionTx {
     ) -> Result<BTreeMap<Symbol, InputRulesOrAlgo>> {
         let rules = payload
             .as_array()
-            .ok_or_else(|| anyhow!("expect array for rules, got {}", payload))?
+            .ok_or_else(|| miette!("expect array for rules, got {}", payload))?
             .iter()
             .map(|o| self.parse_input_rule_definition(o, default_vld, params_pool));
         let mut collected: BTreeMap<Symbol, Vec<InputRule>> = BTreeMap::new();
@@ -535,9 +535,9 @@ impl SessionTx {
     ) -> Result<InputAtom> {
         let binding = payload
             .get("unify")
-            .ok_or_else(|| anyhow!("expect expression to have field 'unify'"))?
+            .ok_or_else(|| miette!("expect expression to have field 'unify'"))?
             .as_str()
-            .ok_or_else(|| anyhow!("expect field 'unify' to be a symbol"))?;
+            .ok_or_else(|| miette!("expect field 'unify' to be a symbol"))?;
         let binding = Symbol::from(binding);
         ensure!(
             binding.is_query_var(),
@@ -546,14 +546,14 @@ impl SessionTx {
         );
         let expr = payload
             .get("expr")
-            .ok_or_else(|| anyhow!("expect unify map to have field 'expr'"))?;
+            .ok_or_else(|| miette!("expect unify map to have field 'expr'"))?;
         let mut expr = Self::parse_expr_arg(expr, params_pool)?;
         expr.partial_eval(params_pool)?;
         let one_many_unif = match payload.get("multi") {
             None => false,
             Some(v) => v
                 .as_bool()
-                .ok_or_else(|| anyhow!("unification 'multi' field must be a boolean"))?,
+                .ok_or_else(|| miette!("unification 'multi' field must be a boolean"))?,
         };
         Ok(InputAtom::Unification(Unification {
             binding,
@@ -568,7 +568,7 @@ impl SessionTx {
         if let Some(name) = payload.get("param") {
             let name = name
                 .as_str()
-                .ok_or_else(|| anyhow!("input var cannot be specified as {}", name))?;
+                .ok_or_else(|| miette!("input var cannot be specified as {}", name))?;
             ensure!(
                 name.starts_with('$') && name.len() > 1,
                 "wrong input var format: {}",
@@ -579,17 +579,17 @@ impl SessionTx {
 
         let name = payload
             .get("op")
-            .ok_or_else(|| anyhow!("expect expression to have key 'pred'"))?
+            .ok_or_else(|| miette!("expect expression to have key 'pred'"))?
             .as_str()
-            .ok_or_else(|| anyhow!("expect key 'pred' to be a string referring to a predicate"))?;
+            .ok_or_else(|| miette!("expect key 'pred' to be a string referring to a predicate"))?;
 
-        let op = get_op(name).ok_or_else(|| anyhow!("unknown operator {}", name))?;
+        let op = get_op(name).ok_or_else(|| miette!("unknown operator {}", name))?;
 
         let mut args: Box<[Expr]> = payload
             .get("args")
-            .ok_or_else(|| anyhow!("expect key 'args' in expression"))?
+            .ok_or_else(|| miette!("expect key 'args' in expression"))?
             .as_array()
-            .ok_or_else(|| anyhow!("expect key 'args' to be an array"))?
+            .ok_or_else(|| miette!("expect key 'args' to be an array"))?
             .iter()
             .map(|v| Self::parse_expr_arg(v, params_pool))
             .try_collect()?;
@@ -667,15 +667,15 @@ impl SessionTx {
     ) -> Result<InputAtom> {
         let rule_name = payload
             .get("rule")
-            .ok_or_else(|| anyhow!("expect key 'rule' in rule atom"))?
+            .ok_or_else(|| miette!("expect key 'rule' in rule atom"))?
             .as_str()
-            .ok_or_else(|| anyhow!("expect value for key 'rule' to be a string"))?
+            .ok_or_else(|| miette!("expect value for key 'rule' to be a string"))?
             .into();
         let args = payload
             .get("args")
-            .ok_or_else(|| anyhow!("expect key 'args' in rule atom"))?
+            .ok_or_else(|| miette!("expect key 'args' in rule atom"))?
             .as_array()
-            .ok_or_else(|| anyhow!("expect value for key 'args' to be an array"))?
+            .ok_or_else(|| miette!("expect value for key 'args' to be an array"))?
             .iter()
             .map(|value_rep| -> Result<InputTerm<DataValue>> {
                 if let Some(s) = value_rep.as_str() {
@@ -713,15 +713,15 @@ impl SessionTx {
     ) -> Result<InputAtom> {
         let rule_name = payload
             .get("view")
-            .ok_or_else(|| anyhow!("expect key 'view' in rule atom"))?
+            .ok_or_else(|| miette!("expect key 'view' in rule atom"))?
             .as_str()
-            .ok_or_else(|| anyhow!("expect value for key 'view' to be a string"))?
+            .ok_or_else(|| miette!("expect value for key 'view' to be a string"))?
             .into();
         let args = payload
             .get("args")
-            .ok_or_else(|| anyhow!("expect key 'args' in rule atom"))?
+            .ok_or_else(|| miette!("expect key 'args' in rule atom"))?
             .as_array()
-            .ok_or_else(|| anyhow!("expect value for key 'args' to be an array"))?
+            .ok_or_else(|| miette!("expect value for key 'args' to be an array"))?
             .iter()
             .map(|value_rep| -> Result<InputTerm<DataValue>> {
                 if let Some(s) = value_rep.as_str() {
@@ -760,7 +760,7 @@ impl SessionTx {
     ) -> Result<(Symbol, InputRule)> {
         let rule_name = payload
             .get("rule")
-            .ok_or_else(|| anyhow!("expect key 'rule' in rule definition"))?;
+            .ok_or_else(|| miette!("expect key 'rule' in rule definition"))?;
         let rule_name = Symbol::try_from(rule_name)?;
         if !rule_name.is_prog_entry() {
             rule_name.validate_not_reserved()?;
@@ -771,16 +771,16 @@ impl SessionTx {
             .unwrap_or(Ok(default_vld))?;
         let args = payload
             .get("args")
-            .ok_or_else(|| anyhow!("expect key 'args' in rule definition"))?
+            .ok_or_else(|| miette!("expect key 'args' in rule definition"))?
             .as_array()
-            .ok_or_else(|| anyhow!("expect value for key 'args' to be an array"))?;
+            .ok_or_else(|| miette!("expect value for key 'args' to be an array"))?;
         let mut args = args.iter();
         let rule_head_payload = args
             .next()
-            .ok_or_else(|| anyhow!("expect value for key 'args' to be a non-empty array"))?;
+            .ok_or_else(|| miette!("expect value for key 'args' to be a non-empty array"))?;
         let rule_head_vec = rule_head_payload
             .as_array()
-            .ok_or_else(|| anyhow!("expect rule head to be an array, got {}", rule_head_payload))?;
+            .ok_or_else(|| miette!("expect rule head to be an array, got {}", rule_head_payload))?;
         let mut rule_head = vec![];
         let mut rule_aggr = vec![];
         for head_item in rule_head_vec {
@@ -792,29 +792,29 @@ impl SessionTx {
             } else if let Some(m) = head_item.as_object() {
                 let s = m
                     .get("symb")
-                    .ok_or_else(|| anyhow!("expect field 'symb' in rule head map"))?
+                    .ok_or_else(|| miette!("expect field 'symb' in rule head map"))?
                     .as_str()
                     .ok_or_else(|| {
-                        anyhow!("expect field 'symb' in rule head map to be a symbol")
+                        miette!("expect field 'symb' in rule head map to be a symbol")
                     })?;
                 let symbol = Symbol::from(s);
                 symbol.validate_query_var()?;
 
                 let aggr = m
                     .get("aggr")
-                    .ok_or_else(|| anyhow!("expect field 'aggr' in rule head map"))?
+                    .ok_or_else(|| miette!("expect field 'aggr' in rule head map"))?
                     .as_str()
                     .ok_or_else(|| {
-                        anyhow!("expect field 'aggr' in rule head map to be a symbol")
+                        miette!("expect field 'aggr' in rule head map to be a symbol")
                     })?;
                 let aggr = get_aggr(aggr)
-                    .ok_or_else(|| anyhow!("aggregation '{}' not found", aggr))?
+                    .ok_or_else(|| miette!("aggregation '{}' not found", aggr))?
                     .clone();
                 let aggr_args: Vec<DataValue> = match m.get("args") {
                     None => vec![],
                     Some(aggr_args) => aggr_args
                         .as_array()
-                        .ok_or_else(|| anyhow!("aggregation args must be an array"))?
+                        .ok_or_else(|| miette!("aggregation args must be an array"))?
                         .iter()
                         .map(|v| Self::parse_const_expr(v, params_pool))
                         .try_collect()?,
@@ -900,7 +900,7 @@ impl SessionTx {
             n @ ("conj" | "disj") => {
                 let args = v
                     .as_array()
-                    .ok_or_else(|| anyhow!("expect array argument for atom {}", n))?
+                    .ok_or_else(|| miette!("expect array argument for atom {}", n))?
                     .iter()
                     .map(|a| self.parse_input_atom(a, vld, params_pool))
                     .try_collect()?;
@@ -943,7 +943,7 @@ impl SessionTx {
         let symb = Symbol::from(k as &str);
         let attr = self
             .attr_by_name(&symb)?
-            .ok_or_else(|| anyhow!("attribute {} not found", symb))?;
+            .ok_or_else(|| miette!("attribute {} not found", symb))?;
         ensure!(
             attr.indexing.is_unique_index(),
             "pull inside query must use unique index, of which {} is not",
@@ -1024,7 +1024,7 @@ impl SessionTx {
                 let kw = Symbol::from(s as &str);
                 let attr = self
                     .attr_by_name(&kw)?
-                    .ok_or_else(|| anyhow!("attribute {} not found", kw))?;
+                    .ok_or_else(|| miette!("attribute {} not found", kw))?;
                 Ok(attr)
             }
             v => bail!("expect attribute name for triple atom, got {}", v),

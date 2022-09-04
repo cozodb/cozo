@@ -1,7 +1,7 @@
 use std::cmp::{max, min, Ordering};
 use std::fmt::{Debug, Formatter};
 
-use anyhow::{ensure, Result};
+use miette::{ensure, IntoDiagnostic, Result};
 use itertools::Itertools;
 use rmp_serde::Serializer;
 use serde::Serialize;
@@ -157,7 +157,7 @@ impl<'a> EncodedTuple<'a> {
             "bad data length for data: {:x?}",
             self.0
         );
-        Ok(rmp_serde::from_slice(&self.0[pos..])?)
+        Ok(rmp_serde::from_slice(&self.0[pos..]).into_diagnostic()?)
     }
 
     pub(crate) fn iter(&self) -> EncodedTupleIter<'a> {

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{anyhow, ensure, Context, Result};
+use miette::{miette, ensure, Context, Result};
 use itertools::Itertools;
 
 use crate::data::aggr::Aggregation;
@@ -195,7 +195,7 @@ impl SessionTx {
                 MagicAtom::Rule(rule_app) => {
                     let store = stores
                         .get(&rule_app.name)
-                        .ok_or_else(|| anyhow!("undefined rule '{:?}' encountered", rule_app.name))?
+                        .ok_or_else(|| miette!("undefined rule '{:?}' encountered", rule_app.name))?
                         .clone();
                     ensure!(
                         store.arity == rule_app.args.len(),
@@ -294,7 +294,7 @@ impl SessionTx {
                     let store = stores
                         .get(&rule_app.name)
                         .ok_or_else(|| {
-                            anyhow!("undefined rule encountered: '{:?}'", rule_app.name)
+                            miette!("undefined rule encountered: '{:?}'", rule_app.name)
                         })?
                         .clone();
                     ensure!(

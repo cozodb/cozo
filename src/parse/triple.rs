@@ -2,7 +2,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use miette::{miette, bail, ensure, Context, Result};
 use serde_json::{json, Map};
 
 use crate::data::attr::{Attribute, AttributeIndex, AttributeTyping};
@@ -116,12 +116,12 @@ impl SessionTx {
     ) -> Result<(Vec<Quintuple>, String)> {
         let map = req
             .as_object()
-            .ok_or_else(|| anyhow!("expect tx request to be an object, got {}", req))?;
+            .ok_or_else(|| miette!("expect tx request to be an object, got {}", req))?;
         let items = map
             .get("tx")
-            .ok_or_else(|| anyhow!("expect field 'tx' in tx request object {}", req))?
+            .ok_or_else(|| miette!("expect field 'tx' in tx request object {}", req))?
             .as_array()
-            .ok_or_else(|| anyhow!("expect field 'tx' to be an array in {}", req))?;
+            .ok_or_else(|| miette!("expect field 'tx' to be an array in {}", req))?;
         let default_since = match map.get("since") {
             None => Validity::current(),
             Some(v) => v.try_into()?,
@@ -147,7 +147,7 @@ impl SessionTx {
     ) -> Result<()> {
         let item = item
             .as_object()
-            .ok_or_else(|| anyhow!("expect tx request item to be an object, got {}", item))?;
+            .ok_or_else(|| miette!("expect tx request item to be an object, got {}", item))?;
         let (inner, action) = {
             if let Some(inner) = item.get("put") {
                 (inner, TxAction::Put)
@@ -265,7 +265,7 @@ impl SessionTx {
                 );
                 let eid = eid
                     .as_u64()
-                    .ok_or_else(|| anyhow!("cannot parse {} as entity id", eid))?;
+                    .ok_or_else(|| miette!("cannot parse {} as entity id", eid))?;
                 let eid = EntityId(eid);
                 ensure!(eid.is_perm(), "expected perm entity id, got {:?}", eid);
                 collected.push(Quintuple {
@@ -288,11 +288,11 @@ impl SessionTx {
                 let kw: Symbol = attr.try_into()?;
                 let attr = self
                     .attr_by_name(&kw)?
-                    .ok_or_else(|| anyhow!("attribute not found {}", kw))?;
+                    .ok_or_else(|| miette!("attribute not found {}", kw))?;
 
                 let eid = eid
                     .as_u64()
-                    .ok_or_else(|| anyhow!("cannot parse {} as entity id", eid))?;
+                    .ok_or_else(|| miette!("cannot parse {} as entity id", eid))?;
                 let eid = EntityId(eid);
                 ensure!(eid.is_perm(), "expect perm entity id, got {:?}", eid);
                 collected.push(Quintuple {
@@ -325,7 +325,7 @@ impl SessionTx {
         let kw: Symbol = attr_kw.try_into()?;
         let attr = self
             .attr_by_name(&kw)?
-            .ok_or_else(|| anyhow!("attribute not found: {}", kw))?;
+            .ok_or_else(|| miette!("attribute not found: {}", kw))?;
         if attr.cardinality.is_many() && attr.val_type != AttributeTyping::List && val.is_array() {
             for cur_val in val.as_array().unwrap() {
                 self.parse_tx_triple(eid, attr_kw, cur_val, action, since, temp_id_ctx, collected)?;
@@ -411,7 +411,7 @@ impl SessionTx {
                 let kw = (k as &str).into();
                 let attr = self
                     .attr_by_name(&kw)?
-                    .ok_or_else(|| anyhow!("attribute '{}' not found", kw))
+                    .ok_or_else(|| miette!("attribute '{}' not found", kw))
                     .with_context(|| format!("cannot process {}", json!(item)))?;
                 has_unique_attr = has_unique_attr || attr.indexing.is_unique_index();
                 has_identity_attr = has_identity_attr || attr.indexing == AttributeIndex::Identity;
@@ -450,7 +450,7 @@ impl SessionTx {
         if let Some(given_id) = item.get(PERM_ID_FIELD) {
             let given_id = given_id
                 .as_u64()
-                .ok_or_else(|| anyhow!("unable to interpret {} as entity id", given_id))?;
+                .ok_or_else(|| miette!("unable to interpret {} as entity id", given_id))?;
             let given_id = EntityId(given_id);
             ensure!(
                 given_id.is_perm(),
@@ -476,7 +476,7 @@ impl SessionTx {
             );
             let temp_id_str = temp_id
                 .as_str()
-                .ok_or_else(|| anyhow!("unable to interpret {} as temp id", temp_id))?;
+                .ok_or_else(|| miette!("unable to interpret {} as temp id", temp_id))?;
             eid = Some(temp_id_ctx.str2tempid(temp_id_str, true));
         }
         let eid = match eid {

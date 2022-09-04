@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::Ordering;
 
-use anyhow::{anyhow, bail, Result};
+use miette::{miette, bail, Result, IntoDiagnostic};
 use rmp_serde::Serializer;
 use serde::Serialize;
 
@@ -130,7 +130,7 @@ impl ViewRelIterator {
         } else {
             self.started = true;
         }
-        Ok(match self.inner.key()? {
+        Ok(match self.inner.key().into_diagnostic()? {
             None => None,
             Some(k_slice) => Some(EncodedTuple(k_slice).decode()?),
         })
@@ -149,14 +149,14 @@ impl SessionTx {
         let key = DataValue::Str(name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
-        Ok(vtx.exists(&encoded, false)?)
+        Ok(vtx.exists(&encoded, false).into_diagnostic()?)
     }
     pub(crate) fn create_view_rel(&self, mut meta: ViewRelMetadata) -> Result<ViewRelStore> {
         let key = DataValue::Str(meta.name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
 
         let mut vtx = self.view_db.transact().set_snapshot(true).start();
-        if vtx.exists(&encoded, true)? {
+        if vtx.exists(&encoded, true).into_diagnostic()? {
             bail!(
                 "cannot create view {}: one with the same name already exists",
                 meta.name
@@ -164,18 +164,18 @@ impl SessionTx {
         };
         let last_id = self.view_store_id.fetch_add(1, Ordering::SeqCst);
         meta.id = ViewRelId::new(last_id + 1)?;
-        vtx.put(&encoded, &meta.id.raw_encode())?;
+        vtx.put(&encoded, &meta.id.raw_encode()).into_diagnostic()?;
         let name_key =
             Tuple(vec![DataValue::Str(meta.name.0.clone())]).encode_as_key(ViewRelId::SYSTEM);
 
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
-        vtx.put(&name_key, &meta_val)?;
+        vtx.put(&name_key, &meta_val).into_diagnostic()?;
 
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
-        vtx.put(&t_encoded, &meta.id.raw_encode())?;
-        vtx.commit()?;
+        vtx.put(&t_encoded, &meta.id.raw_encode()).into_diagnostic()?;
+        vtx.commit().into_diagnostic()?;
         Ok(ViewRelStore {
             view_db: self.view_db.clone(),
             metadata: meta,
@@ -190,9 +190,9 @@ impl SessionTx {
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
 
         let found = vtx
-            .get(&encoded, true)?
-            .ok_or_else(|| anyhow!("cannot find stored view {}", name))?;
-        let metadata: ViewRelMetadata = rmp_serde::from_slice(&found)?;
+            .get(&encoded, true).into_diagnostic()?
+            .ok_or_else(|| miette!("cannot find stored view {}", name))?;
+        let metadata: ViewRelMetadata = rmp_serde::from_slice(&found).into_diagnostic()?;
         Ok(ViewRelStore {
             view_db: self.view_db.clone(),
             metadata,
@@ -203,11 +203,11 @@ impl SessionTx {
         let store = self.do_get_view_rel(name, &vtx)?;
         let key = DataValue::Str(name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
-        vtx.del(&encoded)?;
+        vtx.del(&encoded).into_diagnostic()?;
         let lower_bound = Tuple::default().encode_as_key(store.metadata.id);
         let upper_bound = Tuple::default().encode_as_key(store.metadata.id.next()?);
-        self.view_db.range_del(&lower_bound, &upper_bound)?;
-        vtx.commit()?;
+        self.view_db.range_del(&lower_bound, &upper_bound).into_diagnostic()?;
+        vtx.commit().into_diagnostic()?;
         Ok(())
     }
 }

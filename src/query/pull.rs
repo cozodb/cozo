@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashSet};
 
-use anyhow::{ensure, Result};
+use miette::{ensure, IntoDiagnostic, Result};
 use either::{Left, Right};
 use itertools::Itertools;
 use serde_json::{json, Map};
@@ -61,7 +61,7 @@ pub(crate) struct CurrentPath(SmallVec<[u16; 8]>);
 
 impl CurrentPath {
     pub(crate) fn new(idx: usize) -> Result<Self> {
-        Ok(Self(smallvec![idx.try_into()?]))
+        Ok(Self(smallvec![idx.try_into().into_diagnostic()?]))
     }
     fn get_from_root<'a>(&self, depth: usize, root: &'a [PullSpec]) -> &'a [PullSpec] {
         let mut current = root;
@@ -74,7 +74,7 @@ impl CurrentPath {
     fn push(&self, idx: usize) -> Result<Self> {
         let mut ret = CurrentPath(Default::default());
         ret.0.clone_from(&self.0);
-        ret.0.push(idx.try_into()?);
+        ret.0.push(idx.try_into().into_diagnostic()?);
         Ok(ret)
     }
     fn recurse_pop(&self, depth: usize) -> Self {
@@ -117,10 +117,10 @@ impl SessionTx {
             for data in res_iter {
                 let data = data?;
                 let encoded = data.encode_as_key(view_store.metadata.id);
-                vtx.del(&encoded)?;
+                vtx.del(&encoded).into_diagnostic()?;
             }
 
-            vtx.commit()?;
+            vtx.commit().into_diagnostic()?;
         } else {
             // let mut vtx = self.view_db.transact().start();
             //
@@ -131,17 +131,17 @@ impl SessionTx {
             // }
             //
             // vtx.commit()?;
-            let file = NamedTempFile::new()?;
+            let file = NamedTempFile::new().into_diagnostic()?;
             let path = file.into_temp_path();
             let path = path.to_string_lossy();
-            let mut writer = self.view_db.get_sst_writer(&path)?;
+            let mut writer = self.view_db.get_sst_writer(&path).into_diagnostic()?;
             for data in res_iter {
                 let data = data?;
                 let encoded = data.encode_as_key(view_store.metadata.id);
-                writer.put(&encoded, &[])?;
+                writer.put(&encoded, &[]).into_diagnostic()?;
             }
-            writer.finish()?;
-            self.view_db.ingest_sst_file(&path)?;
+            writer.finish().into_diagnostic()?;
+            self.view_db.ingest_sst_file(&path).into_diagnostic()?;
         }
         Ok(())
     }
@@ -558,7 +558,7 @@ impl SessionTx {
 
         let mut it = self.tx.iterator().upper_bound(&upper_bound).start();
         it.seek(&current);
-        while let Some((k_slice, v_slice)) = it.pair()? {
+        while let Some((k_slice, v_slice)) = it.pair().into_diagnostic()? {
             debug_assert_eq!(
                 StorageTag::try_from(k_slice[0])?,
                 StorageTag::TripleEntityAttrValue

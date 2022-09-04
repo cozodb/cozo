@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
 use smartstring::{LazyCompact, SmartString};
 
@@ -28,11 +28,11 @@ impl AlgoImpl for ReorderSort {
     ) -> Result<()> {
         let in_rel = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'reorder_sort' requires an input relation"))?;
+            .ok_or_else(|| miette!("'reorder_sort' requires an input relation"))?;
 
         let mut out_list = match opts
             .get("out")
-            .ok_or_else(|| anyhow!("'reorder_sort' requires the option 'out'"))?
+            .ok_or_else(|| miette!("'reorder_sort' requires the option 'out'"))?
         {
             Expr::Const(DataValue::List(l)) => {
                 l.iter().map(|d| Expr::Const(d.clone())).collect_vec()
@@ -53,7 +53,7 @@ impl AlgoImpl for ReorderSort {
         let skip = match opts.get("skip") {
             None => 0,
             Some(Expr::Const(v)) => v.get_int().ok_or_else(|| {
-                anyhow!(
+                miette!(
                     "option 'skip' of 'reorder_sort' must be an integer, got {:?}",
                     v
                 )
@@ -71,7 +71,7 @@ impl AlgoImpl for ReorderSort {
         let take = match opts.get("take") {
             None => i64::MAX,
             Some(Expr::Const(v)) => v.get_int().ok_or_else(|| {
-                anyhow!(
+                miette!(
                     "option 'take' of 'reorder_sort' must be an integer, got {:?}",
                     v
                 )

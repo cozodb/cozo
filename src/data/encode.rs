@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 
-use anyhow::{bail, Result};
+use miette::{bail, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -184,7 +184,7 @@ impl From<&'_ [u8]> for EncodedVec<LARGE_VEC_SIZE> {
 }
 
 impl TryFrom<u8> for StorageTag {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
         use StorageTag::*;
         Ok(match value {
@@ -211,17 +211,17 @@ pub(crate) const VEC_SIZE_8: usize = 8;
 
 #[inline]
 pub(crate) fn decode_value(src: &[u8]) -> Result<DataValue> {
-    Ok(rmp_serde::from_slice(src)?)
+    Ok(rmp_serde::from_slice(src).into_diagnostic()?)
 }
 
 #[inline]
 pub(crate) fn decode_value_from_key(src: &[u8]) -> Result<DataValue> {
-    Ok(rmp_serde::from_slice(&src[VEC_SIZE_24..])?)
+    Ok(rmp_serde::from_slice(&src[VEC_SIZE_24..]).into_diagnostic()?)
 }
 
 #[inline]
 pub(crate) fn decode_value_from_val(src: &[u8]) -> Result<DataValue> {
-    Ok(rmp_serde::from_slice(&src[VEC_SIZE_8..])?)
+    Ok(rmp_serde::from_slice(&src[VEC_SIZE_8..]).into_diagnostic()?)
 }
 
 /// eid: 8 bytes (incl. tag)
@@ -421,7 +421,7 @@ pub(crate) fn encode_sentinel_attr_val(aid: AttrId, val: &DataValue) -> EncodedV
 #[inline]
 pub(crate) fn decode_sentinel_attr_val(src: &[u8]) -> Result<(AttrId, DataValue)> {
     let a_id = AttrId::from_bytes(&src[..VEC_SIZE_8]);
-    let val = rmp_serde::from_slice(&src[VEC_SIZE_8..])?;
+    let val = rmp_serde::from_slice(&src[VEC_SIZE_8..]).into_diagnostic()?;
     Ok((a_id, val))
 }
 

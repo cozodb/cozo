@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
 use rand::prelude::*;
 use smartstring::{LazyCompact, SmartString};
@@ -28,14 +28,14 @@ impl AlgoImpl for LabelPropagation {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'label_propagation' requires edges relation"))?;
+            .ok_or_else(|| miette!("'label_propagation' requires edges relation"))?;
         let undirected =
             get_bool_option_required("undirected", opts, Some(false), "label_propagation")?;
         let max_iter = match opts.get("max_iter") {
             None => 10,
             Some(Expr::Const(DataValue::Num(n))) => {
                 let i = n.get_int().ok_or_else(|| {
-                    anyhow!(
+                    miette!(
                         "'max_iter' for 'label_propagation' requires an integer, got {:?}",
                         n
                     )

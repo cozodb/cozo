@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{anyhow, bail, ensure, Result};
+use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
 use log::debug;
 use smartstring::{LazyCompact, SmartString};
@@ -28,7 +28,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'community_detection_louvain' requires edges relation"))?;
+            .ok_or_else(|| miette!("'community_detection_louvain' requires edges relation"))?;
         let undirected = get_bool_option_required(
             "undirected",
             opts,
@@ -39,7 +39,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
             None => 10,
             Some(Expr::Const(DataValue::Num(n))) => {
                 let i = n.get_int().ok_or_else(|| {
-                    anyhow!(
+                    miette!(
                     "'max_iter' for 'community_detection_louvain' requires an integer, got {:?}",
                     n
                 )
@@ -76,7 +76,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
             None => None,
             Some(Expr::Const(DataValue::Num(n))) => Some({
                 let i = n.get_int().ok_or_else(|| {
-                    anyhow!(
+                    miette!(
                     "'keep_depth' for 'community_detection_louvain' requires an integer, got {:?}",
                     n
                 )

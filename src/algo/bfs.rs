@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use anyhow::{anyhow, ensure, Result};
+use miette::{miette, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
@@ -39,14 +39,14 @@ impl AlgoImpl for Bfs {
             let l = expr
                 .get_const()
                 .ok_or_else(|| {
-                    anyhow!(
+                    miette!(
                         "argument 'limit' to 'bfs' must be a constant, got {:?}",
                         expr
                     )
                 })?
                 .get_int()
                 .ok_or_else(|| {
-                    anyhow!(
+                    miette!(
                         "argument 'limit' to 'bfs' must be an integer, got {:?}",
                         expr
                     )
@@ -62,7 +62,7 @@ impl AlgoImpl for Bfs {
         };
         let mut condition = opts
             .get("condition")
-            .ok_or_else(|| anyhow!("terminating 'condition' required for 'bfs'"))?
+            .ok_or_else(|| miette!("terminating 'condition' required for 'bfs'"))?
             .clone();
         let binding_map = nodes.get_binding_map(0);
         condition.fill_binding_indices(&binding_map)?;
@@ -78,7 +78,7 @@ impl AlgoImpl for Bfs {
             let starting_node = node_tuple
                 .0
                 .get(0)
-                .ok_or_else(|| anyhow!("node tuple is empty"))?;
+                .ok_or_else(|| miette!("node tuple is empty"))?;
             if visited.contains(starting_node) {
                 continue;
             }
@@ -93,7 +93,7 @@ impl AlgoImpl for Bfs {
                     let to_node = edge
                         .0
                         .get(1)
-                        .ok_or_else(|| anyhow!("'edges' relation too short"))?;
+                        .ok_or_else(|| miette!("'edges' relation too short"))?;
                     if visited.contains(to_node) {
                         continue;
                     }
@@ -107,7 +107,7 @@ impl AlgoImpl for Bfs {
                         nodes
                             .prefix_iter(to_node, tx, stores)?
                             .next()
-                            .ok_or_else(|| anyhow!("node with id {:?} not found", candidate))??
+                            .ok_or_else(|| miette!("node with id {:?} not found", candidate))??
                     };
 
                     if condition.eval_pred(&cand_tuple)? {

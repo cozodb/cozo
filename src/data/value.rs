@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
-use anyhow::{bail, Result};
+use miette::{bail, Result};
 use ordered_float::OrderedFloat;
 use regex::Regex;
 use rmp_serde::Serializer;

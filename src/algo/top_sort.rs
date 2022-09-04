@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, Result};
+use miette::{miette, Result};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
@@ -26,7 +26,7 @@ impl AlgoImpl for TopSort {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'top_sort' missing edges relation"))?;
+            .ok_or_else(|| miette!("'top_sort' missing edges relation"))?;
 
         let (graph, indices, _) = edges.convert_edge_to_graph(false, tx, stores)?;
 

@@ -2,7 +2,7 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
 
-use anyhow::{anyhow, Result};
+use miette::{miette, Result};
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
@@ -33,9 +33,9 @@ impl AlgoImpl for ShortestPathDijkstra {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'shortest_path_dijkstra' requires edges relation"))?;
+            .ok_or_else(|| miette!("'shortest_path_dijkstra' requires edges relation"))?;
         let starting = rels.get(1).ok_or_else(|| {
-            anyhow!("'shortest_path_dijkstra' requires starting relation as second argument")
+            miette!("'shortest_path_dijkstra' requires starting relation as second argument")
         })?;
         let termination = rels.get(2);
         let undirected =
@@ -52,7 +52,7 @@ impl AlgoImpl for ShortestPathDijkstra {
             let node = tuple
                 .0
                 .get(0)
-                .ok_or_else(|| anyhow!("node relation too short"))?;
+                .ok_or_else(|| miette!("node relation too short"))?;
             if let Some(idx) = inv_indices.get(node) {
                 starting_nodes.insert(*idx);
             }
@@ -66,7 +66,7 @@ impl AlgoImpl for ShortestPathDijkstra {
                     let node = tuple
                         .0
                         .get(0)
-                        .ok_or_else(|| anyhow!("node relation too short"))?;
+                        .ok_or_else(|| miette!("node relation too short"))?;
                     if let Some(idx) = inv_indices.get(node) {
                         tn.insert(*idx);
                     }

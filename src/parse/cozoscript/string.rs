@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use miette::{miette, bail, Result};
 
 use crate::parse::cozoscript::number::parse_int;
 use crate::parse::cozoscript::Pair;
@@ -31,7 +31,7 @@ fn parse_quoted_string(pair: Pair<'_>) -> Result<String> {
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
                 let ch =
-                    char::from_u32(code).ok_or_else(|| anyhow!("invalid UTF8 code {}", code))?;
+                    char::from_u32(code).ok_or_else(|| miette!("invalid UTF8 code {}", code))?;
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {
@@ -60,7 +60,7 @@ fn parse_s_quoted_string(pair: Pair<'_>) -> Result<String> {
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
                 let ch =
-                    char::from_u32(code).ok_or_else(|| anyhow!("invalid UTF8 code {}", code))?;
+                    char::from_u32(code).ok_or_else(|| miette!("invalid UTF8 code {}", code))?;
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {

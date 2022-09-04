@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 
-use anyhow::Result;
+use miette::Result;
 use itertools::Itertools;
 
 use crate::algo::strongly_connected_components::TarjanScc;

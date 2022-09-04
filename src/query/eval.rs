@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
-use anyhow::{anyhow, Result};
+use miette::{miette, Result};
 use log::{debug, log_enabled, trace, Level};
 
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
@@ -39,7 +39,7 @@ impl SessionTx {
             .get(&MagicSymbol::Muggle {
                 inner: PROG_ENTRY.clone(),
             })
-            .ok_or_else(|| anyhow!("program entry not found in rules"))?
+            .ok_or_else(|| miette!("program entry not found in rules"))?
             .clone();
 
         for (idx, cur_prog) in strata.iter().enumerate() {
@@ -146,7 +146,7 @@ impl SessionTx {
         let mut algo_impl = algo_apply.algo.get_impl()?;
         let out = stores
             .get(rule_symb)
-            .ok_or_else(|| anyhow!("cannot find algo store {:?}", rule_symb))?;
+            .ok_or_else(|| miette!("cannot find algo store {:?}", rule_symb))?;
         algo_impl.run(
             self,
             &algo_apply.rule_args,

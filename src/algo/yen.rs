@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{anyhow, ensure, Result};
+use miette::{miette, ensure, Result};
 use itertools::Itertools;
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
@@ -29,22 +29,22 @@ impl AlgoImpl for KShortestPathYen {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'k_shortest_path_yen' requires edges relation"))?;
+            .ok_or_else(|| miette!("'k_shortest_path_yen' requires edges relation"))?;
         let starting = rels.get(1).ok_or_else(|| {
-            anyhow!("'k_shortest_path_yen' requires starting relation as second argument")
+            miette!("'k_shortest_path_yen' requires starting relation as second argument")
         })?;
         let termination = rels.get(2).ok_or_else(|| {
-            anyhow!("'k_shortest_path_yen' requires termination relation as third argument")
+            miette!("'k_shortest_path_yen' requires termination relation as third argument")
         })?;
         let undirected =
             get_bool_option_required("undirected", opts, Some(false), "k_shortest_path_yen")?;
         let k = opts
             .get("k")
-            .ok_or_else(|| anyhow!("option 'k' required for 'k_shortest_path_yen'"))?
+            .ok_or_else(|| miette!("option 'k' required for 'k_shortest_path_yen'"))?
             .get_const()
-            .ok_or_else(|| anyhow!("option 'k' for 'k_shortest_path_yen' must be a constant"))?
+            .ok_or_else(|| miette!("option 'k' for 'k_shortest_path_yen' must be a constant"))?
             .get_int()
-            .ok_or_else(|| anyhow!("option 'k' for 'k_shortest_path_yen' must be an integer"))?;
+            .ok_or_else(|| miette!("option 'k' for 'k_shortest_path_yen' must be an integer"))?;
         ensure!(
             k > 1,
             "option 'k' for 'k_shortest_path_yen' must be greater than 1"
@@ -59,7 +59,7 @@ impl AlgoImpl for KShortestPathYen {
             let node = tuple
                 .0
                 .get(0)
-                .ok_or_else(|| anyhow!("node relation too short"))?;
+                .ok_or_else(|| miette!("node relation too short"))?;
             if let Some(idx) = inv_indices.get(node) {
                 starting_nodes.insert(*idx);
             }
@@ -70,7 +70,7 @@ impl AlgoImpl for KShortestPathYen {
             let node = tuple
                 .0
                 .get(0)
-                .ok_or_else(|| anyhow!("node relation too short"))?;
+                .ok_or_else(|| miette!("node relation too short"))?;
             if let Some(idx) = inv_indices.get(node) {
                 termination_nodes.insert(*idx);
             }

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use anyhow::Result;
+use miette::{IntoDiagnostic, Result};
 use itertools::Itertools;
 use serde_json::json;
 
@@ -58,7 +58,7 @@ fn parse_tx_el(src: Pair<'_>) -> Result<JsonValue> {
         Rule::tx_map => parse_tx_map(src),
         Rule::tx_list => parse_tx_list(src),
         Rule::expr => build_expr::<NoWrapConst>(src),
-        Rule::neg_num => Ok(JsonValue::from_str(src.as_str())?),
+        Rule::neg_num => Ok(JsonValue::from_str(src.as_str()).into_diagnostic()?),
         _ => unreachable!(),
     }
 }

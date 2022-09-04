@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{anyhow, Result};
+use miette::{miette, Result};
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
@@ -27,7 +27,7 @@ impl AlgoImpl for ClusteringCoefficients {
     ) -> Result<()> {
         let edges = rels
             .get(0)
-            .ok_or_else(|| anyhow!("'clustering_coefficients' requires edges relation"))?;
+            .ok_or_else(|| miette!("'clustering_coefficients' requires edges relation"))?;
         let (graph, indices, _) = edges.convert_edge_to_graph(true, tx, stores)?;
         let graph: Vec<BTreeSet<usize>> =
             graph.into_iter().map(|e| e.into_iter().collect()).collect();

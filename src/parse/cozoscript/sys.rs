@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use anyhow::Result;
+use miette::{IntoDiagnostic, Result};
 
 use crate::data::symb::Symbol;
 use crate::parse::cozoscript::{Pairs, Rule};
@@ -48,7 +48,7 @@ pub(crate) fn parsed_db_op_to_enum(mut src: Pairs<'_>) -> Result<SysOp> {
         Rule::running_op => SysOp::ListRunning,
         Rule::kill_op => {
             let i_str = inner.into_inner().next().unwrap().as_str();
-            let i = u64::from_str_radix(i_str, 10)?;
+            let i = u64::from_str_radix(i_str, 10).into_diagnostic()?;
             SysOp::KillRunning(i)
         }
         Rule::list_schema_op => SysOp::ListSchema,

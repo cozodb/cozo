@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::bail;
+use miette::{bail, IntoDiagnostic};
 use chrono::{DateTime, TimeZone, Utc};
 use serde_derive::{Deserialize, Serialize};
 
@@ -40,11 +40,11 @@ impl From<i64> for Validity {
 }
 
 impl TryFrom<&str> for Validity {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let dt =
-            DateTime::parse_from_rfc2822(value).or_else(|_| DateTime::parse_from_rfc3339(value))?;
+            DateTime::parse_from_rfc2822(value).or_else(|_| DateTime::parse_from_rfc3339(value)).into_diagnostic()?;
         let sysdt: SystemTime = dt.into();
         let timestamp = sysdt.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64;
         Ok(Self(timestamp))
@@ -52,7 +52,7 @@ impl TryFrom<&str> for Validity {
 }
 
 impl TryFrom<&JsonValue> for Validity {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
 
     fn try_from(value: &JsonValue) -> Result<Self, Self::Error> {
         if let Some(v) = value.as_i64() {

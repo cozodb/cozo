@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use anyhow::{anyhow, ensure, Result};
+use miette::{ensure, miette, IntoDiagnostic, Result};
 
 use cozorocks::{DbIter, IterBuilder};
 
@@ -99,8 +99,11 @@ impl SessionTx {
     ) -> Result<()> {
         let aid = attr.id;
         let sentinel = encode_sentinel_entity_attr(eid, aid);
-        let gen_err = || anyhow!("required triple not found for {:?}, {:?}", eid, aid);
-        self.tx.get(&sentinel, true)?.ok_or_else(gen_err)?;
+        let gen_err = || miette!("required triple not found for {:?}, {:?}", eid, aid);
+        self.tx
+            .get(&sentinel, true)
+            .into_diagnostic()?
+            .ok_or_else(gen_err)?;
         let v_in_key = if attr.cardinality.is_one() {
             &DataValue::Guard
         } else {
@@ -109,7 +112,7 @@ impl SessionTx {
         let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, vld);
         let eav_encoded_upper = encode_eav_key(eid, attr.id, v_in_key, Validity::MIN);
         let it = self.bounded_scan_first(&eav_encoded, &eav_encoded_upper);
-        let (k_slice, v_slice) = it.pair()?.ok_or_else(gen_err)?;
+        let (k_slice, v_slice) = it.pair().into_diagnostic()?.ok_or_else(gen_err)?;
         if StoreOp::try_from(v_slice[0])?.is_retract() {
             return Err(gen_err());
         }
@@ -154,28 +157,30 @@ impl SessionTx {
 
         let aev_encoded = encode_aev_key(attr.id, eid, v_in_key, vld_in_key);
         if real_delete {
-            self.tx.del(&aev_encoded)?;
+            self.tx.del(&aev_encoded).into_diagnostic()?;
         } else {
-            self.tx.put(&aev_encoded, &val_encoded)?;
+            self.tx.put(&aev_encoded, &val_encoded).into_diagnostic()?;
         }
 
         let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, vld_in_key);
         if real_delete {
-            self.tx.del(&eav_encoded)?;
+            self.tx.del(&eav_encoded).into_diagnostic()?;
         } else {
-            self.tx.put(&eav_encoded, &val_encoded)?;
+            self.tx.put(&eav_encoded, &val_encoded).into_diagnostic()?;
         }
 
         // vae for ref types
         if attr.val_type.is_ref_type() {
             let vae_encoded = encode_vae_key(v.get_entity_id()?, attr.id, eid, vld_in_key);
             if real_delete {
-                self.tx.del(&vae_encoded)?;
+                self.tx.del(&vae_encoded).into_diagnostic()?;
             } else {
-                self.tx.put(
-                    &vae_encoded,
-                    &DataValue::Guard.encode_with_op_and_tx(op, tx_id),
-                )?;
+                self.tx
+                    .put(
+                        &vae_encoded,
+                        &DataValue::Guard.encode_with_op_and_tx(op, tx_id),
+                    )
+                    .into_diagnostic()?;
             }
         }
 
@@ -216,7 +221,7 @@ impl SessionTx {
                             v
                         );
                     }
-                } else if let Some(v_slice) = self.tx.get(&ave_encoded, false)? {
+                } else if let Some(v_slice) = self.tx.get(&ave_encoded, false).into_diagnostic()? {
                     let found_eid = decode_value_from_val(&v_slice)?.get_entity_id()?;
                     ensure!(
                         found_eid == eid,
@@ -228,21 +233,27 @@ impl SessionTx {
             }
             let e_in_val_encoded = eid.as_datavalue().encode_with_op_and_tx(op, tx_id);
             if real_delete {
-                self.tx.del(&ave_encoded)?;
+                self.tx.del(&ave_encoded).into_diagnostic()?;
             } else {
-                self.tx.put(&ave_encoded, &e_in_val_encoded)?;
+                self.tx
+                    .put(&ave_encoded, &e_in_val_encoded)
+                    .into_diagnostic()?;
             }
 
-            self.tx.put(
-                &encode_sentinel_attr_val(attr.id, v),
-                &tx_id.bytes_with_op(op),
-            )?;
+            self.tx
+                .put(
+                    &encode_sentinel_attr_val(attr.id, v),
+                    &tx_id.bytes_with_op(op),
+                )
+                .into_diagnostic()?;
         }
 
-        self.tx.put(
-            &encode_sentinel_entity_attr(eid, attr.id),
-            &tx_id.bytes_with_op(op),
-        )?;
+        self.tx
+            .put(
+                &encode_sentinel_entity_attr(eid, attr.id),
+                &tx_id.bytes_with_op(op),
+            )
+            .into_diagnostic()?;
 
         Ok(eid)
     }
@@ -339,7 +350,7 @@ impl SessionTx {
         let mut counter = 0;
         loop {
             it.seek(&current);
-            match it.pair()? {
+            match it.pair().into_diagnostic()? {
                 None => return Ok(counter),
                 Some((k_slice, v_slice)) => {
                     let op = StoreOp::try_from(v_slice[0])?;
@@ -352,7 +363,7 @@ impl SessionTx {
                     if op.is_assert() {
                         let cur_attr = self
                             .attr_by_id(cur_aid)?
-                            .ok_or_else(|| anyhow!("attribute not found for {:?}", cur_aid))?;
+                            .ok_or_else(|| miette!("attribute not found for {:?}", cur_aid))?;
                         self.retract_triple(cur_eid, &cur_attr, &cur_v, vld)?;
                         counter -= 1;
                     }
@@ -376,7 +387,11 @@ impl SessionTx {
         let lower = encode_ave_key_for_unique_v(attr.id, v, vld);
         let upper = encode_ave_key_for_unique_v(attr.id, v, Validity::MIN);
         Ok(
-            if let Some(v_slice) = self.bounded_scan_first(&lower, &upper).val()? {
+            if let Some(v_slice) = self
+                .bounded_scan_first(&lower, &upper)
+                .val()
+                .into_diagnostic()?
+            {
                 if StoreOp::try_from(v_slice[0])?.is_assert() {
                     // let (_, mut eid, _) = decode_ae_key(k_slice)?;
                     // if eid.is_zero() {
@@ -574,7 +589,7 @@ impl TripleEntityAttrIter {
         } else {
             self.it.next();
         }
-        match self.it.pair()? {
+        match self.it.pair().into_diagnostic()? {
             None => Ok(None),
             Some((k_slice, v_slice)) => {
                 let (eid, aid, _tid) = decode_ea_key(k_slice)?;
@@ -621,7 +636,7 @@ impl TripleEntityAttrBeforeIter {
     fn next_inner(&mut self) -> Result<Option<(EntityId, AttrId, DataValue)>> {
         loop {
             self.it.seek(&self.current);
-            match self.it.pair()? {
+            match self.it.pair().into_diagnostic()? {
                 None => return Ok(None),
                 Some((k_slice, v_slice)) => {
                     let (eid, aid, tid) = decode_ea_key(k_slice)?;
@@ -682,7 +697,7 @@ impl TripleEntityAttrRangeIter {
         } else {
             self.it.next();
         }
-        match self.it.pair()? {
+        match self.it.pair().into_diagnostic()? {
             None => Ok(None),
             Some((k_slice, v_slice)) => {
                 let (eid, aid, _tid) = decode_ea_key(k_slice)?;
@@ -736,7 +751,7 @@ impl TripleEntityAttrRangeBeforeIter {
     fn next_inner(&mut self) -> Result<Option<(EntityId, AttrId, DataValue)>> {
         loop {
             self.it.seek(&self.current);
-            match self.it.pair()? {
+            match self.it.pair().into_diagnostic()? {
                 None => return Ok(None),
                 Some((k_slice, v_slice)) => {
                     let (eid, aid, tid) = decode_ea_key(k_slice)?;
@@ -794,7 +809,7 @@ impl TripleAttrEntityIter {
         } else {
             self.started = true;
         }
-        match self.it.pair()? {
+        match self.it.pair().into_diagnostic()? {
             None => Ok(None),
             Some((k_slice, v_slice)) => {
                 let (aid, eid, _tid) = decode_ae_key(k_slice)?;
@@ -841,7 +856,7 @@ impl TripleAttrEntityBeforeIter {
     fn next_inner(&mut self) -> Result<Option<(AttrId, EntityId, DataValue)>> {
         loop {
             self.it.seek(&self.current);
-            match self.it.pair()? {
+            match self.it.pair().into_diagnostic()? {
                 None => return Ok(None),
                 Some((k_slice, v_slice)) => {
                     let (aid, eid, tid) = decode_ae_key(k_slice)?;
@@ -902,7 +917,7 @@ impl TripleAttrValueRangeIter {
         } else {
             self.started = true;
         }
-        match self.it.pair()? {
+        match self.it.pair().into_diagnostic()? {
             None => Ok(None),
             Some((k_slice, v_slice)) => {
                 let (aid, mut eid, _tid) = decode_ae_key(k_slice)?;
@@ -956,7 +971,7 @@ impl TripleAttrValueRangeBeforeIter {
     fn next_inner(&mut self) -> Result<Option<(AttrId, DataValue, EntityId)>> {
         loop {
             self.it.seek(&self.current);
-            match self.it.pair()? {
+            match self.it.pair().into_diagnostic()? {
                 None => return Ok(None),
                 Some((k_slice, v_slice)) => {
                     let (aid, mut eid, tid) = decode_ae_key(k_slice)?;
@@ -1014,7 +1029,7 @@ impl TripleAttrValueIter {
         } else {
             self.started = true;
         }
-        match self.it.pair()? {
+        match self.it.pair().into_diagnostic()? {
             None => Ok(None),
             Some((k_slice, v_slice)) => {
                 let (aid, mut eid, _tid) = decode_ae_key(k_slice)?;
@@ -1061,7 +1076,7 @@ impl TripleAttrValueBeforeIter {
     fn next_inner(&mut self) -> Result<Option<(AttrId, DataValue, EntityId)>> {
         loop {
             self.it.seek(&self.current);
-            match self.it.pair()? {
+            match self.it.pair().into_diagnostic()? {
                 None => return Ok(None),
                 Some((k_slice, v_slice)) => {
                     let (aid, mut eid, tid) = decode_ae_key(k_slice)?;
@@ -1120,7 +1135,7 @@ impl TripleAttrValueAfterIter {
     fn next_inner(&mut self) -> Result<Option<(AttrId, DataValue, EntityId)>> {
         loop {
             self.it.seek_back(&self.current);
-            match self.it.pair()? {
+            match self.it.pair().into_diagnostic()? {
                 None => return Ok(None),
                 Some((k_slice, v_slice)) => {
                     if compare_key(k_slice, &self.lower_bound) == std::cmp::Ordering::Less {
@@ -1175,7 +1190,7 @@ impl TripleValueRefAttrIter {
         } else {
             self.started = true;
         }
-        match self.it.key()? {
+        match self.it.key().into_diagnostic()? {
             None => Ok(None),
             Some(k_slice) => {
                 let (v_eid, aid, eid, _) = decode_vae_key(k_slice)?;
@@ -1218,7 +1233,7 @@ impl TripleValueRefAttrBeforeIter {
     fn next_inner(&mut self) -> Result<Option<(EntityId, AttrId, EntityId)>> {
         loop {
             self.it.seek(&self.current);
-            match self.it.pair()? {
+            match self.it.pair().into_diagnostic()? {
                 None => return Ok(None),
                 Some((k_slice, v_slice)) => {
                     let (v_eid, aid, eid, tid) = decode_vae_key(k_slice)?;
