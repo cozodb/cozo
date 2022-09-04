@@ -248,6 +248,7 @@ impl Debug for DataValue {
 pub(crate) const INLINE_VAL_SIZE_LIMIT: usize = 60;
 
 impl DataValue {
+    #[allow(dead_code)]
     pub(crate) fn check_input_allowed(&self) -> Result<()> {
         match self {
             DataValue::List(l) => {
@@ -311,6 +312,14 @@ impl DataValue {
     pub(crate) fn get_int(&self) -> Option<i64> {
         match self {
             DataValue::Num(n) => n.get_int(),
+            _ => None,
+        }
+    }
+    pub(crate) fn get_non_neg_int(&self) -> Option<u64> {
+        match self {
+            DataValue::Num(n) => n
+                .get_int()
+                .and_then(|i| if i < 0 { None } else { Some(i as u64) }),
             _ => None,
         }
     }

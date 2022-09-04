@@ -80,7 +80,7 @@ unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }
 
-term = _{ param | grouping | apply | var | list | literal }
+term = _{ literal | param | grouping | apply | var | list }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
@@ -184,12 +184,12 @@ nested_schema_clause = {compound_ident ~ ":" ~ ident+}
 // tx
 
 tx_clause = { (tx_put | tx_retract )? ~ tx_map ~ ";"? }
-tx_put = {"put"}
-tx_retract = {"retract"}
+tx_put = {"put" ~ ("@" ~ expr)?}
+tx_retract = {"retract" ~ ("@" ~ expr)?}
 tx_map = {"{" ~ (tx_pair ~ ",")* ~ tx_pair? ~ "}"}
-tx_pair = {tx_ident ~ ":" ~ tx_el}
-tx_list = {"[" ~ (tx_el ~ ",")* ~ tx_el? ~ "]"}
-tx_el = _{ tx_map | tx_list | neg_num | expr }
-neg_num = {"-" ~ number}
+tx_pair = {tx_ident ~ ":" ~ expr}
 tx_ident = _{ tx_special_ident | compound_ident | string}
-tx_special_ident = {"_id" | "_temp_id"}
+tx_ident_id = {"_id" | "'_id'" | "\"_id\""}
+tx_ident_temp_id = {"_tid" | "'_tid'" | "\"_tid\""}
+tx_ident_key = {"_key" | "'_key'" | "\"_key\""}
+tx_special_ident = _{ tx_ident_id | tx_ident_temp_id | tx_ident_key }

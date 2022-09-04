@@ -25,86 +25,87 @@ fn init_logger() {
 fn air_routes() -> Result<()> {
     init_logger();
     let db = create_db("_test_air_routes", false);
-    // let attr_res = db.run_script(
-    //     r#"
-    //     :schema
-    //
-    //     put country {
-    //         code: string identity,
-    //         desc: string
-    //     }
-    //     put continent {
-    //         code: string identity,
-    //         desc: string
-    //     }
-    //     put airport {
-    //         iata: string identity,
-    //         icao: string index,
-    //         city: string index,
-    //         desc: string,
-    //         region: string index,
-    //         country: ref,
-    //         runways: int,
-    //         longest: int,
-    //         altitude: int,
-    //         lat: float,
-    //         lon: float
-    //     }
-    //     put route {
-    //         src: ref,
-    //         dst: ref,
-    //         distance: int
-    //     }
-    //     put geo {
-    //         contains: ref many,
-    //     }
-    // "#,
-    // );
-    //
-    // if attr_res.is_ok() {
-    //     let insertions = read_to_string("tests/air-routes-data.json").into_diagnostic()?;
-    //     let triple_insertion_time = Instant::now();
-    //     db.run_script(&insertions)?;
-    //     dbg!(triple_insertion_time.elapsed());
-    // }
-    //
-    // let view_time = Instant::now();
-    // db.run_script(r#"
-    //     ?[src, dst, distance] := [r route.src src], [r route.dst dst], [r route.distance distance];
-    //     :view rederive flies_to;
-    // "#)?;
-    //
-    // dbg!(view_time.elapsed());
-    //
-    // let view_time2 = Instant::now();
-    // db.run_script(
-    //     r#"
-    //     ?[src_c, dst_c, distance] := [r route.src src], [r route.dst dst],
-    //                                     [r route.distance distance],
-    //                                     [src airport.iata src_c], [dst airport.iata dst_c];
-    //     :view rederive flies_to_code;
-    // "#,
-    // )?;
-    // dbg!(view_time2.elapsed());
-    //
-    // let view_time3 = Instant::now();
-    // db.run_script(
-    //     r#"
-    //         ?[code, lat, lon] := [n airport.iata code], [n airport.lat lat], [n airport.lon lon];
-    //         :view rederive code_lat_lon;
-    //     "#
-    // )?;
-    // dbg!(view_time3.elapsed());
-    //
-    // println!("views: {}", db.list_relations()?);
-    //
-    // let compact_main_time = Instant::now();
-    // db.compact_main()?;
-    // dbg!(compact_main_time.elapsed());
-    //
-    // let compact_view_time = Instant::now();
-    // db.compact_view()?;
-    // dbg!(compact_view_time.elapsed());
+    let attr_res = db.run_script(
+        r#"
+        :schema
+
+        put country {
+            code: string identity,
+            desc: string
+        }
+        put continent {
+            code: string identity,
+            desc: string
+        }
+        put airport {
+            iata: string identity,
+            icao: string index,
+            city: string index,
+            desc: string,
+            region: string index,
+            country: ref,
+            runways: int,
+            longest: int,
+            altitude: int,
+            lat: float,
+            lon: float
+        }
+        put route {
+            src: ref,
+            dst: ref,
+            distance: int
+        }
+        put geo {
+            contains: ref many,
+        }
+    "#,
+    );
+
+    if attr_res.is_ok() {
+        let insertions = read_to_string("tests/air-routes-data.json").into_diagnostic()?;
+        let triple_insertion_time = Instant::now();
+        db.run_script(&insertions)?;
+        dbg!(triple_insertion_time.elapsed());
+    }
+
+
+    let view_time = Instant::now();
+    db.run_script(r#"
+        ?[src, dst, distance] := [r route.src src], [r route.dst dst], [r route.distance distance];
+        :view rederive flies_to;
+    "#)?;
+
+    dbg!(view_time.elapsed());
+
+    let view_time2 = Instant::now();
+    db.run_script(
+        r#"
+        ?[src_c, dst_c, distance] := [r route.src src], [r route.dst dst],
+                                        [r route.distance distance],
+                                        [src airport.iata src_c], [dst airport.iata dst_c];
+        :view rederive flies_to_code;
+    "#,
+    )?;
+    dbg!(view_time2.elapsed());
+
+    let view_time3 = Instant::now();
+    db.run_script(
+        r#"
+            ?[code, lat, lon] := [n airport.iata code], [n airport.lat lat], [n airport.lon lon];
+            :view rederive code_lat_lon;
+        "#
+    )?;
+    dbg!(view_time3.elapsed());
+
+    println!("views: {}", db.list_relations()?);
+
+    let compact_main_time = Instant::now();
+    db.compact_main()?;
+    dbg!(compact_main_time.elapsed());
+
+    let compact_view_time = Instant::now();
+    db.compact_view()?;
+    dbg!(compact_view_time.elapsed());
 
     let dfs_time = Instant::now();
     let res = db.run_script(r#"

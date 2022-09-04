@@ -442,9 +442,7 @@ fn parse_algo_rule(
     Ok((
         Symbol::from(out_symbol),
         AlgoApply {
-            algo: AlgoHandle {
-                name: Symbol::from(*algo_name),
-            },
+            algo: AlgoHandle::new(algo_name),
             rule_args,
             options,
         },

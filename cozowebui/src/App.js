@@ -30,7 +30,7 @@ function App() {
             setValidating(true);
             const response = await fetch(url, {
                 method: 'POST',
-                body: '?[?ok] := ?ok <- true;',
+                body: '?[ok] := ok <- true;',
                 headers: new Headers({
                     'content-type': 'application/json',
                     'x-cozo-username': usernameInput,
@@ -129,7 +129,7 @@ function App() {
                         res.headers = [];
                         if (res.rows.length) {
                             for (let i = 0; i < res.rows[0].length; i++) {
-                                res.headers.push('?' + i);
+                                res.headers.push('' + i);
                             }
                         }
                     }
@@ -212,7 +212,7 @@ function App() {
                     numRows={queryResults.rows.length}
                 >
                     {queryResults.headers.map((n, idx) => <Column
-                        name={n.replace(/^\?/, '')}
+                        name={n}
                         key={idx}
                         cellRenderer={renderCell(idx)}
                     />)}

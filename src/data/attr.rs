@@ -1,16 +1,19 @@
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use miette::{miette, bail, Result, IntoDiagnostic};
+use miette::{bail, miette, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
+use smartstring::{LazyCompact, SmartString};
 
 use crate::data::encode::EncodedVec;
-use crate::data::id::{AttrId, TxId};
+use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, Num};
-use crate::parse::triple::TempIdCtx;
+// use crate::parse::triple::TempIdCtx;
+
 
 #[repr(u8)]
 #[derive(
@@ -231,6 +234,19 @@ pub(crate) struct Attribute {
     pub(crate) with_history: bool,
 }
 
+impl Default for Attribute {
+    fn default() -> Self {
+        Self {
+            id: AttrId(0),
+            name: Symbol::from(""),
+            cardinality: AttributeCardinality::One,
+            val_type: AttributeTyping::Ref,
+            indexing: AttributeIndex::None,
+            with_history: false,
+        }
+    }
+}
+
 const ATTR_VEC_SIZE: usize = 80;
 
 impl Attribute {
@@ -248,10 +264,12 @@ impl Attribute {
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
         Ok(rmp_serde::from_slice(data).into_diagnostic()?)
     }
-    pub(crate) fn coerce_value(&self, value: DataValue, ctx: &mut TempIdCtx) -> Result<DataValue> {
+    pub(crate) fn coerce_value(&self, value: DataValue, ctx: &BTreeMap<SmartString<LazyCompact>, EntityId>) -> Result<DataValue> {
         if self.val_type.is_ref_type() {
-            if let DataValue::Str(s) = value {
-                return Ok(ctx.str2tempid(&s, false).as_datavalue());
+            if let DataValue::Str(s) = &value {
+                return Ok(ctx.get(s)
+                    .ok_or_else(|| miette!("required tempid {} not found", s))?.as_datavalue());
+
             }
         }
         self.val_type.coerce_value(value)

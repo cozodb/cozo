@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use miette::{bail, miette, IntoDiagnostic, Result};
+use miette::{bail, miette, IntoDiagnostic, Result, ensure};
 use pest::prec_climber::{Operator, PrecClimber};
 use smartstring::{LazyCompact, SmartString};
 
@@ -128,13 +128,19 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
                 Rule::apply => {
                     let mut p = p.into_inner();
                     let ident = p.next().unwrap().as_str();
-                    let args: Vec<_> = p
+                    let mut args: Box<_> = p
                         .next()
                         .unwrap()
                         .into_inner()
                         .map(|v| build_expr(v, param_pool))
                         .try_collect()?;
                     let op = get_op(ident).ok_or_else(|| miette!("op not found: {}", ident))?;
+                    op.post_process_args(&mut args);
+                    if op.vararg {
+                        ensure!(op.min_arity <= args.len(), "args too short for {}", ident);
+                    } else {
+                        ensure!(op.min_arity == args.len(), "args not right for {}", ident);
+                    }
                     Expr::Apply(op, args.into())
                 }
                 Rule::grouping => build_expr(p.into_inner().next().unwrap(), param_pool)?,

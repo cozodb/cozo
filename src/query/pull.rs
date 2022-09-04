@@ -26,8 +26,11 @@ pub(crate) type PullSpecs = Vec<PullSpec>;
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) enum PullSpec {
+    #[allow(dead_code)]
     PullAll,
+    #[allow(dead_code)]
     PullId(Symbol),
+    #[allow(dead_code)]
     Attr(AttrPullSpec),
 }
 

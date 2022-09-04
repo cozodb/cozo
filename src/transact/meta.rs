@@ -11,7 +11,7 @@ use crate::data::encode::{
 use crate::data::id::AttrId;
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
-use crate::parse::schema::AttrTxItem;
+use crate::parse::script::schema::AttrTxItem;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 

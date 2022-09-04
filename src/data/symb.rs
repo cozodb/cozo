@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display, Formatter};
 
-use miette::{ensure, IntoDiagnostic, Result};
+use miette::{IntoDiagnostic, Result};
 use lazy_static::lazy_static;
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
@@ -39,25 +39,6 @@ impl Symbol {
             || self
                 .0
                 .starts_with(['_', ':', '<', '.', '*', '#', '$', '?', '!', ']', '['])
-    }
-    pub(crate) fn is_query_var(&self) -> bool {
-        self.0.starts_with('?') && self.0.len() > 1
-    }
-    pub(crate) fn validate_not_reserved(&self) -> Result<()> {
-        ensure!(
-            !self.is_reserved(),
-            "reserved symbol not allowed here: {}",
-            self.0
-        );
-        Ok(())
-    }
-    pub(crate) fn validate_query_var(&self) -> Result<()> {
-        ensure!(
-            self.is_query_var(),
-            "query var must start with '?': {}",
-            self.0
-        );
-        Ok(())
     }
     pub(crate) fn is_prog_entry(&self) -> bool {
         self.0 == "?"

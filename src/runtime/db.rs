@@ -16,22 +16,19 @@ use smartstring::SmartString;
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
-use crate::data::encode::{
-    decode_ea_key, decode_value_from_key, decode_value_from_val, encode_eav_key, largest_key,
-    smallest_key, StorageTag,
-};
-use crate::data::id::{AttrId, EntityId, TxId, Validity};
+use crate::data::encode::{largest_key, smallest_key};
+use crate::data::id::{TxId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::program::ViewOp;
+use crate::data::program::{InputProgram, ViewOp};
 use crate::data::symb::Symbol;
-use crate::data::triple::StoreOp;
 use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::parse::cozoscript::query::{parse_query_to_json, ScriptType};
-use crate::parse::cozoscript::sys::{CompactTarget, SysOp};
-use crate::parse::schema::AttrTxItem;
+// use crate::parse::cozoscript::query::{parse_query_to_json, ScriptType};
+use crate::parse::script::schema::AttrTxItem;
+use crate::parse::script::sys::{CompactTarget, SysOp};
+use crate::parse::script::tx::Quintuple;
 use crate::parse::script::{parse_script, CozoScript};
-use crate::query::pull::CurrentPath;
+// use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::{ViewRelId, ViewRelMetadata};
 use crate::utils::swap_option_result;
@@ -205,44 +202,44 @@ impl Db {
         it.seek_to_start();
         it
     }
-    pub fn pull(&self, eid: &JsonValue, payload: &JsonValue, vld: &JsonValue) -> Result<JsonValue> {
-        let eid = EntityId::try_from(eid)?;
-        let vld = match vld {
-            JsonValue::Null => Validity::current(),
-            v => Validity::try_from(v)?,
-        };
-        let mut tx = self.transact()?;
-        let specs = tx.parse_pull(payload, 0)?;
-        let mut collected = Default::default();
-        let mut recursive_seen = Default::default();
-        for (idx, spec) in specs.iter().enumerate() {
-            tx.pull(
-                eid,
-                vld,
-                spec,
-                0,
-                &specs,
-                CurrentPath::new(idx)?,
-                &mut collected,
-                &mut recursive_seen,
-            )?;
-        }
-        Ok(JsonValue::Object(collected))
-    }
+    // pub fn pull(&self, eid: &JsonValue, payload: &JsonValue, vld: &JsonValue) -> Result<JsonValue> {
+    //     let eid = EntityId::try_from(eid)?;
+    //     let vld = match vld {
+    //         JsonValue::Null => Validity::current(),
+    //         v => Validity::try_from(v)?,
+    //     };
+    //     let mut tx = self.transact()?;
+    //     let specs = tx.parse_pull(payload, 0)?;
+    //     let mut collected = Default::default();
+    //     let mut recursive_seen = Default::default();
+    //     for (idx, spec) in specs.iter().enumerate() {
+    //         tx.pull(
+    //             eid,
+    //             vld,
+    //             spec,
+    //             0,
+    //             &specs,
+    //             CurrentPath::new(idx)?,
+    //             &mut collected,
+    //             &mut recursive_seen,
+    //         )?;
+    //     }
+    //     Ok(JsonValue::Object(collected))
+    // }
     // pub fn run_tx_triples(&self, payload: &str) -> Result<JsonValue> {
     //     let payload = parse_tx_to_json(payload)?;
     //     self.transact_triples(&payload)
     // }
-    pub fn transact_triples(&self, payload: &JsonValue) -> Result<JsonValue> {
+    fn transact_triples(&self, payloads: Vec<Quintuple>) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
-        let (payloads, comment) = tx.parse_tx_requests(payload)?;
+        // let (payloads, comment) = tx.parse_tx_requests(payload)?;
         let res: JsonValue = tx
             .tx_triples(payloads)?
             .iter()
             .map(|(eid, size)| json!([eid.0, size]))
             .collect();
         let tx_id = tx.get_write_tx_id()?;
-        tx.commit_tx(&comment, false)?;
+        tx.commit_tx("", false)?;
         Ok(json!({
             "tx_id": tx_id,
             "results": res
@@ -252,8 +249,7 @@ impl Db {
     //     let payload = parse_schema_to_json(payload)?;
     //     self.transact_attributes(&payload)
     // }
-    pub fn transact_attributes(&self, payload: &JsonValue) -> Result<JsonValue> {
-        let (attrs, comment) = AttrTxItem::parse_request(payload)?;
+    fn transact_attributes(&self, attrs: Vec<AttrTxItem>) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
         let res: JsonValue = tx
             .tx_attrs(attrs)?
@@ -261,7 +257,7 @@ impl Db {
             .map(|(op, aid)| json!([aid.0, op.to_string()]))
             .collect();
         let tx_id = tx.get_write_tx_id()?;
-        tx.commit_tx(&comment, false)?;
+        tx.commit_tx("", false)?;
         Ok(json!({
             "tx_id": tx_id,
             "results": res
@@ -286,118 +282,103 @@ impl Db {
             json!({"rows": rows, "headers": ["id", "name", "type", "cardinality", "index", "history"]}),
         )
     }
-    pub fn entities_at(&self, vld: &JsonValue) -> Result<JsonValue> {
-        let vld = match vld {
-            JsonValue::Null => Validity::current(),
-            v => Validity::try_from(v)?,
-        };
-        let tx = self.transact()?;
-        let mut current = encode_eav_key(
-            EntityId::MIN_PERM,
-            AttrId::MIN_PERM,
-            &DataValue::Null,
-            Validity::MAX,
-        );
-        let upper_bound = encode_eav_key(
-            EntityId::MAX_PERM,
-            AttrId::MAX_PERM,
-            &DataValue::Bot,
-            Validity::MIN,
-        );
-        let mut it = tx
-            .tx
-            .iterator()
-            .upper_bound(&upper_bound)
-            .total_order_seek(true)
-            .start();
-        let mut collected: BTreeMap<EntityId, JsonValue> = BTreeMap::default();
-        it.seek(&current);
-        while let Some((k_slice, v_slice)) = it.pair().into_diagnostic()? {
-            debug_assert_eq!(
-                StorageTag::try_from(k_slice[0])?,
-                StorageTag::TripleEntityAttrValue
-            );
-            let (e_found, a_found, vld_found) = decode_ea_key(k_slice)?;
-            current.copy_from_slice(k_slice);
-
-            if vld_found > vld {
-                current.encoded_entity_amend_validity(vld);
-                it.seek(&current);
-                continue;
-            }
-            let op = StoreOp::try_from(v_slice[0])?;
-            if op.is_retract() {
-                current.encoded_entity_amend_validity_to_inf_past();
-                it.seek(&current);
-                continue;
-            }
-            let attr = tx.attr_by_id(a_found)?;
-            if attr.is_none() {
-                current.encoded_entity_amend_validity_to_inf_past();
-                it.seek(&current);
-                continue;
-            }
-            let attr = attr.unwrap();
-            let value = if attr.cardinality.is_one() {
-                decode_value_from_val(v_slice)?
-            } else {
-                decode_value_from_key(k_slice)?
-            };
-            let json_for_entry = collected.entry(e_found).or_insert_with(|| json!({}));
-            let map_for_entry = json_for_entry.as_object_mut().unwrap();
-            map_for_entry.insert("_id".to_string(), e_found.0.into());
-            if attr.cardinality.is_many() {
-                let arr = map_for_entry
-                    .entry(attr.name.to_string())
-                    .or_insert_with(|| json!([]));
-                let arr = arr.as_array_mut().unwrap();
-                arr.push(value.into());
-            } else {
-                map_for_entry.insert(attr.name.to_string(), value.into());
-            }
-            current.encoded_entity_amend_validity_to_inf_past();
-            it.seek(&current);
-        }
-        let collected = collected.into_iter().map(|(_, v)| v).collect_vec();
-        Ok(json!(collected))
-    }
+    // pub fn entities_at(&self, vld: &JsonValue) -> Result<JsonValue> {
+    //     let vld = match vld {
+    //         JsonValue::Null => Validity::current(),
+    //         v => Validity::try_from(v)?,
+    //     };
+    //     let tx = self.transact()?;
+    //     let mut current = encode_eav_key(
+    //         EntityId::MIN_PERM,
+    //         AttrId::MIN_PERM,
+    //         &DataValue::Null,
+    //         Validity::MAX,
+    //     );
+    //     let upper_bound = encode_eav_key(
+    //         EntityId::MAX_PERM,
+    //         AttrId::MAX_PERM,
+    //         &DataValue::Bot,
+    //         Validity::MIN,
+    //     );
+    //     let mut it = tx
+    //         .tx
+    //         .iterator()
+    //         .upper_bound(&upper_bound)
+    //         .total_order_seek(true)
+    //         .start();
+    //     let mut collected: BTreeMap<EntityId, JsonValue> = BTreeMap::default();
+    //     it.seek(&current);
+    //     while let Some((k_slice, v_slice)) = it.pair().into_diagnostic()? {
+    //         debug_assert_eq!(
+    //             StorageTag::try_from(k_slice[0])?,
+    //             StorageTag::TripleEntityAttrValue
+    //         );
+    //         let (e_found, a_found, vld_found) = decode_ea_key(k_slice)?;
+    //         current.copy_from_slice(k_slice);
+    //
+    //         if vld_found > vld {
+    //             current.encoded_entity_amend_validity(vld);
+    //             it.seek(&current);
+    //             continue;
+    //         }
+    //         let op = StoreOp::try_from(v_slice[0])?;
+    //         if op.is_retract() {
+    //             current.encoded_entity_amend_validity_to_inf_past();
+    //             it.seek(&current);
+    //             continue;
+    //         }
+    //         let attr = tx.attr_by_id(a_found)?;
+    //         if attr.is_none() {
+    //             current.encoded_entity_amend_validity_to_inf_past();
+    //             it.seek(&current);
+    //             continue;
+    //         }
+    //         let attr = attr.unwrap();
+    //         let value = if attr.cardinality.is_one() {
+    //             decode_value_from_val(v_slice)?
+    //         } else {
+    //             decode_value_from_key(k_slice)?
+    //         };
+    //         let json_for_entry = collected.entry(e_found).or_insert_with(|| json!({}));
+    //         let map_for_entry = json_for_entry.as_object_mut().unwrap();
+    //         map_for_entry.insert("_id".to_string(), e_found.0.into());
+    //         if attr.cardinality.is_many() {
+    //             let arr = map_for_entry
+    //                 .entry(attr.name.to_string())
+    //                 .or_insert_with(|| json!([]));
+    //             let arr = arr.as_array_mut().unwrap();
+    //             arr.push(value.into());
+    //         } else {
+    //             map_for_entry.insert(attr.name.to_string(), value.into());
+    //         }
+    //         current.encoded_entity_amend_validity_to_inf_past();
+    //         it.seek(&current);
+    //     }
+    //     let collected = collected.into_iter().map(|(_, v)| v).collect_vec();
+    //     Ok(json!(collected))
+    // }
     pub fn run_script(&self, payload: &str) -> Result<JsonValue> {
-        let (script_type, json) = parse_query_to_json(payload)?;
-        match script_type {
-            ScriptType::Query => self.run_query(&payload),
-            ScriptType::Schema => self.transact_attributes(&json),
-            ScriptType::Tx => self.transact_triples(&json),
-            ScriptType::Sys => self.run_sys_op(json),
+        match parse_script(payload, &Default::default())? {
+            CozoScript::Query(p) => self.run_query(p),
+            CozoScript::Tx(tx) => self.transact_triples(tx),
+            CozoScript::Schema(schema) => self.transact_attributes(schema),
+            CozoScript::Sys(op) => self.run_sys_op(op),
         }
     }
-    pub fn convert_to_json_query(&self, payload: &str) -> Result<JsonValue> {
-        let (script_type, payload) = parse_query_to_json(payload)?;
-        let key = match script_type {
-            ScriptType::Query => "query",
-            ScriptType::Schema => "schema",
-            ScriptType::Tx => "tx",
-            ScriptType::Sys => "sys",
-        };
-        Ok(json!({ key: payload }))
-    }
+    // pub fn convert_to_json_query(&self, payload: &str) -> Result<JsonValue> {
+    //     let (script_type, payload) = parse_query_to_json(payload)?;
+    //     let key = match script_type {
+    //         ScriptType::Query => "query",
+    //         ScriptType::Schema => "schema",
+    //         ScriptType::Tx => "tx",
+    //         ScriptType::Sys => "sys",
+    //     };
+    //     Ok(json!({ key: payload }))
+    // }
     pub fn run_json_query(&self, _payload: &JsonValue) -> Result<JsonValue> {
         todo!()
-        // let (k, v) = payload
-        //     .as_object()
-        //     .ok_or_else(|| miette!("json query must be an object"))?
-        //     .iter()
-        //     .next()
-        //     .ok_or_else(|| miette!("json query must be an object with keys"))?;
-        // match k as &str {
-        //     "query" => self.run_query(v),
-        //     "schema" => self.transact_attributes(v),
-        //     "tx" => self.transact_triples(v),
-        //     "sys" => self.run_sys_op(v.clone()),
-        //     v => bail!("unexpected key in json query: {}", v),
-        // }
     }
-    pub fn run_sys_op(&self, payload: JsonValue) -> Result<JsonValue> {
-        let op: SysOp = serde_json::from_value(payload).into_diagnostic()?;
+    fn run_sys_op(&self, op: SysOp) -> Result<JsonValue> {
         match op {
             SysOp::Compact(opts) => {
                 for opt in opts {
@@ -435,12 +416,8 @@ impl Db {
             }
         }
     }
-    pub fn run_query(&self, payload: &str) -> Result<JsonValue> {
+    fn run_query(&self, input_program: InputProgram) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let input_program = match parse_script(payload, &Default::default())? {
-            CozoScript::Query(p) => p,
-        };
-        // let input_program = tx.parse_query(payload, &Default::default())?;
         if let Some((meta, op)) = &input_program.out_opts.as_view {
             if *op == ViewOp::Create {
                 ensure!(

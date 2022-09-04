@@ -254,21 +254,21 @@ async fn json_query(
     Ok(HttpResponse::Ok().json(result))
 }
 
-#[post("/script-to-json")]
-async fn to_json_query(
-    body: web::Bytes,
-    data: web::Data<AppStateWithDb>,
-    req: HttpRequest,
-) -> Result<impl Responder> {
-    data.verify_password(&req).await?;
-
-    let text = std::str::from_utf8(&body)
-        .map_err(|e| miette!(e))?
-        .to_string();
-    let db = data.db.new_session()?;
-    let res = db.convert_to_json_query(&text)?;
-    Ok(HttpResponse::Ok().json(res))
-}
+// #[post("/script-to-json")]
+// async fn to_json_query(
+//     body: web::Bytes,
+//     data: web::Data<AppStateWithDb>,
+//     req: HttpRequest,
+// ) -> Result<impl Responder> {
+//     data.verify_password(&req).await?;
+//
+//     let text = std::str::from_utf8(&body)
+//         .map_err(|e| miette!(e))?
+//         .to_string();
+//     let db = data.db.new_session()?;
+//     let res = db.convert_to_json_query(&text)?;
+//     Ok(HttpResponse::Ok().json(res))
+// }
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
@@ -355,7 +355,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .service(query)
             .service(json_query)
-            .service(to_json_query)
+            // .service(to_json_query)
             .service(change_password)
             .service(assert_user)
             .service(remove_user)

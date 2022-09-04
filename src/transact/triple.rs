@@ -1,6 +1,9 @@
+use std::collections::btree_map::Entry;
+use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 
-use miette::{ensure, miette, IntoDiagnostic, Result};
+use miette::{bail, ensure, IntoDiagnostic, miette, Result};
+use smartstring::{LazyCompact, SmartString};
 
 use cozorocks::{DbIter, IterBuilder};
 
@@ -15,119 +18,136 @@ use crate::data::encode::{
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::triple::StoreOp;
 use crate::data::value::DataValue;
-use crate::parse::triple::{Quintuple, TxAction};
+use crate::parse::script::tx::{EntityRep, Quintuple, TxAction};
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
 impl SessionTx {
     pub(crate) fn tx_triples(
         &mut self,
-        payloads: Vec<Quintuple>,
+        mut payloads: Vec<Quintuple>,
     ) -> Result<Vec<(EntityId, isize)>> {
+        let default_vld = Validity::current();
         let mut ret = Vec::with_capacity(payloads.len());
+        let mut str_temp_to_perm_ids: BTreeMap<SmartString<LazyCompact>, EntityId> =
+            BTreeMap::new();
+        let mut num_temp_to_perm_ids: BTreeMap<usize, EntityId> = BTreeMap::new();
+        for payload in &mut payloads {
+            if let EntityRep::UserTempId(symb) = &payload.entity {
+                ensure!(
+                    payload.action == TxAction::Put,
+                    "temp id can only be used for put actions"
+                );
+                if !str_temp_to_perm_ids.contains_key(symb) {
+                    let new_eid = EntityId(self.last_ent_id.fetch_add(1, Ordering::AcqRel) + 1);
+                    str_temp_to_perm_ids.insert(symb.clone(), new_eid);
+                }
+            }
+        }
+
         for payload in payloads {
             match payload.action {
                 TxAction::Put => {
-                    let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
-                    if payload.triple.id.is_perm() {
-                        ret.push((
-                            self.amend_triple(
-                                payload.triple.id,
-                                &attr,
-                                &payload.triple.value,
-                                payload.validity,
-                            )?,
-                            1,
-                        ));
-                    } else {
-                        ret.push((
-                            self.new_triple(
-                                payload.triple.id,
-                                &attr,
-                                &payload.triple.value,
-                                payload.validity,
-                            )?,
-                            1,
-                        ));
+                    let attr = self
+                        .attr_by_name(&payload.attr_name)?
+                        .ok_or_else(|| miette!("attribute {} not found", payload.attr_name))?;
+                    let val = attr.coerce_value(payload.value, &mut str_temp_to_perm_ids)?;
+                    match payload.entity {
+                        EntityRep::Id(perm) => {
+                            ret.push((
+                                self.amend_triple(
+                                    perm,
+                                    &attr,
+                                    &val,
+                                    payload.validity.unwrap_or(default_vld),
+                                )?,
+                                1,
+                            ));
+                        }
+                        EntityRep::SysTempId(tid) => {
+                           let eid = match num_temp_to_perm_ids.entry(tid) {
+                                Entry::Vacant(e) => {
+                                    let new_eid = EntityId(
+                                        self.last_ent_id.fetch_add(1, Ordering::AcqRel) + 1,
+                                    );
+                                    e.insert(new_eid);
+                                    new_eid
+                                }
+                                Entry::Occupied(e) => *e.get(),
+                            };
+
+                            ret.push((
+                                self.new_triple(
+                                    eid,
+                                    &attr,
+                                    &val,
+                                    payload.validity.unwrap_or(default_vld),
+                                )?,
+                                1,
+                            ));
+                        }
+
+                        EntityRep::UserTempId(tempid) => {
+                            let eid = *str_temp_to_perm_ids.get(&tempid).unwrap();
+
+                            ret.push((
+                                self.new_triple(
+                                    eid,
+                                    &attr,
+                                    &val,
+                                    payload.validity.unwrap_or(default_vld),
+                                )?,
+                                1,
+                            ));
+                        }
+                        EntityRep::PullByKey(symb, val) => {
+                            let vld = payload.validity.unwrap_or(default_vld);
+                            let attr = self
+                                .attr_by_name(&symb)?
+                                .ok_or_else(|| miette!("required attribute {} not found", symb))?;
+
+                            let eid =
+                                self.eid_by_unique_av(&attr, &val, vld)?.ok_or_else(|| {
+                                    miette!("requried entity not found: {}: {:?}", symb, val)
+                                })?;
+
+                            ret.push((self.new_triple(eid, &attr, &val, vld)?, 1));
+                        }
                     }
                 }
                 TxAction::Retract => {
-                    let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
+                    let attr = self.attr_by_name(&payload.attr_name)?.unwrap();
+                    let eid = match payload.entity {
+                        EntityRep::Id(id) => id,
+                        EntityRep::UserTempId(_) | EntityRep::SysTempId(_) => {
+                            bail!("cannot retract with temp id")
+                        }
+                        EntityRep::PullByKey(symb, val) => {
+                            let vld = payload.validity.unwrap_or(default_vld);
+                            let attr = self
+                                .attr_by_name(&symb)?
+                                .ok_or_else(|| miette!("required attribute {} not found", symb))?;
+
+                            let eid =
+                                self.eid_by_unique_av(&attr, &val, vld)?.ok_or_else(|| {
+                                    miette!("requried entity not found: {}: {:?}", symb, val)
+                                })?;
+                            eid
+                        }
+                    };
                     ret.push((
                         self.retract_triple(
-                            payload.triple.id,
+                            eid,
                             &attr,
-                            &payload.triple.value,
-                            payload.validity,
+                            &payload.value,
+                            payload.validity.unwrap_or(default_vld),
                         )?,
                         -1,
                     ));
                 }
-                TxAction::RetractAllEA => {
-                    let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
-                    ret.push((
-                        payload.triple.id,
-                        self.retract_triples_for_attr(payload.triple.id, &attr, payload.validity)?,
-                    ));
-                }
-                TxAction::RetractAllE => {
-                    ret.push((
-                        payload.triple.id,
-                        self.retract_entity(payload.triple.id, payload.validity)?,
-                    ));
-                }
-                TxAction::Ensure => {
-                    let attr = self.attr_by_id(payload.triple.attr)?.unwrap();
-                    self.ensure_triple(
-                        payload.triple.id,
-                        &attr,
-                        &payload.triple.value,
-                        payload.validity,
-                    )?;
-                    ret.push((payload.triple.id, 0));
-                }
             }
         }
         Ok(ret)
-    }
-    pub(crate) fn ensure_triple(
-        &mut self,
-        eid: EntityId,
-        attr: &Attribute,
-        v: &DataValue,
-        vld: Validity,
-    ) -> Result<()> {
-        let aid = attr.id;
-        let sentinel = encode_sentinel_entity_attr(eid, aid);
-        let gen_err = || miette!("required triple not found for {:?}, {:?}", eid, aid);
-        self.tx
-            .get(&sentinel, true)
-            .into_diagnostic()?
-            .ok_or_else(gen_err)?;
-        let v_in_key = if attr.cardinality.is_one() {
-            &DataValue::Guard
-        } else {
-            v
-        };
-        let eav_encoded = encode_eav_key(eid, attr.id, v_in_key, vld);
-        let eav_encoded_upper = encode_eav_key(eid, attr.id, v_in_key, Validity::MIN);
-        let it = self.bounded_scan_first(&eav_encoded, &eav_encoded_upper);
-        let (k_slice, v_slice) = it.pair().into_diagnostic()?.ok_or_else(gen_err)?;
-        if StoreOp::try_from(v_slice[0])?.is_retract() {
-            return Err(gen_err());
-        }
-        let stored_v = if attr.cardinality.is_one() {
-            decode_value_from_val(v_slice)?
-        } else {
-            decode_value_from_key(k_slice)?
-        };
-        ensure!(
-            stored_v == *v,
-            "precondition check failed: wanted {:?}, got {:?}",
-            v,
-            stored_v
-        );
-        Ok(())
     }
     pub(crate) fn write_triple(
         &mut self,
@@ -265,20 +285,6 @@ impl SessionTx {
         v: &DataValue,
         vld: Validity,
     ) -> Result<EntityId> {
-        // invariant: in the preparation step, any identity attr should already be resolved to
-        // an existing eid, if there is one
-        let eid = if eid.is_perm() {
-            eid
-        } else {
-            match self.temp_entity_to_perm.get(&eid) {
-                Some(id) => *id,
-                None => {
-                    let new_eid = EntityId(self.last_ent_id.fetch_add(1, Ordering::AcqRel) + 1);
-                    self.temp_entity_to_perm.insert(eid, new_eid);
-                    new_eid
-                }
-            }
-        };
         if attr.val_type.is_ref_type() {
             let v_eid = v.get_entity_id()?;
             if !v_eid.is_perm() {
@@ -323,16 +329,16 @@ impl SessionTx {
         }
         Ok(eid)
     }
-    pub(crate) fn retract_triples_for_attr(
-        &mut self,
-        eid: EntityId,
-        attr: &Attribute,
-        vld: Validity,
-    ) -> Result<isize> {
-        let lower_bound = encode_eav_key(eid, attr.id, &DataValue::Null, Validity::MAX);
-        let upper_bound = encode_eav_key(eid, attr.id, &DataValue::Bot, Validity::MIN);
-        self.batch_retract_triple(lower_bound, upper_bound, vld)
-    }
+    // pub(crate) fn retract_triples_for_attr(
+    //     &mut self,
+    //     eid: EntityId,
+    //     attr: &Attribute,
+    //     vld: Validity,
+    // ) -> Result<isize> {
+    //     let lower_bound = encode_eav_key(eid, attr.id, &DataValue::Null, Validity::MAX);
+    //     let upper_bound = encode_eav_key(eid, attr.id, &DataValue::Bot, Validity::MIN);
+    //     self.batch_retract_triple(lower_bound, upper_bound, vld)
+    // }
     pub(crate) fn retract_entity(&mut self, eid: EntityId, vld: Validity) -> Result<isize> {
         let lower_bound = encode_eav_key(eid, AttrId::MIN_PERM, &DataValue::Null, Validity::MAX);
         let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &DataValue::Bot, Validity::MAX);
