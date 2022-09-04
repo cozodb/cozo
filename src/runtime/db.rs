@@ -6,10 +6,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{fs, thread};
 
-use miette::{miette, bail, ensure, Result, IntoDiagnostic};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
+use miette::{bail, ensure, miette, IntoDiagnostic, Result};
 use serde_json::json;
 use smartstring::SmartString;
 
@@ -30,6 +30,7 @@ use crate::parse::cozoscript::query::{parse_query_to_json, ScriptType};
 use crate::parse::cozoscript::sys::{CompactTarget, SysOp};
 use crate::parse::query::ViewOp;
 use crate::parse::schema::AttrTxItem;
+use crate::parse::script::{parse_script, CozoScript};
 use crate::query::pull::CurrentPath;
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::{ViewRelId, ViewRelMetadata};
@@ -361,12 +362,12 @@ impl Db {
         Ok(json!(collected))
     }
     pub fn run_script(&self, payload: &str) -> Result<JsonValue> {
-        let (script_type, payload) = parse_query_to_json(payload)?;
+        let (script_type, json) = parse_query_to_json(payload)?;
         match script_type {
             ScriptType::Query => self.run_query(&payload),
-            ScriptType::Schema => self.transact_attributes(&payload),
-            ScriptType::Tx => self.transact_triples(&payload),
-            ScriptType::Sys => self.run_sys_op(payload),
+            ScriptType::Schema => self.transact_attributes(&json),
+            ScriptType::Tx => self.transact_triples(&json),
+            ScriptType::Sys => self.run_sys_op(json),
         }
     }
     pub fn convert_to_json_query(&self, payload: &str) -> Result<JsonValue> {
@@ -380,19 +381,20 @@ impl Db {
         Ok(json!({ key: payload }))
     }
     pub fn run_json_query(&self, payload: &JsonValue) -> Result<JsonValue> {
-        let (k, v) = payload
-            .as_object()
-            .ok_or_else(|| miette!("json query must be an object"))?
-            .iter()
-            .next()
-            .ok_or_else(|| miette!("json query must be an object with keys"))?;
-        match k as &str {
-            "query" => self.run_query(v),
-            "schema" => self.transact_attributes(v),
-            "tx" => self.transact_triples(v),
-            "sys" => self.run_sys_op(v.clone()),
-            v => bail!("unexpected key in json query: {}", v),
-        }
+        todo!()
+        // let (k, v) = payload
+        //     .as_object()
+        //     .ok_or_else(|| miette!("json query must be an object"))?
+        //     .iter()
+        //     .next()
+        //     .ok_or_else(|| miette!("json query must be an object with keys"))?;
+        // match k as &str {
+        //     "query" => self.run_query(v),
+        //     "schema" => self.transact_attributes(v),
+        //     "tx" => self.transact_triples(v),
+        //     "sys" => self.run_sys_op(v.clone()),
+        //     v => bail!("unexpected key in json query: {}", v),
+        // }
     }
     pub fn run_sys_op(&self, payload: JsonValue) -> Result<JsonValue> {
         let op: SysOp = serde_json::from_value(payload).into_diagnostic()?;
@@ -433,9 +435,12 @@ impl Db {
             }
         }
     }
-    pub fn run_query(&self, payload: &JsonValue) -> Result<JsonValue> {
+    pub fn run_query(&self, payload: &str) -> Result<JsonValue> {
         let mut tx = self.transact()?;
-        let input_program = tx.parse_query(payload, &Default::default())?;
+        let input_program = match parse_script(payload, &Default::default())? {
+            CozoScript::Query(p) => p,
+        };
+        // let input_program = tx.parse_query(payload, &Default::default())?;
         if let Some((meta, op)) = &input_program.out_opts.as_view {
             if *op == ViewOp::Create {
                 ensure!(
@@ -490,7 +495,8 @@ impl Db {
         };
         if !input_program.out_opts.sorters.is_empty() {
             let entry_head = input_program.get_entry_head()?.to_vec();
-            let sorted_result = tx.sort_and_collect(result, &input_program.out_opts.sorters, &entry_head)?;
+            let sorted_result =
+                tx.sort_and_collect(result, &input_program.out_opts.sorters, &entry_head)?;
             let sorted_iter = if let Some(offset) = input_program.out_opts.offset {
                 Left(sorted_result.scan_sorted().skip(offset))
             } else {

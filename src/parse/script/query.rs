@@ -20,8 +20,8 @@ use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::query::{ConstRules, OutSpec, QueryOutOptions, SortDir, ViewOp};
-use crate::parse::script::{Pair, Pairs, Rule};
 use crate::parse::script::expr::build_expr;
+use crate::parse::script::{Pair, Pairs, Rule};
 use crate::runtime::view::{ViewRelId, ViewRelKind, ViewRelMetadata};
 
 pub(crate) fn parse_query(
@@ -407,7 +407,10 @@ fn parse_algo_rule(
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap().as_str();
                         let args = els.map(|v| Symbol::from(v.as_str())).collect_vec();
-                        rule_args.push(AlgoRuleArg::Stored(Symbol::from(name), args))
+                        rule_args.push(AlgoRuleArg::Stored(
+                            Symbol::from(name.strip_prefix(':').unwrap()),
+                            args,
+                        ))
                     }
                     Rule::algo_triple_rel => {
                         let mut els = inner.into_inner();
@@ -449,12 +452,11 @@ fn parse_algo_rule(
             algo: AlgoHandle {
                 name: Symbol::from(*algo_name),
             },
-            rule_args: vec![],
-            options: Default::default(),
+            rule_args,
+            options,
         },
     ))
 }
-
 
 fn parse_limit_or_offset(src: Pair<'_>) -> Result<usize> {
     let src = src.into_inner().next().unwrap().as_str();

@@ -9,6 +9,7 @@ use crate::parse::script::query::parse_query;
 
 pub(crate) mod query;
 pub(crate) mod expr;
+pub(crate) mod pull;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "cozoscript.pest"]
