@@ -936,7 +936,7 @@ impl SessionTx {
     ) -> Result<InputAtom> {
         let entity = self.parse_input_triple_atom_entity(entity_rep, vld)?;
         let attr = self.parse_triple_atom_attr(attr_rep)?;
-        let value = self.parse_input_triple_clause_value(value_rep, &attr, vld)?;
+        let value = self.parse_input_triple_clause_value(value_rep /*, &attr, vld*/)?;
         Ok(InputAtom::AttrTriple(InputAttrTripleAtom {
             attr,
             entity,
@@ -987,28 +987,29 @@ impl SessionTx {
     fn parse_input_triple_clause_value(
         &mut self,
         value_rep: &JsonValue,
-        attr: &Attribute,
-        vld: Validity,
+        // attr: &Attribute,
+        // vld: Validity,
     ) -> Result<InputTerm<DataValue>> {
-        if let Some(s) = value_rep.as_str() {
-            let var = Symbol::from(s);
-            if s.starts_with(['?', '_']) {
-                return Ok(InputTerm::Var(var));
-            } else {
-                ensure!(!var.is_reserved(), "reserved string {} must be quoted", s);
-            }
-        }
-        if let Some(o) = value_rep.as_object() {
-            return if attr.val_type.is_ref_type() {
-                let eid = self.parse_eid_from_map(o, vld)?;
-                Ok(InputTerm::Const(DataValue::from(eid.0 as i64)))
-            } else {
-                Ok(InputTerm::Const(self.parse_value_from_map(o, attr)?))
-            };
-        }
-        Ok(InputTerm::Const(
-            attr.val_type.coerce_value(value_rep.into())?,
-        ))
+        // if let Some(s) = value_rep.as_str() {
+        //     let var = Symbol::from(s);
+        //     if s.starts_with(['?', '_']) {
+        //         return Ok(InputTerm::Var(var));
+        //     } else {
+        //         ensure!(!var.is_reserved(), "reserved string {} must be quoted", s);
+        //     }
+        // }
+        // if let Some(o) = value_rep.as_object() {
+        //     return if attr.val_type.is_ref_type() {
+        //         let eid = self.parse_eid_from_map(o, vld)?;
+        //         Ok(InputTerm::Const(DataValue::from(eid.0 as i64)))
+        //     } else {
+        //         Ok(InputTerm::Const(self.parse_value_from_map(o, attr)?))
+        //     };
+        // }
+        todo!()
+        // Ok(InputTerm::Const(
+        //     attr.val_type.coerce_value(value_rep.into())?,
+        // ))
     }
     fn parse_input_triple_atom_entity(
         &mut self,
@@ -1032,14 +1033,15 @@ impl SessionTx {
         }
         bail!("cannot parse {} as entity", entity_rep);
     }
-    fn parse_triple_atom_attr(&mut self, attr_rep: &JsonValue) -> Result<Attribute> {
+    fn parse_triple_atom_attr(&mut self, attr_rep: &JsonValue) -> Result<Symbol> {
         match attr_rep {
             JsonValue::String(s) => {
                 let kw = Symbol::from(s as &str);
-                let attr = self
-                    .attr_by_name(&kw)?
-                    .ok_or_else(|| miette!("attribute {} not found", kw))?;
-                Ok(attr)
+                Ok(kw)
+                // let attr = self
+                //     .attr_by_name(&kw)?
+                //     .ok_or_else(|| miette!("attribute {} not found", kw))?;
+                // Ok(attr)
             }
             v => bail!("expect attribute name for triple atom, got {}", v),
         }

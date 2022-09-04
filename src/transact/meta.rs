@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use miette::{miette, bail, ensure, Result, IntoDiagnostic};
+use miette::{bail, ensure, miette, IntoDiagnostic, Result};
 
 use cozorocks::{DbIter, IterBuilder};
 
@@ -32,21 +32,21 @@ impl SessionTx {
             } else {
                 ret.push((item.op, self.new_attr(item.attr)?));
             }
-            self.attr_by_id_cache.remove(&id);
-            self.attr_by_kw_cache.remove(&kw);
+            self.attr_by_id_cache.write().unwrap().remove(&id);
+            self.attr_by_kw_cache.write().unwrap().remove(&kw);
         }
         Ok(ret)
     }
 
-    pub(crate) fn attr_by_id(&mut self, aid: AttrId) -> Result<Option<Attribute>> {
-        if let Some(res) = self.attr_by_id_cache.get(&aid) {
+    pub(crate) fn attr_by_id(&self, aid: AttrId) -> Result<Option<Attribute>> {
+        if let Some(res) = self.attr_by_id_cache.read().unwrap().get(&aid) {
             return Ok(res.clone());
         }
 
         let anchor = encode_sentinel_attr_by_id(aid);
         Ok(match self.tx.get(&anchor, false).into_diagnostic()? {
             None => {
-                self.attr_by_id_cache.insert(aid, None);
+                self.attr_by_id_cache.write().unwrap().insert(aid, None);
                 None
             }
             Some(v_slice) => {
@@ -54,12 +54,20 @@ impl SessionTx {
                 let op = StoreOp::try_from(data[0])?;
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
-                    self.attr_by_id_cache.insert(attr.id, None);
-                    self.attr_by_kw_cache.insert(attr.name, None);
+                    self.attr_by_id_cache.write().unwrap().insert(attr.id, None);
+                    self.attr_by_kw_cache
+                        .write()
+                        .unwrap()
+                        .insert(attr.name, None);
                     None
                 } else {
-                    self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
+                    self.attr_by_id_cache
+                        .write()
+                        .unwrap()
+                        .insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
+                        .write()
+                        .unwrap()
                         .insert(attr.name.clone(), Some(attr.clone()));
                     Some(attr)
                 }
@@ -67,15 +75,18 @@ impl SessionTx {
         })
     }
 
-    pub(crate) fn attr_by_name(&mut self, name: &Symbol) -> Result<Option<Attribute>> {
-        if let Some(res) = self.attr_by_kw_cache.get(name) {
+    pub(crate) fn attr_by_name(&self, name: &Symbol) -> Result<Option<Attribute>> {
+        if let Some(res) = self.attr_by_kw_cache.read().unwrap().get(name) {
             return Ok(res.clone());
         }
 
         let anchor = encode_sentinel_attr_by_name(name);
         Ok(match self.tx.get(&anchor, false).into_diagnostic()? {
             None => {
-                self.attr_by_kw_cache.insert(name.clone(), None);
+                self.attr_by_kw_cache
+                    .write()
+                    .unwrap()
+                    .insert(name.clone(), None);
                 None
             }
             Some(v_slice) => {
@@ -84,12 +95,20 @@ impl SessionTx {
                 debug_assert!(data.len() > 8);
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
-                    self.attr_by_id_cache.insert(attr.id, None);
-                    self.attr_by_kw_cache.insert(name.clone(), None);
+                    self.attr_by_id_cache.write().unwrap().insert(attr.id, None);
+                    self.attr_by_kw_cache
+                        .write()
+                        .unwrap()
+                        .insert(name.clone(), None);
                     None
                 } else {
-                    self.attr_by_id_cache.insert(attr.id, Some(attr.clone()));
+                    self.attr_by_id_cache
+                        .write()
+                        .unwrap()
+                        .insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
+                        .write()
+                        .unwrap()
                         .insert(attr.name.clone(), Some(attr.clone()));
                     Some(attr)
                 }

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
-use miette::{bail, Result};
 use itertools::Itertools;
+use miette::{bail, miette, Result};
 
 use crate::data::expr::Expr;
 use crate::data::program::{
@@ -9,6 +9,7 @@ use crate::data::program::{
     NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, NormalFormViewApplyAtom,
     TempSymbGen, Unification,
 };
+use crate::runtime::transact::SessionTx;
 
 #[derive(Debug)]
 pub(crate) struct Disjunction(pub(crate) Vec<Conjunction>);
@@ -81,34 +82,40 @@ impl InputAtom {
         })
     }
 
-    pub(crate) fn disjunctive_normal_form(self) -> Result<Disjunction> {
+    pub(crate) fn disjunctive_normal_form(self, tx: &SessionTx) -> Result<Disjunction> {
         let neg_form = self.negation_normal_form()?;
         let mut gen = TempSymbGen::default();
-        neg_form.do_disjunctive_normal_form(&mut gen)
+        neg_form.do_disjunctive_normal_form(&mut gen, tx)
     }
 
-    fn do_disjunctive_normal_form(self, gen: &mut TempSymbGen) -> Result<Disjunction> {
+    fn do_disjunctive_normal_form(
+        self,
+        gen: &mut TempSymbGen,
+        tx: &SessionTx,
+    ) -> Result<Disjunction> {
         // invariants: the input is already in negation normal form
         // the return value is a disjunction of conjunctions, with no nesting
         Ok(match self {
             InputAtom::Disjunction(args) => {
                 let mut ret = vec![];
                 for arg in args {
-                    for a in arg.do_disjunctive_normal_form(gen)?.0 {
+                    for a in arg.do_disjunctive_normal_form(gen, tx)?.0 {
                         ret.push(a);
                     }
                 }
                 Disjunction(ret)
             }
             InputAtom::Conjunction(args) => {
-                let mut args = args.into_iter().map(|a| a.do_disjunctive_normal_form(gen));
+                let mut args = args
+                    .into_iter()
+                    .map(|a| a.do_disjunctive_normal_form(gen, tx));
                 let mut result = args.next().unwrap()?;
                 for a in args {
                     result = result.conjunctive_to_disjunctive_de_morgen(a?)
                 }
                 result
             }
-            InputAtom::AttrTriple(a) => a.normalize(false, gen),
+            InputAtom::AttrTriple(a) => a.normalize(false, gen, tx)?,
             InputAtom::Rule(r) => r.normalize(false, gen),
             InputAtom::View(v) => v.normalize(false, gen),
             InputAtom::Predicate(mut p) => {
@@ -117,7 +124,7 @@ impl InputAtom {
             }
             InputAtom::Negation(n) => match *n {
                 InputAtom::Rule(r) => r.normalize(true, gen),
-                InputAtom::AttrTriple(r) => r.normalize(true, gen),
+                InputAtom::AttrTriple(r) => r.normalize(true, gen, tx)?,
                 InputAtom::View(v) => v.normalize(true, gen),
                 _ => unreachable!(),
             },
@@ -176,7 +183,15 @@ impl InputRuleApplyAtom {
 }
 
 impl InputAttrTripleAtom {
-    fn normalize(self, is_negated: bool, gen: &mut TempSymbGen) -> Disjunction {
+    fn normalize(
+        self,
+        is_negated: bool,
+        gen: &mut TempSymbGen,
+        tx: &SessionTx,
+    ) -> Result<Disjunction> {
+        let attr = tx
+            .attr_by_name(&self.attr)?
+            .ok_or_else(|| miette!("attribute {} not found", self.attr))?;
         let wrap = |atom| {
             if is_negated {
                 NormalFormAtom::NegatedAttrTriple(atom)
@@ -184,12 +199,12 @@ impl InputAttrTripleAtom {
                 NormalFormAtom::AttrTriple(atom)
             }
         };
-        Disjunction::conj(match (self.entity, self.value) {
+        Ok(Disjunction::conj(match (self.entity, self.value) {
             (InputTerm::Const(eid), InputTerm::Const(val)) => {
                 let ekw = gen.next();
                 let vkw = gen.next();
                 let atom = NormalFormAttrTripleAtom {
-                    attr: self.attr,
+                    attr,
                     entity: ekw.clone(),
                     value: vkw.clone(),
                 };
@@ -209,7 +224,7 @@ impl InputAttrTripleAtom {
             (InputTerm::Var(ekw), InputTerm::Const(val)) => {
                 let vkw = gen.next();
                 let atom = NormalFormAttrTripleAtom {
-                    attr: self.attr,
+                    attr,
                     entity: ekw,
                     value: vkw.clone(),
                 };
@@ -224,7 +239,7 @@ impl InputAttrTripleAtom {
             (InputTerm::Const(eid), InputTerm::Var(vkw)) => {
                 let ekw = gen.next();
                 let atom = NormalFormAttrTripleAtom {
-                    attr: self.attr,
+                    attr,
                     entity: ekw.clone(),
                     value: vkw,
                 };
@@ -240,7 +255,7 @@ impl InputAttrTripleAtom {
                 if ekw == vkw {
                     let dup = gen.next();
                     let atom = NormalFormAttrTripleAtom {
-                        attr: self.attr,
+                        attr,
                         entity: ekw,
                         value: dup.clone(),
                     };
@@ -254,14 +269,14 @@ impl InputAttrTripleAtom {
                     ]
                 } else {
                     let ret = wrap(NormalFormAttrTripleAtom {
-                        attr: self.attr,
+                        attr,
                         entity: ekw,
                         value: vkw,
                     });
                     vec![ret]
                 }
             }
-        })
+        }))
     }
 }
 

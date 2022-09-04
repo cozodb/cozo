@@ -290,7 +290,7 @@ impl Db {
             JsonValue::Null => Validity::current(),
             v => Validity::try_from(v)?,
         };
-        let mut tx = self.transact()?;
+        let tx = self.transact()?;
         let mut current = encode_eav_key(
             EntityId::MIN_PERM,
             AttrId::MIN_PERM,
@@ -452,9 +452,9 @@ impl Db {
             }
         };
         let program = input_program
-            .to_normalized_program()?
+            .to_normalized_program(&tx)?
             .stratify()?
-            .magic_sets_rewrite();
+            .magic_sets_rewrite(&tx)?;
         debug!("{:#?}", program);
         let (compiled, stores) =
             tx.stratified_magic_compile(&program, &input_program.const_rules)?;

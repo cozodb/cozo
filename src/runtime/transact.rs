@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use miette::{IntoDiagnostic, miette, Result};
 use rmp_serde::Serializer;
@@ -30,8 +30,8 @@ pub struct SessionTx {
     pub(crate) last_attr_id: Arc<AtomicU64>,
     pub(crate) last_ent_id: Arc<AtomicU64>,
     pub(crate) last_tx_id: Arc<AtomicU64>,
-    pub(crate) attr_by_id_cache: BTreeMap<AttrId, Option<Attribute>>,
-    pub(crate) attr_by_kw_cache: BTreeMap<Symbol, Option<Attribute>>,
+    pub(crate) attr_by_id_cache: RwLock<BTreeMap<AttrId, Option<Attribute>>>,
+    pub(crate) attr_by_kw_cache: RwLock<BTreeMap<Symbol, Option<Attribute>>>,
     pub(crate) temp_entity_to_perm: BTreeMap<EntityId, EntityId>,
     pub(crate) eid_by_attr_val_cache:
         BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>,
@@ -87,8 +87,8 @@ impl SessionTx {
     }
 
     pub(crate) fn clear_cache(&mut self) {
-        self.attr_by_id_cache.clear();
-        self.attr_by_kw_cache.clear();
+        self.attr_by_id_cache.write().unwrap().clear();
+        self.attr_by_kw_cache.write().unwrap().clear();
         self.temp_entity_to_perm.clear();
         self.touched_eids.clear();
         self.eid_by_attr_val_cache.clear();

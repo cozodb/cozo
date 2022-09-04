@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::mem;
 
 use itertools::Itertools;
+use miette::{miette, Result};
 use smallvec::SmallVec;
 
 use crate::data::program::{
@@ -11,6 +12,7 @@ use crate::data::program::{
     StratifiedMagicProgram, StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::runtime::transact::SessionTx;
 
 impl NormalFormProgram {
     pub(crate) fn exempt_aggr_rules_for_magic_sets(&self, exempt_rules: &mut BTreeSet<Symbol>) {
@@ -33,16 +35,16 @@ impl NormalFormProgram {
 }
 
 impl StratifiedNormalFormProgram {
-    pub(crate) fn magic_sets_rewrite(self) -> StratifiedMagicProgram {
+    pub(crate) fn magic_sets_rewrite(self, tx: &SessionTx) -> Result<StratifiedMagicProgram> {
         let mut exempt_rules = BTreeSet::from([PROG_ENTRY.clone()]);
         let mut collected = vec![];
         for prog in self.0 {
             prog.exempt_aggr_rules_for_magic_sets(&mut exempt_rules);
-            let adorned = prog.adorn(&exempt_rules);
+            let adorned = prog.adorn(&exempt_rules, tx)?;
             collected.push(adorned.magic_rewrite());
             exempt_rules.extend(prog.get_downstream_rules());
         }
-        StratifiedMagicProgram(collected)
+        Ok(StratifiedMagicProgram(collected))
     }
 }
 
@@ -274,7 +276,7 @@ impl NormalFormProgram {
         }
         downstream_rules
     }
-    fn adorn(&self, upstream_rules: &BTreeSet<Symbol>) -> MagicProgram {
+    fn adorn(&self, upstream_rules: &BTreeSet<Symbol>, tx: &SessionTx) -> Result<MagicProgram> {
         let rules_to_rewrite: BTreeSet<_> = self
             .prog
             .keys()
@@ -303,19 +305,23 @@ impl NormalFormProgram {
                             rule_args: algo_apply
                                 .rule_args
                                 .iter()
-                                .map(|r| match r {
-                                    AlgoRuleArg::InMem(m, args) => MagicAlgoRuleArg::InMem(
-                                        MagicSymbol::Muggle { inner: m.clone() },
-                                        args.clone(),
-                                    ),
-                                    AlgoRuleArg::Stored(s, args) => {
-                                        MagicAlgoRuleArg::Stored(s.clone(), args.clone())
-                                    }
-                                    AlgoRuleArg::Triple(t, args, d) => {
-                                        MagicAlgoRuleArg::Triple(t.clone(), args.clone(), *d)
-                                    }
+                                .map(|r| -> Result<MagicAlgoRuleArg> {
+                                    Ok(match r {
+                                        AlgoRuleArg::InMem(m, args) => MagicAlgoRuleArg::InMem(
+                                            MagicSymbol::Muggle { inner: m.clone() },
+                                            args.clone(),
+                                        ),
+                                        AlgoRuleArg::Stored(s, args) => {
+                                            MagicAlgoRuleArg::Stored(s.clone(), args.clone())
+                                        }
+                                        AlgoRuleArg::Triple(t, args, d) => {
+                                            let attr= tx.attr_by_name(t)?
+                                                .ok_or_else(||miette!("cannot find attribute {}", t))?;
+                                            MagicAlgoRuleArg::Triple(attr, args.clone(), *d)
+                                        }
+                                    })
                                 })
-                                .collect_vec(),
+                                .try_collect()?,
                             options: algo_apply.options.clone(),
                         }),
                     );
@@ -367,7 +373,7 @@ impl NormalFormProgram {
                 .prog
                 .insert(head, MagicRulesOrAlgo::Rules(adorned_rules));
         }
-        adorned_prog
+        Ok(adorned_prog)
     }
 }
 

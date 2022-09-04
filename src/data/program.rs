@@ -15,6 +15,7 @@ use crate::data::id::{EntityId, Validity};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::DataValue;
 use crate::parse::query::{ConstRules, QueryOutOptions};
+use crate::runtime::transact::SessionTx;
 
 #[derive(Default)]
 pub(crate) struct TempSymbGen {
@@ -90,7 +91,7 @@ pub(crate) enum TripleDir {
 pub(crate) enum AlgoRuleArg {
     InMem(Symbol, Vec<Symbol>),
     Stored(Symbol, Vec<Symbol>),
-    Triple(Attribute, Vec<Symbol>, TripleDir),
+    Triple(Symbol, Vec<Symbol>, TripleDir),
 }
 
 #[derive(Debug, Clone)]
@@ -146,7 +147,7 @@ impl InputProgram {
             }
         }
     }
-    pub(crate) fn to_normalized_program(&self) -> Result<NormalFormProgram> {
+    pub(crate) fn to_normalized_program(&self, tx: &SessionTx) -> Result<NormalFormProgram> {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
         for (k, rules_or_algo) in &self.prog {
             match rules_or_algo {
@@ -159,7 +160,7 @@ impl InputProgram {
                             Symbol::from(&format!("***{}", counter) as &str)
                         };
                         let normalized_body =
-                            InputAtom::Conjunction(rule.body.clone()).disjunctive_normal_form()?;
+                            InputAtom::Conjunction(rule.body.clone()).disjunctive_normal_form(tx)?;
                         let mut new_head = Vec::with_capacity(rule.head.len());
                         let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
                         for symb in rule.head.iter() {
@@ -437,7 +438,7 @@ pub(crate) enum MagicAtom {
 
 #[derive(Clone, Debug)]
 pub(crate) struct InputAttrTripleAtom {
-    pub(crate) attr: Attribute,
+    pub(crate) attr: Symbol,
     pub(crate) entity: InputTerm<EntityId>,
     pub(crate) value: InputTerm<DataValue>,
 }
