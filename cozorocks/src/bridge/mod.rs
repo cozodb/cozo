@@ -1,6 +1,10 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+use miette::{Diagnostic, Severity};
+
+use crate::StatusSeverity;
+
 pub(crate) mod db;
 pub(crate) mod iter;
 pub(crate) mod tx;
@@ -120,7 +124,10 @@ pub(crate) mod ffi {
         fn set_ignore_range_deletions(self: &RawRocksDbBridge, val: bool);
         fn make_snapshot(self: &RawRocksDbBridge) -> SharedPtr<SnapshotBridge>;
         fn iterator(self: &RawRocksDbBridge) -> UniquePtr<IterBridge>;
-        fn iterator_with_snapshot(self: &RawRocksDbBridge, snapshot: &SnapshotBridge) -> UniquePtr<IterBridge>;
+        fn iterator_with_snapshot(
+            self: &RawRocksDbBridge,
+            snapshot: &SnapshotBridge,
+        ) -> UniquePtr<IterBridge>;
         fn get(
             self: &RawRocksDbBridge,
             key: &[u8],
@@ -145,23 +152,27 @@ pub(crate) mod ffi {
             cmp_impl: fn(&[u8], &[u8]) -> i8,
         ) -> SharedPtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
-        fn del_range(
-            self: &RocksDbBridge,
-            lower: &[u8],
-            upper: &[u8],
-            status: &mut RocksDbStatus,
-        );
+        fn del_range(self: &RocksDbBridge, lower: &[u8], upper: &[u8], status: &mut RocksDbStatus);
         fn compact_range(
             self: &RocksDbBridge,
             lower: &[u8],
             upper: &[u8],
             status: &mut RocksDbStatus,
         );
-        fn get_sst_writer(self: &RocksDbBridge, path: &str, status: &mut RocksDbStatus) -> UniquePtr<SstFileWriterBridge>;
+        fn get_sst_writer(
+            self: &RocksDbBridge,
+            path: &str,
+            status: &mut RocksDbStatus,
+        ) -> UniquePtr<SstFileWriterBridge>;
         fn ingest_sst(self: &RocksDbBridge, path: &str, status: &mut RocksDbStatus);
 
         type SstFileWriterBridge;
-        fn put(self: Pin<&mut SstFileWriterBridge>, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
+        fn put(
+            self: Pin<&mut SstFileWriterBridge>,
+            key: &[u8],
+            val: &[u8],
+            status: &mut RocksDbStatus,
+        );
         fn finish(self: Pin<&mut SstFileWriterBridge>, status: &mut RocksDbStatus);
 
         type TxBridge;
@@ -236,6 +247,25 @@ impl Display for ffi::RocksDbStatus {
             write!(f, "RocksDB error: {:?}", self)
         } else {
             write!(f, "RocksDB error: {}", self.message)
+        }
+    }
+}
+
+impl Diagnostic for ffi::RocksDbStatus {
+    fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        if self.is_ok() {
+            None
+        } else {
+            Some(Box::new(format!(
+                "cozorocks::{:?}::{:?}",
+                self.code, self.subcode
+            )))
+        }
+    }
+    fn severity(&self) -> Option<Severity> {
+        match self.severity {
+            StatusSeverity::kNoError => None,
+            _ => Some(Severity::Error),
         }
     }
 }

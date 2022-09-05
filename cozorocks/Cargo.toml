@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 cxx = "1.0.69"
-#tikv-jemalloc-sys = { "version" = "0.5", "features" = ["unprefixed_malloc_on_supported_platforms"] }
+miette = "5.3.0"
 
 [build-dependencies]
 cxx-build = "1.0.69"

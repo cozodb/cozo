@@ -94,8 +94,8 @@ impl Db {
             .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
             .use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false);
 
-        let db = db_builder.build().into_diagnostic()?;
-        let view_db = view_db_builder.build().into_diagnostic()?;
+        let db = db_builder.build()?;
+        let view_db = view_db_builder.build()?;
 
         let ret = Self {
             db,
@@ -116,14 +116,14 @@ impl Db {
     pub fn compact_main(&self) -> Result<()> {
         let l = smallest_key();
         let u = largest_key();
-        self.db.range_compact(&l, &u).into_diagnostic()?;
+        self.db.range_compact(&l, &u)?;
         Ok(())
     }
 
     pub fn compact_view(&self) -> Result<()> {
         let l = Tuple::default().encode_as_key(ViewRelId(0));
         let u = Tuple(vec![DataValue::Bot]).encode_as_key(ViewRelId(u64::MAX));
-        self.db.range_compact(&l, &u).into_diagnostic()?;
+        self.db.range_compact(&l, &u)?;
         Ok(())
     }
 
@@ -459,8 +459,8 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let mut vtx = self.view_db.transact().start();
-        vtx.put(&key, v).into_diagnostic()?;
-        vtx.commit().into_diagnostic()?;
+        vtx.put(&key, v)?;
+        vtx.commit()?;
         Ok(())
     }
     pub fn remove_meta_kv(&self, k: &[&str]) -> Result<()> {
@@ -470,8 +470,8 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let mut vtx = self.view_db.transact().start();
-        vtx.del(&key).into_diagnostic()?;
-        vtx.commit().into_diagnostic()?;
+        vtx.del(&key)?;
+        vtx.commit()?;
         Ok(())
     }
     pub fn get_meta_kv(&self, k: &[&str]) -> Result<Option<Vec<u8>>> {
@@ -481,7 +481,7 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
-        Ok(match vtx.get(&key, false).into_diagnostic()? {
+        Ok(match vtx.get(&key, false)? {
             None => None,
             Some(slice) => Some(slice.to_vec()),
         })
@@ -516,7 +516,7 @@ impl Db {
                 } else {
                     self.started = true;
                 }
-                match self.it.pair().into_diagnostic()? {
+                match self.it.pair()? {
                     None => Ok(None),
                     Some((k_slice, v_slice)) => {
                         let encoded = EncodedTuple(k_slice).decode()?;
@@ -562,7 +562,7 @@ impl Db {
             .start();
         it.seek(&lower);
         let mut collected = vec![];
-        while let Some(v_slice) = it.val().into_diagnostic()? {
+        while let Some(v_slice) = it.val()? {
             let meta: ViewRelMetadata = rmp_serde::from_slice(v_slice).into_diagnostic()?;
             let name = meta.name.0;
             let arity = meta.arity;

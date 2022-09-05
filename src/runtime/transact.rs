@@ -96,7 +96,7 @@ impl SessionTx {
         let e_upper = encode_sentinel_entity_attr(EntityId::MAX_PERM, AttrId::MIN_PERM);
         let it = self.bounded_scan_last(&e_lower, &e_upper);
 
-        Ok(match it.key().into_diagnostic()? {
+        Ok(match it.key()? {
             None => EntityId::MAX_TEMP,
             Some(data) => EntityId::from_bytes(data),
         })
@@ -106,7 +106,7 @@ impl SessionTx {
         let e_lower = encode_sentinel_attr_by_id(AttrId::MIN_PERM);
         let e_upper = encode_sentinel_attr_by_id(AttrId::MAX_PERM);
         let it = self.bounded_scan_last(&e_lower, &e_upper);
-        Ok(match it.key().into_diagnostic()? {
+        Ok(match it.key()? {
             None => AttrId::MAX_TEMP,
             Some(data) => AttrId::from_bytes(data),
         })
@@ -116,7 +116,7 @@ impl SessionTx {
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
-        let found = vtx.get(&t_encoded, false).into_diagnostic()?;
+        let found = vtx.get(&t_encoded, false)?;
         match found {
             None => Ok(ViewRelId::SYSTEM),
             Some(slice) => ViewRelId::raw_decode(&slice),
@@ -127,7 +127,7 @@ impl SessionTx {
         let e_lower = encode_tx(TxId::MAX_USER);
         let e_upper = encode_tx(TxId::MAX_SYS);
         let it = self.bounded_scan_first(&e_lower, &e_upper);
-        Ok(match it.key().into_diagnostic()? {
+        Ok(match it.key()? {
             None => TxId::MAX_SYS,
             Some(data) => TxId::from_bytes(data),
         })
@@ -138,8 +138,8 @@ impl SessionTx {
         let encoded = encode_tx(tx_id);
 
         let log = TxLog::new(tx_id, comment);
-        self.tx.put(&encoded, &log.encode()).into_diagnostic()?;
-        self.tx.commit().into_diagnostic()?;
+        self.tx.put(&encoded, &log.encode())?;
+        self.tx.commit()?;
         if refresh {
             let new_tx_id = TxId(self.last_tx_id.fetch_add(1, Ordering::AcqRel) + 1);
             self.tx.set_snapshot();

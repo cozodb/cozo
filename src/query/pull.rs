@@ -72,22 +72,22 @@ impl SessionTx {
             for data in res_iter {
                 let data = data?;
                 let encoded = data.encode_as_key(view_store.metadata.id);
-                vtx.del(&encoded).into_diagnostic()?;
+                vtx.del(&encoded)?;
             }
 
-            vtx.commit().into_diagnostic()?;
+            vtx.commit()?;
         } else {
             let file = NamedTempFile::new().into_diagnostic()?;
             let path = file.into_temp_path();
             let path = path.to_string_lossy();
-            let mut writer = self.view_db.get_sst_writer(&path).into_diagnostic()?;
+            let mut writer = self.view_db.get_sst_writer(&path)?;
             for data in res_iter {
                 let data = data?;
                 let encoded = data.encode_as_key(view_store.metadata.id);
-                writer.put(&encoded, &[]).into_diagnostic()?;
+                writer.put(&encoded, &[])?;
             }
-            writer.finish().into_diagnostic()?;
-            self.view_db.ingest_sst_file(&path).into_diagnostic()?;
+            writer.finish()?;
+            self.view_db.ingest_sst_file(&path)?;
         }
         Ok(())
     }
