@@ -257,7 +257,7 @@ impl Diagnostic for ffi::RocksDbStatus {
             None
         } else {
             Some(Box::new(format!(
-                "cozorocks::{:?}::{:?}",
+                "rocksdb::{:?}::{:?}",
                 self.code, self.subcode
             )))
         }
@@ -267,6 +267,9 @@ impl Diagnostic for ffi::RocksDbStatus {
             StatusSeverity::kNoError => None,
             _ => Some(Severity::Error),
         }
+    }
+    fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        Some(Box::new("This error is usually outside Cozo's control"))
     }
 }
 

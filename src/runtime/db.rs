@@ -280,7 +280,9 @@ impl Db {
             .iter()
             .map(|(k, v)| (k.clone(), DataValue::from(v)))
             .collect();
-        match parse_script(payload, &param_pool)? {
+        match parse_script(payload, &param_pool)
+            .map_err(|e| e.with_source_code(payload.to_string()))?
+        {
             CozoScript::Query(p) => self.run_query(p),
             CozoScript::Tx(tx) => self.transact_triples(tx),
             CozoScript::Schema(schema) => self.transact_attributes(schema),

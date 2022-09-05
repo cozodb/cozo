@@ -38,6 +38,7 @@ rayon = "1.5.3"
 nalgebra = "0.31.1"
 approx = "0.5.1"
 unicode-normalization = "0.1.21"
+thiserror = "1.0.34"
 cozorocks = { path = "cozorocks" }
 
 #[target.'cfg(not(target_env = "msvc"))'.dependencies]

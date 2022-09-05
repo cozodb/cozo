@@ -1,21 +1,22 @@
 use std::collections::BTreeMap;
 
-use miette::{IntoDiagnostic, Result};
+use miette::{Diagnostic, Result};
+use pest::error::InputLocation;
 use pest::Parser;
 
 use crate::data::program::InputProgram;
 use crate::data::value::DataValue;
 use crate::parse::query::parse_query;
-use crate::parse::schema::{AttrTxItem, parse_schema};
+use crate::parse::schema::{parse_schema, AttrTxItem};
 use crate::parse::sys::{parse_sys, SysOp};
 use crate::parse::tx::{parse_tx, Quintuple};
 
 pub(crate) mod expr;
 pub(crate) mod pull;
 pub(crate) mod query;
-pub(crate) mod tx;
 pub(crate) mod schema;
 pub(crate) mod sys;
+pub(crate) mod tx;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "cozoscript.pest"]
@@ -28,7 +29,26 @@ pub(crate) enum CozoScript {
     Query(InputProgram),
     Tx(Vec<Quintuple>),
     Schema(Vec<AttrTxItem>),
-    Sys(SysOp)
+    Sys(SysOp),
+}
+
+#[derive(thiserror::Error, Diagnostic, Debug)]
+#[error("The query parser has encountered unexpected input / end of input")]
+#[diagnostic(code(parse::pest))]
+pub struct ParseError {
+    #[label("here")]
+    span: (usize, usize),
+}
+
+impl From<pest::error::Error<Rule>> for ParseError {
+    fn from(err: pest::error::Error<Rule>) -> Self {
+        match err.location {
+            InputLocation::Pos(p) => Self { span: (p, 0) },
+            InputLocation::Span((start, end)) => Self {
+                span: (start, end - start),
+            },
+        }
+    }
 }
 
 pub(crate) fn parse_script(
@@ -36,7 +56,7 @@ pub(crate) fn parse_script(
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<CozoScript> {
     let parsed = CozoScriptParser::parse(Rule::script, src)
-        .into_diagnostic()?
+        .map_err(|e| ParseError::from(e))?
         .next()
         .unwrap();
     Ok(match parsed.as_rule() {
