@@ -2,11 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use miette::{miette, Result};
 use rayon::prelude::*;
-use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
-use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
+use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
@@ -19,12 +17,12 @@ impl AlgoImpl for ClusteringCoefficients {
     fn run(
         &mut self,
         tx: &SessionTx,
-        rels: &[MagicAlgoRuleArg],
-        _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        algo: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
+        let rels = &algo.rule_args;
         let edges = rels
             .get(0)
             .ok_or_else(|| miette!("'clustering_coefficients' requires edges relation"))?;

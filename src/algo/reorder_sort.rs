@@ -2,12 +2,11 @@ use std::collections::BTreeMap;
 
 use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
-use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
-use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
+use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
@@ -20,12 +19,13 @@ impl AlgoImpl for ReorderSort {
     fn run(
         &mut self,
         tx: &SessionTx,
-        rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        algo: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
+        let rels = &algo.rule_args;
+        let opts = &algo.options;
         let in_rel = rels
             .get(0)
             .ok_or_else(|| miette!("'reorder_sort' requires an input relation"))?;

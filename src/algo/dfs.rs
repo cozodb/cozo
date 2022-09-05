@@ -1,11 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use miette::{miette, ensure, Result};
-use smartstring::{LazyCompact, SmartString};
+use miette::{ensure, miette, Result};
 
 use crate::algo::AlgoImpl;
-use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
+use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
@@ -18,12 +16,13 @@ impl AlgoImpl for Dfs {
     fn run(
         &mut self,
         tx: &SessionTx,
-        rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        algo: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
+        let rels = &algo.rule_args;
+        let opts = &algo.options;
         ensure!(
             rels.len() == 2 || rels.len() == 3,
             "'dfs' requires two or three input relations"

@@ -149,8 +149,7 @@ impl SessionTx {
             .ok_or_else(|| miette!("cannot find algo store {:?}", rule_symb))?;
         algo_impl.run(
             self,
-            &algo_apply.rule_args,
-            &algo_apply.options,
+            &algo_apply,
             stores,
             out,
             poison

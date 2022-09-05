@@ -1,11 +1,9 @@
 use std::collections::BTreeMap;
 
-use miette::{miette, ensure};
-use smartstring::{LazyCompact, SmartString};
+use miette::{miette, ensure, Result};
 
 use crate::algo::AlgoImpl;
-use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
+use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
@@ -18,12 +16,12 @@ impl AlgoImpl for DegreeCentrality {
     fn run(
         &mut self,
         tx: &SessionTx,
-        rels: &[MagicAlgoRuleArg],
-        _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        algo: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
-    ) -> miette::Result<()> {
+    ) -> Result<()> {
+        let rels = &algo.rule_args;
         let it = rels
             .get(0)
             .ok_or_else(|| miette!(

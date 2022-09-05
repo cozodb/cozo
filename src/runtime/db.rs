@@ -422,10 +422,11 @@ impl Db {
                 )
             }
         };
+        let default_vld = Validity::current();
         let program = input_program
-            .to_normalized_program(&tx)?
+            .to_normalized_program(&tx, default_vld)?
             .stratify()?
-            .magic_sets_rewrite(&tx)?;
+            .magic_sets_rewrite(&tx, default_vld)?;
         debug!("{:#?}", program);
         let (compiled, stores) =
             tx.stratified_magic_compile(&program, &input_program.const_rules)?;

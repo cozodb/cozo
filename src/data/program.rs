@@ -96,6 +96,7 @@ pub(crate) struct AlgoApply {
     pub(crate) rule_args: Vec<AlgoRuleArg>,
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
     pub(crate) head: Vec<Symbol>,
+    pub(crate) vld: Option<Validity>
 }
 
 impl AlgoApply {
@@ -154,7 +155,7 @@ pub(crate) enum AlgoRuleArg {
 pub(crate) enum MagicAlgoRuleArg {
     InMem(MagicSymbol, Vec<Symbol>),
     Stored(Symbol, Vec<Symbol>),
-    Triple(Attribute, Vec<Symbol>, TripleDir),
+    Triple(Attribute, Vec<Symbol>, TripleDir, Validity),
 }
 
 impl MagicAlgoRuleArg {
@@ -162,7 +163,7 @@ impl MagicAlgoRuleArg {
         let bindings = match self {
             MagicAlgoRuleArg::InMem(_, b) => b,
             MagicAlgoRuleArg::Stored(_, b) => b,
-            MagicAlgoRuleArg::Triple(_, b, dir) => {
+            MagicAlgoRuleArg::Triple(_, b, dir, _) => {
                 if *dir == TripleDir::Bwd {
                     return b
                         .iter()
@@ -225,8 +226,7 @@ impl InputProgram {
 
         None
     }
-    pub(crate) fn to_normalized_program(&self, tx: &SessionTx) -> Result<NormalFormProgram> {
-        let default_vld = Validity::current();
+    pub(crate) fn to_normalized_program(&self, tx: &SessionTx, default_vld: Validity) -> Result<NormalFormProgram> {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
         for (k, rules_or_algo) in &self.prog {
             match rules_or_algo {

@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use miette::{miette, bail, ensure, Result};
 use either::Either;
 use itertools::Itertools;
+use miette::{bail, ensure, miette, Result};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::all_pairs_shortest_path::{BetweennessCentrality, ClosenessCentrality};
@@ -24,8 +24,8 @@ use crate::algo::triangles::ClusteringCoefficients;
 use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
-use crate::data::id::{EntityId, Validity};
-use crate::data::program::{AlgoRuleArg, MagicAlgoRuleArg, MagicSymbol, TripleDir};
+use crate::data::id::EntityId;
+use crate::data::program::{AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol, TripleDir};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
@@ -57,8 +57,7 @@ pub(crate) trait AlgoImpl {
     fn run(
         &mut self,
         tx: &SessionTx,
-        rels: &[MagicAlgoRuleArg],
-        opts: &AlgoOptions,
+        algo: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
@@ -274,7 +273,7 @@ impl MagicAlgoRuleArg {
                 let t = Tuple(vec![prefix.clone()]);
                 Box::new(view_rel.scan_prefix(&t))
             }
-            MagicAlgoRuleArg::Triple(attr, _, dir) => {
+            MagicAlgoRuleArg::Triple(attr, _, dir, vld) => {
                 if *dir == TripleDir::Bwd && !attr.val_type.is_ref_type() {
                     ensure!(
                         attr.indexing.should_index(),
@@ -283,7 +282,7 @@ impl MagicAlgoRuleArg {
                     );
                     if attr.with_history {
                         Box::new(
-                            tx.triple_av_before_scan(attr.id, prefix, Validity::MAX)
+                            tx.triple_av_before_scan(attr.id, prefix, *vld)
                                 .map_ok(|(_, v, eid)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     } else {
@@ -304,7 +303,7 @@ impl MagicAlgoRuleArg {
                         TripleDir::Fwd => {
                             if attr.with_history {
                                 Box::new(
-                                    tx.triple_ea_before_scan(id, attr.id, Validity::MAX)
+                                    tx.triple_ea_before_scan(id, attr.id, *vld)
                                         .map_ok(|(eid, _, v)| Tuple(vec![eid.as_datavalue(), v])),
                                 )
                             } else {
@@ -316,12 +315,9 @@ impl MagicAlgoRuleArg {
                         }
                         TripleDir::Bwd => {
                             if attr.with_history {
-                                Box::new(
-                                    tx.triple_vref_a_before_scan(id, attr.id, Validity::MAX)
-                                        .map_ok(|(v, _, eid)| {
-                                            Tuple(vec![v.as_datavalue(), eid.as_datavalue()])
-                                        }),
-                                )
+                                Box::new(tx.triple_vref_a_before_scan(id, attr.id, *vld).map_ok(
+                                    |(v, _, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
+                                ))
                             } else {
                                 Box::new(tx.triple_vref_a_scan(id, attr.id).map_ok(
                                     |(v, _, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
@@ -349,7 +345,7 @@ impl MagicAlgoRuleArg {
                 let view_rel = tx.get_view_rel(s)?;
                 view_rel.metadata.arity
             }
-            MagicAlgoRuleArg::Triple(_, _, _) => 2,
+            MagicAlgoRuleArg::Triple(_, _, _, _) => 2,
         })
     }
     pub(crate) fn iter<'a>(
@@ -368,11 +364,11 @@ impl MagicAlgoRuleArg {
                 let view_rel = tx.get_view_rel(s)?;
                 Box::new(view_rel.scan_all()?)
             }
-            MagicAlgoRuleArg::Triple(attr, _, dir) => match dir {
+            MagicAlgoRuleArg::Triple(attr, _, dir, vld) => match dir {
                 TripleDir::Fwd => {
                     if attr.with_history {
                         Box::new(
-                            tx.triple_a_before_scan(attr.id, Validity::MAX)
+                            tx.triple_a_before_scan(attr.id, *vld)
                                 .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                         )
                     } else {
@@ -385,7 +381,7 @@ impl MagicAlgoRuleArg {
                 TripleDir::Bwd => {
                     if attr.with_history {
                         Box::new(
-                            tx.triple_a_before_scan(attr.id, Validity::MAX)
+                            tx.triple_a_before_scan(attr.id, *vld)
                                 .map_ok(|(_, eid, v)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     } else {

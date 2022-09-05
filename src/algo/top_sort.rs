@@ -1,11 +1,9 @@
 use std::collections::BTreeMap;
 
 use miette::{miette, Result};
-use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
-use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
+use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
@@ -18,12 +16,12 @@ impl AlgoImpl for TopSort {
     fn run(
         &mut self,
         tx: &SessionTx,
-        rels: &[MagicAlgoRuleArg],
-        _opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        algo: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
+        let rels = &algo.rule_args;
         let edges = rels
             .get(0)
             .ok_or_else(|| miette!("'top_sort' missing edges relation"))?;

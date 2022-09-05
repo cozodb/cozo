@@ -1,18 +1,16 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
+use itertools::Itertools;
 use miette::miette;
 use miette::Result;
-use itertools::Itertools;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rayon::prelude::*;
-use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::shortest_path_dijkstra::dijkstra_keep_ties;
 use crate::algo::{get_bool_option_required, AlgoImpl};
-use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
+use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
@@ -25,17 +23,21 @@ impl AlgoImpl for BetweennessCentrality {
     fn run(
         &mut self,
         tx: &SessionTx,
-        rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        algo: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
     ) -> miette::Result<()> {
-        let edges = rels
+        let edges = algo
+            .rule_args
             .get(0)
             .ok_or_else(|| miette!("'betweenness_centrality' requires edges relation"))?;
-        let undirected =
-            get_bool_option_required("undirected", opts, Some(false), "betweenness_centrality")?;
+        let undirected = get_bool_option_required(
+            "undirected",
+            &algo.options,
+            Some(false),
+            "betweenness_centrality",
+        )?;
 
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
@@ -91,17 +93,21 @@ impl AlgoImpl for ClosenessCentrality {
     fn run(
         &mut self,
         tx: &SessionTx,
-        rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        algo: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
     ) -> miette::Result<()> {
-        let edges = rels
+        let edges = algo
+            .rule_args
             .get(0)
             .ok_or_else(|| miette!("'closeness_centrality' requires edges relation"))?;
-        let undirected =
-            get_bool_option_required("undirected", opts, Some(false), "closeness_centrality")?;
+        let undirected = get_bool_option_required(
+            "undirected",
+            &algo.options,
+            Some(false),
+            "closeness_centrality",
+        )?;
 
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
@@ -130,7 +136,11 @@ impl AlgoImpl for ClosenessCentrality {
     }
 }
 
-pub(crate) fn dijkstra_cost_only(edges: &[Vec<(usize, f64)>], start: usize, poison: Poison) -> Result<Vec<f64>> {
+pub(crate) fn dijkstra_cost_only(
+    edges: &[Vec<(usize, f64)>],
+    start: usize,
+    poison: Poison,
+) -> Result<Vec<f64>> {
     let mut distance = vec![f64::INFINITY; edges.len()];
     let mut pq = PriorityQueue::new();
     let mut back_pointers = vec![usize::MAX; edges.len()];

@@ -398,7 +398,19 @@ fn parse_algo_rule(
         aggr.iter().all(|v| v.is_none()),
         "aggregation cannot be applied to algo rule head"
     );
-    let algo_name = &src.next().unwrap().as_str().strip_suffix('!').unwrap();
+    let mut name_pair = src.next().unwrap();
+    let mut at = None;
+    match name_pair.as_rule() {
+        Rule::expr => {
+            let vld = build_expr(name_pair, param_pool)?.eval_to_const()?;
+            let vld = Validity::try_from(vld)?;
+            at = Some(vld);
+            name_pair = src.next().unwrap();
+        }
+        Rule::algo_ident => {}
+        _ => unreachable!(),
+    }
+    let algo_name = &name_pair.as_str().strip_suffix('!').unwrap();
     let mut rule_args: Vec<AlgoRuleArg> = vec![];
     let mut options: BTreeMap<SmartString<LazyCompact>, Expr> = Default::default();
 
@@ -469,6 +481,7 @@ fn parse_algo_rule(
             rule_args,
             options,
             head,
+            vld: at
         },
     ))
 }

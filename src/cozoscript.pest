@@ -29,7 +29,7 @@ compound_ident = {ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"}
 const_rule = {rule_head ~ "<-" ~ expr ~ ";" }
-algo_rule = {rule_head ~ "<-" ~ algo_ident ~ "(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")" ~ ";" }
+algo_rule = {rule_head ~ ("@" ~ expr)? ~ "<-" ~ algo_ident ~ "(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")" ~ ";" }
 
 rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
 head_arg = {aggr_arg | var}

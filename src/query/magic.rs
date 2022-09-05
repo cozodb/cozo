@@ -5,6 +5,7 @@ use itertools::Itertools;
 use miette::{miette, Result};
 use smallvec::SmallVec;
 
+use crate::data::id::Validity;
 use crate::data::program::{
     AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicAttrTripleAtom, MagicProgram,
     MagicRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol, MagicViewApplyAtom,
@@ -35,12 +36,16 @@ impl NormalFormProgram {
 }
 
 impl StratifiedNormalFormProgram {
-    pub(crate) fn magic_sets_rewrite(self, tx: &SessionTx) -> Result<StratifiedMagicProgram> {
+    pub(crate) fn magic_sets_rewrite(
+        self,
+        tx: &SessionTx,
+        default_vld: Validity,
+    ) -> Result<StratifiedMagicProgram> {
         let mut exempt_rules = BTreeSet::from([PROG_ENTRY.clone()]);
         let mut collected = vec![];
         for prog in self.0 {
             prog.exempt_aggr_rules_for_magic_sets(&mut exempt_rules);
-            let adorned = prog.adorn(&exempt_rules, tx)?;
+            let adorned = prog.adorn(&exempt_rules, tx, default_vld)?;
             collected.push(adorned.magic_rewrite());
             exempt_rules.extend(prog.get_downstream_rules());
         }
@@ -276,7 +281,12 @@ impl NormalFormProgram {
         }
         downstream_rules
     }
-    fn adorn(&self, upstream_rules: &BTreeSet<Symbol>, tx: &SessionTx) -> Result<MagicProgram> {
+    fn adorn(
+        &self,
+        upstream_rules: &BTreeSet<Symbol>,
+        tx: &SessionTx,
+        default_vld: Validity,
+    ) -> Result<MagicProgram> {
         let rules_to_rewrite: BTreeSet<_> = self
             .prog
             .keys()
@@ -315,9 +325,10 @@ impl NormalFormProgram {
                                             MagicAlgoRuleArg::Stored(s.clone(), args.clone())
                                         }
                                         AlgoRuleArg::Triple(t, args, d) => {
-                                            let attr= tx.attr_by_name(t)?
-                                                .ok_or_else(||miette!("cannot find attribute {}", t))?;
-                                            MagicAlgoRuleArg::Triple(attr, args.clone(), *d)
+                                            let attr = tx.attr_by_name(t)?.ok_or_else(|| {
+                                                miette!("cannot find attribute {}", t)
+                                            })?;
+                                            MagicAlgoRuleArg::Triple(attr, args.clone(), *d, algo_apply.vld.unwrap_or(default_vld))
                                         }
                                     })
                                 })

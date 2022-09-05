@@ -3,11 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
 use log::debug;
-use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoRuleArg, MagicSymbol};
+use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
@@ -20,12 +19,13 @@ impl AlgoImpl for CommunityDetectionLouvain {
     fn run(
         &mut self,
         tx: &SessionTx,
-        rels: &[MagicAlgoRuleArg],
-        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        algo: &MagicAlgoApply,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
+        let rels = &algo.rule_args;
+        let opts = &algo.options;
         let edges = rels
             .get(0)
             .ok_or_else(|| miette!("'community_detection_louvain' requires edges relation"))?;
