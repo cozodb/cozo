@@ -271,81 +271,6 @@ impl Db {
             json!({"rows": rows, "headers": ["id", "name", "type", "cardinality", "index", "history"]}),
         )
     }
-    // pub fn entities_at(&self, vld: &JsonValue) -> Result<JsonValue> {
-    //     let vld = match vld {
-    //         JsonValue::Null => Validity::current(),
-    //         v => Validity::try_from(v)?,
-    //     };
-    //     let tx = self.transact()?;
-    //     let mut current = encode_eav_key(
-    //         EntityId::MIN_PERM,
-    //         AttrId::MIN_PERM,
-    //         &DataValue::Null,
-    //         Validity::MAX,
-    //     );
-    //     let upper_bound = encode_eav_key(
-    //         EntityId::MAX_PERM,
-    //         AttrId::MAX_PERM,
-    //         &DataValue::Bot,
-    //         Validity::MIN,
-    //     );
-    //     let mut it = tx
-    //         .tx
-    //         .iterator()
-    //         .upper_bound(&upper_bound)
-    //         .total_order_seek(true)
-    //         .start();
-    //     let mut collected: BTreeMap<EntityId, JsonValue> = BTreeMap::default();
-    //     it.seek(&current);
-    //     while let Some((k_slice, v_slice)) = it.pair().into_diagnostic()? {
-    //         debug_assert_eq!(
-    //             StorageTag::try_from(k_slice[0])?,
-    //             StorageTag::TripleEntityAttrValue
-    //         );
-    //         let (e_found, a_found, vld_found) = decode_ea_key(k_slice)?;
-    //         current.copy_from_slice(k_slice);
-    //
-    //         if vld_found > vld {
-    //             current.encoded_entity_amend_validity(vld);
-    //             it.seek(&current);
-    //             continue;
-    //         }
-    //         let op = StoreOp::try_from(v_slice[0])?;
-    //         if op.is_retract() {
-    //             current.encoded_entity_amend_validity_to_inf_past();
-    //             it.seek(&current);
-    //             continue;
-    //         }
-    //         let attr = tx.attr_by_id(a_found)?;
-    //         if attr.is_none() {
-    //             current.encoded_entity_amend_validity_to_inf_past();
-    //             it.seek(&current);
-    //             continue;
-    //         }
-    //         let attr = attr.unwrap();
-    //         let value = if attr.cardinality.is_one() {
-    //             decode_value_from_val(v_slice)?
-    //         } else {
-    //             decode_value_from_key(k_slice)?
-    //         };
-    //         let json_for_entry = collected.entry(e_found).or_insert_with(|| json!({}));
-    //         let map_for_entry = json_for_entry.as_object_mut().unwrap();
-    //         map_for_entry.insert("_id".to_string(), e_found.0.into());
-    //         if attr.cardinality.is_many() {
-    //             let arr = map_for_entry
-    //                 .entry(attr.name.to_string())
-    //                 .or_insert_with(|| json!([]));
-    //             let arr = arr.as_array_mut().unwrap();
-    //             arr.push(value.into());
-    //         } else {
-    //             map_for_entry.insert(attr.name.to_string(), value.into());
-    //         }
-    //         current.encoded_entity_amend_validity_to_inf_past();
-    //         it.seek(&current);
-    //     }
-    //     let collected = collected.into_iter().map(|(_, v)| v).collect_vec();
-    //     Ok(json!(collected))
-    // }
     pub fn run_script(
         &self,
         payload: &str,
@@ -362,16 +287,6 @@ impl Db {
             CozoScript::Sys(op) => self.run_sys_op(op),
         }
     }
-    // pub fn convert_to_json_query(&self, payload: &str) -> Result<JsonValue> {
-    //     let (script_type, payload) = parse_query_to_json(payload)?;
-    //     let key = match script_type {
-    //         ScriptType::Query => "query",
-    //         ScriptType::Schema => "schema",
-    //         ScriptType::Tx => "tx",
-    //         ScriptType::Sys => "sys",
-    //     };
-    //     Ok(json!({ key: payload }))
-    // }
     pub fn run_json_query(&self, _payload: &JsonValue) -> Result<JsonValue> {
         todo!()
     }
