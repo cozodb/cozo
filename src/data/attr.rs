@@ -76,7 +76,7 @@ impl TryFrom<&'_ str> for AttributeCardinality {
 )]
 pub(crate) enum AttributeTyping {
     Ref = 1,
-    Component = 2,
+    // Component = 2,
     Bool = 3,
     Int = 4,
     Float = 5,
@@ -87,7 +87,7 @@ pub(crate) enum AttributeTyping {
 
 impl AttributeTyping {
     pub(crate) fn is_ref_type(&self) -> bool {
-        matches!(self, AttributeTyping::Ref | AttributeTyping::Component)
+        matches!(self, AttributeTyping::Ref)
     }
 }
 
@@ -95,7 +95,6 @@ impl Display for AttributeTyping {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             AttributeTyping::Ref => write!(f, "ref"),
-            AttributeTyping::Component => write!(f, "component"),
             AttributeTyping::Bool => write!(f, "bool"),
             AttributeTyping::Int => write!(f, "int"),
             AttributeTyping::Float => write!(f, "float"),
@@ -112,7 +111,6 @@ impl TryFrom<&'_ str> for AttributeTyping {
         use AttributeTyping::*;
         Ok(match value {
             "ref" => Ref,
-            "component" => Component,
             "bool" => Bool,
             "int" => Int,
             "float" => Float,
@@ -130,7 +128,7 @@ impl AttributeTyping {
     }
     pub(crate) fn coerce_value(&self, val: DataValue) -> Result<DataValue> {
         match self {
-            AttributeTyping::Ref | AttributeTyping::Component => match val {
+            AttributeTyping::Ref => match val {
                 DataValue::Num(Num::I(s)) if s > 0 => Ok(DataValue::Num(Num::I(s))),
                 val => Err(self.type_err(val)),
             },

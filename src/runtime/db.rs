@@ -456,7 +456,7 @@ impl Db {
             },
             poison,
         )?;
-        let headers = match input_program.get_entry_head() {
+        let json_headers = match input_program.get_entry_head() {
             None => JsonValue::Null,
             Some(headers) => headers.iter().map(|v| json!(v.0)).collect(),
         };
@@ -482,14 +482,16 @@ impl Db {
                 Ok(json!({"view": "OK"}))
             } else {
                 let ret: Vec<_> = tx
-                    .run_pull_on_query_results(sorted_iter, input_program.out_opts)?
-                    .try_collect()?;
-                Ok(json!({ "rows": ret, "headers": headers }))
+                    .run_pull_on_query_results(
+                        sorted_iter,
+                        input_program.get_entry_head(),
+                        &input_program.out_opts.out_spec,
+                    )?;
+                Ok(json!({ "rows": ret, "headers": json_headers }))
             }
         } else {
-            let scan = if !input_program.head_is_rule()
-                && (input_program.out_opts.limit.is_some()
-                    || input_program.out_opts.offset.is_some())
+            let scan = if (input_program.out_opts.limit.is_some()
+                || input_program.out_opts.offset.is_some())
             {
                 let limit = input_program.out_opts.limit.unwrap_or(usize::MAX);
                 let offset = input_program.out_opts.offset.unwrap_or(0);
@@ -503,9 +505,12 @@ impl Db {
                 Ok(json!({"view": "OK"}))
             } else {
                 let ret: Vec<_> = tx
-                    .run_pull_on_query_results(scan, input_program.out_opts)?
-                    .try_collect()?;
-                Ok(json!({ "rows": ret, "headers": headers }))
+                    .run_pull_on_query_results(
+                        scan,
+                        input_program.get_entry_head(),
+                        &input_program.out_opts.out_spec,
+                    )?;
+                Ok(json!({ "rows": ret, "headers": json_headers }))
             }
         }
     }

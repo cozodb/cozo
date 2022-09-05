@@ -2,10 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::iter;
 
-use miette::{miette, bail, Context, Result};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::error;
+use miette::{bail, miette, Context, Result};
 
 use crate::data::attr::Attribute;
 use crate::data::expr::{compute_bounds, compute_single_bound, Expr};
@@ -843,7 +843,7 @@ impl TripleRelation {
                         .get_entity_id()
                         .with_context(|| format!("{:?}", self))?;
                     let v = tuple.0.get(left_v_idx).unwrap();
-                    let exists = tx.eav_exists(eid, self.attr.id, v, self.vld)?;
+                    let exists = tx.aev_exists(self.attr.id, eid, v, self.vld)?;
                     Ok(if exists {
                         None
                     } else if !eliminate_indices.is_empty() {
@@ -887,7 +887,7 @@ impl TripleRelation {
                     .get_entity_id()
                     .with_context(|| format!("{:?}", self))?;
                 let v = tuple.0.get(left_v_idx).unwrap();
-                let exists = tx.eav_exists(eid, self.attr.id, v, self.vld)?;
+                let exists = tx.aev_exists(self.attr.id, eid, v, self.vld)?;
                 if exists {
                     let v = v.clone();
                     let mut ret = tuple.0;
@@ -919,9 +919,9 @@ impl TripleRelation {
                         .get_entity_id()
                         .with_context(|| format!("{:?}, {:?}", self, tuple))?;
                     let nxt = if self.attr.with_history {
-                        tx.triple_ea_before_scan(eid, self.attr.id, self.vld).next()
+                        tx.triple_ae_before_scan(self.attr.id, eid, self.vld).next()
                     } else {
-                        tx.triple_ea_scan(eid, self.attr.id).next()
+                        tx.triple_ae_scan(self.attr.id, eid).next()
                     };
                     match nxt {
                         None => Ok(if !eliminate_indices.is_empty() {
@@ -994,7 +994,7 @@ impl TripleRelation {
                     .get_entity_id()
                     .with_context(|| format!("{:?}, {:?}, {}", self, tuple, left_e_idx))?;
 
-                let clj = move |(eid, _, val): (EntityId, AttrId, DataValue)| {
+                let clj = move |(_, eid, val): (AttrId, EntityId, DataValue)| {
                     let mut ret = tuple.0.clone();
                     ret.push(eid.as_datavalue());
                     ret.push(val);
@@ -1003,9 +1003,9 @@ impl TripleRelation {
                 Ok(if let Some((l_bound, r_bound)) = bounds {
                     Left(if self.attr.with_history {
                         Left(
-                            tx.triple_ea_range_before_scan(
-                                eid,
+                            tx.triple_ae_range_before_scan(
                                 self.attr.id,
+                                eid,
                                 l_bound,
                                 r_bound,
                                 self.vld,
@@ -1014,18 +1014,18 @@ impl TripleRelation {
                         )
                     } else {
                         Right(
-                            tx.triple_ea_range_scan(eid, self.attr.id, l_bound, r_bound)
+                            tx.triple_ae_range_scan(self.attr.id, eid, l_bound, r_bound)
                                 .map_ok(clj),
                         )
                     })
                 } else {
                     Right(if self.attr.with_history {
                         Left(
-                            tx.triple_ea_before_scan(eid, self.attr.id, self.vld)
+                            tx.triple_ae_before_scan(self.attr.id, eid, self.vld)
                                 .map_ok(clj),
                         )
                     } else {
-                        Right(tx.triple_ea_scan(eid, self.attr.id).map_ok(clj))
+                        Right(tx.triple_ae_scan(self.attr.id, eid).map_ok(clj))
                     })
                 })
             })

@@ -14,13 +14,14 @@ use crate::data::expr::Expr;
 use crate::data::id::Validity;
 use crate::data::program::{
     AlgoApply, AlgoRuleArg, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram, InputRule,
-    InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputViewApplyAtom, MagicSymbol, OutSpec,
+    InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputViewApplyAtom, MagicSymbol,
     QueryOutOptions, SortDir, TripleDir, Unification, ViewOp,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
+use crate::parse::pull::parse_out_options;
 use crate::parse::{Pair, Pairs, Rule};
 use crate::runtime::view::{ViewRelId, ViewRelKind, ViewRelMetadata};
 
@@ -140,13 +141,15 @@ pub(crate) fn parse_query(
                 if out_opts.as_view.is_some() {
                     bail!("cannot use out spec with 'view'");
                 }
-                let out_spec = parse_out_option(pair.into_inner().next().unwrap())?;
-                out_opts.out_spec = Some(out_spec);
+                let (target, specs) = parse_out_options(pair.into_inner().next().unwrap())?;
+                match out_opts.out_spec.entry(target) {
+                    Entry::Vacant(e) => e.insert(specs),
+                    Entry::Occupied(_) => {
+                        bail!("cannot specify spec for the same target twice")
+                    }
+                };
             }
             Rule::view_option => {
-                if out_opts.out_spec.is_some() {
-                    bail!("cannot use out spec with 'view'");
-                }
                 let mut args = pair.into_inner();
                 let op = match args.next().unwrap().as_rule() {
                     Rule::view_create => ViewOp::Create,
@@ -174,11 +177,22 @@ pub(crate) fn parse_query(
         meta.arity = get_entry_arity(&progs)?;
     }
 
-    Ok(InputProgram {
+    let prog = InputProgram {
         prog: progs,
         const_rules,
         out_opts,
-    })
+    };
+
+    let head_args = prog.get_entry_head().unwrap_or(&[]);
+    for key in prog.out_opts.out_spec.keys() {
+        ensure!(
+            head_args.contains(key),
+            "the pull target {} is not found",
+            key
+        );
+    }
+
+    Ok(prog)
 }
 
 fn get_entry_arity(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<usize> {
@@ -481,7 +495,7 @@ fn parse_algo_rule(
             rule_args,
             options,
             head,
-            vld: at
+            vld: at,
         },
     ))
 }
@@ -493,27 +507,4 @@ fn parse_limit_or_offset(src: Pair<'_>) -> Result<usize> {
 
 fn str2usize(src: &str) -> Result<usize> {
     Ok(usize::from_str(&src.replace('_', "")).into_diagnostic()?)
-}
-
-fn parse_out_option(_src: Pair<'_>) -> Result<OutSpec> {
-    // Ok(match src.as_rule() {
-    //     Rule::out_list_spec => {
-    //         let l: Vec<_> = src.into_inner().map(parse_pull_spec).try_collect()?;
-    //         json!(l)
-    //     }
-    //     Rule::out_map_spec => {
-    //         let m: Map<_, _> = src
-    //             .into_inner()
-    //             .map(|p| -> Result<(String, JsonValue)> {
-    //                 let mut p = p.into_inner();
-    //                 let name = p.next().unwrap().as_str();
-    //                 let spec = parse_pull_spec(p.next().unwrap())?;
-    //                 Ok((name.to_string(), spec))
-    //             })
-    //             .try_collect()?;
-    //         json!(m)
-    //     }
-    //     _ => unreachable!(),
-    // })
-    todo!()
 }

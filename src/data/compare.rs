@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::data::encode::{
-    decode_ae_key, decode_attr_key_by_id, decode_ea_key, decode_sentinel_attr_val, decode_vae_key,
+    decode_ae_key, decode_attr_key_by_id, decode_sentinel_attr_val, decode_vae_key,
     decode_value_from_key, StorageTag,
 };
 
@@ -38,7 +38,6 @@ pub(crate) fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
     };
 
     match tag {
-        TripleEntityAttrValue => compare_key_triple_eav(a, b),
         TripleAttrEntityValue => compare_key_triple_aev(a, b),
         TripleAttrValueEntity => compare_key_triple_ave(a, b),
         TripleValueAttrEntity => compare_key_triple_vae(a, b),
@@ -49,24 +48,6 @@ pub(crate) fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
         SentinelAttrById => compare_key_unique_attr_by_id(a, b),
         SentinelAttrByName => compare_key_unique_attr_by_name(a, b),
     }
-}
-
-#[inline]
-fn compare_key_triple_eav(a: &[u8], b: &[u8]) -> Ordering {
-    return_if_resolved!(a[..8].cmp(&b[..8]));
-    if a.len() == 8 || b.len() == 8 {
-        return a.len().cmp(&b.len());
-    }
-    let (_a_e, a_a, a_t) = decode_ea_key(a).unwrap();
-    let (_b_e, b_a, b_t) = decode_ea_key(b).unwrap();
-
-    return_if_resolved!(a_a.cmp(&b_a));
-
-    let a_v = decode_value_from_key(a).unwrap();
-    let b_v = decode_value_from_key(b).unwrap();
-
-    return_if_resolved!(a_v.cmp(&b_v));
-    a_t.cmp(&b_t).reverse()
 }
 
 #[inline]

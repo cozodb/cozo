@@ -153,13 +153,6 @@ impl SessionTx {
         self.w_tx_id
             .ok_or_else(|| miette!("attempting to write in read-only transaction"))
     }
-    pub(crate) fn bounded_scan(&self, lower: &[u8], upper: &[u8]) -> DbIter {
-        self.tx
-            .iterator()
-            .lower_bound(lower)
-            .lower_bound(upper)
-            .start()
-    }
     pub(crate) fn bounded_scan_first(&self, lower: &[u8], upper: &[u8]) -> DbIter {
         // this is tricky, must be written like this!
         let mut it = self.tx.iterator().upper_bound(upper).start();

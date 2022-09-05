@@ -303,13 +303,13 @@ impl MagicAlgoRuleArg {
                         TripleDir::Fwd => {
                             if attr.with_history {
                                 Box::new(
-                                    tx.triple_ea_before_scan(id, attr.id, *vld)
-                                        .map_ok(|(eid, _, v)| Tuple(vec![eid.as_datavalue(), v])),
+                                    tx.triple_ae_before_scan(attr.id, id, *vld)
+                                        .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                                 )
                             } else {
                                 Box::new(
-                                    tx.triple_ea_scan(id, attr.id)
-                                        .map_ok(|(eid, _, v)| Tuple(vec![eid.as_datavalue(), v])),
+                                    tx.triple_ae_scan(attr.id, id, )
+                                        .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                                 )
                             }
                         }

@@ -60,7 +60,6 @@ fn parse_attr_defs(src: Pairs<'_>) -> Result<Attribute> {
             "no_index" => attr.indexing = AttributeIndex::None,
             "unique" => attr.indexing = AttributeIndex::Unique,
             "ref" => attr.val_type = AttributeTyping::Ref,
-            "component" => attr.val_type = AttributeTyping::Component,
             "bool" => attr.val_type = AttributeTyping::Bool,
             "int" => attr.val_type = AttributeTyping::Int,
             "float" => attr.val_type = AttributeTyping::Float,

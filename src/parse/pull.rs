@@ -1,3 +1,55 @@
+use itertools::Itertools;
+use miette::Result;
+
+use crate::data::symb::Symbol;
+use crate::parse::{Pair, Rule};
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) enum OutPullSpec {
+    PullAll,
+    PullField {
+        attr: Symbol,
+        reverse: bool,
+        subfields: Vec<OutPullSpec>,
+    },
+}
+
+pub(crate) fn parse_out_options(pair: Pair<'_>) -> Result<(Symbol, Vec<OutPullSpec>)> {
+    let mut src = pair.into_inner();
+    let target = Symbol::from(src.next().unwrap().as_str());
+    let specs = src.next().unwrap();
+
+    Ok((target, specs.into_inner().map(parse_spec_el).try_collect()?))
+}
+
+fn parse_spec_el(pair: Pair<'_>) -> Result<OutPullSpec> {
+    match pair.as_rule() {
+        Rule::pull_all => Ok(OutPullSpec::PullAll),
+        Rule::pull_field => parse_pull_field(pair),
+        _ => unreachable!(),
+    }
+}
+
+fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
+    let mut is_reverse = false;
+    let mut src = pair.into_inner();
+    let mut name_p = src.next().unwrap();
+    if Rule::rev_pull_marker == name_p.as_rule() {
+        is_reverse = true;
+        name_p = src.next().unwrap();
+    }
+    let name = Symbol::from(name_p.as_str());
+    let subfields = match src.next() {
+        None => vec![],
+        Some(p) => p.into_inner().map(parse_spec_el).try_collect()?,
+    };
+    Ok(OutPullSpec::PullField {
+        attr: name,
+        reverse: is_reverse,
+        subfields,
+    })
+}
+
 // use std::cmp::max;
 //
 // use miette::{miette, bail, Result};
@@ -191,7 +243,6 @@
 //         }))
 //     }
 // }
-
 
 // fn parse_pull_spec(src: Pair<'_>) -> Result<JsonValue> {
 //     let mut src = src.into_inner();

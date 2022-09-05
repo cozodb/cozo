@@ -87,7 +87,7 @@ grouping = { "(" ~ expr ~ ")" }
 option = _{(limit_option|offset_option|out_option|sort_option|view_option|timeout_option) ~ ";"}
 limit_option = {":limit"  ~ pos_int}
 offset_option = {":offset" ~ pos_int}
-out_option = {":out" ~ out_map_spec}
+out_option = {":pull" ~ var ~ out_spec}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
 view_option = {":view" ~ view_op ~ compound_ident}
 view_op = _{view_create | view_rederive | view_put | view_retract}
@@ -101,23 +101,11 @@ sort_dir = _{ sort_asc | sort_desc }
 sort_asc = {"+"}
 sort_desc = {"-"}
 
-pull_ident = @{"<"? ~ compound_ident}
-out_map_spec = {(out_map_pair ~ ",")* ~ out_map_pair?}
-out_map_pair = {compound_ident ~ ":" ~ pull_spec}
-out_list_spec = {"[" ~ (pull_spec ~ ",")* ~ pull_spec? ~ "]"}
-pull_spec = {var ~ pull_args?}
-pull_args = {("[" ~ (pull_arg ~ ",")* ~ pull_arg? ~ "]")?}
-pull_arg = {( pull_all | pull_id | pull_attr ) ~ pull_modifier*}
-pull_attr = {pull_ident ~ pull_args?}
+out_spec = {"{" ~ (pull_el ~ ",")* ~ pull_el? ~ "}"}
+pull_el = _{pull_all | pull_field}
 pull_all = {"*"}
-pull_id = {"_id"}
-pull_modifier = _{pull_as | pull_limit | pull_offset | pull_default | pull_recurse | pull_depth}
-pull_as = {"as" ~ compound_ident}
-pull_limit = {"limit" ~ pos_int}
-pull_offset = {"offset" ~ pos_int}
-pull_default = {"default" ~ expr}
-pull_recurse = {"recurse" ~ expr}
-pull_depth = {"depth" ~ pos_int}
+pull_field = {rev_pull_marker? ~ compound_ident ~ (":" ~ out_spec)?}
+rev_pull_marker = {"<"}
 
 // literals
 

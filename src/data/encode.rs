@@ -16,16 +16,15 @@ use crate::runtime::transact::TxLog;
 #[repr(u8)]
 #[derive(Ord, PartialOrd, Eq, PartialEq, Debug, Copy, Clone)]
 pub(crate) enum StorageTag {
-    TripleEntityAttrValue = 1,
-    TripleAttrEntityValue = 2,
-    TripleAttrValueEntity = 3,
-    TripleValueAttrEntity = 4,
-    AttrById = 5,
-    Tx = 6,
-    SentinelEntityAttr = 7,
-    SentinelAttrValue = 8,
-    SentinelAttrById = 9,
-    SentinelAttrByName = 10,
+    TripleAttrEntityValue = 1,
+    TripleAttrValueEntity = 2,
+    TripleValueAttrEntity = 3,
+    AttrById = 4,
+    Tx = 5,
+    SentinelEntityAttr = 6,
+    SentinelAttrValue = 7,
+    SentinelAttrById = 8,
+    SentinelAttrByName = 9,
 }
 
 #[derive(Clone)]
@@ -43,8 +42,7 @@ impl<const N: usize> EncodedVec<N> {
 impl EncodedVec<LARGE_VEC_SIZE> {
     pub fn debug_value(&self, data: &[u8]) -> String {
         match StorageTag::try_from(self.inner[0]).unwrap() {
-            StorageTag::TripleEntityAttrValue
-            | StorageTag::TripleAttrEntityValue
+            StorageTag::TripleAttrEntityValue
             | StorageTag::TripleAttrValueEntity
             | StorageTag::TripleValueAttrEntity => {
                 let op = StoreOp::try_from(data[0]).unwrap();
@@ -92,11 +90,6 @@ impl<const N: usize> Debug for EncodedVec<N> {
             Ok(tag) => {
                 write!(f, "{:?}", tag)?;
                 match tag {
-                    StorageTag::TripleEntityAttrValue => {
-                        let (e, a, t) = decode_ea_key(self).unwrap();
-                        let v = decode_value_from_key(self).unwrap();
-                        write!(f, " [{:?}, {:?}, {:?}] @{:?}", e, a, v, t)
-                    }
                     StorageTag::TripleAttrEntityValue | StorageTag::TripleAttrValueEntity => {
                         let (a, e, t) = decode_ae_key(self).unwrap();
                         let v = decode_value_from_key(self).unwrap();
@@ -188,16 +181,15 @@ impl TryFrom<u8> for StorageTag {
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
         use StorageTag::*;
         Ok(match value {
-            1 => TripleEntityAttrValue,
-            2 => TripleAttrEntityValue,
-            3 => TripleAttrValueEntity,
-            4 => TripleValueAttrEntity,
-            5 => AttrById,
-            6 => Tx,
-            7 => SentinelEntityAttr,
-            8 => SentinelAttrValue,
-            9 => SentinelAttrById,
-            10 => SentinelAttrByName,
+            1 => TripleAttrEntityValue,
+            2 => TripleAttrValueEntity,
+            3 => TripleValueAttrEntity,
+            4 => AttrById,
+            5 => Tx,
+            6 => SentinelEntityAttr,
+            7 => SentinelAttrValue,
+            8 => SentinelAttrById,
+            9 => SentinelAttrByName,
             n => bail!("unexpected storage tag {}", n),
         })
     }
@@ -224,43 +216,8 @@ pub(crate) fn decode_value_from_val(src: &[u8]) -> Result<DataValue> {
     Ok(rmp_serde::from_slice(&src[VEC_SIZE_8..]).into_diagnostic()?)
 }
 
-/// eid: 8 bytes (incl. tag)
-/// aid: 8 bytes
-/// val: variable
-/// vld: 8 bytes
-#[inline]
-pub(crate) fn encode_eav_key(
-    eid: EntityId,
-    aid: AttrId,
-    val: &DataValue,
-    vld: Validity,
-) -> EncodedVec<LARGE_VEC_SIZE> {
-    let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
-
-    ret.extend(eid.bytes());
-    ret[0] = StorageTag::TripleEntityAttrValue as u8;
-
-    ret.extend(aid.bytes());
-
-    ret.extend(vld.bytes());
-    debug_assert_eq!(ret.len(), VEC_SIZE_24);
-
-    val.serialize(&mut Serializer::new(&mut ret)).unwrap();
-
-    ret.into()
-}
-
 pub(crate) fn smallest_key() -> EncodedVec<LARGE_VEC_SIZE> {
-    encode_eav_key(EntityId::ZERO, AttrId(0), &DataValue::Null, Validity::MIN)
-}
-
-#[inline]
-pub(crate) fn decode_ea_key(src: &[u8]) -> Result<(EntityId, AttrId, Validity)> {
-    let eid = EntityId::from_bytes(&src[0..VEC_SIZE_8]);
-    let aid = AttrId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
-    let vld = Validity::from_bytes(&src[VEC_SIZE_16..VEC_SIZE_24]);
-
-    Ok((eid, aid, vld))
+    encode_aev_key(AttrId(0), EntityId::ZERO,  &DataValue::Null, Validity::MIN)
 }
 
 /// eid: 8 bytes (incl. tag)

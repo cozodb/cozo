@@ -15,17 +15,15 @@ use crate::data::id::Validity;
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::query::pull::PullSpecs;
+use crate::parse::pull::OutPullSpec;
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::ViewRelMetadata;
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, (Vec<Tuple>, Vec<Symbol>)>;
 
-pub(crate) type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct QueryOutOptions {
-    pub(crate) out_spec: Option<OutSpec>,
+    pub(crate) out_spec: BTreeMap<Symbol, Vec<OutPullSpec>>,
     pub(crate) vld: Validity,
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
@@ -37,7 +35,7 @@ pub(crate) struct QueryOutOptions {
 impl Default for QueryOutOptions {
     fn default() -> Self {
         Self {
-            out_spec: None,
+            out_spec: BTreeMap::default(),
             vld: Validity::current(),
             limit: None,
             offset: None,
@@ -96,7 +94,7 @@ pub(crate) struct AlgoApply {
     pub(crate) rule_args: Vec<AlgoRuleArg>,
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
     pub(crate) head: Vec<Symbol>,
-    pub(crate) vld: Option<Validity>
+    pub(crate) vld: Option<Validity>,
 }
 
 impl AlgoApply {
@@ -192,14 +190,6 @@ pub(crate) struct InputProgram {
 }
 
 impl InputProgram {
-    pub(crate) fn head_is_rule(&self) -> bool {
-        if let Some(entry) = self.prog.get(&PROG_ENTRY) {
-            if matches!(entry, InputRulesOrAlgo::Rules(_)) {
-                return true
-            }
-        }
-        false
-    }
     pub(crate) fn get_entry_head(&self) -> Option<&[Symbol]> {
         if let Some(entry) = self.prog.get(&PROG_ENTRY) {
             return match entry {
@@ -226,7 +216,11 @@ impl InputProgram {
 
         None
     }
-    pub(crate) fn to_normalized_program(&self, tx: &SessionTx, default_vld: Validity) -> Result<NormalFormProgram> {
+    pub(crate) fn to_normalized_program(
+        &self,
+        tx: &SessionTx,
+        default_vld: Validity,
+    ) -> Result<NormalFormProgram> {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
         for (k, rules_or_algo) in &self.prog {
             match rules_or_algo {
