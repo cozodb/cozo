@@ -346,8 +346,16 @@ impl Db {
     //     let collected = collected.into_iter().map(|(_, v)| v).collect_vec();
     //     Ok(json!(collected))
     // }
-    pub fn run_script(&self, payload: &str) -> Result<JsonValue> {
-        match parse_script(payload, &Default::default())? {
+    pub fn run_script(
+        &self,
+        payload: &str,
+        params: &BTreeMap<String, JsonValue>,
+    ) -> Result<JsonValue> {
+        let param_pool = params
+            .iter()
+            .map(|(k, v)| (k.clone(), DataValue::from(v)))
+            .collect();
+        match parse_script(payload, &param_pool)? {
             CozoScript::Query(p) => self.run_query(p),
             CozoScript::Tx(tx) => self.transact_triples(tx),
             CozoScript::Schema(schema) => self.transact_attributes(schema),
@@ -485,7 +493,7 @@ impl Db {
                     sorted_iter,
                     input_program.get_entry_head(),
                     &input_program.out_opts.out_spec,
-                    default_vld
+                    default_vld,
                 )?;
                 Ok(json!({ "rows": ret, "headers": json_headers }))
             }
@@ -508,7 +516,7 @@ impl Db {
                     scan,
                     input_program.get_entry_head(),
                     &input_program.out_opts.out_spec,
-                    default_vld
+                    default_vld,
                 )?;
                 Ok(json!({ "rows": ret, "headers": json_headers }))
             }

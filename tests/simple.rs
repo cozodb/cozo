@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use log::info;
 use serde_json::to_string_pretty;
 
@@ -23,6 +25,7 @@ fn simple() {
     init_logger();
     let db = create_db("_test_db", true);
     test_send_sync(&db);
+    let params: BTreeMap<String, serde_json::Value> = Default::default();
     db.run_script(
         r#"
         :schema
@@ -35,6 +38,7 @@ fn simple() {
             weight: float,
         }
     "#,
+        &params,
     )
     .unwrap();
     info!(
@@ -99,6 +103,7 @@ fn simple() {
                 person.friend: "george"},
         }
     "#,
+        &params,
     )
     .unwrap();
     let query = r#"
@@ -115,7 +120,7 @@ fn simple() {
     :sort -n;
     "#;
 
-    let ret = db.run_script(query).unwrap();
+    let ret = db.run_script(query, &params).unwrap();
     let res = to_string_pretty(&ret).unwrap();
     println!("{}", res);
 }

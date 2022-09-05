@@ -1,7 +1,9 @@
 script = _{schema_script | tx_script | sys_script | query_script}
 query_script = {SOI ~":query"? ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
 schema_script = {SOI ~":schema" ~ schema_clause+ ~ EOI}
-tx_script = {SOI ~ (":tx" | "\":tx\"") ~ tx_clause+ ~ EOI}
+tx_script = {SOI ~ (":tx" | "\":tx\"") ~ tx_clause+ ~ (tx_before_ensure_script | tx_after_ensure_script)* ~ EOI}
+tx_before_ensure_script = {":before"? ~ (option | rule | const_rule | algo_rule)+}
+tx_after_ensure_script = {":after"? ~ (option | rule | const_rule | algo_rule)+}
 sys_script = {SOI ~ ":db" ~ (compact_op | list_schema_op | list_relations_op | remove_relations_op | running_op | kill_op) ~ EOI}
 
 compact_op = {"compact" ~ (compact_opt_triples | compact_opt_relations)+}
@@ -85,8 +87,8 @@ list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
 option = _{(limit_option|offset_option|out_option|sort_option|view_option|timeout_option) ~ ";"}
-limit_option = {":limit"  ~ pos_int}
-offset_option = {":offset" ~ pos_int}
+limit_option = {":limit"  ~ expr}
+offset_option = {":offset" ~ expr}
 out_option = {":pull" ~ var ~ ("@" ~ expr)? ~ out_spec}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
 view_option = {":view" ~ view_op ~ compound_ident}

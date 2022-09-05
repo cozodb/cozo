@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::{stdin, stdout, Write};
 use std::str::from_utf8;
@@ -11,7 +11,6 @@ use actix_web::http::header::HeaderName;
 use actix_web::rt::task::spawn_blocking;
 use actix_web::{post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web_static_files::ResourceFiles;
-use miette::{miette, bail, IntoDiagnostic};
 use clap::Parser;
 use env_logger::Env;
 use log::debug;
@@ -20,6 +19,7 @@ use serde_json::json;
 use sha3::Digest;
 
 use cozo::{Db, DbBuilder};
+use miette::{bail, miette, IntoDiagnostic};
 
 type Result<T> = std::result::Result<T, RespError>;
 
@@ -77,12 +77,14 @@ impl AppStateWithDb {
             .headers()
             .get(&HeaderName::from_static("x-cozo-username"))
             .ok_or_else(|| miette!("not authenticated"))?
-            .to_str().into_diagnostic()?;
+            .to_str()
+            .into_diagnostic()?;
         let password = req
             .headers()
             .get(&HeaderName::from_static("x-cozo-password"))
             .ok_or_else(|| miette!("not authenticated"))?
-            .to_str().into_diagnostic()?;
+            .to_str()
+            .into_diagnostic()?;
         if let Some(stored) = self.pass_cache.read().unwrap().get(username).cloned() {
             let mut seed = self.seed.to_vec();
             seed.extend_from_slice(password.as_bytes());
@@ -115,7 +117,8 @@ impl AppStateWithDb {
             thread::sleep(Duration::from_millis(1234));
             bail!("invalid password")
         })
-        .await.into_diagnostic()?
+        .await
+        .into_diagnostic()?
     }
 
     async fn reset_password(&self, user: &str, new_pass: &str) -> miette::Result<()> {
@@ -127,11 +130,13 @@ impl AppStateWithDb {
             pass_cache.write().unwrap().remove(&username);
             let salt = rand::thread_rng().gen::<[u8; 32]>();
             let config = argon2config();
-            let hash = argon2::hash_encoded(new_pass.as_bytes(), &salt, &config).into_diagnostic()?;
+            let hash =
+                argon2::hash_encoded(new_pass.as_bytes(), &salt, &config).into_diagnostic()?;
             db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())?;
             Ok(())
         })
-        .await.into_diagnostic()?
+        .await
+        .into_diagnostic()?
     }
 
     async fn remove_user(&self, user: &str) -> miette::Result<()> {
@@ -150,20 +155,22 @@ fn argon2config() -> argon2::Config<'static> {
     }
 }
 
+#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+struct QueryPayload {
+    script: String,
+    params: BTreeMap<String, serde_json::Value>,
+}
+
 #[post("/text-query")]
 async fn query(
-    body: web::Bytes,
+    body: web::Json<QueryPayload>,
     data: web::Data<AppStateWithDb>,
     req: HttpRequest,
 ) -> Result<impl Responder> {
     data.verify_password(&req).await?;
-
-    let text = std::str::from_utf8(&body)
-        .map_err(|e| miette!(e))?
-        .to_string();
     let db = data.db.new_session()?;
     let start = Instant::now();
-    let task = spawn_blocking(move || db.run_script(&text));
+    let task = spawn_blocking(move || db.run_script(&body.script, &body.params));
     let mut result = task.await.map_err(|e| miette!(e))??;
     if let Some(obj) = result.as_object_mut() {
         obj.insert(
@@ -174,9 +181,14 @@ async fn query(
     Ok(HttpResponse::Ok().json(result))
 }
 
+#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+struct ChangePassPayload {
+    new_pass: String,
+}
+
 #[post("/change-password")]
 async fn change_password(
-    body: web::Json<serde_json::Value>,
+    body: web::Json<ChangePassPayload>,
     data: web::Data<AppStateWithDb>,
     req: HttpRequest,
 ) -> Result<impl Responder> {
@@ -187,88 +199,42 @@ async fn change_password(
         .ok_or_else(|| miette!("not authenticated"))?
         .to_str()
         .map_err(|e| miette!(e))?;
-    let new_pass = body
-        .get("new_pass")
-        .ok_or_else(|| miette!("required 'new_pass' field"))?
-        .as_str()
-        .ok_or_else(|| miette!("'new_pass' field required to be a string"))?;
-    data.reset_password(username, new_pass).await?;
+    data.reset_password(username, &body.new_pass).await?;
     Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
+}
+
+#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+struct AssertUserPayload {
+    username: String,
+    new_pass: String,
 }
 
 #[post("/assert-user")]
 async fn assert_user(
-    body: web::Json<serde_json::Value>,
+    body: web::Json<AssertUserPayload>,
     data: web::Data<AppStateWithDb>,
     req: HttpRequest,
 ) -> Result<impl Responder> {
     data.verify_password(&req).await?;
-    let new_user = body
-        .get("username")
-        .ok_or_else(|| miette!("required 'username' field"))?
-        .as_str()
-        .ok_or_else(|| miette!("'username' field required to be a string"))?;
-    let new_pass = body
-        .get("new_pass")
-        .ok_or_else(|| miette!("required 'new_pass' field"))?
-        .as_str()
-        .ok_or_else(|| miette!("'new_pass' field required to be a string"))?;
-    data.reset_password(new_user, new_pass).await?;
+    data.reset_password(&body.username, &body.new_pass).await?;
     Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
+}
+
+#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+struct RemoveUserPayload {
+    username: String,
 }
 
 #[post("/remove-user")]
 async fn remove_user(
-    body: web::Json<serde_json::Value>,
+    body: web::Json<RemoveUserPayload>,
     data: web::Data<AppStateWithDb>,
     req: HttpRequest,
 ) -> Result<impl Responder> {
     data.verify_password(&req).await?;
-    let user = body
-        .get("username")
-        .ok_or_else(|| miette!("required 'username' field"))?
-        .as_str()
-        .ok_or_else(|| miette!("'username' field required to be a string"))?;
-    data.remove_user(&user).await?;
+    data.remove_user(&body.username).await?;
     Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
 }
-
-#[post("/json-query")]
-async fn json_query(
-    body: web::Json<serde_json::Value>,
-    data: web::Data<AppStateWithDb>,
-    req: HttpRequest,
-) -> Result<impl Responder> {
-    data.verify_password(&req).await?;
-
-    let db = data.db.new_session()?;
-    let start = Instant::now();
-    let task = spawn_blocking(move || db.run_json_query(&body));
-    let mut result = task.await.map_err(|e| miette!(e))??;
-    if let Some(obj) = result.as_object_mut() {
-        obj.insert(
-            "time_taken".to_string(),
-            json!(start.elapsed().as_millis() as u64),
-        );
-    }
-    Ok(HttpResponse::Ok().json(result))
-}
-
-// #[post("/script-to-json")]
-// async fn to_json_query(
-//     body: web::Bytes,
-//     data: web::Data<AppStateWithDb>,
-//     req: HttpRequest,
-// ) -> Result<impl Responder> {
-//     data.verify_password(&req).await?;
-//
-//     let text = std::str::from_utf8(&body)
-//         .map_err(|e| miette!(e))?
-//         .to_string();
-//     let db = data.db.new_session()?;
-//     let res = db.convert_to_json_query(&text)?;
-//     Ok(HttpResponse::Ok().json(res))
-// }
 
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 
@@ -354,8 +320,6 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_state.clone())
             .wrap(cors)
             .service(query)
-            .service(json_query)
-            // .service(to_json_query)
             .service(change_password)
             .service(assert_user)
             .service(remove_user)

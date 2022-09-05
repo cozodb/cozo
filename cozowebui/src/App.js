@@ -6,6 +6,7 @@ import {Cell, Column, Table2} from "@blueprintjs/table";
 function App() {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [params, setParams] = useState('');
     const [validating, setValidating] = useState(false);
     const [usernameInput, setUsernameInput] = useState('');
     const [passwordInput, setPasswordInput] = useState('');
@@ -30,7 +31,7 @@ function App() {
             setValidating(true);
             const response = await fetch(url, {
                 method: 'POST',
-                body: '?[ok] := ok <- true;',
+                body: JSON.stringify({script: '?[ok] := ok <- true;', params: {}}),
                 headers: new Headers({
                     'content-type': 'application/json',
                     'x-cozo-username': usernameInput,
@@ -100,7 +101,7 @@ function App() {
                 if (type === 'json') {
                     response = await fetch(url, {
                         method: 'POST',
-                        body: query,
+                        body: JSON.stringify(query),
                         headers: new Headers({
                             'content-type': 'application/json',
                             'x-cozo-username': username,
@@ -110,9 +111,9 @@ function App() {
                 } else {
                     response = await fetch(url, {
                         method: 'POST',
-                        body: query,
+                        body: JSON.stringify({script: query, params: JSON.parse(params.trim() || '{}')}),
                         headers: new Headers({
-                            'content-type': 'text/plain',
+                            'content-type': 'application/json',
                             'x-cozo-username': username,
                             'x-cozo-password': password
                         }),
@@ -178,18 +179,29 @@ function App() {
     return (
         <div style={{width: "100vw", height: "100vh", display: 'flex', flexDirection: 'column'}}>
             <div style={{padding: 10}}>
-                <TextArea
-                    autoFocus
-                    placeholder="Type query here, SHIFT + Enter to run as script"
-                    id="query-box"
-                    className="bp4-fill"
-                    growVertically={true}
-                    large={true}
-                    intent={Intent.PRIMARY}
-                    onChange={e => setQueryText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    value={queryText}
-                />
+                <div style={{display: 'flex'}}>
+                    <TextArea
+                        autoFocus
+                        placeholder="Type query here, SHIFT + Enter to run as script"
+                        id="query-box"
+                        className="bp4-fill"
+                        growVertically={true}
+                        large={true}
+                        intent={Intent.PRIMARY}
+                        onChange={e => setQueryText(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        value={queryText}
+                    />
+                    <TextArea
+                        id="params-box"
+                        style={{marginLeft: 5}}
+                        placeholder="Type your params here (a JSON map)"
+                        large={true}
+                        onChange={e => setParams(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        value={params}
+                    />
+                </div>
                 <div/>
                 <div style={{paddingTop: 10, display: 'flex', flexDirection: 'row'}}>
                     <Button text="Run script" onClick={() => handleQuery('script')}

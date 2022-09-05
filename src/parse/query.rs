@@ -1,11 +1,10 @@
 use std::borrow::BorrowMut;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
 use either::Left;
 use itertools::Itertools;
-use miette::{bail, ensure, miette, IntoDiagnostic, Result};
+use miette::{bail, ensure, miette, Result};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoHandle;
@@ -115,12 +114,18 @@ pub(crate) fn parse_query(
                 out_opts.timeout = Some(timeout as u64);
             }
             Rule::limit_option => {
-                let limit = parse_limit_or_offset(pair)?;
-                out_opts.limit = Some(limit);
+                let limit = build_expr(pair, param_pool)?
+                    .eval_to_const()?
+                    .get_non_neg_int()
+                    .ok_or_else(|| miette!("limit requires a non-negative integer"))?;
+                out_opts.limit = Some(limit as usize);
             }
             Rule::offset_option => {
-                let offset = parse_limit_or_offset(pair)?;
-                out_opts.offset = Some(offset);
+                let offset = build_expr(pair, param_pool)?
+                    .eval_to_const()?
+                    .get_non_neg_int()
+                    .ok_or_else(|| miette!("limit requires a non-negative integer"))?;
+                out_opts.offset = Some(offset as usize);
             }
             Rule::sort_option => {
                 for part in pair.into_inner() {
@@ -141,7 +146,7 @@ pub(crate) fn parse_query(
                 if out_opts.as_view.is_some() {
                     bail!("cannot use out spec with 'view'");
                 }
-                let (target, vld,  specs) = parse_out_options(pair, param_pool)?;
+                let (target, vld, specs) = parse_out_options(pair, param_pool)?;
                 match out_opts.out_spec.entry(target) {
                     Entry::Vacant(e) => e.insert((specs, vld)),
                     Entry::Occupied(_) => {
@@ -498,13 +503,4 @@ fn parse_algo_rule(
             vld: at,
         },
     ))
-}
-
-fn parse_limit_or_offset(src: Pair<'_>) -> Result<usize> {
-    let src = src.into_inner().next().unwrap().as_str();
-    str2usize(src)
-}
-
-fn str2usize(src: &str) -> Result<usize> {
-    Ok(usize::from_str(&src.replace('_', "")).into_diagnostic()?)
 }

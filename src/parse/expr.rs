@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use miette::{bail, miette, IntoDiagnostic, Result, ensure};
+use miette::{bail, ensure, miette, IntoDiagnostic, Result};
 use pest::prec_climber::{Operator, PrecClimber};
 use smartstring::{LazyCompact, SmartString};
 
@@ -78,12 +78,15 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             match op {
                 Rule::term => build_unary(p, param_pool)?,
                 Rule::var => Expr::Binding(Symbol::from(s), None),
-                Rule::param => Expr::Const(
-                    param_pool
-                        .get(s)
-                        .ok_or_else(|| miette!("param {} not found", s))?
-                        .clone(),
-                ),
+                Rule::param => {
+                    let param_str = s.strip_prefix('$').unwrap();
+                    Expr::Const(
+                        param_pool
+                            .get(param_str)
+                            .ok_or_else(|| miette!("required param '{}' not found", param_str))?
+                            .clone(),
+                    )
+                }
                 Rule::minus => {
                     let inner = build_unary(inner.next().unwrap(), param_pool)?;
                     Expr::Apply(&OP_MINUS, vec![inner].into())
