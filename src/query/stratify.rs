@@ -203,7 +203,7 @@ impl NormalFormProgram {
         let graph = reduce_to_graph(&stratified_graph);
         ensure!(
             graph.contains_key(prog_entry),
-            "program graph does not have an entry"
+            "program graph does not have an entry, {:?}", graph
         );
 
         // 1. find reachable clauses starting from the query

@@ -28,8 +28,8 @@ view_ident = @{":" ~ compound_ident}
 compound_ident = {ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"}
-const_rule = {(prog_entry | ident) ~ "<-" ~ expr ~ ";" }
-algo_rule = {(prog_entry | ident) ~ "<-" ~ algo_ident ~ "(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")" ~ ";" }
+const_rule = {rule_head ~ "<-" ~ expr ~ ";" }
+algo_rule = {rule_head ~ "<-" ~ algo_ident ~ "(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")" ~ ";" }
 
 rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
 head_arg = {aggr_arg | var}
@@ -87,7 +87,7 @@ grouping = { "(" ~ expr ~ ")" }
 option = _{(limit_option|offset_option|out_option|sort_option|view_option|timeout_option) ~ ";"}
 limit_option = {":limit"  ~ pos_int}
 offset_option = {":offset" ~ pos_int}
-out_option = {":out" ~ out_spec}
+out_option = {":out" ~ out_map_spec}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
 view_option = {":view" ~ view_op ~ compound_ident}
 view_op = _{view_create | view_rederive | view_put | view_retract}
@@ -102,8 +102,7 @@ sort_asc = {"+"}
 sort_desc = {"-"}
 
 pull_ident = @{"<"? ~ compound_ident}
-out_spec = _{out_map_spec | out_list_spec}
-out_map_spec = {"{" ~ (out_map_pair ~ ",")* ~ out_map_pair? ~ "}"}
+out_map_spec = {(out_map_pair ~ ",")* ~ out_map_pair?}
 out_map_pair = {compound_ident ~ ":" ~ pull_spec}
 out_list_spec = {"[" ~ (pull_spec ~ ",")* ~ pull_spec? ~ "]"}
 pull_spec = {var ~ pull_args?}

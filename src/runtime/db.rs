@@ -23,10 +23,10 @@ use crate::data::program::{InputProgram, ViewOp};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::parse::{parse_script, CozoScript};
 use crate::parse::schema::AttrTxItem;
 use crate::parse::sys::{CompactTarget, SysOp};
 use crate::parse::tx::Quintuple;
+use crate::parse::{parse_script, CozoScript};
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::{ViewRelId, ViewRelMetadata};
 use crate::utils::swap_option_result;
@@ -456,11 +456,14 @@ impl Db {
             poison,
         )?;
         let headers = match input_program.get_entry_head() {
-            Err(_) => JsonValue::Null,
-            Ok(headers) => headers.iter().map(|v| json!(v.0)).collect(),
+            None => JsonValue::Null,
+            Some(headers) => headers.iter().map(|v| json!(v.0)).collect(),
         };
         if !input_program.out_opts.sorters.is_empty() {
-            let entry_head = input_program.get_entry_head()?.to_vec();
+            let entry_head = input_program
+                .get_entry_head()
+                .ok_or_else(|| miette!("program entry head must be defined for sorters to work"))?
+                .to_vec();
             let sorted_result =
                 tx.sort_and_collect(result, &input_program.out_opts.sorters, &entry_head)?;
             let sorted_iter = if let Some(offset) = input_program.out_opts.offset {
@@ -483,12 +486,23 @@ impl Db {
                 Ok(json!({ "rows": ret, "headers": headers }))
             }
         } else {
+            let scan = if !input_program.head_is_rule()
+                && (input_program.out_opts.limit.is_some()
+                    || input_program.out_opts.offset.is_some())
+            {
+                let limit = input_program.out_opts.limit.unwrap_or(usize::MAX);
+                let offset = input_program.out_opts.offset.unwrap_or(0);
+                Right(result.scan_all().skip(offset).take(limit))
+            } else {
+                Left(result.scan_all())
+            };
+
             if let Some((meta, view_op)) = input_program.out_opts.as_view {
-                tx.execute_view(result.scan_all(), view_op, &meta)?;
+                tx.execute_view(scan, view_op, &meta)?;
                 Ok(json!({"view": "OK"}))
             } else {
                 let ret: Vec<_> = tx
-                    .run_pull_on_query_results(result.scan_all(), input_program.out_opts)?
+                    .run_pull_on_query_results(scan, input_program.out_opts)?
                     .try_collect()?;
                 Ok(json!({ "rows": ret, "headers": headers }))
             }

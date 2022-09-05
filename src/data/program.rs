@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
 use either::{Left, Right};
-use miette::{bail, miette, Result};
+use miette::Result;
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 
@@ -19,7 +19,7 @@ use crate::query::pull::PullSpecs;
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::ViewRelMetadata;
 
-pub(crate) type ConstRules = BTreeMap<MagicSymbol, Vec<Tuple>>;
+pub(crate) type ConstRules = BTreeMap<MagicSymbol, (Vec<Tuple>, Vec<Symbol>)>;
 
 pub(crate) type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
 
@@ -34,7 +34,6 @@ pub(crate) struct QueryOutOptions {
     pub(crate) as_view: Option<(ViewRelMetadata, ViewOp)>,
 }
 
-
 impl Default for QueryOutOptions {
     fn default() -> Self {
         Self {
@@ -48,7 +47,6 @@ impl Default for QueryOutOptions {
         }
     }
 }
-
 
 impl QueryOutOptions {
     pub(crate) fn num_to_take(&self) -> Option<usize> {
@@ -97,6 +95,7 @@ pub(crate) struct AlgoApply {
     pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<AlgoRuleArg>,
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
+    pub(crate) head: Vec<Symbol>,
 }
 
 impl AlgoApply {
@@ -192,17 +191,39 @@ pub(crate) struct InputProgram {
 }
 
 impl InputProgram {
-    pub(crate) fn get_entry_head(&self) -> Result<&[Symbol]> {
-        match self
-            .prog
-            .get(&PROG_ENTRY)
-            .ok_or_else(|| miette!("program entry point not found"))?
-        {
-            InputRulesOrAlgo::Rules(rules) => Ok(&rules.last().unwrap().head),
-            InputRulesOrAlgo::Algo(_) => {
-                bail!("algo application does not have named entry head")
+    pub(crate) fn head_is_rule(&self) -> bool {
+        if let Some(entry) = self.prog.get(&PROG_ENTRY) {
+            if matches!(entry, InputRulesOrAlgo::Rules(_)) {
+                return true
             }
         }
+        false
+    }
+    pub(crate) fn get_entry_head(&self) -> Option<&[Symbol]> {
+        if let Some(entry) = self.prog.get(&PROG_ENTRY) {
+            return match entry {
+                InputRulesOrAlgo::Rules(rules) => Some(&rules.last().unwrap().head),
+                InputRulesOrAlgo::Algo(algo_apply) => {
+                    if algo_apply.head.is_empty() {
+                        None
+                    } else {
+                        Some(&algo_apply.head)
+                    }
+                }
+            };
+        }
+
+        if let Some((_, bindings)) = self.const_rules.get(&MagicSymbol::Muggle {
+            inner: PROG_ENTRY.clone(),
+        }) {
+            return if bindings.is_empty() {
+                None
+            } else {
+                Some(bindings)
+            };
+        }
+
+        None
     }
     pub(crate) fn to_normalized_program(&self, tx: &SessionTx) -> Result<NormalFormProgram> {
         let default_vld = Validity::current();

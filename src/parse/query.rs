@@ -3,6 +3,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
+use either::Left;
 use itertools::Itertools;
 use miette::{bail, ensure, miette, IntoDiagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
@@ -11,7 +12,11 @@ use crate::algo::AlgoHandle;
 use crate::data::aggr::{get_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
-use crate::data::program::{AlgoApply, AlgoRuleArg, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputViewApplyAtom, MagicSymbol, OutSpec, QueryOutOptions, SortDir, TripleDir, Unification, ViewOp};
+use crate::data::program::{
+    AlgoApply, AlgoRuleArg, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram, InputRule,
+    InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputViewApplyAtom, MagicSymbol, OutSpec,
+    QueryOutOptions, SortDir, TripleDir, Unification, ViewOp,
+};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -54,7 +59,11 @@ pub(crate) fn parse_query(
             }
             Rule::const_rule => {
                 let mut src = pair.into_inner();
-                let name = src.next().unwrap().as_str();
+                let (name, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
+                ensure!(
+                    aggr.iter().all(|v| v.is_none()),
+                    "const rules cannot have aggregation application"
+                );
                 let data = build_expr(src.next().unwrap(), param_pool)?;
                 let data = data.eval_to_const()?;
                 let data = match data {
@@ -67,9 +76,7 @@ pub(crate) fn parse_query(
 
                 ensure!(!data.is_empty(), "const rules cannot be empty for {}", name);
 
-                match const_rules.entry(MagicSymbol::Muggle {
-                    inner: Symbol::from(name),
-                }) {
+                match const_rules.entry(MagicSymbol::Muggle { inner: name }) {
                     Entry::Vacant(e) => {
                         let mut tuples = vec![];
                         let mut last_len = None;
@@ -85,7 +92,13 @@ pub(crate) fn parse_query(
                                 v => bail!("rows of const rules must be list, got {:?}", v),
                             }
                         }
-                        e.insert(tuples);
+                        if let Some(l) = &last_len {
+                            ensure!(
+                                head.is_empty() || *l == head.len(),
+                                "const head must have the same length as rows, or be empty"
+                            );
+                        }
+                        e.insert((tuples, head));
                     }
                     Entry::Occupied(e) => {
                         bail!("const rule can be defined only once: {:?}", e.key())
@@ -380,7 +393,11 @@ fn parse_algo_rule(
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<(Symbol, AlgoApply)> {
     let mut src = src.into_inner();
-    let out_symbol = src.next().unwrap().as_str();
+    let (out_symbol, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
+    ensure!(
+        aggr.iter().all(|v| v.is_none()),
+        "aggregation cannot be applied to algo rule head"
+    );
     let algo_name = &src.next().unwrap().as_str().strip_suffix('!').unwrap();
     let mut rule_args: Vec<AlgoRuleArg> = vec![];
     let mut options: BTreeMap<SmartString<LazyCompact>, Expr> = Default::default();
@@ -439,12 +456,19 @@ fn parse_algo_rule(
         }
     }
 
+    let algo = AlgoHandle::new(algo_name);
+    ensure!(
+        head.is_empty() || algo.arity(Left(&rule_args), &options)? == head.len(),
+        "algo head must have the same length as the return, or be omitted"
+    );
+
     Ok((
-        Symbol::from(out_symbol),
+        out_symbol,
         AlgoApply {
-            algo: AlgoHandle::new(algo_name),
+            algo,
             rule_args,
             options,
+            head,
         },
     ))
 }
