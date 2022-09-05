@@ -68,10 +68,10 @@ function App() {
     </Cell>
 
     function displayValue(v) {
-        if (v.constructor === Array) {
-            return '[' + v.map(el => displayValue(el)).join(', ') + ']'
+        if (v instanceof Object) {
+            return JSON.stringify(v)
         } else {
-            return '' + v
+            return v
         }
     }
 

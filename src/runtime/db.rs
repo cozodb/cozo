@@ -481,17 +481,17 @@ impl Db {
                 tx.execute_view(sorted_iter, view_op, &meta)?;
                 Ok(json!({"view": "OK"}))
             } else {
-                let ret: Vec<_> = tx
-                    .run_pull_on_query_results(
-                        sorted_iter,
-                        input_program.get_entry_head(),
-                        &input_program.out_opts.out_spec,
-                    )?;
+                let ret: Vec<_> = tx.run_pull_on_query_results(
+                    sorted_iter,
+                    input_program.get_entry_head(),
+                    &input_program.out_opts.out_spec,
+                    default_vld
+                )?;
                 Ok(json!({ "rows": ret, "headers": json_headers }))
             }
         } else {
-            let scan = if (input_program.out_opts.limit.is_some()
-                || input_program.out_opts.offset.is_some())
+            let scan = if input_program.out_opts.limit.is_some()
+                || input_program.out_opts.offset.is_some()
             {
                 let limit = input_program.out_opts.limit.unwrap_or(usize::MAX);
                 let offset = input_program.out_opts.offset.unwrap_or(0);
@@ -504,12 +504,12 @@ impl Db {
                 tx.execute_view(scan, view_op, &meta)?;
                 Ok(json!({"view": "OK"}))
             } else {
-                let ret: Vec<_> = tx
-                    .run_pull_on_query_results(
-                        scan,
-                        input_program.get_entry_head(),
-                        &input_program.out_opts.out_spec,
-                    )?;
+                let ret: Vec<_> = tx.run_pull_on_query_results(
+                    scan,
+                    input_program.get_entry_head(),
+                    &input_program.out_opts.out_spec,
+                    default_vld
+                )?;
                 Ok(json!({ "rows": ret, "headers": json_headers }))
             }
         }

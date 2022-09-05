@@ -1,33 +1,43 @@
+use std::collections::BTreeMap;
+
 use itertools::Itertools;
 use miette::Result;
 
+use crate::data::id::Validity;
 use crate::data::symb::Symbol;
+use crate::data::value::DataValue;
+use crate::parse::expr::build_expr;
 use crate::parse::{Pair, Rule};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) enum OutPullSpec {
-    PullAll,
-    PullField {
-        attr: Symbol,
-        reverse: bool,
-        subfields: Vec<OutPullSpec>,
-    },
+pub(crate) struct OutPullSpec {
+    pub(crate) attr: Symbol,
+    pub(crate) reverse: bool,
+    pub(crate) subfields: Vec<OutPullSpec>,
 }
 
-pub(crate) fn parse_out_options(pair: Pair<'_>) -> Result<(Symbol, Vec<OutPullSpec>)> {
+pub(crate) fn parse_out_options(
+    pair: Pair<'_>,
+    param_pool: &BTreeMap<String, DataValue>,
+) -> Result<(Symbol, Option<Validity>, Vec<OutPullSpec>)> {
     let mut src = pair.into_inner();
     let target = Symbol::from(src.next().unwrap().as_str());
-    let specs = src.next().unwrap();
+    let mut specs = src.next().unwrap();
+    let mut at = None;
 
-    Ok((target, specs.into_inner().map(parse_spec_el).try_collect()?))
-}
+    if specs.as_rule() == Rule::expr {
+        let vld = build_expr(specs, param_pool)?.eval_to_const()?;
+        let vld = Validity::try_from(vld)?;
+        at = Some(vld);
 
-fn parse_spec_el(pair: Pair<'_>) -> Result<OutPullSpec> {
-    match pair.as_rule() {
-        Rule::pull_all => Ok(OutPullSpec::PullAll),
-        Rule::pull_field => parse_pull_field(pair),
-        _ => unreachable!(),
+        specs = src.next().unwrap();
     }
+
+    Ok((
+        target,
+        at,
+        specs.into_inner().map(parse_pull_field).try_collect()?,
+    ))
 }
 
 fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
@@ -41,9 +51,9 @@ fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
     let name = Symbol::from(name_p.as_str());
     let subfields = match src.next() {
         None => vec![],
-        Some(p) => p.into_inner().map(parse_spec_el).try_collect()?,
+        Some(p) => p.into_inner().map(parse_pull_field).try_collect()?,
     };
-    Ok(OutPullSpec::PullField {
+    Ok(OutPullSpec {
         attr: name,
         reverse: is_reverse,
         subfields,

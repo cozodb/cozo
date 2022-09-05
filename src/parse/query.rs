@@ -141,9 +141,9 @@ pub(crate) fn parse_query(
                 if out_opts.as_view.is_some() {
                     bail!("cannot use out spec with 'view'");
                 }
-                let (target, specs) = parse_out_options(pair.into_inner().next().unwrap())?;
+                let (target, vld,  specs) = parse_out_options(pair, param_pool)?;
                 match out_opts.out_spec.entry(target) {
-                    Entry::Vacant(e) => e.insert(specs),
+                    Entry::Vacant(e) => e.insert((specs, vld)),
                     Entry::Occupied(_) => {
                         bail!("cannot specify spec for the same target twice")
                     }

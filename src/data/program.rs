@@ -23,7 +23,7 @@ pub(crate) type ConstRules = BTreeMap<MagicSymbol, (Vec<Tuple>, Vec<Symbol>)>;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct QueryOutOptions {
-    pub(crate) out_spec: BTreeMap<Symbol, Vec<OutPullSpec>>,
+    pub(crate) out_spec: BTreeMap<Symbol, (Vec<OutPullSpec>, Option<Validity>)>,
     pub(crate) vld: Validity,
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,

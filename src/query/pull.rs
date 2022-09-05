@@ -1,84 +1,44 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use miette::{ensure, IntoDiagnostic, miette, Result};
+use miette::{ensure, miette, IntoDiagnostic, Result};
 use serde_json::{json, Map};
 use tempfile::NamedTempFile;
 
-use crate::data::attr::{Attribute, AttributeCardinality};
+use crate::data::attr::Attribute;
 use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::ViewOp;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
-use crate::data::value::DataValue;
 use crate::parse::pull::OutPullSpec;
 use crate::runtime::transact::SessionTx;
 use crate::runtime::view::ViewRelMetadata;
 
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) enum PullSpec {
-    #[allow(dead_code)]
-    PullAll,
-    #[allow(dead_code)]
-    PullId(Symbol),
-    #[allow(dead_code)]
-    Attr(AttrPullSpec),
+struct OutPullSpecWithAttr {
+    attr: Attribute,
+    reverse: bool,
+    subfields: Vec<OutPullSpecWithAttr>,
+    vld: Validity,
 }
 
-// impl PullSpec {
-//     fn as_attr_spec(&self) -> Option<&AttrPullSpec> {
-//         match self {
-//             PullSpec::Attr(s) => Some(s),
-//             _ => None,
-//         }
-//     }
-// }
-
-// pub type QueryResult<'a> = Box<dyn Iterator<Item = Result<JsonValue>> + 'a>;
-
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) struct AttrPullSpec {
-    pub(crate) recursive: bool,
-    pub(crate) reverse: bool,
-    pub(crate) attr: Attribute,
-    pub(crate) default_val: DataValue,
-    pub(crate) name: Symbol,
-    pub(crate) cardinality: AttributeCardinality,
-    pub(crate) take: Option<usize>,
-    pub(crate) nested: Vec<PullSpec>,
-    pub(crate) recursion_limit: Option<usize>,
-    pub(crate) recursion_depth: usize,
+impl OutPullSpec {
+    fn hydrate(&self, tx: &SessionTx, vld: Validity) -> Result<OutPullSpecWithAttr> {
+        let attr = tx
+            .attr_by_name(&self.attr)?
+            .ok_or_else(|| miette!("required attribute not found: {}", self.attr))?;
+        Ok(OutPullSpecWithAttr {
+            attr,
+            reverse: self.reverse,
+            subfields: self
+                .subfields
+                .iter()
+                .map(|v| v.hydrate(tx, vld))
+                .try_collect()?,
+            vld,
+        })
+    }
 }
-
-// #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
-// pub(crate) struct CurrentPath(SmallVec<[u16; 8]>);
-//
-// impl CurrentPath {
-//     pub(crate) fn new(idx: usize) -> Result<Self> {
-//         Ok(Self(smallvec![idx.try_into().into_diagnostic()?]))
-//     }
-//     fn get_from_root<'a>(&self, depth: usize, root: &'a [PullSpec]) -> &'a [PullSpec] {
-//         let mut current = root;
-//         let indices = &self.0[..self.0.len() - depth];
-//         for i in indices {
-//             current = &current[*i as usize].as_attr_spec().unwrap().nested;
-//         }
-//         current
-//     }
-//     fn push(&self, idx: usize) -> Result<Self> {
-//         let mut ret = CurrentPath(Default::default());
-//         ret.0.clone_from(&self.0);
-//         ret.0.push(idx.try_into().into_diagnostic()?);
-//         Ok(ret)
-//     }
-//     fn recurse_pop(&self, depth: usize) -> Self {
-//         Self(self.0[..self.0.len() + 1 - depth].to_smallvec())
-//     }
-//     fn pop_to_last(&self) -> Self {
-//         self.recurse_pop(2)
-//     }
-// }
 
 impl SessionTx {
     pub(crate) fn execute_view<'a>(
@@ -117,15 +77,6 @@ impl SessionTx {
 
             vtx.commit().into_diagnostic()?;
         } else {
-            // let mut vtx = self.view_db.transact().start();
-            //
-            // for data in res_iter {
-            //     let data = data?;
-            //     let encoded = data.encode_as_key(view_store.metadata.id);
-            //     vtx.put(&encoded, &[])?;
-            // }
-            //
-            // vtx.commit()?;
             let file = NamedTempFile::new().into_diagnostic()?;
             let path = file.into_temp_path();
             let path = path.to_string_lossy();
@@ -140,31 +91,92 @@ impl SessionTx {
         }
         Ok(())
     }
-    pub(crate) fn run_pull_on_item(
-        &self,
-        id: EntityId,
-        specs: &[OutPullSpec],
-    ) -> Result<JsonValue> {
+    fn run_pull_on_item(&self, id: EntityId, specs: &[OutPullSpecWithAttr]) -> Result<JsonValue> {
         let mut ret_map = Map::default();
         ret_map.insert("_id".to_string(), json!(id.0));
         for spec in specs {
-            self.run_pull_spec_on_item(id, spec, &mut ret_map);
+            self.run_pull_spec_on_item(id, spec, &mut ret_map)?;
         }
 
         Ok(json!(ret_map))
     }
-    pub(crate) fn run_pull_spec_on_item(
+    fn run_pull_spec_on_item(
         &self,
         id: EntityId,
-        spec: &OutPullSpec,
-        coll: &mut Map<String, JsonValue>
+        spec: &OutPullSpecWithAttr,
+        coll: &mut Map<String, JsonValue>,
     ) -> Result<()> {
-        match spec {
-            OutPullSpec::PullAll => {
-                todo!()
+        if spec.reverse {
+            ensure!(
+                spec.attr.val_type.is_ref_type(),
+                "attribute is not ref type: {}",
+                spec.attr.name
+            );
+            let back_res: Vec<_> = if spec.attr.with_history {
+                self.triple_vref_a_before_scan(id, spec.attr.id, spec.vld)
+                    .map_ok(|(_, _, e)| e)
+                    .try_collect()?
+            } else {
+                self.triple_vref_a_scan(id, spec.attr.id)
+                    .map_ok(|(_, _, e)| e)
+                    .try_collect()?
+            };
+            let name = format!("<{}", spec.attr.name);
+            if spec.subfields.is_empty() {
+                coll.insert(
+                    name,
+                    back_res
+                        .into_iter()
+                        .map(|v| JsonValue::from(v.as_datavalue()))
+                        .collect(),
+                );
+            } else {
+                let maps: JsonValue = back_res
+                    .iter()
+                    .map(|eid| self.run_pull_on_item(*eid, &spec.subfields))
+                    .try_collect()?;
+                coll.insert(name, maps);
             }
-            OutPullSpec::PullField { attr, reverse, subfields } => {
-                todo!()
+        } else {
+            let res: Vec<_> = if spec.attr.with_history {
+                self.triple_ae_before_scan(spec.attr.id, id, spec.vld)
+                    .map_ok(|(_, _, e)| e)
+                    .try_collect()?
+            } else {
+                self.triple_ae_scan(spec.attr.id, id)
+                    .map_ok(|(_, _, e)| e)
+                    .try_collect()?
+            };
+            let name = format!("{}", spec.attr.name);
+            if spec.subfields.is_empty() {
+                if spec.attr.cardinality.is_many() {
+                    coll.insert(name, res.into_iter().map(|v| JsonValue::from(v)).collect());
+                } else {
+                    coll.insert(
+                        name,
+                        res.into_iter()
+                            .map(|v| JsonValue::from(v))
+                            .next()
+                            .unwrap_or(JsonValue::Null),
+                    );
+                }
+            } else {
+                ensure!(
+                    spec.attr.val_type.is_ref_type(),
+                    "sub pull only valid on ref types"
+                );
+                let maps: Vec<_> = res
+                    .iter()
+                    .map(|dv| -> Result<_> {
+                        let id = dv.get_entity_id()?;
+                        self.run_pull_on_item(id, &spec.subfields)
+                    })
+                    .try_collect()?;
+                if spec.attr.cardinality.is_many() {
+                    coll.insert(name, JsonValue::Array(maps));
+                } else {
+                    coll.insert(name, maps.into_iter().next().unwrap_or(JsonValue::Null));
+                }
             }
         }
 
@@ -174,7 +186,8 @@ impl SessionTx {
         &self,
         res_iter: impl Iterator<Item = Result<Tuple>>,
         headers: Option<&[Symbol]>,
-        out_spec: &BTreeMap<Symbol, Vec<OutPullSpec>>,
+        out_spec: &BTreeMap<Symbol, (Vec<OutPullSpec>, Option<Validity>)>,
+        default_vld: Validity,
     ) -> Result<Vec<JsonValue>> {
         if out_spec.is_empty() {
             Ok(res_iter
@@ -182,17 +195,23 @@ impl SessionTx {
                 .try_collect()?)
         } else {
             let headers = headers.ok_or_else(|| miette!("pull requires headers"))?;
-            let idx2pull: Vec<_> = headers
-                .iter()
-                .enumerate()
-                .map(|(idx, symb)| out_spec.get(symb))
-                .collect();
+            let mut idx2pull: Vec<Option<Vec<_>>> = Vec::with_capacity(headers.len());
+            for head in headers.iter() {
+                match out_spec.get(head) {
+                    None => idx2pull.push(None),
+                    Some((os, vld)) => idx2pull.push(Some(
+                        os.iter()
+                            .map(|o| o.hydrate(self, vld.unwrap_or(default_vld)))
+                            .try_collect()?,
+                    )),
+                }
+            }
             let mut collected = vec![];
             for tuple in res_iter {
                 let tuple = tuple?.0;
                 let mut row_collected = Vec::with_capacity(tuple.len());
                 for (idx, item) in tuple.into_iter().enumerate() {
-                    if let Some(specs) = idx2pull[idx] {
+                    if let Some(specs) = &idx2pull[idx] {
                         let id = EntityId(
                             item.get_int()
                                 .ok_or_else(|| miette!("pull requires integer, got {:?}", item))?
@@ -204,488 +223,9 @@ impl SessionTx {
                         row_collected.push(JsonValue::from(item));
                     }
                 }
+                collected.push(JsonValue::Array(row_collected));
             }
             Ok(collected)
         }
-        // match out_opts.out_spec {
-        //     None => Ok(Box::new(out_iter.map_ok(|tuple| {
-        //         JsonValue::Array(tuple.0.into_iter().map(JsonValue::from).collect_vec())
-        //     }))),
-        //     Some((pull_specs, out_keys)) => {
-        //         // type OutSpec = (Vec<(usize, Option<PullSpecs>)>, Option<Vec<String>>);
-        //         Ok(Box::new(
-        //             out_iter
-        //                 .map_ok(move |tuple| -> Result<JsonValue> {
-        //                     let tuple = tuple.0;
-        //                     let res_iter =
-        //                         pull_specs.iter().map(|(idx, spec)| -> Result<JsonValue> {
-        //                             let val = tuple.get(*idx).unwrap();
-        //                             match spec {
-        //                                 None => Ok(JsonValue::from(val.clone())),
-        //                                 Some(specs) => {
-        //                                     let eid = AttributeTyping::Ref
-        //                                         .coerce_value(val.clone())?
-        //                                         .get_entity_id()
-        //                                         .unwrap();
-        //                                     let mut collected = Default::default();
-        //                                     let mut recursive_seen = Default::default();
-        //                                     for (idx, spec) in specs.iter().enumerate() {
-        //                                         self.pull(
-        //                                             eid,
-        //                                             out_opts.vld,
-        //                                             spec,
-        //                                             0,
-        //                                             specs,
-        //                                             CurrentPath::new(idx)?,
-        //                                             &mut collected,
-        //                                             &mut recursive_seen,
-        //                                         )?;
-        //                                     }
-        //                                     Ok(JsonValue::Object(collected))
-        //                                 }
-        //                             }
-        //                         });
-        //                     match &out_keys {
-        //                         None => {
-        //                             let v: Vec<_> = res_iter.try_collect()?;
-        //                             Ok(json!(v))
-        //                         }
-        //                         Some(keys) => {
-        //                             let map: Map<_, _> = keys
-        //                                 .iter()
-        //                                 .zip(res_iter)
-        //                                 .map(|(k, v)| match v {
-        //                                     Ok(v) => Ok((k.clone(), v)),
-        //                                     Err(e) => Err(e),
-        //                                 })
-        //                                 .try_collect()?;
-        //                             Ok(json!(map))
-        //                         }
-        //                     }
-        //                 })
-        //                 .map(flatten_err),
-        //         ))
-        //     }
-        // }
-        // todo!()
     }
-    // pub(crate) fn pull(
-    //     &mut self,
-    //     eid: EntityId,
-    //     vld: Validity,
-    //     spec: &PullSpec,
-    //     depth: usize,
-    //     root: &[PullSpec],
-    //     path: CurrentPath,
-    //     collector: &mut Map<String, JsonValue>,
-    //     recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
-    // ) -> Result<()> {
-    //     match spec {
-    //         PullSpec::PullAll => {
-    //             let mut seen = HashSet::default();
-    //             self.pull_all(eid, vld, collector, &mut seen)
-    //         }
-    //         PullSpec::Attr(a_spec) => {
-    //             if !a_spec.recursive {
-    //                 recursive_seen.insert((path.pop_to_last(), eid));
-    //             }
-    //             if a_spec.reverse {
-    //                 self.pull_attr_rev(
-    //                     eid,
-    //                     vld,
-    //                     a_spec,
-    //                     depth,
-    //                     root,
-    //                     path,
-    //                     collector,
-    //                     recursive_seen,
-    //                 )
-    //             } else {
-    //                 self.pull_attr(
-    //                     eid,
-    //                     vld,
-    //                     a_spec,
-    //                     depth,
-    //                     root,
-    //                     path,
-    //                     collector,
-    //                     recursive_seen,
-    //                 )
-    //             }
-    //         }
-    //         PullSpec::PullId(kw) => {
-    //             collector.insert(kw.to_string(), eid.into());
-    //             Ok(())
-    //         }
-    //     }
-    // }
-    // pub(crate) fn pull_attr(
-    //     &mut self,
-    //     eid: EntityId,
-    //     vld: Validity,
-    //     spec: &AttrPullSpec,
-    //     depth: usize,
-    //     root: &[PullSpec],
-    //     path: CurrentPath,
-    //     collector: &mut Map<String, JsonValue>,
-    //     recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
-    // ) -> Result<()> {
-    //     if spec.cardinality.is_one() {
-    //         if let Some(found) = self.triple_ea_before_scan(eid, spec.attr.id, vld).next() {
-    //             let (_, _, value) = found?;
-    //             self.pull_attr_collect(
-    //                 spec,
-    //                 value,
-    //                 vld,
-    //                 depth,
-    //                 root,
-    //                 path,
-    //                 collector,
-    //                 recursive_seen,
-    //             )?;
-    //         } else if spec.default_val != DataValue::Null {
-    //             self.pull_attr_collect(
-    //                 spec,
-    //                 spec.default_val.clone(),
-    //                 vld,
-    //                 depth,
-    //                 root,
-    //                 path,
-    //                 collector,
-    //                 recursive_seen,
-    //             )?;
-    //         }
-    //     } else {
-    //         let mut collection: Vec<DataValue> = vec![];
-    //         let iter = self.triple_ea_before_scan(eid, spec.attr.id, vld);
-    //         for found in iter {
-    //             let (_, _, value) = found?;
-    //             collection.push(value);
-    //             if let Some(n) = spec.take {
-    //                 if n <= collection.len() {
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //         self.pull_attr_collect_many(
-    //             spec,
-    //             collection,
-    //             vld,
-    //             depth,
-    //             root,
-    //             path,
-    //             collector,
-    //             recursive_seen,
-    //         )?;
-    //     }
-    //     Ok(())
-    // }
-    // fn pull_attr_collect(
-    //     &mut self,
-    //     spec: &AttrPullSpec,
-    //     value: DataValue,
-    //     vld: Validity,
-    //     depth: usize,
-    //     root: &[PullSpec],
-    //     path: CurrentPath,
-    //     collector: &mut Map<String, JsonValue>,
-    //     recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
-    // ) -> Result<()> {
-    //     if spec.recursive {
-    //         if let Some(limit) = spec.recursion_limit {
-    //             if depth >= limit {
-    //                 return Ok(());
-    //             }
-    //         }
-    //         let recursion_path = path.recurse_pop(spec.recursion_depth);
-    //         let eid = value.get_entity_id()?;
-    //         let mut sub_collector = Map::default();
-    //         let sentinel = (recursion_path.pop_to_last(), eid);
-    //         if !recursive_seen.insert(sentinel) {
-    //             sub_collector.insert("_id".to_string(), eid.into());
-    //             collector.insert(spec.name.to_string(), sub_collector.into());
-    //             return Ok(());
-    //         }
-    //
-    //         let recurse_target = path.get_from_root(spec.recursion_depth, root);
-    //         for sub_spec in recurse_target {
-    //             let next_depth = if let PullSpec::Attr(sub) = sub_spec {
-    //                 if sub.name == spec.name {
-    //                     depth + 1
-    //                 } else {
-    //                     0
-    //                 }
-    //             } else {
-    //                 0
-    //             };
-    //             self.pull(
-    //                 eid,
-    //                 vld,
-    //                 sub_spec,
-    //                 next_depth,
-    //                 root,
-    //                 recursion_path.clone(),
-    //                 &mut sub_collector,
-    //                 recursive_seen,
-    //             )?;
-    //         }
-    //
-    //         collector.insert(spec.name.to_string(), sub_collector.into());
-    //     } else if spec.nested.is_empty() {
-    //         collector.insert(spec.name.to_string(), value.into());
-    //     } else {
-    //         let eid = value.get_entity_id()?;
-    //         let sentinel = (path.clone(), eid);
-    //         recursive_seen.insert(sentinel);
-    //
-    //         let mut sub_collector = Map::default();
-    //         for (idx, sub_spec) in spec.nested.iter().enumerate() {
-    //             self.pull(
-    //                 eid,
-    //                 vld,
-    //                 sub_spec,
-    //                 depth,
-    //                 root,
-    //                 path.push(idx)?,
-    //                 &mut sub_collector,
-    //                 recursive_seen,
-    //             )?;
-    //         }
-    //         collector.insert(spec.name.to_string(), sub_collector.into());
-    //     }
-    //     Ok(())
-    // }
-    // fn pull_attr_collect_many(
-    //     &mut self,
-    //     spec: &AttrPullSpec,
-    //     values: Vec<DataValue>,
-    //     vld: Validity,
-    //     depth: usize,
-    //     root: &[PullSpec],
-    //     path: CurrentPath,
-    //     collector: &mut Map<String, JsonValue>,
-    //     recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
-    // ) -> Result<()> {
-    //     if spec.recursive {
-    //         if let Some(limit) = spec.recursion_limit {
-    //             if depth >= limit {
-    //                 return Ok(());
-    //             }
-    //         }
-    //
-    //         let mut sub_collectors = vec![];
-    //         let recursion_path = path.recurse_pop(spec.recursion_depth);
-    //         for value in values {
-    //             let eid = value.get_entity_id()?;
-    //             let mut sub_collector = Map::default();
-    //             let sentinel = (recursion_path.pop_to_last(), eid);
-    //             if !recursive_seen.insert(sentinel) {
-    //                 sub_collector.insert("_id".to_string(), eid.into());
-    //                 sub_collectors.push(sub_collector);
-    //                 continue;
-    //             }
-    //
-    //             let recurse_target = path.get_from_root(spec.recursion_depth, root);
-    //             for sub_spec in recurse_target {
-    //                 let next_depth = if let PullSpec::Attr(sub) = sub_spec {
-    //                     if sub.name == spec.name {
-    //                         depth + 1
-    //                     } else {
-    //                         0
-    //                     }
-    //                 } else {
-    //                     0
-    //                 };
-    //
-    //                 self.pull(
-    //                     eid,
-    //                     vld,
-    //                     sub_spec,
-    //                     next_depth,
-    //                     root,
-    //                     recursion_path.clone(),
-    //                     &mut sub_collector,
-    //                     recursive_seen,
-    //                 )?;
-    //             }
-    //             sub_collectors.push(sub_collector);
-    //         }
-    //         collector.insert(spec.name.to_string(), sub_collectors.into());
-    //     } else if spec.nested.is_empty() {
-    //         collector.insert(spec.name.to_string(), values.into());
-    //     } else {
-    //         let mut sub_collectors = vec![];
-    //         for value in values {
-    //             let eid = value.get_entity_id()?;
-    //             let mut sub_collector = Map::default();
-    //             for (idx, sub_spec) in spec.nested.iter().enumerate() {
-    //                 self.pull(
-    //                     eid,
-    //                     vld,
-    //                     sub_spec,
-    //                     depth,
-    //                     root,
-    //                     path.push(idx)?,
-    //                     &mut sub_collector,
-    //                     recursive_seen,
-    //                 )?;
-    //             }
-    //             sub_collectors.push(sub_collector);
-    //         }
-    //         collector.insert(spec.name.to_string(), sub_collectors.into());
-    //     }
-    //     Ok(())
-    // }
-    // pub(crate) fn pull_attr_rev(
-    //     &mut self,
-    //     eid: EntityId,
-    //     vld: Validity,
-    //     spec: &AttrPullSpec,
-    //     depth: usize,
-    //     root: &[PullSpec],
-    //     path: CurrentPath,
-    //     collector: &mut Map<String, JsonValue>,
-    //     recursive_seen: &mut BTreeSet<(CurrentPath, EntityId)>,
-    // ) -> Result<()> {
-    //     if spec.cardinality.is_one() {
-    //         if let Some(found) = self
-    //             .triple_vref_a_before_scan(eid, spec.attr.id, vld)
-    //             .next()
-    //         {
-    //             let (_, _, value) = found?;
-    //             self.pull_attr_collect(
-    //                 spec,
-    //                 value.as_datavalue(),
-    //                 vld,
-    //                 depth,
-    //                 root,
-    //                 path,
-    //                 collector,
-    //                 recursive_seen,
-    //             )?;
-    //         } else if spec.default_val != DataValue::Null {
-    //             self.pull_attr_collect(
-    //                 spec,
-    //                 spec.default_val.clone(),
-    //                 vld,
-    //                 depth,
-    //                 root,
-    //                 path,
-    //                 collector,
-    //                 recursive_seen,
-    //             )?;
-    //         }
-    //     } else {
-    //         let mut collection: Vec<DataValue> = vec![];
-    //         let iter = self.triple_vref_a_before_scan(eid, spec.attr.id, vld);
-    //         for found in iter {
-    //             let (_, _, value) = found?;
-    //             collection.push(value.as_datavalue());
-    //             if let Some(n) = spec.take {
-    //                 if n <= collection.len() {
-    //                     break;
-    //                 }
-    //             }
-    //         }
-    //         self.pull_attr_collect_many(
-    //             spec,
-    //             collection,
-    //             vld,
-    //             depth,
-    //             root,
-    //             path,
-    //             collector,
-    //             recursive_seen,
-    //         )?;
-    //     }
-    //     Ok(())
-    // }
-    // pub(crate) fn pull_all(
-    //     &mut self,
-    //     eid: EntityId,
-    //     vld: Validity,
-    //     collector: &mut Map<String, JsonValue>,
-    //     pull_all_seen: &mut HashSet<EntityId>,
-    // ) -> Result<()> {
-    //     let mut current = encode_eav_key(eid, AttrId::MIN_PERM, &DataValue::Null, Validity::MAX);
-    //     let upper_bound = encode_eav_key(eid, AttrId::MAX_PERM, &DataValue::Bot, Validity::MIN);
-    //
-    //     let mut it = self.tx.iterator().upper_bound(&upper_bound).start();
-    //     it.seek(&current);
-    //     while let Some((k_slice, v_slice)) = it.pair().into_diagnostic()? {
-    //         debug_assert_eq!(
-    //             StorageTag::try_from(k_slice[0])?,
-    //             StorageTag::TripleEntityAttrValue
-    //         );
-    //         let (_e_found, a_found, vld_found) = decode_ea_key(k_slice)?;
-    //         current.copy_from_slice(k_slice);
-    //
-    //         if vld_found > vld {
-    //             current.encoded_entity_amend_validity(vld);
-    //             it.seek(&current);
-    //             continue;
-    //         }
-    //         let op = StoreOp::try_from(v_slice[0])?;
-    //         if op.is_retract() {
-    //             current.encoded_entity_amend_validity_to_inf_past();
-    //             it.seek(&current);
-    //             continue;
-    //         }
-    //         let attr = self.attr_by_id(a_found)?;
-    //         if attr.is_none() {
-    //             current.encoded_entity_amend_validity_to_inf_past();
-    //             it.seek(&current);
-    //             continue;
-    //         }
-    //         let attr = attr.unwrap();
-    //         let value = if attr.cardinality.is_one() {
-    //             decode_value_from_val(v_slice)?
-    //         } else {
-    //             decode_value_from_key(k_slice)?
-    //         };
-    //         collector.insert("_id".to_string(), eid.0.into());
-    //         pull_all_seen.insert(eid);
-    //         if attr.cardinality.is_many() {
-    //             if attr.val_type == AttributeTyping::Component {
-    //                 let val_id = value.get_entity_id()?;
-    //                 if pull_all_seen.contains(&val_id) {
-    //                     let arr = collector
-    //                         .entry(attr.name.to_string())
-    //                         .or_insert_with(|| json!([]));
-    //                     let arr = arr.as_array_mut().unwrap();
-    //                     arr.push(value.into());
-    //                 } else {
-    //                     let mut subcollector = Map::default();
-    //                     self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
-    //
-    //                     let arr = collector
-    //                         .entry(attr.name.to_string())
-    //                         .or_insert_with(|| json!([]));
-    //                     let arr = arr.as_array_mut().unwrap();
-    //                     arr.push(subcollector.into());
-    //                 }
-    //             } else {
-    //                 let arr = collector
-    //                     .entry(attr.name.to_string())
-    //                     .or_insert_with(|| json!([]));
-    //                 let arr = arr.as_array_mut().unwrap();
-    //                 arr.push(value.into());
-    //             }
-    //         } else if attr.val_type == AttributeTyping::Component {
-    //             let val_id = value.get_entity_id()?;
-    //             if pull_all_seen.contains(&val_id) {
-    //                 collector.insert(attr.name.to_string(), value.into());
-    //             } else {
-    //                 let mut subcollector = Map::default();
-    //                 self.pull_all(val_id, vld, &mut subcollector, pull_all_seen)?;
-    //                 collector.insert(attr.name.to_string(), subcollector.into());
-    //             }
-    //         } else {
-    //             collector.insert(attr.name.to_string(), value.into());
-    //         }
-    //         current.encoded_entity_amend_validity_to_inf_past();
-    //         it.seek(&current);
-    //     }
-    //     Ok(())
-    // }
 }
