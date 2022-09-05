@@ -1,4 +1,3 @@
-use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 
@@ -31,7 +30,6 @@ impl SessionTx {
         let mut ret = Vec::with_capacity(payloads.len());
         let mut str_temp_to_perm_ids: BTreeMap<SmartString<LazyCompact>, EntityId> =
             BTreeMap::new();
-        let mut num_temp_to_perm_ids: BTreeMap<usize, EntityId> = BTreeMap::new();
         for payload in &mut payloads {
             if let EntityRep::UserTempId(symb) = &payload.entity {
                 ensure!(
@@ -61,28 +59,6 @@ impl SessionTx {
                                     &attr,
                                     &val,
                                     payload.validity.unwrap_or(vld),
-                                )?,
-                                1,
-                            ));
-                        }
-                        EntityRep::SysTempId(tid) => {
-                           let eid = match num_temp_to_perm_ids.entry(tid) {
-                                Entry::Vacant(e) => {
-                                    let new_eid = EntityId(
-                                        self.last_ent_id.fetch_add(1, Ordering::AcqRel) + 1,
-                                    );
-                                    e.insert(new_eid);
-                                    new_eid
-                                }
-                                Entry::Occupied(e) => *e.get(),
-                            };
-
-                            ret.push((
-                                self.new_triple(
-                                    eid,
-                                    &attr,
-                                    &val,
-                                    vld,
                                 )?,
                                 1,
                             ));
@@ -119,7 +95,7 @@ impl SessionTx {
                     let attr = self.attr_by_name(&payload.attr_name)?.unwrap();
                     let eid = match payload.entity {
                         EntityRep::Id(id) => id,
-                        EntityRep::UserTempId(_) | EntityRep::SysTempId(_) => {
+                        EntityRep::UserTempId(_) => {
                             bail!("cannot retract with temp id")
                         }
                         EntityRep::PullByKey(symb, val) => {

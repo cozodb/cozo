@@ -45,7 +45,7 @@ fn simple() {
         r#"
         :tx
         {
-            _temp_id: "alice",
+            _tid: "alice",
             person.first_name: "Alice",
             person.age: 7,
             person.last_name: "Amorist",
@@ -54,7 +54,7 @@ fn simple() {
             person.friend: "eve"
         }
         {
-            _temp_id: "bob",
+            _tid: "bob",
             person.first_name: "Bob",
             person.age: 70,
             person.last_name: "Wonderland",
@@ -63,13 +63,13 @@ fn simple() {
             person.friend: "alice"
         }
         {
-            _temp_id: "eve",
+            _tid: "eve",
             person.first_name: "Eve",
             person.age: 18,
             person.last_name: "Faking",
             person.id: "eve_faking",
             person.weight: 50,
-            person.friend: [
+            *person.friend: [
                 "alice",
                 "bob",
                 {
@@ -83,14 +83,14 @@ fn simple() {
             ]
         }
         {
-            _temp_id: "david",
+            _tid: "david",
             person.first_name: "David",
             person.age: 7,
             person.last_name: "Dull",
             person.id: "david_dull",
             person.weight: 25,
             person.friend: {
-                _temp_id: "george",
+                _tid: "george",
                 person.first_name: "George",
                 person.age: 7,
                 person.last_name: "Geomancer",
@@ -102,20 +102,20 @@ fn simple() {
     )
     .unwrap();
     let query = r#"
-    friend_of_friend[?a, ?b] := [?a person.friend ?b];
-    friend_of_friend[?a, ?b] := [?a person.friend ?c], friend_of_friend[?c, ?b];
+    friend_of_friend[a, b] := [a person.friend b];
+    friend_of_friend[a, b] := [a person.friend c], friend_of_friend[c, b];
 
-    ?[?a, ?n] := [?alice person.first_name "Alice"],
-                 not friend_of_friend[?alice, ?a],
-                 [?a person.first_name ?n];
+    ?[a, n] := [alice person.first_name "Alice"],
+               not friend_of_friend[alice, a],
+               [a person.first_name n];
 
-    :limit 1;
-    :out {friend: ?a[person.first_name as first_name,
-                     person.last_name as last_name]};
-    :sort -?n;
+    // :limit 1;
+    // :out {friend: ?a[person.first_name as first_name,
+    //                  person.last_name as last_name]};
+    :sort -n;
     "#;
 
     let ret = db.run_script(query).unwrap();
     let res = to_string_pretty(&ret).unwrap();
-    info!("{}", res);
+    println!("{}", res);
 }
