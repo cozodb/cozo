@@ -7,7 +7,10 @@ use pest::prec_climber::{Operator, PrecClimber};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::data::expr::{get_op, Expr};
-use crate::data::functions::{OP_LIST, OP_MINUS, OP_NEGATE};
+use crate::data::functions::{
+    OP_ADD, OP_AND, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LIST, OP_LT, OP_MINUS,
+    OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
+};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::{Pair, Rule};
@@ -44,25 +47,24 @@ pub(crate) fn build_expr(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue
 
 fn build_expr_infix(lhs: Result<Expr>, op: Pair<'_>, rhs: Result<Expr>) -> Result<Expr> {
     let args = vec![lhs?, rhs?];
-    let name = match op.as_rule() {
-        Rule::op_add => "add",
-        Rule::op_sub => "sub",
-        Rule::op_mul => "mul",
-        Rule::op_div => "div",
-        Rule::op_mod => "mod",
-        Rule::op_pow => "pow",
-        Rule::op_eq => "eq",
-        Rule::op_ne => "neq",
-        Rule::op_gt => "gt",
-        Rule::op_ge => "ge",
-        Rule::op_lt => "lt",
-        Rule::op_le => "le",
-        Rule::op_concat => "concat",
-        Rule::op_or => "or",
-        Rule::op_and => "and",
+    let op = match op.as_rule() {
+        Rule::op_add => &OP_ADD,
+        Rule::op_sub => &OP_SUB,
+        Rule::op_mul => &OP_MUL,
+        Rule::op_div => &OP_DIV,
+        Rule::op_mod => &OP_MOD,
+        Rule::op_pow => &OP_POW,
+        Rule::op_eq => &OP_EQ,
+        Rule::op_ne => &OP_NEQ,
+        Rule::op_gt => &OP_GT,
+        Rule::op_ge => &OP_GE,
+        Rule::op_lt => &OP_LT,
+        Rule::op_le => &OP_LE,
+        Rule::op_concat => &OP_CONCAT,
+        Rule::op_or => &OP_OR,
+        Rule::op_and => &OP_AND,
         _ => unreachable!(),
     };
-    let op = get_op(name).ok_or_else(|| miette!("op not found"))?;
     Ok(Expr::Apply(op, args.into()))
 }
 
