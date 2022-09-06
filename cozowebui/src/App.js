@@ -218,7 +218,7 @@ function App() {
                     </div>
                 </div>
             </div>
-            {errorMessage ? <pre id="error-message">{errorMessage}</pre> : null}
+            {errorMessage ? <pre id="error-message" dangerouslySetInnerHTML={{__html: errorMessage}}></pre> : null}
             {queryResults ? (queryResults.rows && queryResults.headers ?
                 <Table2
                     numRows={queryResults.rows.length}

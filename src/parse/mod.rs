@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use miette::{Diagnostic, Result};
+use miette::{Diagnostic, Result, SourceSpan};
 use pest::error::InputLocation;
 use pest::Parser;
 
@@ -36,7 +36,7 @@ pub(crate) enum CozoScript {
 #[error("The query parser has encountered unexpected input / end of input")]
 #[diagnostic(code(parse::pest))]
 pub struct ParseError {
-    #[label("here")]
+    #[label]
     span: (usize, usize),
 }
 
@@ -66,4 +66,17 @@ pub(crate) fn parse_script(
         Rule::sys_script => CozoScript::Sys(parse_sys(parsed.into_inner())?),
         _ => unreachable!(),
     })
+}
+
+trait ExtractSpan {
+    fn extract_span(&self) -> SourceSpan;
+}
+
+impl ExtractSpan for Pair<'_> {
+    fn extract_span(&self) -> SourceSpan {
+        let span = self.as_span();
+        let start = span.start();
+        let end = span.end();
+        SourceSpan::new(start.into(), (end - start).into())
+    }
 }

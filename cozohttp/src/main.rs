@@ -7,19 +7,21 @@ use std::time::{Duration, Instant};
 use std::{env, thread};
 
 use actix_cors::Cors;
+use actix_web::body::BoxBody;
 use actix_web::http::header::HeaderName;
 use actix_web::rt::task::spawn_blocking;
-use actix_web::{post, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, ResponseError};
 use actix_web_static_files::ResourceFiles;
+use ansi_to_html::convert_escaped;
 use clap::Parser;
 use env_logger::Env;
 use log::debug;
+use miette::{bail, miette, IntoDiagnostic};
 use rand::Rng;
 use serde_json::json;
 use sha3::Digest;
 
 use cozo::{Db, DbBuilder};
-use miette::{bail, miette, IntoDiagnostic};
 
 type Result<T> = std::result::Result<T, RespError>;
 
@@ -39,11 +41,17 @@ impl Display for RespError {
     }
 }
 
-impl actix_web::error::ResponseError for RespError {}
-
 impl From<cozo::Error> for RespError {
     fn from(err: cozo::Error) -> RespError {
         RespError { err }
+    }
+}
+
+impl ResponseError for RespError {
+    fn error_response(&self) -> HttpResponse<BoxBody> {
+        let formatted = format!("{:?}", self.err);
+        let converted = convert_escaped(&formatted).unwrap();
+        HttpResponse::BadRequest().body(converted)
     }
 }
 

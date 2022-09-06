@@ -7,6 +7,7 @@
     padding: 10px;
     overflow: scroll;
     font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+    font-size: 90%;
 }
 
 #query-box, #params-box {
