@@ -4,7 +4,6 @@ use cxx::*;
 
 use crate::bridge::ffi::*;
 use crate::bridge::tx::TxBuilder;
-use crate::{IterBuilder, PinSlice};
 
 #[derive(Default, Clone)]
 pub struct DbBuilder<'a> {
@@ -137,109 +136,6 @@ impl<'a> DbBuilder<'a> {
             Err(status)
         }
     }
-    pub fn build_raw(self, no_wal: bool) -> Result<RawRocksDb, RocksDbStatus> {
-        let mut status = RocksDbStatus::default();
-
-        fn dummy(_a: &[u8], _b: &[u8]) -> i8 {
-            0
-        }
-
-        let result = open_raw_db(
-            &self.opts,
-            &mut status,
-            self.cmp_fn.is_some(),
-            self.cmp_fn.unwrap_or(dummy),
-            no_wal,
-        );
-        if status.is_ok() {
-            Ok(RawRocksDb { inner: result })
-        } else {
-            Err(status)
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct RawRocksDb {
-    inner: SharedPtr<RawRocksDbBridge>,
-}
-
-impl RawRocksDb {
-    pub fn db_path(&self) -> Cow<str> {
-        self.inner.get_db_path().to_string_lossy()
-    }
-    pub fn ignore_range_deletions(self, val: bool) -> Self {
-        self.inner.set_ignore_range_deletions(val);
-        self
-    }
-    #[inline]
-    pub fn make_snapshot(&self) -> SharedPtr<SnapshotBridge> {
-        self.inner.make_snapshot()
-    }
-    #[inline]
-    pub fn iterator(&self) -> IterBuilder {
-        IterBuilder {
-            inner: self.inner.iterator(),
-        }
-        .auto_prefix_mode(true)
-    }
-    #[inline]
-    pub fn iterator_with_snapshot(&self, snapshot: &SnapshotBridge) -> IterBuilder {
-        IterBuilder {
-            inner: self.inner.iterator_with_snapshot(snapshot),
-        }
-        .auto_prefix_mode(true)
-    }
-    #[inline]
-    pub fn put(&self, key: &[u8], val: &[u8]) -> Result<(), RocksDbStatus> {
-        let mut status = RocksDbStatus::default();
-        self.inner.put(key, val, &mut status);
-        if status.is_ok() {
-            Ok(())
-        } else {
-            Err(status)
-        }
-    }
-    #[inline]
-    pub fn del(&self, key: &[u8]) -> Result<(), RocksDbStatus> {
-        let mut status = RocksDbStatus::default();
-        self.inner.del(key, &mut status);
-        if status.is_ok() {
-            Ok(())
-        } else {
-            Err(status)
-        }
-    }
-    #[inline]
-    pub fn range_del(&mut self, lower: &[u8], upper: &[u8]) -> Result<(), RocksDbStatus> {
-        let mut status = RocksDbStatus::default();
-        self.inner.del_range(lower, upper, &mut status);
-        if status.is_ok() {
-            Ok(())
-        } else {
-            Err(status)
-        }
-    }
-    #[inline]
-    pub fn get(&self, key: &[u8]) -> Result<Option<PinSlice>, RocksDbStatus> {
-        let mut status = RocksDbStatus::default();
-        let ret = self.inner.get(key, &mut status);
-        match status.code {
-            StatusCode::kOk => Ok(Some(PinSlice { inner: ret })),
-            StatusCode::kNotFound => Ok(None),
-            _ => Err(status),
-        }
-    }
-    #[inline]
-    pub fn exists(&self, key: &[u8]) -> Result<bool, RocksDbStatus> {
-        let mut status = RocksDbStatus::default();
-        self.inner.exists(key, &mut status);
-        match status.code {
-            StatusCode::kOk => Ok(true),
-            StatusCode::kNotFound => Ok(false),
-            _ => Err(status),
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -325,7 +221,3 @@ impl SstWriter {
 unsafe impl Send for RocksDb {}
 
 unsafe impl Sync for RocksDb {}
-
-unsafe impl Send for RawRocksDb {}
-
-unsafe impl Sync for RawRocksDb {}
