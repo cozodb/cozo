@@ -104,8 +104,10 @@ impl AlgoHandle {
                     .get("out")
                     .ok_or_else(|| miette!("'reorder_sort' requires the option 'out'"))?;
                 match out_opts {
-                    Expr::Const(DataValue::List(l)) => l.len() + 1,
-                    Expr::Apply(op, args) if **op == OP_LIST => args.len() + 1,
+                    Expr::Const {
+                        val: DataValue::List(l),
+                    } => l.len() + 1,
+                    Expr::Apply { op, args } if **op == OP_LIST => args.len() + 1,
                     v => {
                         bail!("option 'out' of 'reorder_sort' must be a list, got {:?}", v)
                     }
@@ -261,33 +263,33 @@ impl MagicAlgoRuleArg {
         stores: &'a BTreeMap<MagicSymbol, DerivedRelStore>,
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
-            MagicAlgoRuleArg::InMem(s, _) => {
+            MagicAlgoRuleArg::InMem { name, .. } => {
                 let store = stores
-                    .get(s)
-                    .ok_or_else(|| miette!("rule not found: {:?}", s))?;
+                    .get(name)
+                    .ok_or_else(|| miette!("rule not found: {:?}", name))?;
                 let t = Tuple(vec![prefix.clone()]);
                 Box::new(store.scan_prefix(&t))
             }
-            MagicAlgoRuleArg::Stored(s, _) => {
-                let relation = tx.get_relation(s)?;
+            MagicAlgoRuleArg::Stored { name, .. } => {
+                let relation = tx.get_relation(name)?;
                 let t = Tuple(vec![prefix.clone()]);
                 Box::new(relation.scan_prefix(tx, &t))
             }
-            MagicAlgoRuleArg::Triple(attr, _, dir, vld) => {
-                if *dir == TripleDir::Bwd && !attr.val_type.is_ref_type() {
+            MagicAlgoRuleArg::Triple { name, dir, vld, .. } => {
+                if *dir == TripleDir::Bwd && !name.val_type.is_ref_type() {
                     ensure!(
-                        attr.indexing.should_index(),
+                        name.indexing.should_index(),
                         "reverse scanning of triple values requires indexing: {:?}",
-                        attr.name
+                        name.name
                     );
-                    if attr.with_history {
+                    if name.with_history {
                         Box::new(
-                            tx.triple_av_before_scan(attr.id, prefix, *vld)
+                            tx.triple_av_before_scan(name.id, prefix, *vld)
                                 .map_ok(|(_, v, eid)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     } else {
                         Box::new(
-                            tx.triple_av_scan(attr.id, prefix)
+                            tx.triple_av_scan(name.id, prefix)
                                 .map_ok(|(_, v, eid)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     }
@@ -301,25 +303,25 @@ impl MagicAlgoRuleArg {
                     let id = EntityId(id as u64);
                     match dir {
                         TripleDir::Fwd => {
-                            if attr.with_history {
+                            if name.with_history {
                                 Box::new(
-                                    tx.triple_ae_before_scan(attr.id, id, *vld)
+                                    tx.triple_ae_before_scan(name.id, id, *vld)
                                         .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                                 )
                             } else {
                                 Box::new(
-                                    tx.triple_ae_scan(attr.id, id, )
+                                    tx.triple_ae_scan(name.id, id)
                                         .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                                 )
                             }
                         }
                         TripleDir::Bwd => {
-                            if attr.with_history {
-                                Box::new(tx.triple_vref_a_before_scan(id, attr.id, *vld).map_ok(
+                            if name.with_history {
+                                Box::new(tx.triple_vref_a_before_scan(id, name.id, *vld).map_ok(
                                     |(v, _, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
                                 ))
                             } else {
-                                Box::new(tx.triple_vref_a_scan(id, attr.id).map_ok(
+                                Box::new(tx.triple_vref_a_scan(id, name.id).map_ok(
                                     |(v, _, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
                                 ))
                             }
@@ -335,17 +337,17 @@ impl MagicAlgoRuleArg {
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
     ) -> Result<usize> {
         Ok(match self {
-            MagicAlgoRuleArg::InMem(s, _) => {
+            MagicAlgoRuleArg::InMem { name, .. } => {
                 let store = stores
-                    .get(s)
-                    .ok_or_else(|| miette!("rule not found: {:?}", s))?;
+                    .get(name)
+                    .ok_or_else(|| miette!("rule not found: {:?}", name))?;
                 store.arity
             }
-            MagicAlgoRuleArg::Stored(s, _) => {
-                let meta = tx.get_relation(s)?;
+            MagicAlgoRuleArg::Stored { name, .. } => {
+                let meta = tx.get_relation(name)?;
                 meta.arity
             }
-            MagicAlgoRuleArg::Triple(_, _, _, _) => 2,
+            MagicAlgoRuleArg::Triple { .. } => 2,
         })
     }
     pub(crate) fn iter<'a>(
@@ -354,39 +356,39 @@ impl MagicAlgoRuleArg {
         stores: &'a BTreeMap<MagicSymbol, DerivedRelStore>,
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
-            MagicAlgoRuleArg::InMem(s, _) => {
+            MagicAlgoRuleArg::InMem { name, .. } => {
                 let store = stores
-                    .get(s)
-                    .ok_or_else(|| miette!("rule not found: {:?}", s))?;
+                    .get(name)
+                    .ok_or_else(|| miette!("rule not found: {:?}", name))?;
                 Box::new(store.scan_all())
             }
-            MagicAlgoRuleArg::Stored(s, _) => {
-                let relation = tx.get_relation(s)?;
+            MagicAlgoRuleArg::Stored { name, .. } => {
+                let relation = tx.get_relation(name)?;
                 Box::new(relation.scan_all(tx)?)
             }
-            MagicAlgoRuleArg::Triple(attr, _, dir, vld) => match dir {
+            MagicAlgoRuleArg::Triple { name, dir, vld, .. } => match dir {
                 TripleDir::Fwd => {
-                    if attr.with_history {
+                    if name.with_history {
                         Box::new(
-                            tx.triple_a_before_scan(attr.id, *vld)
+                            tx.triple_a_before_scan(name.id, *vld)
                                 .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                         )
                     } else {
                         Box::new(
-                            tx.triple_a_scan(attr.id)
+                            tx.triple_a_scan(name.id)
                                 .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                         )
                     }
                 }
                 TripleDir::Bwd => {
-                    if attr.with_history {
+                    if name.with_history {
                         Box::new(
-                            tx.triple_a_before_scan(attr.id, *vld)
+                            tx.triple_a_before_scan(name.id, *vld)
                                 .map_ok(|(_, eid, v)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     } else {
                         Box::new(
-                            tx.triple_a_scan(attr.id)
+                            tx.triple_a_scan(name.id)
                                 .map_ok(|(_, eid, v)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     }

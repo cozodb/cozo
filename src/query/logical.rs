@@ -5,8 +5,8 @@ use miette::{bail, miette, Result};
 
 use crate::data::expr::Expr;
 use crate::data::program::{
-    InputAtom, InputAttrTripleAtom, InputRuleApplyAtom, InputTerm, InputRelationApplyAtom,
-    NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, NormalFormRelationApplyAtom,
+    InputAtom, InputAttrTripleAtom, InputRelationApplyAtom, InputRuleApplyAtom, InputTerm,
+    NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom,
     TempSymbGen, Unification,
 };
 use crate::runtime::transact::SessionTx;
@@ -147,7 +147,10 @@ impl InputRuleApplyAtom {
                         let dup = gen.next();
                         let unif = NormalFormAtom::Unification(Unification {
                             binding: dup.clone(),
-                            expr: Expr::Binding(kw, None),
+                            expr: Expr::Binding {
+                                var: kw,
+                                tuple_pos: None,
+                            },
                             one_many_unif: false,
                         });
                         ret.push(unif);
@@ -159,7 +162,7 @@ impl InputRuleApplyAtom {
                     args.push(kw.clone());
                     let unif = NormalFormAtom::Unification(Unification {
                         binding: kw,
-                        expr: Expr::Const(val),
+                        expr: Expr::Const { val },
                         one_many_unif: false,
                     });
                     ret.push(unif)
@@ -211,12 +214,12 @@ impl InputAttrTripleAtom {
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const(eid),
+                    expr: Expr::Const { val: eid },
                     one_many_unif: false,
                 });
                 let uv = NormalFormAtom::Unification(Unification {
                     binding: vkw,
-                    expr: Expr::Const(val),
+                    expr: Expr::Const { val },
                     one_many_unif: false,
                 });
                 vec![ue, uv, ret]
@@ -231,7 +234,7 @@ impl InputAttrTripleAtom {
                 let ret = wrap(atom);
                 let uv = NormalFormAtom::Unification(Unification {
                     binding: vkw,
-                    expr: Expr::Const(val),
+                    expr: Expr::Const { val },
                     one_many_unif: false,
                 });
                 vec![uv, ret]
@@ -246,7 +249,7 @@ impl InputAttrTripleAtom {
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const(eid),
+                    expr: Expr::Const { val: eid },
                     one_many_unif: false,
                 });
                 vec![ue, ret]
@@ -262,7 +265,10 @@ impl InputAttrTripleAtom {
                     vec![
                         NormalFormAtom::Unification(Unification {
                             binding: dup,
-                            expr: Expr::Binding(vkw, None),
+                            expr: Expr::Binding {
+                                var: vkw,
+                                tuple_pos: None,
+                            },
                             one_many_unif: false,
                         }),
                         wrap(atom),
@@ -294,7 +300,10 @@ impl InputRelationApplyAtom {
                         let dup = gen.next();
                         let unif = NormalFormAtom::Unification(Unification {
                             binding: dup.clone(),
-                            expr: Expr::Binding(kw, None),
+                            expr: Expr::Binding {
+                                var: kw,
+                                tuple_pos: None,
+                            },
                             one_many_unif: false,
                         });
                         ret.push(unif);
@@ -306,7 +315,7 @@ impl InputRelationApplyAtom {
                     args.push(kw.clone());
                     let unif = NormalFormAtom::Unification(Unification {
                         binding: kw,
-                        expr: Expr::Const(val),
+                        expr: Expr::Const { val },
                         one_many_unif: false,
                     });
                     ret.push(unif)

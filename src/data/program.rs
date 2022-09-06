@@ -16,8 +16,8 @@ use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::pull::OutPullSpec;
-use crate::runtime::transact::SessionTx;
 use crate::runtime::relation::RelationMetadata;
+use crate::runtime::transact::SessionTx;
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, (Vec<Tuple>, Vec<Symbol>)>;
 
@@ -144,33 +144,54 @@ pub(crate) enum TripleDir {
 
 #[derive(Debug, Clone)]
 pub(crate) enum AlgoRuleArg {
-    InMem(Symbol, Vec<Symbol>),
-    Stored(Symbol, Vec<Symbol>),
-    Triple(Symbol, Vec<Symbol>, TripleDir),
+    InMem {
+        name: Symbol,
+        bindings: Vec<Symbol>,
+    },
+    Stored {
+        name: Symbol,
+        bindings: Vec<Symbol>,
+    },
+    Triple {
+        name: Symbol,
+        bindings: Vec<Symbol>,
+        dir: TripleDir,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum MagicAlgoRuleArg {
-    InMem(MagicSymbol, Vec<Symbol>),
-    Stored(Symbol, Vec<Symbol>),
-    Triple(Attribute, Vec<Symbol>, TripleDir, Validity),
+    InMem {
+        name: MagicSymbol,
+        bindings: Vec<Symbol>,
+    },
+    Stored {
+        name: Symbol,
+        bindings: Vec<Symbol>,
+    },
+    Triple {
+        name: Attribute,
+        bindings: Vec<Symbol>,
+        dir: TripleDir,
+        vld: Validity,
+    },
 }
 
 impl MagicAlgoRuleArg {
     pub(crate) fn get_binding_map(&self, starting: usize) -> BTreeMap<Symbol, usize> {
         let bindings = match self {
-            MagicAlgoRuleArg::InMem(_, b) => b,
-            MagicAlgoRuleArg::Stored(_, b) => b,
-            MagicAlgoRuleArg::Triple(_, b, dir, _) => {
+            MagicAlgoRuleArg::InMem { bindings, .. }
+            | MagicAlgoRuleArg::Stored { bindings, .. } => bindings,
+            MagicAlgoRuleArg::Triple { bindings, dir, .. } => {
                 if *dir == TripleDir::Bwd {
-                    return b
+                    return bindings
                         .iter()
                         .rev()
                         .enumerate()
                         .map(|(idx, symb)| (symb.clone(), idx))
                         .collect();
                 } else {
-                    b
+                    bindings
                 }
             }
         };
@@ -255,7 +276,10 @@ impl InputProgram {
                                 for new_symb in new_symbs.iter() {
                                     body.push(NormalFormAtom::Unification(Unification {
                                         binding: new_symb.clone(),
-                                        expr: Expr::Binding((*old_symb).clone(), None),
+                                        expr: Expr::Binding {
+                                            var: (*old_symb).clone(),
+                                            tuple_pos: None,
+                                        },
                                         one_many_unif: false,
                                     }))
                                 }
@@ -581,7 +605,7 @@ pub(crate) struct Unification {
 
 impl Unification {
     pub(crate) fn is_const(&self) -> bool {
-        matches!(self.expr, Expr::Const(_))
+        matches!(self.expr, Expr::Const { .. })
     }
     pub(crate) fn bindings_in_expr(&self) -> BTreeSet<Symbol> {
         self.expr.bindings()

@@ -65,7 +65,10 @@ fn build_expr_infix(lhs: Result<Expr>, op: Pair<'_>, rhs: Result<Expr>) -> Resul
         Rule::op_and => &OP_AND,
         _ => unreachable!(),
     };
-    Ok(Expr::Apply(op, args.into()))
+    Ok(Expr::Apply {
+        op,
+        args: args.into(),
+    })
 }
 
 fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<Expr> {
@@ -79,56 +82,84 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             let op = p.as_rule();
             match op {
                 Rule::term => build_unary(p, param_pool)?,
-                Rule::var => Expr::Binding(Symbol::from(s), None),
+                Rule::var => Expr::Binding {
+                    var: Symbol::from(s),
+                    tuple_pos: None,
+                },
                 Rule::param => {
                     let param_str = s.strip_prefix('$').unwrap();
-                    Expr::Const(
-                        param_pool
+                    Expr::Const {
+                        val: param_pool
                             .get(param_str)
                             .ok_or_else(|| miette!("required param '{}' not found", param_str))?
                             .clone(),
-                    )
+                    }
                 }
                 Rule::minus => {
                     let inner = build_unary(inner.next().unwrap(), param_pool)?;
-                    Expr::Apply(&OP_MINUS, vec![inner].into())
+                    Expr::Apply {
+                        op: &OP_MINUS,
+                        args: [inner].into(),
+                    }
                 }
                 Rule::negate => {
                     let inner = build_unary(inner.next().unwrap(), param_pool)?;
-                    Expr::Apply(&OP_NEGATE, vec![inner].into())
+                    Expr::Apply {
+                        op: &OP_NEGATE,
+                        args: [inner].into(),
+                    }
                 }
                 Rule::pos_int => {
                     let i = s.replace('_', "").parse::<i64>().into_diagnostic()?;
-                    Expr::Const(DataValue::from(i))
+                    Expr::Const {
+                        val: DataValue::from(i),
+                    }
                 }
                 Rule::hex_pos_int => {
                     let i = parse_int(s, 16);
-                    Expr::Const(DataValue::from(i))
+                    Expr::Const {
+                        val: DataValue::from(i),
+                    }
                 }
                 Rule::octo_pos_int => {
                     let i = parse_int(s, 8);
-                    Expr::Const(DataValue::from(i))
+                    Expr::Const {
+                        val: DataValue::from(i),
+                    }
                 }
                 Rule::bin_pos_int => {
                     let i = parse_int(s, 2);
-                    Expr::Const(DataValue::from(i))
+                    Expr::Const {
+                        val: DataValue::from(i),
+                    }
                 }
                 Rule::dot_float | Rule::sci_float => {
                     let f = s.replace('_', "").parse::<f64>().into_diagnostic()?;
-                    Expr::Const(DataValue::from(f))
+                    Expr::Const {
+                        val: DataValue::from(f),
+                    }
                 }
-                Rule::null => Expr::Const(DataValue::Null),
-                Rule::boolean => Expr::Const(DataValue::Bool(s == "true")),
+                Rule::null => Expr::Const {
+                    val: DataValue::Null,
+                },
+                Rule::boolean => Expr::Const {
+                    val: DataValue::Bool(s == "true"),
+                },
                 Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
                     let s = parse_string(p)?;
-                    Expr::Const(DataValue::Str(s))
+                    Expr::Const {
+                        val: DataValue::Str(s),
+                    }
                 }
                 Rule::list => {
                     let mut collected = vec![];
                     for p in p.into_inner() {
                         collected.push(build_expr(p, param_pool)?)
                     }
-                    Expr::Apply(&OP_LIST, collected.into())
+                    Expr::Apply {
+                        op: &OP_LIST,
+                        args: collected.into(),
+                    }
                 }
                 Rule::apply => {
                     let mut p = p.into_inner();
@@ -146,7 +177,10 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
                     } else {
                         ensure!(op.min_arity == args.len(), "args not right for {}", ident);
                     }
-                    Expr::Apply(op, args.into())
+                    Expr::Apply {
+                        op,
+                        args: args.into(),
+                    }
                 }
                 Rule::grouping => build_expr(p.into_inner().next().unwrap(), param_pool)?,
                 r => unreachable!("Encountered unknown op {:?}", r),

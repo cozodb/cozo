@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
 use log::debug;
+use miette::{bail, ensure, miette, Result};
 
 use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::Expr;
@@ -37,7 +37,9 @@ impl AlgoImpl for CommunityDetectionLouvain {
         )?;
         let max_iter = match opts.get("max_iter") {
             None => 10,
-            Some(Expr::Const(DataValue::Num(n))) => {
+            Some(Expr::Const {
+                val: DataValue::Num(n),
+            }) => {
                 let i = n.get_int().ok_or_else(|| {
                     miette!(
                     "'max_iter' for 'community_detection_louvain' requires an integer, got {:?}",
@@ -58,7 +60,9 @@ impl AlgoImpl for CommunityDetectionLouvain {
         };
         let delta = match opts.get("delta") {
             None => 0.0001,
-            Some(Expr::Const(DataValue::Num(n))) => {
+            Some(Expr::Const {
+                val: DataValue::Num(n),
+            }) => {
                 let i = n.get_float();
                 ensure!(
                     i > 0.,
@@ -74,7 +78,9 @@ impl AlgoImpl for CommunityDetectionLouvain {
         };
         let keep_depth = match opts.get("keep_depth") {
             None => None,
-            Some(Expr::Const(DataValue::Num(n))) => Some({
+            Some(Expr::Const {
+                val: DataValue::Num(n),
+            }) => Some({
                 let i = n.get_int().ok_or_else(|| {
                     miette!(
                     "'keep_depth' for 'community_detection_louvain' requires an integer, got {:?}",
@@ -125,7 +131,12 @@ impl AlgoImpl for CommunityDetectionLouvain {
     }
 }
 
-fn louvain(graph: &[BTreeMap<usize, f64>], delta: f64, max_iter: usize, poison: Poison) -> Result<Vec<Vec<usize>>> {
+fn louvain(
+    graph: &[BTreeMap<usize, f64>],
+    delta: f64,
+    max_iter: usize,
+    poison: Poison,
+) -> Result<Vec<Vec<usize>>> {
     let mut current = graph;
     let mut collected = vec![];
     while current.len() > 2 {

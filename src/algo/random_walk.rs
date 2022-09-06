@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
+use miette::{bail, ensure, miette, Result};
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
 
@@ -38,7 +38,9 @@ impl AlgoImpl for RandomWalk {
             .ok_or_else(|| miette!("'random_walk' requires starting relation as third argument"))?;
         let iterations = match opts.get("iterations") {
             None => 1usize,
-            Some(Expr::Const(DataValue::Num(n))) => {
+            Some(Expr::Const {
+                val: DataValue::Num(n),
+            }) => {
                 let n = n.get_int().ok_or_else(|| {
                     miette!(
                         "'iterations' for 'random_walk' requires an integer, got {}",
@@ -61,7 +63,9 @@ impl AlgoImpl for RandomWalk {
             .get("steps")
             .ok_or_else(|| miette!("'random_walk' requires option 'steps'"))?
         {
-            Expr::Const(DataValue::Num(n)) => {
+            Expr::Const {
+                val: DataValue::Num(n),
+            } => {
                 let n = n.get_int().ok_or_else(|| {
                     miette!("'steps' for 'random_walk' requires an integer, got {}", n)
                 })?;

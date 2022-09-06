@@ -1,8 +1,8 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
 
-use miette::{miette, bail, Result};
 use itertools::Itertools;
+use miette::{bail, miette, Result};
 
 use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
@@ -40,7 +40,9 @@ impl AlgoImpl for StronglyConnectedComponent {
 
         let reverse_mode = match opts.get("mode") {
             None => false,
-            Some(Expr::Const(DataValue::Str(s))) => match s as &str {
+            Some(Expr::Const {
+                val: DataValue::Str(s),
+            }) => match s as &str {
                 "group_first" => true,
                 "key_first" => false,
                 v => bail!(

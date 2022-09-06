@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
+use miette::{bail, ensure, miette, Result};
 use rand::prelude::*;
 
 use crate::algo::{get_bool_option_required, AlgoImpl};
@@ -33,7 +33,9 @@ impl AlgoImpl for LabelPropagation {
             get_bool_option_required("undirected", opts, Some(false), "label_propagation")?;
         let max_iter = match opts.get("max_iter") {
             None => 10,
-            Some(Expr::Const(DataValue::Num(n))) => {
+            Some(Expr::Const {
+                val: DataValue::Num(n),
+            }) => {
                 let i = n.get_int().ok_or_else(|| {
                     miette!(
                         "'max_iter' for 'label_propagation' requires an integer, got {:?}",
@@ -63,7 +65,11 @@ impl AlgoImpl for LabelPropagation {
     }
 }
 
-fn label_propagation(graph: &[Vec<(usize, f64)>], max_iter: usize, poison: Poison) -> Result<Vec<usize>> {
+fn label_propagation(
+    graph: &[Vec<(usize, f64)>],
+    max_iter: usize,
+    poison: Poison,
+) -> Result<Vec<usize>> {
     let n_nodes = graph.len();
     let mut labels = (0..n_nodes).collect_vec();
     let mut rng = thread_rng();

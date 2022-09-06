@@ -1,11 +1,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use miette::{miette, ensure, Context, Result};
 use itertools::Itertools;
+use miette::{ensure, miette, Context, Result};
 
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
-use crate::data::program::{ConstRules, MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram};
+use crate::data::program::{
+    ConstRules, MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol,
+    StratifiedMagicProgram,
+};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::query::relation::RelAlgebra;
@@ -361,12 +364,18 @@ impl SessionTx {
                     if seen_variables.contains(&u.binding) {
                         let expr = if u.one_many_unif {
                             Expr::build_is_in(vec![
-                                Expr::Binding(u.binding.clone(), None),
+                                Expr::Binding {
+                                    var: u.binding.clone(),
+                                    tuple_pos: None,
+                                },
                                 u.expr.clone(),
                             ])
                         } else {
                             Expr::build_equate(vec![
-                                Expr::Binding(u.binding.clone(), None),
+                                Expr::Binding {
+                                    var: u.binding.clone(),
+                                    tuple_pos: None,
+                                },
                                 u.expr.clone(),
                             ])
                         };

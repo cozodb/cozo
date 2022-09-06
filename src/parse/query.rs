@@ -12,9 +12,9 @@ use crate::data::aggr::{get_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
 use crate::data::program::{
-    AlgoApply, AlgoRuleArg, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram, InputRule,
-    InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputRelationApplyAtom, MagicSymbol,
-    QueryOutOptions, SortDir, TripleDir, Unification, RelationOp,
+    AlgoApply, AlgoRuleArg, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram,
+    InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm,
+    MagicSymbol, QueryOutOptions, RelationOp, SortDir, TripleDir, Unification,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
@@ -349,8 +349,8 @@ fn parse_rule_arg(
             let mut p = build_expr(src, param_pool)?;
             p.partial_eval()?;
             match p {
-                Expr::Binding(b, _) => InputTerm::Var(b),
-                Expr::Const(c) => InputTerm::Const(c),
+                Expr::Binding { var, .. } => InputTerm::Var(var),
+                Expr::Const { val } => InputTerm::Const(val),
                 _ => bail!("triple arg must either evaluate to a constant or a variable"),
             }
         }
@@ -440,17 +440,20 @@ fn parse_algo_rule(
                     Rule::algo_rule_rel => {
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap().as_str();
-                        let args = els.map(|v| Symbol::from(v.as_str())).collect_vec();
-                        rule_args.push(AlgoRuleArg::InMem(Symbol::from(name), args))
+                        let bindings = els.map(|v| Symbol::from(v.as_str())).collect_vec();
+                        rule_args.push(AlgoRuleArg::InMem {
+                            name: Symbol::from(name),
+                            bindings,
+                        })
                     }
                     Rule::algo_relation_rel => {
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap().as_str();
-                        let args = els.map(|v| Symbol::from(v.as_str())).collect_vec();
-                        rule_args.push(AlgoRuleArg::Stored(
-                            Symbol::from(name.strip_prefix(':').unwrap()),
-                            args,
-                        ))
+                        let bindings = els.map(|v| Symbol::from(v.as_str())).collect_vec();
+                        rule_args.push(AlgoRuleArg::Stored {
+                            name: Symbol::from(name.strip_prefix(':').unwrap()),
+                            bindings,
+                        })
                     }
                     Rule::algo_triple_rel => {
                         let mut els = inner.into_inner();
@@ -466,11 +469,11 @@ fn parse_algo_rule(
                             _ => unreachable!(),
                         };
                         let snd = els.next().unwrap().as_str();
-                        rule_args.push(AlgoRuleArg::Triple(
-                            Symbol::from(ident),
-                            vec![Symbol::from(fst), Symbol::from(snd)],
+                        rule_args.push(AlgoRuleArg::Triple {
+                            name: Symbol::from(ident),
+                            bindings: vec![Symbol::from(fst), Symbol::from(snd)],
                             dir,
-                        ));
+                        });
                     }
                     _ => unreachable!(),
                 }

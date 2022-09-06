@@ -1,8 +1,8 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
-use miette::{ensure, Result};
 use itertools::Itertools;
+use miette::{ensure, Result};
 
 use crate::data::program::{
     AlgoRuleArg, NormalFormAlgoOrRules, NormalFormAtom, NormalFormProgram,
@@ -123,11 +123,11 @@ fn convert_normal_form_program_to_graph(
                 let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
                 for rel in &algo.rule_args {
                     match rel {
-                        AlgoRuleArg::InMem(r, _args) => {
-                            ret.insert(r, true);
+                        AlgoRuleArg::InMem { name, .. } => {
+                            ret.insert(name, true);
                         }
-                        AlgoRuleArg::Stored(_, _) => {}
-                        AlgoRuleArg::Triple(_, _, _) => {}
+                        AlgoRuleArg::Stored { .. } => {}
+                        AlgoRuleArg::Triple { .. } => {}
                     }
                 }
                 (k, ret)
@@ -203,7 +203,8 @@ impl NormalFormProgram {
         let graph = reduce_to_graph(&stratified_graph);
         ensure!(
             graph.contains_key(prog_entry),
-            "program graph does not have an entry, {:?}", graph
+            "program graph does not have an entry, {:?}",
+            graph
         );
 
         // 1. find reachable clauses starting from the query

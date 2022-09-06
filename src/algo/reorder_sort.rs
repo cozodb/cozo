@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use miette::{miette, bail, ensure, Result};
 use itertools::Itertools;
+use miette::{bail, ensure, miette, Result};
 
 use crate::algo::{get_bool_option_required, AlgoImpl};
 use crate::data::expr::Expr;
@@ -34,28 +34,30 @@ impl AlgoImpl for ReorderSort {
             .get("out")
             .ok_or_else(|| miette!("'reorder_sort' requires the option 'out'"))?
         {
-            Expr::Const(DataValue::List(l)) => {
-                l.iter().map(|d| Expr::Const(d.clone())).collect_vec()
-            }
-            Expr::Apply(op, args) if **op == OP_LIST => args.to_vec(),
+            Expr::Const {
+                val: DataValue::List(l),
+            } => l
+                .iter()
+                .map(|d| Expr::Const { val: d.clone() })
+                .collect_vec(),
+            Expr::Apply { op, args } if **op == OP_LIST => args.to_vec(),
             v => {
                 bail!("option 'out' of 'reorder_sort' must be a list, got {:?}", v)
             }
         };
 
-        let mut sort_by = opts
-            .get("sort_by")
-            .cloned()
-            .unwrap_or(Expr::Const(DataValue::Null));
+        let mut sort_by = opts.get("sort_by").cloned().unwrap_or(Expr::Const {
+            val: DataValue::Null,
+        });
         let sort_descending =
             get_bool_option_required("descending", opts, Some(false), "reorder_sort")?;
         let break_ties = get_bool_option_required("break_ties", opts, Some(false), "reorder_sort")?;
         let skip = match opts.get("skip") {
             None => 0,
-            Some(Expr::Const(v)) => v.get_int().ok_or_else(|| {
+            Some(Expr::Const { val }) => val.get_int().ok_or_else(|| {
                 miette!(
                     "option 'skip' of 'reorder_sort' must be an integer, got {:?}",
-                    v
+                    val
                 )
             })?,
             Some(v) => bail!(
@@ -70,10 +72,10 @@ impl AlgoImpl for ReorderSort {
         );
         let take = match opts.get("take") {
             None => i64::MAX,
-            Some(Expr::Const(v)) => v.get_int().ok_or_else(|| {
+            Some(Expr::Const { val }) => val.get_int().ok_or_else(|| {
                 miette!(
                     "option 'take' of 'reorder_sort' must be an integer, got {:?}",
-                    v
+                    val
                 )
             })?,
             Some(v) => bail!(

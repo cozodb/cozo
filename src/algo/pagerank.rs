@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::mem;
 
-use miette::{miette, bail, ensure, Result};
 use approx::AbsDiffEq;
+use miette::{bail, ensure, miette, Result};
 use nalgebra::{Dynamic, OMatrix, U1};
 
 use crate::algo::{get_bool_option_required, AlgoImpl};
@@ -33,7 +33,9 @@ impl AlgoImpl for PageRank {
         let undirected = get_bool_option_required("undirected", opts, Some(false), "pagerank")?;
         let theta = match opts.get("theta") {
             None => 0.8f32,
-            Some(Expr::Const(DataValue::Num(n))) => n.get_float() as f32,
+            Some(Expr::Const {
+                val: DataValue::Num(n),
+            }) => n.get_float() as f32,
             Some(v) => bail!(
                 "option 'theta' for 'pagerank' requires a float, got {:?}",
                 v
@@ -46,7 +48,9 @@ impl AlgoImpl for PageRank {
         );
         let epsilon = match opts.get("epsilon") {
             None => 0.001f32,
-            Some(Expr::Const(DataValue::Num(n))) => n.get_float() as f32,
+            Some(Expr::Const {
+                val: DataValue::Num(n),
+            }) => n.get_float() as f32,
             Some(v) => bail!(
                 "option 'epsilon' for 'pagerank' requires a float, got {:?}",
                 v
@@ -54,7 +58,9 @@ impl AlgoImpl for PageRank {
         };
         let iterations = match opts.get("iterations") {
             None => 20,
-            Some(Expr::Const(DataValue::Num(Num::I(i)))) => *i,
+            Some(Expr::Const {
+                val: DataValue::Num(Num::I(i)),
+            }) => *i,
             Some(v) => bail!(
                 "option 'iterations' for 'pagerank' requires an integer, got {:?}",
                 v

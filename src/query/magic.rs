@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 use crate::data::id::Validity;
 use crate::data::program::{
     AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicAttrTripleAtom, MagicProgram,
-    MagicRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol, MagicRelationApplyAtom,
+    MagicRelationApplyAtom, MagicRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol,
     NormalFormAlgoOrRules, NormalFormAtom, NormalFormProgram, NormalFormRule,
     StratifiedMagicProgram, StratifiedNormalFormProgram,
 };
@@ -272,8 +272,8 @@ impl NormalFormProgram {
                 }
                 NormalFormAlgoOrRules::Algo(algo) => {
                     for rel in algo.rule_args.iter() {
-                        if let AlgoRuleArg::InMem(r, _args) = rel {
-                            downstream_rules.insert(r.clone());
+                        if let AlgoRuleArg::InMem { name, .. } = rel {
+                            downstream_rules.insert(name.clone());
                         }
                     }
                 }
@@ -317,18 +317,34 @@ impl NormalFormProgram {
                                 .iter()
                                 .map(|r| -> Result<MagicAlgoRuleArg> {
                                     Ok(match r {
-                                        AlgoRuleArg::InMem(m, args) => MagicAlgoRuleArg::InMem(
-                                            MagicSymbol::Muggle { inner: m.clone() },
-                                            args.clone(),
-                                        ),
-                                        AlgoRuleArg::Stored(s, args) => {
-                                            MagicAlgoRuleArg::Stored(s.clone(), args.clone())
+                                        AlgoRuleArg::InMem { name, bindings } => {
+                                            MagicAlgoRuleArg::InMem {
+                                                name: MagicSymbol::Muggle {
+                                                    inner: name.clone(),
+                                                },
+                                                bindings: bindings.clone(),
+                                            }
                                         }
-                                        AlgoRuleArg::Triple(t, args, d) => {
-                                            let attr = tx.attr_by_name(t)?.ok_or_else(|| {
-                                                miette!("cannot find attribute {}", t)
+                                        AlgoRuleArg::Stored { name, bindings } => {
+                                            MagicAlgoRuleArg::Stored {
+                                                name: name.clone(),
+                                                bindings: bindings.clone(),
+                                            }
+                                        }
+                                        AlgoRuleArg::Triple {
+                                            name,
+                                            bindings,
+                                            dir,
+                                        } => {
+                                            let attr = tx.attr_by_name(name)?.ok_or_else(|| {
+                                                miette!("cannot find attribute {}", name)
                                             })?;
-                                            MagicAlgoRuleArg::Triple(attr, args.clone(), *d, algo_apply.vld.unwrap_or(default_vld))
+                                            MagicAlgoRuleArg::Triple {
+                                                name: attr,
+                                                bindings: bindings.clone(),
+                                                dir: *dir,
+                                                vld: algo_apply.vld.unwrap_or(default_vld),
+                                            }
                                         }
                                     })
                                 })
@@ -467,10 +483,12 @@ impl NormalFormAtom {
                 },
                 args: nr.args.clone(),
             }),
-            NormalFormAtom::NegatedRelation(nv) => MagicAtom::NegatedRelation(MagicRelationApplyAtom {
-                name: nv.name.clone(),
-                args: nv.args.clone(),
-            }),
+            NormalFormAtom::NegatedRelation(nv) => {
+                MagicAtom::NegatedRelation(MagicRelationApplyAtom {
+                    name: nv.name.clone(),
+                    args: nv.args.clone(),
+                })
+            }
             NormalFormAtom::Unification(u) => {
                 seen_bindings.insert(u.binding.clone());
                 MagicAtom::Unification(u.clone())
