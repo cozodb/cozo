@@ -39,6 +39,8 @@ lazy_static! {
 }
 
 pub(crate) fn build_expr(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<Expr> {
+    // TODO remove this when we are sure
+    assert_eq!(pair.as_rule(), Rule::expr);
     PREC_CLIMBER.climb(
         pair.into_inner(),
         |v| build_unary(v, param_pool),
@@ -74,157 +76,148 @@ fn build_expr_infix(lhs: Result<Expr>, op: Pair<'_>, rhs: Result<Expr>) -> Resul
 
 fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<Expr> {
     let span = pair.extract_span();
-    Ok(match pair.as_rule() {
-        Rule::expr => build_unary(pair.into_inner().next().unwrap(), param_pool)?,
-        Rule::grouping => build_expr(pair.into_inner().next().unwrap(), param_pool)?,
-        Rule::unary => {
-            let s = pair.as_str();
-            let mut inner = pair.into_inner();
-            let p = inner.next().unwrap();
-            let op = p.as_rule();
-            match op {
-                Rule::term => build_unary(p, param_pool)?,
-                Rule::var => Expr::Binding {
-                    var: Symbol::from(s),
-                    tuple_pos: None,
-                },
-                Rule::param => {
-                    let param_str = s.strip_prefix('$').unwrap();
-                    Expr::Const {
-                        val: param_pool
-                            .get(param_str)
-                            .ok_or_else(|| {
-                                cozo_err(
-                                    "parser::param_not_found",
-                                    format!("Required parameter '{}' not found", param_str),
-                                )
-                                .span(span)
-                            })?
-                            .clone(),
-                    }
-                }
-                Rule::minus => {
-                    let inner = build_unary(inner.next().unwrap(), param_pool)?;
-                    Expr::Apply {
-                        op: &OP_MINUS,
-                        args: [inner].into(),
-                    }
-                }
-                Rule::negate => {
-                    let inner = build_unary(inner.next().unwrap(), param_pool)?;
-                    Expr::Apply {
-                        op: &OP_NEGATE,
-                        args: [inner].into(),
-                    }
-                }
-                Rule::pos_int => {
-                    let i = s.replace('_', "").parse::<i64>().map_err(|_| {
-                        cozo_err("parser::bad_pos_int", "Cannot parse integer").span(span)
-                    })?;
-                    Expr::Const {
-                        val: DataValue::from(i),
-                    }
-                }
-                Rule::hex_pos_int => {
-                    let i = parse_int(s, 16);
-                    Expr::Const {
-                        val: DataValue::from(i),
-                    }
-                }
-                Rule::octo_pos_int => {
-                    let i = parse_int(s, 8);
-                    Expr::Const {
-                        val: DataValue::from(i),
-                    }
-                }
-                Rule::bin_pos_int => {
-                    let i = parse_int(s, 2);
-                    Expr::Const {
-                        val: DataValue::from(i),
-                    }
-                }
-                Rule::dot_float | Rule::sci_float => {
-                    let f = s.replace('_', "").parse::<f64>().map_err(|_| {
-                        cozo_err("parser::bad_float", "Cannot parse floating number").span(span)
-                    })?;
-                    Expr::Const {
-                        val: DataValue::from(f),
-                    }
-                }
-                Rule::null => Expr::Const {
-                    val: DataValue::Null,
-                },
-                Rule::boolean => Expr::Const {
-                    val: DataValue::Bool(s == "true"),
-                },
-                Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
-                    let s = parse_string(p)?;
-                    Expr::Const {
-                        val: DataValue::Str(s),
-                    }
-                }
-                Rule::list => {
-                    let mut collected = vec![];
-                    for p in p.into_inner() {
-                        collected.push(build_expr(p, param_pool)?)
-                    }
-                    Expr::Apply {
-                        op: &OP_LIST,
-                        args: collected.into(),
-                    }
-                }
-                Rule::apply => {
-                    let mut p = p.into_inner();
-                    let ident_p = p.next().unwrap();
-                    let ident = ident_p.as_str();
-                    let mut args: Box<_> = p
-                        .next()
-                        .unwrap()
-                        .into_inner()
-                        .map(|v| build_expr(v, param_pool))
-                        .try_collect()?;
-                    let op = get_op(ident).ok_or_else(|| {
+    let s = pair.as_str();
+    let mut inner = pair.into_inner();
+    let p = inner.next().unwrap();
+    let op = p.as_rule();
+    Ok(match op {
+        Rule::term => build_unary(p, param_pool)?,
+        Rule::var => Expr::Binding {
+            var: Symbol::from(s),
+            tuple_pos: None,
+        },
+        Rule::param => {
+            let param_str = s.strip_prefix('$').unwrap();
+            Expr::Const {
+                val: param_pool
+                    .get(param_str)
+                    .ok_or_else(|| {
                         cozo_err(
-                            "parser::func_not_function",
-                            format!("Named function '{}' not found", ident),
+                            "parser::param_not_found",
+                            format!("Required parameter '{}' not found", param_str),
                         )
-                        .span(ident_p.extract_span())
-                    })?;
-                    op.post_process_args(&mut args);
-                    if op.vararg {
-                        ensure!(
-                            op.min_arity <= args.len(),
-                            cozo_err(
-                                "parser::not_enough_args",
-                                format!("Wrong number of arguments for function '{}'", ident)
-                            )
-                            .span(span)
-                            .help(format!("Need at least {} argument(s)", op.min_arity))
-                        );
-                    } else {
-                        ensure!(
-                            op.min_arity == args.len(),
-                            cozo_err(
-                                "parser::bad_args_count",
-                                format!("Wrong number of arguments for function '{}'", ident)
-                            )
-                            .span(span)
-                            .help(format!("Need exactly {} argument(s)", op.min_arity))
-                        );
-                    }
-                    Expr::Apply {
-                        op,
-                        args: args.into(),
-                    }
-                }
-                Rule::grouping => build_expr(p.into_inner().next().unwrap(), param_pool)?,
-                r => unreachable!("Encountered unknown op {:?}", r),
+                        .span(span)
+                    })?
+                    .clone(),
             }
         }
-        _ => {
-            println!("Unhandled rule {:?}", pair.as_rule());
-            unimplemented!()
+        Rule::minus => {
+            let inner = build_unary(inner.next().unwrap(), param_pool)?;
+            Expr::Apply {
+                op: &OP_MINUS,
+                args: [inner].into(),
+            }
         }
+        Rule::negate => {
+            let inner = build_unary(inner.next().unwrap(), param_pool)?;
+            Expr::Apply {
+                op: &OP_NEGATE,
+                args: [inner].into(),
+            }
+        }
+        Rule::pos_int => {
+            let i = s
+                .replace('_', "")
+                .parse::<i64>()
+                .map_err(|_| cozo_err("parser::bad_pos_int", "Cannot parse integer").span(span))?;
+            Expr::Const {
+                val: DataValue::from(i),
+            }
+        }
+        Rule::hex_pos_int => {
+            let i = parse_int(s, 16);
+            Expr::Const {
+                val: DataValue::from(i),
+            }
+        }
+        Rule::octo_pos_int => {
+            let i = parse_int(s, 8);
+            Expr::Const {
+                val: DataValue::from(i),
+            }
+        }
+        Rule::bin_pos_int => {
+            let i = parse_int(s, 2);
+            Expr::Const {
+                val: DataValue::from(i),
+            }
+        }
+        Rule::dot_float | Rule::sci_float => {
+            let f = s.replace('_', "").parse::<f64>().map_err(|_| {
+                cozo_err("parser::bad_float", "Cannot parse floating number").span(span)
+            })?;
+            Expr::Const {
+                val: DataValue::from(f),
+            }
+        }
+        Rule::null => Expr::Const {
+            val: DataValue::Null,
+        },
+        Rule::boolean => Expr::Const {
+            val: DataValue::Bool(s == "true"),
+        },
+        Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
+            let s = parse_string(p)?;
+            Expr::Const {
+                val: DataValue::Str(s),
+            }
+        }
+        Rule::list => {
+            let mut collected = vec![];
+            for p in p.into_inner() {
+                collected.push(build_expr(p, param_pool)?)
+            }
+            Expr::Apply {
+                op: &OP_LIST,
+                args: collected.into(),
+            }
+        }
+        Rule::apply => {
+            let mut p = p.into_inner();
+            let ident_p = p.next().unwrap();
+            let ident = ident_p.as_str();
+            let mut args: Box<_> = p
+                .next()
+                .unwrap()
+                .into_inner()
+                .map(|v| build_expr(v, param_pool))
+                .try_collect()?;
+            let op = get_op(ident).ok_or_else(|| {
+                cozo_err(
+                    "parser::func_not_function",
+                    format!("Named function '{}' not found", ident),
+                )
+                .span(ident_p.extract_span())
+            })?;
+            op.post_process_args(&mut args);
+            if op.vararg {
+                ensure!(
+                    op.min_arity <= args.len(),
+                    cozo_err(
+                        "parser::not_enough_args",
+                        format!("Wrong number of arguments for function '{}'", ident)
+                    )
+                    .span(span)
+                    .help(format!("Need at least {} argument(s)", op.min_arity))
+                );
+            } else {
+                ensure!(
+                    op.min_arity == args.len(),
+                    cozo_err(
+                        "parser::bad_args_count",
+                        format!("Wrong number of arguments for function '{}'", ident)
+                    )
+                    .span(span)
+                    .help(format!("Need exactly {} argument(s)", op.min_arity))
+                );
+            }
+            Expr::Apply {
+                op,
+                args: args.into(),
+            }
+        }
+        Rule::grouping => build_expr(p.into_inner().next().unwrap(), param_pool)?,
+        r => unreachable!("Encountered unknown op {:?}", r),
     })
 }
 

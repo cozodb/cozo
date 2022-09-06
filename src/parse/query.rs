@@ -21,8 +21,9 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
 use crate::parse::pull::parse_out_options;
-use crate::parse::{Pair, Pairs, Rule};
+use crate::parse::{ExtractSpan, Pair, Pairs, Rule};
 use crate::runtime::relation::{RelationId, RelationMetadata};
+use crate::utils::CozoError;
 
 pub(crate) fn parse_query(
     src: Pairs<'_>,
@@ -106,7 +107,7 @@ pub(crate) fn parse_query(
                 }
             }
             Rule::timeout_option => {
-                let timeout = build_expr(pair, param_pool)?
+                let timeout = build_expr(pair.into_inner().next().unwrap(), param_pool)?
                     .eval_to_const()?
                     .get_int()
                     .ok_or_else(|| miette!("timeout option must be an integer"))?;
@@ -114,14 +115,14 @@ pub(crate) fn parse_query(
                 out_opts.timeout = Some(timeout as u64);
             }
             Rule::limit_option => {
-                let limit = build_expr(pair, param_pool)?
+                let limit = build_expr(pair.into_inner().next().unwrap(), param_pool)?
                     .eval_to_const()?
                     .get_non_neg_int()
                     .ok_or_else(|| miette!("limit requires a non-negative integer"))?;
                 out_opts.limit = Some(limit as usize);
             }
             Rule::offset_option => {
-                let offset = build_expr(pair, param_pool)?
+                let offset = build_expr(pair.into_inner().next().unwrap(), param_pool)?
                     .eval_to_const()?
                     .get_non_neg_int()
                     .ok_or_else(|| miette!("limit requires a non-negative integer"))?;

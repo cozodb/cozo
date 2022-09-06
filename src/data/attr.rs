@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use miette::{bail, ensure, miette, IntoDiagnostic, Result};
+use log::error;
+use miette::{bail, ensure, miette, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -13,6 +14,7 @@ use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, Num};
 use crate::runtime::transact::SessionTx;
+use crate::utils::{cozo_err, CozoError};
 
 // use crate::parse::triple::TempIdCtx;
 
@@ -106,7 +108,7 @@ impl Display for AttributeTyping {
 }
 
 impl TryFrom<&'_ str> for AttributeTyping {
-    type Error = miette::Error;
+    type Error = CozoError;
     fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
         use AttributeTyping::*;
         Ok(match value {
@@ -117,7 +119,12 @@ impl TryFrom<&'_ str> for AttributeTyping {
             "string" => String,
             "bytes" => Bytes,
             "list" => List,
-            s => bail!("unknown type {}", s),
+            s => {
+                return Err(cozo_err(
+                    "attr_typing::from_str",
+                    format!("Unsupported type '{}'", s),
+                ))
+            }
         })
     }
 }
@@ -261,7 +268,12 @@ impl Attribute {
         EncodedVec { inner }
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
-        Ok(rmp_serde::from_slice(data).into_diagnostic()?)
+        Ok(rmp_serde::from_slice(data)
+            .map_err(|_| {
+                error!("Cannot deserialize attribute from bytes: {:x?}", data);
+                cozo_err("deser::attr", "Cannot deserialize attribute")
+                    .help("This indicates data corruption or a bug. If you think it is the latter, consider file a bug report.")
+            })?)
     }
     pub(crate) fn coerce_value(
         &self,

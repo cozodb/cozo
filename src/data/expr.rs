@@ -11,6 +11,7 @@ use crate::data::functions::*;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::utils::cozo_err;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
@@ -110,10 +111,10 @@ impl Expr {
         self.partial_eval()?;
         match self {
             Expr::Const { val } => Ok(val),
-            v => bail!(
-                "expect expression to be completed evaluated at this point: {:?}",
-                v
-            ),
+            _ => bail!(cozo_err(
+                "eval::not_const",
+                "Expression contains unevaluated constant"
+            )),
         }
     }
     pub(crate) fn partial_eval(&mut self) -> Result<()> {
