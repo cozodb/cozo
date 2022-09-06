@@ -5,10 +5,12 @@ use miette::{bail, ensure, miette, Result};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::data::id::{EntityId, Validity};
+use crate::data::program::InputProgram;
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::expr::{build_expr, parse_string};
 use crate::parse::{Pair, Pairs, Rule};
+use crate::parse::query::parse_query;
 
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
@@ -51,20 +53,43 @@ pub(crate) struct Quintuple {
     pub(crate) validity: Option<Validity>,
 }
 
+pub(crate) struct TripleTx {
+    pub(crate) quintuples: Vec<Quintuple>,
+    pub(crate) before: Vec<InputProgram>,
+    pub(crate) after: Vec<InputProgram>,
+}
+
 pub(crate) fn parse_tx(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-) -> Result<Vec<Quintuple>> {
-    let mut ret = vec![];
+) -> Result<TripleTx> {
+    let mut quintuples = vec![];
+    let mut before = vec![];
+    let mut after = vec![];
     let mut temp_id_serial = 0;
 
     for pair in src {
-        if pair.as_rule() == Rule::EOI {
-            break;
+        match pair.as_rule() {
+            Rule::EOI => {}
+            Rule::tx_clause => {
+                parse_tx_clause(pair, param_pool, &mut temp_id_serial, &mut quintuples)?
+            }
+            Rule::tx_before_ensure_script => {
+                let p = parse_query(pair.into_inner(), param_pool)?;
+                before.push(p);
+            },
+            Rule::tx_after_ensure_script => {
+                let p = parse_query(pair.into_inner(), param_pool)?;
+                after.push(p);
+            },
+            _ => unreachable!(),
         }
-        parse_tx_clause(pair, param_pool, &mut temp_id_serial, &mut ret)?;
     }
-    Ok(ret)
+    Ok(TripleTx {
+        quintuples,
+        before,
+        after,
+    })
 }
 
 fn parse_tx_clause(
@@ -166,7 +191,10 @@ fn parse_tx_map(
     }
     let identifier = identifier.unwrap_or_else(|| {
         *temp_id_serial += 1;
-        let s_id = format!("{}{}{}", LARGEST_UTF_CHAR, *temp_id_serial, LARGEST_UTF_CHAR);
+        let s_id = format!(
+            "{}{}{}",
+            LARGEST_UTF_CHAR, *temp_id_serial, LARGEST_UTF_CHAR
+        );
         EntityRep::UserTempId(SmartString::from(s_id))
     });
     for pair in map_p.into_inner() {
@@ -277,7 +305,7 @@ fn parse_tx_val(
                         let value = expr.eval_to_const()?;
                         list_coll.push(value)
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
             coll.push(Quintuple {

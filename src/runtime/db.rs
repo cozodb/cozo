@@ -9,7 +9,7 @@ use std::{fs, thread};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
-use miette::{bail, ensure, miette, IntoDiagnostic, Result};
+use miette::{bail, ensure, miette, IntoDiagnostic, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
 
@@ -26,10 +26,10 @@ use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::schema::AttrTxItem;
 use crate::parse::sys::{CompactTarget, SysOp};
-use crate::parse::tx::Quintuple;
+use crate::parse::tx::TripleTx;
 use crate::parse::{parse_script, CozoScript};
-use crate::runtime::transact::SessionTx;
 use crate::runtime::relation::{RelationId, RelationMetadata};
+use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
 struct RunningQueryHandle {
@@ -184,13 +184,21 @@ impl Db {
         it.seek_to_start();
         it
     }
-    fn transact_triples(&self, payloads: Vec<Quintuple>) -> Result<JsonValue> {
+    fn transact_triples(&self, payloads: TripleTx) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
+        for before_prog in payloads.before {
+            self.run_query(&mut tx, before_prog)
+                .wrap_err("Triple store transaction failed as a pre-condition failed")?;
+        }
         let res: JsonValue = tx
-            .tx_triples(payloads)?
+            .tx_triples(payloads.quintuples)?
             .iter()
             .map(|(eid, size)| json!([eid.0, size]))
             .collect();
+        for after_prog in payloads.after {
+            self.run_query(&mut tx, after_prog)
+                .wrap_err("Triple store transaction failed as a post-condition failed")?;
+        }
         let tx_id = tx.get_write_tx_id()?;
         tx.commit_tx("", false)?;
         Ok(json!({
@@ -243,7 +251,23 @@ impl Db {
         match parse_script(payload, &param_pool)
             .map_err(|e| e.with_source_code(payload.to_string()))?
         {
-            CozoScript::Query(p) => self.run_query(p),
+            CozoScript::Query(p) => {
+                let (mut tx, is_write) = if p.out_opts.store_relation.is_some() {
+                    (self.transact_write()?, true)
+                } else {
+                    (self.transact()?, false)
+                };
+                let (res, cleanups) = self.run_query(&mut tx, p)?;
+                if is_write {
+                    tx.commit_tx("", false)?;
+                } else {
+                    ensure!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
+                }
+                for (lower, upper) in cleanups {
+                    self.db.range_del(&lower, &upper, Snd)?;
+                }
+                Ok(res)
+            }
             CozoScript::Tx(tx) => self.transact_triples(tx),
             CozoScript::Schema(schema) => self.transact_attributes(schema),
             CozoScript::Sys(op) => self.run_sys_op(op),
@@ -290,12 +314,12 @@ impl Db {
             }
         }
     }
-    fn run_query(&self, input_program: InputProgram) -> Result<JsonValue> {
-        let mut tx = if input_program.out_opts.store_relation.is_some() {
-            self.transact_write()?
-        } else {
-            self.transact()?
-        };
+    fn run_query(
+        &self,
+        tx: &mut SessionTx,
+        input_program: InputProgram,
+    ) -> Result<(JsonValue, Vec<(Vec<u8>, Vec<u8>)>)> {
+        let mut clean_ups = vec![];
         if let Some((meta, op)) = &input_program.out_opts.store_relation {
             if *op == RelationOp::Create {
                 ensure!(
@@ -368,11 +392,10 @@ impl Db {
             };
             if let Some((meta, relation_op)) = input_program.out_opts.store_relation {
                 let to_clear = tx.execute_relation(sorted_iter, relation_op, &meta)?;
-                tx.commit_tx("", false)?;
-                if let Some((lower, upper)) = to_clear {
-                    self.db.range_del(&lower, &upper, Snd)?;
+                if let Some(c) = to_clear {
+                    clean_ups.push(c);
                 }
-                Ok(json!({"relation": "OK"}))
+                Ok((json!({"relation": "OK"}), clean_ups))
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     sorted_iter,
@@ -380,7 +403,7 @@ impl Db {
                     &input_program.out_opts.out_spec,
                     default_vld,
                 )?;
-                Ok(json!({ "rows": ret, "headers": json_headers }))
+                Ok((json!({ "rows": ret, "headers": json_headers }), clean_ups))
             }
         } else {
             let scan = if input_program.out_opts.limit.is_some()
@@ -395,11 +418,10 @@ impl Db {
 
             if let Some((meta, relation_op)) = input_program.out_opts.store_relation {
                 let to_clear = tx.execute_relation(scan, relation_op, &meta)?;
-                tx.commit_tx("", false)?;
-                if let Some((lower, upper)) = to_clear {
-                    self.db.range_del(&lower, &upper, Snd)?;
+                if let Some(c) = to_clear {
+                    clean_ups.push(c);
                 }
-                Ok(json!({"relation": "OK"}))
+                Ok((json!({"relation": "OK"}), clean_ups))
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     scan,
@@ -407,7 +429,7 @@ impl Db {
                     &input_program.out_opts.out_spec,
                     default_vld,
                 )?;
-                Ok(json!({ "rows": ret, "headers": json_headers }))
+                Ok((json!({ "rows": ret, "headers": json_headers }), clean_ups))
             }
         }
     }

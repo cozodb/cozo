@@ -38,6 +38,8 @@ The four _basic arithmetic operators_ `+`, `-`, `*`, and `/` do what you expect,
 
 !> `negate(...)` is not the same as `not ...`, the former denotes the negation of a boolean expression, whereas the latter denotes the negation of a Horn clause.
 
+`assert(x, ...)` returns `true` if `x` is `true`, otherwise it will raise an error.
+
 ## Mathematical functions
 
 `add(...)`, `sub(x, y)`, `mul(...)`, `div(x, y)`: the function forms of `+`, `-`, `*`, `/`. `add` and `mul` can take multiple arguments (or no arguments).

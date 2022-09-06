@@ -455,6 +455,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "rand_bernoulli" => &OP_RAND_BERNOULLI,
         "rand_int" => &OP_RAND_INT,
         "rand_choose" => &OP_RAND_CHOOSE,
+        "assert" => &OP_ASSERT,
         _ => return None,
     })
 }

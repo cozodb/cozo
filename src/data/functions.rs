@@ -1342,3 +1342,11 @@ pub(crate) fn op_rand_choose(args: &[DataValue]) -> Result<DataValue> {
         v => bail!("'rand_choice' can only be applied to list, got {:?}", v),
     }
 }
+
+define_op!(OP_ASSERT, 1, true);
+pub(crate) fn op_assert(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::Bool(true) => Ok(DataValue::Bool(true)),
+        _ => bail!("Assertion failed: args {:?}", args)
+    }
+}

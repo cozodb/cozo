@@ -9,7 +9,7 @@ use crate::data::value::DataValue;
 use crate::parse::query::parse_query;
 use crate::parse::schema::{parse_schema, AttrTxItem};
 use crate::parse::sys::{parse_sys, SysOp};
-use crate::parse::tx::{parse_tx, Quintuple};
+use crate::parse::tx::{parse_tx, TripleTx};
 
 pub(crate) mod expr;
 pub(crate) mod pull;
@@ -27,7 +27,7 @@ pub(crate) type Pairs<'a> = pest::iterators::Pairs<'a, Rule>;
 
 pub(crate) enum CozoScript {
     Query(InputProgram),
-    Tx(Vec<Quintuple>),
+    Tx(TripleTx),
     Schema(Vec<AttrTxItem>),
     Sys(SysOp),
 }
