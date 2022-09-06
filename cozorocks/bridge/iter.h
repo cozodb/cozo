@@ -17,16 +17,13 @@ struct IterBridge {
     string upper_storage;
     Slice lower_bound;
     Slice upper_bound;
+    ColumnFamilyHandle *cf;
     unique_ptr<ReadOptions> r_opts;
 
-    explicit IterBridge(Transaction *tx_) : db(nullptr), tx(tx_), iter(nullptr), lower_bound(), upper_bound(),
-                                            r_opts(new ReadOptions) {
-        r_opts->ignore_range_deletions = true;
-        r_opts->auto_prefix_mode = true;
-    }
-
-    explicit IterBridge(DB *db_) : db(db_), tx(nullptr), iter(nullptr), lower_bound(), upper_bound(),
-                                   r_opts(new ReadOptions) {
+    explicit IterBridge(Transaction *tx_, ColumnFamilyHandle *cf_) : db(nullptr), tx(tx_), iter(nullptr), lower_bound(),
+                                                                     upper_bound(),
+                                                                     cf(cf_),
+                                                                     r_opts(new ReadOptions) {
         r_opts->ignore_range_deletions = true;
         r_opts->auto_prefix_mode = true;
     }
@@ -88,9 +85,9 @@ struct IterBridge {
 
     inline void start() {
         if (db == nullptr) {
-            iter.reset(tx->GetIterator(*r_opts));
+            iter.reset(tx->GetIterator(*r_opts, cf));
         } else {
-            iter.reset(db->NewIterator(*r_opts));
+            iter.reset(db->NewIterator(*r_opts, cf));
         }
     }
 

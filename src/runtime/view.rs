@@ -5,6 +5,7 @@ use miette::{bail, miette, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 
+use cozorocks::CfHandle::Snd;
 use cozorocks::{DbIter, RocksDb, Tx};
 
 use crate::data::symb::Symbol;
@@ -117,7 +118,12 @@ struct ViewRelIterator {
 
 impl ViewRelIterator {
     fn new(db: &RocksDb, lower: &[u8], upper: &[u8]) -> Self {
-        let mut inner = db.transact().start().iterator().upper_bound(upper).start();
+        let mut inner = db
+            .transact()
+            .start()
+            .iterator(Snd)
+            .upper_bound(upper)
+            .start();
         inner.seek(lower);
         Self {
             inner,
@@ -149,14 +155,14 @@ impl SessionTx {
         let key = DataValue::Str(name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
-        Ok(vtx.exists(&encoded, false)?)
+        Ok(vtx.exists(&encoded, false, Snd)?)
     }
     pub(crate) fn create_view_rel(&self, mut meta: ViewRelMetadata) -> Result<ViewRelStore> {
         let key = DataValue::Str(meta.name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
 
         let mut vtx = self.view_db.transact().set_snapshot(true).start();
-        if vtx.exists(&encoded, true)? {
+        if vtx.exists(&encoded, true, Snd)? {
             bail!(
                 "cannot create view {}: one with the same name already exists",
                 meta.name
@@ -164,17 +170,17 @@ impl SessionTx {
         };
         let last_id = self.view_store_id.fetch_add(1, Ordering::SeqCst);
         meta.id = ViewRelId::new(last_id + 1)?;
-        vtx.put(&encoded, &meta.id.raw_encode())?;
+        vtx.put(&encoded, &meta.id.raw_encode(), Snd)?;
         let name_key =
             Tuple(vec![DataValue::Str(meta.name.0.clone())]).encode_as_key(ViewRelId::SYSTEM);
 
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
-        vtx.put(&name_key, &meta_val)?;
+        vtx.put(&name_key, &meta_val, Snd)?;
 
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
-        vtx.put(&t_encoded, &meta.id.raw_encode())?;
+        vtx.put(&t_encoded, &meta.id.raw_encode(), Snd)?;
         vtx.commit()?;
         Ok(ViewRelStore {
             view_db: self.view_db.clone(),
@@ -190,7 +196,7 @@ impl SessionTx {
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
 
         let found = vtx
-            .get(&encoded, true)?
+            .get(&encoded, true, Snd)?
             .ok_or_else(|| miette!("cannot find stored view {}", name))?;
         let metadata: ViewRelMetadata = rmp_serde::from_slice(&found).into_diagnostic()?;
         Ok(ViewRelStore {
@@ -203,10 +209,10 @@ impl SessionTx {
         let store = self.do_get_view_rel(name, &vtx)?;
         let key = DataValue::Str(name.0.clone());
         let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
-        vtx.del(&encoded)?;
+        vtx.del(&encoded, Snd)?;
         let lower_bound = Tuple::default().encode_as_key(store.metadata.id);
         let upper_bound = Tuple::default().encode_as_key(store.metadata.id.next()?);
-        self.view_db.range_del(&lower_bound, &upper_bound)?;
+        self.view_db.range_del(&lower_bound, &upper_bound, Snd)?;
         vtx.commit()?;
         Ok(())
     }

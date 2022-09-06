@@ -4,6 +4,7 @@ use itertools::Itertools;
 use miette::{ensure, miette, IntoDiagnostic, Result};
 use serde_json::{json, Map};
 use tempfile::NamedTempFile;
+use cozorocks::CfHandle::Snd;
 
 use crate::data::attr::Attribute;
 use crate::data::id::{EntityId, Validity};
@@ -72,7 +73,7 @@ impl SessionTx {
             for data in res_iter {
                 let data = data?;
                 let encoded = data.encode_as_key(view_store.metadata.id);
-                vtx.del(&encoded)?;
+                vtx.del(&encoded, Snd)?;
             }
 
             vtx.commit()?;
@@ -80,14 +81,18 @@ impl SessionTx {
             let file = NamedTempFile::new().into_diagnostic()?;
             let path = file.into_temp_path();
             let path = path.to_string_lossy();
-            let mut writer = self.view_db.get_sst_writer(&path)?;
+            let mut writer = self.view_db.get_sst_writer(&path, Snd)?;
+            let mut written = false;
             for data in res_iter {
                 let data = data?;
                 let encoded = data.encode_as_key(view_store.metadata.id);
                 writer.put(&encoded, &[])?;
+                written = true;
             }
-            writer.finish()?;
-            self.view_db.ingest_sst_file(&path)?;
+            if written {
+                writer.finish()?;
+                self.view_db.ingest_sst_file(&path, Snd)?;
+            }
         }
         Ok(())
     }

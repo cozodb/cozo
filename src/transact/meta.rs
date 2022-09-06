@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 use miette::{bail, ensure, miette, Result};
 
 use cozorocks::{DbIter, IterBuilder};
+use cozorocks::CfHandle::Pri;
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
@@ -44,7 +45,7 @@ impl SessionTx {
         }
 
         let anchor = encode_sentinel_attr_by_id(aid);
-        Ok(match self.tx.get(&anchor, false)? {
+        Ok(match self.tx.get(&anchor, false, Pri)? {
             None => {
                 self.attr_by_id_cache.borrow_mut().insert(aid, None);
                 None
@@ -76,7 +77,7 @@ impl SessionTx {
         }
 
         let anchor = encode_sentinel_attr_by_name(name);
-        Ok(match self.tx.get(&anchor, false)? {
+        Ok(match self.tx.get(&anchor, false, Pri)? {
             None => {
                 self.attr_by_kw_cache
                     .borrow_mut()
@@ -108,7 +109,7 @@ impl SessionTx {
     }
 
     pub(crate) fn all_attrs(&mut self) -> impl Iterator<Item = Result<Attribute>> {
-        AttrIter::new(self.tx.iterator())
+        AttrIter::new(self.tx.iterator(Pri))
     }
 
     /// conflict if new attribute has same name as existing one
@@ -153,7 +154,7 @@ impl SessionTx {
             );
             let kw_sentinel = encode_sentinel_attr_by_name(&existing.name);
             let attr_data = existing.encode_with_op_and_tx(StoreOp::Retract, tx_id);
-            self.tx.put(&kw_sentinel, &attr_data)?;
+            self.tx.put(&kw_sentinel, &attr_data, Pri)?;
         }
         self.put_attr(&attr, StoreOp::Assert)
     }
@@ -162,11 +163,11 @@ impl SessionTx {
         let tx_id = self.get_write_tx_id()?;
         let attr_data = attr.encode_with_op_and_tx(op, tx_id);
         let id_encoded = encode_attr_by_id(attr.id, tx_id);
-        self.tx.put(&id_encoded, &attr_data)?;
+        self.tx.put(&id_encoded, &attr_data, Pri)?;
         let id_sentinel = encode_sentinel_attr_by_id(attr.id);
-        self.tx.put(&id_sentinel, &attr_data)?;
+        self.tx.put(&id_sentinel, &attr_data, Pri)?;
         let kw_sentinel = encode_sentinel_attr_by_name(&attr.name);
-        self.tx.put(&kw_sentinel, &attr_data)?;
+        self.tx.put(&kw_sentinel, &attr_data, Pri)?;
         Ok(attr.id)
     }
 

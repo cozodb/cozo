@@ -42,16 +42,16 @@ struct SstFileWriterBridge {
 
 struct RocksDbBridge {
     unique_ptr<Comparator> comparator;
-    unique_ptr<Options> options;
-    unique_ptr<TransactionDBOptions> tdb_opts;
     unique_ptr<TransactionDB> db;
+    vector<ColumnFamilyHandle *> cf_handles;
 
     bool destroy_on_exit;
     string db_path;
 
-    inline unique_ptr<SstFileWriterBridge> get_sst_writer(rust::Str path, RocksDbStatus &status) const {
+    inline unique_ptr<SstFileWriterBridge> get_sst_writer(rust::Str path, size_t idx, RocksDbStatus &status) const {
         DB *db_ = get_base_db();
-        Options options_ = db_->GetOptions();
+        auto cf = cf_handles[idx];
+        Options options_ = db_->GetOptions(cf);
         auto sst_file_writer = std::make_unique<SstFileWriterBridge>(EnvOptions(), options_);
         string path_(path);
 
@@ -59,11 +59,12 @@ struct RocksDbBridge {
         return sst_file_writer;
     }
 
-    inline void ingest_sst(rust::Str path, RocksDbStatus &status) const {
+    inline void ingest_sst(rust::Str path, size_t idx, RocksDbStatus &status) const {
         IngestExternalFileOptions ifo;
         DB *db_ = get_base_db();
         string path_(path);
-        write_status(db_->IngestExternalFile({std::move(path_)}, ifo), status);
+        auto cf = cf_handles[idx];
+        write_status(db_->IngestExternalFile(cf, {std::move(path_)}, ifo), status);
     }
 
     [[nodiscard]] inline const string &get_db_path() const {
@@ -72,13 +73,14 @@ struct RocksDbBridge {
 
 
     [[nodiscard]] inline unique_ptr<TxBridge> transact() const {
-        auto ret = make_unique<TxBridge>(&*this->db);
+        auto ret = make_unique<TxBridge>(&*this->db, cf_handles);
         return ret;
     }
 
-    inline void del_range(RustBytes start, RustBytes end, RocksDbStatus &status) const {
+    inline void del_range(RustBytes start, RustBytes end, size_t idx, RocksDbStatus &status) const {
         WriteBatch batch;
-        auto s = batch.DeleteRange(db->DefaultColumnFamily(), convert_slice(start), convert_slice(end));
+        auto cf = cf_handles[idx];
+        auto s = batch.DeleteRange(cf, convert_slice(start), convert_slice(end));
         if (!s.ok()) {
             write_status(s, status);
             return;
@@ -91,11 +93,12 @@ struct RocksDbBridge {
         write_status(s2, status);
     }
 
-    void compact_range(RustBytes start, RustBytes end, RocksDbStatus &status) const {
+    void compact_range(RustBytes start, RustBytes end, size_t idx, RocksDbStatus &status) const {
         CompactRangeOptions options;
+        auto cf = cf_handles[idx];
         auto start_s = convert_slice(start);
         auto end_s = convert_slice(end);
-        auto s = db->CompactRange(options, &start_s, &end_s);
+        auto s = db->CompactRange(options, cf, &start_s, &end_s);
         write_status(s, status);
     }
 

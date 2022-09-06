@@ -4,6 +4,7 @@ use cxx::*;
 
 use crate::bridge::ffi::*;
 use crate::bridge::tx::TxBuilder;
+use crate::CfHandle;
 
 #[derive(Default, Clone)]
 pub struct DbBuilder<'a> {
@@ -153,9 +154,9 @@ impl RocksDb {
         }
     }
     #[inline]
-    pub fn range_del(&self, lower: &[u8], upper: &[u8]) -> Result<(), RocksDbStatus> {
+    pub fn range_del(&self, lower: &[u8], upper: &[u8], handle: CfHandle) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.del_range(lower, upper, &mut status);
+        self.inner.del_range(lower, upper, handle.into(), &mut status);
         if status.is_ok() {
             Ok(())
         } else {
@@ -163,27 +164,27 @@ impl RocksDb {
         }
     }
     #[inline]
-    pub fn range_compact(&self, lower: &[u8], upper: &[u8]) -> Result<(), RocksDbStatus> {
+    pub fn range_compact(&self, lower: &[u8], upper: &[u8], handle: CfHandle) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.compact_range(lower, upper, &mut status);
+        self.inner.compact_range(lower, upper, handle.into(), &mut status);
         if status.is_ok() {
             Ok(())
         } else {
             Err(status)
         }
     }
-    pub fn get_sst_writer(&self, path: &str) -> Result<SstWriter, RocksDbStatus> {
+    pub fn get_sst_writer(&self, path: &str, handle: CfHandle) -> Result<SstWriter, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        let ret = self.inner.get_sst_writer(path, &mut status);
+        let ret = self.inner.get_sst_writer(path, handle.into(), &mut status);
         if status.is_ok() {
             Ok(SstWriter { inner: ret })
         } else {
             Err(status)
         }
     }
-    pub fn ingest_sst_file(&self, path: &str) -> Result<(), RocksDbStatus> {
+    pub fn ingest_sst_file(&self, path: &str, handle: CfHandle) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.ingest_sst(path, &mut status);
+        self.inner.ingest_sst(path, handle.into(), &mut status);
         if status.is_ok() {
             Ok(())
         } else {

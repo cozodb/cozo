@@ -14,6 +14,7 @@ use serde_json::json;
 use smartstring::SmartString;
 
 use cozorocks::{DbBuilder, DbIter, RocksDb};
+use cozorocks::CfHandle::{Pri, Snd};
 
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::encode::{largest_key, smallest_key};
@@ -116,14 +117,14 @@ impl Db {
     pub fn compact_main(&self) -> Result<()> {
         let l = smallest_key();
         let u = largest_key();
-        self.db.range_compact(&l, &u)?;
+        self.db.range_compact(&l, &u, Pri)?;
         Ok(())
     }
 
     pub fn compact_view(&self) -> Result<()> {
         let l = Tuple::default().encode_as_key(ViewRelId(0));
         let u = Tuple(vec![DataValue::Bot]).encode_as_key(ViewRelId(u64::MAX));
-        self.db.range_compact(&l, &u)?;
+        self.db.range_compact(&l, &u, Snd)?;
         Ok(())
     }
 
@@ -192,7 +193,7 @@ impl Db {
         Ok(ret)
     }
     pub fn total_iter(&self) -> DbIter {
-        let mut it = self.db.transact().start().iterator().start();
+        let mut it = self.db.transact().start().iterator(Pri).start();
         it.seek_to_start();
         it
     }
@@ -461,7 +462,7 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let mut vtx = self.view_db.transact().start();
-        vtx.put(&key, v)?;
+        vtx.put(&key, v, Snd)?;
         vtx.commit()?;
         Ok(())
     }
@@ -472,7 +473,7 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let mut vtx = self.view_db.transact().start();
-        vtx.del(&key)?;
+        vtx.del(&key, Snd)?;
         vtx.commit()?;
         Ok(())
     }
@@ -483,7 +484,7 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
-        Ok(match vtx.get(&key, false)? {
+        Ok(match vtx.get(&key, false, Snd)? {
             None => None,
             Some(slice) => Some(slice.to_vec()),
         })
@@ -501,7 +502,7 @@ impl Db {
             .view_db
             .transact()
             .start()
-            .iterator()
+            .iterator(Snd)
             .upper_bound(&upper_bound.encode_as_key(ViewRelId::SYSTEM))
             .start();
         it.seek(&lower_bound.encode_as_key(ViewRelId::SYSTEM));
@@ -559,7 +560,7 @@ impl Db {
             .view_db
             .transact()
             .start()
-            .iterator()
+            .iterator(Snd)
             .upper_bound(&upper)
             .start();
         it.seek(&lower);

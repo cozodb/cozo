@@ -122,19 +122,27 @@ pub(crate) mod ffi {
             cmp_impl: fn(&[u8], &[u8]) -> i8,
         ) -> SharedPtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
-        fn del_range(self: &RocksDbBridge, lower: &[u8], upper: &[u8], status: &mut RocksDbStatus);
+        fn del_range(
+            self: &RocksDbBridge,
+            lower: &[u8],
+            upper: &[u8],
+            idx: usize,
+            status: &mut RocksDbStatus,
+        );
         fn compact_range(
             self: &RocksDbBridge,
             lower: &[u8],
             upper: &[u8],
+            idx: usize,
             status: &mut RocksDbStatus,
         );
         fn get_sst_writer(
             self: &RocksDbBridge,
             path: &str,
+            idx: usize,
             status: &mut RocksDbStatus,
         ) -> UniquePtr<SstFileWriterBridge>;
-        fn ingest_sst(self: &RocksDbBridge, path: &str, status: &mut RocksDbStatus);
+        fn ingest_sst(self: &RocksDbBridge, path: &str, idx: usize, status: &mut RocksDbStatus);
 
         type SstFileWriterBridge;
         fn put(
@@ -157,17 +165,30 @@ pub(crate) mod ffi {
             self: &TxBridge,
             key: &[u8],
             for_update: bool,
+            idx: usize,
             status: &mut RocksDbStatus,
         ) -> UniquePtr<PinnableSlice>;
-        fn exists(self: &TxBridge, key: &[u8], for_update: bool, status: &mut RocksDbStatus);
-        fn put(self: Pin<&mut TxBridge>, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
-        fn del(self: Pin<&mut TxBridge>, key: &[u8], status: &mut RocksDbStatus);
+        fn exists(
+            self: &TxBridge,
+            key: &[u8],
+            for_update: bool,
+            idx: usize,
+            status: &mut RocksDbStatus,
+        );
+        fn put(
+            self: Pin<&mut TxBridge>,
+            key: &[u8],
+            val: &[u8],
+            idx: usize,
+            status: &mut RocksDbStatus,
+        );
+        fn del(self: Pin<&mut TxBridge>, key: &[u8], idx: usize, status: &mut RocksDbStatus);
         fn commit(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn rollback(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn rollback_to_savepoint(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn pop_savepoint(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn set_savepoint(self: Pin<&mut TxBridge>);
-        fn iterator(self: &TxBridge) -> UniquePtr<IterBridge>;
+        fn iterator(self: &TxBridge, idx: usize) -> UniquePtr<IterBridge>;
 
         type IterBridge;
         fn start(self: Pin<&mut IterBridge>);

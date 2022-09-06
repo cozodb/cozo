@@ -9,6 +9,7 @@ use serde::Serialize;
 use smallvec::SmallVec;
 
 use cozorocks::{DbIter, RocksDb, Tx};
+use cozorocks::CfHandle::{Pri, Snd};
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
@@ -116,7 +117,7 @@ impl SessionTx {
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
         let vtx = self.view_db.transact().start();
-        let found = vtx.get(&t_encoded, false)?;
+        let found = vtx.get(&t_encoded, false, Snd)?;
         match found {
             None => Ok(ViewRelId::SYSTEM),
             Some(slice) => ViewRelId::raw_decode(&slice),
@@ -138,7 +139,7 @@ impl SessionTx {
         let encoded = encode_tx(tx_id);
 
         let log = TxLog::new(tx_id, comment);
-        self.tx.put(&encoded, &log.encode())?;
+        self.tx.put(&encoded, &log.encode(), Pri)?;
         self.tx.commit()?;
         if refresh {
             let new_tx_id = TxId(self.last_tx_id.fetch_add(1, Ordering::AcqRel) + 1);
@@ -155,7 +156,7 @@ impl SessionTx {
     }
     pub(crate) fn bounded_scan_first(&self, lower: &[u8], upper: &[u8]) -> DbIter {
         // this is tricky, must be written like this!
-        let mut it = self.tx.iterator().upper_bound(upper).start();
+        let mut it = self.tx.iterator(Pri).upper_bound(upper).start();
         it.seek(lower);
         it
     }
@@ -164,7 +165,7 @@ impl SessionTx {
         // this is tricky, must be written like this!
         let mut it = self
             .tx
-            .iterator()
+            .iterator(Pri)
             .lower_bound(lower)
             .upper_bound(upper)
             .start();
