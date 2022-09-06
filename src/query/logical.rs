@@ -5,8 +5,8 @@ use miette::{bail, miette, Result};
 
 use crate::data::expr::Expr;
 use crate::data::program::{
-    InputAtom, InputAttrTripleAtom, InputRuleApplyAtom, InputTerm, InputViewApplyAtom,
-    NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, NormalFormViewApplyAtom,
+    InputAtom, InputAttrTripleAtom, InputRuleApplyAtom, InputTerm, InputRelationApplyAtom,
+    NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRuleApplyAtom, NormalFormRelationApplyAtom,
     TempSymbGen, Unification,
 };
 use crate::runtime::transact::SessionTx;
@@ -47,7 +47,7 @@ impl InputAtom {
             a @ (InputAtom::AttrTriple(_)
             | InputAtom::Rule(_)
             | InputAtom::Predicate(_)
-            | InputAtom::View(_)) => a,
+            | InputAtom::Relation(_)) => a,
             InputAtom::Conjunction(args) => InputAtom::Conjunction(
                 args.into_iter()
                     .map(|a| a.negation_normal_form())
@@ -60,7 +60,7 @@ impl InputAtom {
             ),
             InputAtom::Unification(unif) => InputAtom::Unification(unif),
             InputAtom::Negation(arg) => match *arg {
-                a @ (InputAtom::AttrTriple(_) | InputAtom::Rule(_) | InputAtom::View(_)) => {
+                a @ (InputAtom::AttrTriple(_) | InputAtom::Rule(_) | InputAtom::Relation(_)) => {
                     InputAtom::Negation(Box::new(a))
                 }
                 InputAtom::Predicate(p) => InputAtom::Predicate(p.negate()),
@@ -117,7 +117,7 @@ impl InputAtom {
             }
             InputAtom::AttrTriple(a) => a.normalize(false, gen, tx)?,
             InputAtom::Rule(r) => r.normalize(false, gen),
-            InputAtom::View(v) => v.normalize(false, gen),
+            InputAtom::Relation(v) => v.normalize(false, gen),
             InputAtom::Predicate(mut p) => {
                 p.partial_eval()?;
                 Disjunction::singlet(NormalFormAtom::Predicate(p))
@@ -125,7 +125,7 @@ impl InputAtom {
             InputAtom::Negation(n) => match *n {
                 InputAtom::Rule(r) => r.normalize(true, gen),
                 InputAtom::AttrTriple(r) => r.normalize(true, gen, tx)?,
-                InputAtom::View(v) => v.normalize(true, gen),
+                InputAtom::Relation(v) => v.normalize(true, gen),
                 _ => unreachable!(),
             },
             InputAtom::Unification(u) => Disjunction::singlet(NormalFormAtom::Unification(u)),
@@ -280,7 +280,7 @@ impl InputAttrTripleAtom {
     }
 }
 
-impl InputViewApplyAtom {
+impl InputRelationApplyAtom {
     fn normalize(self, is_negated: bool, gen: &mut TempSymbGen) -> Disjunction {
         let mut ret = Vec::with_capacity(self.args.len() + 1);
         let mut args = Vec::with_capacity(self.args.len());
@@ -315,12 +315,12 @@ impl InputViewApplyAtom {
         }
 
         ret.push(if is_negated {
-            NormalFormAtom::NegatedView(NormalFormViewApplyAtom {
+            NormalFormAtom::NegatedRelation(NormalFormRelationApplyAtom {
                 name: self.name,
                 args,
             })
         } else {
-            NormalFormAtom::View(NormalFormViewApplyAtom {
+            NormalFormAtom::Relation(NormalFormRelationApplyAtom {
                 name: self.name,
                 args,
             })

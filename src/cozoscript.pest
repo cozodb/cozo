@@ -26,7 +26,7 @@ var = @{(XID_START | "_") ~ (XID_CONTINUE | "_")*}
 param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 algo_ident = @{XID_START ~ ("_" | XID_CONTINUE)* ~ "!"}
-view_ident = @{":" ~ compound_ident}
+relation_ident = @{":" ~ compound_ident}
 compound_ident = {ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"}
@@ -38,18 +38,18 @@ head_arg = {aggr_arg | var}
 aggr_arg = {ident ~ "(" ~ var ~ ("," ~ expr)* ~ ")"}
 algo_arg = _{algo_rel | algo_opt_pair}
 algo_opt_pair = {ident ~ ":" ~ expr}
-algo_rel = {algo_rule_rel | algo_view_rel | algo_triple_rel}
+algo_rel = {algo_rule_rel | algo_relation_rel | algo_triple_rel}
 algo_rule_rel = {ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
-algo_view_rel = {view_ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
+algo_relation_rel = {relation_ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
 algo_triple_rel = { "[" ~ var ~ rev_triple_marker? ~ compound_ident ~ var ~ "]"}
 rev_triple_marker = {"<"}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
 rule_apply = {ident ~ "[" ~ apply_args ~ "]"}
-view_apply = {view_ident ~ "[" ~ apply_args ~ "]"}
+relation_apply = {relation_ident ~ "[" ~ apply_args ~ "]"}
 
 disjunction = {(atom ~ "or" )* ~ atom}
-atom = _{grouped | triple | negation | view_apply | rule_apply | unify_multi | unify | expr }
+atom = _{grouped | triple | negation | relation_apply | rule_apply | unify_multi | unify | expr }
 unify = {var ~ ("is" | "<-") ~ expr}
 unify_multi = {var ~ ("is_in" | ("<-" ~ "..")) ~ expr}
 negation = {"not" ~ atom}
@@ -86,17 +86,17 @@ term = _{ literal | param | grouping | apply | var | list }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = _{(limit_option|offset_option|out_option|sort_option|view_option|timeout_option) ~ ";"}
+option = _{(limit_option|offset_option|out_option|sort_option|relation_option|timeout_option) ~ ";"}
 limit_option = {":limit"  ~ expr}
 offset_option = {":offset" ~ expr}
 out_option = {":pull" ~ var ~ ("@" ~ expr)? ~ out_spec}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
-view_option = {":view" ~ view_op ~ compound_ident}
-view_op = _{view_create | view_rederive | view_put | view_retract}
-view_create = {"create"}
-view_rederive = {"rederive"}
-view_put = {"put"}
-view_retract = {"retract"}
+relation_option = {":relation" ~ relation_op ~ compound_ident}
+relation_op = _{relation_create | relation_rederive | relation_put | relation_retract}
+relation_create = {"create"}
+relation_rederive = {"rederive"}
+relation_put = {"put"}
+relation_retract = {"retract"}
 timeout_option = {":timeout" ~ expr }
 sort_arg = { sort_dir? ~ var }
 sort_dir = _{ sort_asc | sort_desc }

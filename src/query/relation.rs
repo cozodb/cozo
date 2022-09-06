@@ -14,23 +14,23 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::runtime::derived::{DerivedRelStore, DerivedRelStoreId};
+use crate::runtime::relation::RelationMetadata;
 use crate::runtime::transact::SessionTx;
-use crate::runtime::view::ViewRelStore;
 
-pub(crate) enum Relation {
-    Fixed(InlineFixedRelation),
-    Triple(TripleRelation),
-    Derived(DerivedRelation),
-    View(ViewRelation),
+pub(crate) enum RelAlgebra {
+    Fixed(InlineFixedRA),
+    Triple(TripleRA),
+    Derived(DerivedRA),
+    Relation(RelationRA),
     Join(Box<InnerJoin>),
     NegJoin(Box<NegJoin>),
-    Reorder(ReorderRelation),
-    Filter(FilteredRelation),
-    Unification(UnificationRelation),
+    Reorder(ReorderRA),
+    Filter(FilteredRA),
+    Unification(UnificationRA),
 }
 
-pub(crate) struct UnificationRelation {
-    parent: Box<Relation>,
+pub(crate) struct UnificationRA {
+    parent: Box<RelAlgebra>,
     binding: Symbol,
     expr: Expr,
     is_multi: bool,
@@ -56,7 +56,7 @@ fn eliminate_from_tuple(mut ret: Tuple, eliminate_indices: &BTreeSet<usize>) -> 
     ret
 }
 
-impl UnificationRelation {
+impl UnificationRA {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let parent_bindings: BTreeMap<_, _> = self
             .parent
@@ -128,13 +128,13 @@ impl UnificationRelation {
     }
 }
 
-pub(crate) struct FilteredRelation {
-    parent: Box<Relation>,
+pub(crate) struct FilteredRA {
+    parent: Box<RelAlgebra>,
     pred: Vec<Expr>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
 
-impl FilteredRelation {
+impl FilteredRA {
     pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         for binding in self.parent.bindings_before_eliminate() {
             if !used.contains(&binding) {
@@ -200,11 +200,11 @@ impl Debug for BindingFormatter {
     }
 }
 
-impl Debug for Relation {
+impl Debug for RelAlgebra {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let bindings = BindingFormatter(self.bindings_after_eliminate());
         match self {
-            Relation::Fixed(r) => {
+            RelAlgebra::Fixed(r) => {
                 if r.bindings.is_empty() && r.data.len() == 1 {
                     f.write_str("Unit")
                 } else if r.data.len() == 1 {
@@ -219,25 +219,25 @@ impl Debug for Relation {
                         .finish()
                 }
             }
-            Relation::Triple(r) => f
+            RelAlgebra::Triple(r) => f
                 .debug_tuple("Triple")
                 .field(&bindings)
                 .field(&r.attr.name)
                 .field(&r.filters)
                 .finish(),
-            Relation::Derived(r) => f
+            RelAlgebra::Derived(r) => f
                 .debug_tuple("Derived")
                 .field(&bindings)
                 .field(&r.storage.rule_name)
                 .field(&r.filters)
                 .finish(),
-            Relation::View(r) => f
+            RelAlgebra::Relation(r) => f
                 .debug_tuple("Derived")
                 .field(&bindings)
-                .field(&r.storage.metadata.name)
+                .field(&r.storage.name)
                 .field(&r.filters)
                 .finish(),
-            Relation::Join(r) => {
+            RelAlgebra::Join(r) => {
                 if r.left.is_unit() {
                     r.right.fmt(f)
                 } else {
@@ -249,25 +249,25 @@ impl Debug for Relation {
                         .finish()
                 }
             }
-            Relation::NegJoin(r) => f
+            RelAlgebra::NegJoin(r) => f
                 .debug_tuple("NegJoin")
                 .field(&bindings)
                 .field(&r.joiner)
                 .field(&r.left)
                 .field(&r.right)
                 .finish(),
-            Relation::Reorder(r) => f
+            RelAlgebra::Reorder(r) => f
                 .debug_tuple("Reorder")
                 .field(&r.new_order)
                 .field(&r.relation)
                 .finish(),
-            Relation::Filter(r) => f
+            RelAlgebra::Filter(r) => f
                 .debug_tuple("Filter")
                 .field(&bindings)
                 .field(&r.pred)
                 .field(&r.parent)
                 .finish(),
-            Relation::Unification(r) => f
+            RelAlgebra::Unification(r) => f
                 .debug_tuple("Unify")
                 .field(&bindings)
                 .field(&r.parent)
@@ -278,49 +278,49 @@ impl Debug for Relation {
     }
 }
 
-impl Relation {
+impl RelAlgebra {
     pub(crate) fn get_filters(&mut self) -> Option<&mut Vec<Expr>> {
         match self {
-            Relation::Triple(t) => Some(&mut t.filters),
-            Relation::Derived(d) => Some(&mut d.filters),
-            Relation::Join(j) => j.right.get_filters(),
-            Relation::Filter(f) => Some(&mut f.pred),
+            RelAlgebra::Triple(t) => Some(&mut t.filters),
+            RelAlgebra::Derived(d) => Some(&mut d.filters),
+            RelAlgebra::Join(j) => j.right.get_filters(),
+            RelAlgebra::Filter(f) => Some(&mut f.pred),
             _ => None,
         }
     }
     pub(crate) fn fill_normal_binding_indices(&mut self) -> Result<()> {
         match self {
-            Relation::Fixed(_) => {}
-            Relation::Triple(t) => {
+            RelAlgebra::Fixed(_) => {}
+            RelAlgebra::Triple(t) => {
                 t.fill_binding_indices()?;
             }
-            Relation::Derived(d) => {
+            RelAlgebra::Derived(d) => {
                 d.fill_binding_indices()?;
             }
-            Relation::View(v) => {
+            RelAlgebra::Relation(v) => {
                 v.fill_binding_indices()?;
             }
-            Relation::Reorder(r) => {
+            RelAlgebra::Reorder(r) => {
                 r.relation.fill_normal_binding_indices()?;
             }
-            Relation::Filter(f) => {
+            RelAlgebra::Filter(f) => {
                 f.parent.fill_normal_binding_indices()?;
                 f.fill_binding_indices()?
             }
-            Relation::NegJoin(r) => {
+            RelAlgebra::NegJoin(r) => {
                 r.left.fill_normal_binding_indices()?;
             }
-            Relation::Unification(u) => {
+            RelAlgebra::Unification(u) => {
                 u.parent.fill_normal_binding_indices()?;
                 u.fill_binding_indices()?
             }
-            Relation::Join(r) => {
+            RelAlgebra::Join(r) => {
                 r.left.fill_normal_binding_indices()?;
             }
         }
-        if matches!(self, Relation::Join(_)) {
+        if matches!(self, RelAlgebra::Join(_)) {
             let bindings = self.bindings_before_eliminate();
-            if let Relation::Join(r) = self {
+            if let RelAlgebra::Join(r) = self {
                 r.right.fill_join_binding_indices(bindings)?;
             }
         }
@@ -328,10 +328,10 @@ impl Relation {
     }
     pub(crate) fn fill_join_binding_indices(&mut self, bindings: Vec<Symbol>) -> Result<()> {
         match self {
-            Relation::Triple(t) => {
+            RelAlgebra::Triple(t) => {
                 t.fill_join_binding_indices(&bindings)?;
             }
-            Relation::Derived(d) => {
+            RelAlgebra::Derived(d) => {
                 d.fill_join_binding_indices(&bindings)?;
             }
             r => {
@@ -341,27 +341,27 @@ impl Relation {
         Ok(())
     }
     pub(crate) fn unit() -> Self {
-        Self::Fixed(InlineFixedRelation::unit())
+        Self::Fixed(InlineFixedRA::unit())
     }
     pub(crate) fn is_unit(&self) -> bool {
-        if let Relation::Fixed(r) = self {
+        if let RelAlgebra::Fixed(r) = self {
             r.bindings.is_empty() && r.data.len() == 1
         } else {
             false
         }
     }
-    pub(crate) fn cartesian_join(self, right: Relation) -> Self {
+    pub(crate) fn cartesian_join(self, right: RelAlgebra) -> Self {
         self.join(right, vec![], vec![])
     }
     pub(crate) fn derived(bindings: Vec<Symbol>, storage: DerivedRelStore) -> Self {
-        Self::Derived(DerivedRelation {
+        Self::Derived(DerivedRA {
             bindings,
             storage,
             filters: vec![],
         })
     }
-    pub(crate) fn view(bindings: Vec<Symbol>, storage: ViewRelStore) -> Self {
-        Self::View(ViewRelation {
+    pub(crate) fn relation(bindings: Vec<Symbol>, storage: RelationMetadata) -> Self {
+        Self::Relation(RelationRA {
             bindings,
             storage,
             filters: vec![],
@@ -373,7 +373,7 @@ impl Relation {
         e_binding: Symbol,
         v_binding: Symbol,
     ) -> Self {
-        Self::Triple(TripleRelation {
+        Self::Triple(TripleRA {
             attr,
             vld,
             bindings: [e_binding, v_binding],
@@ -381,20 +381,20 @@ impl Relation {
         })
     }
     pub(crate) fn reorder(self, new_order: Vec<Symbol>) -> Self {
-        Self::Reorder(ReorderRelation {
+        Self::Reorder(ReorderRA {
             relation: Box::new(self),
             new_order,
         })
     }
     pub(crate) fn filter(self, filter: Expr) -> Self {
-        Relation::Filter(FilteredRelation {
+        RelAlgebra::Filter(FilteredRA {
             parent: Box::new(self),
             pred: vec![filter],
             to_eliminate: Default::default(),
         })
     }
     pub(crate) fn unify(self, binding: Symbol, expr: Expr, is_multi: bool) -> Self {
-        Relation::Unification(UnificationRelation {
+        RelAlgebra::Unification(UnificationRA {
             parent: Box::new(self),
             binding,
             expr,
@@ -404,11 +404,11 @@ impl Relation {
     }
     pub(crate) fn join(
         self,
-        right: Relation,
+        right: RelAlgebra,
         left_keys: Vec<Symbol>,
         right_keys: Vec<Symbol>,
     ) -> Self {
-        Relation::Join(Box::new(InnerJoin {
+        RelAlgebra::Join(Box::new(InnerJoin {
             left: self,
             right,
             joiner: Joiner {
@@ -420,11 +420,11 @@ impl Relation {
     }
     pub(crate) fn neg_join(
         self,
-        right: Relation,
+        right: RelAlgebra,
         left_keys: Vec<Symbol>,
         right_keys: Vec<Symbol>,
     ) -> Self {
-        Relation::NegJoin(Box::new(NegJoin {
+        RelAlgebra::NegJoin(Box::new(NegJoin {
             left: self,
             right,
             joiner: Joiner {
@@ -437,12 +437,12 @@ impl Relation {
 }
 
 #[derive(Debug)]
-pub(crate) struct ReorderRelation {
-    pub(crate) relation: Box<Relation>,
+pub(crate) struct ReorderRA {
+    pub(crate) relation: Box<RelAlgebra>,
     pub(crate) new_order: Vec<Symbol>,
 }
 
-impl ReorderRelation {
+impl ReorderRA {
     fn bindings(&self) -> Vec<Symbol> {
         self.new_order.clone()
     }
@@ -481,13 +481,13 @@ impl ReorderRelation {
 }
 
 #[derive(Debug)]
-pub(crate) struct InlineFixedRelation {
+pub(crate) struct InlineFixedRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) data: Vec<Vec<DataValue>>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
 
-impl InlineFixedRelation {
+impl InlineFixedRA {
     pub(crate) fn unit() -> Self {
         Self {
             bindings: vec![],
@@ -505,7 +505,7 @@ impl InlineFixedRelation {
     }
 }
 
-impl InlineFixedRelation {
+impl InlineFixedRA {
     pub(crate) fn join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
@@ -567,7 +567,7 @@ impl InlineFixedRelation {
 }
 
 #[derive(Debug)]
-pub(crate) struct TripleRelation {
+pub(crate) struct TripleRA {
     pub(crate) attr: Attribute,
     pub(crate) vld: Validity,
     pub(crate) bindings: [Symbol; 2],
@@ -609,7 +609,7 @@ fn filter_iter(
     .map(flatten_err)
 }
 
-impl TripleRelation {
+impl TripleRA {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
@@ -1327,13 +1327,13 @@ fn get_eliminate_indices(bindings: &[Symbol], eliminate: &BTreeSet<Symbol>) -> B
 }
 
 #[derive(Debug)]
-pub(crate) struct ViewRelation {
+pub(crate) struct RelationRA {
     pub(crate) bindings: Vec<Symbol>,
-    pub(crate) storage: ViewRelStore,
+    pub(crate) storage: RelationMetadata,
     pub(crate) filters: Vec<Expr>,
 }
 
-impl ViewRelation {
+impl RelationRA {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
@@ -1502,13 +1502,13 @@ impl ViewRelation {
 }
 
 #[derive(Debug)]
-pub(crate) struct DerivedRelation {
+pub(crate) struct DerivedRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: DerivedRelStore,
     pub(crate) filters: Vec<Expr>,
 }
 
-impl DerivedRelation {
+impl DerivedRA {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
@@ -1773,32 +1773,32 @@ impl Joiner {
     }
 }
 
-impl Relation {
+impl RelAlgebra {
     pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         match self {
-            Relation::Fixed(r) => r.do_eliminate_temp_vars(used),
-            Relation::Triple(_r) => Ok(()),
-            Relation::Derived(_r) => Ok(()),
-            Relation::View(_v) => Ok(()),
-            Relation::Join(r) => r.do_eliminate_temp_vars(used),
-            Relation::Reorder(r) => r.relation.eliminate_temp_vars(used),
-            Relation::Filter(r) => r.do_eliminate_temp_vars(used),
-            Relation::NegJoin(r) => r.do_eliminate_temp_vars(used),
-            Relation::Unification(r) => r.do_eliminate_temp_vars(used),
+            RelAlgebra::Fixed(r) => r.do_eliminate_temp_vars(used),
+            RelAlgebra::Triple(_r) => Ok(()),
+            RelAlgebra::Derived(_r) => Ok(()),
+            RelAlgebra::Relation(_v) => Ok(()),
+            RelAlgebra::Join(r) => r.do_eliminate_temp_vars(used),
+            RelAlgebra::Reorder(r) => r.relation.eliminate_temp_vars(used),
+            RelAlgebra::Filter(r) => r.do_eliminate_temp_vars(used),
+            RelAlgebra::NegJoin(r) => r.do_eliminate_temp_vars(used),
+            RelAlgebra::Unification(r) => r.do_eliminate_temp_vars(used),
         }
     }
 
     fn eliminate_set(&self) -> Option<&BTreeSet<Symbol>> {
         match self {
-            Relation::Fixed(r) => Some(&r.to_eliminate),
-            Relation::Triple(_) => None,
-            Relation::Derived(_) => None,
-            Relation::View(_) => None,
-            Relation::Join(r) => Some(&r.to_eliminate),
-            Relation::Reorder(_) => None,
-            Relation::Filter(r) => Some(&r.to_eliminate),
-            Relation::NegJoin(r) => Some(&r.to_eliminate),
-            Relation::Unification(u) => Some(&u.to_eliminate),
+            RelAlgebra::Fixed(r) => Some(&r.to_eliminate),
+            RelAlgebra::Triple(_) => None,
+            RelAlgebra::Derived(_) => None,
+            RelAlgebra::Relation(_) => None,
+            RelAlgebra::Join(r) => Some(&r.to_eliminate),
+            RelAlgebra::Reorder(_) => None,
+            RelAlgebra::Filter(r) => Some(&r.to_eliminate),
+            RelAlgebra::NegJoin(r) => Some(&r.to_eliminate),
+            RelAlgebra::Unification(u) => Some(&u.to_eliminate),
         }
     }
 
@@ -1815,15 +1815,15 @@ impl Relation {
 
     fn bindings_before_eliminate(&self) -> Vec<Symbol> {
         match self {
-            Relation::Fixed(f) => f.bindings.clone(),
-            Relation::Triple(t) => t.bindings.to_vec(),
-            Relation::Derived(d) => d.bindings.clone(),
-            Relation::View(v) => v.bindings.clone(),
-            Relation::Join(j) => j.bindings(),
-            Relation::Reorder(r) => r.bindings(),
-            Relation::Filter(r) => r.parent.bindings_after_eliminate(),
-            Relation::NegJoin(j) => j.left.bindings_after_eliminate(),
-            Relation::Unification(u) => {
+            RelAlgebra::Fixed(f) => f.bindings.clone(),
+            RelAlgebra::Triple(t) => t.bindings.to_vec(),
+            RelAlgebra::Derived(d) => d.bindings.clone(),
+            RelAlgebra::Relation(v) => v.bindings.clone(),
+            RelAlgebra::Join(j) => j.bindings(),
+            RelAlgebra::Reorder(r) => r.bindings(),
+            RelAlgebra::Filter(r) => r.parent.bindings_after_eliminate(),
+            RelAlgebra::NegJoin(j) => j.left.bindings_after_eliminate(),
+            RelAlgebra::Unification(u) => {
                 let mut bindings = u.parent.bindings_after_eliminate();
                 bindings.push(u.binding.clone());
                 bindings
@@ -1837,23 +1837,23 @@ impl Relation {
         use_delta: &BTreeSet<DerivedRelStoreId>,
     ) -> Result<TupleIter<'a>> {
         match self {
-            Relation::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone()))))),
-            Relation::Triple(r) => r.iter(tx),
-            Relation::Derived(r) => r.iter(epoch, use_delta),
-            Relation::View(v) => v.iter(tx),
-            Relation::Join(j) => j.iter(tx, epoch, use_delta),
-            Relation::Reorder(r) => r.iter(tx, epoch, use_delta),
-            Relation::Filter(r) => r.iter(tx, epoch, use_delta),
-            Relation::NegJoin(r) => r.iter(tx, epoch, use_delta),
-            Relation::Unification(r) => r.iter(tx, epoch, use_delta),
+            RelAlgebra::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone()))))),
+            RelAlgebra::Triple(r) => r.iter(tx),
+            RelAlgebra::Derived(r) => r.iter(epoch, use_delta),
+            RelAlgebra::Relation(v) => v.iter(tx),
+            RelAlgebra::Join(j) => j.iter(tx, epoch, use_delta),
+            RelAlgebra::Reorder(r) => r.iter(tx, epoch, use_delta),
+            RelAlgebra::Filter(r) => r.iter(tx, epoch, use_delta),
+            RelAlgebra::NegJoin(r) => r.iter(tx, epoch, use_delta),
+            RelAlgebra::Unification(r) => r.iter(tx, epoch, use_delta),
         }
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct NegJoin {
-    pub(crate) left: Relation,
-    pub(crate) right: Relation,
+    pub(crate) left: RelAlgebra,
+    pub(crate) right: RelAlgebra,
     pub(crate) joiner: Joiner,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
@@ -1881,7 +1881,7 @@ impl NegJoin {
         let bindings = self.left.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         match &self.right {
-            Relation::Triple(r) => {
+            RelAlgebra::Triple(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1896,7 +1896,7 @@ impl NegJoin {
                     eliminate_indices,
                 )
             }
-            Relation::Derived(r) => {
+            RelAlgebra::Derived(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1910,7 +1910,7 @@ impl NegJoin {
                     eliminate_indices,
                 )
             }
-            Relation::View(v) => {
+            RelAlgebra::Relation(v) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1934,8 +1934,8 @@ impl NegJoin {
 
 #[derive(Debug)]
 pub(crate) struct InnerJoin {
-    pub(crate) left: Relation,
-    pub(crate) right: Relation,
+    pub(crate) left: RelAlgebra,
+    pub(crate) right: RelAlgebra,
     pub(crate) joiner: Joiner,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
 }
@@ -1950,8 +1950,8 @@ impl InnerJoin {
         let mut left = used.clone();
         left.extend(self.joiner.left_keys.clone());
         if let Some(filters) = match &self.right {
-            Relation::Triple(r) => Some(&r.filters),
-            Relation::Derived(r) => Some(&r.filters),
+            RelAlgebra::Triple(r) => Some(&r.filters),
+            RelAlgebra::Derived(r) => Some(&r.filters),
             _ => None,
         } {
             for filter in filters {
@@ -1980,7 +1980,7 @@ impl InnerJoin {
         let bindings = self.bindings();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         match &self.right {
-            Relation::Fixed(f) => {
+            RelAlgebra::Fixed(f) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1994,7 +1994,7 @@ impl InnerJoin {
                     eliminate_indices,
                 )
             }
-            Relation::Triple(r) => {
+            RelAlgebra::Triple(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -2009,7 +2009,7 @@ impl InnerJoin {
                     eliminate_indices,
                 )
             }
-            Relation::Derived(r) => {
+            RelAlgebra::Derived(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -2029,7 +2029,7 @@ impl InnerJoin {
                     self.materialized_join(tx, eliminate_indices, epoch, use_delta)
                 }
             }
-            Relation::View(r) => {
+            RelAlgebra::Relation(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -2048,13 +2048,13 @@ impl InnerJoin {
                     self.materialized_join(tx, eliminate_indices, epoch, use_delta)
                 }
             }
-            Relation::Join(_) | Relation::Filter(_) | Relation::Unification(_) => {
+            RelAlgebra::Join(_) | RelAlgebra::Filter(_) | RelAlgebra::Unification(_) => {
                 self.materialized_join(tx, eliminate_indices, epoch, use_delta)
             }
-            Relation::Reorder(_) => {
+            RelAlgebra::Reorder(_) => {
                 panic!("joining on reordered")
             }
-            Relation::NegJoin(_) => {
+            RelAlgebra::NegJoin(_) => {
                 panic!("joining on NegJoin")
             }
         }

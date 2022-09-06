@@ -20,7 +20,7 @@ use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::encode::{largest_key, smallest_key};
 use crate::data::id::{TxId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::program::{InputProgram, ViewOp};
+use crate::data::program::{InputProgram, RelationOp};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
@@ -29,7 +29,7 @@ use crate::parse::sys::{CompactTarget, SysOp};
 use crate::parse::tx::Quintuple;
 use crate::parse::{parse_script, CozoScript};
 use crate::runtime::transact::SessionTx;
-use crate::runtime::view::{ViewRelId, ViewRelMetadata};
+use crate::runtime::relation::{RelationId, RelationMetadata};
 use crate::utils::swap_option_result;
 
 struct RunningQueryHandle {
@@ -56,7 +56,7 @@ pub struct Db {
     last_attr_id: Arc<AtomicU64>,
     last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,
-    view_store_id: Arc<AtomicU64>,
+    relation_store_id: Arc<AtomicU64>,
     n_sessions: Arc<AtomicUsize>,
     queries_count: Arc<AtomicU64>,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
@@ -94,7 +94,7 @@ impl Db {
             last_attr_id: Arc::new(Default::default()),
             last_ent_id: Arc::new(Default::default()),
             last_tx_id: Arc::new(Default::default()),
-            view_store_id: Arc::new(Default::default()),
+            relation_store_id: Arc::new(Default::default()),
             n_sessions: Arc::new(Default::default()),
             queries_count: Arc::new(Default::default()),
             running_queries: Arc::new(Mutex::new(Default::default())),
@@ -104,16 +104,16 @@ impl Db {
         Ok(ret)
     }
 
-    pub fn compact_main(&self) -> Result<()> {
+    pub fn compact_triple_store(&self) -> Result<()> {
         let l = smallest_key();
         let u = largest_key();
         self.db.range_compact(&l, &u, Pri)?;
         Ok(())
     }
 
-    pub fn compact_view(&self) -> Result<()> {
-        let l = Tuple::default().encode_as_key(ViewRelId(0));
-        let u = Tuple(vec![DataValue::Bot]).encode_as_key(ViewRelId(u64::MAX));
+    pub fn compact_relation(&self) -> Result<()> {
+        let l = Tuple::default().encode_as_key(RelationId(0));
+        let u = Tuple(vec![DataValue::Bot]).encode_as_key(RelationId(u64::MAX));
         self.db.range_compact(&l, &u, Snd)?;
         Ok(())
     }
@@ -126,7 +126,7 @@ impl Db {
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
-            view_store_id: self.view_store_id.clone(),
+            relation_store_id: self.relation_store_id.clone(),
             n_sessions: self.n_sessions.clone(),
             queries_count: self.queries_count.clone(),
             running_queries: self.running_queries.clone(),
@@ -142,15 +142,15 @@ impl Db {
             .store(tx.load_last_attr_id()?.0, Ordering::Release);
         self.last_ent_id
             .store(tx.load_last_entity_id()?.0, Ordering::Release);
-        self.view_store_id
-            .store(tx.load_last_view_store_id()?.0, Ordering::Release);
+        self.relation_store_id
+            .store(tx.load_last_relation_store_id()?.0, Ordering::Release);
         Ok(())
     }
     pub fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
             mem_store_id: Default::default(),
-            view_store_id: self.view_store_id.clone(),
+            relation_store_id: self.relation_store_id.clone(),
             w_tx_id: None,
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
@@ -168,7 +168,7 @@ impl Db {
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
             mem_store_id: Default::default(),
-            view_store_id: self.view_store_id.clone(),
+            relation_store_id: self.relation_store_id.clone(),
             w_tx_id: Some(cur_tx_id),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
@@ -258,10 +258,10 @@ impl Db {
                 for opt in opts {
                     match opt {
                         CompactTarget::Triples => {
-                            self.compact_main()?;
+                            self.compact_triple_store()?;
                         }
                         CompactTarget::Relations => {
-                            self.compact_view()?;
+                            self.compact_relation()?;
                         }
                     }
                 }
@@ -271,7 +271,7 @@ impl Db {
             SysOp::ListRelations => self.list_relations(),
             SysOp::RemoveRelations(rs) => {
                 for r in rs.iter() {
-                    self.remove_view(&r.0)?;
+                    self.remove_relation(&r.0)?;
                 }
                 Ok(json!({"status": "OK"}))
             }
@@ -291,22 +291,22 @@ impl Db {
         }
     }
     fn run_query(&self, input_program: InputProgram) -> Result<JsonValue> {
-        let mut tx = if input_program.out_opts.as_view.is_some() {
+        let mut tx = if input_program.out_opts.store_relation.is_some() {
             self.transact_write()?
         } else {
             self.transact()?
         };
-        if let Some((meta, op)) = &input_program.out_opts.as_view {
-            if *op == ViewOp::Create {
+        if let Some((meta, op)) = &input_program.out_opts.store_relation {
+            if *op == RelationOp::Create {
                 ensure!(
-                    !tx.view_exists(&meta.name)?,
-                    "view '{}' exists but is required not to be",
+                    !tx.relation_exists(&meta.name)?,
+                    "relation '{}' exists but is required not to be",
                     meta.name
                 )
-            } else if *op != ViewOp::Rederive {
+            } else if *op != RelationOp::Rederive {
                 ensure!(
-                    tx.view_exists(&meta.name)?,
-                    "view '{}' does not exist but is required to be",
+                    tx.relation_exists(&meta.name)?,
+                    "relation '{}' does not exist but is required to be",
                     meta.name
                 )
             }
@@ -366,13 +366,13 @@ impl Db {
             } else {
                 Right(sorted_iter)
             };
-            if let Some((meta, view_op)) = input_program.out_opts.as_view {
-                let to_clear = tx.execute_view(sorted_iter, view_op, &meta)?;
+            if let Some((meta, relation_op)) = input_program.out_opts.store_relation {
+                let to_clear = tx.execute_relation(sorted_iter, relation_op, &meta)?;
                 tx.commit_tx("", false)?;
                 if let Some((lower, upper)) = to_clear {
                     self.db.range_del(&lower, &upper, Snd)?;
                 }
-                Ok(json!({"view": "OK"}))
+                Ok(json!({"relation": "OK"}))
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     sorted_iter,
@@ -393,13 +393,13 @@ impl Db {
                 Left(result.scan_all())
             };
 
-            if let Some((meta, view_op)) = input_program.out_opts.as_view {
-                let to_clear = tx.execute_view(scan, view_op, &meta)?;
+            if let Some((meta, relation_op)) = input_program.out_opts.store_relation {
+                let to_clear = tx.execute_relation(scan, relation_op, &meta)?;
                 tx.commit_tx("", false)?;
                 if let Some((lower, upper)) = to_clear {
                     self.db.range_del(&lower, &upper, Snd)?;
                 }
-                Ok(json!({"view": "OK"}))
+                Ok(json!({"relation": "OK"}))
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     scan,
@@ -411,10 +411,10 @@ impl Db {
             }
         }
     }
-    pub fn remove_view(&self, name: &str) -> Result<()> {
+    pub fn remove_relation(&self, name: &str) -> Result<()> {
         let name = Symbol::from(name);
         let mut tx = self.transact_write()?;
-        let (lower, upper) = tx.destroy_view_rel(&name)?;
+        let (lower, upper) = tx.destroy_relation(&name)?;
         self.db.range_del(&lower, &upper, Snd)?;
         Ok(())
     }
@@ -433,7 +433,7 @@ impl Db {
         for el in k {
             ks.push(DataValue::Str(SmartString::from(*el)));
         }
-        let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
+        let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
         let mut vtx = self.db.transact().start();
         vtx.put(&key, v, Snd)?;
         vtx.commit()?;
@@ -444,7 +444,7 @@ impl Db {
         for el in k {
             ks.push(DataValue::Str(SmartString::from(*el)));
         }
-        let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
+        let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
         let mut vtx = self.db.transact().start();
         vtx.del(&key, Snd)?;
         vtx.commit()?;
@@ -455,7 +455,7 @@ impl Db {
         for el in k {
             ks.push(DataValue::Str(SmartString::from(*el)));
         }
-        let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
+        let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
         let vtx = self.db.transact().start();
         Ok(match vtx.get(&key, false, Snd)? {
             None => None,
@@ -476,9 +476,9 @@ impl Db {
             .transact()
             .start()
             .iterator(Snd)
-            .upper_bound(&upper_bound.encode_as_key(ViewRelId::SYSTEM))
+            .upper_bound(&upper_bound.encode_as_key(RelationId::SYSTEM))
             .start();
-        it.seek(&lower_bound.encode_as_key(ViewRelId::SYSTEM));
+        it.seek(&lower_bound.encode_as_key(RelationId::SYSTEM));
 
         struct CustomIter {
             it: DbIter,
@@ -524,11 +524,11 @@ impl Db {
     }
     pub fn list_relations(&self) -> Result<JsonValue> {
         let lower =
-            Tuple(vec![DataValue::Str(SmartString::from(""))]).encode_as_key(ViewRelId::SYSTEM);
+            Tuple(vec![DataValue::Str(SmartString::from(""))]).encode_as_key(RelationId::SYSTEM);
         let upper = Tuple(vec![DataValue::Str(SmartString::from(String::from(
             LARGEST_UTF_CHAR,
         )))])
-        .encode_as_key(ViewRelId::SYSTEM);
+        .encode_as_key(RelationId::SYSTEM);
         let mut it = self
             .db
             .transact()
@@ -539,7 +539,7 @@ impl Db {
         it.seek(&lower);
         let mut collected = vec![];
         while let Some(v_slice) = it.val()? {
-            let meta: ViewRelMetadata = rmp_serde::from_slice(v_slice).into_diagnostic()?;
+            let meta: RelationMetadata = rmp_serde::from_slice(v_slice).into_diagnostic()?;
             let name = meta.name.0;
             let arity = meta.arity;
             collected.push(json!([name, arity]));

@@ -9,12 +9,12 @@ use cozorocks::CfHandle::Snd;
 use crate::data::attr::Attribute;
 use crate::data::id::{EntityId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::program::ViewOp;
+use crate::data::program::RelationOp;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::parse::pull::OutPullSpec;
 use crate::runtime::transact::SessionTx;
-use crate::runtime::view::ViewRelMetadata;
+use crate::runtime::relation::RelationMetadata;
 
 struct OutPullSpecWithAttr {
     attr: Attribute,
@@ -42,44 +42,39 @@ impl OutPullSpec {
 }
 
 impl SessionTx {
-    pub(crate) fn execute_view<'a>(
+    pub(crate) fn execute_relation<'a>(
         &'a mut self,
         res_iter: impl Iterator<Item = Result<Tuple>> + 'a,
-        op: ViewOp,
-        meta: &ViewRelMetadata,
+        op: RelationOp,
+        meta: &RelationMetadata,
     ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = None;
-        if op == ViewOp::Rederive {
-            if let Ok(c) = self.destroy_view_rel(&meta.name) {
+        if op == RelationOp::Rederive {
+            if let Ok(c) = self.destroy_relation(&meta.name) {
                 to_clear = Some(c);
             }
         }
-        let view_store = if op == ViewOp::Rederive || op == ViewOp::Create {
-            self.create_view_rel(meta.clone())?
+        let relation_store = if op == RelationOp::Rederive || op == RelationOp::Create {
+            self.create_relation(meta.clone())?
         } else {
-            let found = self.get_view_rel(&meta.name)?;
+            let found = self.get_relation(&meta.name)?;
             ensure!(
-                found.metadata.arity == meta.arity,
-                "arity mismatch for view {}",
+                found.arity == meta.arity,
+                "arity mismatch for relation {}",
                 meta.name
-            );
-            ensure!(
-                found.metadata.kind == meta.kind,
-                "kind mismatch for view {:?}",
-                meta.kind
             );
             found
         };
-        if op == ViewOp::Retract {
+        if op == RelationOp::Retract {
             for data in res_iter {
                 let data = data?;
-                let encoded = data.encode_as_key(view_store.metadata.id);
+                let encoded = data.encode_as_key(relation_store.id);
                 self.tx.del(&encoded, Snd)?;
             }
         } else {
             for data in res_iter {
                 let data = data?;
-                let encoded = data.encode_as_key(view_store.metadata.id);
+                let encoded = data.encode_as_key(relation_store.id);
                 self.tx.put(&encoded, &[], Snd)?;
             }
         }

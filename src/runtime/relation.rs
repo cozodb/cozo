@@ -25,9 +25,9 @@ use crate::utils::swap_option_result;
     PartialOrd,
     Ord,
 )]
-pub(crate) struct ViewRelId(pub(crate) u64);
+pub(crate) struct RelationId(pub(crate) u64);
 
-impl ViewRelId {
+impl RelationId {
     pub(crate) fn new(u: u64) -> Result<Self> {
         if u > 2u64.pow(6 * 8) {
             bail!("StoredRelId overflow: {}", u)
@@ -54,36 +54,24 @@ impl ViewRelId {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) enum ViewRelKind {
-    Manual,
-    AutoByCount,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) struct ViewRelMetadata {
+#[derive(Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
+pub(crate) struct RelationMetadata {
     pub(crate) name: Symbol,
-    pub(crate) id: ViewRelId,
+    pub(crate) id: RelationId,
     pub(crate) arity: usize,
-    pub(crate) kind: ViewRelKind,
 }
 
-#[derive(Clone)]
-pub(crate) struct ViewRelStore {
-    pub(crate) metadata: ViewRelMetadata,
-}
-
-impl Debug for ViewRelStore {
+impl Debug for RelationMetadata {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ViewStore<{}>", self.metadata.name)
+        write!(f, "Relation<{}>", self.name)
     }
 }
 
-impl ViewRelStore {
+impl RelationMetadata {
     pub(crate) fn scan_all(&self, tx: &SessionTx) -> Result<impl Iterator<Item = Result<Tuple>>> {
-        let lower = Tuple::default().encode_as_key(self.metadata.id);
-        let upper = Tuple::default().encode_as_key(self.metadata.id.next()?);
-        Ok(ViewRelIterator::new(tx, &lower, &upper))
+        let lower = Tuple::default().encode_as_key(self.id);
+        let upper = Tuple::default().encode_as_key(self.id.next()?);
+        Ok(RelationIterator::new(tx, &lower, &upper))
     }
 
     pub(crate) fn scan_prefix(
@@ -93,9 +81,9 @@ impl ViewRelStore {
     ) -> impl Iterator<Item = Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bot);
-        let prefix_encoded = prefix.encode_as_key(self.metadata.id);
-        let upper_encoded = Tuple(upper).encode_as_key(self.metadata.id);
-        ViewRelIterator::new(tx, &prefix_encoded, &upper_encoded)
+        let prefix_encoded = prefix.encode_as_key(self.id);
+        let upper_encoded = Tuple(upper).encode_as_key(self.id);
+        RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
     }
     pub(crate) fn scan_bounded_prefix(
         &self,
@@ -109,18 +97,18 @@ impl ViewRelStore {
         let mut upper_t = prefix.clone();
         upper_t.0.extend_from_slice(upper);
         upper_t.0.push(DataValue::Bot);
-        let lower_encoded = lower_t.encode_as_key(self.metadata.id);
-        let upper_encoded = upper_t.encode_as_key(self.metadata.id);
-        ViewRelIterator::new(tx, &lower_encoded, &upper_encoded)
+        let lower_encoded = lower_t.encode_as_key(self.id);
+        let upper_encoded = upper_t.encode_as_key(self.id);
+        RelationIterator::new(tx, &lower_encoded, &upper_encoded)
     }
 }
 
-struct ViewRelIterator {
+struct RelationIterator {
     inner: DbIter,
     started: bool,
 }
 
-impl ViewRelIterator {
+impl RelationIterator {
     fn new(sess: &SessionTx, lower: &[u8], upper: &[u8]) -> Self {
         let mut inner = sess.tx.iterator(Snd).upper_bound(upper).start();
         inner.seek(lower);
@@ -142,7 +130,7 @@ impl ViewRelIterator {
     }
 }
 
-impl Iterator for ViewRelIterator {
+impl Iterator for RelationIterator {
     type Item = Result<Tuple>;
     fn next(&mut self) -> Option<Self::Item> {
         swap_option_result(self.next_inner())
@@ -150,54 +138,57 @@ impl Iterator for ViewRelIterator {
 }
 
 impl SessionTx {
-    pub(crate) fn view_exists(&self, name: &Symbol) -> Result<bool> {
+    pub(crate) fn relation_exists(&self, name: &Symbol) -> Result<bool> {
         let key = DataValue::Str(name.0.clone());
-        let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
+        let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         Ok(self.tx.exists(&encoded, false, Snd)?)
     }
-    pub(crate) fn create_view_rel(&mut self, mut meta: ViewRelMetadata) -> Result<ViewRelStore> {
+    pub(crate) fn create_relation(
+        &mut self,
+        mut meta: RelationMetadata,
+    ) -> Result<RelationMetadata> {
         let key = DataValue::Str(meta.name.0.clone());
-        let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
+        let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
         if self.tx.exists(&encoded, true, Snd)? {
             bail!(
-                "cannot create view {}: one with the same name already exists",
+                "cannot create relation {}: one with the same name already exists",
                 meta.name
             )
         };
-        let last_id = self.view_store_id.fetch_add(1, Ordering::SeqCst);
-        meta.id = ViewRelId::new(last_id + 1)?;
+        let last_id = self.relation_store_id.fetch_add(1, Ordering::SeqCst);
+        meta.id = RelationId::new(last_id + 1)?;
         self.tx.put(&encoded, &meta.id.raw_encode(), Snd)?;
         let name_key =
-            Tuple(vec![DataValue::Str(meta.name.0.clone())]).encode_as_key(ViewRelId::SYSTEM);
+            Tuple(vec![DataValue::Str(meta.name.0.clone())]).encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
         self.tx.put(&name_key, &meta_val, Snd)?;
 
         let tuple = Tuple(vec![DataValue::Null]);
-        let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
+        let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
         self.tx.put(&t_encoded, &meta.id.raw_encode(), Snd)?;
-        Ok(ViewRelStore { metadata: meta })
+        Ok(meta)
     }
-    pub(crate) fn get_view_rel(&self, name: &Symbol) -> Result<ViewRelStore> {
+    pub(crate) fn get_relation(&self, name: &Symbol) -> Result<RelationMetadata> {
         let key = DataValue::Str(name.0.clone());
-        let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
+        let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
         let found = self
             .tx
             .get(&encoded, true, Snd)?
-            .ok_or_else(|| miette!("cannot find stored view {}", name))?;
-        let metadata: ViewRelMetadata = rmp_serde::from_slice(&found).into_diagnostic()?;
-        Ok(ViewRelStore { metadata })
+            .ok_or_else(|| miette!("cannot find stored relation {}", name))?;
+        let metadata: RelationMetadata = rmp_serde::from_slice(&found).into_diagnostic()?;
+        Ok(metadata)
     }
-    pub(crate) fn destroy_view_rel(&mut self, name: &Symbol) -> Result<(Vec<u8>, Vec<u8>)> {
-        let store = self.get_view_rel(name)?;
+    pub(crate) fn destroy_relation(&mut self, name: &Symbol) -> Result<(Vec<u8>, Vec<u8>)> {
+        let store = self.get_relation(name)?;
         let key = DataValue::Str(name.0.clone());
-        let encoded = Tuple(vec![key]).encode_as_key(ViewRelId::SYSTEM);
+        let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         self.tx.del(&encoded, Snd)?;
-        let lower_bound = Tuple::default().encode_as_key(store.metadata.id);
-        let upper_bound = Tuple::default().encode_as_key(store.metadata.id.next()?);
+        let lower_bound = Tuple::default().encode_as_key(store.id);
+        let upper_bound = Tuple::default().encode_as_key(store.id.next()?);
         Ok((lower_bound, upper_bound))
     }
 }

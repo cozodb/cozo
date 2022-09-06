@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use crate::data::json::JsonValue;
 use crate::data::value::DataValue;
-use crate::runtime::view::ViewRelId;
+use crate::runtime::relation::RelationId;
 
 pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 6;
 
@@ -32,7 +32,7 @@ impl Debug for Tuple {
 pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
 
 impl Tuple {
-    pub(crate) fn encode_as_key(&self, prefix: ViewRelId) -> Vec<u8> {
+    pub(crate) fn encode_as_key(&self, prefix: RelationId) -> Vec<u8> {
         let len = self.0.len();
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
         let prefix_bytes = prefix.0.to_be_bytes();
@@ -110,12 +110,12 @@ impl<'a> EncodedTuple<'a> {
     //         ],
     //     )
     // }
-    pub(crate) fn prefix(&self) -> Result<ViewRelId> {
+    pub(crate) fn prefix(&self) -> Result<RelationId> {
         ensure!(self.0.len() >= 6, "bad data: {:x?}", self.0);
         let id = u64::from_be_bytes([
             0, 0, self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5],
         ]);
-        Ok(ViewRelId(id))
+        Ok(RelationId(id))
     }
     pub(crate) fn arity(&self) -> Result<usize> {
         if self.0.len() == 6 {

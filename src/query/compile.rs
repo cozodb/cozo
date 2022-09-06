@@ -8,7 +8,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{ConstRules, MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
-use crate::query::relation::Relation;
+use crate::query::relation::RelAlgebra;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -62,7 +62,7 @@ impl CompiledRuleSet {
 #[derive(Debug)]
 pub(crate) struct CompiledRule {
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
-    pub(crate) relation: Relation,
+    pub(crate) relation: RelAlgebra,
     pub(crate) contained_rules: BTreeSet<MagicSymbol>,
 }
 
@@ -149,8 +149,8 @@ impl SessionTx {
         rule_idx: usize,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         ret_vars: &[Symbol],
-    ) -> Result<Relation> {
-        let mut ret = Relation::unit();
+    ) -> Result<RelAlgebra> {
+        let mut ret = RelAlgebra::unit();
         let mut seen_variables = BTreeSet::new();
         let mut serial_id = 0;
         let mut gen_symb = || {
@@ -181,7 +181,7 @@ impl SessionTx {
                         seen_variables.insert(t.value.clone());
                         t.value.clone()
                     };
-                    let right = Relation::triple(t.attr.clone(), rule.vld, e_kw, v_kw);
+                    let right = RelAlgebra::triple(t.attr.clone(), rule.vld, e_kw, v_kw);
                     if ret.is_unit() {
                         ret = right
                     } else {
@@ -217,24 +217,24 @@ impl SessionTx {
                         }
                     }
 
-                    let right = Relation::derived(right_vars, store);
+                    let right = RelAlgebra::derived(right_vars, store);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
-                MagicAtom::View(view_app) => {
-                    let store = self.get_view_rel(&view_app.name)?;
+                MagicAtom::Relation(rel_app) => {
+                    let store = self.get_relation(&rel_app.name)?;
                     ensure!(
-                        store.metadata.arity == view_app.args.len(),
+                        store.arity == rel_app.args.len(),
                         "arity mismatch in rule application {:?}, expect {}, found {}",
-                        view_app.name,
-                        store.metadata.arity,
-                        view_app.args.len()
+                        rel_app.name,
+                        store.arity,
+                        rel_app.args.len()
                     );
                     let mut prev_joiner_vars = vec![];
                     let mut right_joiner_vars = vec![];
                     let mut right_vars = vec![];
 
-                    for var in &view_app.args {
+                    for var in &rel_app.args {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
                             let rk = gen_symb();
@@ -246,7 +246,7 @@ impl SessionTx {
                         }
                     }
 
-                    let right = Relation::view(right_vars, store);
+                    let right = RelAlgebra::relation(right_vars, store);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
@@ -279,7 +279,7 @@ impl SessionTx {
                         e_kw,
                         v_kw
                     );
-                    let right = Relation::triple(a_triple.attr.clone(), rule.vld, e_kw, v_kw);
+                    let right = RelAlgebra::triple(a_triple.attr.clone(), rule.vld, e_kw, v_kw);
                     if ret.is_unit() {
                         ret = right;
                     } else {
@@ -317,25 +317,25 @@ impl SessionTx {
                         }
                     }
 
-                    let right = Relation::derived(right_vars, store);
+                    let right = RelAlgebra::derived(right_vars, store);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
                 }
-                MagicAtom::NegatedView(view_app) => {
-                    let store = self.get_view_rel(&view_app.name)?;
+                MagicAtom::NegatedRelation(relation_app) => {
+                    let store = self.get_relation(&relation_app.name)?;
                     ensure!(
-                        store.metadata.arity == view_app.args.len(),
+                        store.arity == relation_app.args.len(),
                         "arity mismatch for {:?}, expect {}, got {}",
-                        view_app.name,
-                        store.metadata.arity,
-                        view_app.args.len()
+                        relation_app.name,
+                        store.arity,
+                        relation_app.args.len()
                     );
 
                     let mut prev_joiner_vars = vec![];
                     let mut right_joiner_vars = vec![];
                     let mut right_vars = vec![];
 
-                    for var in &view_app.args {
+                    for var in &relation_app.args {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
                             let rk = gen_symb();
@@ -346,7 +346,7 @@ impl SessionTx {
                         }
                     }
 
-                    let right = Relation::view(right_vars, store);
+                    let right = RelAlgebra::relation(right_vars, store);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
                 }
@@ -387,7 +387,7 @@ impl SessionTx {
         ret.eliminate_temp_vars(&ret_vars_set)?;
         let cur_ret_set: BTreeSet<_> = ret.bindings_after_eliminate().into_iter().collect();
         if cur_ret_set != ret_vars_set {
-            ret = ret.cartesian_join(Relation::unit());
+            ret = ret.cartesian_join(RelAlgebra::unit());
             ret.eliminate_temp_vars(&ret_vars_set)?;
         }
 

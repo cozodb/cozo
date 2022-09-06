@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 use crate::data::id::Validity;
 use crate::data::program::{
     AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicAttrTripleAtom, MagicProgram,
-    MagicRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol, MagicViewApplyAtom,
+    MagicRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol, MagicRelationApplyAtom,
     NormalFormAlgoOrRules, NormalFormAtom, NormalFormProgram, NormalFormRule,
     StratifiedMagicProgram, StratifiedNormalFormProgram,
 };
@@ -150,7 +150,7 @@ fn magic_rewrite_ruleset(
                 a @ (MagicAtom::Predicate(_)
                 | MagicAtom::NegatedAttrTriple(_)
                 | MagicAtom::NegatedRule(_)
-                | MagicAtom::NegatedView(_)) => {
+                | MagicAtom::NegatedRelation(_)) => {
                     collected_atoms.push(a);
                 }
                 MagicAtom::AttrTriple(t) => {
@@ -158,9 +158,9 @@ fn magic_rewrite_ruleset(
                     seen_bindings.insert(t.value.clone());
                     collected_atoms.push(MagicAtom::AttrTriple(t));
                 }
-                MagicAtom::View(v) => {
+                MagicAtom::Relation(v) => {
                     seen_bindings.extend(v.args.iter().cloned());
-                    collected_atoms.push(MagicAtom::View(v));
+                    collected_atoms.push(MagicAtom::Relation(v));
                 }
                 MagicAtom::Unification(u) => {
                     seen_bindings.insert(u.binding.clone());
@@ -410,8 +410,8 @@ impl NormalFormAtom {
                 }
                 MagicAtom::AttrTriple(t)
             }
-            NormalFormAtom::View(v) => {
-                let v = MagicViewApplyAtom {
+            NormalFormAtom::Relation(v) => {
+                let v = MagicRelationApplyAtom {
                     name: v.name.clone(),
                     args: v.args.clone(),
                 };
@@ -420,7 +420,7 @@ impl NormalFormAtom {
                         seen_bindings.insert(arg.clone());
                     }
                 }
-                MagicAtom::View(v)
+                MagicAtom::Relation(v)
             }
             NormalFormAtom::Predicate(p) => {
                 // predicate cannot introduce new bindings
@@ -467,7 +467,7 @@ impl NormalFormAtom {
                 },
                 args: nr.args.clone(),
             }),
-            NormalFormAtom::NegatedView(nv) => MagicAtom::NegatedView(MagicViewApplyAtom {
+            NormalFormAtom::NegatedRelation(nv) => MagicAtom::NegatedRelation(MagicRelationApplyAtom {
                 name: nv.name.clone(),
                 args: nv.args.clone(),
             }),

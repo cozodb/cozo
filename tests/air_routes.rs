@@ -75,7 +75,7 @@ fn air_routes() -> Result<()> {
     db.run_script(
         r#"
         ?[src, dst, distance] := [r route.src src], [r route.dst dst], [r route.distance distance];
-        :view rederive flies_to;
+        :relation rederive flies_to;
     "#,
         &params,
     )?;
@@ -88,7 +88,7 @@ fn air_routes() -> Result<()> {
         ?[src_c, dst_c, distance] := [r route.src src], [r route.dst dst],
                                         [r route.distance distance],
                                         [src airport.iata src_c], [dst airport.iata dst_c];
-        :view rederive flies_to_code;
+        :relation rederive flies_to_code;
     "#,
         &params,
     )?;
@@ -98,7 +98,7 @@ fn air_routes() -> Result<()> {
     db.run_script(
         r#"
             ?[code, lat, lon] := [n airport.iata code], [n airport.lat lat], [n airport.lon lon];
-            :view rederive code_lat_lon;
+            :relation rederive code_lat_lon;
         "#,
         &params,
     )?;
@@ -107,11 +107,11 @@ fn air_routes() -> Result<()> {
     println!("views: {}", db.list_relations()?);
 
     let compact_main_time = Instant::now();
-    db.compact_main()?;
+    db.compact_triple_store()?;
     dbg!(compact_main_time.elapsed());
 
     let compact_view_time = Instant::now();
-    db.compact_view()?;
+    db.compact_relation()?;
     dbg!(compact_view_time.elapsed());
 
     let dfs_time = Instant::now();

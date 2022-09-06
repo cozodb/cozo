@@ -17,7 +17,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::pull::OutPullSpec;
 use crate::runtime::transact::SessionTx;
-use crate::runtime::view::ViewRelMetadata;
+use crate::runtime::relation::RelationMetadata;
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, (Vec<Tuple>, Vec<Symbol>)>;
 
@@ -29,7 +29,7 @@ pub(crate) struct QueryOutOptions {
     pub(crate) offset: Option<usize>,
     pub(crate) timeout: Option<u64>,
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
-    pub(crate) as_view: Option<(ViewRelMetadata, ViewOp)>,
+    pub(crate) store_relation: Option<(RelationMetadata, RelationOp)>,
 }
 
 impl Default for QueryOutOptions {
@@ -41,7 +41,7 @@ impl Default for QueryOutOptions {
             offset: None,
             timeout: None,
             sorters: vec![],
-            as_view: None,
+            store_relation: None,
         }
     }
 }
@@ -63,7 +63,7 @@ pub(crate) enum SortDir {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum ViewOp {
+pub(crate) enum RelationOp {
     Create,
     Rederive,
     Put,
@@ -477,7 +477,7 @@ impl MagicRule {
 pub(crate) enum InputAtom {
     AttrTriple(InputAttrTripleAtom),
     Rule(InputRuleApplyAtom),
-    View(InputViewApplyAtom),
+    Relation(InputRelationApplyAtom),
     Predicate(Expr),
     Negation(Box<InputAtom>),
     Conjunction(Vec<InputAtom>),
@@ -489,10 +489,10 @@ pub(crate) enum InputAtom {
 pub(crate) enum NormalFormAtom {
     AttrTriple(NormalFormAttrTripleAtom),
     Rule(NormalFormRuleApplyAtom),
-    View(NormalFormViewApplyAtom),
+    Relation(NormalFormRelationApplyAtom),
     NegatedAttrTriple(NormalFormAttrTripleAtom),
     NegatedRule(NormalFormRuleApplyAtom),
-    NegatedView(NormalFormViewApplyAtom),
+    NegatedRelation(NormalFormRelationApplyAtom),
     Predicate(Expr),
     Unification(Unification),
 }
@@ -501,11 +501,11 @@ pub(crate) enum NormalFormAtom {
 pub(crate) enum MagicAtom {
     AttrTriple(MagicAttrTripleAtom),
     Rule(MagicRuleApplyAtom),
-    View(MagicViewApplyAtom),
+    Relation(MagicRelationApplyAtom),
     Predicate(Expr),
     NegatedAttrTriple(MagicAttrTripleAtom),
     NegatedRule(MagicRuleApplyAtom),
-    NegatedView(MagicViewApplyAtom),
+    NegatedRelation(MagicRelationApplyAtom),
     Unification(Unification),
 }
 
@@ -537,7 +537,7 @@ pub(crate) struct InputRuleApplyAtom {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct InputViewApplyAtom {
+pub(crate) struct InputRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<InputTerm<DataValue>>,
 }
@@ -549,7 +549,7 @@ pub(crate) struct NormalFormRuleApplyAtom {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct NormalFormViewApplyAtom {
+pub(crate) struct NormalFormRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
 }
@@ -561,7 +561,7 @@ pub(crate) struct MagicRuleApplyAtom {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct MagicViewApplyAtom {
+pub(crate) struct MagicRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
 }

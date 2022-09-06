@@ -13,8 +13,8 @@ use crate::data::expr::Expr;
 use crate::data::id::Validity;
 use crate::data::program::{
     AlgoApply, AlgoRuleArg, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram, InputRule,
-    InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputViewApplyAtom, MagicSymbol,
-    QueryOutOptions, SortDir, TripleDir, Unification, ViewOp,
+    InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, InputRelationApplyAtom, MagicSymbol,
+    QueryOutOptions, SortDir, TripleDir, Unification, RelationOp,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
@@ -22,7 +22,7 @@ use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
 use crate::parse::pull::parse_out_options;
 use crate::parse::{Pair, Pairs, Rule};
-use crate::runtime::view::{ViewRelId, ViewRelKind, ViewRelMetadata};
+use crate::runtime::relation::{RelationId, RelationMetadata};
 
 pub(crate) fn parse_query(
     src: Pairs<'_>,
@@ -143,8 +143,8 @@ pub(crate) fn parse_query(
                 }
             }
             Rule::out_option => {
-                if out_opts.as_view.is_some() {
-                    bail!("cannot use out spec with 'view'");
+                if out_opts.store_relation.is_some() {
+                    bail!("cannot use out spec with 'relation'");
                 }
                 let (target, vld, specs) = parse_out_options(pair, param_pool)?;
                 match out_opts.out_spec.entry(target) {
@@ -154,31 +154,30 @@ pub(crate) fn parse_query(
                     }
                 };
             }
-            Rule::view_option => {
+            Rule::relation_option => {
                 let mut args = pair.into_inner();
                 let op = match args.next().unwrap().as_rule() {
-                    Rule::view_create => ViewOp::Create,
-                    Rule::view_rederive => ViewOp::Rederive,
-                    Rule::view_put => ViewOp::Put,
-                    Rule::view_retract => ViewOp::Retract,
+                    Rule::relation_create => RelationOp::Create,
+                    Rule::relation_rederive => RelationOp::Rederive,
+                    Rule::relation_put => RelationOp::Put,
+                    Rule::relation_retract => RelationOp::Retract,
                     _ => unreachable!(),
                 };
 
                 let name = args.next().unwrap().as_str();
-                let meta = ViewRelMetadata {
+                let meta = RelationMetadata {
                     name: Symbol::from(name),
-                    id: ViewRelId::SYSTEM,
-                    arity: 0, // TODO
-                    kind: ViewRelKind::Manual,
+                    id: RelationId::SYSTEM,
+                    arity: 0,
                 };
-                out_opts.as_view = Some((meta, op));
+                out_opts.store_relation = Some((meta, op));
             }
             Rule::EOI => break,
             r => unreachable!("{:?}", r),
         }
     }
 
-    if let Some((meta, _)) = out_opts.as_view.borrow_mut() {
+    if let Some((meta, _)) = out_opts.store_relation.borrow_mut() {
         meta.arity = get_entry_arity(&progs)?;
     }
 
@@ -311,7 +310,7 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 args,
             })
         }
-        Rule::view_apply => {
+        Rule::relation_apply => {
             let mut src = src.into_inner();
             let name = &src.next().unwrap().as_str()[1..];
             let args: Vec<_> = src
@@ -320,7 +319,7 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 .into_inner()
                 .map(|v| parse_rule_arg(v, param_pool))
                 .try_collect()?;
-            InputAtom::View(InputViewApplyAtom {
+            InputAtom::Relation(InputRelationApplyAtom {
                 name: Symbol::from(name),
                 args,
             })
@@ -444,7 +443,7 @@ fn parse_algo_rule(
                         let args = els.map(|v| Symbol::from(v.as_str())).collect_vec();
                         rule_args.push(AlgoRuleArg::InMem(Symbol::from(name), args))
                     }
-                    Rule::algo_view_rel => {
+                    Rule::algo_relation_rel => {
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap().as_str();
                         let args = els.map(|v| Symbol::from(v.as_str())).collect_vec();

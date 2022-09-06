@@ -21,11 +21,11 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::derived::{DerivedRelStore, DerivedRelStoreId};
-use crate::runtime::view::ViewRelId;
+use crate::runtime::relation::RelationId;
 
 pub struct SessionTx {
     pub(crate) tx: Tx,
-    pub(crate) view_store_id: Arc<AtomicU64>,
+    pub(crate) relation_store_id: Arc<AtomicU64>,
     pub(crate) mem_store_id: Arc<AtomicU32>,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
@@ -112,13 +112,13 @@ impl SessionTx {
         })
     }
 
-    pub(crate) fn load_last_view_store_id(&self) -> Result<ViewRelId> {
+    pub(crate) fn load_last_relation_store_id(&self) -> Result<RelationId> {
         let tuple = Tuple(vec![DataValue::Null]);
-        let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
+        let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
         let found = self.tx.get(&t_encoded, false, Snd)?;
         match found {
-            None => Ok(ViewRelId::SYSTEM),
-            Some(slice) => ViewRelId::raw_decode(&slice),
+            None => Ok(RelationId::SYSTEM),
+            Some(slice) => RelationId::raw_decode(&slice),
         }
     }
 
