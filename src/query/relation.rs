@@ -1350,6 +1350,7 @@ impl ViewRelation {
 
     fn prefix_join<'a>(
         &'a self,
+        tx: &'a SessionTx,
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
@@ -1382,7 +1383,7 @@ impl ViewRelation {
                     {
                         return Left(
                             self.storage
-                                .scan_bounded_prefix(&prefix, &l_bound, &u_bound)
+                                .scan_bounded_prefix(tx, &prefix, &l_bound, &u_bound)
                                 .filter_map_ok(move |found| {
                                     // dbg!("filter", &tuple, &prefix, &found);
                                     let mut ret = tuple.0.clone();
@@ -1395,7 +1396,7 @@ impl ViewRelation {
                 skip_range_check = true;
                 Right(
                     self.storage
-                        .scan_prefix(&prefix)
+                        .scan_prefix(tx, &prefix)
                         .filter_map_ok(move |found| {
                             // dbg!("filter", &tuple, &prefix, &found);
                             let mut ret = tuple.0.clone();
@@ -1423,6 +1424,7 @@ impl ViewRelation {
 
     fn neg_join<'a>(
         &'a self,
+        tx: &'a SessionTx,
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
@@ -1448,7 +1450,7 @@ impl ViewRelation {
                             .collect_vec(),
                     );
 
-                    'outer: for found in self.storage.scan_prefix(&prefix) {
+                    'outer: for found in self.storage.scan_prefix(tx, &prefix) {
                         let found = found?;
                         for (left_idx, right_idx) in
                             left_join_indices.iter().zip(right_join_indices.iter())
@@ -1483,8 +1485,8 @@ impl ViewRelation {
         ))
     }
 
-    fn iter(&self) -> Result<TupleIter<'_>> {
-        let it = self.storage.scan_all()?;
+    fn iter(&self, tx: &SessionTx) -> Result<TupleIter<'_>> {
+        let it = self.storage.scan_all(tx)?;
         Ok(if self.filters.is_empty() {
             Box::new(it)
         } else {
@@ -1838,7 +1840,7 @@ impl Relation {
             Relation::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone()))))),
             Relation::Triple(r) => r.iter(tx),
             Relation::Derived(r) => r.iter(epoch, use_delta),
-            Relation::View(v) => v.iter(),
+            Relation::View(v) => v.iter(tx),
             Relation::Join(j) => j.iter(tx, epoch, use_delta),
             Relation::Reorder(r) => r.iter(tx, epoch, use_delta),
             Relation::Filter(r) => r.iter(tx, epoch, use_delta),
@@ -1917,6 +1919,7 @@ impl NegJoin {
                     )
                     .unwrap();
                 v.neg_join(
+                    tx,
                     self.left.iter(tx, epoch, use_delta)?,
                     join_indices,
                     eliminate_indices,
@@ -2036,6 +2039,7 @@ impl InnerJoin {
                     .unwrap();
                 if r.join_is_prefix(&join_indices.1) {
                     r.prefix_join(
+                        tx,
                         self.left.iter(tx, epoch, use_delta)?,
                         join_indices,
                         eliminate_indices,

@@ -46,7 +46,9 @@ ColumnFamilyOptions default_cf_options() {
     return options;
 }
 
-shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl) {
+shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp,
+                                  RustComparatorFn pri_cmp_impl,
+                                  RustComparatorFn snd_cmp_impl) {
     auto options = default_db_options();
     auto cf_pri_opts = default_cf_options();
     auto cf_snd_opts = default_cf_options();
@@ -89,32 +91,40 @@ shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, boo
         cf_pri_opts.table_factory.reset(NewBlockBasedTableFactory(table_options));
         cf_snd_opts.table_factory.reset(NewBlockBasedTableFactory(table_options));
     }
-    if (opts.use_capped_prefix_extractor) {
-        options.prefix_extractor.reset(NewCappedPrefixTransform(opts.capped_prefix_extractor_len));
-        cf_pri_opts.prefix_extractor.reset(NewCappedPrefixTransform(opts.capped_prefix_extractor_len));
-        cf_snd_opts.prefix_extractor.reset(NewCappedPrefixTransform(opts.capped_prefix_extractor_len));
+    if (opts.pri_use_capped_prefix_extractor) {
+        cf_pri_opts.prefix_extractor.reset(NewCappedPrefixTransform(opts.pri_capped_prefix_extractor_len));
     }
-    if (opts.use_fixed_prefix_extractor) {
-        options.prefix_extractor.reset(NewFixedPrefixTransform(opts.fixed_prefix_extractor_len));
-        cf_pri_opts.prefix_extractor.reset(NewFixedPrefixTransform(opts.fixed_prefix_extractor_len));
-        cf_snd_opts.prefix_extractor.reset(NewFixedPrefixTransform(opts.fixed_prefix_extractor_len));
+    if (opts.snd_use_capped_prefix_extractor) {
+        cf_snd_opts.prefix_extractor.reset(NewCappedPrefixTransform(opts.snd_capped_prefix_extractor_len));
     }
-    RustComparator *cmp = nullptr;
+    if (opts.pri_use_fixed_prefix_extractor) {
+        cf_pri_opts.prefix_extractor.reset(NewFixedPrefixTransform(opts.pri_fixed_prefix_extractor_len));
+    }
+    if (opts.snd_use_fixed_prefix_extractor) {
+        cf_pri_opts.prefix_extractor.reset(NewFixedPrefixTransform(opts.snd_fixed_prefix_extractor_len));
+    }
+    RustComparator *pri_cmp = nullptr;
+    RustComparator *snd_cmp = nullptr;
     if (use_cmp) {
-        cmp = new RustComparator(
-                string(opts.comparator_name),
-                opts.comparator_different_bytes_can_be_equal,
-                cmp_impl);
-        options.comparator = cmp;
-        cf_pri_opts.comparator = cmp;
-        cf_snd_opts.comparator = cmp;
+        pri_cmp = new RustComparator(
+                string(opts.pri_comparator_name),
+                opts.pri_comparator_different_bytes_can_be_equal,
+                pri_cmp_impl);
+        cf_pri_opts.comparator = pri_cmp;
+
+        snd_cmp = new RustComparator(
+                string(opts.snd_comparator_name),
+                opts.snd_comparator_different_bytes_can_be_equal,
+                snd_cmp_impl);
+        cf_snd_opts.comparator = snd_cmp;
     }
     options.create_missing_column_families = true;
 
     shared_ptr<RocksDbBridge> db = make_shared<RocksDbBridge>();
 
     db->db_path = string(opts.db_path);
-    db->comparator.reset(cmp);
+    db->pri_comparator.reset(pri_cmp);
+    db->snd_comparator.reset(snd_cmp);
 
     std::vector<ColumnFamilyDescriptor> column_families;
     column_families.emplace_back(ColumnFamilyDescriptor(

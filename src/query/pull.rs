@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use miette::{ensure, miette, IntoDiagnostic, Result};
+use miette::{ensure, miette, Result};
 use serde_json::{json, Map};
-use tempfile::NamedTempFile;
+
 use cozorocks::CfHandle::Snd;
 
 use crate::data::attr::Attribute;
@@ -47,9 +47,12 @@ impl SessionTx {
         res_iter: impl Iterator<Item = Result<Tuple>> + 'a,
         op: ViewOp,
         meta: &ViewRelMetadata,
-    ) -> Result<()> {
+    ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+        let mut to_clear = None;
         if op == ViewOp::Rederive {
-            let _ = self.destroy_view_rel(&meta.name);
+            if let Ok(c) = self.destroy_view_rel(&meta.name) {
+                to_clear = Some(c);
+            }
         }
         let view_store = if op == ViewOp::Rederive || op == ViewOp::Create {
             self.create_view_rel(meta.clone())?
@@ -68,33 +71,19 @@ impl SessionTx {
             found
         };
         if op == ViewOp::Retract {
-            let mut vtx = self.view_db.transact().start();
-
             for data in res_iter {
                 let data = data?;
                 let encoded = data.encode_as_key(view_store.metadata.id);
-                vtx.del(&encoded, Snd)?;
+                self.tx.del(&encoded, Snd)?;
             }
-
-            vtx.commit()?;
         } else {
-            let file = NamedTempFile::new().into_diagnostic()?;
-            let path = file.into_temp_path();
-            let path = path.to_string_lossy();
-            let mut writer = self.view_db.get_sst_writer(&path, Snd)?;
-            let mut written = false;
             for data in res_iter {
                 let data = data?;
                 let encoded = data.encode_as_key(view_store.metadata.id);
-                writer.put(&encoded, &[])?;
-                written = true;
-            }
-            if written {
-                writer.finish()?;
-                self.view_db.ingest_sst_file(&path, Snd)?;
+                self.tx.put(&encoded, &[], Snd)?;
             }
         }
-        Ok(())
+        Ok(to_clear)
     }
     fn run_pull_on_item(&self, id: EntityId, specs: &[OutPullSpecWithAttr]) -> Result<JsonValue> {
         let mut ret_map = Map::default();

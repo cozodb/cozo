@@ -41,7 +41,8 @@ struct SstFileWriterBridge {
 };
 
 struct RocksDbBridge {
-    unique_ptr<Comparator> comparator;
+    unique_ptr<Comparator> pri_comparator;
+    unique_ptr<Comparator> snd_comparator;
     unique_ptr<TransactionDB> db;
     vector<ColumnFamilyHandle *> cf_handles;
 
@@ -141,6 +142,8 @@ public:
     bool can_different_bytes_be_equal;
 };
 
-shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl);
+shared_ptr<RocksDbBridge>
+open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn pri_cmp_impl,
+        RustComparatorFn snd_cmp_impl);
 
 #endif //COZOROCKS_DB_H

@@ -13,8 +13,8 @@ use miette::{bail, ensure, miette, IntoDiagnostic, Result};
 use serde_json::json;
 use smartstring::SmartString;
 
-use cozorocks::{DbBuilder, DbIter, RocksDb};
 use cozorocks::CfHandle::{Pri, Snd};
+use cozorocks::{DbBuilder, DbIter, RocksDb};
 
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
 use crate::data::encode::{largest_key, smallest_key};
@@ -53,7 +53,6 @@ impl Drop for RunningQueryCleanup {
 
 pub struct Db {
     db: RocksDb,
-    view_db: RocksDb,
     last_attr_id: Arc<AtomicU64>,
     last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,
@@ -79,28 +78,19 @@ impl Db {
         let path = builder.opts.db_path;
         fs::create_dir_all(path).into_diagnostic()?;
         let path_buf = PathBuf::from(path);
-        let mut triple_path = path_buf.clone();
-        triple_path.push("triple");
+        let mut store_path = path_buf.clone();
+        store_path.push("data");
         let db_builder = builder
-            .use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
-            .optimistic(false)
-            .use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
-            .path(triple_path.to_str().unwrap());
-        let mut rel_path = path_buf;
-        rel_path.push("rel");
-        let view_db_builder = db_builder
-            .clone()
-            .optimistic(false)
-            .path(rel_path.to_str().unwrap())
-            .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
-            .use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false);
+            .pri_use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
+            .pri_use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
+            .snd_use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
+            .snd_use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false)
+            .path(store_path.to_str().unwrap());
 
         let db = db_builder.build()?;
-        let view_db = view_db_builder.build()?;
 
         let ret = Self {
             db,
-            view_db,
             last_attr_id: Arc::new(Default::default()),
             last_ent_id: Arc::new(Default::default()),
             last_tx_id: Arc::new(Default::default()),
@@ -133,7 +123,6 @@ impl Db {
 
         Ok(Self {
             db: self.db.clone(),
-            view_db: self.view_db.clone(),
             last_attr_id: self.last_attr_id.clone(),
             last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
@@ -160,7 +149,6 @@ impl Db {
     pub fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
-            view_db: self.view_db.clone(),
             mem_store_id: Default::default(),
             view_store_id: self.view_store_id.clone(),
             w_tx_id: None,
@@ -179,7 +167,6 @@ impl Db {
 
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
-            view_db: self.view_db.clone(),
             mem_store_id: Default::default(),
             view_store_id: self.view_store_id.clone(),
             w_tx_id: Some(cur_tx_id),
@@ -197,34 +184,6 @@ impl Db {
         it.seek_to_start();
         it
     }
-    // pub fn pull(&self, eid: &JsonValue, payload: &JsonValue, vld: &JsonValue) -> Result<JsonValue> {
-    //     let eid = EntityId::try_from(eid)?;
-    //     let vld = match vld {
-    //         JsonValue::Null => Validity::current(),
-    //         v => Validity::try_from(v)?,
-    //     };
-    //     let mut tx = self.transact()?;
-    //     let specs = tx.parse_pull(payload, 0)?;
-    //     let mut collected = Default::default();
-    //     let mut recursive_seen = Default::default();
-    //     for (idx, spec) in specs.iter().enumerate() {
-    //         tx.pull(
-    //             eid,
-    //             vld,
-    //             spec,
-    //             0,
-    //             &specs,
-    //             CurrentPath::new(idx)?,
-    //             &mut collected,
-    //             &mut recursive_seen,
-    //         )?;
-    //     }
-    //     Ok(JsonValue::Object(collected))
-    // }
-    // pub fn run_tx_triples(&self, payload: &str) -> Result<JsonValue> {
-    //     let payload = parse_tx_to_json(payload)?;
-    //     self.transact_triples(&payload)
-    // }
     fn transact_triples(&self, payloads: Vec<Quintuple>) -> Result<JsonValue> {
         let mut tx = self.transact_write()?;
         let res: JsonValue = tx
@@ -332,7 +291,11 @@ impl Db {
         }
     }
     fn run_query(&self, input_program: InputProgram) -> Result<JsonValue> {
-        let mut tx = self.transact()?;
+        let mut tx = if input_program.out_opts.as_view.is_some() {
+            self.transact_write()?
+        } else {
+            self.transact()?
+        };
         if let Some((meta, op)) = &input_program.out_opts.as_view {
             if *op == ViewOp::Create {
                 ensure!(
@@ -404,7 +367,11 @@ impl Db {
                 Right(sorted_iter)
             };
             if let Some((meta, view_op)) = input_program.out_opts.as_view {
-                tx.execute_view(sorted_iter, view_op, &meta)?;
+                let to_clear = tx.execute_view(sorted_iter, view_op, &meta)?;
+                tx.commit_tx("", false)?;
+                if let Some((lower, upper)) = to_clear {
+                    self.db.range_del(&lower, &upper, Snd)?;
+                }
                 Ok(json!({"view": "OK"}))
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
@@ -427,7 +394,11 @@ impl Db {
             };
 
             if let Some((meta, view_op)) = input_program.out_opts.as_view {
-                tx.execute_view(scan, view_op, &meta)?;
+                let to_clear = tx.execute_view(scan, view_op, &meta)?;
+                tx.commit_tx("", false)?;
+                if let Some((lower, upper)) = to_clear {
+                    self.db.range_del(&lower, &upper, Snd)?;
+                }
                 Ok(json!({"view": "OK"}))
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
@@ -442,8 +413,10 @@ impl Db {
     }
     pub fn remove_view(&self, name: &str) -> Result<()> {
         let name = Symbol::from(name);
-        let tx = self.transact()?;
-        tx.destroy_view_rel(&name)
+        let mut tx = self.transact_write()?;
+        let (lower, upper) = tx.destroy_view_rel(&name)?;
+        self.db.range_del(&lower, &upper, Snd)?;
+        Ok(())
     }
     pub fn list_running(&self) -> Result<JsonValue> {
         let res = self
@@ -461,7 +434,7 @@ impl Db {
             ks.push(DataValue::Str(SmartString::from(*el)));
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
-        let mut vtx = self.view_db.transact().start();
+        let mut vtx = self.db.transact().start();
         vtx.put(&key, v, Snd)?;
         vtx.commit()?;
         Ok(())
@@ -472,7 +445,7 @@ impl Db {
             ks.push(DataValue::Str(SmartString::from(*el)));
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
-        let mut vtx = self.view_db.transact().start();
+        let mut vtx = self.db.transact().start();
         vtx.del(&key, Snd)?;
         vtx.commit()?;
         Ok(())
@@ -483,7 +456,7 @@ impl Db {
             ks.push(DataValue::Str(SmartString::from(*el)));
         }
         let key = Tuple(ks).encode_as_key(ViewRelId::SYSTEM);
-        let vtx = self.view_db.transact().start();
+        let vtx = self.db.transact().start();
         Ok(match vtx.get(&key, false, Snd)? {
             None => None,
             Some(slice) => Some(slice.to_vec()),
@@ -499,7 +472,7 @@ impl Db {
         }
         let upper_bound = Tuple(vec![DataValue::Bot]);
         let mut it = self
-            .view_db
+            .db
             .transact()
             .start()
             .iterator(Snd)
@@ -557,7 +530,7 @@ impl Db {
         )))])
         .encode_as_key(ViewRelId::SYSTEM);
         let mut it = self
-            .view_db
+            .db
             .transact()
             .start()
             .iterator(Snd)

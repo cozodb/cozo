@@ -8,7 +8,7 @@ use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
 
-use cozorocks::{DbIter, RocksDb, Tx};
+use cozorocks::{DbIter, Tx};
 use cozorocks::CfHandle::{Pri, Snd};
 
 use crate::data::attr::Attribute;
@@ -25,7 +25,6 @@ use crate::runtime::view::ViewRelId;
 
 pub struct SessionTx {
     pub(crate) tx: Tx,
-    pub(crate) view_db: RocksDb,
     pub(crate) view_store_id: Arc<AtomicU64>,
     pub(crate) mem_store_id: Arc<AtomicU32>,
     pub(crate) w_tx_id: Option<TxId>,
@@ -116,8 +115,7 @@ impl SessionTx {
     pub(crate) fn load_last_view_store_id(&self) -> Result<ViewRelId> {
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(ViewRelId::SYSTEM);
-        let vtx = self.view_db.transact().start();
-        let found = vtx.get(&t_encoded, false, Snd)?;
+        let found = self.tx.get(&t_encoded, false, Snd)?;
         match found {
             None => Ok(ViewRelId::SYSTEM),
             Some(slice) => ViewRelId::raw_decode(&slice),

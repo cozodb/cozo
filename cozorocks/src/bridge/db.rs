@@ -8,7 +8,8 @@ use crate::CfHandle;
 
 #[derive(Default, Clone)]
 pub struct DbBuilder<'a> {
-    pub cmp_fn: Option<fn(&[u8], &[u8]) -> i8>,
+    pub pri_cmp_fn: Option<fn(&[u8], &[u8]) -> i8>,
+    pub snd_cmp_fn: Option<fn(&[u8], &[u8]) -> i8>,
     pub opts: DbOpts<'a>,
 }
 
@@ -16,7 +17,6 @@ impl<'a> Default for DbOpts<'a> {
     fn default() -> Self {
         Self {
             db_path: "",
-            optimistic: false,
             prepare_for_bulk_load: false,
             increase_parallelism: 0,
             optimize_level_style_compaction: false,
@@ -29,12 +29,18 @@ impl<'a> Default for DbOpts<'a> {
             use_bloom_filter: false,
             bloom_filter_bits_per_key: 0.0,
             bloom_filter_whole_key_filtering: false,
-            use_capped_prefix_extractor: false,
-            capped_prefix_extractor_len: 0,
-            use_fixed_prefix_extractor: false,
-            fixed_prefix_extractor_len: 0,
-            comparator_name: "",
-            comparator_different_bytes_can_be_equal: false,
+            pri_use_capped_prefix_extractor: false,
+            pri_capped_prefix_extractor_len: 0,
+            pri_use_fixed_prefix_extractor: false,
+            pri_fixed_prefix_extractor_len: 0,
+            pri_comparator_name: "",
+            pri_comparator_different_bytes_can_be_equal: false,
+            snd_use_capped_prefix_extractor: false,
+            snd_capped_prefix_extractor_len: 0,
+            snd_use_fixed_prefix_extractor: false,
+            snd_fixed_prefix_extractor_len: 0,
+            snd_comparator_name: "",
+            snd_comparator_different_bytes_can_be_equal: false,
             destroy_on_exit: false,
         }
     }
@@ -43,10 +49,6 @@ impl<'a> Default for DbOpts<'a> {
 impl<'a> DbBuilder<'a> {
     pub fn path(mut self, path: &'a str) -> Self {
         self.opts.db_path = path;
-        self
-    }
-    pub fn optimistic(mut self, val: bool) -> Self {
-        self.opts.optimistic = val;
         self
     }
     pub fn prepare_for_bulk_load(mut self, val: bool) -> Self {
@@ -93,25 +95,46 @@ impl<'a> DbBuilder<'a> {
         self.opts.bloom_filter_whole_key_filtering = whole_key_filtering;
         self
     }
-    pub fn use_capped_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
-        self.opts.use_capped_prefix_extractor = enable;
-        self.opts.capped_prefix_extractor_len = len;
+    pub fn pri_use_capped_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
+        self.opts.pri_use_capped_prefix_extractor = enable;
+        self.opts.pri_capped_prefix_extractor_len = len;
         self
     }
-    pub fn use_fixed_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
-        self.opts.use_fixed_prefix_extractor = enable;
-        self.opts.fixed_prefix_extractor_len = len;
+    pub fn snd_use_capped_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
+        self.opts.snd_use_capped_prefix_extractor = enable;
+        self.opts.snd_capped_prefix_extractor_len = len;
         self
     }
-    pub fn use_custom_comparator(
+    pub fn pri_use_fixed_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
+        self.opts.pri_use_fixed_prefix_extractor = enable;
+        self.opts.pri_fixed_prefix_extractor_len = len;
+        self
+    }
+    pub fn snd_use_fixed_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
+        self.opts.snd_use_fixed_prefix_extractor = enable;
+        self.opts.snd_fixed_prefix_extractor_len = len;
+        self
+    }
+    pub fn pri_use_custom_comparator(
         mut self,
         name: &'a str,
         cmp: fn(&[u8], &[u8]) -> i8,
         different_bytes_can_be_equal: bool,
     ) -> Self {
-        self.cmp_fn = Some(cmp);
-        self.opts.comparator_name = name;
-        self.opts.comparator_different_bytes_can_be_equal = different_bytes_can_be_equal;
+        self.pri_cmp_fn = Some(cmp);
+        self.opts.pri_comparator_name = name;
+        self.opts.pri_comparator_different_bytes_can_be_equal = different_bytes_can_be_equal;
+        self
+    }
+    pub fn snd_use_custom_comparator(
+        mut self,
+        name: &'a str,
+        cmp: fn(&[u8], &[u8]) -> i8,
+        different_bytes_can_be_equal: bool,
+    ) -> Self {
+        self.snd_cmp_fn = Some(cmp);
+        self.opts.snd_comparator_name = name;
+        self.opts.snd_comparator_different_bytes_can_be_equal = different_bytes_can_be_equal;
         self
     }
     pub fn destroy_on_exit(mut self, destroy: bool) -> Self {
@@ -128,8 +151,9 @@ impl<'a> DbBuilder<'a> {
         let result = open_db(
             &self.opts,
             &mut status,
-            self.cmp_fn.is_some(),
-            self.cmp_fn.unwrap_or(dummy),
+            self.pri_cmp_fn.is_some() || self.snd_cmp_fn.is_some(),
+            self.pri_cmp_fn.unwrap_or(dummy),
+            self.snd_cmp_fn.unwrap_or(dummy)
         );
         if status.is_ok() {
             Ok(RocksDb { inner: result })

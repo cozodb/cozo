@@ -271,7 +271,7 @@ impl MagicAlgoRuleArg {
             MagicAlgoRuleArg::Stored(s, _) => {
                 let view_rel = tx.get_view_rel(s)?;
                 let t = Tuple(vec![prefix.clone()]);
-                Box::new(view_rel.scan_prefix(&t))
+                Box::new(view_rel.scan_prefix(tx, &t))
             }
             MagicAlgoRuleArg::Triple(attr, _, dir, vld) => {
                 if *dir == TripleDir::Bwd && !attr.val_type.is_ref_type() {
@@ -362,7 +362,7 @@ impl MagicAlgoRuleArg {
             }
             MagicAlgoRuleArg::Stored(s, _) => {
                 let view_rel = tx.get_view_rel(s)?;
-                Box::new(view_rel.scan_all()?)
+                Box::new(view_rel.scan_all(tx)?)
             }
             MagicAlgoRuleArg::Triple(attr, _, dir, vld) => match dir {
                 TripleDir::Fwd => {

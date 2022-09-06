@@ -14,7 +14,6 @@ pub(crate) mod ffi {
     #[derive(Debug, Clone)]
     struct DbOpts<'a> {
         pub db_path: &'a str,
-        pub optimistic: bool,
         pub prepare_for_bulk_load: bool,
         pub increase_parallelism: usize,
         pub optimize_level_style_compaction: bool,
@@ -27,12 +26,18 @@ pub(crate) mod ffi {
         pub use_bloom_filter: bool,
         pub bloom_filter_bits_per_key: f64,
         pub bloom_filter_whole_key_filtering: bool,
-        pub use_capped_prefix_extractor: bool,
-        pub capped_prefix_extractor_len: usize,
-        pub use_fixed_prefix_extractor: bool,
-        pub fixed_prefix_extractor_len: usize,
-        pub comparator_name: &'a str,
-        pub comparator_different_bytes_can_be_equal: bool,
+        pub pri_use_capped_prefix_extractor: bool,
+        pub pri_capped_prefix_extractor_len: usize,
+        pub pri_use_fixed_prefix_extractor: bool,
+        pub pri_fixed_prefix_extractor_len: usize,
+        pub snd_use_capped_prefix_extractor: bool,
+        pub snd_capped_prefix_extractor_len: usize,
+        pub snd_use_fixed_prefix_extractor: bool,
+        pub snd_fixed_prefix_extractor_len: usize,
+        pub pri_comparator_name: &'a str,
+        pub pri_comparator_different_bytes_can_be_equal: bool,
+        pub snd_comparator_name: &'a str,
+        pub snd_comparator_different_bytes_can_be_equal: bool,
         pub destroy_on_exit: bool,
     }
 
@@ -119,7 +124,8 @@ pub(crate) mod ffi {
             builder: &DbOpts,
             status: &mut RocksDbStatus,
             use_cmp: bool,
-            cmp_impl: fn(&[u8], &[u8]) -> i8,
+            pri_cmp_impl: fn(&[u8], &[u8]) -> i8,
+            snd_cmp_impl: fn(&[u8], &[u8]) -> i8,
         ) -> SharedPtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
         fn del_range(
