@@ -49,12 +49,12 @@ impl SessionTx {
         meta: &RelationMetadata,
     ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = None;
-        if op == RelationOp::Rederive {
+        if op == RelationOp::ReDerive {
             if let Ok(c) = self.destroy_relation(&meta.name) {
                 to_clear = Some(c);
             }
         }
-        let relation_store = if op == RelationOp::Rederive || op == RelationOp::Create {
+        let relation_store = if op == RelationOp::ReDerive || op == RelationOp::Create {
             self.create_relation(meta.clone())?
         } else {
             let found = self.get_relation(&meta.name)?;

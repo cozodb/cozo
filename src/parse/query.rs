@@ -38,11 +38,11 @@ pub(crate) fn parse_query(
                 let (name, rule) = parse_rule(pair, param_pool)?;
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
-                        e.insert(InputRulesOrAlgo::Rules(vec![rule]));
+                        e.insert(InputRulesOrAlgo::Rules { rules: vec![rule] });
                     }
                     Entry::Occupied(mut e) => match e.get_mut() {
-                        InputRulesOrAlgo::Rules(rs) => rs.push(rule),
-                        InputRulesOrAlgo::Algo(_) => {
+                        InputRulesOrAlgo::Rules { rules: rs } => rs.push(rule),
+                        InputRulesOrAlgo::Algo { algo: _ } => {
                             bail!("cannot mix rules and algo: {}", e.key())
                         }
                     },
@@ -52,7 +52,7 @@ pub(crate) fn parse_query(
                 let (name, apply) = parse_algo_rule(pair, param_pool)?;
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
-                        e.insert(InputRulesOrAlgo::Algo(apply));
+                        e.insert(InputRulesOrAlgo::Algo { algo: apply });
                     }
                     Entry::Occupied(e) => bail!("algo rule can only be defined once: {}", e.key()),
                 }
@@ -158,7 +158,7 @@ pub(crate) fn parse_query(
                 let mut args = pair.into_inner();
                 let op = match args.next().unwrap().as_rule() {
                     Rule::relation_create => RelationOp::Create,
-                    Rule::relation_rederive => RelationOp::Rederive,
+                    Rule::relation_rederive => RelationOp::ReDerive,
                     Rule::relation_put => RelationOp::Put,
                     Rule::relation_retract => RelationOp::Retract,
                     _ => unreachable!(),
@@ -205,8 +205,8 @@ fn get_entry_arity(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<usize> {
             .get(&PROG_ENTRY)
             .ok_or_else(|| miette!("program entry point not found"))?
         {
-            InputRulesOrAlgo::Rules(rules) => rules[0].head.len(),
-            InputRulesOrAlgo::Algo(algo_apply) => algo_apply.arity()?,
+            InputRulesOrAlgo::Rules { rules } => rules[0].head.len(),
+            InputRulesOrAlgo::Algo { algo } => algo.arity()?,
         },
     )
 }

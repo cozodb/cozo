@@ -19,7 +19,7 @@ impl NormalFormProgram {
     pub(crate) fn exempt_aggr_rules_for_magic_sets(&self, exempt_rules: &mut BTreeSet<Symbol>) {
         for (name, rule_set) in self.prog.iter() {
             match rule_set {
-                NormalFormAlgoOrRules::Rules(rule_set) => {
+                NormalFormAlgoOrRules::Rules { rules: rule_set } => {
                     'outer: for rule in rule_set.iter() {
                         for aggr in rule.aggr.iter() {
                             if aggr.is_some() {
@@ -29,7 +29,7 @@ impl NormalFormProgram {
                         }
                     }
                 }
-                NormalFormAlgoOrRules::Algo(_) => {}
+                NormalFormAlgoOrRules::Algo { algo: _ } => {}
             }
         }
     }
@@ -60,13 +60,13 @@ impl MagicProgram {
         };
         for (rule_head, ruleset) in self.prog {
             match ruleset {
-                MagicRulesOrAlgo::Rules(ruleset) => {
+                MagicRulesOrAlgo::Rules { rules: ruleset } => {
                     magic_rewrite_ruleset(rule_head, ruleset, &mut ret_prog);
                 }
-                MagicRulesOrAlgo::Algo(algo_apply) => {
+                MagicRulesOrAlgo::Algo { algo: algo_apply } => {
                     ret_prog
                         .prog
-                        .insert(rule_head, MagicRulesOrAlgo::Algo(algo_apply));
+                        .insert(rule_head, MagicRulesOrAlgo::Algo { algo: algo_apply });
                 }
             }
         }
@@ -130,12 +130,14 @@ fn magic_rewrite_ruleset(
 
             ret_prog.prog.insert(
                 sup_kw.clone(),
-                MagicRulesOrAlgo::Rules(vec![MagicRule {
-                    head: sup_args.clone(),
-                    aggr: sup_aggr,
-                    body: sup_body,
-                    vld: rule.vld,
-                }]),
+                MagicRulesOrAlgo::Rules {
+                    rules: vec![MagicRule {
+                        head: sup_args.clone(),
+                        aggr: sup_aggr,
+                        body: sup_body,
+                        vld: rule.vld,
+                    }]
+                },
             );
 
             seen_bindings.extend(sup_args.iter().cloned());
@@ -255,7 +257,7 @@ impl NormalFormProgram {
         let mut downstream_rules: BTreeSet<Symbol> = Default::default();
         for rules in self.prog.values() {
             match rules {
-                NormalFormAlgoOrRules::Rules(rules) => {
+                NormalFormAlgoOrRules::Rules { rules } => {
                     for rule in rules {
                         for atom in rule.body.iter() {
                             match atom {
@@ -270,7 +272,7 @@ impl NormalFormProgram {
                         }
                     }
                 }
-                NormalFormAlgoOrRules::Algo(algo) => {
+                NormalFormAlgoOrRules::Algo { algo } => {
                     for rel in algo.rule_args.iter() {
                         if let AlgoRuleArg::InMem { name, .. } = rel {
                             downstream_rules.insert(name.clone());
@@ -305,55 +307,57 @@ impl NormalFormProgram {
                 continue;
             }
             match rules {
-                NormalFormAlgoOrRules::Algo(algo_apply) => {
+                NormalFormAlgoOrRules::Algo { algo: algo_apply } => {
                     adorned_prog.prog.insert(
                         MagicSymbol::Muggle {
                             inner: rule_name.clone(),
                         },
-                        MagicRulesOrAlgo::Algo(MagicAlgoApply {
-                            algo: algo_apply.algo.clone(),
-                            rule_args: algo_apply
-                                .rule_args
-                                .iter()
-                                .map(|r| -> Result<MagicAlgoRuleArg> {
-                                    Ok(match r {
-                                        AlgoRuleArg::InMem { name, bindings } => {
-                                            MagicAlgoRuleArg::InMem {
-                                                name: MagicSymbol::Muggle {
-                                                    inner: name.clone(),
-                                                },
-                                                bindings: bindings.clone(),
+                        MagicRulesOrAlgo::Algo {
+                            algo: MagicAlgoApply {
+                                algo: algo_apply.algo.clone(),
+                                rule_args: algo_apply
+                                    .rule_args
+                                    .iter()
+                                    .map(|r| -> Result<MagicAlgoRuleArg> {
+                                        Ok(match r {
+                                            AlgoRuleArg::InMem { name, bindings } => {
+                                                MagicAlgoRuleArg::InMem {
+                                                    name: MagicSymbol::Muggle {
+                                                        inner: name.clone(),
+                                                    },
+                                                    bindings: bindings.clone(),
+                                                }
                                             }
-                                        }
-                                        AlgoRuleArg::Stored { name, bindings } => {
-                                            MagicAlgoRuleArg::Stored {
-                                                name: name.clone(),
-                                                bindings: bindings.clone(),
+                                            AlgoRuleArg::Stored { name, bindings } => {
+                                                MagicAlgoRuleArg::Stored {
+                                                    name: name.clone(),
+                                                    bindings: bindings.clone(),
+                                                }
                                             }
-                                        }
-                                        AlgoRuleArg::Triple {
-                                            name,
-                                            bindings,
-                                            dir,
-                                        } => {
-                                            let attr = tx.attr_by_name(name)?.ok_or_else(|| {
-                                                miette!("cannot find attribute {}", name)
-                                            })?;
-                                            MagicAlgoRuleArg::Triple {
-                                                name: attr,
-                                                bindings: bindings.clone(),
-                                                dir: *dir,
-                                                vld: algo_apply.vld.unwrap_or(default_vld),
+                                            AlgoRuleArg::Triple {
+                                                name,
+                                                bindings,
+                                                dir,
+                                            } => {
+                                                let attr = tx.attr_by_name(name)?.ok_or_else(|| {
+                                                    miette!("cannot find attribute {}", name)
+                                                })?;
+                                                MagicAlgoRuleArg::Triple {
+                                                    name: attr,
+                                                    bindings: bindings.clone(),
+                                                    dir: *dir,
+                                                    vld: algo_apply.vld.unwrap_or(default_vld),
+                                                }
                                             }
-                                        }
+                                        })
                                     })
-                                })
-                                .try_collect()?,
-                            options: algo_apply.options.clone(),
-                        }),
+                                    .try_collect()?,
+                                options: algo_apply.options.clone(),
+                            }
+                        },
                     );
                 }
-                NormalFormAlgoOrRules::Rules(rules) => {
+                NormalFormAlgoOrRules::Rules { rules } => {
                     let mut adorned_rules = Vec::with_capacity(rules.len());
                     for rule in rules {
                         let adorned_rule = rule.adorn(
@@ -367,7 +371,7 @@ impl NormalFormProgram {
                         MagicSymbol::Muggle {
                             inner: rule_name.clone(),
                         },
-                        MagicRulesOrAlgo::Rules(adorned_rules),
+                        MagicRulesOrAlgo::Rules { rules: adorned_rules },
                     );
                 }
             }
@@ -398,7 +402,7 @@ impl NormalFormProgram {
             }
             adorned_prog
                 .prog
-                .insert(head, MagicRulesOrAlgo::Rules(adorned_rules));
+                .insert(head, MagicRulesOrAlgo::Rules { rules: adorned_rules });
         }
         Ok(adorned_prog)
     }

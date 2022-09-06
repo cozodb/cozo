@@ -65,7 +65,7 @@ pub(crate) enum SortDir {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum RelationOp {
     Create,
-    Rederive,
+    ReDerive,
     Put,
     Retract,
 }
@@ -84,8 +84,8 @@ impl TempSymbGen {
 
 #[derive(Debug, Clone)]
 pub(crate) enum InputRulesOrAlgo {
-    Rules(Vec<InputRule>),
-    Algo(AlgoApply),
+    Rules { rules: Vec<InputRule> },
+    Algo { algo: AlgoApply },
 }
 
 #[derive(Clone)]
@@ -214,8 +214,8 @@ impl InputProgram {
     pub(crate) fn get_entry_head(&self) -> Option<&[Symbol]> {
         if let Some(entry) = self.prog.get(&PROG_ENTRY) {
             return match entry {
-                InputRulesOrAlgo::Rules(rules) => Some(&rules.last().unwrap().head),
-                InputRulesOrAlgo::Algo(algo_apply) => {
+                InputRulesOrAlgo::Rules { rules } => Some(&rules.last().unwrap().head),
+                InputRulesOrAlgo::Algo { algo: algo_apply } => {
                     if algo_apply.head.is_empty() {
                         None
                     } else {
@@ -245,7 +245,7 @@ impl InputProgram {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
         for (k, rules_or_algo) in &self.prog {
             match rules_or_algo {
-                InputRulesOrAlgo::Rules(rules) => {
+                InputRulesOrAlgo::Rules { rules } => {
                     let mut collected_rules = vec![];
                     for rule in rules {
                         let mut counter = -1;
@@ -293,10 +293,20 @@ impl InputProgram {
                             collected_rules.push(normalized_rule.convert_to_well_ordered_rule()?);
                         }
                     }
-                    prog.insert(k.clone(), NormalFormAlgoOrRules::Rules(collected_rules));
+                    prog.insert(
+                        k.clone(),
+                        NormalFormAlgoOrRules::Rules {
+                            rules: collected_rules,
+                        },
+                    );
                 }
-                InputRulesOrAlgo::Algo(algo_apply) => {
-                    prog.insert(k.clone(), NormalFormAlgoOrRules::Algo(algo_apply.clone()));
+                InputRulesOrAlgo::Algo { algo: algo_apply } => {
+                    prog.insert(
+                        k.clone(),
+                        NormalFormAlgoOrRules::Algo {
+                            algo: algo_apply.clone(),
+                        },
+                    );
                 }
             }
         }
@@ -309,15 +319,15 @@ pub(crate) struct StratifiedNormalFormProgram(pub(crate) Vec<NormalFormProgram>)
 
 #[derive(Debug, Clone)]
 pub(crate) enum NormalFormAlgoOrRules {
-    Rules(Vec<NormalFormRule>),
-    Algo(AlgoApply),
+    Rules { rules: Vec<NormalFormRule> },
+    Algo { algo: AlgoApply },
 }
 
 impl NormalFormAlgoOrRules {
     pub(crate) fn rules(&self) -> Option<&[NormalFormRule]> {
         match self {
-            NormalFormAlgoOrRules::Rules(r) => Some(r),
-            NormalFormAlgoOrRules::Algo(_) => None,
+            NormalFormAlgoOrRules::Rules { rules: r } => Some(r),
+            NormalFormAlgoOrRules::Algo { algo: _ } => None,
         }
     }
 }
@@ -332,27 +342,27 @@ pub(crate) struct StratifiedMagicProgram(pub(crate) Vec<MagicProgram>);
 
 #[derive(Debug, Clone)]
 pub(crate) enum MagicRulesOrAlgo {
-    Rules(Vec<MagicRule>),
-    Algo(MagicAlgoApply),
+    Rules { rules: Vec<MagicRule> },
+    Algo { algo: MagicAlgoApply },
 }
 
 impl Default for MagicRulesOrAlgo {
     fn default() -> Self {
-        Self::Rules(vec![])
+        Self::Rules { rules: vec![] }
     }
 }
 
 impl MagicRulesOrAlgo {
     pub(crate) fn arity(&self) -> Result<usize> {
         Ok(match self {
-            MagicRulesOrAlgo::Rules(r) => r.first().unwrap().head.len(),
-            MagicRulesOrAlgo::Algo(algo) => algo.arity()?,
+            MagicRulesOrAlgo::Rules { rules } => rules.first().unwrap().head.len(),
+            MagicRulesOrAlgo::Algo { algo } => algo.arity()?,
         })
     }
     pub(crate) fn mut_rules(&mut self) -> Option<&mut Vec<MagicRule>> {
         match self {
-            MagicRulesOrAlgo::Rules(r) => Some(r),
-            MagicRulesOrAlgo::Algo(_) => None,
+            MagicRulesOrAlgo::Rules { rules } => Some(rules),
+            MagicRulesOrAlgo::Algo { algo: _ } => None,
         }
     }
 }

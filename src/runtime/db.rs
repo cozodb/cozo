@@ -327,7 +327,7 @@ impl Db {
                     "relation '{}' exists but is required not to be",
                     meta.name
                 )
-            } else if *op != RelationOp::Rederive {
+            } else if *op != RelationOp::ReDerive {
                 ensure!(
                     tx.relation_exists(&meta.name)?,
                     "relation '{}' does not exist but is required to be",

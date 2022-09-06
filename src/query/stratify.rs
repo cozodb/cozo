@@ -35,7 +35,7 @@ fn convert_normal_form_program_to_graph(
         .prog
         .iter()
         .filter_map(|(k, ruleset)| match ruleset {
-            NormalFormAlgoOrRules::Rules(ruleset) => {
+            NormalFormAlgoOrRules::Rules { rules: ruleset } => {
                 let has_aggr = ruleset
                     .iter()
                     .any(|rule| rule.aggr.iter().any(|a| a.is_some()));
@@ -52,22 +52,22 @@ fn convert_normal_form_program_to_graph(
                     None
                 }
             }
-            NormalFormAlgoOrRules::Algo(_) => None,
+            NormalFormAlgoOrRules::Algo { algo: _ } => None,
         })
         .collect();
     let algo_rules: BTreeSet<_> = nf_prog
         .prog
         .iter()
         .filter_map(|(k, ruleset)| match ruleset {
-            NormalFormAlgoOrRules::Rules(_) => None,
-            NormalFormAlgoOrRules::Algo(_) => Some(k),
+            NormalFormAlgoOrRules::Rules { rules: _ } => None,
+            NormalFormAlgoOrRules::Algo { algo: _ } => Some(k),
         })
         .collect();
     nf_prog
         .prog
         .iter()
         .map(|(k, ruleset)| match ruleset {
-            NormalFormAlgoOrRules::Rules(ruleset) => {
+            NormalFormAlgoOrRules::Rules { rules: ruleset } => {
                 let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
                 let has_aggr = ruleset
                     .iter()
@@ -119,7 +119,7 @@ fn convert_normal_form_program_to_graph(
                 }
                 (k, ret)
             }
-            NormalFormAlgoOrRules::Algo(algo) => {
+            NormalFormAlgoOrRules::Algo { algo } => {
                 let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
                 for rel in &algo.rule_args {
                     match rel {

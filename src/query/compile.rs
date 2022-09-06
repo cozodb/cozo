@@ -109,7 +109,7 @@ impl SessionTx {
                     .iter()
                     .map(|(k, body)| -> Result<(MagicSymbol, CompiledRuleSet)> {
                         match body {
-                            MagicRulesOrAlgo::Rules(body) => {
+                            MagicRulesOrAlgo::Rules { rules: body } => {
                                 let mut collected = Vec::with_capacity(body.len());
                                 for (rule_idx, rule) in body.iter().enumerate() {
                                     let header = &rule.head;
@@ -135,7 +135,7 @@ impl SessionTx {
                                 Ok((k.clone(), CompiledRuleSet::Rules(collected)))
                             }
 
-                            MagicRulesOrAlgo::Algo(algo_apply) => {
+                            MagicRulesOrAlgo::Algo { algo: algo_apply } => {
                                 Ok((k.clone(), CompiledRuleSet::Algo(algo_apply.clone())))
                             }
                         }
