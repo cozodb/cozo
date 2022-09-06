@@ -70,35 +70,24 @@ shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, boo
     }
 
     shared_ptr<RocksDbBridge> db_wrapper = shared_ptr<RocksDbBridge>(nullptr);
-    if (opts.optimistic) {
-        auto db = new OptimisticRocksDb();
-        db->options = std::move(options);
-        db->db_path = string(opts.db_path);
-        db->comparator.reset(cmp);
 
-        OptimisticTransactionDB *txn_db = nullptr;
-        write_status(OptimisticTransactionDB::Open(*db->options, db->db_path, &txn_db), status);
-        db->db.reset(txn_db);
-        db->destroy_on_exit = opts.destroy_on_exit;
-        db_wrapper.reset(db);
-    } else {
-        auto db = new PessimisticRocksDb();
-        db->options = std::move(options);
-        db->db_path = string(opts.db_path);
-        db->tdb_opts = make_unique<TransactionDBOptions>();
-        db->comparator.reset(cmp);
+    auto db = new RocksDbBridge();
+    db->options = std::move(options);
+    db->db_path = string(opts.db_path);
+    db->tdb_opts = make_unique<TransactionDBOptions>();
+    db->comparator.reset(cmp);
 
-        TransactionDB *txn_db = nullptr;
-        write_status(TransactionDB::Open(*db->options, *db->tdb_opts, db->db_path, &txn_db), status);
-        db->db.reset(txn_db);
-        db->destroy_on_exit = opts.destroy_on_exit;
-        db_wrapper.reset(db);
-    }
+    TransactionDB *txn_db = nullptr;
+    write_status(TransactionDB::Open(*db->options, *db->tdb_opts, db->db_path, &txn_db), status);
+    db->db.reset(txn_db);
+    db->destroy_on_exit = opts.destroy_on_exit;
+    db_wrapper.reset(db);
+
 
     return db_wrapper;
 }
 
-PessimisticRocksDb::~PessimisticRocksDb() {
+RocksDbBridge::~RocksDbBridge() {
     if (destroy_on_exit && (db != nullptr)) {
         cerr << "destroying database on exit: " << db_path << endl;
         auto status = db->Close();
@@ -111,24 +100,4 @@ PessimisticRocksDb::~PessimisticRocksDb() {
             cerr << status2.ToString() << endl;
         }
     }
-}
-
-OptimisticRocksDb::~OptimisticRocksDb() {
-    if (destroy_on_exit) {
-        cerr << "destroying database on exit: " << db_path << endl;
-        auto status = db->Close();
-        if (!status.ok()) {
-            cerr << status.ToString() << endl;
-        }
-        db.reset();
-        auto status2 = DestroyDB(db_path, *options);
-        if (!status2.ok()) {
-            cerr << status.ToString() << endl;
-        }
-    }
-}
-
-void OptimisticRocksDb::del_range(RustBytes, RustBytes, RocksDbStatus &status) const {
-    status.code = StatusCode::kInvalidArgument;
-    status.message = rust::String("cannot call 'del_range' on optimistic db");
 }
