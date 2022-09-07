@@ -52,8 +52,6 @@ pub(crate) mod top_sort;
 pub(crate) mod triangles;
 pub(crate) mod yen;
 
-pub(crate) type AlgoOptions = BTreeMap<SmartString<LazyCompact>, Expr>;
-
 pub(crate) trait AlgoImpl {
     fn run(
         &mut self,
@@ -394,39 +392,4 @@ impl MagicAlgoRuleArg {
             },
         })
     }
-}
-
-pub(crate) fn get_bool_option(
-    name: &str,
-    opts: &AlgoOptions,
-    default: Option<bool>,
-    algo_name: &str,
-) -> Result<Option<bool>> {
-    Ok(match opts.get(name) {
-        None => default,
-        Some(ex) => match ex.eval(&Tuple::default())? {
-            DataValue::Bool(b) => Some(b),
-            v => bail!(
-                "cannot get boolean option '{}' for '{}': found {:?}",
-                name,
-                algo_name,
-                v
-            ),
-        },
-    })
-}
-
-pub(crate) fn get_bool_option_required(
-    name: &str,
-    opts: &AlgoOptions,
-    default: Option<bool>,
-    algo_name: &str,
-) -> Result<bool> {
-    get_bool_option(name, opts, default, algo_name)?.ok_or_else(|| {
-        miette!(
-            "boolean option '{}' required for algorithm '{}'",
-            name,
-            algo_name
-        )
-    })
 }

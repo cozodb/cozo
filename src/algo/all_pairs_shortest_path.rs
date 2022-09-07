@@ -2,14 +2,13 @@ use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use miette::miette;
 use miette::Result;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rayon::prelude::*;
 
 use crate::algo::shortest_path_dijkstra::dijkstra_keep_ties;
-use crate::algo::{get_bool_option_required, AlgoImpl};
+use crate::algo::AlgoImpl;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -27,17 +26,9 @@ impl AlgoImpl for BetweennessCentrality {
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
-    ) -> miette::Result<()> {
-        let edges = algo
-            .rule_args
-            .get(0)
-            .ok_or_else(|| miette!("'betweenness_centrality' requires edges relation"))?;
-        let undirected = get_bool_option_required(
-            "undirected",
-            &algo.options,
-            Some(false),
-            "betweenness_centrality",
-        )?;
+    ) -> Result<()> {
+        let edges = algo.get_relation(0)?;
+        let undirected = algo.get_bool_option("undirected", Some(false))?;
 
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
@@ -97,17 +88,9 @@ impl AlgoImpl for ClosenessCentrality {
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         out: &DerivedRelStore,
         poison: Poison,
-    ) -> miette::Result<()> {
-        let edges = algo
-            .rule_args
-            .get(0)
-            .ok_or_else(|| miette!("'closeness_centrality' requires edges relation"))?;
-        let undirected = get_bool_option_required(
-            "undirected",
-            &algo.options,
-            Some(false),
-            "closeness_centrality",
-        )?;
+    ) -> Result<()> {
+        let edges = algo.get_relation(0)?;
+        let undirected = algo.get_bool_option("undirected", Some(false))?;
 
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;

@@ -2,14 +2,14 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
 
-use miette::{miette, Result};
 use itertools::Itertools;
+use miette::{miette, Result};
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rayon::prelude::*;
 use smallvec::{smallvec, SmallVec};
 
-use crate::algo::{get_bool_option_required, AlgoImpl};
+use crate::algo::AlgoImpl;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -28,19 +28,11 @@ impl AlgoImpl for ShortestPathDijkstra {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
-        let opts = &algo.options;
-        let edges = rels
-            .get(0)
-            .ok_or_else(|| miette!("'shortest_path_dijkstra' requires edges relation"))?;
-        let starting = rels.get(1).ok_or_else(|| {
-            miette!("'shortest_path_dijkstra' requires starting relation as second argument")
-        })?;
-        let termination = rels.get(2);
-        let undirected =
-            get_bool_option_required("undirected", opts, Some(false), "shortest_path_dijkstra")?;
-        let keep_ties =
-            get_bool_option_required("keep_ties", opts, Some(false), "shortest_path_dijkstra")?;
+        let edges = algo.get_relation(0)?;
+        let starting = algo.get_relation(1)?;
+        let termination = algo.get_relation(2);
+        let undirected = algo.get_bool_option("undirected", Some(false))?;
+        let keep_ties = algo.get_bool_option("keep_ties", Some(false))?;
 
         let (graph, indices, inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
@@ -57,8 +49,8 @@ impl AlgoImpl for ShortestPathDijkstra {
             }
         }
         let termination_nodes = match termination {
-            None => None,
-            Some(t) => {
+            Err(_) => None,
+            Ok(t) => {
                 let mut tn = BTreeSet::new();
                 for tuple in t.iter(tx, stores)? {
                     let tuple = tuple?;

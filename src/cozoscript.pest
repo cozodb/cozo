@@ -25,13 +25,13 @@ prog_entry = {"?"}
 var = @{(XID_START | "_") ~ (XID_CONTINUE | "_")*}
 param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
-algo_ident = @{XID_START ~ ("_" | XID_CONTINUE)* ~ "!"}
 relation_ident = @{":" ~ compound_ident}
 compound_ident = {ident ~ ("." ~ ident)?}
 
-rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"}
-const_rule = {rule_head ~ "<-" ~ expr ~ ";" }
-algo_rule = {rule_head ~ ("@" ~ expr)? ~ "<-" ~ algo_ident ~ "(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")" ~ ";" }
+rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"?}
+const_rule = {rule_head ~ "<-" ~ expr ~ ";"?}
+algo_rule = {rule_head ~ ("@" ~ expr)? ~ "<~" ~ ident ~ algo_args_list ~ ";"?}
+algo_args_list = {"(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")"}
 
 rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
 head_arg = {aggr_arg | var}
@@ -86,7 +86,7 @@ term = _{ literal | param | grouping | apply | var | list }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = _{(limit_option|offset_option|out_option|sort_option|relation_option|timeout_option) ~ ";"}
+option = _{(limit_option|offset_option|out_option|sort_option|relation_option|timeout_option) ~ ";"?}
 limit_option = {":limit"  ~ expr}
 offset_option = {":offset" ~ expr}
 out_option = {":pull" ~ var ~ ("@" ~ expr)? ~ out_spec}
@@ -164,7 +164,7 @@ literal = _{ null | boolean | number | string}
 schema_clause = { (schema_put | schema_retract) ~ compound_ident ~ (simple_schema_def | nested_schema_def) }
 schema_put = {"put"}
 schema_retract = {"retract"}
-simple_schema_def = {":" ~ ident+ ~ ";"}
+simple_schema_def = {":" ~ ident+ ~ ";"?}
 nested_schema_def = {"{" ~ (nested_schema_clause ~ ",")* ~ nested_schema_clause? ~ "}" ~ ";"?}
 nested_schema_clause = {compound_ident ~ ":" ~ ident+}
 

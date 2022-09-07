@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use miette::{miette, ensure, Result};
+use miette::{ensure, miette, Result};
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 
@@ -25,20 +25,11 @@ impl AlgoImpl for ShortestPathAStar {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
         let opts = &algo.options;
-        let edges = rels
-            .get(0)
-            .ok_or_else(|| miette!("'shortest_path_astar' requires edges relation"))?;
-        let nodes = rels.get(1).ok_or_else(|| {
-            miette!("'shortest_path_astar' requires nodes relation as second argument")
-        })?;
-        let starting = rels.get(2).ok_or_else(|| {
-            miette!("'shortest_path_astar' requires starting relation as third argument")
-        })?;
-        let goals = rels.get(3).ok_or_else(|| {
-            miette!("'shortest_path_astar' requires goal relation as fourth argument")
-        })?;
+        let edges = algo.get_relation(0)?;
+        let nodes = algo.get_relation(1)?;
+        let starting = algo.get_relation(2)?;
+        let goals = algo.get_relation(3)?;
         let mut heuristic = opts
             .get("heuristic")
             .ok_or_else(|| miette!("'heuristic' option required for 'shortest_path_astar'"))?
@@ -52,7 +43,16 @@ impl AlgoImpl for ShortestPathAStar {
             let start = start?;
             for goal in goals.iter(tx, stores)? {
                 let goal = goal?;
-                let (cost, path) = astar(&start, &goal, edges, nodes, &heuristic, tx, stores, poison.clone())?;
+                let (cost, path) = astar(
+                    &start,
+                    &goal,
+                    edges,
+                    nodes,
+                    &heuristic,
+                    tx,
+                    stores,
+                    poison.clone(),
+                )?;
                 out.put(
                     Tuple(vec![
                         start.0[0].clone(),

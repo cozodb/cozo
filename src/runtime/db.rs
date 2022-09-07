@@ -21,6 +21,7 @@ use crate::data::encode::{largest_key, smallest_key};
 use crate::data::id::{TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, RelationOp};
+use crate::data::symb::Symbol;
 use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::schema::AttrTxItem;
@@ -238,7 +239,15 @@ impl Db {
             json!({"rows": rows, "headers": ["id", "name", "type", "cardinality", "index", "history"]}),
         )
     }
-    pub fn run_script(
+    pub fn run_script<'a>(
+        &self,
+        payload: &str,
+        params: &BTreeMap<String, JsonValue>,
+    ) -> Result<JsonValue> {
+        self.do_run_script(payload, params)
+            .map_err(|err| err.with_source_code(payload.to_string()))
+    }
+    pub fn do_run_script(
         &self,
         payload: &str,
         params: &BTreeMap<String, JsonValue>,
@@ -247,9 +256,7 @@ impl Db {
             .iter()
             .map(|(k, v)| (k.clone(), DataValue::from(v)))
             .collect();
-        match parse_script(payload, &param_pool)
-            .map_err(|e| e.with_source_code(payload.to_string()))?
-        {
+        match parse_script(payload, &param_pool)? {
             CozoScript::Query(p) => {
                 let (mut tx, is_write) = if p.out_opts.store_relation.is_some() {
                     (self.transact_write()?, true)
@@ -294,7 +301,7 @@ impl Db {
             SysOp::ListRelations => self.list_relations(),
             SysOp::RemoveRelations(rs) => {
                 for r in rs.iter() {
-                    self.remove_relation(&r.name)?;
+                    self.remove_relation(r)?;
                 }
                 Ok(json!({"status": "OK"}))
             }
@@ -432,13 +439,13 @@ impl Db {
             }
         }
     }
-    pub fn remove_relation(&self, name: &str) -> Result<()> {
+    pub(crate) fn remove_relation(&self, name: &Symbol) -> Result<()> {
         let mut tx = self.transact_write()?;
         let (lower, upper) = tx.destroy_relation(name)?;
         self.db.range_del(&lower, &upper, Snd)?;
         Ok(())
     }
-    pub fn list_running(&self) -> Result<JsonValue> {
+    pub(crate) fn list_running(&self) -> Result<JsonValue> {
         let res = self
             .running_queries
             .lock()

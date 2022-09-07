@@ -21,19 +21,10 @@ impl AlgoImpl for Dfs {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
         let opts = &algo.options;
-        ensure!(
-            rels.len() == 2 || rels.len() == 3,
-            "'dfs' requires two or three input relations"
-        );
-        let edges = rels.get(0).unwrap();
-        let nodes = rels.get(1).unwrap();
-        let starting_nodes = if rels.len() == 3 {
-            rels.get(2).unwrap()
-        } else {
-            nodes
-        };
+        let edges = algo.get_relation(0)?;
+        let nodes = algo.get_relation(1)?;
+        let starting_nodes = algo.get_relation(2).unwrap_or(nodes);
         let limit = if let Some(expr) = opts.get("limit") {
             let l = expr
                 .get_const()

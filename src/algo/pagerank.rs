@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 use std::mem;
 
 use approx::AbsDiffEq;
-use miette::{bail, ensure, miette, Result};
+use miette::{bail, ensure, Result};
 use nalgebra::{Dynamic, OMatrix, U1};
 
-use crate::algo::{get_bool_option_required, AlgoImpl};
+use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
@@ -25,12 +25,9 @@ impl AlgoImpl for PageRank {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
         let opts = &algo.options;
-        let edges = rels
-            .get(0)
-            .ok_or_else(|| miette!("'pagerank' requires edges relation"))?;
-        let undirected = get_bool_option_required("undirected", opts, Some(false), "pagerank")?;
+        let edges = algo.get_relation(0)?;
+        let undirected = algo.get_bool_option("undirected", Some(false))?;
         let theta = match opts.get("theta") {
             None => 0.8f32,
             Some(Expr::Const {

@@ -32,11 +32,8 @@ impl AlgoImpl for StronglyConnectedComponent {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
         let opts = &algo.options;
-        let edges = rels
-            .get(0)
-            .ok_or_else(|| miette!("'strongly_connected_components' missing edges relation"))?;
+        let edges = algo.get_relation(0)?;
 
         let reverse_mode = match opts.get("mode") {
             None => false,
@@ -75,7 +72,7 @@ impl AlgoImpl for StronglyConnectedComponent {
 
         let mut counter = tarjan.len() as i64;
 
-        if let Some(nodes) = rels.get(1) {
+        if let Ok(nodes) = algo.get_relation(1) {
             for tuple in nodes.iter(tx, stores)? {
                 let tuple = tuple?;
                 let node = tuple.0.into_iter().next().ok_or_else(|| {

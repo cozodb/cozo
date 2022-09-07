@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use miette::{miette, Result};
+use miette::{Result};
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 
@@ -24,10 +24,7 @@ impl AlgoImpl for MinimumSpanningTreePrim {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
-        let edges = rels
-            .get(0)
-            .ok_or_else(|| miette!("'minimum_spanning_tree_prim' requires edge relation"))?;
+        let edges = algo.get_relation(0)?;
         let (graph, indices, _, _) =
             edges.convert_edge_to_weighted_graph(true, true, tx, stores)?;
         if graph.is_empty() {

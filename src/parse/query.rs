@@ -553,7 +553,6 @@ fn parse_algo_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<(Symbol, AlgoApply)> {
-    let span = src.extract_span();
     let mut src = src.into_inner();
     let (out_symbol, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
     ensure!(
@@ -569,14 +568,16 @@ fn parse_algo_rule(
             at = Some(vld);
             name_pair = src.next().unwrap();
         }
-        Rule::algo_ident => {}
+        Rule::ident => {}
         _ => unreachable!(),
     }
-    let algo_name = &name_pair.as_str().strip_suffix('!').unwrap();
+    let algo_name = &name_pair.as_str();
     let mut rule_args: Vec<AlgoRuleArg> = vec![];
     let mut options: BTreeMap<SmartString<LazyCompact>, Expr> = Default::default();
+    let args_list = src.next().unwrap();
+    let args_list_span = args_list.extract_span();
 
-    for nxt in src {
+    for nxt in args_list.into_inner() {
         match nxt.as_rule() {
             Rule::algo_rel => {
                 let inner = nxt.into_inner().next().unwrap();
@@ -660,7 +661,7 @@ fn parse_algo_rule(
             options,
             head,
             vld: at,
-            span,
+            span: args_list_span,
         },
     ))
 }

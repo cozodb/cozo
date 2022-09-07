@@ -117,24 +117,26 @@ fn air_routes() -> Result<()> {
     let dfs_time = Instant::now();
     let res = db.run_script(r#"
         starting[] <- [['PEK']];
-        ?[] <- dfs!(:flies_to_code[], [id <airport.iata code], starting[], condition: (code == 'LHR'));
+        ?[] <~ dfs(:flies_to_code[], [id <airport.iata code], starting[], condition: (code == 'LHR'));
     "#,        &params,
     )?;
     dbg!(dfs_time.elapsed());
     println!("{}", res);
 
     let bfs_time = Instant::now();
-    let res = db.run_script(r#"
+    let res = db.run_script(
+        r#"
         starting[] <- [['PEK']];
-        ?[] <- bfs!(:flies_to_code[], [id <airport.iata code], starting[], condition: code == 'SOU');
-    "#,        &params,
+        ?[] <~ bfs(:flies_to_code[], [id <airport.iata code], starting[], condition: code == 'SOU');
+    "#,
+        &params,
     )?;
     dbg!(bfs_time.elapsed());
     println!("{}", res);
 
     let scc_time = Instant::now();
     let res = db.run_script(r#"
-        res[] <- strongly_connected_components!(:flies_to_code[], [id <airport.iata code], mode: 'group_first');
+        res[] <~ strongly_connected_components(:flies_to_code[], [id <airport.iata code], mode: 'group_first');
         ?[grp, code] := res[grp, code], grp != 0;
     "#,        &params,
     )?;
@@ -143,7 +145,7 @@ fn air_routes() -> Result<()> {
 
     let cc_time = Instant::now();
     let res = db.run_script(r#"
-        res[] <- connected_components!(:flies_to_code[], [id <airport.iata code], mode: 'group_first');
+        res[] <~ connected_components(:flies_to_code[], [id <airport.iata code], mode: 'group_first');
         ?[grp, code] := res[grp, code], grp != 0;
     "#,        &params,
     )?;
@@ -154,7 +156,7 @@ fn air_routes() -> Result<()> {
     let res = db.run_script(r#"
         starting[code, lat, lon] := code <- 'HFE', :code_lat_lon[code, lat, lon];
         goal[code, lat, lon] := code <- 'LHR', :code_lat_lon[code, lat, lon];
-        ?[] <- shortest_path_astar!(:flies_to_code[], :code_lat_lon[node, lat1, lon1], starting[], goal[goal, lat2, lon2], heuristic: haversine_deg_input(lat1, lon1, lat2, lon2) * 3963);
+        ?[] <~ shortest_path_astar(:flies_to_code[], :code_lat_lon[node, lat1, lon1], starting[], goal[goal, lat2, lon2], heuristic: haversine_deg_input(lat1, lon1, lat2, lon2) * 3963);
     "#,        &params,
     )?;
     println!("{}", res);
@@ -163,7 +165,7 @@ fn air_routes() -> Result<()> {
     let deg_centrality_time = Instant::now();
     let res = db.run_script(
         r#"
-        deg_centrality[] <- degree_centrality!(:flies_to[a, b]);
+        deg_centrality[] <~ degree_centrality(:flies_to[a, b]);
         ?[total, out, in] := deg_centrality[node, total, out, in];
         :order -total;
         :limit 10;
@@ -187,7 +189,7 @@ fn air_routes() -> Result<()> {
         r#"
         flies_to[a, b] := [r route.src ac], [r route.dst bc],
                             [ac airport.iata a], [bc airport.iata b];
-        deg_centrality[] <- degree_centrality!(flies_to[a, b]);
+        deg_centrality[] <~ degree_centrality(flies_to[a, b]);
         ?[node, total, out, in] := deg_centrality[node, total, out, in];
         :order -total;
         :limit 10;
@@ -213,7 +215,7 @@ fn air_routes() -> Result<()> {
         r#"
         starting[] <- [['JFK']];
         ending[] <- [['KUL']];
-        res[] <- shortest_path_dijkstra!(:flies_to_code[], starting[], ending[]);
+        res[] <~ shortest_path_dijkstra(:flies_to_code[], starting[], ending[]);
         ?[path] := res[src, dst, cost, path];
     "#,
         &params,
@@ -227,7 +229,7 @@ fn air_routes() -> Result<()> {
         r#"
         starting[] <- [['PEK']];
         ending[] <- [['SIN']];
-        ?[] <- k_shortest_path_yen!(:flies_to_code[], starting[], ending[], k: 5);
+        ?[] <~ k_shortest_path_yen(:flies_to_code[], starting[], ending[], k: 5);
     "#,
         &params,
     )?;

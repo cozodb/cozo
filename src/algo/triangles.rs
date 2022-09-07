@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use miette::{miette, Result};
+use miette::Result;
 use rayon::prelude::*;
 
 use crate::algo::AlgoImpl;
@@ -22,10 +22,7 @@ impl AlgoImpl for ClusteringCoefficients {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
-        let edges = rels
-            .get(0)
-            .ok_or_else(|| miette!("'clustering_coefficients' requires edges relation"))?;
+        let edges = algo.get_relation(0)?;
         let (graph, indices, _) = edges.convert_edge_to_graph(true, tx, stores)?;
         let graph: Vec<BTreeSet<usize>> =
             graph.into_iter().map(|e| e.into_iter().collect()).collect();

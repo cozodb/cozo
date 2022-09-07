@@ -3,9 +3,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
 use either::{Left, Right};
+use miette::Diagnostic;
 use miette::Result;
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
 use crate::algo::AlgoHandle;
 use crate::data::aggr::Aggregation;
@@ -127,11 +129,77 @@ pub(crate) struct MagicAlgoApply {
     pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<MagicAlgoRuleArg>,
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
+    pub(crate) span: SourceSpan,
+}
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("Cannot find a required named option '{name}' for '{algo_name}'")]
+#[diagnostic(code(algo::arg_not_found))]
+pub(crate) struct AlgoOptionNotFoundError {
+    name: String,
+    #[label]
+    span: SourceSpan,
+    algo_name: String,
+}
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("Wrong value for option '{name}' of '{algo_name}'")]
+#[diagnostic(code(algo::arg_wrong))]
+pub(crate) struct WrongAlgoOptionError {
+    name: String,
+    #[label]
+    span: SourceSpan,
+    algo_name: String,
+    #[help]
+    help: String,
 }
 
 impl MagicAlgoApply {
     pub(crate) fn arity(&self) -> Option<usize> {
         self.algo.arity(Right(&self.rule_args), &self.options)
+    }
+    pub(crate) fn get_relation(&self, idx: usize) -> Result<&MagicAlgoRuleArg> {
+        #[derive(Error, Diagnostic, Debug)]
+        #[error("Cannot find a required positional argument at index {idx} for '{algo_name}'")]
+        #[diagnostic(code(algo::not_enough_args))]
+        pub(crate) struct AlgoNotEnoughRelationError {
+            idx: usize,
+            #[label]
+            span: SourceSpan,
+            algo_name: String,
+        }
+
+        Ok(self
+            .rule_args
+            .get(idx)
+            .ok_or_else(|| AlgoNotEnoughRelationError {
+                idx,
+                span: self.span,
+                algo_name: self.algo.name.to_string(),
+            })?)
+    }
+    pub(crate) fn get_bool_option(&self, name: &str, default: Option<bool>) -> Result<bool> {
+        match self.options.get(name) {
+            Some(v) => match v.clone().eval_to_const() {
+                Ok(DataValue::Bool(b)) => Ok(b),
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: v.span(),
+                    algo_name: self.algo.name.to_string(),
+                    help: "a boolean value is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                Some(v) => Ok(v),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.span,
+                    algo_name: self.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
     }
 }
 
@@ -617,7 +685,6 @@ pub(crate) enum MagicAtom {
     Unification(Unification),
 }
 
-
 // impl MagicAtom {
 //     pub(crate) fn span(&self) -> SourceSpan {
 //         match self {
@@ -632,7 +699,6 @@ pub(crate) enum MagicAtom {
 //         }
 //     }
 // }
-
 
 #[derive(Clone, Debug)]
 pub(crate) struct InputAttrTripleAtom {

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use miette::{miette, ensure, Result};
+use miette::{ensure, miette, Result};
 
 use crate::algo::AlgoImpl;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
@@ -21,13 +21,7 @@ impl AlgoImpl for DegreeCentrality {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
-        let it = rels
-            .get(0)
-            .ok_or_else(|| miette!(
-                "'degree_centrality' requires at least an edge relation to proceed"
-            ))?
-            .iter(tx, stores)?;
+        let it = algo.get_relation(0)?.iter(tx, stores)?;
         let mut counter: BTreeMap<DataValue, (usize, usize, usize)> = BTreeMap::new();
         for tuple in it {
             let tuple = tuple?;
@@ -46,7 +40,7 @@ impl AlgoImpl for DegreeCentrality {
             *to_in += 1;
             poison.check()?;
         }
-        if let Some(nodes) = rels.get(1) {
+        if let Ok(nodes) = algo.get_relation(1) {
             for tuple in nodes.iter(tx, stores)? {
                 let tuple = tuple?;
                 let id = tuple

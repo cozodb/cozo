@@ -228,7 +228,7 @@ impl SessionTx {
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::Relation(rel_app) => {
-                    let store = self.get_relation(&rel_app.name.name)?;
+                    let store = self.get_relation(&rel_app.name)?;
                     ensure!(
                         store.arity == rel_app.args.len(),
                         "arity mismatch in rule application {:?}, expect {}, found {}",
@@ -328,7 +328,7 @@ impl SessionTx {
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::NegatedRelation(relation_app) => {
-                    let store = self.get_relation(&relation_app.name.name)?;
+                    let store = self.get_relation(&relation_app.name)?;
                     ensure!(
                         store.arity == relation_app.args.len(),
                         "arity mismatch for {:?}, expect {}, got {}",

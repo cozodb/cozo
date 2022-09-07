@@ -202,11 +202,6 @@ impl NormalFormProgram {
         let prog_entry: &Symbol = &Symbol::new(PROG_ENTRY, SourceSpan(0, 0));
         let stratified_graph = convert_normal_form_program_to_graph(&self);
         let graph = reduce_to_graph(&stratified_graph);
-        ensure!(
-            graph.contains_key(prog_entry),
-            "program graph does not have an entry, {:?}",
-            graph
-        );
 
         // 1. find reachable clauses starting from the query
         let reachable: BTreeSet<_> = reachable_components(&graph, &prog_entry)

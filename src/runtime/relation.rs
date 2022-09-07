@@ -1,10 +1,11 @@
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::Ordering;
 
-use miette::{bail, miette, IntoDiagnostic, Result};
+use miette::{bail, Diagnostic, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smartstring::SmartString;
+use thiserror::Error;
 
 use cozorocks::CfHandle::Snd;
 use cozorocks::DbIter;
@@ -12,6 +13,7 @@ use cozorocks::DbIter;
 use crate::data::symb::Symbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
@@ -172,20 +174,32 @@ impl SessionTx {
         self.tx.put(&t_encoded, &meta.id.raw_encode(), Snd)?;
         Ok(meta)
     }
-    pub(crate) fn get_relation(&self, name: &str) -> Result<RelationMetadata> {
-        let key = DataValue::Str(SmartString::from(name));
+    pub(crate) fn get_relation(&self, name: &Symbol) -> Result<RelationMetadata> {
+        #[derive(Error, Diagnostic, Debug)]
+        #[error("Cannot find requested stored relation '{name}'")]
+        #[diagnostic(code(query::relation_not_found))]
+        struct StoredRelationNotFoundError {
+            name: String,
+            #[label]
+            span: SourceSpan,
+        }
+
+        let key = DataValue::Str(SmartString::from(name as &str));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
-        let found = self
-            .tx
-            .get(&encoded, true, Snd)?
-            .ok_or_else(|| miette!("cannot find stored relation {}", name))?;
+        let found =
+            self.tx
+                .get(&encoded, true, Snd)?
+                .ok_or_else(|| StoredRelationNotFoundError {
+                    name: name.name.to_string(),
+                    span: name.span,
+                })?;
         let metadata: RelationMetadata = rmp_serde::from_slice(&found).into_diagnostic()?;
         Ok(metadata)
     }
-    pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<(Vec<u8>, Vec<u8>)> {
+    pub(crate) fn destroy_relation(&mut self, name: &Symbol) -> Result<(Vec<u8>, Vec<u8>)> {
         let store = self.get_relation(name)?;
-        let key = DataValue::Str(SmartString::from(name));
+        let key = DataValue::Str(SmartString::from(name as &str));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         self.tx.del(&encoded, Snd)?;
         let lower_bound = Tuple::default().encode_as_key(store.id);

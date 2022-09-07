@@ -4,7 +4,7 @@ use itertools::Itertools;
 use log::debug;
 use miette::{bail, ensure, miette, Result};
 
-use crate::algo::{get_bool_option_required, AlgoImpl};
+use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
@@ -24,22 +24,14 @@ impl AlgoImpl for CommunityDetectionLouvain {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
         let opts = &algo.options;
-        let edges = rels
-            .get(0)
-            .ok_or_else(|| miette!("'community_detection_louvain' requires edges relation"))?;
-        let undirected = get_bool_option_required(
-            "undirected",
-            opts,
-            Some(false),
-            "community_detection_louvain",
-        )?;
+        let edges = algo.get_relation(0)?;
+        let undirected = algo.get_bool_option("undirected", Some(false))?;
         let max_iter = match opts.get("max_iter") {
             None => 10,
             Some(Expr::Const {
                 val: DataValue::Num(n),
-                span
+                span,
             }) => {
                 let i = n.get_int().ok_or_else(|| {
                     miette!(
@@ -63,13 +55,14 @@ impl AlgoImpl for CommunityDetectionLouvain {
             None => 0.0001,
             Some(Expr::Const {
                 val: DataValue::Num(n),
-                span
+                span,
             }) => {
                 let i = n.get_float();
                 ensure!(
                     i > 0.,
                     "'delta' for 'community_detection_louvain' must be positive, got {} {:?}",
-                    i, span
+                    i,
+                    span
                 );
                 i
             }
@@ -82,7 +75,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
             None => None,
             Some(Expr::Const {
                 val: DataValue::Num(n),
-                span
+                span,
             }) => Some({
                 let i = n.get_int().ok_or_else(|| {
                     miette!(

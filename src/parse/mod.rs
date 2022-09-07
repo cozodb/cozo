@@ -1,4 +1,3 @@
-use std::cmp::{max, min};
 use std::collections::BTreeMap;
 
 use miette::{Diagnostic, Result};
@@ -35,18 +34,6 @@ pub(crate) enum CozoScript {
 
 #[derive(Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone)]
 pub(crate) struct SourceSpan(pub(crate) usize, pub(crate) usize);
-
-impl SourceSpan {
-    pub(crate) fn merge(self, other: Self) -> Self {
-        let l_start = self.0;
-        let r_start = other.0;
-        let l_end = self.0 + self.1;
-        let r_end = other.0 + other.1;
-        let start = min(l_start, r_start);
-        let end = max(l_end, r_end);
-        Self(start, end - start)
-    }
-}
 
 impl From<&'_ SourceSpan> for miette::SourceSpan {
     fn from(s: &'_ SourceSpan) -> Self {

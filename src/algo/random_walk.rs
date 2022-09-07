@@ -25,17 +25,10 @@ impl AlgoImpl for RandomWalk {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
         let opts = &algo.options;
-        let edges = rels
-            .get(0)
-            .ok_or_else(|| miette!("'random_walk' requires edges relation as first argument"))?;
-        let nodes = rels
-            .get(1)
-            .ok_or_else(|| miette!("'random_walk' requires nodes relation as second argument"))?;
-        let starting = rels
-            .get(2)
-            .ok_or_else(|| miette!("'random_walk' requires starting relation as third argument"))?;
+        let edges = algo.get_relation(0)?;
+        let nodes = algo.get_relation(1)?;
+        let starting = algo.get_relation(2)?;
         let iterations = match opts.get("iterations") {
             None => 1usize,
             Some(Expr::Const {

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use miette::{miette, Result};
+use miette::Result;
 
 use crate::algo::AlgoImpl;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
@@ -21,10 +21,7 @@ impl AlgoImpl for TopSort {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
-        let edges = rels
-            .get(0)
-            .ok_or_else(|| miette!("'top_sort' missing edges relation"))?;
+        let edges = algo.get_relation(0)?;
 
         let (graph, indices, _) = edges.convert_edge_to_graph(false, tx, stores)?;
 

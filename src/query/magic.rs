@@ -318,6 +318,7 @@ impl NormalFormProgram {
                         },
                         MagicRulesOrAlgo::Algo {
                             algo: MagicAlgoApply {
+                                span: algo_apply.span,
                                 algo: algo_apply.algo.clone(),
                                 rule_args: algo_apply
                                     .rule_args

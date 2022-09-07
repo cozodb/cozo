@@ -4,8 +4,9 @@ use std::fmt::{Debug, Formatter};
 use std::mem;
 
 use itertools::Itertools;
-use miette::{bail, miette, Result};
+use miette::{bail, miette, Diagnostic, Result};
 use smartstring::SmartString;
+use thiserror::Error;
 
 use crate::data::functions::*;
 use crate::data::symb::Symbol;
@@ -119,7 +120,7 @@ impl Expr {
         }
     }
     pub(crate) fn eval_to_const(mut self) -> Result<DataValue> {
-        #[derive(thiserror::Error, miette::Diagnostic, Debug)]
+        #[derive(Error, Diagnostic, Debug)]
         #[error("Expression contains unevaluated constant")]
         #[diagnostic(code(eval::not_constant))]
         struct NotConstError;
@@ -140,13 +141,7 @@ impl Expr {
             }
             if all_evaluated {
                 let result = self.eval(&Tuple(vec![]))?;
-                mem::swap(
-                    self,
-                    &mut Expr::Const {
-                        val: result,
-                        span,
-                    },
-                );
+                mem::swap(self, &mut Expr::Const { val: result, span });
             }
             // nested not's can accumulate during conversion to normal form
             if let Expr::Apply {
@@ -192,10 +187,7 @@ impl Expr {
     }
     pub(crate) fn eval_bound(&self, bindings: &Tuple) -> Result<Self> {
         Ok(match self {
-            Expr::Binding {
-                var,
-                tuple_pos: i,
-            } => match bindings.0.get(i.unwrap()) {
+            Expr::Binding { var, tuple_pos: i } => match bindings.0.get(i.unwrap()) {
                 None => Expr::Binding {
                     var: var.clone(),
                     tuple_pos: *i,
@@ -234,18 +226,37 @@ impl Expr {
         match self {
             Expr::Binding { var, tuple_pos, .. } => match tuple_pos {
                 None => {
-                    bail!("binding '{}' is unbound", var)
+                    #[derive(Error, Diagnostic, Debug)]
+                    #[error("The variable '{0}' is unbound")]
+                    #[diagnostic(code(eval::unbound))]
+                    struct UnboundVariableError(String, #[label] SourceSpan);
+
+                    bail!(UnboundVariableError(var.name.to_string(), var.span))
                 }
-                Some(i) => Ok(bindings
-                    .0
-                    .get(*i)
-                    .ok_or_else(|| miette!("binding '{}' not found in tuple (too short)", var))?
-                    .clone()),
+                Some(i) => {
+                    #[derive(Error, Diagnostic, Debug)]
+                    #[error("The tuple bound by variable '{0}' is too short")]
+                    #[diagnostic(help("This is definitely a bug. Please report it."))]
+                    #[diagnostic(code(eval::unbound))]
+                    struct TupleTooShortError(String, #[label] SourceSpan);
+
+                    Ok(bindings
+                        .0
+                        .get(*i)
+                        .ok_or_else(|| TupleTooShortError(var.name.to_string(), var.span))?
+                        .clone())
+                }
             },
             Expr::Const { val, .. } => Ok(val.clone()),
             Expr::Apply { op, args, .. } => {
+                #[derive(Error, Diagnostic, Debug)]
+                #[error("Evaluation of expression failed")]
+                #[diagnostic(code(eval::throw))]
+                struct EvalRaisedError(#[label] SourceSpan, #[help] String);
+
                 let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings)).try_collect()?;
-                (op.inner)(&args)
+                Ok((op.inner)(&args)
+                    .map_err(|err| EvalRaisedError(self.span(), err.to_string()))?)
             }
         }
     }

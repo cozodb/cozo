@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use itertools::Itertools;
 use miette::{bail, ensure, miette, Result};
 
-use crate::algo::{get_bool_option_required, AlgoImpl};
+use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
@@ -25,21 +25,22 @@ impl AlgoImpl for ReorderSort {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let rels = &algo.rule_args;
         let opts = &algo.options;
-        let in_rel = rels
-            .get(0)
-            .ok_or_else(|| miette!("'reorder_sort' requires an input relation"))?;
+        let in_rel = algo.get_relation(0)?;
 
         let mut out_list = match opts
             .get("out")
             .ok_or_else(|| miette!("'reorder_sort' requires the option 'out'"))?
         {
             Expr::Const {
-                val: DataValue::List(l), span
+                val: DataValue::List(l),
+                span,
             } => l
                 .iter()
-                .map(|d| Expr::Const { val: d.clone(), span: *span })
+                .map(|d| Expr::Const {
+                    val: d.clone(),
+                    span: *span,
+                })
                 .collect_vec(),
             Expr::Apply { op, args, .. } if **op == OP_LIST => args.to_vec(),
             v => {
@@ -49,11 +50,10 @@ impl AlgoImpl for ReorderSort {
 
         let mut sort_by = opts.get("sort_by").cloned().unwrap_or(Expr::Const {
             val: DataValue::Null,
-            span: SourceSpan(0, 0)
+            span: SourceSpan(0, 0),
         });
-        let sort_descending =
-            get_bool_option_required("descending", opts, Some(false), "reorder_sort")?;
-        let break_ties = get_bool_option_required("break_ties", opts, Some(false), "reorder_sort")?;
+        let sort_descending = algo.get_bool_option("descending", Some(false))?;
+        let break_ties = algo.get_bool_option("break_ties", Some(false))?;
         let skip = match opts.get("skip") {
             None => 0,
             Some(Expr::Const { val, .. }) => val.get_int().ok_or_else(|| {
