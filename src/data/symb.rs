@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 
-use miette::{IntoDiagnostic, Result};
 use lazy_static::lazy_static;
+use miette::{IntoDiagnostic, Result};
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 
@@ -22,7 +22,7 @@ impl Debug for Symbol {
 
 impl From<&str> for Symbol {
     fn from(value: &str) -> Self {
-        Self(value.into())
+        Self(SmartString::from(value))
     }
 }
 
@@ -34,12 +34,6 @@ impl TryFrom<&[u8]> for Symbol {
 }
 
 impl Symbol {
-    pub(crate) fn is_reserved(&self) -> bool {
-        self.0.is_empty()
-            || self
-                .0
-                .starts_with(['_', ':', '<', '.', '*', '#', '$', '?', '!', ']', '['])
-    }
     pub(crate) fn is_prog_entry(&self) -> bool {
         self.0 == "?"
     }
@@ -47,16 +41,4 @@ impl Symbol {
 
 lazy_static! {
     pub(crate) static ref PROG_ENTRY: Symbol = Symbol::from("?");
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::data::symb::Symbol;
-
-    #[test]
-    fn reserved_symb() {
-        assert!(Symbol("_a".into()).is_reserved());
-        assert!(Symbol(":a".into()).is_reserved());
-        assert!(Symbol("".into()).is_reserved());
-    }
 }

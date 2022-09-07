@@ -35,20 +35,9 @@ pub(crate) enum CozoScript {
 #[derive(thiserror::Error, Diagnostic, Debug)]
 #[error("The query parser has encountered unexpected input / end of input")]
 #[diagnostic(code(parse::pest))]
-pub struct ParseError {
+struct ParseError {
     #[label]
-    span: (usize, usize),
-}
-
-impl From<pest::error::Error<Rule>> for ParseError {
-    fn from(err: pest::error::Error<Rule>) -> Self {
-        match err.location {
-            InputLocation::Pos(p) => Self { span: (p, 0) },
-            InputLocation::Span((start, end)) => Self {
-                span: (start, end - start),
-            },
-        }
-    }
+    span: SourceSpan,
 }
 
 pub(crate) fn parse_script(
@@ -56,7 +45,13 @@ pub(crate) fn parse_script(
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<CozoScript> {
     let parsed = CozoScriptParser::parse(Rule::script, src)
-        .map_err(|e| ParseError::from(e))?
+        .map_err(|err| {
+            let span = match err.location {
+                InputLocation::Pos(p) => (p, 0),
+                InputLocation::Span((start, end)) => (start, end - start),
+            };
+            ParseError { span: span.into() }
+        })?
         .next()
         .unwrap();
     Ok(match parsed.as_rule() {

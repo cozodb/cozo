@@ -1,8 +1,8 @@
-use miette::{miette, ensure};
+use miette::{miette};
 use serde_json::json;
 pub(crate) use serde_json::Value as JsonValue;
+use smartstring::SmartString;
 
-use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::id::{AttrId, EntityId, TxId};
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, Num};
@@ -16,15 +16,15 @@ impl From<JsonValue> for DataValue {
                 Some(i) => DataValue::from(i),
                 None => match n.as_f64() {
                     Some(f) => DataValue::from(f),
-                    None => DataValue::Str(n.to_string().into()),
+                    None => DataValue::Str(SmartString::from(n.to_string())),
                 },
             },
-            JsonValue::String(s) => DataValue::Str(s.into()),
+            JsonValue::String(s) => DataValue::Str(SmartString::from(s)),
             JsonValue::Array(arr) => DataValue::List(arr.iter().map(DataValue::from).collect()),
             JsonValue::Object(d) => DataValue::List(
                 d.into_iter()
                     .map(|(k, v)| {
-                        DataValue::List([DataValue::Str(k.into()), DataValue::from(v)].into())
+                        DataValue::List([DataValue::Str(SmartString::from(k)), DataValue::from(v)].into())
                     })
                     .collect(),
             ),
@@ -41,7 +41,7 @@ impl<'a> From<&'a JsonValue> for DataValue {
                 Some(i) => DataValue::from(i),
                 None => match n.as_f64() {
                     Some(f) => DataValue::from(f),
-                    None => DataValue::Str(n.to_string().into()),
+                    None => DataValue::Str(SmartString::from(n.to_string())),
                 },
             },
             JsonValue::String(s) => DataValue::Str(s.into()),
@@ -105,76 +105,6 @@ impl TryFrom<&'_ JsonValue> for Symbol {
             .as_str()
             .ok_or_else(|| miette!("failed to convert {} to a symbol", value))?;
         Ok(Symbol::from(s))
-    }
-}
-
-impl TryFrom<&'_ JsonValue> for Attribute {
-    type Error = miette::Error;
-
-    fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
-        let map = value
-            .as_object()
-            .ok_or_else(|| miette!("expect object in attribute definition, got {}", value))?;
-        let id = match map.get("id") {
-            None => AttrId(0),
-            Some(v) => AttrId::try_from(v)?,
-        };
-        let name = map
-            .get("name")
-            .ok_or_else(|| miette!("expect field 'name' in attribute definition, got {}", value))?;
-        let symb = Symbol::try_from(name)?;
-        ensure!(!symb.is_reserved(), "cannot use reserved symbol {}", symb);
-        let cardinality = map
-            .get("cardinality")
-            .ok_or_else(|| miette!("expect field 'cardinality' in {}", value))?
-            .as_str()
-            .ok_or_else(|| miette!("expect field 'cardinality' to be a string, got {}", value))?;
-        let cardinality = AttributeCardinality::try_from(cardinality)?;
-        let val_type = map
-            .get("type")
-            .ok_or_else(|| miette!("expect field 'type' in {}", value))?
-            .as_str()
-            .ok_or_else(|| miette!("expect field 'type' in {} to be a string", value))?;
-        let val_type = AttributeTyping::try_from(val_type)?;
-
-        let indexing = match map.get("index") {
-            None => AttributeIndex::None,
-            Some(JsonValue::Bool(true)) => AttributeIndex::Indexed,
-            Some(JsonValue::Bool(false)) => AttributeIndex::None,
-            Some(v) => AttributeIndex::try_from(
-                v.as_str()
-                    .ok_or_else(|| miette!("cannot convert {} to attribute indexing", v))?,
-            )?,
-        };
-
-        let with_history = match map.get("history") {
-            None => false,
-            Some(v) => v
-                .as_bool()
-                .ok_or_else(|| miette!("cannot convert {} to attribute with history flag", v))?,
-        };
-
-        Ok(Attribute {
-            id,
-            name: symb,
-            cardinality,
-            val_type,
-            indexing,
-            with_history,
-        })
-    }
-}
-
-impl From<Attribute> for JsonValue {
-    fn from(attr: Attribute) -> Self {
-        json!({
-            "id": attr.id.0,
-            "name": attr.name.to_string(),
-            "cardinality": attr.cardinality.to_string(),
-            "type": attr.val_type.to_string(),
-            "index": attr.indexing.to_string(),
-            "history": attr.with_history
-        })
     }
 }
 

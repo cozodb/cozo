@@ -14,7 +14,6 @@ use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, Num};
 use crate::runtime::transact::SessionTx;
-use crate::utils::{cozo_err, CozoError};
 
 // use crate::parse::triple::TempIdCtx;
 
@@ -104,28 +103,6 @@ impl Display for AttributeTyping {
             AttributeTyping::Bytes => write!(f, "bytes"),
             AttributeTyping::List => write!(f, "list"),
         }
-    }
-}
-
-impl TryFrom<&'_ str> for AttributeTyping {
-    type Error = CozoError;
-    fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
-        use AttributeTyping::*;
-        Ok(match value {
-            "ref" => Ref,
-            "bool" => Bool,
-            "int" => Int,
-            "float" => Float,
-            "string" => String,
-            "bytes" => Bytes,
-            "list" => List,
-            s => {
-                return Err(cozo_err(
-                    "attr_typing::from_str",
-                    format!("Unsupported type '{}'", s),
-                ))
-            }
-        })
     }
 }
 
@@ -255,6 +232,12 @@ impl Default for Attribute {
 
 const ATTR_VEC_SIZE: usize = 80;
 
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("Cannot deserialize attribute")]
+#[diagnostic(code(deser::attr))]
+#[diagnostic(help("This could indicate a bug. Consider file a bug report."))]
+struct AttrDeserError;
+
 impl Attribute {
     pub(crate) fn encode_with_op_and_tx(
         &self,
@@ -268,12 +251,10 @@ impl Attribute {
         EncodedVec { inner }
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
-        Ok(rmp_serde::from_slice(data)
-            .map_err(|_| {
-                error!("Cannot deserialize attribute from bytes: {:x?}", data);
-                cozo_err("deser::attr", "Cannot deserialize attribute")
-                    .help("This indicates data corruption or a bug. If you think it is the latter, consider file a bug report.")
-            })?)
+        Ok(rmp_serde::from_slice(data).map_err(|_| {
+            error!("Cannot deserialize attribute from bytes: {:x?}", data);
+            AttrDeserError
+        })?)
     }
     pub(crate) fn coerce_value(
         &self,

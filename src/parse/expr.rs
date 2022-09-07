@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use miette::{bail, ensure, Result};
+use miette::{bail, ensure, Diagnostic, Result, SourceSpan};
 use pest::prec_climber::{Operator, PrecClimber};
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
 use crate::data::expr::{get_op, Expr};
 use crate::data::functions::{
@@ -14,7 +15,6 @@ use crate::data::functions::{
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::{ExtractSpan, Pair, Rule};
-use crate::utils::cozo_err;
 
 lazy_static! {
     static ref PREC_CLIMBER: PrecClimber<Rule> = {
@@ -87,17 +87,16 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             tuple_pos: None,
         },
         Rule::param => {
+            #[derive(Error, Diagnostic, Debug)]
+            #[error("Required parameter {0} not found")]
+            #[diagnostic(code(parser::param_not_found))]
+            struct ParamNotFoundError(String, #[label] SourceSpan);
+
             let param_str = s.strip_prefix('$').unwrap();
             Expr::Const {
                 val: param_pool
                     .get(param_str)
-                    .ok_or_else(|| {
-                        cozo_err(
-                            "parser::param_not_found",
-                            format!("Required parameter '{}' not found", param_str),
-                        )
-                        .span(span)
-                    })?
+                    .ok_or_else(|| ParamNotFoundError(param_str.to_string(), span))?
                     .clone(),
             }
         }
@@ -116,10 +115,15 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             }
         }
         Rule::pos_int => {
+            #[derive(Error, Diagnostic, Debug)]
+            #[error("Cannot parse integer")]
+            #[diagnostic(code(parser::bad_pos_int))]
+            struct BadIntError(#[label] SourceSpan);
+
             let i = s
                 .replace('_', "")
                 .parse::<i64>()
-                .map_err(|_| cozo_err("parser::bad_pos_int", "Cannot parse integer").span(span))?;
+                .map_err(|_| BadIntError(span))?;
             Expr::Const {
                 val: DataValue::from(i),
             }
@@ -143,9 +147,15 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             }
         }
         Rule::dot_float | Rule::sci_float => {
-            let f = s.replace('_', "").parse::<f64>().map_err(|_| {
-                cozo_err("parser::bad_float", "Cannot parse floating number").span(span)
-            })?;
+            #[derive(Error, Diagnostic, Debug)]
+            #[error("Cannot parse float")]
+            #[diagnostic(code(parser::bad_float))]
+            struct BadFloatError(#[label] SourceSpan);
+
+            let f = s
+                .replace('_', "")
+                .parse::<f64>()
+                .map_err(|_| BadFloatError(span))?;
             Expr::Const {
                 val: DataValue::from(f),
             }
@@ -182,33 +192,37 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
                 .into_inner()
                 .map(|v| build_expr(v, param_pool))
                 .try_collect()?;
-            let op = get_op(ident).ok_or_else(|| {
-                cozo_err(
-                    "parser::func_not_function",
-                    format!("Named function '{}' not found", ident),
-                )
-                .span(ident_p.extract_span())
-            })?;
+            #[derive(Error, Diagnostic, Debug)]
+            #[error("Named function '{0}' not found")]
+            #[diagnostic(code(parser::func_not_function))]
+            struct FuncNotFoundError(String, #[label] SourceSpan);
+
+            let op = get_op(ident)
+                .ok_or_else(|| FuncNotFoundError(ident.to_string(), ident_p.extract_span()))?;
             op.post_process_args(&mut args);
+
+            #[derive(Error, Diagnostic, Debug)]
+            #[error("Wrong number of arguments for function '{0}'")]
+            #[diagnostic(code(parser::func_wrong_num_args))]
+            struct WrongNumArgsError(String, #[label] SourceSpan, #[help] String);
+
             if op.vararg {
                 ensure!(
                     op.min_arity <= args.len(),
-                    cozo_err(
-                        "parser::not_enough_args",
-                        format!("Wrong number of arguments for function '{}'", ident)
+                    WrongNumArgsError(
+                        ident.to_string(),
+                        span,
+                        format!("Need at least {} argument(s)", op.min_arity)
                     )
-                    .span(span)
-                    .help(format!("Need at least {} argument(s)", op.min_arity))
                 );
             } else {
                 ensure!(
                     op.min_arity == args.len(),
-                    cozo_err(
-                        "parser::bad_args_count",
-                        format!("Wrong number of arguments for function '{}'", ident)
+                    WrongNumArgsError(
+                        ident.to_string(),
+                        span,
+                        format!("Need exactly {} argument(s)", op.min_arity)
                     )
-                    .span(span)
-                    .help(format!("Need exactly {} argument(s)", op.min_arity))
                 );
             }
             Expr::Apply {
@@ -235,6 +249,16 @@ pub(crate) fn parse_string(pair: Pair<'_>) -> Result<SmartString<LazyCompact>> {
     }
 }
 
+#[derive(Error, Diagnostic, Debug)]
+#[error("invalid UTF8 code {0}")]
+#[diagnostic(code(parser::invalid_utf8_code))]
+struct InvalidUtf8Error(u32, #[label] SourceSpan);
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("invalid escape sequence {0}")]
+#[diagnostic(code(parser::invalid_escape_seq))]
+struct InvalidEscapeSeqError(String, #[label] SourceSpan);
+
 fn parse_quoted_string(pair: Pair<'_>) -> Result<SmartString<LazyCompact>> {
     let pairs = pair.into_inner().next().unwrap().into_inner();
     let mut ret = SmartString::new();
@@ -251,21 +275,12 @@ fn parse_quoted_string(pair: Pair<'_>) -> Result<SmartString<LazyCompact>> {
             r"\t" => ret.push('\t'),
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
-                let ch = char::from_u32(code).ok_or_else(|| {
-                    cozo_err(
-                        "parser::invalid_utf8_code",
-                        format!("invalid UTF8 code {}", code),
-                    )
-                    .span(pair.extract_span())
-                })?;
+                let ch = char::from_u32(code)
+                    .ok_or_else(|| InvalidUtf8Error(code, pair.extract_span()))?;
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {
-                bail!(cozo_err(
-                    "parser::invalid_escape_seq",
-                    format!("invalid escape sequence {}", s)
-                )
-                .span(pair.extract_span()))
+                bail!(InvalidEscapeSeqError(s.to_string(), pair.extract_span()))
             }
             s => ret.push_str(s),
         }
@@ -289,21 +304,12 @@ fn parse_s_quoted_string(pair: Pair<'_>) -> Result<SmartString<LazyCompact>> {
             r"\t" => ret.push('\t'),
             s if s.starts_with(r"\u") => {
                 let code = parse_int(s, 16) as u32;
-                let ch = char::from_u32(code).ok_or_else(|| {
-                    cozo_err(
-                        "parser::invalid_utf8_code",
-                        format!("Invalid UTF8 code {}", code),
-                    )
-                    .span(pair.extract_span())
-                })?;
+                let ch = char::from_u32(code)
+                    .ok_or_else(|| InvalidUtf8Error(code, pair.extract_span()))?;
                 ret.push(ch);
             }
             s if s.starts_with('\\') => {
-                bail!(cozo_err(
-                    "parser::invalid_escape_seq",
-                    format!("invalid escape sequence {}", s)
-                )
-                .span(pair.extract_span()))
+                bail!(InvalidEscapeSeqError(s.to_string(), pair.extract_span()))
             }
             s => ret.push_str(s),
         }

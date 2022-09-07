@@ -21,9 +21,8 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
 use crate::parse::pull::parse_out_options;
-use crate::parse::{ExtractSpan, Pair, Pairs, Rule};
+use crate::parse::{Pair, Pairs, Rule};
 use crate::runtime::relation::{RelationId, RelationMetadata};
-use crate::utils::CozoError;
 
 pub(crate) fn parse_query(
     src: Pairs<'_>,
