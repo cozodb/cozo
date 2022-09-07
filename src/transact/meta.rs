@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use miette::{bail, ensure, miette, Result};
+use smartstring::SmartString;
 
 use cozorocks::{DbIter, IterBuilder};
 use cozorocks::CfHandle::Pri;
@@ -10,7 +11,6 @@ use crate::data::encode::{
     encode_attr_by_id, encode_sentinel_attr_by_id, encode_sentinel_attr_by_name, VEC_SIZE_8,
 };
 use crate::data::id::AttrId;
-use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::parse::schema::AttrTxItem;
 use crate::runtime::transact::SessionTx;
@@ -26,7 +26,7 @@ impl SessionTx {
                 if item.attr.id.is_perm() {
                     ret.push((item.op, self.retract_attr(item.attr.id)?));
                 } else {
-                    ret.push((item.op, self.retract_attr_by_kw(&item.attr.name)?));
+                    ret.push((item.op, self.retract_attr_by_name(&item.attr.name)?));
                 }
             } else if item.attr.id.is_perm() {
                 ret.push((item.op, self.amend_attr(item.attr)?));
@@ -56,7 +56,7 @@ impl SessionTx {
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
                     self.attr_by_id_cache.borrow_mut().insert(attr.id, None);
-                    self.attr_by_kw_cache.borrow_mut().insert(attr.name, None);
+                    self.attr_by_kw_cache.borrow_mut().insert(attr.name.into(), None);
                     None
                 } else {
                     self.attr_by_id_cache
@@ -71,7 +71,7 @@ impl SessionTx {
         })
     }
 
-    pub(crate) fn attr_by_name(&self, name: &Symbol) -> Result<Option<Attribute>> {
+    pub(crate) fn attr_by_name(&self, name: &str) -> Result<Option<Attribute>> {
         if let Some(res) = self.attr_by_kw_cache.borrow().get(name) {
             return Ok(res.clone());
         }
@@ -81,7 +81,7 @@ impl SessionTx {
             None => {
                 self.attr_by_kw_cache
                     .borrow_mut()
-                    .insert(name.clone(), None);
+                    .insert(SmartString::from(name), None);
                 None
             }
             Some(v_slice) => {
@@ -93,7 +93,7 @@ impl SessionTx {
                     self.attr_by_id_cache.borrow_mut().insert(attr.id, None);
                     self.attr_by_kw_cache
                         .borrow_mut()
-                        .insert(name.clone(), None);
+                        .insert(SmartString::from(name), None);
                     None
                 } else {
                     self.attr_by_id_cache
@@ -101,7 +101,7 @@ impl SessionTx {
                         .insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
                         .borrow_mut()
-                        .insert(attr.name.clone(), Some(attr.clone()));
+                        .insert(SmartString::from(attr.name.clone()), Some(attr.clone()));
                     Some(attr)
                 }
             }
@@ -182,7 +182,7 @@ impl SessionTx {
         }
     }
 
-    pub(crate) fn retract_attr_by_kw(&mut self, kw: &Symbol) -> Result<AttrId> {
+    pub(crate) fn retract_attr_by_name(&mut self, kw: &str) -> Result<AttrId> {
         let attr = self
             .attr_by_name(kw)?
             .ok_or_else(|| miette!("attribute not found: {}", kw))?;

@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use miette::{IntoDiagnostic, Result};
 
 use crate::data::symb::Symbol;
-use crate::parse::{Pairs, Rule};
+use crate::parse::{ExtractSpan, Pairs, Rule};
 
 #[derive(
     Debug,
@@ -56,7 +56,7 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
         Rule::remove_relations_op => {
             let rels = inner
                 .into_inner()
-                .map(|v| Symbol::from(v.as_str()))
+                .map(|v| Symbol::new(v.as_str(), v.extract_span()))
                 .collect();
             SysOp::RemoveRelations(rels)
         }

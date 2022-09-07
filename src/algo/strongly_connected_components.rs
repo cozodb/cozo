@@ -42,6 +42,7 @@ impl AlgoImpl for StronglyConnectedComponent {
             None => false,
             Some(Expr::Const {
                 val: DataValue::Str(s),
+                ..
             }) => match s as &str {
                 "group_first" => true,
                 "key_first" => false,

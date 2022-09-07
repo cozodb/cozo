@@ -28,7 +28,7 @@ fn parse_schema_clause(src: Pair<'_>) -> Result<Vec<AttrTxItem>> {
     match attr_def.as_rule() {
         Rule::simple_schema_def => {
             let mut attr = parse_attr_defs(attr_def.into_inner())?;
-            attr.name.0.push_str(ident);
+            attr.name.push_str(ident);
             ret.push(AttrTxItem { op, attr });
         }
         Rule::nested_schema_def => {
@@ -37,7 +37,7 @@ fn parse_schema_clause(src: Pair<'_>) -> Result<Vec<AttrTxItem>> {
                 let nested_ident = clause_row.next().unwrap().as_str();
                 let combined_ident = format!("{}.{}", ident, nested_ident);
                 let mut attr = parse_attr_defs(clause_row)?;
-                attr.name.0.push_str(&combined_ident);
+                attr.name.push_str(&combined_ident);
                 ret.push(AttrTxItem { op, attr });
             }
         }

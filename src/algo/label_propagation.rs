@@ -34,12 +34,12 @@ impl AlgoImpl for LabelPropagation {
         let max_iter = match opts.get("max_iter") {
             None => 10,
             Some(Expr::Const {
-                val: DataValue::Num(n),
+                val: DataValue::Num(n), span
             }) => {
                 let i = n.get_int().ok_or_else(|| {
                     miette!(
-                        "'max_iter' for 'label_propagation' requires an integer, got {:?}",
-                        n
+                        "'max_iter' for 'label_propagation' requires an integer, got {:?} {:?}",
+                        n, span
                     )
                 })?;
                 ensure!(

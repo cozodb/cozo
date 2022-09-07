@@ -13,6 +13,7 @@ use crate::data::program::{
     StratifiedMagicProgram, StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
 
 impl NormalFormProgram {
@@ -41,7 +42,7 @@ impl StratifiedNormalFormProgram {
         tx: &SessionTx,
         default_vld: Validity,
     ) -> Result<StratifiedMagicProgram> {
-        let mut exempt_rules = BTreeSet::from([PROG_ENTRY.clone()]);
+        let mut exempt_rules = BTreeSet::from([Symbol::new(PROG_ENTRY, SourceSpan(0, 0))]);
         let mut collected = vec![];
         for prog in self.0 {
             prog.exempt_aggr_rules_for_magic_sets(&mut exempt_rules);
@@ -126,6 +127,7 @@ fn magic_rewrite_ruleset(
                     adornment: adornment.into(),
                 },
                 args: sup_args.clone(),
+                span: rule_head.symbol().span,
             })];
 
             ret_prog.prog.insert(
@@ -136,7 +138,7 @@ fn magic_rewrite_ruleset(
                         aggr: sup_aggr,
                         body: sup_body,
                         vld: rule.vld,
-                    }]
+                    }],
                 },
             );
 
@@ -145,6 +147,7 @@ fn magic_rewrite_ruleset(
             collected_atoms.push(MagicAtom::Rule(MagicRuleApplyAtom {
                 name: sup_kw,
                 args: sup_args,
+                span: rule_head.symbol().span,
             }))
         }
         for atom in rule.body {
@@ -194,6 +197,7 @@ fn magic_rewrite_ruleset(
                         let sup_rule_app = MagicAtom::Rule(MagicRuleApplyAtom {
                             name: sup_kw.clone(),
                             args,
+                            span: rule_head.symbol().span,
                         });
                         collected_atoms.push(sup_rule_app.clone());
 
@@ -339,9 +343,11 @@ impl NormalFormProgram {
                                                 bindings,
                                                 dir,
                                             } => {
-                                                let attr = tx.attr_by_name(name)?.ok_or_else(|| {
-                                                    miette!("cannot find attribute {}", name)
-                                                })?;
+                                                let attr = tx
+                                                    .attr_by_name(&name.name)?
+                                                    .ok_or_else(|| {
+                                                        miette!("cannot find attribute {}", name)
+                                                    })?;
                                                 MagicAlgoRuleArg::Triple {
                                                     name: attr,
                                                     bindings: bindings.clone(),
@@ -353,7 +359,7 @@ impl NormalFormProgram {
                                     })
                                     .try_collect()?,
                                 options: algo_apply.options.clone(),
-                            }
+                            },
                         },
                     );
                 }
@@ -371,7 +377,9 @@ impl NormalFormProgram {
                         MagicSymbol::Muggle {
                             inner: rule_name.clone(),
                         },
-                        MagicRulesOrAlgo::Rules { rules: adorned_rules },
+                        MagicRulesOrAlgo::Rules {
+                            rules: adorned_rules,
+                        },
                     );
                 }
             }
@@ -400,9 +408,12 @@ impl NormalFormProgram {
                     rule.adorn(&mut pending_adornment, &rules_to_rewrite, seen_bindings);
                 adorned_rules.push(adorned_rule);
             }
-            adorned_prog
-                .prog
-                .insert(head, MagicRulesOrAlgo::Rules { rules: adorned_rules });
+            adorned_prog.prog.insert(
+                head,
+                MagicRulesOrAlgo::Rules {
+                    rules: adorned_rules,
+                },
+            );
         }
         Ok(adorned_prog)
     }
@@ -421,6 +432,7 @@ impl NormalFormAtom {
                     attr: a.attr.clone(),
                     entity: a.entity.clone(),
                     value: a.value.clone(),
+                    span: a.span,
                 };
                 if !seen_bindings.contains(&a.entity) {
                     seen_bindings.insert(a.entity.clone());
@@ -434,6 +446,7 @@ impl NormalFormAtom {
                 let v = MagicRelationApplyAtom {
                     name: v.name.clone(),
                     args: v.args.clone(),
+                    span: v.span,
                 };
                 for arg in v.args.iter() {
                     if !seen_bindings.contains(arg) {
@@ -464,6 +477,7 @@ impl NormalFormAtom {
                     MagicAtom::Rule(MagicRuleApplyAtom {
                         name,
                         args: rule.args.clone(),
+                        span: rule.span,
                     })
                 } else {
                     MagicAtom::Rule(MagicRuleApplyAtom {
@@ -471,6 +485,7 @@ impl NormalFormAtom {
                             inner: rule.name.clone(),
                         },
                         args: rule.args.clone(),
+                        span: rule.span,
                     })
                 }
             }
@@ -479,6 +494,7 @@ impl NormalFormAtom {
                     attr: na.attr.clone(),
                     entity: na.entity.clone(),
                     value: na.value.clone(),
+                    span: na.span,
                 })
             }
             NormalFormAtom::NegatedRule(nr) => MagicAtom::NegatedRule(MagicRuleApplyAtom {
@@ -486,11 +502,13 @@ impl NormalFormAtom {
                     inner: nr.name.clone(),
                 },
                 args: nr.args.clone(),
+                span: nr.span,
             }),
             NormalFormAtom::NegatedRelation(nv) => {
                 MagicAtom::NegatedRelation(MagicRelationApplyAtom {
                     name: nv.name.clone(),
                     args: nv.args.clone(),
+                    span: nv.span,
                 })
             }
             NormalFormAtom::Unification(u) => {

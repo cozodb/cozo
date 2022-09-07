@@ -4,6 +4,7 @@ use std::sync::atomic::Ordering;
 use miette::{bail, miette, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
+use smartstring::SmartString;
 
 use cozorocks::CfHandle::Snd;
 use cozorocks::DbIter;
@@ -139,7 +140,7 @@ impl Iterator for RelationIterator {
 
 impl SessionTx {
     pub(crate) fn relation_exists(&self, name: &Symbol) -> Result<bool> {
-        let key = DataValue::Str(name.0.clone());
+        let key = DataValue::Str(name.name.clone());
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         Ok(self.tx.exists(&encoded, false, Snd)?)
     }
@@ -147,7 +148,7 @@ impl SessionTx {
         &mut self,
         mut meta: RelationMetadata,
     ) -> Result<RelationMetadata> {
-        let key = DataValue::Str(meta.name.0.clone());
+        let key = DataValue::Str(meta.name.name.clone());
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
         if self.tx.exists(&encoded, true, Snd)? {
@@ -160,7 +161,7 @@ impl SessionTx {
         meta.id = RelationId::new(last_id + 1)?;
         self.tx.put(&encoded, &meta.id.raw_encode(), Snd)?;
         let name_key =
-            Tuple(vec![DataValue::Str(meta.name.0.clone())]).encode_as_key(RelationId::SYSTEM);
+            Tuple(vec![DataValue::Str(meta.name.name.clone())]).encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
@@ -171,8 +172,8 @@ impl SessionTx {
         self.tx.put(&t_encoded, &meta.id.raw_encode(), Snd)?;
         Ok(meta)
     }
-    pub(crate) fn get_relation(&self, name: &Symbol) -> Result<RelationMetadata> {
-        let key = DataValue::Str(name.0.clone());
+    pub(crate) fn get_relation(&self, name: &str) -> Result<RelationMetadata> {
+        let key = DataValue::Str(SmartString::from(name));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
         let found = self
@@ -182,9 +183,9 @@ impl SessionTx {
         let metadata: RelationMetadata = rmp_serde::from_slice(&found).into_diagnostic()?;
         Ok(metadata)
     }
-    pub(crate) fn destroy_relation(&mut self, name: &Symbol) -> Result<(Vec<u8>, Vec<u8>)> {
+    pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<(Vec<u8>, Vec<u8>)> {
         let store = self.get_relation(name)?;
-        let key = DataValue::Str(name.0.clone());
+        let key = DataValue::Str(SmartString::from(name));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         self.tx.del(&encoded, Snd)?;
         let lower_bound = Tuple::default().encode_as_key(store.id);

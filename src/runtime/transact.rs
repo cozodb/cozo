@@ -7,6 +7,7 @@ use miette::{miette, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
+use smartstring::{LazyCompact, SmartString};
 
 use cozorocks::{DbIter, Tx};
 use cozorocks::CfHandle::{Pri, Snd};
@@ -20,6 +21,7 @@ use crate::data::program::MagicSymbol;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 use crate::runtime::derived::{DerivedRelStore, DerivedRelStoreId};
 use crate::runtime::relation::RelationId;
 
@@ -32,7 +34,7 @@ pub struct SessionTx {
     pub(crate) last_ent_id: Arc<AtomicU64>,
     pub(crate) last_tx_id: Arc<AtomicU64>,
     pub(crate) attr_by_id_cache: RefCell<BTreeMap<AttrId, Option<Attribute>>>,
-    pub(crate) attr_by_kw_cache: RefCell<BTreeMap<Symbol, Option<Attribute>>>,
+    pub(crate) attr_by_kw_cache: RefCell<BTreeMap<SmartString<LazyCompact>, Option<Attribute>>>,
     pub(crate) eid_by_attr_val_cache:
         RefCell<BTreeMap<DataValue, BTreeMap<(AttrId, Validity), Option<EntityId>>>>,
     // "touched" requires the id to exist prior to the transaction, and something related to it has changed
@@ -73,13 +75,13 @@ impl SessionTx {
         DerivedRelStore::new(DerivedRelStoreId(old_count), rule_name, arity)
     }
 
-    pub(crate) fn new_temp_store(&self) -> DerivedRelStore {
+    pub(crate) fn new_temp_store(&self, span: SourceSpan) -> DerivedRelStore {
         let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
         DerivedRelStore::new(
             DerivedRelStoreId(old_count),
             MagicSymbol::Muggle {
-                inner: Symbol::from(""),
+                inner: Symbol::new("", span),
             },
             0,
         )

@@ -26,7 +26,7 @@ struct OutPullSpecWithAttr {
 impl OutPullSpec {
     fn hydrate(&self, tx: &SessionTx, vld: Validity) -> Result<OutPullSpecWithAttr> {
         let attr = tx
-            .attr_by_name(&self.attr)?
+            .attr_by_name(&self.attr.name)?
             .ok_or_else(|| miette!("required attribute not found: {}", self.attr))?;
         Ok(OutPullSpecWithAttr {
             attr,
@@ -50,14 +50,14 @@ impl SessionTx {
     ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = None;
         if op == RelationOp::ReDerive {
-            if let Ok(c) = self.destroy_relation(&meta.name) {
+            if let Ok(c) = self.destroy_relation(&meta.name.name) {
                 to_clear = Some(c);
             }
         }
         let relation_store = if op == RelationOp::ReDerive || op == RelationOp::Create {
             self.create_relation(meta.clone())?
         } else {
-            let found = self.get_relation(&meta.name)?;
+            let found = self.get_relation(&meta.name.name)?;
             ensure!(
                 found.arity == meta.arity,
                 "arity mismatch for relation {}",

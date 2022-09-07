@@ -29,6 +29,7 @@ use crate::data::program::{AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicS
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
@@ -70,17 +71,17 @@ pub(crate) struct AlgoHandle {
 }
 
 impl AlgoHandle {
-    pub(crate) fn new(name: &str) -> Self {
+    pub(crate) fn new(name: &str, span: SourceSpan) -> Self {
         AlgoHandle {
-            name: Symbol::from(name),
+            name: Symbol::new(name, span),
         }
     }
     pub(crate) fn arity(
         &self,
         _args: Either<&[AlgoRuleArg], &[MagicAlgoRuleArg]>,
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
-    ) -> Result<usize> {
-        Ok(match &self.name.0 as &str {
+    ) -> Option<usize> {
+        Some(match &self.name.name as &str {
             "clustering_coefficients" => 4,
             "degree_centrality" => 4,
             "closeness_centrality" => 2,
@@ -100,25 +101,22 @@ impl AlgoHandle {
             "label_propagation" => 2,
             "random_walk" => 3,
             "reorder_sort" => {
-                let out_opts = opts
-                    .get("out")
-                    .ok_or_else(|| miette!("'reorder_sort' requires the option 'out'"))?;
+                let out_opts = opts.get("out")?;
                 match out_opts {
                     Expr::Const {
                         val: DataValue::List(l),
+                        ..
                     } => l.len() + 1,
-                    Expr::Apply { op, args } if **op == OP_LIST => args.len() + 1,
-                    v => {
-                        bail!("option 'out' of 'reorder_sort' must be a list, got {:?}", v)
-                    }
+                    Expr::Apply { op, args, .. } if **op == OP_LIST => args.len() + 1,
+                    _ => return None,
                 }
             }
-            name => bail!("algorithm '{}' not found", name),
+            _ => return None,
         })
     }
 
     pub(crate) fn get_impl(&self) -> Result<Box<dyn AlgoImpl>> {
-        Ok(match &self.name.0 as &str {
+        Ok(match &self.name.name as &str {
             "clustering_coefficients" => Box::new(ClusteringCoefficients),
             "degree_centrality" => Box::new(DegreeCentrality),
             "closeness_centrality" => Box::new(ClosenessCentrality),

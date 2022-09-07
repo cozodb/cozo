@@ -23,7 +23,7 @@ impl SessionTx {
             .iter()
             .map(|(k, dir)| (head_indices[k], *dir))
             .collect_vec();
-        let ret = self.new_temp_store();
+        let ret = self.new_temp_store(original.rule_name.symbol().span);
         for (idx, tuple) in original.scan_all().enumerate() {
             let tuple = tuple?;
             let mut key = idx_sorters

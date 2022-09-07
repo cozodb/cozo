@@ -10,7 +10,6 @@ use smartstring::{LazyCompact, SmartString};
 
 use crate::data::encode::EncodedVec;
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
-use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, Num};
 use crate::runtime::transact::SessionTx;
@@ -210,7 +209,7 @@ impl TryFrom<&'_ str> for AttributeIndex {
 )]
 pub(crate) struct Attribute {
     pub(crate) id: AttrId,
-    pub(crate) name: Symbol,
+    pub(crate) name: SmartString<LazyCompact>,
     pub(crate) cardinality: AttributeCardinality,
     pub(crate) val_type: AttributeTyping,
     pub(crate) indexing: AttributeIndex,
@@ -221,7 +220,7 @@ impl Default for Attribute {
     fn default() -> Self {
         Self {
             id: AttrId(0),
-            name: Symbol::from(""),
+            name: SmartString::from(""),
             cardinality: AttributeCardinality::One,
             val_type: AttributeTyping::Ref,
             indexing: AttributeIndex::None,
@@ -280,7 +279,7 @@ impl Attribute {
                         .get_string()
                         .ok_or_else(|| miette!("list specifier requires first argument string"))?;
                     let attr = tx
-                        .attr_by_name(&Symbol::from(attr_name))?
+                        .attr_by_name(attr_name)?
                         .ok_or_else(|| miette!("attribute not found: {}", attr_name))?;
                     ensure!(
                         attr.indexing.is_unique_index(),

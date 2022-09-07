@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
+use std::str::Utf8Error;
 
 use miette::{bail, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
@@ -8,7 +9,6 @@ use smallvec::SmallVec;
 
 use crate::data::attr::Attribute;
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
-use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::runtime::transact::TxLog;
@@ -392,20 +392,19 @@ pub(crate) fn encode_sentinel_attr_by_id(aid: AttrId) -> EncodedVec<VEC_SIZE_8> 
 }
 
 #[inline]
-pub(crate) fn encode_sentinel_attr_by_name(name: &Symbol) -> EncodedVec<LARGE_VEC_SIZE> {
+pub(crate) fn encode_sentinel_attr_by_name(name: &str) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
     ret.push(StorageTag::SentinelAttrByName as u8);
-    ret.extend_from_slice(name.0.as_bytes());
+    ret.extend_from_slice(name.as_bytes());
     ret.into()
 }
 
 pub(crate) fn largest_key() -> EncodedVec<LARGE_VEC_SIZE> {
     let name = String::from(LARGEST_UTF_CHAR);
-    let symb = Symbol::from(&name as &str);
-    encode_sentinel_attr_by_name(&symb)
+    encode_sentinel_attr_by_name(&name)
 }
 
 #[inline]
-pub(crate) fn decode_sentinel_attr_by_name(src: &[u8]) -> Result<Symbol> {
-    Symbol::try_from(&src[1..])
+pub(crate) fn decode_sentinel_attr_by_name(src: &[u8]) -> Result<&str, Utf8Error> {
+    std::str::from_utf8(&src[1..])
 }

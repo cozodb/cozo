@@ -12,15 +12,17 @@ use crate::data::program::{
 use crate::runtime::transact::SessionTx;
 
 #[derive(Debug)]
-pub(crate) struct Disjunction(pub(crate) Vec<Conjunction>);
+pub(crate) struct Disjunction {
+    pub(crate) inner: Vec<Conjunction>,
+}
 
 impl Disjunction {
     fn conjunctive_to_disjunctive_de_morgen(self, other: Self) -> Self {
         // invariants: self and other are both already in disjunctive normal form, which are to be conjuncted together
         // the return value must be in disjunctive normal form
         let mut ret = vec![];
-        let right_args = other.0.into_iter().map(|a| a.0).collect_vec();
-        for left in self.0 {
+        let right_args = other.inner.into_iter().map(|a| a.0).collect_vec();
+        for left in self.inner {
             let left = left.0;
             for right in &right_args {
                 let mut current = left.clone();
@@ -28,13 +30,17 @@ impl Disjunction {
                 ret.push(Conjunction(current))
             }
         }
-        Disjunction(ret)
+        Disjunction { inner: ret }
     }
     fn singlet(atom: NormalFormAtom) -> Self {
-        Disjunction(vec![Conjunction(vec![atom])])
+        Disjunction {
+            inner: vec![Conjunction(vec![atom])],
+        }
     }
     fn conj(atoms: Vec<NormalFormAtom>) -> Self {
-        Disjunction(vec![Conjunction(atoms)])
+        Disjunction {
+            inner: vec![Conjunction(atoms)],
+        }
     }
 }
 
@@ -44,38 +50,65 @@ pub(crate) struct Conjunction(pub(crate) Vec<NormalFormAtom>);
 impl InputAtom {
     pub(crate) fn negation_normal_form(self) -> Result<Self> {
         Ok(match self {
-            a @ (InputAtom::AttrTriple(_)
-            | InputAtom::Rule(_)
-            | InputAtom::Predicate(_)
-            | InputAtom::Relation(_)) => a,
-            InputAtom::Conjunction(args) => InputAtom::Conjunction(
-                args.into_iter()
+            a @ (InputAtom::AttrTriple { inner: _ }
+            | InputAtom::Rule { inner: _ }
+            | InputAtom::Predicate { inner: _ }
+            | InputAtom::Relation { inner: _ }) => a,
+            InputAtom::Conjunction { inner: args, span } => InputAtom::Conjunction {
+                inner: args
+                    .into_iter()
                     .map(|a| a.negation_normal_form())
                     .try_collect()?,
-            ),
-            InputAtom::Disjunction(args) => InputAtom::Disjunction(
-                args.into_iter()
+                span,
+            },
+            InputAtom::Disjunction { inner: args, span } => InputAtom::Disjunction {
+                inner: args
+                    .into_iter()
                     .map(|a| a.negation_normal_form())
                     .try_collect()?,
-            ),
-            InputAtom::Unification(unif) => InputAtom::Unification(unif),
-            InputAtom::Negation(arg) => match *arg {
-                a @ (InputAtom::AttrTriple(_) | InputAtom::Rule(_) | InputAtom::Relation(_)) => {
-                    InputAtom::Negation(Box::new(a))
-                }
-                InputAtom::Predicate(p) => InputAtom::Predicate(p.negate()),
-                InputAtom::Negation(inner) => inner.negation_normal_form()?,
-                InputAtom::Conjunction(args) => InputAtom::Disjunction(
-                    args.into_iter()
-                        .map(|a| InputAtom::Negation(Box::new(a)).negation_normal_form())
+                span,
+            },
+            InputAtom::Unification { inner: unif } => InputAtom::Unification { inner: unif },
+            InputAtom::Negation { inner: arg, span } => match *arg {
+                a @ (InputAtom::AttrTriple { inner: _ }
+                | InputAtom::Rule { inner: _ }
+                | InputAtom::Relation { inner: _ }) => InputAtom::Negation {
+                    inner: Box::new(a),
+                    span,
+                },
+                InputAtom::Predicate { inner: p } => InputAtom::Predicate {
+                    inner: p.negate(span),
+                },
+                InputAtom::Negation { inner, .. } => inner.negation_normal_form()?,
+                InputAtom::Conjunction { inner: args, .. } => InputAtom::Disjunction {
+                    inner: args
+                        .into_iter()
+                        .map(|a| {
+                            let span = a.span();
+                            InputAtom::Negation {
+                                inner: Box::new(a),
+                                span,
+                            }
+                            .negation_normal_form()
+                        })
                         .try_collect()?,
-                ),
-                InputAtom::Disjunction(args) => InputAtom::Conjunction(
-                    args.into_iter()
-                        .map(|a| InputAtom::Negation(Box::new(a)).negation_normal_form())
+                    span,
+                },
+                InputAtom::Disjunction { inner: args, span } => InputAtom::Conjunction {
+                    inner: args
+                        .into_iter()
+                        .map(|a| {
+                            let span = a.span();
+                            InputAtom::Negation {
+                                inner: Box::new(a),
+                                span,
+                            }
+                            .negation_normal_form()
+                        })
                         .try_collect()?,
-                ),
-                InputAtom::Unification(unif) => {
+                    span,
+                },
+                InputAtom::Unification { inner: unif } => {
                     bail!("unification not allowed in negation: {:?}", unif)
                 }
             },
@@ -96,16 +129,16 @@ impl InputAtom {
         // invariants: the input is already in negation normal form
         // the return value is a disjunction of conjunctions, with no nesting
         Ok(match self {
-            InputAtom::Disjunction(args) => {
+            InputAtom::Disjunction { inner: args, .. } => {
                 let mut ret = vec![];
                 for arg in args {
-                    for a in arg.do_disjunctive_normal_form(gen, tx)?.0 {
+                    for a in arg.do_disjunctive_normal_form(gen, tx)?.inner {
                         ret.push(a);
                     }
                 }
-                Disjunction(ret)
+                Disjunction { inner: ret }
             }
-            InputAtom::Conjunction(args) => {
+            InputAtom::Conjunction { inner: args, .. } => {
                 let mut args = args
                     .into_iter()
                     .map(|a| a.do_disjunctive_normal_form(gen, tx));
@@ -115,20 +148,22 @@ impl InputAtom {
                 }
                 result
             }
-            InputAtom::AttrTriple(a) => a.normalize(false, gen, tx)?,
-            InputAtom::Rule(r) => r.normalize(false, gen),
-            InputAtom::Relation(v) => v.normalize(false, gen),
-            InputAtom::Predicate(mut p) => {
+            InputAtom::AttrTriple { inner: a } => a.normalize(false, gen, tx)?,
+            InputAtom::Rule { inner: r } => r.normalize(false, gen),
+            InputAtom::Relation { inner: v } => v.normalize(false, gen),
+            InputAtom::Predicate { inner: mut p } => {
                 p.partial_eval()?;
                 Disjunction::singlet(NormalFormAtom::Predicate(p))
             }
-            InputAtom::Negation(n) => match *n {
-                InputAtom::Rule(r) => r.normalize(true, gen),
-                InputAtom::AttrTriple(r) => r.normalize(true, gen, tx)?,
-                InputAtom::Relation(v) => v.normalize(true, gen),
+            InputAtom::Negation { inner: n, .. } => match *n {
+                InputAtom::Rule { inner: r } => r.normalize(true, gen),
+                InputAtom::AttrTriple { inner: r } => r.normalize(true, gen, tx)?,
+                InputAtom::Relation { inner: v } => v.normalize(true, gen),
                 _ => unreachable!(),
             },
-            InputAtom::Unification(u) => Disjunction::singlet(NormalFormAtom::Unification(u)),
+            InputAtom::Unification { inner: u } => {
+                Disjunction::singlet(NormalFormAtom::Unification(u))
+            }
         })
     }
 }
@@ -140,11 +175,11 @@ impl InputRuleApplyAtom {
         let mut seen_variables = BTreeSet::new();
         for arg in self.args {
             match arg {
-                InputTerm::Var(kw) => {
+                InputTerm::Var { name: kw } => {
                     if seen_variables.insert(kw.clone()) {
                         args.push(kw);
                     } else {
-                        let dup = gen.next();
+                        let dup = gen.next(kw.span);
                         let unif = NormalFormAtom::Unification(Unification {
                             binding: dup.clone(),
                             expr: Expr::Binding {
@@ -152,18 +187,20 @@ impl InputRuleApplyAtom {
                                 tuple_pos: None,
                             },
                             one_many_unif: false,
+                            span: dup.span,
                         });
                         ret.push(unif);
                         args.push(dup);
                     }
                 }
-                InputTerm::Const(val) => {
-                    let kw = gen.next();
+                InputTerm::Const { val, span } => {
+                    let kw = gen.next(span);
                     args.push(kw.clone());
                     let unif = NormalFormAtom::Unification(Unification {
                         binding: kw,
-                        expr: Expr::Const { val },
+                        expr: Expr::Const { val, span },
                         one_many_unif: false,
+                        span,
                     });
                     ret.push(unif)
                 }
@@ -174,11 +211,13 @@ impl InputRuleApplyAtom {
             NormalFormAtom::NegatedRule(NormalFormRuleApplyAtom {
                 name: self.name,
                 args,
+                span: self.span,
             })
         } else {
             NormalFormAtom::Rule(NormalFormRuleApplyAtom {
                 name: self.name,
                 args,
+                span: self.span,
             })
         });
         Disjunction::conj(ret)
@@ -193,7 +232,7 @@ impl InputAttrTripleAtom {
         tx: &SessionTx,
     ) -> Result<Disjunction> {
         let attr = tx
-            .attr_by_name(&self.attr)?
+            .attr_by_name(&self.attr.name)?
             .ok_or_else(|| miette!("attribute {} not found", self.attr))?;
         let wrap = |atom| {
             if is_negated {
@@ -202,65 +241,107 @@ impl InputAttrTripleAtom {
                 NormalFormAtom::AttrTriple(atom)
             }
         };
+        let original_span = self.span;
         Ok(Disjunction::conj(match (self.entity, self.value) {
-            (InputTerm::Const(eid), InputTerm::Const(val)) => {
-                let ekw = gen.next();
-                let vkw = gen.next();
+            (
+                InputTerm::Const {
+                    val: eid,
+                    span: first_span,
+                },
+                InputTerm::Const {
+                    val,
+                    span: second_span,
+                },
+            ) => {
+                let ekw = gen.next(first_span);
+                let vkw = gen.next(second_span);
                 let atom = NormalFormAttrTripleAtom {
                     attr,
                     entity: ekw.clone(),
                     value: vkw.clone(),
+                    span: original_span,
                 };
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const { val: eid },
+                    expr: Expr::Const {
+                        val: eid,
+                        span: first_span,
+                    },
                     one_many_unif: false,
+                    span: first_span,
                 });
                 let uv = NormalFormAtom::Unification(Unification {
                     binding: vkw,
-                    expr: Expr::Const { val },
+                    expr: Expr::Const {
+                        val,
+                        span: second_span,
+                    },
                     one_many_unif: false,
+                    span: second_span,
                 });
                 vec![ue, uv, ret]
             }
-            (InputTerm::Var(ekw), InputTerm::Const(val)) => {
-                let vkw = gen.next();
+            (
+                InputTerm::Var { name: ekw },
+                InputTerm::Const {
+                    val,
+                    span: second_span,
+                },
+            ) => {
+                let vkw = gen.next(second_span);
                 let atom = NormalFormAttrTripleAtom {
                     attr,
                     entity: ekw,
                     value: vkw.clone(),
+                    span: original_span,
                 };
                 let ret = wrap(atom);
                 let uv = NormalFormAtom::Unification(Unification {
                     binding: vkw,
-                    expr: Expr::Const { val },
+                    expr: Expr::Const {
+                        val,
+                        span: second_span,
+                    },
                     one_many_unif: false,
+                    span: second_span,
                 });
                 vec![uv, ret]
             }
-            (InputTerm::Const(eid), InputTerm::Var(vkw)) => {
-                let ekw = gen.next();
+            (
+                InputTerm::Const {
+                    val: eid,
+                    span: first_span,
+                },
+                InputTerm::Var { name: vkw },
+            ) => {
+                let ekw = gen.next(vkw.span);
                 let atom = NormalFormAttrTripleAtom {
                     attr,
                     entity: ekw.clone(),
                     value: vkw,
+                    span: original_span,
                 };
                 let ret = wrap(atom);
                 let ue = NormalFormAtom::Unification(Unification {
                     binding: ekw,
-                    expr: Expr::Const { val: eid },
+                    expr: Expr::Const {
+                        val: eid,
+                        span: first_span,
+                    },
                     one_many_unif: false,
+                    span: first_span,
                 });
                 vec![ue, ret]
             }
-            (InputTerm::Var(ekw), InputTerm::Var(vkw)) => {
+            (InputTerm::Var { name: ekw }, InputTerm::Var { name: vkw }) => {
                 if ekw == vkw {
-                    let dup = gen.next();
+                    let dup = gen.next(vkw.span);
                     let atom = NormalFormAttrTripleAtom {
                         attr,
                         entity: ekw,
                         value: dup.clone(),
+                        span: vkw.span,
                     };
                     vec![
                         NormalFormAtom::Unification(Unification {
@@ -270,6 +351,7 @@ impl InputAttrTripleAtom {
                                 tuple_pos: None,
                             },
                             one_many_unif: false,
+                            span: original_span,
                         }),
                         wrap(atom),
                     ]
@@ -278,6 +360,7 @@ impl InputAttrTripleAtom {
                         attr,
                         entity: ekw,
                         value: vkw,
+                        span: original_span,
                     });
                     vec![ret]
                 }
@@ -293,11 +376,12 @@ impl InputRelationApplyAtom {
         let mut seen_variables = BTreeSet::new();
         for arg in self.args {
             match arg {
-                InputTerm::Var(kw) => {
+                InputTerm::Var { name: kw } => {
                     if seen_variables.insert(kw.clone()) {
                         args.push(kw);
                     } else {
-                        let dup = gen.next();
+                        let span = kw.span;
+                        let dup = gen.next(span);
                         let unif = NormalFormAtom::Unification(Unification {
                             binding: dup.clone(),
                             expr: Expr::Binding {
@@ -305,18 +389,20 @@ impl InputRelationApplyAtom {
                                 tuple_pos: None,
                             },
                             one_many_unif: false,
+                            span,
                         });
                         ret.push(unif);
                         args.push(dup);
                     }
                 }
-                InputTerm::Const(val) => {
-                    let kw = gen.next();
+                InputTerm::Const { val, span } => {
+                    let kw = gen.next(span);
                     args.push(kw.clone());
                     let unif = NormalFormAtom::Unification(Unification {
                         binding: kw,
-                        expr: Expr::Const { val },
+                        expr: Expr::Const { val, span },
                         one_many_unif: false,
+                        span,
                     });
                     ret.push(unif)
                 }
@@ -327,13 +413,15 @@ impl InputRelationApplyAtom {
             NormalFormAtom::NegatedRelation(NormalFormRelationApplyAtom {
                 name: self.name,
                 args,
+                span: self.span,
             })
         } else {
             NormalFormAtom::Relation(NormalFormRelationApplyAtom {
                 name: self.name,
                 args,
+                span: self.span,
             })
         });
-        Disjunction::conj(ret)
+        Disjunction::conj(ret )
     }
 }

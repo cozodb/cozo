@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use miette::{bail, ensure, Diagnostic, Result, SourceSpan};
+use miette::{bail, ensure, Diagnostic, Result};
 use pest::prec_climber::{Operator, PrecClimber};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -14,7 +14,7 @@ use crate::data::functions::{
 };
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
-use crate::parse::{ExtractSpan, Pair, Rule};
+use crate::parse::{ExtractSpan, Pair, Rule, SourceSpan};
 
 lazy_static! {
     static ref PREC_CLIMBER: PrecClimber<Rule> = {
@@ -68,9 +68,13 @@ fn build_expr_infix(lhs: Result<Expr>, op: Pair<'_>, rhs: Result<Expr>) -> Resul
         Rule::op_and => &OP_AND,
         _ => unreachable!(),
     };
+    let start = args[0].span().0;
+    let end = args[1].span().0 + args[1].span().1;
+    let length = end - start;
     Ok(Expr::Apply {
         op,
         args: args.into(),
+        span: SourceSpan(start, length),
     })
 }
 
@@ -83,7 +87,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
     Ok(match op {
         Rule::term => build_unary(p, param_pool)?,
         Rule::var => Expr::Binding {
-            var: Symbol::from(s),
+            var: Symbol::new(s, p.extract_span()),
             tuple_pos: None,
         },
         Rule::param => {
@@ -98,6 +102,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
                     .get(param_str)
                     .ok_or_else(|| ParamNotFoundError(param_str.to_string(), span))?
                     .clone(),
+                span,
             }
         }
         Rule::minus => {
@@ -105,6 +110,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             Expr::Apply {
                 op: &OP_MINUS,
                 args: [inner].into(),
+                span,
             }
         }
         Rule::negate => {
@@ -112,6 +118,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             Expr::Apply {
                 op: &OP_NEGATE,
                 args: [inner].into(),
+                span,
             }
         }
         Rule::pos_int => {
@@ -126,24 +133,28 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
                 .map_err(|_| BadIntError(span))?;
             Expr::Const {
                 val: DataValue::from(i),
+                span,
             }
         }
         Rule::hex_pos_int => {
             let i = parse_int(s, 16);
             Expr::Const {
                 val: DataValue::from(i),
+                span,
             }
         }
         Rule::octo_pos_int => {
             let i = parse_int(s, 8);
             Expr::Const {
                 val: DataValue::from(i),
+                span,
             }
         }
         Rule::bin_pos_int => {
             let i = parse_int(s, 2);
             Expr::Const {
                 val: DataValue::from(i),
+                span,
             }
         }
         Rule::dot_float | Rule::sci_float => {
@@ -158,18 +169,22 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
                 .map_err(|_| BadFloatError(span))?;
             Expr::Const {
                 val: DataValue::from(f),
+                span,
             }
         }
         Rule::null => Expr::Const {
             val: DataValue::Null,
+            span,
         },
         Rule::boolean => Expr::Const {
             val: DataValue::Bool(s == "true"),
+            span,
         },
         Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
             let s = parse_string(p)?;
             Expr::Const {
                 val: DataValue::Str(s),
+                span,
             }
         }
         Rule::list => {
@@ -180,6 +195,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             Expr::Apply {
                 op: &OP_LIST,
                 args: collected.into(),
+                span,
             }
         }
         Rule::apply => {
@@ -228,6 +244,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             Expr::Apply {
                 op,
                 args: args.into(),
+                span,
             }
         }
         Rule::grouping => build_expr(p.into_inner().next().unwrap(), param_pool)?,

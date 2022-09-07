@@ -4,7 +4,6 @@ pub(crate) use serde_json::Value as JsonValue;
 use smartstring::SmartString;
 
 use crate::data::id::{AttrId, EntityId, TxId};
-use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, Num};
 
 impl From<JsonValue> for DataValue {
@@ -95,16 +94,6 @@ impl From<DataValue> for JsonValue {
               //     JsonValue::Array(m.into_iter().map(|(k, v)| json!([k, v])).collect())
               // }
         }
-    }
-}
-
-impl TryFrom<&'_ JsonValue> for Symbol {
-    type Error = miette::Error;
-    fn try_from(value: &'_ JsonValue) -> Result<Self, Self::Error> {
-        let s = value
-            .as_str()
-            .ok_or_else(|| miette!("failed to convert {} to a symbol", value))?;
-        Ok(Symbol::from(s))
     }
 }
 

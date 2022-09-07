@@ -9,6 +9,7 @@ use crate::data::program::{
     StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::parse::SourceSpan;
 use crate::query::graph::{
     generalized_kahn, reachable_components, strongly_connected_components, Graph, StratifiedGraph,
 };
@@ -198,7 +199,7 @@ impl NormalFormProgram {
     pub(crate) fn stratify(self) -> Result<StratifiedNormalFormProgram> {
         // prerequisite: the program is already in disjunctive normal form
         // 0. build a graph of the program
-        let prog_entry: &Symbol = &PROG_ENTRY;
+        let prog_entry: &Symbol = &Symbol::new(PROG_ENTRY, SourceSpan(0, 0));
         let stratified_graph = convert_normal_form_program_to_graph(&self);
         let graph = reduce_to_graph(&stratified_graph);
         ensure!(

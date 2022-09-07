@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
-use miette::{miette, Result};
 use log::{debug, log_enabled, trace, Level};
+use miette::{miette, Result};
 
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
-use crate::data::symb::PROG_ENTRY;
+use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
@@ -37,7 +38,7 @@ impl SessionTx {
     ) -> Result<DerivedRelStore> {
         let ret_area = stores
             .get(&MagicSymbol::Muggle {
-                inner: PROG_ENTRY.clone(),
+                inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
             })
             .ok_or_else(|| miette!("program entry not found in rules"))?
             .clone();
@@ -147,13 +148,7 @@ impl SessionTx {
         let out = stores
             .get(rule_symb)
             .ok_or_else(|| miette!("cannot find algo store {:?}", rule_symb))?;
-        algo_impl.run(
-            self,
-            &algo_apply,
-            stores,
-            out,
-            poison
-        )
+        algo_impl.run(self, &algo_apply, stores, out, poison)
     }
     fn initial_rule_eval(
         &self,
@@ -201,7 +196,7 @@ impl SessionTx {
                 }
             }
             AggrKind::Normal => {
-                let store_to_use = self.new_temp_store();
+                let store_to_use = self.new_temp_store(rule_symb.symbol().span);
                 for (rule_n, rule) in ruleset.iter().enumerate() {
                     debug!(
                         "Calculation for normal aggr rule {:?}.{}",
@@ -225,7 +220,7 @@ impl SessionTx {
                     } else {
                         None
                     },
-                    poison
+                    poison,
                 )? {
                     return Ok(());
                 }

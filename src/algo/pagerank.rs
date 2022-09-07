@@ -35,6 +35,7 @@ impl AlgoImpl for PageRank {
             None => 0.8f32,
             Some(Expr::Const {
                 val: DataValue::Num(n),
+                ..
             }) => n.get_float() as f32,
             Some(v) => bail!(
                 "option 'theta' for 'pagerank' requires a float, got {:?}",
@@ -50,6 +51,7 @@ impl AlgoImpl for PageRank {
             None => 0.001f32,
             Some(Expr::Const {
                 val: DataValue::Num(n),
+                ..
             }) => n.get_float() as f32,
             Some(v) => bail!(
                 "option 'epsilon' for 'pagerank' requires a float, got {:?}",
@@ -60,10 +62,11 @@ impl AlgoImpl for PageRank {
             None => 20,
             Some(Expr::Const {
                 val: DataValue::Num(Num::I(i)),
+                ..
             }) => *i,
             Some(v) => bail!(
                 "option 'iterations' for 'pagerank' requires an integer, got {:?}",
-                v
+                v,
             ),
         };
         ensure!(

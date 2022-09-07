@@ -13,6 +13,7 @@ use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 use crate::runtime::derived::{DerivedRelStore, DerivedRelStoreId};
 use crate::runtime::relation::RelationMetadata;
 use crate::runtime::transact::SessionTx;
@@ -1259,7 +1260,7 @@ impl TripleRA {
         eliminate_indices: BTreeSet<usize>,
     ) -> Result<TupleIter<'a>> {
         // [f, b] where b is not indexed
-        let throwaway = tx.new_temp_store();
+        let throwaway = tx.new_temp_store(SourceSpan(0, 0));
         let it = if self.attr.with_history {
             Left(tx.triple_a_before_scan(self.attr.id, self.vld))
         } else {
@@ -2084,7 +2085,7 @@ impl InnerJoin {
             .sorted_by_key(|(_, b)| **b)
             .map(|(a, _)| a)
             .collect_vec();
-        let throwaway = tx.new_temp_store();
+        let throwaway = tx.new_temp_store(SourceSpan(0, 0));
         for item in self.right.iter(tx, epoch, use_delta)? {
             match item {
                 Ok(tuple) => {

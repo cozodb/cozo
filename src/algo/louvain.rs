@@ -39,11 +39,12 @@ impl AlgoImpl for CommunityDetectionLouvain {
             None => 10,
             Some(Expr::Const {
                 val: DataValue::Num(n),
+                span
             }) => {
                 let i = n.get_int().ok_or_else(|| {
                     miette!(
-                    "'max_iter' for 'community_detection_louvain' requires an integer, got {:?}",
-                    n
+                    "'max_iter' for 'community_detection_louvain' requires an integer, got {:?} {:?}",
+                    n, span
                 )
                 })?;
                 ensure!(
@@ -62,12 +63,13 @@ impl AlgoImpl for CommunityDetectionLouvain {
             None => 0.0001,
             Some(Expr::Const {
                 val: DataValue::Num(n),
+                span
             }) => {
                 let i = n.get_float();
                 ensure!(
                     i > 0.,
-                    "'delta' for 'community_detection_louvain' must be positive, got {}",
-                    i
+                    "'delta' for 'community_detection_louvain' must be positive, got {} {:?}",
+                    i, span
                 );
                 i
             }
@@ -80,11 +82,12 @@ impl AlgoImpl for CommunityDetectionLouvain {
             None => None,
             Some(Expr::Const {
                 val: DataValue::Num(n),
+                span
             }) => Some({
                 let i = n.get_int().ok_or_else(|| {
                     miette!(
-                    "'keep_depth' for 'community_detection_louvain' requires an integer, got {:?}",
-                    n
+                    "'keep_depth' for 'community_detection_louvain' requires an integer, got {:?} {:?}",
+                    n, span
                 )
                 })?;
                 ensure!(

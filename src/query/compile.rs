@@ -6,7 +6,7 @@ use miette::{ensure, miette, Context, Result};
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{
-    ConstRules, MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol,
+    ConstRule, ConstRules, MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol,
     StratifiedMagicProgram,
 };
 use crate::data::symb::Symbol;
@@ -77,7 +77,7 @@ impl SessionTx {
     ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, DerivedRelStore>)> {
         let mut stores: BTreeMap<MagicSymbol, DerivedRelStore> = Default::default();
 
-        for (name, (data, _)) in const_rules {
+        for (name, ConstRule { data, .. }) in const_rules {
             let store = self.new_rule_store(name.clone(), data[0].0.len());
             for tuple in data {
                 store.put(tuple.clone(), 0);
@@ -94,7 +94,10 @@ impl SessionTx {
                 );
                 stores.insert(
                     name.clone(),
-                    self.new_rule_store(name.clone(), ruleset.arity()?),
+                    self.new_rule_store(
+                        name.clone(),
+                        ruleset.arity().ok_or_else(|| miette!("bad algo arity"))?,
+                    ),
                 );
             }
         }
@@ -156,8 +159,8 @@ impl SessionTx {
         let mut ret = RelAlgebra::unit();
         let mut seen_variables = BTreeSet::new();
         let mut serial_id = 0;
-        let mut gen_symb = || {
-            let ret = Symbol::from(&format!("**{}", serial_id) as &str);
+        let mut gen_symb = |span| {
+            let ret = Symbol::new(&format!("**{}", serial_id) as &str, span);
             serial_id += 1;
             ret
         };
@@ -167,7 +170,7 @@ impl SessionTx {
                     let mut join_left_keys = vec![];
                     let mut join_right_keys = vec![];
                     let e_kw = if seen_variables.contains(&t.entity) {
-                        let kw = gen_symb();
+                        let kw = gen_symb(t.entity.span);
                         join_left_keys.push(t.entity.clone());
                         join_right_keys.push(kw.clone());
                         kw
@@ -176,7 +179,7 @@ impl SessionTx {
                         t.entity.clone()
                     };
                     let v_kw = if seen_variables.contains(&t.value) {
-                        let kw = gen_symb();
+                        let kw = gen_symb(t.value.span);
                         join_left_keys.push(t.value.clone());
                         join_right_keys.push(kw.clone());
                         kw
@@ -211,7 +214,7 @@ impl SessionTx {
                     for var in &rule_app.args {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
-                            let rk = gen_symb();
+                            let rk = gen_symb(var.span);
                             right_vars.push(rk.clone());
                             right_joiner_vars.push(rk);
                         } else {
@@ -225,7 +228,7 @@ impl SessionTx {
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::Relation(rel_app) => {
-                    let store = self.get_relation(&rel_app.name)?;
+                    let store = self.get_relation(&rel_app.name.name)?;
                     ensure!(
                         store.arity == rel_app.args.len(),
                         "arity mismatch in rule application {:?}, expect {}, found {}",
@@ -240,7 +243,7 @@ impl SessionTx {
                     for var in &rel_app.args {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
-                            let rk = gen_symb();
+                            let rk = gen_symb(var.span);
                             right_vars.push(rk.clone());
                             right_joiner_vars.push(rk);
                         } else {
@@ -258,7 +261,7 @@ impl SessionTx {
                     let mut join_right_keys = vec![];
                     let e_kw = {
                         if seen_variables.contains(&a_triple.entity) {
-                            let kw = gen_symb();
+                            let kw = gen_symb(a_triple.entity.span);
                             join_left_keys.push(a_triple.entity.clone());
                             join_right_keys.push(kw.clone());
                             kw
@@ -268,7 +271,7 @@ impl SessionTx {
                     };
                     let v_kw = {
                         if seen_variables.contains(&a_triple.value) {
-                            let kw = gen_symb();
+                            let kw = gen_symb(a_triple.value.span);
                             join_left_keys.push(a_triple.value.clone());
                             join_right_keys.push(kw.clone());
                             kw
@@ -312,7 +315,7 @@ impl SessionTx {
                     for var in &rule_app.args {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
-                            let rk = gen_symb();
+                            let rk = gen_symb(var.span);
                             right_vars.push(rk.clone());
                             right_joiner_vars.push(rk);
                         } else {
@@ -325,7 +328,7 @@ impl SessionTx {
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
                 }
                 MagicAtom::NegatedRelation(relation_app) => {
-                    let store = self.get_relation(&relation_app.name)?;
+                    let store = self.get_relation(&relation_app.name.name)?;
                     ensure!(
                         store.arity == relation_app.args.len(),
                         "arity mismatch for {:?}, expect {}, got {}",
@@ -341,7 +344,7 @@ impl SessionTx {
                     for var in &relation_app.args {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
-                            let rk = gen_symb();
+                            let rk = gen_symb(var.span);
                             right_vars.push(rk.clone());
                             right_joiner_vars.push(rk);
                         } else {
@@ -369,7 +372,7 @@ impl SessionTx {
                                     tuple_pos: None,
                                 },
                                 u.expr.clone(),
-                            ])
+                            ], u.span)
                         } else {
                             Expr::build_equate(vec![
                                 Expr::Binding {
@@ -377,7 +380,7 @@ impl SessionTx {
                                     tuple_pos: None,
                                 },
                                 u.expr.clone(),
-                            ])
+                            ], u.span)
                         };
                         if let Some(fs) = ret.get_filters() {
                             fs.push(expr);
@@ -403,7 +406,7 @@ impl SessionTx {
         let cur_ret_set: BTreeSet<_> = ret.bindings_after_eliminate().into_iter().collect();
         ensure!(
             cur_ret_set == ret_vars_set,
-            "unbound variables in rule head for {:?}.{}: variables required {:?}, of which only {:?} are bound.\n{:#?}\n{:#?}",
+            "unbound Symbols in rule head for {:?}.{}: Symbols required {:?}, of which only {:?} are bound.\n{:#?}\n{:#?}",
             rule_name,
             rule_idx,
             ret_vars_set,

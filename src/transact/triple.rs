@@ -48,7 +48,7 @@ impl SessionTx {
             match payload.action {
                 TxAction::Put => {
                     let attr = self
-                        .attr_by_name(&payload.attr_name)?
+                        .attr_by_name(&payload.attr_name.name)?
                         .ok_or_else(|| miette!("attribute {} not found", payload.attr_name))?;
                     let val =
                         attr.coerce_value(payload.value, &mut str_temp_to_perm_ids, self, vld)?;
@@ -85,7 +85,7 @@ impl SessionTx {
                     }
                 }
                 TxAction::Retract => {
-                    let attr = self.attr_by_name(&payload.attr_name)?.unwrap();
+                    let attr = self.attr_by_name(&payload.attr_name.name)?.unwrap();
                     let eid = match payload.entity {
                         EntityRep::Id(id) => id,
                         EntityRep::UserTempId(_) => {

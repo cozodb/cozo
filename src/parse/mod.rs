@@ -1,6 +1,7 @@
+use std::cmp::{max, min};
 use std::collections::BTreeMap;
 
-use miette::{Diagnostic, Result, SourceSpan};
+use miette::{Diagnostic, Result};
 use pest::error::InputLocation;
 use pest::Parser;
 
@@ -32,6 +33,33 @@ pub(crate) enum CozoScript {
     Sys(SysOp),
 }
 
+#[derive(Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone)]
+pub(crate) struct SourceSpan(pub(crate) usize, pub(crate) usize);
+
+impl SourceSpan {
+    pub(crate) fn merge(self, other: Self) -> Self {
+        let l_start = self.0;
+        let r_start = other.0;
+        let l_end = self.0 + self.1;
+        let r_end = other.0 + other.1;
+        let start = min(l_start, r_start);
+        let end = max(l_end, r_end);
+        Self(start, end - start)
+    }
+}
+
+impl From<&'_ SourceSpan> for miette::SourceSpan {
+    fn from(s: &'_ SourceSpan) -> Self {
+        miette::SourceSpan::new(s.0.into(), s.1.into())
+    }
+}
+
+impl From<SourceSpan> for miette::SourceSpan {
+    fn from(s: SourceSpan) -> Self {
+        miette::SourceSpan::new(s.0.into(), s.1.into())
+    }
+}
+
 #[derive(thiserror::Error, Diagnostic, Debug)]
 #[error("The query parser has encountered unexpected input / end of input")]
 #[diagnostic(code(parse::pest))]
@@ -47,10 +75,10 @@ pub(crate) fn parse_script(
     let parsed = CozoScriptParser::parse(Rule::script, src)
         .map_err(|err| {
             let span = match err.location {
-                InputLocation::Pos(p) => (p, 0),
-                InputLocation::Span((start, end)) => (start, end - start),
+                InputLocation::Pos(p) => SourceSpan(p, 0),
+                InputLocation::Span((start, end)) => SourceSpan(start, end - start),
             };
-            ParseError { span: span.into() }
+            ParseError { span }
         })?
         .next()
         .unwrap();
@@ -72,6 +100,6 @@ impl ExtractSpan for Pair<'_> {
         let span = self.as_span();
         let start = span.start();
         let end = span.end();
-        SourceSpan::new(start.into(), (end - start).into())
+        SourceSpan(start.into(), (end - start).into())
     }
 }

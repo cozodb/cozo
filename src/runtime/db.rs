@@ -21,7 +21,6 @@ use crate::data::encode::{largest_key, smallest_key};
 use crate::data::id::{TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, RelationOp};
-use crate::data::symb::Symbol;
 use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::schema::AttrTxItem;
@@ -295,7 +294,7 @@ impl Db {
             SysOp::ListRelations => self.list_relations(),
             SysOp::RemoveRelations(rs) => {
                 for r in rs.iter() {
-                    self.remove_relation(&r.0)?;
+                    self.remove_relation(&r.name)?;
                 }
                 Ok(json!({"status": "OK"}))
             }
@@ -371,7 +370,7 @@ impl Db {
         )?;
         let json_headers = match input_program.get_entry_head() {
             None => JsonValue::Null,
-            Some(headers) => headers.iter().map(|v| json!(v.0)).collect(),
+            Some(headers) => headers.iter().map(|v| json!(v.name)).collect(),
         };
         if !input_program.out_opts.sorters.is_empty() {
             let entry_head = input_program
@@ -434,9 +433,8 @@ impl Db {
         }
     }
     pub fn remove_relation(&self, name: &str) -> Result<()> {
-        let name = Symbol::from(name);
         let mut tx = self.transact_write()?;
-        let (lower, upper) = tx.destroy_relation(&name)?;
+        let (lower, upper) = tx.destroy_relation(name)?;
         self.db.range_del(&lower, &upper, Snd)?;
         Ok(())
     }
@@ -562,7 +560,7 @@ impl Db {
         let mut collected = vec![];
         while let Some(v_slice) = it.val()? {
             let meta: RelationMetadata = rmp_serde::from_slice(v_slice).into_diagnostic()?;
-            let name = meta.name.0;
+            let name = meta.name.name;
             let arity = meta.arity;
             collected.push(json!([name, arity]));
             it.next();

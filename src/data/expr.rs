@@ -11,6 +11,7 @@ use crate::data::functions::*;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::parse::SourceSpan;
 
 #[derive(Debug, Clone)]
 pub(crate) enum Expr {
@@ -20,14 +21,22 @@ pub(crate) enum Expr {
     },
     Const {
         val: DataValue,
+        span: SourceSpan,
     },
     Apply {
         op: &'static Op,
         args: Box<[Expr]>,
+        span: SourceSpan,
     },
 }
 
 impl Expr {
+    pub(crate) fn span(&self) -> SourceSpan {
+        match self {
+            Expr::Binding { var, .. } => var.span,
+            Expr::Const { span, .. } | Expr::Apply { span, .. } => *span,
+        }
+    }
     pub(crate) fn get_binding(&self) -> Option<&Symbol> {
         if let Expr::Binding { var, .. } = self {
             Some(var)
@@ -42,27 +51,30 @@ impl Expr {
             None
         }
     }
-    pub(crate) fn build_equate(exprs: Vec<Expr>) -> Self {
+    pub(crate) fn build_equate(exprs: Vec<Expr>, span: SourceSpan) -> Self {
         Expr::Apply {
             op: &OP_EQ,
             args: exprs.into(),
+            span,
         }
     }
-    pub(crate) fn build_is_in(exprs: Vec<Expr>) -> Self {
+    pub(crate) fn build_is_in(exprs: Vec<Expr>, span: SourceSpan) -> Self {
         Expr::Apply {
             op: &OP_IS_IN,
             args: exprs.into(),
+            span,
         }
     }
-    pub(crate) fn negate(self) -> Self {
+    pub(crate) fn negate(self, span: SourceSpan) -> Self {
         Expr::Apply {
             op: &OP_NEGATE,
             args: Box::new([self]),
+            span,
         }
     }
     pub(crate) fn to_conjunction(&self) -> Vec<Self> {
         match self {
-            Expr::Apply { op, args } if **op == OP_AND => args.to_vec(),
+            Expr::Apply { op, args, .. } if **op == OP_AND => args.to_vec(),
             v => vec![v.clone()],
         }
     }
@@ -71,7 +83,7 @@ impl Expr {
         binding_map: &BTreeMap<Symbol, usize>,
     ) -> Result<()> {
         match self {
-            Expr::Binding { var, tuple_pos } => {
+            Expr::Binding { var, tuple_pos, .. } => {
                 let found_idx = *binding_map.get(var).ok_or_else(|| {
                     miette!("cannot find binding {}, this indicates a system error", var)
                 })?;
@@ -107,7 +119,6 @@ impl Expr {
         }
     }
     pub(crate) fn eval_to_const(mut self) -> Result<DataValue> {
-
         #[derive(thiserror::Error, miette::Diagnostic, Debug)]
         #[error("Expression contains unevaluated constant")]
         #[diagnostic(code(eval::not_constant))]
@@ -115,12 +126,13 @@ impl Expr {
 
         self.partial_eval()?;
         match self {
-            Expr::Const { val } => Ok(val),
+            Expr::Const { val, .. } => Ok(val),
             _ => bail!(NotConstError),
         }
     }
     pub(crate) fn partial_eval(&mut self) -> Result<()> {
-        if let Expr::Apply { args, .. } = self {
+        if let Expr::Apply { args, span, .. } = self {
+            let span = *span;
             let mut all_evaluated = true;
             for arg in args.iter_mut() {
                 arg.partial_eval()?;
@@ -128,18 +140,26 @@ impl Expr {
             }
             if all_evaluated {
                 let result = self.eval(&Tuple(vec![]))?;
-                mem::swap(self, &mut Expr::Const { val: result });
+                mem::swap(
+                    self,
+                    &mut Expr::Const {
+                        val: result,
+                        span,
+                    },
+                );
             }
             // nested not's can accumulate during conversion to normal form
             if let Expr::Apply {
                 op: op1,
                 args: arg1,
+                ..
             } = self
             {
                 if op1.name == OP_NEGATE.name {
                     if let Some(Expr::Apply {
                         op: op2,
                         args: arg2,
+                        ..
                     }) = arg1.first()
                     {
                         if op2.name == OP_NEGATE.name {
@@ -172,15 +192,21 @@ impl Expr {
     }
     pub(crate) fn eval_bound(&self, bindings: &Tuple) -> Result<Self> {
         Ok(match self {
-            Expr::Binding { var, tuple_pos: i } => match bindings.0.get(i.unwrap()) {
+            Expr::Binding {
+                var,
+                tuple_pos: i,
+            } => match bindings.0.get(i.unwrap()) {
                 None => Expr::Binding {
                     var: var.clone(),
                     tuple_pos: *i,
                 },
-                Some(v) => Expr::Const { val: v.clone() },
+                Some(v) => Expr::Const {
+                    val: v.clone(),
+                    span: var.span,
+                },
             },
             e @ Expr::Const { .. } => e.clone(),
-            Expr::Apply { op, args } => {
+            Expr::Apply { op, args, span } => {
                 let args: Box<[Expr]> =
                     args.iter().map(|v| v.eval_bound(bindings)).try_collect()?;
                 let const_args = args
@@ -188,10 +214,17 @@ impl Expr {
                     .map(|v| v.get_const().cloned())
                     .collect::<Option<Box<[DataValue]>>>();
                 match const_args {
-                    None => Expr::Apply { op: *op, args },
+                    None => Expr::Apply {
+                        op: *op,
+                        args,
+                        span: *span,
+                    },
                     Some(args) => {
                         let res = (op.inner)(&args)?;
-                        Expr::Const { val: res }
+                        Expr::Const {
+                            val: res,
+                            span: *span,
+                        }
                     }
                 }
             }
@@ -199,7 +232,7 @@ impl Expr {
     }
     pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
         match self {
-            Expr::Binding { var, tuple_pos } => match tuple_pos {
+            Expr::Binding { var, tuple_pos, .. } => match tuple_pos {
                 None => {
                     bail!("binding '{}' is unbound", var)
                 }
@@ -209,8 +242,8 @@ impl Expr {
                     .ok_or_else(|| miette!("binding '{}' not found in tuple (too short)", var))?
                     .clone()),
             },
-            Expr::Const { val } => Ok(val.clone()),
-            Expr::Apply { op, args } => {
+            Expr::Const { val, .. } => Ok(val.clone()),
+            Expr::Apply { op, args, .. } => {
                 let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings)).try_collect()?;
                 (op.inner)(&args)
             }
@@ -225,7 +258,7 @@ impl Expr {
     pub(crate) fn extract_bound(&self, target: &Symbol) -> Result<ValueRange> {
         Ok(match self {
             Expr::Binding { .. } | Expr::Const { .. } => ValueRange::default(),
-            Expr::Apply { op, args } => match op.name {
+            Expr::Apply { op, args, .. } => match op.name {
                 n if n == OP_GE.name || n == OP_GT.name => {
                     if let Some(symb) = args[0].get_binding() {
                         if let Some(val) = args[1].get_const() {
@@ -503,6 +536,7 @@ impl Op {
             args[1] = Expr::Apply {
                 op: &OP_REGEX,
                 args: [args[1].clone()].into(),
+                span: args[1].span(),
             }
         }
     }

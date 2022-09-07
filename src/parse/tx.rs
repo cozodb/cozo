@@ -9,8 +9,8 @@ use crate::data::program::InputProgram;
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::expr::{build_expr, parse_string};
-use crate::parse::{Pair, Pairs, Rule};
 use crate::parse::query::parse_query;
+use crate::parse::{ExtractSpan, Pair, Pairs, Rule};
 
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
@@ -29,7 +29,7 @@ impl Display for TxAction {
 pub(crate) enum EntityRep {
     Id(EntityId),
     UserTempId(SmartString<LazyCompact>),
-    PullByKey(Symbol, DataValue),
+    PullByKey(SmartString<LazyCompact>, DataValue),
 }
 
 impl EntityRep {
@@ -38,7 +38,7 @@ impl EntityRep {
             EntityRep::Id(i) => DataValue::from(i.0 as i64),
             EntityRep::UserTempId(s) => DataValue::Str(s.clone()),
             EntityRep::PullByKey(attr, data) => {
-                DataValue::List(vec![DataValue::Str(attr.0.clone()), data.clone()])
+                DataValue::List(vec![DataValue::Str(attr.clone()), data.clone()])
             }
         }
     }
@@ -77,11 +77,11 @@ pub(crate) fn parse_tx(
             Rule::tx_before_ensure_script => {
                 let p = parse_query(pair.into_inner(), param_pool)?;
                 before.push(p);
-            },
+            }
             Rule::tx_after_ensure_script => {
                 let p = parse_query(pair.into_inner(), param_pool)?;
                 after.push(p);
-            },
+            }
             _ => unreachable!(),
         }
     }
@@ -180,7 +180,7 @@ fn parse_tx_map(
                 ensure!(c.len() == 2, "key requires a list of length 2");
                 let mut c = c.into_iter();
                 let attr = match c.next().unwrap() {
-                    DataValue::Str(s) => Symbol(s),
+                    DataValue::Str(s) => s,
                     v => bail!("attr name requires a string, got {:?}", v),
                 };
                 let val = c.next().unwrap();
@@ -217,17 +217,24 @@ fn parse_tx_pair(
     let (attr_name, is_multi) = match fst.as_rule() {
         Rule::compound_ident_with_maybe_star => {
             if fst.as_str().starts_with('*') {
-                (Symbol::from(fst.as_str().strip_prefix('*').unwrap()), true)
+                (
+                    Symbol::new(fst.as_str().strip_prefix('*').unwrap(), fst.extract_span()),
+                    true,
+                )
             } else {
-                (Symbol::from(fst.as_str()), false)
+                (Symbol::new(fst.as_str(), fst.extract_span()), false)
             }
         }
         Rule::raw_string | Rule::s_quoted_string | Rule::quoted_string => {
+            let span = fst.extract_span();
             let s = parse_string(fst)?;
             if s.starts_with('*') {
-                (Symbol::from(s.as_str().strip_prefix('*').unwrap()), true)
+                (
+                    Symbol::new(s.as_str().strip_prefix('*').unwrap(), span),
+                    true,
+                )
             } else {
-                (Symbol::from(s.as_str()), false)
+                (Symbol::new(s.as_str(), span), false)
             }
         }
         Rule::tx_ident_id | Rule::tx_ident_temp_id | Rule::tx_ident_key => return Ok(()),

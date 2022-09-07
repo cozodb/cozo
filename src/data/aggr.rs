@@ -1050,7 +1050,7 @@ impl NormalAggrObj for AggrBitXor {
     }
 }
 
-pub(crate) fn get_aggr(name: &str) -> Option<&'static Aggregation> {
+pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
     Some(match name {
         "count" => &AGGR_COUNT,
         "group_count" => &AGGR_GROUP_COUNT,

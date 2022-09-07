@@ -40,6 +40,7 @@ impl AlgoImpl for RandomWalk {
             None => 1usize,
             Some(Expr::Const {
                 val: DataValue::Num(n),
+                ..
             }) => {
                 let n = n.get_int().ok_or_else(|| {
                     miette!(
@@ -65,6 +66,7 @@ impl AlgoImpl for RandomWalk {
         {
             Expr::Const {
                 val: DataValue::Num(n),
+                ..
             } => {
                 let n = n.get_int().ok_or_else(|| {
                     miette!("'steps' for 'random_walk' requires an integer, got {}", n)

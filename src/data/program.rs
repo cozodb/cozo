@@ -16,10 +16,18 @@ use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::pull::OutPullSpec;
+use crate::parse::SourceSpan;
 use crate::runtime::relation::RelationMetadata;
 use crate::runtime::transact::SessionTx;
 
-pub(crate) type ConstRules = BTreeMap<MagicSymbol, (Vec<Tuple>, Vec<Symbol>)>;
+pub(crate) type ConstRules = BTreeMap<MagicSymbol, ConstRule>;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) struct ConstRule {
+    pub(crate) bindings: Vec<Symbol>,
+    pub(crate) data: Vec<Tuple>,
+    pub(crate) span: SourceSpan,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct QueryOutOptions {
@@ -76,9 +84,9 @@ pub(crate) struct TempSymbGen {
 }
 
 impl TempSymbGen {
-    pub(crate) fn next(&mut self) -> Symbol {
+    pub(crate) fn next(&mut self, span: SourceSpan) -> Symbol {
         self.last_id += 1;
-        Symbol::from(&format!("*{}", self.last_id) as &str)
+        Symbol::new(&format!("*{}", self.last_id) as &str, span)
     }
 }
 
@@ -95,10 +103,11 @@ pub(crate) struct AlgoApply {
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
     pub(crate) head: Vec<Symbol>,
     pub(crate) vld: Option<Validity>,
+    pub(crate) span: SourceSpan,
 }
 
 impl AlgoApply {
-    pub(crate) fn arity(&self) -> Result<usize> {
+    pub(crate) fn arity(&self) -> Option<usize> {
         self.algo.arity(Left(&self.rule_args), &self.options)
     }
 }
@@ -121,7 +130,7 @@ pub(crate) struct MagicAlgoApply {
 }
 
 impl MagicAlgoApply {
-    pub(crate) fn arity(&self) -> Result<usize> {
+    pub(crate) fn arity(&self) -> Option<usize> {
         self.algo.arity(Right(&self.rule_args), &self.options)
     }
 }
@@ -212,7 +221,7 @@ pub(crate) struct InputProgram {
 
 impl InputProgram {
     pub(crate) fn get_entry_head(&self) -> Option<&[Symbol]> {
-        if let Some(entry) = self.prog.get(&PROG_ENTRY) {
+        if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
                 InputRulesOrAlgo::Rules { rules } => Some(&rules.last().unwrap().head),
                 InputRulesOrAlgo::Algo { algo: algo_apply } => {
@@ -225,8 +234,8 @@ impl InputProgram {
             };
         }
 
-        if let Some((_, bindings)) = self.const_rules.get(&MagicSymbol::Muggle {
-            inner: PROG_ENTRY.clone(),
+        if let Some(ConstRule { bindings, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
+            inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
         }) {
             return if bindings.is_empty() {
                 None
@@ -249,12 +258,15 @@ impl InputProgram {
                     let mut collected_rules = vec![];
                     for rule in rules {
                         let mut counter = -1;
-                        let mut gen_symb = || {
+                        let mut gen_symb = |span| {
                             counter += 1;
-                            Symbol::from(&format!("***{}", counter) as &str)
+                            Symbol::new(&format!("***{}", counter) as &str, span)
                         };
-                        let normalized_body = InputAtom::Conjunction(rule.body.clone())
-                            .disjunctive_normal_form(tx)?;
+                        let normalized_body = InputAtom::Conjunction {
+                            inner: rule.body.clone(),
+                            span: rule.span,
+                        }
+                        .disjunctive_normal_form(tx)?;
                         let mut new_head = Vec::with_capacity(rule.head.len());
                         let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
                         for symb in rule.head.iter() {
@@ -264,13 +276,13 @@ impl InputProgram {
                                     new_head.push(symb.clone());
                                 }
                                 Entry::Occupied(mut e) => {
-                                    let new_symb = gen_symb();
+                                    let new_symb = gen_symb(symb.span);
                                     e.get_mut().push(new_symb.clone());
                                     new_head.push(new_symb);
                                 }
                             }
                         }
-                        for conj in normalized_body.0 {
+                        for conj in normalized_body.inner {
                             let mut body = conj.0;
                             for (old_symb, new_symbs) in seen.iter() {
                                 for new_symb in new_symbs.iter() {
@@ -281,6 +293,7 @@ impl InputProgram {
                                             tuple_pos: None,
                                         },
                                         one_many_unif: false,
+                                        span: new_symb.span,
                                     }))
                                 }
                             }
@@ -353,8 +366,8 @@ impl Default for MagicRulesOrAlgo {
 }
 
 impl MagicRulesOrAlgo {
-    pub(crate) fn arity(&self) -> Result<usize> {
-        Ok(match self {
+    pub(crate) fn arity(&self) -> Option<usize> {
+        Some(match self {
             MagicRulesOrAlgo::Rules { rules } => rules.first().unwrap().head.len(),
             MagicRulesOrAlgo::Algo { algo } => algo.arity()?,
         })
@@ -393,12 +406,23 @@ pub(crate) enum MagicSymbol {
     },
 }
 
+impl MagicSymbol {
+    pub(crate) fn symbol(&self) -> &Symbol {
+        match self {
+            MagicSymbol::Muggle { inner, .. }
+            | MagicSymbol::Magic { inner, .. }
+            | MagicSymbol::Input { inner, .. }
+            | MagicSymbol::Sup { inner, .. } => inner,
+        }
+    }
+}
+
 impl Debug for MagicSymbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MagicSymbol::Muggle { inner } => write!(f, "{}", inner.0),
+            MagicSymbol::Muggle { inner } => write!(f, "{}", inner.name),
             MagicSymbol::Magic { inner, adornment } => {
-                write!(f, "{}|M", inner.0)?;
+                write!(f, "{}|M", inner.name)?;
                 for b in adornment {
                     if *b {
                         write!(f, "b")?
@@ -409,7 +433,7 @@ impl Debug for MagicSymbol {
                 Ok(())
             }
             MagicSymbol::Input { inner, adornment } => {
-                write!(f, "{}|I", inner.0)?;
+                write!(f, "{}|I", inner.name)?;
                 for b in adornment {
                     if *b {
                         write!(f, "b")?
@@ -425,7 +449,7 @@ impl Debug for MagicSymbol {
                 rule_idx,
                 sup_idx,
             } => {
-                write!(f, "{}|S.{}.{}", inner.0, rule_idx, sup_idx)?;
+                write!(f, "{}|S.{}.{}", inner.name, rule_idx, sup_idx)?;
                 for b in adornment {
                     if *b {
                         write!(f, "b")?
@@ -474,6 +498,7 @@ pub(crate) struct InputRule {
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<InputAtom>,
     pub(crate) vld: Option<Validity>,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -509,14 +534,48 @@ impl MagicRule {
 
 #[derive(Debug, Clone)]
 pub(crate) enum InputAtom {
-    AttrTriple(InputAttrTripleAtom),
-    Rule(InputRuleApplyAtom),
-    Relation(InputRelationApplyAtom),
-    Predicate(Expr),
-    Negation(Box<InputAtom>),
-    Conjunction(Vec<InputAtom>),
-    Disjunction(Vec<InputAtom>),
-    Unification(Unification),
+    AttrTriple {
+        inner: InputAttrTripleAtom,
+    },
+    Rule {
+        inner: InputRuleApplyAtom,
+    },
+    Relation {
+        inner: InputRelationApplyAtom,
+    },
+    Predicate {
+        inner: Expr,
+    },
+    Negation {
+        inner: Box<InputAtom>,
+        span: SourceSpan,
+    },
+    Conjunction {
+        inner: Vec<InputAtom>,
+        span: SourceSpan,
+    },
+    Disjunction {
+        inner: Vec<InputAtom>,
+        span: SourceSpan,
+    },
+    Unification {
+        inner: Unification,
+    },
+}
+
+impl InputAtom {
+    pub(crate) fn span(&self) -> SourceSpan {
+        match self {
+            InputAtom::Negation { span, .. }
+            | InputAtom::Conjunction { span, .. }
+            | InputAtom::Disjunction { span, .. } => *span,
+            InputAtom::AttrTriple { inner, .. } => inner.span,
+            InputAtom::Rule { inner, .. } => inner.span,
+            InputAtom::Relation { inner, .. } => inner.span,
+            InputAtom::Predicate { inner, .. } => inner.span(),
+            InputAtom::Unification { inner, .. } => inner.span,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -531,6 +590,21 @@ pub(crate) enum NormalFormAtom {
     Unification(Unification),
 }
 
+// impl NormalFormAtom {
+//     pub(crate) fn span(&self) -> SourceSpan {
+//         match self {
+//             NormalFormAtom::AttrTriple(inner) => inner.span,
+//             NormalFormAtom::Rule(inner) => inner.span,
+//             NormalFormAtom::Relation(inner) => inner.span,
+//             NormalFormAtom::NegatedAttrTriple(inner) => inner.span,
+//             NormalFormAtom::NegatedRule(inner) => inner.span,
+//             NormalFormAtom::NegatedRelation(inner) => inner.span,
+//             NormalFormAtom::Predicate(inner) => inner.span(),
+//             NormalFormAtom::Unification(inner) => inner.span
+//         }
+//     }
+// }
+
 #[derive(Debug, Clone)]
 pub(crate) enum MagicAtom {
     AttrTriple(MagicAttrTripleAtom),
@@ -543,11 +617,29 @@ pub(crate) enum MagicAtom {
     Unification(Unification),
 }
 
+
+// impl MagicAtom {
+//     pub(crate) fn span(&self) -> SourceSpan {
+//         match self {
+//             MagicAtom::AttrTriple(inner) => inner.span,
+//             MagicAtom::Rule(inner) => inner.span,
+//             MagicAtom::Relation(inner) => inner.span,
+//             MagicAtom::NegatedAttrTriple(inner) => inner.span,
+//             MagicAtom::NegatedRule(inner) => inner.span,
+//             MagicAtom::NegatedRelation(inner) => inner.span,
+//             MagicAtom::Predicate(inner) => inner.span(),
+//             MagicAtom::Unification(inner) => inner.span
+//         }
+//     }
+// }
+
+
 #[derive(Clone, Debug)]
 pub(crate) struct InputAttrTripleAtom {
     pub(crate) attr: Symbol,
     pub(crate) entity: InputTerm<DataValue>,
     pub(crate) value: InputTerm<DataValue>,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -555,6 +647,7 @@ pub(crate) struct NormalFormAttrTripleAtom {
     pub(crate) attr: Attribute,
     pub(crate) entity: Symbol,
     pub(crate) value: Symbol,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -562,48 +655,55 @@ pub(crate) struct MagicAttrTripleAtom {
     pub(crate) attr: Attribute,
     pub(crate) entity: Symbol,
     pub(crate) value: Symbol,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct InputRuleApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<InputTerm<DataValue>>,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct InputRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<InputTerm<DataValue>>,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct NormalFormRuleApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct NormalFormRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct MagicRuleApplyAtom {
     pub(crate) name: MagicSymbol,
     pub(crate) args: Vec<Symbol>,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct MagicRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) enum InputTerm<T> {
-    Var(Symbol),
-    Const(T),
+    Var { name: Symbol },
+    Const { val: T, span: SourceSpan },
 }
 
 #[derive(Clone, Debug)]
@@ -611,6 +711,7 @@ pub(crate) struct Unification {
     pub(crate) binding: Symbol,
     pub(crate) expr: Expr,
     pub(crate) one_many_unif: bool,
+    pub(crate) span: SourceSpan,
 }
 
 impl Unification {

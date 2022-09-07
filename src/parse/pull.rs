@@ -7,7 +7,7 @@ use crate::data::id::Validity;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
-use crate::parse::{Pair, Rule};
+use crate::parse::{ExtractSpan, Pair, Rule};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct OutPullSpec {
@@ -21,7 +21,8 @@ pub(crate) fn parse_out_options(
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<(Symbol, Option<Validity>, Vec<OutPullSpec>)> {
     let mut src = pair.into_inner();
-    let target = Symbol::from(src.next().unwrap().as_str());
+    let sp = src.next().unwrap();
+    let target = Symbol::new(sp.as_str(), sp.extract_span());
     let mut specs = src.next().unwrap();
     let mut at = None;
 
@@ -48,7 +49,7 @@ fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
         is_reverse = true;
         name_p = src.next().unwrap();
     }
-    let name = Symbol::from(name_p.as_str());
+    let name = Symbol::new(name_p.as_str(), name_p.extract_span());
     let subfields = match src.next() {
         None => vec![],
         Some(p) => p.into_inner().map(parse_pull_field).try_collect()?,
@@ -96,10 +97,10 @@ fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
 //             JsonValue::String(s) if s == "*" => Ok(PullSpec::PullAll),
 //             JsonValue::String(s) if s == "_id" => Ok(PullSpec::PullId("_id".into())),
 //             JsonValue::String(s) => {
-//                 let input_symb = Symbol::from(s.as_ref());
+//                 let input_symb = Symbol::new(s.as_ref());
 //                 let reverse = input_symb.0.starts_with('<');
 //                 let symb = if reverse {
-//                     Symbol::from(input_symb.0.strip_prefix('<').unwrap())
+//                     Symbol::new(input_symb.0.strip_prefix('<').unwrap())
 //                 } else {
 //                     input_symb.clone()
 //                 };
@@ -144,7 +145,7 @@ fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
 //             match k as &str {
 //                 "as" => {
 //                     as_override =
-//                         Some(Symbol::from(v.as_str().ok_or_else(|| {
+//                         Some(Symbol::new(v.as_str().ok_or_else(|| {
 //                             miette!("expect 'as' field to be string, got {}", v)
 //                         })?))
 //                 }
@@ -167,7 +168,7 @@ fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
 //                     if v == "_id" {
 //                         pull_id = true
 //                     } else {
-//                         input_symb = Some(Symbol::from(v));
+//                         input_symb = Some(Symbol::new(v));
 //                     }
 //                 }
 //                 "recurse" => {
@@ -219,7 +220,7 @@ fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
 //
 //         let reverse = input_symb.0.starts_with('<');
 //         let symb = if reverse {
-//             Symbol::from(input_symb.0.strip_prefix('<').unwrap())
+//             Symbol::new(input_symb.0.strip_prefix('<').unwrap())
 //         } else {
 //             input_symb.clone()
 //         };

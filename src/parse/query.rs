@@ -1,18 +1,21 @@
 use std::borrow::BorrowMut;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 
 use either::Left;
 use itertools::Itertools;
-use miette::{bail, ensure, miette, Result};
+use miette::{bail, ensure, miette, Diagnostic, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
 use crate::algo::AlgoHandle;
-use crate::data::aggr::{get_aggr, Aggregation};
+use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
 use crate::data::program::{
-    AlgoApply, AlgoRuleArg, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram,
+    AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram,
     InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm,
     MagicSymbol, QueryOutOptions, RelationOp, SortDir, TripleDir, Unification,
 };
@@ -21,8 +24,49 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
 use crate::parse::pull::parse_out_options;
-use crate::parse::{Pair, Pairs, Rule};
+use crate::parse::{ExtractSpan, Pair, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::{RelationId, RelationMetadata};
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("Query option {0} is not constant")]
+#[diagnostic(code(parser::option_not_constant))]
+struct OptionNotConstantError(&'static str, #[label] SourceSpan, #[related] [Report; 1]);
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("Query option {0} requires a non-negative integer")]
+#[diagnostic(code(parser::option_not_non_neg))]
+struct OptionNotNonNegIntError(&'static str, #[label] SourceSpan);
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("Query option {0} requires a positive integer")]
+#[diagnostic(code(parser::option_not_pos))]
+struct OptionNotPosIntError(&'static str, #[label] SourceSpan);
+
+#[derive(Debug)]
+struct MultipleRuleDefinitionError(String, Vec<SourceSpan>);
+
+impl Error for MultipleRuleDefinitionError {}
+
+impl Display for MultipleRuleDefinitionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "The rule '{0}' cannot have multiple definitions since it contains non-Horn clauses",
+            self.0
+        )
+    }
+}
+
+impl Diagnostic for MultipleRuleDefinitionError {
+    fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        Some(Box::new("parser::mult_rule_def"))
+    }
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+        Some(Box::new(
+            self.1.iter().map(|s| LabeledSpan::new_with_span(None, s)),
+        ))
+    }
+}
 
 pub(crate) fn parse_query(
     src: Pairs<'_>,
@@ -35,37 +79,89 @@ pub(crate) fn parse_query(
     for pair in src {
         match pair.as_rule() {
             Rule::rule => {
+                let rule_span = pair.extract_span();
                 let (name, rule) = parse_rule(pair, param_pool)?;
+                if let Some(found) = const_rules.get(&MagicSymbol::Muggle {
+                    inner: name.clone(),
+                }) {
+                    bail!(MultipleRuleDefinitionError(
+                        name.name.to_string(),
+                        vec![rule_span, found.span]
+                    ));
+                }
+
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
                         e.insert(InputRulesOrAlgo::Rules { rules: vec![rule] });
                     }
                     Entry::Occupied(mut e) => match e.get_mut() {
-                        InputRulesOrAlgo::Rules { rules: rs } => rs.push(rule),
-                        InputRulesOrAlgo::Algo { algo: _ } => {
-                            bail!("cannot mix rules and algo: {}", e.key())
+                        InputRulesOrAlgo::Rules { rules: rs } => {
+                            rs.push(rule);
+                        }
+                        InputRulesOrAlgo::Algo { algo } => {
+                            let algo_span = algo.span;
+                            bail!(MultipleRuleDefinitionError(
+                                e.key().name.to_string(),
+                                vec![rule.span, algo_span]
+                            ))
                         }
                     },
                 }
             }
             Rule::algo_rule => {
+                let rule_span = pair.extract_span();
                 let (name, apply) = parse_algo_rule(pair, param_pool)?;
+                if let Some(found) = const_rules.get(&MagicSymbol::Muggle {
+                    inner: name.clone(),
+                }) {
+                    bail!(MultipleRuleDefinitionError(
+                        name.name.to_string(),
+                        vec![rule_span, found.span]
+                    ));
+                }
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
                         e.insert(InputRulesOrAlgo::Algo { algo: apply });
                     }
-                    Entry::Occupied(e) => bail!("algo rule can only be defined once: {}", e.key()),
+                    Entry::Occupied(e) => {
+                        let found_name = e.key().name.to_string();
+                        let mut found_span = match e.get() {
+                            InputRulesOrAlgo::Rules { rules } => {
+                                rules.iter().map(|r| r.span).collect_vec()
+                            }
+                            InputRulesOrAlgo::Algo { algo } => vec![algo.span],
+                        };
+                        found_span.push(rule_span);
+                        bail!(MultipleRuleDefinitionError(found_name, found_span));
+                    }
                 }
             }
             Rule::const_rule => {
+                let span = pair.extract_span();
                 let mut src = pair.into_inner();
                 let (name, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
+
+                if let Some(found) = progs.get(&name) {
+                    let mut found_span = match found {
+                        InputRulesOrAlgo::Rules { rules } => {
+                            rules.iter().map(|r| r.span).collect_vec()
+                        }
+                        InputRulesOrAlgo::Algo { algo } => {
+                            vec![algo.span]
+                        }
+                    };
+                    found_span.push(span);
+                    bail!(MultipleRuleDefinitionError(
+                        name.name.to_string(),
+                        found_span
+                    ));
+                }
+
                 ensure!(
                     aggr.iter().all(|v| v.is_none()),
                     "const rules cannot have aggregation application"
                 );
-                let data = build_expr(src.next().unwrap(), param_pool)?;
-                let data = data.eval_to_const()?;
+                let data = build_expr(src.next().unwrap(), param_pool)?.eval_to_const()?;
                 let data = match data {
                     DataValue::List(l) => l,
                     d => bail!(
@@ -98,7 +194,11 @@ pub(crate) fn parse_query(
                                 "const head must have the same length as rows, or be empty"
                             );
                         }
-                        e.insert((tuples, head));
+                        e.insert(ConstRule {
+                            data: tuples,
+                            bindings: head,
+                            span,
+                        });
                     }
                     Entry::Occupied(e) => {
                         bail!("const rule can be defined only once: {:?}", e.key())
@@ -106,40 +206,53 @@ pub(crate) fn parse_query(
                 }
             }
             Rule::timeout_option => {
-                let timeout = build_expr(pair.into_inner().next().unwrap(), param_pool)?
-                    .eval_to_const()?
-                    .get_int()
-                    .ok_or_else(|| miette!("timeout option must be an integer"))?;
-                ensure!(timeout > 0, "timeout must be positive");
+                let pair = pair.into_inner().next().unwrap();
+                let span = pair.extract_span();
+                let timeout = build_expr(pair, param_pool)?
+                    .eval_to_const()
+                    .map_err(|err| OptionNotConstantError("timeout", span, [err]))?
+                    .get_non_neg_int()
+                    .ok_or_else(|| OptionNotNonNegIntError("timeout", span))?;
+                ensure!(timeout > 0, OptionNotPosIntError("timeout", span));
                 out_opts.timeout = Some(timeout as u64);
             }
             Rule::limit_option => {
-                let limit = build_expr(pair.into_inner().next().unwrap(), param_pool)?
-                    .eval_to_const()?
+                let pair = pair.into_inner().next().unwrap();
+                let span = pair.extract_span();
+                let limit = build_expr(pair, param_pool)?
+                    .eval_to_const()
+                    .map_err(|err| OptionNotConstantError("limit", span, [err]))?
                     .get_non_neg_int()
-                    .ok_or_else(|| miette!("limit requires a non-negative integer"))?;
+                    .ok_or_else(|| OptionNotNonNegIntError("limit", span))?;
                 out_opts.limit = Some(limit as usize);
             }
             Rule::offset_option => {
-                let offset = build_expr(pair.into_inner().next().unwrap(), param_pool)?
-                    .eval_to_const()?
+                let pair = pair.into_inner().next().unwrap();
+                let span = pair.extract_span();
+                let offset = build_expr(pair, param_pool)?
+                    .eval_to_const()
+                    .map_err(|err| OptionNotConstantError("offset", span, [err]))?
                     .get_non_neg_int()
-                    .ok_or_else(|| miette!("limit requires a non-negative integer"))?;
+                    .ok_or_else(|| OptionNotNonNegIntError("offset", span))?;
                 out_opts.offset = Some(offset as usize);
             }
             Rule::sort_option => {
                 for part in pair.into_inner() {
                     let mut var = "";
                     let mut dir = SortDir::Asc;
+                    let mut span = part.extract_span();
                     for a in part.into_inner() {
                         match a.as_rule() {
-                            Rule::var => var = a.as_str(),
+                            Rule::var => {
+                                var = a.as_str();
+                                span = a.extract_span();
+                            }
                             Rule::sort_asc => dir = SortDir::Asc,
                             Rule::sort_desc => dir = SortDir::Dsc,
                             _ => unreachable!(),
                         }
                     }
-                    out_opts.sorters.push((Symbol::from(var), dir));
+                    out_opts.sorters.push((Symbol::new(var, span), dir));
                 }
             }
             Rule::out_option => {
@@ -164,9 +277,9 @@ pub(crate) fn parse_query(
                     _ => unreachable!(),
                 };
 
-                let name = args.next().unwrap().as_str();
+                let name_p = args.next().unwrap();
                 let meta = RelationMetadata {
-                    name: Symbol::from(name),
+                    name: Symbol::new(name_p.as_str(), name_p.extract_span()),
                     id: RelationId::SYSTEM,
                     arity: 0,
                 };
@@ -178,7 +291,7 @@ pub(crate) fn parse_query(
     }
 
     if let Some((meta, _)) = out_opts.store_relation.borrow_mut() {
-        meta.arity = get_entry_arity(&progs)?;
+        meta.arity = get_entry_arity(&progs).ok_or_else(|| miette!("bad"))?;
     }
 
     let prog = InputProgram {
@@ -199,22 +312,18 @@ pub(crate) fn parse_query(
     Ok(prog)
 }
 
-fn get_entry_arity(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Result<usize> {
-    Ok(
-        match prog
-            .get(&PROG_ENTRY)
-            .ok_or_else(|| miette!("program entry point not found"))?
-        {
-            InputRulesOrAlgo::Rules { rules } => rules[0].head.len(),
-            InputRulesOrAlgo::Algo { algo } => algo.arity()?,
-        },
-    )
+fn get_entry_arity(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Option<usize> {
+    match prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0)))? {
+        InputRulesOrAlgo::Rules { rules } => Some(rules[0].head.len()),
+        InputRulesOrAlgo::Algo { algo } => algo.arity(),
+    }
 }
 
 fn parse_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<(Symbol, InputRule)> {
+    let span = src.extract_span();
     let mut src = src.into_inner();
     let head = src.next().unwrap();
     let (name, head, aggr) = parse_rule_head(head, param_pool)?;
@@ -238,6 +347,7 @@ fn parse_rule(
             aggr,
             body: body_clauses,
             vld: at,
+            span,
         },
     ))
 }
@@ -246,6 +356,7 @@ fn parse_disjunction(
     pair: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<InputAtom> {
+    let span = pair.extract_span();
     let res: Vec<_> = pair
         .into_inner()
         .map(|v| parse_atom(v, param_pool))
@@ -253,91 +364,116 @@ fn parse_disjunction(
     Ok(if res.len() == 1 {
         res.into_iter().next().unwrap()
     } else {
-        InputAtom::Disjunction(res)
+        InputAtom::Disjunction { inner: res, span }
     })
 }
 
 fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<InputAtom> {
     Ok(match src.as_rule() {
         Rule::rule_body => {
+            let span = src.extract_span();
             let grouped: Vec<_> = src
                 .into_inner()
                 .map(|v| parse_disjunction(v, param_pool))
                 .try_collect()?;
-            InputAtom::Conjunction(grouped)
+            InputAtom::Conjunction { inner: grouped, span }
         }
         Rule::disjunction => parse_disjunction(src, param_pool)?,
         Rule::triple => parse_triple(src, param_pool)?,
         Rule::negation => {
+            let span = src.extract_span();
             let inner = parse_atom(src.into_inner().next().unwrap(), param_pool)?;
-            InputAtom::Negation(inner.into())
+            InputAtom::Negation {
+                inner: inner.into(),
+                span
+            }
         }
         Rule::expr => {
             let expr = build_expr(src, param_pool)?;
-            InputAtom::Predicate(expr)
+            InputAtom::Predicate { inner: expr }
         }
         Rule::unify => {
+            let span = src.extract_span();
             let mut src = src.into_inner();
-            let var = src.next().unwrap().as_str();
+            let var = src.next().unwrap();
             let expr = build_expr(src.next().unwrap(), param_pool)?;
-            InputAtom::Unification(Unification {
-                binding: Symbol::from(var),
-                expr,
-                one_many_unif: false,
-            })
+            InputAtom::Unification {
+                inner: Unification {
+                    binding: Symbol::new(var.as_str(), var.extract_span()),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                },
+            }
         }
         Rule::unify_multi => {
+            let span = src.extract_span();
             let mut src = src.into_inner();
-            let var = src.next().unwrap().as_str();
+            let var = src.next().unwrap();
             let expr = build_expr(src.next().unwrap(), param_pool)?;
-            InputAtom::Unification(Unification {
-                binding: Symbol::from(var),
-                expr,
-                one_many_unif: true,
-            })
+            InputAtom::Unification {
+                inner: Unification {
+                    binding: Symbol::new(var.as_str(), var.extract_span()),
+                    expr,
+                    one_many_unif: true,
+                    span,
+                },
+            }
         }
         Rule::rule_apply => {
+            let span = src.extract_span();
             let mut src = src.into_inner();
-            let name = src.next().unwrap().as_str();
+            let name = src.next().unwrap();
             let args: Vec<_> = src
                 .next()
                 .unwrap()
                 .into_inner()
                 .map(|v| parse_rule_arg(v, param_pool))
                 .try_collect()?;
-            InputAtom::Rule(InputRuleApplyAtom {
-                name: Symbol::from(name),
-                args,
-            })
+            InputAtom::Rule {
+                inner: InputRuleApplyAtom {
+                    name: Symbol::new(name.as_str(), name.extract_span()),
+                    args,
+                    span
+                },
+            }
         }
         Rule::relation_apply => {
+            let span = src.extract_span();
             let mut src = src.into_inner();
-            let name = &src.next().unwrap().as_str()[1..];
+            let name = src.next().unwrap();
             let args: Vec<_> = src
                 .next()
                 .unwrap()
                 .into_inner()
                 .map(|v| parse_rule_arg(v, param_pool))
                 .try_collect()?;
-            InputAtom::Relation(InputRelationApplyAtom {
-                name: Symbol::from(name),
-                args,
-            })
+            InputAtom::Relation {
+                inner: InputRelationApplyAtom {
+                    name: Symbol::new(&name.as_str()[1..], name.extract_span()),
+                    args,
+                    span
+                },
+            }
         }
         rule => unreachable!("{:?}", rule),
     })
 }
 
 fn parse_triple(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<InputAtom> {
+    let span = src.extract_span();
     let mut src = src.into_inner();
     let e_p = src.next().unwrap();
     let attr_p = src.next().unwrap();
     let v_p = src.next().unwrap();
-    Ok(InputAtom::AttrTriple(InputAttrTripleAtom {
-        attr: Symbol::from(attr_p.as_str()),
-        entity: parse_rule_arg(e_p, param_pool)?,
-        value: parse_rule_arg(v_p, param_pool)?,
-    }))
+    Ok(InputAtom::AttrTriple {
+        inner: InputAttrTripleAtom {
+            attr: Symbol::new(attr_p.as_str(), attr_p.extract_span()),
+            entity: parse_rule_arg(e_p, param_pool)?,
+            value: parse_rule_arg(v_p, param_pool)?,
+            span
+        },
+    })
 }
 
 fn parse_rule_arg(
@@ -347,11 +483,12 @@ fn parse_rule_arg(
     Ok(match src.as_rule() {
         Rule::expr => {
             let mut p = build_expr(src, param_pool)?;
+            let span = p.span();
             p.partial_eval()?;
             match p {
-                Expr::Binding { var, .. } => InputTerm::Var(var),
-                Expr::Const { val } => InputTerm::Const(val),
-                _ => bail!("triple arg must either evaluate to a constant or a variable"),
+                Expr::Binding { var, .. } => InputTerm::Var { name: var },
+                Expr::Const { val, .. } => InputTerm::Const { val, span },
+                _ => bail!("triple arg must either evaluate to a constant or a Symbol"),
             }
         }
         _ => unreachable!(),
@@ -367,7 +504,7 @@ fn parse_rule_head(
     Vec<Option<(Aggregation, Vec<DataValue>)>>,
 )> {
     let mut src = src.into_inner();
-    let name = src.next().unwrap().as_str();
+    let name = src.next().unwrap();
     let mut args = vec![];
     let mut aggrs = vec![];
     for p in src {
@@ -375,8 +512,13 @@ fn parse_rule_head(
         args.push(arg);
         aggrs.push(aggr);
     }
-    Ok((Symbol::from(name), args, aggrs))
+    Ok((Symbol::new(name.as_str(), name.extract_span()), args, aggrs))
 }
+
+#[derive(Error, Diagnostic, Debug)]
+#[diagnostic(code(parser::aggr_not_found))]
+#[error("Aggregation '{0}' not found")]
+struct AggrNotFound(String, #[label] SourceSpan);
 
 fn parse_rule_head_arg(
     src: Pair<'_>,
@@ -384,19 +526,20 @@ fn parse_rule_head_arg(
 ) -> Result<(Symbol, Option<(Aggregation, Vec<DataValue>)>)> {
     let src = src.into_inner().next().unwrap();
     Ok(match src.as_rule() {
-        Rule::var => (Symbol::from(src.as_str()), None),
+        Rule::var => (Symbol::new(src.as_str(), src.extract_span()), None),
         Rule::aggr_arg => {
             let mut inner = src.into_inner();
-            let aggr_name = inner.next().unwrap().as_str();
-            let var = inner.next().unwrap().as_str();
+            let aggr_p = inner.next().unwrap();
+            let aggr_name = aggr_p.as_str();
+            let var = inner.next().unwrap();
             let args: Vec<_> = inner
                 .map(|v| -> Result<DataValue> { build_expr(v, param_pool)?.eval_to_const() })
                 .try_collect()?;
             (
-                Symbol::from(var),
+                Symbol::new(var.as_str(), var.extract_span()),
                 Some((
-                    get_aggr(aggr_name)
-                        .ok_or_else(|| miette!("cannot find aggregation"))?
+                    parse_aggr(aggr_name)
+                        .ok_or_else(|| AggrNotFound(aggr_name.to_string(), aggr_p.extract_span()))?
                         .clone(),
                     args,
                 )),
@@ -410,6 +553,7 @@ fn parse_algo_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<(Symbol, AlgoApply)> {
+    let span = src.extract_span();
     let mut src = src.into_inner();
     let (out_symbol, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
     ensure!(
@@ -439,39 +583,49 @@ fn parse_algo_rule(
                 match inner.as_rule() {
                     Rule::algo_rule_rel => {
                         let mut els = inner.into_inner();
-                        let name = els.next().unwrap().as_str();
-                        let bindings = els.map(|v| Symbol::from(v.as_str())).collect_vec();
+                        let name = els.next().unwrap();
+                        let bindings = els
+                            .map(|v| Symbol::new(v.as_str(), v.extract_span()))
+                            .collect_vec();
                         rule_args.push(AlgoRuleArg::InMem {
-                            name: Symbol::from(name),
+                            name: Symbol::new(name.as_str(), name.extract_span()),
                             bindings,
                         })
                     }
                     Rule::algo_relation_rel => {
                         let mut els = inner.into_inner();
-                        let name = els.next().unwrap().as_str();
-                        let bindings = els.map(|v| Symbol::from(v.as_str())).collect_vec();
+                        let name = els.next().unwrap();
+                        let bindings = els
+                            .map(|v| Symbol::new(v.as_str(), v.extract_span()))
+                            .collect_vec();
                         rule_args.push(AlgoRuleArg::Stored {
-                            name: Symbol::from(name.strip_prefix(':').unwrap()),
+                            name: Symbol::new(
+                                name.as_str().strip_prefix(':').unwrap(),
+                                name.extract_span(),
+                            ),
                             bindings,
                         })
                     }
                     Rule::algo_triple_rel => {
                         let mut els = inner.into_inner();
-                        let fst = els.next().unwrap().as_str();
+                        let fst = els.next().unwrap();
                         let mdl = els.next().unwrap();
                         let mut dir = TripleDir::Fwd;
                         let ident = match mdl.as_rule() {
                             Rule::rev_triple_marker => {
                                 dir = TripleDir::Bwd;
-                                els.next().unwrap().as_str()
+                                els.next().unwrap()
                             }
-                            Rule::compound_ident => mdl.as_str(),
+                            Rule::compound_ident => mdl,
                             _ => unreachable!(),
                         };
-                        let snd = els.next().unwrap().as_str();
+                        let snd = els.next().unwrap();
                         rule_args.push(AlgoRuleArg::Triple {
-                            name: Symbol::from(ident),
-                            bindings: vec![Symbol::from(fst), Symbol::from(snd)],
+                            name: Symbol::new(ident.as_str(), ident.extract_span()),
+                            bindings: vec![
+                                Symbol::new(fst.as_str(), fst.extract_span()),
+                                Symbol::new(snd.as_str(), snd.extract_span()),
+                            ],
                             dir,
                         });
                     }
@@ -489,9 +643,12 @@ fn parse_algo_rule(
         }
     }
 
-    let algo = AlgoHandle::new(algo_name);
+    let algo = AlgoHandle::new(algo_name, name_pair.extract_span());
+    let algo_arity = algo
+        .arity(Left(&rule_args), &options)
+        .ok_or_else(|| miette!("bad algo arity"))?;
     ensure!(
-        head.is_empty() || algo.arity(Left(&rule_args), &options)? == head.len(),
+        head.is_empty() || algo_arity == head.len(),
         "algo head must have the same length as the return, or be omitted"
     );
 
@@ -503,6 +660,7 @@ fn parse_algo_rule(
             options,
             head,
             vld: at,
+            span,
         },
     ))
 }
