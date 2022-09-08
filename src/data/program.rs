@@ -224,15 +224,18 @@ pub(crate) enum AlgoRuleArg {
     InMem {
         name: Symbol,
         bindings: Vec<Symbol>,
+        span: SourceSpan,
     },
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
+        span: SourceSpan,
     },
     Triple {
         name: Symbol,
         bindings: Vec<Symbol>,
         dir: TripleDir,
+        span: SourceSpan,
     },
 }
 
@@ -241,20 +244,37 @@ pub(crate) enum MagicAlgoRuleArg {
     InMem {
         name: MagicSymbol,
         bindings: Vec<Symbol>,
+        span: SourceSpan,
     },
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
+        span: SourceSpan,
     },
     Triple {
-        name: Attribute,
+        attr: Attribute,
         bindings: Vec<Symbol>,
         dir: TripleDir,
         vld: Validity,
+        span: SourceSpan,
     },
 }
 
 impl MagicAlgoRuleArg {
+    pub(crate) fn bindings(&self) -> &[Symbol] {
+        match self {
+            MagicAlgoRuleArg::InMem { bindings, .. }
+            | MagicAlgoRuleArg::Stored { bindings, .. }
+            | MagicAlgoRuleArg::Triple { bindings, .. } => bindings,
+        }
+    }
+    pub(crate) fn span(&self) -> SourceSpan {
+        match self {
+            MagicAlgoRuleArg::InMem { span, .. }
+            | MagicAlgoRuleArg::Stored { span, .. }
+            | MagicAlgoRuleArg::Triple { span, .. } => *span,
+        }
+    }
     pub(crate) fn get_binding_map(&self, starting: usize) -> BTreeMap<Symbol, usize> {
         let bindings = match self {
             MagicAlgoRuleArg::InMem { bindings, .. }

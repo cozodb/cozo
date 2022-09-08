@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 
 use either::Either;
 use itertools::Itertools;
-use miette::{bail, ensure, miette, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
 use crate::algo::all_pairs_shortest_path::{BetweennessCentrality, ClosenessCentrality};
 use crate::algo::astar::ShortestPathAStar;
@@ -136,10 +137,44 @@ impl AlgoHandle {
             "label_propagation" => Box::new(LabelPropagation),
             "random_walk" => Box::new(RandomWalk),
             "reorder_sort" => Box::new(ReorderSort),
-            name => bail!("algorithm '{}' not found", name),
+            name => bail!(AlgoNotFoundError(name.to_string(), self.name.span)),
         })
     }
 }
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("The relation cannot be interpreted as an edge")]
+#[diagnostic(code(algo::not_an_edge))]
+#[diagnostic(help("Edge relation requires tuples of length at least two"))]
+struct NotAnEdgeError(#[label] SourceSpan);
+
+#[derive(Error, Diagnostic, Debug)]
+#[error(
+    "The value {0:?} at the third position in the relation cannot be interpreted as edge weights"
+)]
+#[diagnostic(code(algo::invalid_edge_weight))]
+#[diagnostic(help(
+    "Edge weights must be finite numbers. Some algorithm also requires positivity."
+))]
+struct BadEdgeWeightError(DataValue, #[label] SourceSpan);
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("The requested rule '{0}' cannot be found")]
+#[diagnostic(code(algo::rule_not_found))]
+struct RuleNotFoundError(String, #[label] SourceSpan);
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("Invalid reverse scanning of triples")]
+#[diagnostic(code(algo::invalid_reverse_triple_scan))]
+#[diagnostic(help(
+    "Inverse scanning of triples requires the type to be 'ref', or the value be indexed"
+))]
+struct InvalidInverseTripleUse(String, #[label] SourceSpan);
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("The requested algorithm '{0}' is not found")]
+#[diagnostic(code(parser::algo_not_found))]
+pub(crate) struct AlgoNotFoundError(pub(crate) String, #[label] pub(crate) SourceSpan);
 
 impl MagicAlgoRuleArg {
     pub(crate) fn convert_edge_to_weighted_graph(
@@ -161,26 +196,45 @@ impl MagicAlgoRuleArg {
 
         for tuple in self.iter(tx, stores)? {
             let mut tuple = tuple?.0.into_iter();
-            let from = tuple
-                .next()
-                .ok_or_else(|| miette!("edges relation too short"))?;
-            let to = tuple
-                .next()
-                .ok_or_else(|| miette!("edges relation too short"))?;
+            let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
+            let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
             let weight = match tuple.next() {
                 None => 1.0,
                 Some(d) => match d.get_float() {
                     Some(f) => {
-                        ensure!(f.is_finite(), "edge weight must be finite, got {}", f);
+                        ensure!(
+                            f.is_finite(),
+                            BadEdgeWeightError(
+                                d,
+                                self.bindings()
+                                    .get(2)
+                                    .map(|s| s.span)
+                                    .unwrap_or(self.span())
+                            )
+                        );
                         if f < 0. {
                             if !allow_negative_edges {
-                                bail!("edge weight must be non-negative, got {}", f);
+                                bail!(BadEdgeWeightError(
+                                    d,
+                                    self.bindings()
+                                        .get(2)
+                                        .map(|s| s.span)
+                                        .unwrap_or(self.span())
+                                ));
                             }
                             has_neg_edge = true;
                         }
                         f
                     }
-                    None => bail!("edge weight must be a number, got {:?}", d),
+                    None => {
+                        bail!(BadEdgeWeightError(
+                            d,
+                            self.bindings()
+                                .get(2)
+                                .map(|s| s.span)
+                                .unwrap_or(self.span())
+                        ))
+                    }
                 },
             };
             let from_idx = if let Some(idx) = inv_indices.get(&from) {
@@ -220,12 +274,8 @@ impl MagicAlgoRuleArg {
 
         for tuple in self.iter(tx, stores)? {
             let mut tuple = tuple?.0.into_iter();
-            let from = tuple
-                .next()
-                .ok_or_else(|| miette!("edges relation too short"))?;
-            let to = tuple
-                .next()
-                .ok_or_else(|| miette!("edges relation too short"))?;
+            let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
+            let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
             let from_idx = if let Some(idx) = inv_indices.get(&from) {
                 *idx
             } else {
@@ -260,9 +310,9 @@ impl MagicAlgoRuleArg {
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
             MagicAlgoRuleArg::InMem { name, .. } => {
-                let store = stores
-                    .get(name)
-                    .ok_or_else(|| miette!("rule not found: {:?}", name))?;
+                let store = stores.get(name).ok_or_else(|| {
+                    RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
+                })?;
                 let t = Tuple(vec![prefix.clone()]);
                 Box::new(store.scan_prefix(&t))
             }
@@ -271,53 +321,63 @@ impl MagicAlgoRuleArg {
                 let t = Tuple(vec![prefix.clone()]);
                 Box::new(relation.scan_prefix(tx, &t))
             }
-            MagicAlgoRuleArg::Triple { name, dir, vld, .. } => {
-                if *dir == TripleDir::Bwd && !name.val_type.is_ref_type() {
+            MagicAlgoRuleArg::Triple {
+                attr,
+                dir,
+                vld,
+                span,
+                ..
+            } => {
+                if *dir == TripleDir::Bwd && !attr.val_type.is_ref_type() {
                     ensure!(
-                        name.indexing.should_index(),
-                        "reverse scanning of triple values requires indexing: {:?}",
-                        name.name
+                        attr.indexing.should_index(),
+                        InvalidInverseTripleUse(attr.name.to_string(), *span)
                     );
-                    if name.with_history {
+                    if attr.with_history {
                         Box::new(
-                            tx.triple_av_before_scan(name.id, prefix, *vld)
+                            tx.triple_av_before_scan(attr.id, prefix, *vld)
                                 .map_ok(|(_, v, eid)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     } else {
                         Box::new(
-                            tx.triple_av_scan(name.id, prefix)
+                            tx.triple_av_scan(attr.id, prefix)
                                 .map_ok(|(_, v, eid)| Tuple(vec![v, eid.as_datavalue()])),
                         )
                     }
                 } else {
-                    let id = prefix.get_int().ok_or_else(|| {
-                        miette!(
-                            "prefix scanning of triple requires integer id, got {:?}",
-                            prefix
-                        )
-                    })?;
+                    #[derive(Error, Diagnostic, Debug)]
+                    #[error("Encountered bad prefix value {0:?} during triple prefix scanning")]
+                    #[diagnostic(code(algo::invalid_triple_prefix))]
+                    #[diagnostic(help(
+                        "Triple prefix should be an entity ID represented by an integer"
+                    ))]
+                    struct InvalidTriplePrefixError(DataValue, #[label] SourceSpan);
+
+                    let id = prefix
+                        .get_int()
+                        .ok_or_else(|| InvalidTriplePrefixError(prefix.clone(), self.span()))?;
                     let id = EntityId(id as u64);
                     match dir {
                         TripleDir::Fwd => {
-                            if name.with_history {
+                            if attr.with_history {
                                 Box::new(
-                                    tx.triple_ae_before_scan(name.id, id, *vld)
+                                    tx.triple_ae_before_scan(attr.id, id, *vld)
                                         .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                                 )
                             } else {
                                 Box::new(
-                                    tx.triple_ae_scan(name.id, id)
+                                    tx.triple_ae_scan(attr.id, id)
                                         .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
                                 )
                             }
                         }
                         TripleDir::Bwd => {
-                            if name.with_history {
-                                Box::new(tx.triple_vref_a_before_scan(id, name.id, *vld).map_ok(
+                            if attr.with_history {
+                                Box::new(tx.triple_vref_a_before_scan(id, attr.id, *vld).map_ok(
                                     |(v, _, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
                                 ))
                             } else {
-                                Box::new(tx.triple_vref_a_scan(id, name.id).map_ok(
+                                Box::new(tx.triple_vref_a_scan(id, attr.id).map_ok(
                                     |(v, _, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
                                 ))
                             }
@@ -334,9 +394,9 @@ impl MagicAlgoRuleArg {
     ) -> Result<usize> {
         Ok(match self {
             MagicAlgoRuleArg::InMem { name, .. } => {
-                let store = stores
-                    .get(name)
-                    .ok_or_else(|| miette!("rule not found: {:?}", name))?;
+                let store = stores.get(name).ok_or_else(|| {
+                    RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
+                })?;
                 store.arity
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
@@ -353,16 +413,21 @@ impl MagicAlgoRuleArg {
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
             MagicAlgoRuleArg::InMem { name, .. } => {
-                let store = stores
-                    .get(name)
-                    .ok_or_else(|| miette!("rule not found: {:?}", name))?;
+                let store = stores.get(name).ok_or_else(|| {
+                    RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
+                })?;
                 Box::new(store.scan_all())
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
                 let relation = tx.get_relation(name)?;
                 Box::new(relation.scan_all(tx)?)
             }
-            MagicAlgoRuleArg::Triple { name, dir, vld, .. } => match dir {
+            MagicAlgoRuleArg::Triple {
+                attr: name,
+                dir,
+                vld,
+                ..
+            } => match dir {
                 TripleDir::Fwd => {
                     if name.with_history {
                         Box::new(

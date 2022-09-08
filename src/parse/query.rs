@@ -10,7 +10,7 @@ use miette::{bail, ensure, miette, Diagnostic, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::AlgoHandle;
+use crate::algo::{AlgoHandle, AlgoNotFoundError};
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
@@ -581,6 +581,7 @@ fn parse_algo_rule(
         match nxt.as_rule() {
             Rule::algo_rel => {
                 let inner = nxt.into_inner().next().unwrap();
+                let span = inner.extract_span();
                 match inner.as_rule() {
                     Rule::algo_rule_rel => {
                         let mut els = inner.into_inner();
@@ -591,6 +592,7 @@ fn parse_algo_rule(
                         rule_args.push(AlgoRuleArg::InMem {
                             name: Symbol::new(name.as_str(), name.extract_span()),
                             bindings,
+                            span
                         })
                     }
                     Rule::algo_relation_rel => {
@@ -605,6 +607,7 @@ fn parse_algo_rule(
                                 name.extract_span(),
                             ),
                             bindings,
+                            span
                         })
                     }
                     Rule::algo_triple_rel => {
@@ -628,6 +631,7 @@ fn parse_algo_rule(
                                 Symbol::new(snd.as_str(), snd.extract_span()),
                             ],
                             dir,
+                            span
                         });
                     }
                     _ => unreachable!(),
@@ -647,7 +651,7 @@ fn parse_algo_rule(
     let algo = AlgoHandle::new(algo_name, name_pair.extract_span());
     let algo_arity = algo
         .arity(Left(&rule_args), &options)
-        .ok_or_else(|| miette!("bad algo arity"))?;
+        .ok_or_else(|| AlgoNotFoundError(algo.name.to_string(), algo.name.span))?;
     ensure!(
         head.is_empty() || algo_arity == head.len(),
         "algo head must have the same length as the return, or be omitted"

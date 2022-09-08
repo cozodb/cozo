@@ -325,24 +325,31 @@ impl NormalFormProgram {
                                     .iter()
                                     .map(|r| -> Result<MagicAlgoRuleArg> {
                                         Ok(match r {
-                                            AlgoRuleArg::InMem { name, bindings } => {
-                                                MagicAlgoRuleArg::InMem {
-                                                    name: MagicSymbol::Muggle {
-                                                        inner: name.clone(),
-                                                    },
-                                                    bindings: bindings.clone(),
-                                                }
-                                            }
-                                            AlgoRuleArg::Stored { name, bindings } => {
-                                                MagicAlgoRuleArg::Stored {
-                                                    name: name.clone(),
-                                                    bindings: bindings.clone(),
-                                                }
-                                            }
+                                            AlgoRuleArg::InMem {
+                                                name,
+                                                bindings,
+                                                span,
+                                            } => MagicAlgoRuleArg::InMem {
+                                                name: MagicSymbol::Muggle {
+                                                    inner: name.clone(),
+                                                },
+                                                bindings: bindings.clone(),
+                                                span: *span,
+                                            },
+                                            AlgoRuleArg::Stored {
+                                                name,
+                                                bindings,
+                                                span,
+                                            } => MagicAlgoRuleArg::Stored {
+                                                name: name.clone(),
+                                                bindings: bindings.clone(),
+                                                span: *span,
+                                            },
                                             AlgoRuleArg::Triple {
                                                 name,
                                                 bindings,
                                                 dir,
+                                                span,
                                             } => {
                                                 let attr = tx
                                                     .attr_by_name(&name.name)?
@@ -350,10 +357,11 @@ impl NormalFormProgram {
                                                         miette!("cannot find attribute {}", name)
                                                     })?;
                                                 MagicAlgoRuleArg::Triple {
-                                                    name: attr,
+                                                    attr: attr,
                                                     bindings: bindings.clone(),
                                                     dir: *dir,
                                                     vld: algo_apply.vld.unwrap_or(default_vld),
+                                                    span: *span,
                                                 }
                                             }
                                         })

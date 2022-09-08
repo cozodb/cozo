@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use itertools::Itertools;
 use miette::{ensure, miette, Context, Result};
 
+use crate::algo::AlgoNotFoundError;
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{
@@ -96,7 +97,9 @@ impl SessionTx {
                     name.clone(),
                     self.new_rule_store(
                         name.clone(),
-                        ruleset.arity().ok_or_else(|| miette!("bad algo arity"))?,
+                        ruleset.arity().ok_or_else(|| {
+                            AlgoNotFoundError(name.symbol().to_string(), name.symbol().span)
+                        })?,
                     ),
                 );
             }
@@ -366,21 +369,27 @@ impl SessionTx {
                 MagicAtom::Unification(u) => {
                     if seen_variables.contains(&u.binding) {
                         let expr = if u.one_many_unif {
-                            Expr::build_is_in(vec![
-                                Expr::Binding {
-                                    var: u.binding.clone(),
-                                    tuple_pos: None,
-                                },
-                                u.expr.clone(),
-                            ], u.span)
+                            Expr::build_is_in(
+                                vec![
+                                    Expr::Binding {
+                                        var: u.binding.clone(),
+                                        tuple_pos: None,
+                                    },
+                                    u.expr.clone(),
+                                ],
+                                u.span,
+                            )
                         } else {
-                            Expr::build_equate(vec![
-                                Expr::Binding {
-                                    var: u.binding.clone(),
-                                    tuple_pos: None,
-                                },
-                                u.expr.clone(),
-                            ], u.span)
+                            Expr::build_equate(
+                                vec![
+                                    Expr::Binding {
+                                        var: u.binding.clone(),
+                                        tuple_pos: None,
+                                    },
+                                    u.expr.clone(),
+                                ],
+                                u.span,
+                            )
                         };
                         if let Some(fs) = ret.get_filters() {
                             fs.push(expr);
