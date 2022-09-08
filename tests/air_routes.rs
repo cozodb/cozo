@@ -135,19 +135,23 @@ fn air_routes() -> Result<()> {
     println!("{}", res);
 
     let scc_time = Instant::now();
-    let res = db.run_script(r#"
-        res[] <~ strongly_connected_components(:flies_to_code[], [id <airport.iata code], mode: 'group_first');
-        ?[grp, code] := res[grp, code], grp != 0;
-    "#,        &params,
+    let res = db.run_script(
+        r#"
+        res[] <~ strongly_connected_components(:flies_to_code[], [id <airport.iata code]);
+        ?[grp, code] := res[code, grp], grp != 0;
+    "#,
+        &params,
     )?;
     println!("{}", res);
     dbg!(scc_time.elapsed());
 
     let cc_time = Instant::now();
-    let res = db.run_script(r#"
-        res[] <~ connected_components(:flies_to_code[], [id <airport.iata code], mode: 'group_first');
-        ?[grp, code] := res[grp, code], grp != 0;
-    "#,        &params,
+    let res = db.run_script(
+        r#"
+        res[] <~ connected_components(:flies_to_code[], [id <airport.iata code]);
+        ?[grp, code] := res[code, grp], grp != 0;
+    "#,
+        &params,
     )?;
     println!("{}", res);
     dbg!(cc_time.elapsed());

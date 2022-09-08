@@ -235,7 +235,7 @@ const ATTR_VEC_SIZE: usize = 80;
 #[error("Cannot deserialize attribute")]
 #[diagnostic(code(deser::attr))]
 #[diagnostic(help("This could indicate a bug. Consider file a bug report."))]
-struct AttrDeserError;
+pub(crate) struct AttrDeserError;
 
 impl Attribute {
     pub(crate) fn encode_with_op_and_tx(

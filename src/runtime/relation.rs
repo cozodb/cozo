@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::Ordering;
+use log::error;
 
 use miette::{bail, Diagnostic, IntoDiagnostic, Result};
 use rmp_serde::Serializer;
@@ -70,7 +71,20 @@ impl Debug for RelationMetadata {
     }
 }
 
+
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("Cannot deserialize relation")]
+#[diagnostic(code(deser::attr))]
+#[diagnostic(help("This could indicate a bug. Consider file a bug report."))]
+pub(crate) struct RelationDeserError;
+
 impl RelationMetadata {
+    pub(crate) fn decode(data: &[u8]) -> Result<Self> {
+        Ok(rmp_serde::from_slice(data).map_err(|_| {
+            error!("Cannot deserialize relation metadata from bytes: {:x?}", data);
+            RelationDeserError
+        })?)
+    }
     pub(crate) fn scan_all(&self, tx: &SessionTx) -> Result<impl Iterator<Item = Result<Tuple>>> {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next()?);

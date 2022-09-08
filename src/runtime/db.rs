@@ -9,9 +9,10 @@ use std::{fs, thread};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
-use miette::{bail, ensure, miette, IntoDiagnostic, Result, WrapErr};
+use miette::{bail, ensure, miette, Diagnostic, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
+use thiserror::Error;
 
 use cozorocks::CfHandle::{Pri, Snd};
 use cozorocks::{DbBuilder, DbIter, RocksDb};
@@ -73,10 +74,16 @@ impl Debug for Db {
     }
 }
 
+#[derive(Debug, Diagnostic, Error)]
+#[error("Initialization of database failed")]
+#[diagnostic(code(db::init))]
+struct BadDbInit(#[help] String);
+
 impl Db {
     pub fn build(builder: DbBuilder<'_>) -> Result<Self> {
         let path = builder.opts.db_path;
-        fs::create_dir_all(path).into_diagnostic()?;
+        fs::create_dir_all(path)
+            .map_err(|err| BadDbInit(format!("cannot create directory {}: {}", path, err)))?;
         let path_buf = PathBuf::from(path);
         let mut store_path = path_buf.clone();
         store_path.push("data");
@@ -566,7 +573,7 @@ impl Db {
         it.seek(&lower);
         let mut collected = vec![];
         while let Some(v_slice) = it.val()? {
-            let meta: RelationMetadata = rmp_serde::from_slice(v_slice).into_diagnostic()?;
+            let meta = RelationMetadata::decode(v_slice)?;
             let name = meta.name.name;
             let arity = meta.arity;
             collected.push(json!([name, arity]));
