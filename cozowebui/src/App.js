@@ -69,10 +69,10 @@ function App() {
     </Cell>
 
     function displayValue(v) {
-        if (v instanceof Object) {
-            return JSON.stringify(v)
-        } else {
+        if (typeof v === 'string') {
             return v
+        } else {
+            return <span style={{color: "#184A90"}}>{JSON.stringify(v)}</span>
         }
     }
 

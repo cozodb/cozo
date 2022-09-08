@@ -441,8 +441,11 @@ impl SessionTx {
 
         let cur_ret_set: BTreeSet<_> = ret.bindings_after_eliminate().into_iter().collect();
         #[derive(Debug, Error, Diagnostic)]
-        #[error("Symbol {0} in rule head is unbound")]
+        #[error("Symbol '{0}' in rule head is unbound")]
         #[diagnostic(code(eval::unbound_symb_in_head))]
+        #[diagnostic(help(
+            "Note that symbols occurring only in negated positions are not considered bound"
+        ))]
         struct UnboundSymbolInRuleHead(String, #[label] SourceSpan);
 
         ensure!(cur_ret_set == ret_vars_set, {

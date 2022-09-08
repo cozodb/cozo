@@ -6,12 +6,12 @@ use std::fmt::{Display, Formatter};
 
 use either::Left;
 use itertools::Itertools;
-use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
+use miette::{bail, Diagnostic, ensure, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::algo::{AlgoHandle, AlgoNotFoundError};
-use crate::data::aggr::{parse_aggr, Aggregation};
+use crate::data::aggr::{Aggregation, parse_aggr};
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
 use crate::data::program::{
@@ -22,9 +22,9 @@ use crate::data::program::{
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::parse::expr::build_expr;
 use crate::parse::pull::parse_out_options;
-use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 
 #[derive(Error, Diagnostic, Debug)]
@@ -423,7 +423,16 @@ fn parse_rule(
     let span = src.extract_span();
     let mut src = src.into_inner();
     let head = src.next().unwrap();
+    let head_span = head.extract_span();
     let (name, head, aggr) = parse_rule_head(head, param_pool)?;
+
+    #[derive(Debug, Error, Diagnostic)]
+    #[error("Horn-clause rule cannot have empty rule head")]
+    #[diagnostic(code(parser::empty_horn_rule_head))]
+    struct EmptyRuleHead(#[label] SourceSpan);
+
+    ensure!(!head.is_empty(), EmptyRuleHead(head_span));
+
     let mut at = None;
     let mut body = src.next().unwrap();
     if body.as_rule() == Rule::expr {

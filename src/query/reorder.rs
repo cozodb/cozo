@@ -8,11 +8,12 @@ use crate::data::program::{NormalFormAtom, NormalFormRule};
 use crate::parse::SourceSpan;
 
 #[derive(Diagnostic, Debug, Error)]
-#[error("Encountered unsafe negation")]
+#[error("Encountered unsafe negation, or empty rule definition")]
 #[diagnostic(code(eval::unsafe_negation))]
 #[diagnostic(help(
-"Only rule applications that are partially bounded, \
-                or expressions / unifications that are completely bounded, can be safely negated."
+    "Only rule applications that are partially bounded, \
+or expressions / unifications that are completely bounded, can be safely negated. \
+You may also encounter this error if your rule can never produce any rows."
 ))]
 pub(crate) struct UnsafeNegation(#[label] pub(crate) SourceSpan);
 
