@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use miette::{bail, ensure, miette, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
 use crate::data::id::{EntityId, Validity};
 use crate::data::program::InputProgram;
@@ -10,7 +11,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::expr::{build_expr, parse_string};
 use crate::parse::query::parse_query;
-use crate::parse::{ExtractSpan, Pair, Pairs, Rule};
+use crate::parse::{ExtractSpan, Pair, Pairs, Rule, SourceSpan};
 
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
@@ -136,6 +137,12 @@ fn parse_tx_clause(
     Ok(())
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Duplicate specification of key in tx map")]
+#[diagnostic(code(parser::tx_dup_key))]
+#[diagnostic(help("'_id' or '_tid' can appear only once"))]
+struct DupKeySpecError(#[label] SourceSpan);
+
 fn parse_tx_map(
     map_p: Pair<'_>,
     op: TxAction,
@@ -145,32 +152,33 @@ fn parse_tx_map(
     coll: &mut Vec<Quintuple>,
 ) -> Result<EntityRep> {
     let mut identifier = None;
+    let whole_span = map_p.extract_span();
     for pair in map_p.clone().into_inner() {
         let mut src = pair.into_inner();
         let fst = src.next().unwrap();
         match fst.as_rule() {
             Rule::tx_ident_id => {
-                ensure!(identifier.is_none(), "duplicate specification of key");
+                ensure!(identifier.is_none(), DupKeySpecError(whole_span));
                 let expr = build_expr(src.next().unwrap(), param_pool)?;
-                let c = expr.eval_to_const()?;
-                let c = c
-                    .get_non_neg_int()
-                    .ok_or_else(|| miette!("integer id required, got {:?}", c))?;
-                let eid = EntityId(c);
-                ensure!(eid.is_perm(), "entity id invalid: {:?}", eid);
+                let eid = expr.build_perm_eid()?;
                 identifier = Some(EntityRep::Id(eid))
             }
             Rule::tx_ident_temp_id => {
-                ensure!(identifier.is_none(), "duplicate specification of key");
+                #[derive(Debug, Diagnostic, Error)]
+                #[error("Bad temp id specified")]
+                #[diagnostic(code(parser::bad_temp_id))]
+                #[diagnostic(help("Temp ID must be given as a string"))]
+                struct BadTempId(DataValue, #[label] SourceSpan);
+
+                ensure!(identifier.is_none(), DupKeySpecError(whole_span));
                 let expr = build_expr(src.next().unwrap(), param_pool)?;
+                let span = expr.span();
                 let c = expr.eval_to_const()?;
-                let c = c
-                    .get_string()
-                    .ok_or_else(|| miette!("tid requires string, got {:?}", c))?;
+                let c = c.get_string().ok_or_else(|| BadTempId(c.clone(), span))?;
                 identifier = Some(EntityRep::UserTempId(SmartString::from(c)))
             }
             Rule::tx_ident_key => {
-                ensure!(identifier.is_none(), "duplicate specification of key");
+                ensure!(identifier.is_none(), DupKeySpecError(whole_span));
                 let expr = build_expr(src.next().unwrap(), param_pool)?;
                 let c = expr.eval_to_const()?;
                 let c = match c {

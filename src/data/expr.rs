@@ -4,11 +4,12 @@ use std::fmt::{Debug, Formatter};
 use std::mem;
 
 use itertools::Itertools;
-use miette::{bail, miette, Diagnostic, Result};
+use miette::{bail, Diagnostic, Result};
 use smartstring::SmartString;
 use thiserror::Error;
 
 use crate::data::functions::*;
+use crate::data::id::EntityId;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
@@ -31,7 +32,33 @@ pub(crate) enum Expr {
     },
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Cannot build entity ID from {0:?}")]
+#[diagnostic(code(parser::bad_eid))]
+#[diagnostic(help("Entity ID should be an integer satisfying certain constraints"))]
+struct BadEntityId(DataValue, #[label] SourceSpan);
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("Evaluation of expression failed")]
+#[diagnostic(code(eval::throw))]
+struct EvalRaisedError(#[label] SourceSpan, #[help] String);
+
 impl Expr {
+    pub(crate) fn build_perm_eid(self) -> Result<EntityId> {
+        let span = self.span();
+        let value = self.eval_to_const()?;
+        match value.get_non_neg_int() {
+            Some(i) => {
+                let eid = EntityId(i);
+                if !eid.is_perm() {
+                    Err(BadEntityId(value, span).into())
+                } else {
+                    Ok(eid)
+                }
+            }
+            None => Err(BadEntityId(value, span).into()),
+        }
+    }
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             Expr::Binding { var, .. } => var.span,
@@ -85,9 +112,15 @@ impl Expr {
     ) -> Result<()> {
         match self {
             Expr::Binding { var, tuple_pos, .. } => {
-                let found_idx = *binding_map.get(var).ok_or_else(|| {
-                    miette!("cannot find binding {}, this indicates a system error", var)
-                })?;
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Cannot find binding {0}")]
+                #[diagnostic(code(eval::bad_binding))]
+                #[diagnostic(help("This could indicate a system problem"))]
+                struct BadBindingError(String, #[label] SourceSpan);
+
+                let found_idx = *binding_map
+                    .get(var)
+                    .ok_or_else(|| BadBindingError(var.to_string(), var.span))?;
                 *tuple_pos = Some(found_idx)
             }
             Expr::Const { .. } => {}
@@ -211,13 +244,13 @@ impl Expr {
                         args,
                         span: *span,
                     },
-                    Some(args) => {
-                        let res = (op.inner)(&args)?;
-                        Expr::Const {
+                    Some(args) => match (op.inner)(&args) {
+                        Ok(res) => Expr::Const {
                             val: res,
                             span: *span,
-                        }
-                    }
+                        },
+                        Err(msg) => bail!(EvalRaisedError(self.span(), msg.to_string())),
+                    },
                 }
             }
         })
@@ -249,11 +282,6 @@ impl Expr {
             },
             Expr::Const { val, .. } => Ok(val.clone()),
             Expr::Apply { op, args, .. } => {
-                #[derive(Error, Diagnostic, Debug)]
-                #[error("Evaluation of expression failed")]
-                #[diagnostic(code(eval::throw))]
-                struct EvalRaisedError(#[label] SourceSpan, #[help] String);
-
                 let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings)).try_collect()?;
                 Ok((op.inner)(&args)
                     .map_err(|err| EvalRaisedError(self.span(), err.to_string()))?)
@@ -309,7 +337,13 @@ impl Expr {
                         if let Some(val) = args[1].get_const() {
                             if target == symb {
                                 let s = val.get_string().ok_or_else(|| {
-                                    miette!("unexpected arg {:?} for OP_STARTS_WITH", val)
+                                    #[derive(Debug, Error, Diagnostic)]
+                                    #[error("Cannot prefix scan with {0:?}")]
+                                    #[diagnostic(code(eval::bad_string_range_scan))]
+                                    #[diagnostic(help("A string argument is required"))]
+                                    struct StrRangeScanError(DataValue, #[label] SourceSpan);
+
+                                    StrRangeScanError(val.clone(), symb.span)
                                 })?;
                                 let lower = DataValue::Str(SmartString::from(s));
                                 // let lower = DataValue::Str(s.to_string());

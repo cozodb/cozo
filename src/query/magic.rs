@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::mem;
 
 use itertools::Itertools;
-use miette::{miette, Result};
+use miette::{Result};
 use smallvec::SmallVec;
 
 use crate::data::id::Validity;
@@ -15,6 +15,7 @@ use crate::data::program::{
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
+use crate::transact::meta::AttrNotFoundError;
 
 impl NormalFormProgram {
     pub(crate) fn exempt_aggr_rules_for_magic_sets(&self, exempt_rules: &mut BTreeSet<Symbol>) {
@@ -351,11 +352,10 @@ impl NormalFormProgram {
                                                 dir,
                                                 span,
                                             } => {
-                                                let attr = tx
-                                                    .attr_by_name(&name.name)?
-                                                    .ok_or_else(|| {
-                                                        miette!("cannot find attribute {}", name)
-                                                    })?;
+                                                let attr =
+                                                    tx.attr_by_name(&name.name)?.ok_or_else(
+                                                        || AttrNotFoundError(name.to_string()),
+                                                    )?;
                                                 MagicAlgoRuleArg::Triple {
                                                     attr: attr,
                                                     bindings: bindings.clone(),

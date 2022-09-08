@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
-use miette::{ensure, miette, Context, Result};
+use miette::{ensure, Context, Diagnostic, Result};
+use thiserror::Error;
 
 use crate::algo::AlgoNotFoundError;
 use crate::data::aggr::Aggregation;
@@ -12,6 +13,7 @@ use crate::data::program::{
 };
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 use crate::query::relation::RelAlgebra;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
@@ -69,6 +71,11 @@ pub(crate) struct CompiledRule {
     pub(crate) relation: RelAlgebra,
     pub(crate) contained_rules: BTreeSet<MagicSymbol>,
 }
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Requested rule {0} not found")]
+#[diagnostic(code(eval::rule_not_found))]
+struct RuleNotFound(String, #[label] SourceSpan);
 
 impl SessionTx {
     pub(crate) fn stratified_magic_compile(
@@ -201,7 +208,12 @@ impl SessionTx {
                 MagicAtom::Rule(rule_app) => {
                     let store = stores
                         .get(&rule_app.name)
-                        .ok_or_else(|| miette!("undefined rule '{:?}' encountered", rule_app.name))?
+                        .ok_or_else(|| {
+                            RuleNotFound(
+                                rule_app.name.symbol().to_string(),
+                                rule_app.name.symbol().span,
+                            )
+                        })?
                         .clone();
                     ensure!(
                         store.arity == rule_app.args.len(),
@@ -300,7 +312,10 @@ impl SessionTx {
                     let store = stores
                         .get(&rule_app.name)
                         .ok_or_else(|| {
-                            miette!("undefined rule encountered: '{:?}'", rule_app.name)
+                            RuleNotFound(
+                                rule_app.name.symbol().to_string(),
+                                rule_app.name.symbol().span,
+                            )
                         })?
                         .clone();
                     ensure!(
@@ -398,7 +413,7 @@ impl SessionTx {
                         }
                     } else {
                         seen_variables.insert(u.binding.clone());
-                        ret = ret.unify(u.binding.clone(), u.expr.clone(), u.one_many_unif);
+                        ret = ret.unify(u.binding.clone(), u.expr.clone(), u.one_many_unif, u.span);
                     }
                 }
             }

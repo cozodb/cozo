@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 
-use miette::{bail, ensure, miette, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
 use cozorocks::CfHandle::Pri;
 use cozorocks::{DbIter, IterBuilder};
@@ -19,7 +20,13 @@ use crate::data::triple::StoreOp;
 use crate::data::value::DataValue;
 use crate::parse::tx::{EntityRep, Quintuple, TxAction};
 use crate::runtime::transact::SessionTx;
+use crate::transact::meta::AttrNotFoundError;
 use crate::utils::swap_option_result;
+
+#[derive(Debug, Diagnostic, Error)]
+#[error("Required entity identified by {0} not found")]
+#[diagnostic(code(eval::entity_not_found))]
+pub(crate) struct EntityNotFound(pub(crate) String);
 
 impl SessionTx {
     pub(crate) fn tx_triples(
@@ -49,7 +56,7 @@ impl SessionTx {
                 TxAction::Put => {
                     let attr = self
                         .attr_by_name(&payload.attr_name.name)?
-                        .ok_or_else(|| miette!("attribute {} not found", payload.attr_name))?;
+                        .ok_or_else(|| AttrNotFoundError(payload.attr_name.name.to_string()))?;
                     let val =
                         attr.coerce_value(payload.value, &mut str_temp_to_perm_ids, self, vld)?;
                     match payload.entity {
@@ -73,11 +80,11 @@ impl SessionTx {
                         EntityRep::PullByKey(symb, val) => {
                             let attr = self
                                 .attr_by_name(&symb)?
-                                .ok_or_else(|| miette!("required attribute {} not found", symb))?;
+                                .ok_or_else(|| AttrNotFoundError(symb.to_string()))?;
 
                             let eid =
                                 self.eid_by_unique_av(&attr, &val, vld)?.ok_or_else(|| {
-                                    miette!("requried entity not found: {}: {:?}", symb, val)
+                                    EntityNotFound(format!("{}: {:?}", attr.name, val))
                                 })?;
 
                             ret.push((self.new_triple(eid, &attr, &val, vld)?, 1));
@@ -95,11 +102,11 @@ impl SessionTx {
                             let vld = payload.validity.unwrap_or(default_vld);
                             let attr = self
                                 .attr_by_name(&symb)?
-                                .ok_or_else(|| miette!("required attribute {} not found", symb))?;
+                                .ok_or_else(|| AttrNotFoundError(symb.to_string()))?;
 
                             let eid =
                                 self.eid_by_unique_av(&attr, &val, vld)?.ok_or_else(|| {
-                                    miette!("requried entity not found: {}: {:?}", symb, val)
+                                    EntityNotFound(format!("{}: {:?}", attr.name, val))
                                 })?;
                             eid
                         }

@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use itertools::Itertools;
-use miette::{bail, miette, Result};
+use miette::{bail, Result};
 
 use crate::data::expr::Expr;
 use crate::data::program::{
@@ -10,6 +10,7 @@ use crate::data::program::{
     TempSymbGen, Unification,
 };
 use crate::runtime::transact::SessionTx;
+use crate::transact::meta::AttrNotFoundError;
 
 #[derive(Debug)]
 pub(crate) struct Disjunction {
@@ -233,7 +234,7 @@ impl InputAttrTripleAtom {
     ) -> Result<Disjunction> {
         let attr = tx
             .attr_by_name(&self.attr.name)?
-            .ok_or_else(|| miette!("attribute {} not found", self.attr))?;
+            .ok_or_else(|| AttrNotFoundError(self.attr.name.to_string()))?;
         let wrap = |atom| {
             if is_negated {
                 NormalFormAtom::NegatedAttrTriple(atom)
@@ -422,6 +423,6 @@ impl InputRelationApplyAtom {
                 span: self.span,
             })
         });
-        Disjunction::conj(ret )
+        Disjunction::conj(ret)
     }
 }

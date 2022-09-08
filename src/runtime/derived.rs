@@ -5,8 +5,8 @@ use std::ops::Bound::Included;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
 
-use miette::{miette, Result};
 use itertools::Itertools;
+use miette::Result;
 
 use cozorocks::DbIter;
 
@@ -381,7 +381,7 @@ impl Iterator for SortedIter {
             self.it.next();
         }
         match self.it.pair() {
-            Err(e) => Some(Err(miette!(e))),
+            Err(e) => Some(Err(e.into())),
             Ok(None) => None,
             Ok(Some((_, v_slice))) => match EncodedTuple(v_slice).decode() {
                 Ok(res) => Some(Ok(res)),

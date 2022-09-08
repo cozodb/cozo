@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use miette::{ensure, miette, Result};
+use miette::{ensure, Diagnostic, Result};
 use serde_json::{json, Map};
+use thiserror::Error;
 
 use cozorocks::CfHandle::Snd;
 
@@ -12,9 +13,12 @@ use crate::data::json::JsonValue;
 use crate::data::program::RelationOp;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
+use crate::data::value::DataValue;
 use crate::parse::pull::OutPullSpec;
-use crate::runtime::transact::SessionTx;
+use crate::parse::SourceSpan;
 use crate::runtime::relation::RelationMetadata;
+use crate::runtime::transact::SessionTx;
+use crate::transact::meta::AttrNotFoundError;
 
 struct OutPullSpecWithAttr {
     attr: Attribute,
@@ -27,7 +31,7 @@ impl OutPullSpec {
     fn hydrate(&self, tx: &SessionTx, vld: Validity) -> Result<OutPullSpecWithAttr> {
         let attr = tx
             .attr_by_name(&self.attr.name)?
-            .ok_or_else(|| miette!("required attribute not found: {}", self.attr))?;
+            .ok_or_else(|| AttrNotFoundError(self.attr.to_string()))?;
         Ok(OutPullSpecWithAttr {
             attr,
             reverse: self.reverse,
@@ -183,16 +187,17 @@ impl SessionTx {
                 .map_ok(|tuple| tuple.0.into_iter().map(JsonValue::from).collect())
                 .try_collect()?)
         } else {
-            let headers = headers.ok_or_else(|| miette!("pull requires headers"))?;
-            let mut idx2pull: Vec<Option<Vec<_>>> = Vec::with_capacity(headers.len());
+            let headers = headers.unwrap_or(&[]);
+            let mut idx2pull: Vec<Option<(Vec<_>, _)>> = Vec::with_capacity(headers.len());
             for head in headers.iter() {
                 match out_spec.get(head) {
                     None => idx2pull.push(None),
-                    Some((os, vld)) => idx2pull.push(Some(
+                    Some((os, vld)) => idx2pull.push(Some((
                         os.iter()
                             .map(|o| o.hydrate(self, vld.unwrap_or(default_vld)))
                             .try_collect()?,
-                    )),
+                        head.clone(),
+                    ))),
                 }
             }
             let mut collected = vec![];
@@ -200,12 +205,20 @@ impl SessionTx {
                 let tuple = tuple?.0;
                 let mut row_collected = Vec::with_capacity(tuple.len());
                 for (idx, item) in tuple.into_iter().enumerate() {
-                    if let Some(specs) = &idx2pull[idx] {
-                        let id = EntityId(
-                            item.get_int()
-                                .ok_or_else(|| miette!("pull requires integer, got {:?}", item))?
-                                as u64,
-                        );
+                    if let Some((specs, symb)) = &idx2pull[idx] {
+                        #[derive(Debug, Diagnostic, Error)]
+                        #[error("Cannot interpret {0:?} as an entity")]
+                        #[diagnostic(code(eval::bad_pull_id))]
+                        #[diagnostic(help(
+                            "You specified pull operation for the variable '{1}', but the value in the output \
+                        stream cannot be interpreted as an entity ID (must be an integer)."
+                        ))]
+                        struct BadPullInputError(DataValue, String, #[label] SourceSpan);
+
+                        let id =
+                            EntityId(item.get_int().ok_or_else(|| {
+                                BadPullInputError(item, symb.to_string(), symb.span)
+                            })? as u64);
                         let res = self.run_pull_on_item(id, specs)?;
                         row_collected.push(res);
                     } else {

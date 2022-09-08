@@ -1,10 +1,11 @@
 use std::sync::atomic::Ordering;
 
-use miette::{bail, ensure, miette, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::SmartString;
+use thiserror::Error;
 
-use cozorocks::{DbIter, IterBuilder};
 use cozorocks::CfHandle::Pri;
+use cozorocks::{DbIter, IterBuilder};
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
@@ -56,7 +57,9 @@ impl SessionTx {
                 let attr = Attribute::decode(&data[VEC_SIZE_8..])?;
                 if op.is_retract() {
                     self.attr_by_id_cache.borrow_mut().insert(attr.id, None);
-                    self.attr_by_kw_cache.borrow_mut().insert(attr.name.into(), None);
+                    self.attr_by_kw_cache
+                        .borrow_mut()
+                        .insert(attr.name.into(), None);
                     None
                 } else {
                     self.attr_by_id_cache
@@ -136,7 +139,7 @@ impl SessionTx {
     pub(crate) fn amend_attr(&mut self, attr: Attribute) -> Result<AttrId> {
         let existing = self
             .attr_by_id(attr.id)?
-            .ok_or_else(|| miette!("expected attribute id {:?} not found", attr.id))?;
+            .ok_or_else(|| AttrNotFoundError(attr.id.0.to_string()))?;
         let tx_id = self.get_write_tx_id()?;
         if existing.name != attr.name {
             ensure!(
@@ -185,10 +188,15 @@ impl SessionTx {
     pub(crate) fn retract_attr_by_name(&mut self, kw: &str) -> Result<AttrId> {
         let attr = self
             .attr_by_name(kw)?
-            .ok_or_else(|| miette!("attribute not found: {}", kw))?;
+            .ok_or_else(|| AttrNotFoundError(kw.to_string()))?;
         self.retract_attr(attr.id)
     }
 }
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Required attribute identified by {0} not found")]
+#[diagnostic(code(eval::attr_not_found))]
+pub(crate) struct AttrNotFoundError(pub(crate) String);
 
 struct AttrIter {
     it: DbIter,

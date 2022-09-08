@@ -1,17 +1,18 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use log::error;
-use miette::{miette, Result};
+use miette::{Diagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
-use cozorocks::CfHandle::{Pri, Snd};
 use cozorocks::{DbIter, Tx};
+use cozorocks::CfHandle::{Pri, Snd};
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
@@ -164,8 +165,13 @@ impl SessionTx {
     }
 
     pub(crate) fn get_write_tx_id(&self) -> Result<TxId> {
-        self.w_tx_id
-            .ok_or_else(|| miette!("attempting to write in read-only transaction"))
+        #[derive(Error, Diagnostic, Debug)]
+        #[error("Attempting to write in read-only mode")]
+        #[diagnostic(code(query::readonly_violation))]
+        #[diagnostic(help("This indicates a bug. Please report it."))]
+        struct WriteInReadOnlyModeError;
+
+        Ok(self.w_tx_id.ok_or_else(|| WriteInReadOnlyModeError)?)
     }
     pub(crate) fn bounded_scan_first(&self, lower: &[u8], upper: &[u8]) -> DbIter {
         // this is tricky, must be written like this!

@@ -5,7 +5,8 @@ use std::iter;
 use either::{Left, Right};
 use itertools::Itertools;
 use log::error;
-use miette::{bail, miette, Context, Result};
+use miette::{bail, Context, Diagnostic, Result};
+use thiserror::Error;
 
 use crate::data::attr::Attribute;
 use crate::data::expr::{compute_bounds, compute_single_bound, Expr};
@@ -36,6 +37,7 @@ pub(crate) struct UnificationRA {
     expr: Expr,
     is_multi: bool,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
+    span: SourceSpan,
 }
 
 fn eliminate_from_tuple(mut ret: Tuple, eliminate_indices: &BTreeSet<usize>) -> Tuple {
@@ -96,7 +98,13 @@ impl UnificationRA {
                 .map_ok(move |tuple| -> Result<Vec<Tuple>> {
                     let result_list = self.expr.eval(&tuple)?;
                     let result_list = result_list.get_list().ok_or_else(|| {
-                        miette!("multi unification encountered non-list {:?}", result_list)
+                        #[derive(Debug, Error, Diagnostic)]
+                        #[error("Invalid spread unification")]
+                        #[diagnostic(code(eval::invalid_spread_unif))]
+                        #[diagnostic(help("Spread unification requires a list at the right"))]
+                        struct BadSpreadUnification(#[label] SourceSpan);
+
+                        BadSpreadUnification(self.span)
                     })?;
                     let mut coll = vec![];
                     for result in result_list {
@@ -394,13 +402,20 @@ impl RelAlgebra {
             to_eliminate: Default::default(),
         })
     }
-    pub(crate) fn unify(self, binding: Symbol, expr: Expr, is_multi: bool) -> Self {
+    pub(crate) fn unify(
+        self,
+        binding: Symbol,
+        expr: Expr,
+        is_multi: bool,
+        span: SourceSpan,
+    ) -> Self {
         RelAlgebra::Unification(UnificationRA {
             parent: Box::new(self),
             binding,
             expr,
             is_multi,
             to_eliminate: Default::default(),
+            span,
         })
     }
     pub(crate) fn join(

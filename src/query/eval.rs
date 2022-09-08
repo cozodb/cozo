@@ -2,9 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
 use log::{debug, log_enabled, trace, Level};
-use miette::{miette, Result};
+use miette::Result;
 
-use crate::data::program::{MagicAlgoApply, MagicSymbol};
+use crate::data::program::{MagicAlgoApply, MagicSymbol, NoEntryError};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
@@ -40,7 +40,7 @@ impl SessionTx {
             .get(&MagicSymbol::Muggle {
                 inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
             })
-            .ok_or_else(|| miette!("program entry not found in rules"))?
+            .ok_or_else(|| NoEntryError)?
             .clone();
 
         for (idx, cur_prog) in strata.iter().enumerate() {
@@ -145,9 +145,7 @@ impl SessionTx {
         poison: Poison,
     ) -> Result<()> {
         let mut algo_impl = algo_apply.algo.get_impl()?;
-        let out = stores
-            .get(rule_symb)
-            .ok_or_else(|| miette!("cannot find algo store {:?}", rule_symb))?;
+        let out = stores.get(rule_symb).unwrap();
         algo_impl.run(self, &algo_apply, stores, out, poison)
     }
     fn initial_rule_eval(

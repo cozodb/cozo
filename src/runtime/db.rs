@@ -9,7 +9,7 @@ use std::{fs, thread};
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
-use miette::{bail, ensure, miette, Diagnostic, Result, WrapErr};
+use miette::{bail, ensure, Diagnostic, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
@@ -383,14 +383,11 @@ impl Db {
             poison,
         )?;
         let json_headers = match input_program.get_entry_head() {
-            None => JsonValue::Null,
-            Some(headers) => headers.iter().map(|v| json!(v.name)).collect(),
+            Err(_) => JsonValue::Null,
+            Ok(headers) => headers.iter().map(|v| json!(v.name)).collect(),
         };
         if !input_program.out_opts.sorters.is_empty() {
-            let entry_head = input_program
-                .get_entry_head()
-                .ok_or_else(|| miette!("program entry head must be defined for sorters to work"))?
-                .to_vec();
+            let entry_head = input_program.get_entry_head()?.to_vec();
             let sorted_result =
                 tx.sort_and_collect(result, &input_program.out_opts.sorters, &entry_head)?;
             let sorted_iter = if let Some(offset) = input_program.out_opts.offset {
@@ -412,7 +409,7 @@ impl Db {
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     sorted_iter,
-                    input_program.get_entry_head(),
+                    input_program.get_entry_head().ok(),
                     &input_program.out_opts.out_spec,
                     default_vld,
                 )?;
@@ -438,7 +435,7 @@ impl Db {
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     scan,
-                    input_program.get_entry_head(),
+                    input_program.get_entry_head().ok(),
                     &input_program.out_opts.out_spec,
                     default_vld,
                 )?;
@@ -529,6 +526,12 @@ impl Db {
                 match self.it.pair()? {
                     None => Ok(None),
                     Some((k_slice, v_slice)) => {
+                        #[derive(Debug, Error, Diagnostic)]
+                        #[error("Encountered corrupt key in meta store")]
+                        #[diagnostic(code(db::corrupt_meta_key))]
+                        #[diagnostic(help("This is an internal error. Please file a bug."))]
+                        struct CorruptKeyInMetaStoreError;
+
                         let encoded = EncodedTuple(k_slice).decode()?;
                         let ks: Vec<_> = encoded
                             .0
@@ -537,7 +540,7 @@ impl Db {
                             .map(|v| {
                                 v.get_string()
                                     .map(|s| s.to_string())
-                                    .ok_or_else(|| miette!("bad key in meta store"))
+                                    .ok_or(CorruptKeyInMetaStoreError)
                             })
                             .try_collect()?;
                         Ok(Some((ks, v_slice.to_vec())))

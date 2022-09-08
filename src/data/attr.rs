@@ -2,17 +2,20 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use log::error;
-use miette::{bail, ensure, miette, Result};
+use miette::{bail, Diagnostic, ensure, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
 use crate::data::encode::EncodedVec;
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::triple::StoreOp;
 use crate::data::value::{DataValue, Num};
 use crate::runtime::transact::SessionTx;
+use crate::transact::meta::AttrNotFoundError;
+use crate::transact::triple::EntityNotFound;
 
 // use crate::parse::triple::TempIdCtx;
 
@@ -106,53 +109,50 @@ impl Display for AttributeTyping {
 }
 
 impl AttributeTyping {
-    fn type_err(&self, val: DataValue) -> miette::Error {
-        miette!("cannot coerce {:?} to {:?}", val, self)
-    }
-    pub(crate) fn coerce_value(&self, val: DataValue) -> Result<DataValue> {
+    pub(crate) fn coerce_value(&self, val: DataValue) -> Result<DataValue, DataValue> {
         match self {
             AttributeTyping::Ref => match val {
                 DataValue::Num(Num::I(s)) if s > 0 => Ok(DataValue::Num(Num::I(s))),
-                val => Err(self.type_err(val)),
+                val => Err(val),
             },
             AttributeTyping::Bool => {
                 if matches!(val, DataValue::Bool(_)) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val))
+                    Err(val)
                 }
             }
             AttributeTyping::Int => {
                 if matches!(val, DataValue::Num(Num::I(_))) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val))
+                    Err(val)
                 }
             }
             AttributeTyping::Float => match val {
                 v @ DataValue::Num(Num::F(_)) => Ok(v),
                 DataValue::Num(Num::I(i)) => Ok(DataValue::Num(Num::F(i as f64))),
-                val => Err(self.type_err(val)),
+                val => Err(val),
             },
             AttributeTyping::String => {
                 if matches!(val, DataValue::Str(_)) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val))
+                    Err(val)
                 }
             }
             AttributeTyping::Bytes => {
                 if matches!(val, DataValue::Bytes(_)) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val))
+                    Err(val)
                 }
             }
             AttributeTyping::List => {
                 if matches!(val, DataValue::List(_)) {
                     Ok(val)
                 } else {
-                    Err(self.type_err(val))
+                    Err(val)
                 }
             }
         }
@@ -265,35 +265,98 @@ impl Attribute {
         if self.val_type.is_ref_type() {
             match &value {
                 DataValue::Str(s) => {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("Cannot find triple with temp ID '{temp_id}'")]
+                    #[diagnostic(code(eval::temp_id_not_found))]
+                    #[diagnostic(help(
+                        "As the attribute {attr_name} is of type 'ref', \
+                    the given value is interpreted as a temp id, \
+                    but it cannot be found in the input triples."
+                    ))]
+                    struct TempIdNotFoundError {
+                        attr_name: String,
+                        temp_id: String,
+                    }
+
                     return Ok(temp_ids
                         .get(s)
-                        .ok_or_else(|| miette!("required tempid {} not found", s))?
+                        .ok_or_else(|| TempIdNotFoundError {
+                            attr_name: self.name.to_string(),
+                            temp_id: s.to_string(),
+                        })?
                         .as_datavalue());
                 }
                 DataValue::List(ls) => {
+                    #[derive(Debug, Diagnostic, Error)]
+                    #[error("Cannot interpret the list {data:?} as a keyed entity")]
+                    #[diagnostic(code(eval::bad_keyed_entity))]
+                    #[diagnostic(help("As the attribute {attr_name} is of type 'ref', \
+                    the list value is interpreted as a keyed entity, with the first element a string \
+                    representing the attribute name, and the second element the keyed value."))]
+                    struct BadUniqueKeySpecifierError {
+                        data: Vec<DataValue>,
+                        attr_name: String,
+                    }
+
+                    #[derive(Debug, Diagnostic, Error)]
+                    #[error("The attribute {attr_name} is not uniquely indexed")]
+                    #[diagnostic(code(eval::non_unique_keyed_entity))]
+                    #[diagnostic(help("As the attribute {attr_name} is of type 'ref', and the list \
+                    {data:?} is specified as the value, the attribute is required to have a unique index."))]
+                    struct NonUniqueKeySpecifierError {
+                        data: Vec<DataValue>,
+                        attr_name: String,
+                    }
+
                     ensure!(
                         ls.len() == 2,
-                        "list specifier for ref types must have length 2"
+                        BadUniqueKeySpecifierError {
+                            data: ls.clone(),
+                            attr_name: self.name.to_string()
+                        }
                     );
-                    let attr_name = ls[0]
+                    let attr_name = ls.get(0).unwrap()
                         .get_string()
-                        .ok_or_else(|| miette!("list specifier requires first argument string"))?;
+                        .ok_or_else(|| BadUniqueKeySpecifierError {
+                            data: ls.clone(),
+                            attr_name: self.name.to_string()
+                        })?;
                     let attr = tx
                         .attr_by_name(attr_name)?
-                        .ok_or_else(|| miette!("attribute not found: {}", attr_name))?;
+                        .ok_or_else(|| AttrNotFoundError(attr_name.to_string()))?;
                     ensure!(
                         attr.indexing.is_unique_index(),
-                        "ref type list specifier requires unique index"
+                        NonUniqueKeySpecifierError {
+                            data: ls.clone(),
+                            attr_name: self.name.to_string()
+                        }
                     );
                     let val = attr.coerce_value(ls[1].clone(), temp_ids, tx, vld)?;
-                    let eid = tx.eid_by_unique_av(&attr, &val, vld)?.ok_or_else(|| {
-                        miette!("entity not found for attr val {} {:?}", attr_name, val)
-                    })?;
+                    let eid = tx
+                        .eid_by_unique_av(&attr, &val, vld)?
+                        .ok_or_else(|| EntityNotFound(format!("{}: {:?}", attr_name, val)))?;
                     return Ok(eid.as_datavalue());
                 }
                 _ => {}
             }
         }
-        self.val_type.coerce_value(value)
+        self.val_type.coerce_value(value).map_err(|value| {
+            ValueCoercionError {
+                value,
+                typing: self.val_type,
+                attr_name: self.name.to_string(),
+            }
+            .into()
+        })
     }
+}
+
+#[derive(Debug, Diagnostic, Error)]
+#[error("Cannot coerce value {value:?} to type {typing:?}")]
+#[diagnostic(code(eval::type_coercion))]
+#[diagnostic(help("This is required by the attribute {attr_name}"))]
+struct ValueCoercionError {
+    value: DataValue,
+    typing: AttributeTyping,
+    attr_name: String,
 }

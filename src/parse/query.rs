@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 
 use either::Left;
 use itertools::Itertools;
-use miette::{bail, ensure, miette, Diagnostic, LabeledSpan, Report, Result};
+use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -19,7 +19,7 @@ use crate::data::program::{
     InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm,
     MagicSymbol, QueryOutOptions, RelationOp, SortDir, TripleDir, Unification,
 };
-use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
@@ -290,33 +290,31 @@ pub(crate) fn parse_query(
         }
     }
 
-    if let Some((meta, _)) = out_opts.store_relation.borrow_mut() {
-        meta.arity = get_entry_arity(&progs).ok_or_else(|| miette!("bad"))?;
-    }
-
-    let prog = InputProgram {
+    let mut prog = InputProgram {
         prog: progs,
         const_rules,
         out_opts,
     };
 
-    let head_args = prog.get_entry_head().unwrap_or(&[]);
-    for key in prog.out_opts.out_spec.keys() {
-        ensure!(
-            head_args.contains(key),
-            "the pull target {} is not found",
-            key
-        );
+    let head_arity = prog.get_entry_arity()?;
+
+    if let Some((meta, _)) = prog.out_opts.store_relation.borrow_mut() {
+        meta.arity = head_arity;
+    }
+
+    if !prog.out_opts.out_spec.is_empty() {
+        let head_args = prog.get_entry_head().unwrap_or(&[]);
+
+        for key in prog.out_opts.out_spec.keys() {
+            ensure!(
+                head_args.contains(key),
+                "the pull target {} is not found",
+                key
+            );
+        }
     }
 
     Ok(prog)
-}
-
-fn get_entry_arity(prog: &BTreeMap<Symbol, InputRulesOrAlgo>) -> Option<usize> {
-    match prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0)))? {
-        InputRulesOrAlgo::Rules { rules } => Some(rules[0].head.len()),
-        InputRulesOrAlgo::Algo { algo } => algo.arity(),
-    }
 }
 
 fn parse_rule(
@@ -376,7 +374,10 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 .into_inner()
                 .map(|v| parse_disjunction(v, param_pool))
                 .try_collect()?;
-            InputAtom::Conjunction { inner: grouped, span }
+            InputAtom::Conjunction {
+                inner: grouped,
+                span,
+            }
         }
         Rule::disjunction => parse_disjunction(src, param_pool)?,
         Rule::triple => parse_triple(src, param_pool)?,
@@ -385,7 +386,7 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
             let inner = parse_atom(src.into_inner().next().unwrap(), param_pool)?;
             InputAtom::Negation {
                 inner: inner.into(),
-                span
+                span,
             }
         }
         Rule::expr => {
@@ -434,7 +435,7 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 inner: InputRuleApplyAtom {
                     name: Symbol::new(name.as_str(), name.extract_span()),
                     args,
-                    span
+                    span,
                 },
             }
         }
@@ -452,7 +453,7 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 inner: InputRelationApplyAtom {
                     name: Symbol::new(&name.as_str()[1..], name.extract_span()),
                     args,
-                    span
+                    span,
                 },
             }
         }
@@ -471,7 +472,7 @@ fn parse_triple(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             attr: Symbol::new(attr_p.as_str(), attr_p.extract_span()),
             entity: parse_rule_arg(e_p, param_pool)?,
             value: parse_rule_arg(v_p, param_pool)?,
-            span
+            span,
         },
     })
 }
@@ -592,7 +593,7 @@ fn parse_algo_rule(
                         rule_args.push(AlgoRuleArg::InMem {
                             name: Symbol::new(name.as_str(), name.extract_span()),
                             bindings,
-                            span
+                            span,
                         })
                     }
                     Rule::algo_relation_rel => {
@@ -607,7 +608,7 @@ fn parse_algo_rule(
                                 name.extract_span(),
                             ),
                             bindings,
-                            span
+                            span,
                         })
                     }
                     Rule::algo_triple_rel => {
@@ -631,7 +632,7 @@ fn parse_algo_rule(
                                 Symbol::new(snd.as_str(), snd.extract_span()),
                             ],
                             dir,
-                            span
+                            span,
                         });
                     }
                     _ => unreachable!(),

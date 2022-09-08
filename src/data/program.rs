@@ -3,13 +3,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
 use either::{Left, Right};
-use miette::Result;
-use miette::{ensure, Diagnostic};
+use miette::{ensure, Diagnostic, Result};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::AlgoHandle;
+use crate::algo::{AlgoHandle, AlgoNotFoundError};
 use crate::data::aggr::Aggregation;
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
@@ -97,6 +96,15 @@ impl TempSymbGen {
 pub(crate) enum InputRulesOrAlgo {
     Rules { rules: Vec<InputRule> },
     Algo { algo: AlgoApply },
+}
+
+impl InputRulesOrAlgo {
+    pub(crate) fn first_span(&self) -> SourceSpan {
+        match self {
+            InputRulesOrAlgo::Rules { rules, .. } => rules[0].span,
+            InputRulesOrAlgo::Algo { algo, .. } => algo.span,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -466,32 +474,64 @@ pub(crate) struct InputProgram {
     pub(crate) out_opts: QueryOutOptions,
 }
 
+#[derive(Debug, Diagnostic, Error)]
+#[error("Entry head not found")]
+#[diagnostic(code(parser::no_entry_head))]
+#[diagnostic(help("You need to explicitly name your entry arguments"))]
+struct EntryHeadNotExplicitlyDefinedError(#[label] SourceSpan);
+
+#[derive(Debug, Diagnostic, Error)]
+#[error("Program has no entry")]
+#[diagnostic(code(parser::no_entry))]
+#[diagnostic(help("You need to have one rule named '?'"))]
+pub(crate) struct NoEntryError;
+
 impl InputProgram {
-    pub(crate) fn get_entry_head(&self) -> Option<&[Symbol]> {
+    pub(crate) fn get_entry_arity(&self) -> Result<usize> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
-                InputRulesOrAlgo::Rules { rules } => Some(&rules.last().unwrap().head),
+                InputRulesOrAlgo::Rules { rules } => Ok(rules.last().unwrap().head.len()),
+                InputRulesOrAlgo::Algo { algo: algo_apply } => {
+                    algo_apply.arity().ok_or_else(|| {
+                        AlgoNotFoundError(algo_apply.algo.name.to_string(), algo_apply.span).into()
+                    })
+                }
+            };
+        }
+
+        if let Some(ConstRule { data, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
+            inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
+        }) {
+            return Ok(data.get(0).map(|row| row.0.len()).unwrap_or(0))
+        }
+
+        Err(NoEntryError.into())
+    }
+    pub(crate) fn get_entry_head(&self) -> Result<&[Symbol]> {
+        if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
+            return match entry {
+                InputRulesOrAlgo::Rules { rules } => Ok(&rules.last().unwrap().head),
                 InputRulesOrAlgo::Algo { algo: algo_apply } => {
                     if algo_apply.head.is_empty() {
-                        None
+                        Err(EntryHeadNotExplicitlyDefinedError(entry.first_span()).into())
                     } else {
-                        Some(&algo_apply.head)
+                        Ok(&algo_apply.head)
                     }
                 }
             };
         }
 
-        if let Some(ConstRule { bindings, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
+        if let Some(ConstRule { bindings, span, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
             inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
         }) {
             return if bindings.is_empty() {
-                None
+                Err(EntryHeadNotExplicitlyDefinedError(*span).into())
             } else {
-                Some(bindings)
+                Ok(bindings)
             };
         }
 
-        None
+        Err(NoEntryError.into())
     }
     pub(crate) fn to_normalized_program(
         &self,
