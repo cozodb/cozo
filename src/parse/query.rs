@@ -402,7 +402,7 @@ pub(crate) fn parse_query(
 
         for key in prog.out_opts.out_spec.keys() {
             #[derive(Debug, Error, Diagnostic)]
-            #[error("The pull target {0} does not appear in the program entry head")]
+            #[error("The pull target '{0}' does not appear in the program entry head")]
             #[diagnostic(code(parser::pull_target_not_found))]
             struct PullArgNotFound(String, #[label] SourceSpan);
 
