@@ -27,7 +27,7 @@ pub(crate) fn parse_out_options(
     let mut at = None;
 
     if specs.as_rule() == Rule::expr {
-        let vld = build_expr(specs, param_pool)?.eval_to_const()?;
+        let vld = build_expr(specs, param_pool)?;
         let vld = Validity::try_from(vld)?;
         at = Some(vld);
 

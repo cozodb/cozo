@@ -1,8 +1,8 @@
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::Ordering;
-use log::error;
 
-use miette::{bail, Diagnostic, IntoDiagnostic, Result};
+use log::error;
+use miette::{bail, Diagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smartstring::SmartString;
@@ -71,17 +71,19 @@ impl Debug for RelationMetadata {
     }
 }
 
-
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("Cannot deserialize relation")]
-#[diagnostic(code(deser::attr))]
+#[diagnostic(code(deser::relation))]
 #[diagnostic(help("This could indicate a bug. Consider file a bug report."))]
 pub(crate) struct RelationDeserError;
 
 impl RelationMetadata {
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
         Ok(rmp_serde::from_slice(data).map_err(|_| {
-            error!("Cannot deserialize relation metadata from bytes: {:x?}", data);
+            error!(
+                "Cannot deserialize relation metadata from bytes: {:x?}",
+                data
+            );
             RelationDeserError
         })?)
     }
@@ -208,7 +210,7 @@ impl SessionTx {
                     name: name.name.to_string(),
                     span: name.span,
                 })?;
-        let metadata: RelationMetadata = rmp_serde::from_slice(&found).into_diagnostic()?;
+        let metadata = RelationMetadata::decode(&found)?;
         Ok(metadata)
     }
     pub(crate) fn destroy_relation(&mut self, name: &Symbol) -> Result<(Vec<u8>, Vec<u8>)> {

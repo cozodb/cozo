@@ -108,7 +108,7 @@ fn parse_tx_clause(
             let n = src.next().unwrap();
             match n.as_rule() {
                 Rule::expr => {
-                    let vld_expr = build_expr(n, param_pool)?.eval_to_const()?;
+                    let vld_expr = build_expr(n, param_pool)?;
                     vld = Some(Validity::try_from(vld_expr)?);
                     src.next().unwrap()
                 }
@@ -121,7 +121,7 @@ fn parse_tx_clause(
             let n = src.next().unwrap();
             match n.as_rule() {
                 Rule::expr => {
-                    let vld_expr = build_expr(n, param_pool)?.eval_to_const()?;
+                    let vld_expr = build_expr(n, param_pool)?;
                     vld = Some(Validity::try_from(vld_expr)?);
                     src.next().unwrap()
                 }

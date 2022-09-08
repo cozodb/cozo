@@ -2,12 +2,14 @@ use std::fmt::{Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, TimeZone, Utc};
-use miette::{bail, IntoDiagnostic};
+use miette::Diagnostic;
 use serde_derive::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::data::json::JsonValue;
+use crate::data::expr::Expr;
 use crate::data::triple::StoreOp;
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 
 #[derive(Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Deserialize, Serialize, Hash)]
 pub(crate) struct Validity(pub(crate) i64);
@@ -39,44 +41,32 @@ impl From<i64> for Validity {
     }
 }
 
-impl TryFrom<&str> for Validity {
+#[derive(Debug, Error, Diagnostic)]
+#[error("Cannot convert {0:?} to Validity")]
+#[diagnostic(code(parser::bad_validity))]
+#[diagnostic(help(
+    "Validity can be represented by integers, or strings according to RFC2822 or RFC3339"
+))]
+struct BadValidityError(DataValue, #[label] SourceSpan);
+
+impl TryFrom<Expr> for Validity {
     type Error = miette::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let dt = DateTime::parse_from_rfc2822(value)
-            .or_else(|_| DateTime::parse_from_rfc3339(value))
-            .into_diagnostic()?;
-        let sysdt: SystemTime = dt.into();
-        let timestamp = sysdt.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64;
-        Ok(Self(timestamp))
-    }
-}
-
-impl TryFrom<&JsonValue> for Validity {
-    type Error = miette::Error;
-
-    fn try_from(value: &JsonValue) -> Result<Self, Self::Error> {
-        if let Some(v) = value.as_i64() {
-            return Ok(v.into());
-        }
-        if let Some(s) = value.as_str() {
-            return s.try_into();
-        }
-        bail!("cannot convert {} to validity", value);
-    }
-}
-
-impl TryFrom<DataValue> for Validity {
-    type Error = miette::Error;
-
-    fn try_from(value: DataValue) -> Result<Self, Self::Error> {
+    fn try_from(expr: Expr) -> Result<Self, Self::Error> {
+        let span = expr.span();
+        let value = expr.eval_to_const()?;
         if let Some(v) = value.get_int() {
             return Ok(v.into());
         }
         if let Some(s) = value.get_string() {
-            return s.try_into();
+            let dt = DateTime::parse_from_rfc2822(s)
+                .or_else(|_| DateTime::parse_from_rfc3339(s))
+                .map_err(|_| BadValidityError(value, span))?;
+            let sysdt: SystemTime = dt.into();
+            let timestamp = sysdt.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64;
+            return Ok(Self(timestamp));
         }
-        bail!("cannot convert {:?} to validity", value);
+        Err(BadValidityError(value, span).into())
     }
 }
 

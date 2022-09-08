@@ -2,7 +2,8 @@ use std::fmt::{Debug, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::Utf8Error;
 
-use miette::{bail, IntoDiagnostic, Result};
+use log::error;
+use miette::{bail, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -201,23 +202,47 @@ pub(crate) const VEC_SIZE_24: usize = 24;
 pub(crate) const VEC_SIZE_16: usize = 16;
 pub(crate) const VEC_SIZE_8: usize = 8;
 
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("Cannot deserialize datavalue")]
+#[diagnostic(code(deser::datavalue))]
+#[diagnostic(help("This could indicate a bug. Consider file a bug report."))]
+pub(crate) struct DataValueDeserError;
+
 #[inline]
 pub(crate) fn decode_value(src: &[u8]) -> Result<DataValue> {
-    Ok(rmp_serde::from_slice(src).into_diagnostic()?)
+    Ok(rmp_serde::from_slice(src).map_err(|err| {
+        error!(
+            "Cannot deserialize DataValue from bytes: {:x?}, {:?}",
+            src, err
+        );
+        DataValueDeserError
+    })?)
 }
 
 #[inline]
 pub(crate) fn decode_value_from_key(src: &[u8]) -> Result<DataValue> {
-    Ok(rmp_serde::from_slice(&src[VEC_SIZE_24..]).into_diagnostic()?)
+    Ok(rmp_serde::from_slice(&src[VEC_SIZE_24..]).map_err(|err| {
+        error!(
+            "Cannot deserialize DataValue from bytes: {:x?}, {:?}",
+            src, err
+        );
+        DataValueDeserError
+    })?)
 }
 
 #[inline]
 pub(crate) fn decode_value_from_val(src: &[u8]) -> Result<DataValue> {
-    Ok(rmp_serde::from_slice(&src[VEC_SIZE_8..]).into_diagnostic()?)
+    Ok(rmp_serde::from_slice(&src[VEC_SIZE_8..]).map_err(|err| {
+        error!(
+            "Cannot deserialize DataValue from bytes: {:x?}, {:?}",
+            src, err
+        );
+        DataValueDeserError
+    })?)
 }
 
 pub(crate) fn smallest_key() -> EncodedVec<LARGE_VEC_SIZE> {
-    encode_aev_key(AttrId(0), EntityId::ZERO,  &DataValue::Null, Validity::MIN)
+    encode_aev_key(AttrId(0), EntityId::ZERO, &DataValue::Null, Validity::MIN)
 }
 
 /// eid: 8 bytes (incl. tag)
@@ -378,7 +403,13 @@ pub(crate) fn encode_sentinel_attr_val(aid: AttrId, val: &DataValue) -> EncodedV
 #[inline]
 pub(crate) fn decode_sentinel_attr_val(src: &[u8]) -> Result<(AttrId, DataValue)> {
     let a_id = AttrId::from_bytes(&src[..VEC_SIZE_8]);
-    let val = rmp_serde::from_slice(&src[VEC_SIZE_8..]).into_diagnostic()?;
+    let val = rmp_serde::from_slice(&src[VEC_SIZE_8..]).map_err(|err| {
+        error!(
+            "Cannot deserialize DataValue from bytes: {:x?}, {:?}",
+            src, err
+        );
+        DataValueDeserError
+    })?;
     Ok((a_id, val))
 }
 

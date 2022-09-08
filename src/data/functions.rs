@@ -2,7 +2,7 @@ use std::ops::{Div, Rem};
 use std::str::FromStr;
 
 use itertools::Itertools;
-use miette::{bail, ensure, miette, IntoDiagnostic, Result};
+use miette::{bail, ensure, miette, Result};
 use num_traits::FloatConst;
 use rand::prelude::*;
 use smartstring::SmartString;
@@ -753,7 +753,9 @@ pub(crate) fn op_regex(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         r @ DataValue::Regex(_) => r.clone(),
         DataValue::Str(s) => {
-            DataValue::Regex(RegexWrapper(regex::Regex::new(s).into_diagnostic()?))
+            DataValue::Regex(RegexWrapper(regex::Regex::new(s).map_err(|err| {
+                miette!("The string cannot be interpreted as regex: {}", err)
+            })?))
         }
         _ => bail!("'regex' requires strings"),
     })
@@ -1174,7 +1176,7 @@ define_op!(OP_DECODE_BASE64, 1, false);
 pub(crate) fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Str(s) => {
-            let b = base64::decode(s).into_diagnostic()?;
+            let b = base64::decode(s).map_err(|_| miette!("Data is not properly encoded"))?;
             Ok(DataValue::Bytes(b.into()))
         }
         _ => bail!("'decode_base64' requires strings"),
@@ -1191,7 +1193,9 @@ pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
             "NAN" => f64::NAN.into(),
             "INF" => f64::INFINITY.into(),
             "NEG_INF" => f64::NEG_INFINITY.into(),
-            s => f64::from_str(s).into_diagnostic()?.into(),
+            s => f64::from_str(s)
+                .map_err(|_| miette!("The string cannot be interpreted as float"))?
+                .into(),
         },
         v => bail!("'to_float' does not recognize {:?}", v),
     })

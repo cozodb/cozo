@@ -330,7 +330,7 @@ fn parse_rule(
     let mut at = None;
     let mut body = src.next().unwrap();
     if body.as_rule() == Rule::expr {
-        let vld = build_expr(body, param_pool)?.eval_to_const()?;
+        let vld = build_expr(body, param_pool)?;
         let vld = Validity::try_from(vld)?;
         at = Some(vld);
         body = src.next().unwrap();
@@ -563,7 +563,7 @@ fn parse_algo_rule(
     let mut at = None;
     match name_pair.as_rule() {
         Rule::expr => {
-            let vld = build_expr(name_pair, param_pool)?.eval_to_const()?;
+            let vld = build_expr(name_pair, param_pool)?;
             let vld = Validity::try_from(vld)?;
             at = Some(vld);
             name_pair = src.next().unwrap();

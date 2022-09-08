@@ -3,14 +3,15 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 
-use miette::{miette, IntoDiagnostic, Result};
+use log::error;
+use miette::{miette, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 
-use cozorocks::{DbIter, Tx};
 use cozorocks::CfHandle::{Pri, Snd};
+use cozorocks::{DbIter, Tx};
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
@@ -49,6 +50,12 @@ pub(crate) struct TxLog {
     pub(crate) ts: Validity,
 }
 
+#[derive(thiserror::Error, miette::Diagnostic, Debug)]
+#[error("Cannot deserialize tx log")]
+#[diagnostic(code(deser::tx_log))]
+#[diagnostic(help("This could indicate a bug. Consider file a bug report."))]
+pub(crate) struct TxLogDeserError;
+
 impl TxLog {
     pub(crate) fn new(id: TxId, comment: &str) -> Self {
         let timestamp = Validity::current();
@@ -64,7 +71,13 @@ impl TxLog {
         EncodedVec { inner: store }
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
-        Ok(rmp_serde::from_slice(data).into_diagnostic()?)
+        Ok(rmp_serde::from_slice(data).map_err(|err| {
+            error!(
+                "Cannot deserialize tx log from bytes: {:x?}, {:?}",
+                data, err
+            );
+            TxLogDeserError
+        })?)
     }
 }
 
