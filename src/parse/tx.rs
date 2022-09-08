@@ -11,7 +11,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::expr::{build_expr, parse_string};
 use crate::parse::query::parse_query;
-use crate::parse::{ExtractSpan, Pair, Pairs, Rule, SourceSpan};
+use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
@@ -179,17 +179,19 @@ fn parse_tx_map(
             }
             Rule::tx_ident_key => {
                 ensure!(identifier.is_none(), DupKeySpecError(whole_span));
-                let expr = build_expr(src.next().unwrap(), param_pool)?;
+                let expr_p = src.next().unwrap();
+                let span = expr_p.extract_span();
+                let expr = build_expr(expr_p, param_pool)?;
                 let c = expr.eval_to_const()?;
                 let c = match c {
                     DataValue::List(l) => l,
-                    v => bail!("key requires a list, got {:?}", v),
+                    _ => bail!(ParseError { span }),
                 };
-                ensure!(c.len() == 2, "key requires a list of length 2");
+                ensure!(c.len() == 2, ParseError { span });
                 let mut c = c.into_iter();
                 let attr = match c.next().unwrap() {
                     DataValue::Str(s) => s,
-                    v => bail!("attr name requires a string, got {:?}", v),
+                    _ => bail!(ParseError { span }),
                 };
                 let val = c.next().unwrap();
                 identifier = Some(EntityRep::PullByKey(attr, val))
@@ -268,7 +270,9 @@ fn parse_tx_pair(
                 }
             }
             Rule::expr | Rule::tx_map => {
-                bail!("multi elements require a list")
+                bail!(ParseError {
+                    span: tx_val.extract_span()
+                })
             }
             _ => unreachable!(),
         }
@@ -314,7 +318,9 @@ fn parse_tx_val(
             let mut list_coll = vec![];
             for el in pair.into_inner() {
                 match el.as_rule() {
-                    Rule::tx_map => bail!("map not allowed here"),
+                    Rule::tx_map => bail!(ParseError {
+                        span: el.extract_span()
+                    }),
                     Rule::expr => {
                         let expr = build_expr(el, param_pool)?;
                         let value = expr.eval_to_const()?;

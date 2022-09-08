@@ -197,7 +197,7 @@ impl SessionTx {
                         seen_variables.insert(t.value.clone());
                         t.value.clone()
                     };
-                    let right = RelAlgebra::triple(t.attr.clone(), rule.vld, e_kw, v_kw);
+                    let right = RelAlgebra::triple(t.attr.clone(), rule.vld, e_kw, v_kw, t.span);
                     if ret.is_unit() {
                         ret = right
                     } else {
@@ -300,7 +300,13 @@ impl SessionTx {
                         e_kw,
                         v_kw
                     );
-                    let right = RelAlgebra::triple(a_triple.attr.clone(), rule.vld, e_kw, v_kw);
+                    let right = RelAlgebra::triple(
+                        a_triple.attr.clone(),
+                        rule.vld,
+                        e_kw,
+                        v_kw,
+                        a_triple.span,
+                    );
                     if ret.is_unit() {
                         ret = right;
                     } else {

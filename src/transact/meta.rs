@@ -177,7 +177,7 @@ impl SessionTx {
     /// conflict if retracted attr_id doesn't already exist, or is already retracted
     pub(crate) fn retract_attr(&mut self, aid: AttrId) -> Result<AttrId> {
         match self.attr_by_id(aid)? {
-            None => bail!("attempting to retract non-existing attribute {:?}", aid),
+            None => bail!(AttrNotFoundError(aid.0.to_string())),
             Some(attr) => {
                 self.put_attr(&attr, StoreOp::Retract)?;
                 Ok(attr.id)

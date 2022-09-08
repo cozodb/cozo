@@ -291,7 +291,13 @@ impl Expr {
     pub(crate) fn eval_pred(&self, bindings: &Tuple) -> Result<bool> {
         match self.eval(bindings)? {
             DataValue::Bool(b) => Ok(b),
-            v => bail!("predicate must have boolean return type, got {:?}", v),
+            v => {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Found value {1:?} where a boolean value is expected")]
+                #[diagnostic(code(eval::predicate_not_bool))]
+                struct PredicateTypeError(#[label] SourceSpan, DataValue);
+                bail!(PredicateTypeError(self.span(), v))
+            },
         }
     }
     pub(crate) fn extract_bound(&self, target: &Symbol) -> Result<ValueRange> {

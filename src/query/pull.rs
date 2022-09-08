@@ -25,6 +25,7 @@ struct OutPullSpecWithAttr {
     reverse: bool,
     subfields: Vec<OutPullSpecWithAttr>,
     vld: Validity,
+    span: SourceSpan
 }
 
 impl OutPullSpec {
@@ -41,6 +42,7 @@ impl OutPullSpec {
                 .map(|v| v.hydrate(tx, vld))
                 .try_collect()?,
             vld,
+            span: self.span
         })
     }
 }
@@ -161,7 +163,14 @@ impl SessionTx {
                 let maps: Vec<_> = res
                     .iter()
                     .map(|dv| -> Result<_> {
-                        let id = dv.get_entity_id()?;
+                        let id = dv.get_entity_id().ok_or_else(|| {
+                            #[derive(Debug, Error, Diagnostic)]
+                            #[error("Cannot pull: {0:?} is not an entity ID")]
+                            #[diagnostic(code(eval::non_id_for_pull))]
+                            struct UnacceptableIdForPull(DataValue, #[label] SourceSpan);
+
+                            UnacceptableIdForPull(dv.clone(), spec.span)
+                        })?;
                         self.run_pull_on_item(id, &spec.subfields)
                     })
                     .try_collect()?;

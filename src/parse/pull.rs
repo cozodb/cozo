@@ -7,13 +7,14 @@ use crate::data::id::Validity;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
-use crate::parse::{ExtractSpan, Pair, Rule};
+use crate::parse::{ExtractSpan, Pair, Rule, SourceSpan};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct OutPullSpec {
     pub(crate) attr: Symbol,
     pub(crate) reverse: bool,
     pub(crate) subfields: Vec<OutPullSpec>,
+    pub(crate) span: SourceSpan
 }
 
 pub(crate) fn parse_out_options(
@@ -42,6 +43,7 @@ pub(crate) fn parse_out_options(
 }
 
 fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
+    let span = pair.extract_span();
     let mut is_reverse = false;
     let mut src = pair.into_inner();
     let mut name_p = src.next().unwrap();
@@ -58,5 +60,6 @@ fn parse_pull_field(pair: Pair<'_>) -> Result<OutPullSpec> {
         attr: name,
         reverse: is_reverse,
         subfields,
+        span
     })
 }

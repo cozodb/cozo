@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter};
 
 use itertools::Itertools;
 use log::error;
-use miette::{ensure, Result};
+use miette::Result;
 use rmp_serde::Serializer;
 use serde::Serialize;
 
@@ -71,49 +71,8 @@ impl<'a> From<&'a [u8]> for EncodedTuple<'a> {
 }
 
 impl<'a> EncodedTuple<'a> {
-    // pub(crate) fn bounds_for_prefix(prefix: TempStoreId) -> ([u8; 6], [u8; 6]) {
-    //     let prefix_bytes = prefix.0.to_be_bytes();
-    //     let next_prefix_bytes = (prefix.0 + 1).to_be_bytes();
-    //     (
-    //         [prefix_bytes[1], prefix_bytes[2], prefix_bytes[3], 0, 0, 0],
-    //         [
-    //             next_prefix_bytes[1],
-    //             next_prefix_bytes[2],
-    //             next_prefix_bytes[3],
-    //             0,
-    //             0,
-    //             0,
-    //         ],
-    //     )
-    // }
-    // pub(crate) fn bounds_for_prefix_and_epoch(
-    //     prefix: TempStoreId,
-    //     epoch: u32,
-    // ) -> ([u8; 6], [u8; 6]) {
-    //     let prefix_bytes = prefix.0.to_be_bytes();
-    //     let epoch_bytes = epoch.to_be_bytes();
-    //     let epoch_bytes_upper = (epoch + 1).to_be_bytes();
-    //     (
-    //         [
-    //             prefix_bytes[1],
-    //             prefix_bytes[2],
-    //             prefix_bytes[3],
-    //             epoch_bytes[1],
-    //             epoch_bytes[2],
-    //             epoch_bytes[3],
-    //         ],
-    //         [
-    //             prefix_bytes[1],
-    //             prefix_bytes[2],
-    //             prefix_bytes[3],
-    //             epoch_bytes_upper[1],
-    //             epoch_bytes_upper[2],
-    //             epoch_bytes_upper[3],
-    //         ],
-    //     )
-    // }
     pub(crate) fn prefix(&self) -> Result<RelationId> {
-        ensure!(self.0.len() >= 6, "bad data: {:x?}", self.0);
+        // ensure!(self.0.len() >= 6, "bad data: {:x?}", self.0);
         let id = u64::from_be_bytes([
             0, 0, self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5],
         ]);
@@ -123,7 +82,7 @@ impl<'a> EncodedTuple<'a> {
         if self.0.len() == 6 {
             return Ok(0);
         }
-        ensure!(self.0.len() >= 8, "bad data: {:x?}", self.0);
+        // ensure!(self.0.len() >= 8, "bad data: {:x?}", self.0);
         Ok(u16::from_be_bytes([self.0[6], self.0[7]]) as usize)
     }
     fn force_get(&self, idx: usize) -> DataValue {
@@ -146,7 +105,7 @@ impl<'a> EncodedTuple<'a> {
             4 * (self.arity()? + 1)
         } else {
             let len_pos = (idx + 1) * 4;
-            ensure!(self.0.len() >= len_pos + 4, "bad data: {:x?}", self.0);
+            // ensure!(self.0.len() >= len_pos + 4, "bad data: {:x?}", self.0);
             u32::from_be_bytes([
                 self.0[len_pos],
                 self.0[len_pos + 1],
@@ -154,11 +113,11 @@ impl<'a> EncodedTuple<'a> {
                 self.0[len_pos + 3],
             ]) as usize
         };
-        ensure!(
-            pos < self.0.len(),
-            "bad data length for data: {:x?}",
-            self.0
-        );
+        // ensure!(
+        //     pos < self.0.len(),
+        //     "bad data length for data: {:x?}",
+        //     self.0
+        // );
         Ok(rmp_serde::from_slice(&self.0[pos..]).map_err(|err| {
             error!(
                 "Cannot deserialize DataValue from bytes: {:x?}, {:?}",

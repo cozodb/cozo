@@ -28,6 +28,12 @@ use crate::utils::swap_option_result;
 #[diagnostic(code(eval::entity_not_found))]
 pub(crate) struct EntityNotFound(pub(crate) String);
 
+#[derive(Debug, Diagnostic, Error)]
+#[error("Encountered unacceptable entity ID {1:?} when transacting")]
+#[diagnostic(code(eval::unacceptable_entity_id))]
+#[diagnostic(help("This occurs when transacting against the attribute {0}"))]
+pub(crate) struct ExpectEntityId(String, DataValue);
+
 impl SessionTx {
     pub(crate) fn tx_triples(
         &mut self,
@@ -95,8 +101,15 @@ impl SessionTx {
                     let attr = self.attr_by_name(&payload.attr_name.name)?.unwrap();
                     let eid = match payload.entity {
                         EntityRep::Id(id) => id,
-                        EntityRep::UserTempId(_) => {
-                            bail!("cannot retract with temp id")
+                        EntityRep::UserTempId(id) => {
+                            #[derive(Debug, Error, Diagnostic)]
+                            #[error("Attempting to retract with temp ID {0}")]
+                            #[diagnostic(code(eval::retract_with_temp_id))]
+                            #[diagnostic(help(
+                                "This occurs when transacting against the attribute {1}"
+                            ))]
+                            struct RetractWithTempId(String, String);
+                            bail!(RetractWithTempId(id.to_string(), attr.name.to_string()))
                         }
                         EntityRep::PullByKey(symb, val) => {
                             let vld = payload.validity.unwrap_or(default_vld);
@@ -160,7 +173,13 @@ impl SessionTx {
 
         // vae for ref types
         if attr.val_type.is_ref_type() {
-            let vae_encoded = encode_vae_key(v.get_entity_id()?, attr.id, eid, vld_in_key);
+            let vae_encoded = encode_vae_key(
+                v.get_entity_id()
+                    .ok_or_else(|| ExpectEntityId(attr.name.to_string(), v.clone()))?,
+                attr.id,
+                eid,
+                vld_in_key,
+            );
             if real_delete {
                 self.tx.del(&vae_encoded, Pri)?;
             } else {
@@ -210,7 +229,9 @@ impl SessionTx {
                         );
                     }
                 } else if let Some(v_slice) = self.tx.get(&ave_encoded, false, Pri)? {
-                    let found_eid = decode_value_from_val(&v_slice)?.get_entity_id()?;
+                    let found_eid = decode_value_from_val(&v_slice)?
+                        .get_entity_id()
+                        .ok_or_else(|| ExpectEntityId(attr.name.to_string(), v.clone()))?;
                     ensure!(
                         found_eid == eid,
                         "unique constraint violated for attr {} with value {:?}",
@@ -291,7 +312,9 @@ impl SessionTx {
         Ok(
             if let Some(v_slice) = self.bounded_scan_first(&lower, &upper).val()? {
                 if StoreOp::try_from(v_slice[0])?.is_assert() {
-                    let eid = decode_value(&v_slice[8..])?.get_entity_id()?;
+                    let eid = decode_value(&v_slice[8..])?
+                        .get_entity_id()
+                        .ok_or_else(|| ExpectEntityId(attr.name.to_string(), v.clone()))?;
                     let ret = Some(eid);
                     self.eid_by_attr_val_cache
                         .borrow_mut()
@@ -716,7 +739,9 @@ impl TripleAttrValueRangeIter {
             Some((k_slice, v_slice)) => {
                 let (aid, mut eid, _tid) = decode_ae_key(k_slice)?;
                 if eid.is_placeholder() {
-                    eid = decode_value_from_val(v_slice)?.get_entity_id()?;
+                    eid = decode_value_from_val(v_slice)?
+                        .get_entity_id()
+                        .expect("entity ID expected");
                 }
                 let v = decode_value_from_key(k_slice)?;
                 if v > self.inc_upper {
@@ -770,7 +795,9 @@ impl TripleAttrValueRangeBeforeIter {
                 Some((k_slice, v_slice)) => {
                     let (aid, mut eid, tid) = decode_ae_key(k_slice)?;
                     if eid.is_placeholder() {
-                        eid = decode_value_from_val(v_slice)?.get_entity_id()?;
+                        eid = decode_value_from_val(v_slice)?
+                            .get_entity_id()
+                            .expect("entity ID expected");
                     }
                     if tid > self.before {
                         self.current.encoded_entity_amend_validity(self.before);
@@ -828,7 +855,9 @@ impl TripleAttrValueIter {
             Some((k_slice, v_slice)) => {
                 let (aid, mut eid, _tid) = decode_ae_key(k_slice)?;
                 if eid.is_placeholder() {
-                    eid = decode_value_from_val(v_slice)?.get_entity_id()?;
+                    eid = decode_value_from_val(v_slice)?
+                        .get_entity_id()
+                        .expect("entity ID expected");
                 }
                 let v = decode_value_from_key(k_slice)?;
                 Ok(Some((aid, v, eid)))
@@ -875,7 +904,9 @@ impl TripleAttrValueBeforeIter {
                 Some((k_slice, v_slice)) => {
                     let (aid, mut eid, tid) = decode_ae_key(k_slice)?;
                     if eid.is_placeholder() {
-                        eid = decode_value_from_val(v_slice)?.get_entity_id()?;
+                        eid = decode_value_from_val(v_slice)?
+                            .get_entity_id()
+                            .expect("entity ID expected");
                     }
                     if tid > self.before {
                         self.current.encoded_entity_amend_validity(self.before);

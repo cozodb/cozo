@@ -592,8 +592,14 @@ pub(crate) struct Poison(pub(crate) Arc<AtomicBool>);
 impl Poison {
     #[inline(always)]
     pub(crate) fn check(&self) -> Result<()> {
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Process is killed before completion")]
+        #[diagnostic(code(eval::killed))]
+        #[diagnostic(help("A process may be killed by timeout, or explicit command"))]
+        struct ProcessKilled;
+
         if self.0.load(Ordering::Relaxed) {
-            bail!("killed")
+            bail!(ProcessKilled)
         }
         Ok(())
     }

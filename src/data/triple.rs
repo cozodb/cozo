@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 
-use miette::bail;
 use serde_derive::{Deserialize, Serialize};
 
 #[repr(u8)]
@@ -35,7 +34,7 @@ impl TryFrom<u8> for StoreOp {
         Ok(match u {
             0 => StoreOp::Retract,
             1 => StoreOp::Assert,
-            n => bail!("unexpect tag for store op: {}", n),
+            n => panic!("unexpect tag for store op: {}", n),
         })
     }
 }

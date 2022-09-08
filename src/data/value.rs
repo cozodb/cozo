@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
-use miette::{bail, Result};
 use ordered_float::OrderedFloat;
 use regex::Regex;
 use rmp_serde::Serializer;
@@ -248,25 +247,6 @@ impl Debug for DataValue {
 pub(crate) const INLINE_VAL_SIZE_LIMIT: usize = 60;
 
 impl DataValue {
-    #[allow(dead_code)]
-    pub(crate) fn check_input_allowed(&self) -> Result<()> {
-        match self {
-            DataValue::List(l) => {
-                for el in l {
-                    el.check_input_allowed()?;
-                }
-            }
-            DataValue::Regex(_)
-            | DataValue::Set(_)
-            | DataValue::Guard
-            | DataValue::Rev(_)
-            | DataValue::Bot => {
-                bail!("encountered internal datatypes in input")
-            }
-            _ => {}
-        }
-        Ok(())
-    }
     pub(crate) fn encode_with_op_and_tx(
         &self,
         op: StoreOp,
@@ -279,10 +259,10 @@ impl DataValue {
         ret.into()
     }
 
-    pub(crate) fn get_entity_id(&self) -> Result<EntityId> {
+    pub(crate) fn get_entity_id(&self) -> Option<EntityId> {
         match self {
-            DataValue::Num(Num::I(id)) => Ok(EntityId(*id as u64)),
-            _ => bail!("type mismatch: expect type EntId, got value {:?}", self),
+            DataValue::Num(Num::I(id)) => Some(EntityId(*id as u64)),
+            _ => None,
         }
     }
     pub(crate) fn get_list(&self) -> Option<&[DataValue]> {
@@ -291,18 +271,6 @@ impl DataValue {
             _ => None,
         }
     }
-    // pub(crate) fn get_set(&self) -> Option<&BTreeSet<DataValue>> {
-    //     match self {
-    //         DataValue::Set(s) => Some(s),
-    //         _ => None,
-    //     }
-    // }
-    // pub(crate) fn get_map(&self) -> Option<&BTreeMap<DataValue, DataValue>> {
-    //     match self {
-    //         DataValue::Map(m) => Some(m),
-    //         _ => None,
-    //     }
-    // }
     pub(crate) fn get_string(&self) -> Option<&str> {
         match self {
             DataValue::Str(s) => Some(s),

@@ -1,9 +1,20 @@
 use std::collections::BTreeSet;
 use std::mem;
 
-use miette::{bail, Result};
+use miette::{bail, Diagnostic, Result};
+use thiserror::Error;
 
 use crate::data::program::{NormalFormAtom, NormalFormRule};
+use crate::parse::SourceSpan;
+
+#[derive(Diagnostic, Debug, Error)]
+#[error("Encountered unsafe negation")]
+#[diagnostic(code(eval::unsafe_negation))]
+#[diagnostic(help(
+"Only rule applications that are partially bounded, \
+                or expressions / unifications that are completely bounded, can be safely negated."
+))]
+pub(crate) struct UnsafeNegation(#[label] pub(crate) SourceSpan);
 
 impl NormalFormRule {
     pub(crate) fn convert_to_well_ordered_rule(self) -> Result<Self> {
@@ -47,9 +58,7 @@ impl NormalFormRule {
                 NormalFormAtom::NegatedAttrTriple(t) => {
                     pending.push(NormalFormAtom::NegatedAttrTriple(t))
                 }
-                NormalFormAtom::NegatedRule(r) => {
-                    pending.push(NormalFormAtom::NegatedRule(r))
-                }
+                NormalFormAtom::NegatedRule(r) => pending.push(NormalFormAtom::NegatedRule(r)),
                 NormalFormAtom::NegatedRelation(v) => {
                     pending.push(NormalFormAtom::NegatedRelation(v))
                 }
@@ -144,28 +153,28 @@ impl NormalFormRule {
                         if seen_variables.contains(&t.value) || seen_variables.contains(&t.entity) {
                             collected.push(NormalFormAtom::NegatedAttrTriple(t.clone()));
                         } else {
-                            bail!("found unsafe triple in rule: {:?}", t)
+                            bail!(UnsafeNegation(t.span))
                         }
                     }
                     NormalFormAtom::NegatedRule(r) => {
                         if r.args.iter().any(|a| seen_variables.contains(a)) {
                             collected.push(NormalFormAtom::NegatedRule(r.clone()));
                         } else {
-                            bail!("found unsafe rule application in rule: {:?}", r);
+                            bail!(UnsafeNegation(r.span));
                         }
                     }
                     NormalFormAtom::NegatedRelation(v) => {
                         if v.args.iter().any(|a| seen_variables.contains(a)) {
                             collected.push(NormalFormAtom::NegatedRelation(v.clone()));
                         } else {
-                            bail!("found unsafe rule application in relation: {:?}", v);
+                            bail!(UnsafeNegation(v.span));
                         }
                     }
                     NormalFormAtom::Predicate(p) => {
-                        bail!("found unsafe predicate in rule: {:?}", p)
+                        bail!(UnsafeNegation(p.span()))
                     }
                     NormalFormAtom::Unification(u) => {
-                        bail!("found unsafe unification in rule: {:?}", u)
+                        bail!(UnsafeNegation(u.span))
                     }
                 }
             }

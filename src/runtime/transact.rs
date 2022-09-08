@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::sync::Arc;
 
 use log::error;
 use miette::{Diagnostic, Result};
@@ -11,8 +11,8 @@ use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use cozorocks::{DbIter, Tx};
 use cozorocks::CfHandle::{Pri, Snd};
+use cozorocks::{DbIter, Tx};
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
@@ -132,10 +132,10 @@ impl SessionTx {
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
         let found = self.tx.get(&t_encoded, false, Snd)?;
-        match found {
-            None => Ok(RelationId::SYSTEM),
+        Ok(match found {
+            None => RelationId::SYSTEM,
             Some(slice) => RelationId::raw_decode(&slice),
-        }
+        })
     }
 
     pub(crate) fn load_last_tx_id(&self) -> Result<TxId> {

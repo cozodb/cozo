@@ -441,7 +441,7 @@ impl MagicAlgoRuleArg {
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
                 let relation = tx.get_relation(name)?;
-                Box::new(relation.scan_all(tx)?)
+                Box::new(relation.scan_all(tx))
             }
             MagicAlgoRuleArg::Triple {
                 attr: name,

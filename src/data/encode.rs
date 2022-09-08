@@ -3,7 +3,7 @@ use std::ops::{Deref, DerefMut};
 use std::str::Utf8Error;
 
 use log::error;
-use miette::{bail, Result};
+use miette::Result;
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -191,7 +191,7 @@ impl TryFrom<u8> for StorageTag {
             7 => SentinelAttrValue,
             8 => SentinelAttrById,
             9 => SentinelAttrByName,
-            n => bail!("unexpected storage tag {}", n),
+            n => panic!("unexpected storage tag {}", n),
         })
     }
 }

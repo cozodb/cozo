@@ -9,6 +9,7 @@ use crate::data::program::{
     NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom,
     TempSymbGen, Unification,
 };
+use crate::query::reorder::UnsafeNegation;
 use crate::runtime::transact::SessionTx;
 use crate::transact::meta::AttrNotFoundError;
 
@@ -109,8 +110,8 @@ impl InputAtom {
                         .try_collect()?,
                     span,
                 },
-                InputAtom::Unification { inner: unif } => {
-                    bail!("unification not allowed in negation: {:?}", unif)
+                InputAtom::Unification { inner } => {
+                    bail!(UnsafeNegation(inner.span))
                 }
             },
         })

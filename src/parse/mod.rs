@@ -50,9 +50,9 @@ impl From<SourceSpan> for miette::SourceSpan {
 #[derive(thiserror::Error, Diagnostic, Debug)]
 #[error("The query parser has encountered unexpected input / end of input")]
 #[diagnostic(code(parse::pest))]
-struct ParseError {
+pub(crate) struct ParseError {
     #[label]
-    span: SourceSpan,
+    pub(crate) span: SourceSpan,
 }
 
 pub(crate) fn parse_script(

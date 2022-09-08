@@ -2,7 +2,8 @@ use miette::{bail, Result};
 
 use crate::data::attr::{Attribute, AttributeCardinality, AttributeIndex, AttributeTyping};
 use crate::data::triple::StoreOp;
-use crate::parse::{Pair, Pairs, Rule};
+use crate::parse::ExtractSpan;
+use crate::parse::{Pair, Pairs, ParseError, Rule};
 
 pub(crate) fn parse_schema(src: Pairs<'_>) -> Result<Vec<AttrTxItem>> {
     let mut ret = vec![];
@@ -65,7 +66,9 @@ fn parse_attr_defs(src: Pairs<'_>) -> Result<Attribute> {
             "string" => attr.val_type = AttributeTyping::String,
             "bytes" => attr.val_type = AttributeTyping::Bytes,
             "list" => attr.val_type = AttributeTyping::List,
-            v => bail!("cannot interpret {} as attribute property", v),
+            _ => bail!(ParseError {
+                span: pair.extract_span()
+            }),
         };
     }
     Ok(attr)

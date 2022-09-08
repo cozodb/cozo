@@ -24,7 +24,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
 use crate::parse::pull::parse_out_options;
-use crate::parse::{ExtractSpan, Pair, Pairs, Rule, SourceSpan};
+use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 
 #[derive(Error, Diagnostic, Debug)]
@@ -157,17 +157,29 @@ pub(crate) fn parse_query(
                     ));
                 }
 
-                ensure!(
-                    aggr.iter().all(|v| v.is_none()),
-                    "const rules cannot have aggregation application"
-                );
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Constant rules cannot have aggregation application")]
+                #[diagnostic(code(parse::aggr_in_const_rule))]
+                struct AggrInConstRuleError(#[label] SourceSpan);
+
+                for (a, v) in aggr.iter().zip(head.iter()) {
+                    ensure!(a.is_none(), AggrInConstRuleError(v.span));
+                }
+
                 let data = build_expr(src.next().unwrap(), param_pool)?.eval_to_const()?;
                 let data = match data {
                     DataValue::List(l) => l,
-                    d => bail!(
-                        "const rules must have body consisting of a list, got {:?}",
-                        d
-                    ),
+                    d => {
+                        #[derive(Error, Debug, Diagnostic)]
+                        #[error("Bad body for constant rule: {0:?}")]
+                        #[diagnostic(code(parser::bad_body_for_const))]
+                        #[diagnostic(help(
+                            "The body of a constant rule should evaluate to a list of lists"
+                        ))]
+                        struct ConstRuleBodyNotList(DataValue);
+
+                        bail!(ConstRuleBodyNotList(d))
+                    }
                 };
 
                 ensure!(!data.is_empty(), "const rules cannot be empty for {}", name);
@@ -185,7 +197,15 @@ pub(crate) fn parse_query(
                                     last_len = Some(tuple.len());
                                     tuples.push(Tuple(tuple));
                                 }
-                                v => bail!("rows of const rules must be list, got {:?}", v),
+                                row => {
+                                    #[derive(Error, Debug, Diagnostic)]
+                                    #[error("Bad row for constant rule: {0:?}")]
+                                    #[diagnostic(code(parser::bad_row_for_const))]
+                                    #[diagnostic(help("The body of a constant rule should evaluate to a list of lists"))]
+                                    struct ConstRuleRowNotList(DataValue);
+
+                                    bail!(ConstRuleRowNotList(row))
+                                }
                             }
                         }
                         if let Some(l) = &last_len {
@@ -201,7 +221,12 @@ pub(crate) fn parse_query(
                         });
                     }
                     Entry::Occupied(e) => {
-                        bail!("const rule can be defined only once: {:?}", e.key())
+                        #[derive(Debug, Error, Diagnostic)]
+                        #[error("Duplicate definition for constant rule")]
+                        #[diagnostic(code(parser::dup_const_rule))]
+                        struct DupConstRuleDefError(#[label] SourceSpan, #[label] SourceSpan);
+
+                        bail!(DupConstRuleDefError(e.key().symbol().span, span))
                     }
                 }
             }
@@ -257,13 +282,24 @@ pub(crate) fn parse_query(
             }
             Rule::out_option => {
                 if out_opts.store_relation.is_some() {
-                    bail!("cannot use out spec with 'relation'");
+                    #[derive(Error, Diagnostic, Debug)]
+                    #[error("Cannot specify both pull options and relation options")]
+                    #[diagnostic(code(parser::pull_rel_conflict))]
+                    struct PullSpecRelationConflictError(#[label] SourceSpan);
+
+                    bail!(PullSpecRelationConflictError(pair.extract_span()));
                 }
                 let (target, vld, specs) = parse_out_options(pair, param_pool)?;
+                let span = target.span;
                 match out_opts.out_spec.entry(target) {
                     Entry::Vacant(e) => e.insert((specs, vld)),
-                    Entry::Occupied(_) => {
-                        bail!("cannot specify spec for the same target twice")
+                    Entry::Occupied(e) => {
+                        #[derive(Debug, Error, Diagnostic)]
+                        #[error("Duplicate specification of pull spec")]
+                        #[diagnostic(code(parser::dup_pull_specs))]
+                        struct DupSpecError(#[label] SourceSpan, #[label] SourceSpan);
+
+                        bail!(DupSpecError(span, e.key().span))
                     }
                 };
             }
@@ -489,7 +525,7 @@ fn parse_rule_arg(
             match p {
                 Expr::Binding { var, .. } => InputTerm::Var { name: var },
                 Expr::Const { val, .. } => InputTerm::Const { val, span },
-                _ => bail!("triple arg must either evaluate to a constant or a Symbol"),
+                _ => bail!(ParseError { span }),
             }
         }
         _ => unreachable!(),

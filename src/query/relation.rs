@@ -5,7 +5,7 @@ use std::iter;
 use either::{Left, Right};
 use itertools::Itertools;
 use log::error;
-use miette::{bail, Context, Diagnostic, Result};
+use miette::{Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::attr::Attribute;
@@ -39,6 +39,11 @@ pub(crate) struct UnificationRA {
     pub(crate) to_eliminate: BTreeSet<Symbol>,
     span: SourceSpan,
 }
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Found value {0:?} while iterating, unacceptable for an Entity ID")]
+#[diagnostic(code(eval::iter_bad_entity_id))]
+struct EntityIdExpected(DataValue, #[label] SourceSpan);
 
 fn eliminate_from_tuple(mut ret: Tuple, eliminate_indices: &BTreeSet<usize>) -> Tuple {
     if !eliminate_indices.is_empty() {
@@ -381,12 +386,14 @@ impl RelAlgebra {
         vld: Validity,
         e_binding: Symbol,
         v_binding: Symbol,
+        span: SourceSpan,
     ) -> Self {
         Self::Triple(TripleRA {
             attr,
             vld,
             bindings: [e_binding, v_binding],
             filters: vec![],
+            span,
         })
     }
     pub(crate) fn reorder(self, new_order: Vec<Symbol>) -> Self {
@@ -588,6 +595,7 @@ pub(crate) struct TripleRA {
     pub(crate) vld: Validity,
     pub(crate) bindings: [Symbol; 2],
     pub(crate) filters: Vec<Expr>,
+    pub(crate) span: SourceSpan,
 }
 
 pub(crate) fn flatten_err<T, E1: Into<miette::Error>, E2: Into<miette::Error>>(
@@ -852,12 +860,10 @@ impl TripleRA {
         Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let eid = tuple
-                        .0
-                        .get(left_e_idx)
-                        .unwrap()
+                    let dv = tuple.0.get(left_e_idx).unwrap();
+                    let eid = dv
                         .get_entity_id()
-                        .with_context(|| format!("{:?}", self))?;
+                        .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
                     let v = tuple.0.get(left_v_idx).unwrap();
                     let exists = tx.aev_exists(self.attr.id, eid, v, self.vld)?;
                     Ok(if exists {
@@ -896,12 +902,10 @@ impl TripleRA {
         // [b, b] actually a filter
         let it = left_iter
             .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                let eid = tuple
-                    .0
-                    .get(left_e_idx)
-                    .unwrap()
+                let dv = tuple.0.get(left_e_idx).unwrap();
+                let eid = dv
                     .get_entity_id()
-                    .with_context(|| format!("{:?}", self))?;
+                    .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
                 let v = tuple.0.get(left_v_idx).unwrap();
                 let exists = tx.aev_exists(self.attr.id, eid, v, self.vld)?;
                 if exists {
@@ -928,12 +932,10 @@ impl TripleRA {
         Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let eid = tuple
-                        .0
-                        .get(left_e_idx)
-                        .unwrap()
+                    let dv = tuple.0.get(left_e_idx).unwrap();
+                    let eid = dv
                         .get_entity_id()
-                        .with_context(|| format!("{:?}, {:?}", self, tuple))?;
+                        .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
                     let nxt = if self.attr.with_history {
                         tx.triple_ae_before_scan(self.attr.id, eid, self.vld).next()
                     } else {
@@ -1003,12 +1005,10 @@ impl TripleRA {
                 } else {
                     None
                 };
-                let eid = tuple
-                    .0
-                    .get(left_e_idx)
-                    .unwrap()
+                let dv = tuple.0.get(left_e_idx).unwrap();
+                let eid = dv
                     .get_entity_id()
-                    .with_context(|| format!("{:?}, {:?}, {}", self, tuple, left_e_idx))?;
+                    .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
 
                 let clj = move |(_, eid, val): (AttrId, EntityId, DataValue)| {
                     let mut ret = tuple.0.clone();
@@ -1060,12 +1060,10 @@ impl TripleRA {
         Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let v_eid = tuple
-                        .0
-                        .get(left_v_idx)
-                        .unwrap()
+                    let dv = tuple.0.get(left_v_idx).unwrap();
+                    let v_eid = dv
                         .get_entity_id()
-                        .with_context(|| format!("{:?}", self))?;
+                        .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
                     let nxt = if self.attr.with_history {
                         tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
                             .next()
@@ -1109,12 +1107,9 @@ impl TripleRA {
         // [f, b] where b is a ref
         let it = left_iter
             .map_ok(move |tuple| {
-                tuple
-                    .0
-                    .get(left_v_idx)
-                    .unwrap()
-                    .get_entity_id()
-                    .with_context(|| format!("{:?}", self))
+                let dv = tuple.0.get(left_v_idx).unwrap();
+                dv.get_entity_id()
+                    .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))
                     .map(move |v_eid| {
                         if self.attr.with_history {
                             Left(
@@ -1502,7 +1497,7 @@ impl RelationRA {
     }
 
     fn iter(&self, tx: &SessionTx) -> Result<TupleIter<'_>> {
-        let it = self.storage.scan_all(tx)?;
+        let it = self.storage.scan_all(tx);
         Ok(if self.filters.is_empty() {
             Box::new(it)
         } else {
@@ -1768,20 +1763,8 @@ impl Joiner {
         let mut ret_l = Vec::with_capacity(self.left_keys.len());
         let mut ret_r = Vec::with_capacity(self.left_keys.len());
         for (l, r) in self.left_keys.iter().zip(self.right_keys.iter()) {
-            let l_pos = match left_binding_map.get(l) {
-                None => {
-                    bail!("join key is wrong: left binding for {} not found: left {:?} vs right {:?}, {:?}",
-                        l, left_bindings, right_bindings, self);
-                }
-                Some(p) => p,
-            };
-            let r_pos = match right_binding_map.get(r) {
-                None => {
-                    bail!("join key is wrong: right binding for {} not found: left {:?} vs right {:?}, {:?}",
-                        r, left_bindings, right_bindings, self);
-                }
-                Some(p) => p,
-            };
+            let l_pos = left_binding_map.get(l).unwrap();
+            let r_pos = right_binding_map.get(r).unwrap();
             ret_l.push(*l_pos);
             ret_r.push(*r_pos)
         }

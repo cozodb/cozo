@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use log::error;
-use miette::{bail, Diagnostic, ensure, Result};
+use miette::{ensure, Diagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -51,17 +51,6 @@ impl Display for AttributeCardinality {
             AttributeCardinality::One => write!(f, "one"),
             AttributeCardinality::Many => write!(f, "many"),
         }
-    }
-}
-
-impl TryFrom<&'_ str> for AttributeCardinality {
-    type Error = miette::Error;
-    fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
-        Ok(match value {
-            "one" => AttributeCardinality::One,
-            "many" => AttributeCardinality::Many,
-            s => bail!("unknown cardinality {}", s),
-        })
     }
 }
 
@@ -190,20 +179,6 @@ impl Display for AttributeIndex {
     }
 }
 
-impl TryFrom<&'_ str> for AttributeIndex {
-    type Error = miette::Error;
-    fn try_from(value: &'_ str) -> std::result::Result<Self, Self::Error> {
-        use AttributeIndex::*;
-        Ok(match value {
-            "none" => None,
-            "indexed" => Indexed,
-            "unique" => Unique,
-            "identity" => Identity,
-            s => bail!("unknown attribute indexing type {}", s),
-        })
-    }
-}
-
 #[derive(
     Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
 )]
@@ -315,12 +290,12 @@ impl Attribute {
                             attr_name: self.name.to_string()
                         }
                     );
-                    let attr_name = ls.get(0).unwrap()
-                        .get_string()
-                        .ok_or_else(|| BadUniqueKeySpecifierError {
+                    let attr_name = ls.get(0).unwrap().get_string().ok_or_else(|| {
+                        BadUniqueKeySpecifierError {
                             data: ls.clone(),
-                            attr_name: self.name.to_string()
-                        })?;
+                            attr_name: self.name.to_string(),
+                        }
+                    })?;
                     let attr = tx
                         .attr_by_name(attr_name)?
                         .ok_or_else(|| AttrNotFoundError(attr_name.to_string()))?;

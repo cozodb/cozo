@@ -32,29 +32,25 @@ use crate::utils::swap_option_result;
 pub(crate) struct RelationId(pub(crate) u64);
 
 impl RelationId {
-    pub(crate) fn new(u: u64) -> Result<Self> {
+    pub(crate) fn new(u: u64) -> Self {
         if u > 2u64.pow(6 * 8) {
-            bail!("StoredRelId overflow: {}", u)
+            panic!("StoredRelId overflow: {}", u)
         } else {
-            Ok(Self(u))
+            Self(u)
         }
     }
-    pub(crate) fn next(&self) -> Result<Self> {
+    pub(crate) fn next(&self) -> Self {
         Self::new(self.0 + 1)
     }
     pub(crate) const SYSTEM: Self = Self(0);
     pub(crate) fn raw_encode(&self) -> [u8; 8] {
         self.0.to_be_bytes()
     }
-    pub(crate) fn raw_decode(src: &[u8]) -> Result<Self> {
-        if src.len() < 8 {
-            bail!("cannot decode bytes as StoredRelId: {:x?}", src)
-        } else {
-            let u = u64::from_be_bytes([
-                src[0], src[1], src[2], src[3], src[4], src[5], src[6], src[7],
-            ]);
-            Self::new(u)
-        }
+    pub(crate) fn raw_decode(src: &[u8]) -> Self {
+        let u = u64::from_be_bytes([
+            src[0], src[1], src[2], src[3], src[4], src[5], src[6], src[7],
+        ]);
+        Self::new(u)
     }
 }
 
@@ -87,10 +83,10 @@ impl RelationMetadata {
             RelationDeserError
         })?)
     }
-    pub(crate) fn scan_all(&self, tx: &SessionTx) -> Result<impl Iterator<Item = Result<Tuple>>> {
+    pub(crate) fn scan_all(&self, tx: &SessionTx) -> impl Iterator<Item = Result<Tuple>> {
         let lower = Tuple::default().encode_as_key(self.id);
-        let upper = Tuple::default().encode_as_key(self.id.next()?);
-        Ok(RelationIterator::new(tx, &lower, &upper))
+        let upper = Tuple::default().encode_as_key(self.id.next());
+        RelationIterator::new(tx, &lower, &upper)
     }
 
     pub(crate) fn scan_prefix(
@@ -169,14 +165,16 @@ impl SessionTx {
         let key = DataValue::Str(meta.name.name.clone());
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
+        #[derive(Debug, Diagnostic, Error)]
+        #[error("Cannot create relation {0} as one with the same name already exists")]
+        #[diagnostic(code(eval::rel_name_conflict))]
+        struct RelNameConflictError(String, #[label] SourceSpan);
+
         if self.tx.exists(&encoded, true, Snd)? {
-            bail!(
-                "cannot create relation {}: one with the same name already exists",
-                meta.name
-            )
+            bail!(RelNameConflictError(meta.name.to_string(), meta.name.span))
         };
         let last_id = self.relation_store_id.fetch_add(1, Ordering::SeqCst);
-        meta.id = RelationId::new(last_id + 1)?;
+        meta.id = RelationId::new(last_id + 1);
         self.tx.put(&encoded, &meta.id.raw_encode(), Snd)?;
         let name_key =
             Tuple(vec![DataValue::Str(meta.name.name.clone())]).encode_as_key(RelationId::SYSTEM);
@@ -219,7 +217,7 @@ impl SessionTx {
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         self.tx.del(&encoded, Snd)?;
         let lower_bound = Tuple::default().encode_as_key(store.id);
-        let upper_bound = Tuple::default().encode_as_key(store.id.next()?);
+        let upper_bound = Tuple::default().encode_as_key(store.id.next());
         Ok((lower_bound, upper_bound))
     }
 }
