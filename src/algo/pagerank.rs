@@ -2,14 +2,13 @@ use std::collections::BTreeMap;
 use std::mem;
 
 use approx::AbsDiffEq;
-use miette::{bail, ensure, Result};
+use miette::Result;
 use nalgebra::{Dynamic, OMatrix, U1};
 
 use crate::algo::AlgoImpl;
-use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
-use crate::data::value::{DataValue, Num};
+use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
@@ -25,53 +24,11 @@ impl AlgoImpl for PageRank {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let opts = &algo.options;
-        let edges = algo.get_relation(0)?;
-        let undirected = algo.get_bool_option("undirected", Some(false))?;
-        let theta = match opts.get("theta") {
-            None => 0.8f32,
-            Some(Expr::Const {
-                val: DataValue::Num(n),
-                ..
-            }) => n.get_float() as f32,
-            Some(v) => bail!(
-                "option 'theta' for 'pagerank' requires a float, got {:?}",
-                v
-            ),
-        };
-        ensure!(
-            0. <= theta && theta <= 1.,
-            "'theta' in 'pagerank' out of range [0, 1]: {}",
-            theta
-        );
-        let epsilon = match opts.get("epsilon") {
-            None => 0.001f32,
-            Some(Expr::Const {
-                val: DataValue::Num(n),
-                ..
-            }) => n.get_float() as f32,
-            Some(v) => bail!(
-                "option 'epsilon' for 'pagerank' requires a float, got {:?}",
-                v
-            ),
-        };
-        let iterations = match opts.get("iterations") {
-            None => 20,
-            Some(Expr::Const {
-                val: DataValue::Num(Num::I(i)),
-                ..
-            }) => *i,
-            Some(v) => bail!(
-                "option 'iterations' for 'pagerank' requires an integer, got {:?}",
-                v,
-            ),
-        };
-        ensure!(
-            iterations > 0,
-            "'iterations' for 'pagerank' must be positive, got {}",
-            iterations
-        );
-        let iterations = iterations as usize;
+        let edges = algo.relation(0)?;
+        let undirected = algo.bool_option("undirected", Some(false))?;
+        let theta = algo.unit_interval_option("theta", Some(0.8))? as f32;
+        let epsilon = algo.unit_interval_option("epsilon", Some(0.8))? as f32;
+        let iterations = algo.pos_integer_option("iterations", Some(20))?;
         let (graph, indices, _) = edges.convert_edge_to_graph(undirected, tx, stores)?;
         let res = pagerank(&graph, theta, epsilon, iterations, poison)?;
         for (idx, score) in res.iter().enumerate() {

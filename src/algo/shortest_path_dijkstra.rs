@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
 
 use itertools::Itertools;
-use miette::{miette, Result};
+use miette::Result;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rayon::prelude::*;
@@ -28,11 +28,11 @@ impl AlgoImpl for ShortestPathDijkstra {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.get_relation(0)?;
-        let starting = algo.get_relation(1)?;
-        let termination = algo.get_relation(2);
-        let undirected = algo.get_bool_option("undirected", Some(false))?;
-        let keep_ties = algo.get_bool_option("keep_ties", Some(false))?;
+        let edges = algo.relation(0)?;
+        let starting = algo.relation(1)?;
+        let termination = algo.relation(2);
+        let undirected = algo.bool_option("undirected", Some(false))?;
+        let keep_ties = algo.bool_option("keep_ties", Some(false))?;
 
         let (graph, indices, inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
@@ -40,10 +40,7 @@ impl AlgoImpl for ShortestPathDijkstra {
         let mut starting_nodes = BTreeSet::new();
         for tuple in starting.iter(tx, stores)? {
             let tuple = tuple?;
-            let node = tuple
-                .0
-                .get(0)
-                .ok_or_else(|| miette!("node relation too short"))?;
+            let node = &tuple.0[0];
             if let Some(idx) = inv_indices.get(node) {
                 starting_nodes.insert(*idx);
             }
@@ -54,10 +51,7 @@ impl AlgoImpl for ShortestPathDijkstra {
                 let mut tn = BTreeSet::new();
                 for tuple in t.iter(tx, stores)? {
                     let tuple = tuple?;
-                    let node = tuple
-                        .0
-                        .get(0)
-                        .ok_or_else(|| miette!("node relation too short"))?;
+                    let node = &tuple.0[0];
                     if let Some(idx) = inv_indices.get(node) {
                         tn.insert(*idx);
                     }

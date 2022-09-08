@@ -21,7 +21,7 @@ impl AlgoImpl for TopSort {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.get_relation(0)?;
+        let edges = algo.relation(0)?;
 
         let (graph, indices, _) = edges.convert_edge_to_graph(false, tx, stores)?;
 

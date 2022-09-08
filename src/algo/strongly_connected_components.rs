@@ -2,10 +2,9 @@ use std::cmp::min;
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use miette::{bail, miette, Result};
+use miette::Result;
 
 use crate::algo::AlgoImpl;
-use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -32,27 +31,7 @@ impl AlgoImpl for StronglyConnectedComponent {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let opts = &algo.options;
-        let edges = algo.get_relation(0)?;
-
-        let reverse_mode = match opts.get("mode") {
-            None => false,
-            Some(Expr::Const {
-                val: DataValue::Str(s),
-                ..
-            }) => match s as &str {
-                "group_first" => true,
-                "key_first" => false,
-                v => bail!(
-                    "unexpected option 'mode' for 'strongly_connected_components': {}",
-                    v
-                ),
-            },
-            Some(v) => bail!(
-                "unexpected option 'mode' for 'strongly_connected_components': {:?}",
-                v
-            ),
-        };
+        let edges = algo.relation(0)?;
 
         let (graph, indices, mut inv_indices) =
             edges.convert_edge_to_graph(!self.strong, tx, stores)?;
@@ -61,30 +40,20 @@ impl AlgoImpl for StronglyConnectedComponent {
         for (grp_id, cc) in tarjan.iter().enumerate() {
             for idx in cc {
                 let val = indices.get(*idx).unwrap();
-                let tuple = if reverse_mode {
-                    Tuple(vec![DataValue::from(grp_id as i64), val.clone()])
-                } else {
-                    Tuple(vec![val.clone(), DataValue::from(grp_id as i64)])
-                };
+                let tuple = Tuple(vec![val.clone(), DataValue::from(grp_id as i64)]);
                 out.put(tuple, 0);
             }
         }
 
         let mut counter = tarjan.len() as i64;
 
-        if let Ok(nodes) = algo.get_relation(1) {
+        if let Ok(nodes) = algo.relation(1) {
             for tuple in nodes.iter(tx, stores)? {
                 let tuple = tuple?;
-                let node = tuple.0.into_iter().next().ok_or_else(|| {
-                    miette!("nodes relation for 'strongly_connected_components' too short")
-                })?;
+                let node = tuple.0.into_iter().next().unwrap();
                 if !inv_indices.contains_key(&node) {
                     inv_indices.insert(node.clone(), usize::MAX);
-                    let tuple = if reverse_mode {
-                        Tuple(vec![DataValue::from(counter), node])
-                    } else {
-                        Tuple(vec![node, DataValue::from(counter)])
-                    };
+                    let tuple = Tuple(vec![node, DataValue::from(counter)]);
                     out.put(tuple, 0);
                     counter += 1;
                 }

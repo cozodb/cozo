@@ -2,10 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
 use log::debug;
-use miette::{bail, ensure, miette, Result};
+use miette::Result;
 
 use crate::algo::AlgoImpl;
-use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -24,77 +23,12 @@ impl AlgoImpl for CommunityDetectionLouvain {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let opts = &algo.options;
-        let edges = algo.get_relation(0)?;
-        let undirected = algo.get_bool_option("undirected", Some(false))?;
-        let max_iter = match opts.get("max_iter") {
-            None => 10,
-            Some(Expr::Const {
-                val: DataValue::Num(n),
-                span,
-            }) => {
-                let i = n.get_int().ok_or_else(|| {
-                    miette!(
-                    "'max_iter' for 'community_detection_louvain' requires an integer, got {:?} {:?}",
-                    n, span
-                )
-                })?;
-                ensure!(
-                    i >= 0,
-                    "'max_iter' for 'community_detection_louvain' must be positive, got {}",
-                    i
-                );
-                i as usize
-            }
-            Some(n) => bail!(
-                "'max_iter' for 'community_detection_louvain' requires an integer, got {:?}",
-                n
-            ),
-        };
-        let delta = match opts.get("delta") {
-            None => 0.0001,
-            Some(Expr::Const {
-                val: DataValue::Num(n),
-                span,
-            }) => {
-                let i = n.get_float();
-                ensure!(
-                    i > 0.,
-                    "'delta' for 'community_detection_louvain' must be positive, got {} {:?}",
-                    i,
-                    span
-                );
-                i
-            }
-            Some(n) => bail!(
-                "'delta' for 'community_detection_louvain' requires a float, got {:?}",
-                n
-            ),
-        };
-        let keep_depth = match opts.get("keep_depth") {
-            None => None,
-            Some(Expr::Const {
-                val: DataValue::Num(n),
-                span,
-            }) => Some({
-                let i = n.get_int().ok_or_else(|| {
-                    miette!(
-                    "'keep_depth' for 'community_detection_louvain' requires an integer, got {:?} {:?}",
-                    n, span
-                )
-                })?;
-                ensure!(
-                    i > 0,
-                    "'keep_depth' for 'community_detection_louvain' must be positive, got {}",
-                    i
-                );
-                i as usize
-            }),
-            Some(n) => bail!(
-                "'keep_depth' for 'community_detection_louvain' requires an integer, got {:?}",
-                n
-            ),
-        };
+        let edges = algo.relation(0)?;
+        let undirected = algo.bool_option("undirected", Some(false))?;
+        let max_iter = algo.pos_integer_option("max_iter", Some(10))?;
+        let delta = algo.unit_interval_option("delta", Some(0.0001))?;
+        let keep_depth = algo.non_neg_integer_option("keep_depth", None).ok();
+
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
         let graph = graph

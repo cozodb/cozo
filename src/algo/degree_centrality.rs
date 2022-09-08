@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use miette::{ensure, miette, Result};
+use miette::Result;
 
 use crate::algo::AlgoImpl;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
@@ -21,14 +21,12 @@ impl AlgoImpl for DegreeCentrality {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let it = algo.get_relation(0)?.iter(tx, stores)?;
+        let it = algo
+            .relation_with_min_len(0, 2, tx, stores)?
+            .iter(tx, stores)?;
         let mut counter: BTreeMap<DataValue, (usize, usize, usize)> = BTreeMap::new();
         for tuple in it {
             let tuple = tuple?;
-            ensure!(
-                tuple.0.len() >= 2,
-                "'degree_centrality' requires input relation to be a tuple of two elements"
-            );
             let from = tuple.0[0].clone();
             let (from_total, from_out, _) = counter.entry(from).or_default();
             *from_total += 1;
@@ -40,13 +38,10 @@ impl AlgoImpl for DegreeCentrality {
             *to_in += 1;
             poison.check()?;
         }
-        if let Ok(nodes) = algo.get_relation(1) {
+        if let Ok(nodes) = algo.relation(1) {
             for tuple in nodes.iter(tx, stores)? {
                 let tuple = tuple?;
-                let id = tuple
-                    .0
-                    .get(0)
-                    .ok_or_else(|| miette!("nodes relation to 'degree_centrality' too short"))?;
+                let id = &tuple.0[0];
                 if !counter.contains_key(id) {
                     counter.insert(id.clone(), (0, 0, 0));
                 }

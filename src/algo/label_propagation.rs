@@ -1,11 +1,10 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use miette::{bail, ensure, miette, Result};
+use miette::Result;
 use rand::prelude::*;
 
 use crate::algo::AlgoImpl;
-use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -24,34 +23,9 @@ impl AlgoImpl for LabelPropagation {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let opts = &algo.options;
-        let edges = algo.get_relation(0)?;
-        let undirected = algo.get_bool_option("undirected", Some(false))?;
-        let max_iter = match opts.get("max_iter") {
-            None => 10,
-            Some(Expr::Const {
-                val: DataValue::Num(n),
-                span,
-            }) => {
-                let i = n.get_int().ok_or_else(|| {
-                    miette!(
-                        "'max_iter' for 'label_propagation' requires an integer, got {:?} {:?}",
-                        n,
-                        span
-                    )
-                })?;
-                ensure!(
-                    i >= 0,
-                    "'max_iter' for 'label_propagation' must be positive, got {}",
-                    i
-                );
-                i as usize
-            }
-            Some(n) => bail!(
-                "'max_iter' for 'label_propagation' requires an integer, got {:?}",
-                n
-            ),
-        };
+        let edges = algo.relation(0)?;
+        let undirected = algo.bool_option("undirected", Some(false))?;
+        let max_iter = algo.pos_integer_option("max_iter", Some(10))?;
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, true, tx, stores)?;
         let labels = label_propagation(&graph, max_iter, poison)?;

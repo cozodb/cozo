@@ -27,8 +27,8 @@ impl AlgoImpl for BetweennessCentrality {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.get_relation(0)?;
-        let undirected = algo.get_bool_option("undirected", Some(false))?;
+        let edges = algo.relation(0)?;
+        let undirected = algo.bool_option("undirected", Some(false))?;
 
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
@@ -89,8 +89,8 @@ impl AlgoImpl for ClosenessCentrality {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.get_relation(0)?;
-        let undirected = algo.get_bool_option("undirected", Some(false))?;
+        let edges = algo.relation(0)?;
+        let undirected = algo.bool_option("undirected", Some(false))?;
 
         let (graph, indices, _inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;

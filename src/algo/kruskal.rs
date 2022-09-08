@@ -1,8 +1,8 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use miette::{Result};
 use itertools::Itertools;
+use miette::Result;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 
@@ -25,8 +25,7 @@ impl AlgoImpl for MinimumSpanningTreeKruskal {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo
-            .get_relation(0)?;
+        let edges = algo.relation(0)?;
         let (graph, indices, _, _) =
             edges.convert_edge_to_weighted_graph(true, true, tx, stores)?;
         if graph.is_empty() {

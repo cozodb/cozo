@@ -22,7 +22,7 @@ impl AlgoImpl for ClusteringCoefficients {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.get_relation(0)?;
+        let edges = algo.relation(0)?;
         let (graph, indices, _) = edges.convert_edge_to_graph(true, tx, stores)?;
         let graph: Vec<BTreeSet<usize>> =
             graph.into_iter().map(|e| e.into_iter().collect()).collect();

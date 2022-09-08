@@ -172,6 +172,27 @@ struct RuleNotFoundError(String, #[label] SourceSpan);
 struct InvalidInverseTripleUse(String, #[label] SourceSpan);
 
 #[derive(Error, Diagnostic, Debug)]
+#[error("Required node with key {missing:?} not found")]
+#[diagnostic(code(algo::node_with_key_not_found))]
+#[diagnostic(help(
+    "The relation is interpreted as a relation of nodes, but the required key is missing"
+))]
+pub(crate) struct NodeNotFoundError {
+    pub(crate) missing: DataValue,
+    #[label]
+    pub(crate) span: SourceSpan,
+}
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("Unacceptable value {0:?} encountered")]
+#[diagnostic(code(algo::unacceptable_value))]
+pub(crate) struct BadExprValueError(
+    pub(crate) DataValue,
+    #[label] pub(crate) SourceSpan,
+    #[help] pub(crate) String,
+);
+
+#[derive(Error, Diagnostic, Debug)]
 #[error("The requested algorithm '{0}' is not found")]
 #[diagnostic(code(parser::algo_not_found))]
 pub(crate) struct AlgoNotFoundError(pub(crate) String, #[label] pub(crate) SourceSpan);

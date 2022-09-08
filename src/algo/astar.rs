@@ -1,11 +1,11 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use miette::{ensure, miette, Result};
+use miette::{ensure, Result};
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, BadExprValueError, NodeNotFoundError};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol};
 use crate::data::tuple::Tuple;
@@ -25,15 +25,11 @@ impl AlgoImpl for ShortestPathAStar {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let opts = &algo.options;
-        let edges = algo.get_relation(0)?;
-        let nodes = algo.get_relation(1)?;
-        let starting = algo.get_relation(2)?;
-        let goals = algo.get_relation(3)?;
-        let mut heuristic = opts
-            .get("heuristic")
-            .ok_or_else(|| miette!("'heuristic' option required for 'shortest_path_astar'"))?
-            .clone();
+        let edges = algo.relation_with_min_len(0, 3, tx, stores)?;
+        let nodes = algo.relation(1)?;
+        let starting = algo.relation(2)?;
+        let goals = algo.relation(3)?;
+        let mut heuristic = algo.expr_option("heuristic", None)?;
 
         let mut binding_map = nodes.get_binding_map(0);
         let goal_binding_map = goals.get_binding_map(nodes.arity(tx, stores)?);
@@ -79,24 +75,27 @@ fn astar(
     stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
     poison: Poison,
 ) -> Result<(f64, Vec<DataValue>)> {
-    let start_node = starting
-        .0
-        .get(0)
-        .ok_or_else(|| miette!("starting node too short"))?;
-    let goal_node = goal
-        .0
-        .get(0)
-        .ok_or_else(|| miette!("goal node too short"))?;
+    let start_node = &starting.0[0];
+    let goal_node = &goal.0[0];
     let eval_heuristic = |node: &Tuple| -> Result<f64> {
         let mut v = node.0.clone();
         v.extend_from_slice(&goal.0);
         let t = Tuple(v);
-        let cost = heuristic.eval(&t)?.get_float().ok_or_else(|| {
-            miette!("heuristic function of 'shortest_path_astar' must return a float")
+        let cost_val = heuristic.eval(&t)?;
+        let cost = cost_val.get_float().ok_or_else(|| {
+            BadExprValueError(
+                cost_val,
+                heuristic.span(),
+                "a number is required".to_string(),
+            )
         })?;
         ensure!(
             !cost.is_nan(),
-            "got cost NaN for heuristic function of 'shortest_path_astar'"
+            BadExprValueError(
+                DataValue::from(cost),
+                heuristic.span(),
+                "a number is required".to_string(),
+            )
         );
         Ok(cost)
     };
@@ -106,8 +105,6 @@ fn astar(
         PriorityQueue::new();
     open_set.push(start_node.clone(), (Reverse(OrderedFloat(0.)), 0));
     let mut sub_priority: usize = 0;
-    // let mut f_score: BTreeMap<DataValue, f64> =
-    //     BTreeMap::from([(start_node.clone(), eval_heuristic(starting)?)]);
     while let Some((node, (Reverse(OrderedFloat(cost)), _))) = open_set.pop() {
         if node == *goal_node {
             let mut current = node;
@@ -124,17 +121,21 @@ fn astar(
 
         for edge in edges.prefix_iter(&node, tx, stores)? {
             let edge = edge?;
-            ensure!(
-                edge.0.len() >= 3,
-                "edge relation for 'shortest_path_astar' too short"
-            );
             let edge_dst = &edge.0[1];
-            let edge_cost = edge.0[2]
-                .get_float()
-                .ok_or_else(|| miette!("cost on edge for 'astar' must be a number"))?;
+            let edge_cost = edge.0[2].get_float().ok_or_else(|| {
+                BadExprValueError(
+                    edge_dst.clone(),
+                    edges.span(),
+                    "edge cost must be a number".to_string(),
+                )
+            })?;
             ensure!(
                 !edge_cost.is_nan(),
-                "got cost NaN for edge of 'shortest_path_astar'"
+                BadExprValueError(
+                    edge_dst.clone(),
+                    edges.span(),
+                    "edge cost must be a number".to_string(),
+                )
             );
 
             let cost_to_src = g_score.get(&node).cloned().unwrap_or(f64::INFINITY);
@@ -147,11 +148,9 @@ fn astar(
                 let edge_dst_tuple = nodes
                     .prefix_iter(edge_dst, tx, stores)?
                     .next()
-                    .ok_or_else(|| {
-                        miette!(
-                            "node {:?} not found in nodes relation of 'shortest_path_astar'",
-                            edge_dst
-                        )
+                    .ok_or_else(|| NodeNotFoundError {
+                        missing: edge_dst.clone(),
+                        span: nodes.span(),
                     })??;
 
                 let heuristic_cost = eval_heuristic(&edge_dst_tuple)?;

@@ -3,8 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
 use either::{Left, Right};
-use miette::Diagnostic;
 use miette::Result;
+use miette::{ensure, Diagnostic};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -19,6 +19,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::pull::OutPullSpec;
 use crate::parse::SourceSpan;
+use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::relation::RelationMetadata;
 use crate::runtime::transact::SessionTx;
 
@@ -146,19 +147,40 @@ pub(crate) struct AlgoOptionNotFoundError {
 #[error("Wrong value for option '{name}' of '{algo_name}'")]
 #[diagnostic(code(algo::arg_wrong))]
 pub(crate) struct WrongAlgoOptionError {
-    name: String,
+    pub(crate) name: String,
     #[label]
-    span: SourceSpan,
-    algo_name: String,
+    pub(crate) span: SourceSpan,
+    pub(crate) algo_name: String,
     #[help]
-    help: String,
+    pub(crate) help: String,
 }
 
 impl MagicAlgoApply {
     pub(crate) fn arity(&self) -> Option<usize> {
         self.algo.arity(Right(&self.rule_args), &self.options)
     }
-    pub(crate) fn get_relation(&self, idx: usize) -> Result<&MagicAlgoRuleArg> {
+    pub(crate) fn relation_with_min_len(
+        &self,
+        idx: usize,
+        len: usize,
+        tx: &SessionTx,
+        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+    ) -> Result<&MagicAlgoRuleArg> {
+        #[derive(Error, Diagnostic, Debug)]
+        #[error("Input relation to algorithm has insufficient arity")]
+        #[diagnostic(help("Arity should be at least {0} but is {1}"))]
+        #[diagnostic(code(algo::input_relation_bad_arity))]
+        struct InputRelationArityError(usize, usize, #[label] SourceSpan);
+
+        let rel = self.relation(idx)?;
+        let arity = rel.arity(tx, stores)?;
+        ensure!(
+            arity >= len,
+            InputRelationArityError(len, arity, rel.span())
+        );
+        Ok(rel)
+    }
+    pub(crate) fn relation(&self, idx: usize) -> Result<&MagicAlgoRuleArg> {
         #[derive(Error, Diagnostic, Debug)]
         #[error("Cannot find a required positional argument at index {idx} for '{algo_name}'")]
         #[diagnostic(code(algo::not_enough_args))]
@@ -178,7 +200,144 @@ impl MagicAlgoApply {
                 algo_name: self.algo.name.to_string(),
             })?)
     }
-    pub(crate) fn get_bool_option(&self, name: &str, default: Option<bool>) -> Result<bool> {
+    pub(crate) fn expr_option(&self, name: &str, default: Option<Expr>) -> Result<Expr> {
+        match self.options.get(name) {
+            Some(ex) => Ok(ex.clone()),
+            None => match default {
+                Some(ex) => Ok(ex),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.span,
+                    algo_name: self.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
+    }
+    pub(crate) fn pos_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
+        match self.options.get(name) {
+            Some(v) => match v.clone().eval_to_const() {
+                Ok(DataValue::Num(n)) => match n.get_int() {
+                    Some(i) => {
+                        ensure!(
+                            i > 0,
+                            WrongAlgoOptionError {
+                                name: name.to_string(),
+                                span: v.span(),
+                                algo_name: self.algo.name.to_string(),
+                                help: "a positive integer is required".to_string(),
+                            }
+                        );
+                        Ok(i as usize)
+                    }
+                    None => Err(AlgoOptionNotFoundError {
+                        name: name.to_string(),
+                        span: self.span,
+                        algo_name: self.algo.name.to_string(),
+                    }
+                    .into()),
+                },
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: v.span(),
+                    algo_name: self.algo.name.to_string(),
+                    help: "a positive integer is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                Some(v) => Ok(v),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.span,
+                    algo_name: self.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
+    }
+    pub(crate) fn non_neg_integer_option(
+        &self,
+        name: &str,
+        default: Option<usize>,
+    ) -> Result<usize> {
+        match self.options.get(name) {
+            Some(v) => match v.clone().eval_to_const() {
+                Ok(DataValue::Num(n)) => match n.get_int() {
+                    Some(i) => {
+                        ensure!(
+                            i >= 0,
+                            WrongAlgoOptionError {
+                                name: name.to_string(),
+                                span: v.span(),
+                                algo_name: self.algo.name.to_string(),
+                                help: "a non-negative integer is required".to_string(),
+                            }
+                        );
+                        Ok(i as usize)
+                    }
+                    None => Err(AlgoOptionNotFoundError {
+                        name: name.to_string(),
+                        span: self.span,
+                        algo_name: self.algo.name.to_string(),
+                    }
+                    .into()),
+                },
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: v.span(),
+                    algo_name: self.algo.name.to_string(),
+                    help: "a non-negative integer is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                Some(v) => Ok(v),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.span,
+                    algo_name: self.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
+    }
+    pub(crate) fn unit_interval_option(&self, name: &str, default: Option<f64>) -> Result<f64> {
+        match self.options.get(name) {
+            Some(v) => match v.clone().eval_to_const() {
+                Ok(DataValue::Num(n)) => {
+                    let f = n.get_float();
+                    ensure!(
+                        f >= 0. && f <= 1.,
+                        WrongAlgoOptionError {
+                            name: name.to_string(),
+                            span: v.span(),
+                            algo_name: self.algo.name.to_string(),
+                            help: "a number between 0. and 1. is required".to_string(),
+                        }
+                    );
+                    Ok(f)
+                }
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: v.span(),
+                    algo_name: self.algo.name.to_string(),
+                    help: "a number between 0. and 1. is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                Some(v) => Ok(v),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.span,
+                    algo_name: self.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
+    }
+    pub(crate) fn bool_option(&self, name: &str, default: Option<bool>) -> Result<bool> {
         match self.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {
                 Ok(DataValue::Bool(b)) => Ok(b),

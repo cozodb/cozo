@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
-use miette::{ensure, miette, Result};
+use miette::Result;
 use rayon::prelude::*;
 
 use crate::algo::shortest_path_dijkstra::dijkstra;
@@ -24,22 +24,11 @@ impl AlgoImpl for KShortestPathYen {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let opts = &algo.options;
-        let edges = algo.get_relation(0)?;
-        let starting = algo.get_relation(1)?;
-        let termination = algo.get_relation(2)?;
-        let undirected = algo.get_bool_option("undirected", Some(false))?;
-        let k = opts
-            .get("k")
-            .ok_or_else(|| miette!("option 'k' required for 'k_shortest_path_yen'"))?
-            .get_const()
-            .ok_or_else(|| miette!("option 'k' for 'k_shortest_path_yen' must be a constant"))?
-            .get_int()
-            .ok_or_else(|| miette!("option 'k' for 'k_shortest_path_yen' must be an integer"))?;
-        ensure!(
-            k > 1,
-            "option 'k' for 'k_shortest_path_yen' must be greater than 1"
-        );
+        let edges = algo.relation(0)?;
+        let starting = algo.relation(1)?;
+        let termination = algo.relation(2)?;
+        let undirected = algo.bool_option("undirected", Some(false))?;
+        let k = algo.pos_integer_option("k", None)?;
 
         let (graph, indices, inv_indices, _) =
             edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
@@ -47,10 +36,7 @@ impl AlgoImpl for KShortestPathYen {
         let mut starting_nodes = BTreeSet::new();
         for tuple in starting.iter(tx, stores)? {
             let tuple = tuple?;
-            let node = tuple
-                .0
-                .get(0)
-                .ok_or_else(|| miette!("node relation too short"))?;
+            let node = &tuple.0[0];
             if let Some(idx) = inv_indices.get(node) {
                 starting_nodes.insert(*idx);
             }
@@ -58,10 +44,7 @@ impl AlgoImpl for KShortestPathYen {
         let mut termination_nodes = BTreeSet::new();
         for tuple in termination.iter(tx, stores)? {
             let tuple = tuple?;
-            let node = tuple
-                .0
-                .get(0)
-                .ok_or_else(|| miette!("node relation too short"))?;
+            let node = &tuple.0[0];
             if let Some(idx) = inv_indices.get(node) {
                 termination_nodes.insert(*idx);
             }

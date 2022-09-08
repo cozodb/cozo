@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use miette::{ensure, miette, Result};
+use miette::Result;
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, NodeNotFoundError};
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -21,39 +21,11 @@ impl AlgoImpl for Dfs {
         out: &DerivedRelStore,
         poison: Poison,
     ) -> Result<()> {
-        let opts = &algo.options;
-        let edges = algo.get_relation(0)?;
-        let nodes = algo.get_relation(1)?;
-        let starting_nodes = algo.get_relation(2).unwrap_or(nodes);
-        let limit = if let Some(expr) = opts.get("limit") {
-            let l = expr
-                .get_const()
-                .ok_or_else(|| {
-                    miette!(
-                        "argument 'limit' to 'dfs' must be a constant, got {:?}",
-                        expr
-                    )
-                })?
-                .get_int()
-                .ok_or_else(|| {
-                    miette!(
-                        "argument 'limit' to 'dfs' must be an integer, got {:?}",
-                        expr
-                    )
-                })?;
-            ensure!(
-                l > 0,
-                "argument 'limit' to 'dfs' must be positive, got {}",
-                l
-            );
-            l as usize
-        } else {
-            1
-        };
-        let mut condition = opts
-            .get("condition")
-            .ok_or_else(|| miette!("terminating 'condition' required for 'dfs'"))?
-            .clone();
+        let edges = algo.relation_with_min_len(0, 2, tx, stores)?;
+        let nodes = algo.relation(1)?;
+        let starting_nodes = algo.relation(2).unwrap_or(nodes);
+        let limit = algo.pos_integer_option("limit", Some(1))?;
+        let mut condition = algo.expr_option("condition", None)?;
         let binding_map = nodes.get_binding_map(0);
         condition.fill_binding_indices(&binding_map)?;
         let binding_indices = condition.binding_indices();
@@ -65,10 +37,7 @@ impl AlgoImpl for Dfs {
 
         'outer: for node_tuple in starting_nodes.iter(tx, stores)? {
             let node_tuple = node_tuple?;
-            let starting_node = node_tuple
-                .0
-                .get(0)
-                .ok_or_else(|| miette!("node tuple is empty"))?;
+            let starting_node = &node_tuple.0[0];
             if visited.contains(starting_node) {
                 continue;
             }
@@ -87,7 +56,10 @@ impl AlgoImpl for Dfs {
                     nodes
                         .prefix_iter(&candidate, tx, stores)?
                         .next()
-                        .ok_or_else(|| miette!("node with id {:?} not found", candidate))??
+                        .ok_or_else(|| NodeNotFoundError {
+                            missing: candidate.clone(),
+                            span: nodes.span(),
+                        })??
                 };
 
                 if condition.eval_pred(&cand_tuple)? {
@@ -101,10 +73,7 @@ impl AlgoImpl for Dfs {
 
                 for edge in edges.prefix_iter(&candidate, tx, stores)? {
                     let edge = edge?;
-                    let to_node = edge
-                        .0
-                        .get(1)
-                        .ok_or_else(|| miette!("'edges' relation too short"))?;
+                    let to_node = &edge.0[1];
                     if visited.contains(to_node) {
                         continue;
                     }
