@@ -6,12 +6,12 @@ use std::fmt::{Display, Formatter};
 
 use either::Left;
 use itertools::Itertools;
-use miette::{bail, Diagnostic, ensure, LabeledSpan, Report, Result};
+use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::algo::{AlgoHandle, AlgoNotFoundError};
-use crate::data::aggr::{Aggregation, parse_aggr};
+use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
 use crate::data::program::{
@@ -22,9 +22,9 @@ use crate::data::program::{
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::parse::expr::build_expr;
 use crate::parse::pull::parse_out_options;
+use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 
 #[derive(Error, Diagnostic, Debug)]
@@ -410,6 +410,22 @@ pub(crate) fn parse_query(
                 head_args.contains(key),
                 PullArgNotFound(key.to_string(), key.span)
             );
+        }
+    }
+
+    if !prog.out_opts.sorters.is_empty() {
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Sort key '{0}' not found")]
+        #[diagnostic(code(parser::sort_key_not_found))]
+        struct SortKeyNotFound(String, #[label] SourceSpan);
+
+        let head_args = prog.get_entry_head().unwrap_or(&[]);
+
+        for (sorter, _) in &prog.out_opts.sorters {
+            ensure!(
+                head_args.contains(sorter),
+                SortKeyNotFound(sorter.to_string(), sorter.span)
+            )
         }
     }
 

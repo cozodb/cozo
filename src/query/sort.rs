@@ -1,10 +1,10 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
-use miette::Result;
 use itertools::Itertools;
-use crate::data::program::SortDir;
+use miette::Result;
 
+use crate::data::program::SortDir;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
