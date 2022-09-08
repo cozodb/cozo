@@ -62,6 +62,16 @@ function App() {
             e.stopPropagation();
             handleQuery('script');
         }
+        if (e.key === 'Tab' && !e.shiftKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            typeInTextarea('    ');
+        }
+    }
+
+    function typeInTextarea(newText, el = document.activeElement) {
+        const [start, end] = [el.selectionStart, el.selectionEnd];
+        el.setRangeText(newText, start, end, 'end');
     }
 
     const renderCell = (colIdx) => (rowIdx) => <Cell>

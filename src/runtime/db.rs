@@ -465,7 +465,7 @@ impl Db {
             .iter()
             .map(|(k, v)| json!([k, format!("{:?}", v.started_at)]))
             .collect_vec();
-        Ok(json!({"rows": res, "headers": ["?id", "?started_at"]}))
+        Ok(json!({"rows": res, "headers": ["id", "started_at"]}))
     }
     pub fn put_meta_kv(&self, k: &[&str], v: &[u8]) -> Result<()> {
         let mut ks = vec![DataValue::Guard];

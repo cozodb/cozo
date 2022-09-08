@@ -83,7 +83,7 @@ impl<const N: usize> Debug for EncodedVec<N> {
             Err(_) => {
                 write!(
                     f,
-                    "?{:x?} {}",
+                    "{:x?} {}",
                     self.inner,
                     String::from_utf8_lossy(&self.inner)
                 )
