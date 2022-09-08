@@ -41,7 +41,7 @@ pub(crate) fn op_is_in(args: &[DataValue]) -> Result<DataValue> {
     let left = &args[0];
     let right = args[1]
         .get_list()
-        .ok_or_else(|| miette!("right hand side of 'is_in' is not a list"))?;
+        .ok_or_else(|| miette!("right hand side of 'is_in' must be a list"))?;
     Ok(DataValue::Bool(right.contains(left)))
 }
 
@@ -58,8 +58,7 @@ define_op!(OP_GT, 2, false);
 pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
     ensure!(
         same_value_type(&args[0], &args[1]),
-        "comparison between different datatypes: {:?}",
-        args
+        "comparison can only be done between the same datatypes"
     );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => *l as f64 > *r as f64,
@@ -72,8 +71,7 @@ define_op!(OP_GE, 2, false);
 pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
     ensure!(
         same_value_type(&args[0], &args[1]),
-        "comparison between different datatypes: {:?}",
-        args
+        "comparison can only be done between the same datatypes"
     );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => *l as f64 >= *r as f64,
@@ -86,8 +84,7 @@ define_op!(OP_LT, 2, false);
 pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
     ensure!(
         same_value_type(&args[0], &args[1]),
-        "comparison between different datatypes: {:?}",
-        args
+        "comparison can only be done between the same datatypes"
     );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => (*l as f64) < (*r as f64),
@@ -100,8 +97,7 @@ define_op!(OP_LE, 2, false);
 pub(crate) fn op_le(args: &[DataValue]) -> Result<DataValue> {
     ensure!(
         same_value_type(&args[0], &args[1]),
-        "comparison between different datatypes: {:?}",
-        args
+        "comparison can only be done between the same datatypes"
     );
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => (*l as f64) <= (*r as f64),
@@ -118,7 +114,7 @@ pub(crate) fn op_add(args: &[DataValue]) -> Result<DataValue> {
         match arg {
             DataValue::Num(Num::I(i)) => i_accum += i,
             DataValue::Num(Num::F(f)) => f_accum += f,
-            v => bail!("unexpected arg {:?} for OP_ADD", v),
+            _ => bail!("addition requires numbers"),
         }
     }
     if f_accum == 0.0f64 {
@@ -128,15 +124,14 @@ pub(crate) fn op_add(args: &[DataValue]) -> Result<DataValue> {
     }
 }
 
-define_op!(OP_MAX, 0, true);
+define_op!(OP_MAX, 1, true);
 pub(crate) fn op_max(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(!args.is_empty(), "'max' called on no arguments");
     let res = args
         .iter()
         .try_fold(None, |accum, nxt| match (accum, nxt) {
             (None, d @ DataValue::Num(_)) => Ok(Some(d.clone())),
             (Some(DataValue::Num(a)), DataValue::Num(b)) => Ok(Some(DataValue::Num(a.max(*b)))),
-            v => bail!("unexpected arg {:?} for OP_MAX", v),
+            _ => bail!("'max can only be applied to numbers'"),
         })?;
     match res {
         None => Ok(DataValue::Num(Num::F(f64::NEG_INFINITY))),
@@ -144,15 +139,14 @@ pub(crate) fn op_max(args: &[DataValue]) -> Result<DataValue> {
     }
 }
 
-define_op!(OP_MIN, 0, true);
+define_op!(OP_MIN, 1, true);
 pub(crate) fn op_min(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(!args.is_empty(), "'min' called on no arguments");
     let res = args
         .iter()
         .try_fold(None, |accum, nxt| match (accum, nxt) {
             (None, d @ DataValue::Num(_)) => Ok(Some(d.clone())),
             (Some(DataValue::Num(a)), DataValue::Num(b)) => Ok(Some(DataValue::Num(a.min(*b)))),
-            v => bail!("unexpected arg {:?} for OP_MIN", v),
+            _ => bail!("'min' can only be applied to numbers"),
         })?;
     match res {
         None => Ok(DataValue::Num(Num::F(f64::INFINITY))),
@@ -171,7 +165,7 @@ pub(crate) fn op_sub(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Num(Num::F(a)), DataValue::Num(Num::I(b))) => {
             DataValue::Num(Num::F(a - (*b as f64)))
         }
-        v => bail!("unexpected arg {:?} for OP_SUB", v),
+        _ => bail!("subtraction requires numbers"),
     })
 }
 
@@ -183,7 +177,7 @@ pub(crate) fn op_mul(args: &[DataValue]) -> Result<DataValue> {
         match arg {
             DataValue::Num(Num::I(i)) => i_accum *= i,
             DataValue::Num(Num::F(f)) => f_accum *= f,
-            v => bail!("unexpected arg {:?} for OP_MUL", v),
+            _ => bail!("multiplication requires numbers"),
         }
     }
     if f_accum == 1.0f64 {
@@ -206,7 +200,7 @@ pub(crate) fn op_div(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Num(Num::F(a)), DataValue::Num(Num::I(b))) => {
             DataValue::Num(Num::F(a / (*b as f64)))
         }
-        v => bail!("unexpected arg {:?} for OP_DIV", v),
+        _ => bail!("division requires numbers"),
     })
 }
 
@@ -215,7 +209,7 @@ pub(crate) fn op_minus(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(-(*i))),
         DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(-(*f))),
-        v => bail!("unexpected arg {:?} for OP_MINUS", v),
+        _ => bail!("minus can only be applied to numbers"),
     })
 }
 
@@ -224,7 +218,7 @@ pub(crate) fn op_abs(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(i.abs())),
         DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(f.abs())),
-        v => bail!("unexpected arg {:?} for OP_ABS", v),
+        _ => bail!("'abs' requires numbers"),
     })
 }
 
@@ -243,7 +237,7 @@ pub(crate) fn op_signum(args: &[DataValue]) -> Result<DataValue> {
                 DataValue::from(f64::NAN)
             }
         }
-        v => bail!("unexpected arg {:?} for OP_SIGNUM", v),
+        _ => bail!("'signum' requires numbers"),
     })
 }
 
@@ -252,7 +246,7 @@ pub(crate) fn op_floor(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(*i)),
         DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(f.floor())),
-        v => bail!("unexpected arg {:?} for OP_FLOOR", v),
+        _ => bail!("'floor' requires numbers"),
     })
 }
 
@@ -261,7 +255,7 @@ pub(crate) fn op_ceil(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(*i)),
         DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(f.ceil())),
-        v => bail!("unexpected arg {:?} for OP_CEIL", v),
+        _ => bail!("'ceil' requires numbers"),
     })
 }
 
@@ -270,7 +264,7 @@ pub(crate) fn op_round(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(*i)),
         DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(f.round())),
-        v => bail!("unexpected arg {:?} for OP_ROUND", v),
+        _ => bail!("'round' requires numbers"),
     })
 }
 
@@ -279,7 +273,7 @@ pub(crate) fn op_exp(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_EXP", v),
+        _ => bail!("'exp' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.exp())))
 }
@@ -289,7 +283,7 @@ pub(crate) fn op_exp2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_EXP2", v),
+        _ => bail!("'exp2' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.exp2())))
 }
@@ -299,7 +293,7 @@ pub(crate) fn op_ln(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_LN", v),
+        _ => bail!("'ln' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.ln())))
 }
@@ -309,7 +303,7 @@ pub(crate) fn op_log2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_LOG2", v),
+        _ => bail!("'log2' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.log2())))
 }
@@ -319,7 +313,7 @@ pub(crate) fn op_log10(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_LOG10", v),
+        _ => bail!("'log10' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.log10())))
 }
@@ -329,7 +323,7 @@ pub(crate) fn op_sin(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_SIN", v),
+        _ => bail!("'sin' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.sin())))
 }
@@ -339,7 +333,7 @@ pub(crate) fn op_cos(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_COS", v),
+        _ => bail!("'cos' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.cos())))
 }
@@ -349,7 +343,7 @@ pub(crate) fn op_tan(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_TAN", v),
+        _ => bail!("'tan' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.tan())))
 }
@@ -359,7 +353,7 @@ pub(crate) fn op_asin(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_ASIN", v),
+        _ => bail!("'asin' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.asin())))
 }
@@ -369,7 +363,7 @@ pub(crate) fn op_acos(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_ACOS", v),
+        _ => bail!("'acos' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.acos())))
 }
@@ -379,7 +373,7 @@ pub(crate) fn op_atan(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_ATAN", v),
+        _ => bail!("'atan' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.atan())))
 }
@@ -389,12 +383,12 @@ pub(crate) fn op_atan2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_ATAN2", v),
+        _ => bail!("'atan2' requires numbers"),
     };
     let b = match &args[1] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_ATAN2", v),
+        _ => bail!("'atan2' requires numbers"),
     };
 
     Ok(DataValue::Num(Num::F(a.atan2(b))))
@@ -405,7 +399,7 @@ pub(crate) fn op_sinh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_SINH", v),
+        _ => bail!("'sinh' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.sinh())))
 }
@@ -415,7 +409,7 @@ pub(crate) fn op_cosh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_COSH", v),
+        _ => bail!("'cosh' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.cosh())))
 }
@@ -425,7 +419,7 @@ pub(crate) fn op_tanh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_TANH", v),
+        _ => bail!("'tanh' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.tanh())))
 }
@@ -435,7 +429,7 @@ pub(crate) fn op_asinh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_ASINH", v),
+        _ => bail!("'asinh' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.asinh())))
 }
@@ -445,7 +439,7 @@ pub(crate) fn op_acosh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_ACOSH", v),
+        _ => bail!("'acosh' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.acosh())))
 }
@@ -455,7 +449,7 @@ pub(crate) fn op_atanh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_ATANH", v),
+        _ => bail!("'atanh' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.atanh())))
 }
@@ -465,12 +459,12 @@ pub(crate) fn op_pow(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_POW", v),
+        _ => bail!("'pow' requires numbers"),
     };
     let b = match &args[1] {
         DataValue::Num(Num::I(i)) => *i as f64,
         DataValue::Num(Num::F(f)) => *f,
-        v => bail!("unexpected arg {:?} for OP_POW", v),
+        _ => bail!("'pow' requires numbers"),
     };
     Ok(DataValue::Num(Num::F(a.powf(b))))
 }
@@ -486,7 +480,7 @@ pub(crate) fn op_mod(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Num(Num::F(a)), DataValue::Num(Num::I(b))) => {
             DataValue::Num(Num::F(a.rem(*b as f64)))
         }
-        v => bail!("unexpected arg {:?} for OP_MOD", v),
+        _ => bail!("'mod' requires numbers"),
     })
 }
 
@@ -498,7 +492,7 @@ pub(crate) fn op_and(args: &[DataValue]) -> Result<DataValue> {
                 return Ok(DataValue::Bool(false));
             }
         } else {
-            bail!("unexpected arg {:?} for OP_AND", arg);
+            bail!("'and' requires booleans");
         }
     }
     Ok(DataValue::Bool(true))
@@ -512,7 +506,7 @@ pub(crate) fn op_or(args: &[DataValue]) -> Result<DataValue> {
                 return Ok(DataValue::Bool(true));
             }
         } else {
-            bail!("unexpected arg {:?} for OP_OR", arg);
+            bail!("'or' requires booleans");
         }
     }
     Ok(DataValue::Bool(false))
@@ -523,7 +517,7 @@ pub(crate) fn op_negate(args: &[DataValue]) -> Result<DataValue> {
     if let DataValue::Bool(b) = &args[0] {
         Ok(DataValue::Bool(!*b))
     } else {
-        bail!("unexpected arg {:?} for OP_NEGATE", args);
+        bail!("'negate' requires booleans");
     }
 }
 
@@ -533,9 +527,7 @@ pub(crate) fn op_bit_and(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Bytes(left), DataValue::Bytes(right)) => {
             ensure!(
                 left.len() == right.len(),
-                "operands of 'bit_and' must have the same lengths, got {:x?} and {:x?}",
-                left,
-                right
+                "operands of 'bit_and' must have the same lengths"
             );
             let mut ret = left.clone();
             for (l, r) in ret.iter_mut().zip(right.iter()) {
@@ -543,7 +535,7 @@ pub(crate) fn op_bit_and(args: &[DataValue]) -> Result<DataValue> {
             }
             Ok(DataValue::Bytes(ret))
         }
-        v => bail!("cannot apply 'bit_and' to {:?}", v),
+        _ => bail!("'bit_and' requires bytes"),
     }
 }
 
@@ -553,9 +545,7 @@ pub(crate) fn op_bit_or(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Bytes(left), DataValue::Bytes(right)) => {
             ensure!(
                 left.len() == right.len(),
-                "operands of 'bit_or' must have the same lengths, got {:x?} and {:x?}",
-                left,
-                right
+                "operands of 'bit_or' must have the same lengths",
             );
             let mut ret = left.clone();
             for (l, r) in ret.iter_mut().zip(right.iter()) {
@@ -563,7 +553,7 @@ pub(crate) fn op_bit_or(args: &[DataValue]) -> Result<DataValue> {
             }
             Ok(DataValue::Bytes(ret))
         }
-        v => bail!("cannot apply 'bit_or' to {:?}", v),
+        _ => bail!("'bit_or' requires bytes"),
     }
 }
 
@@ -577,7 +567,7 @@ pub(crate) fn op_bit_not(args: &[DataValue]) -> Result<DataValue> {
             }
             Ok(DataValue::Bytes(ret))
         }
-        v => bail!("cannot apply 'bit_not' to {:?}", v),
+        _ => bail!("'bit_not' requires bytes"),
     }
 }
 
@@ -587,9 +577,7 @@ pub(crate) fn op_bit_xor(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Bytes(left), DataValue::Bytes(right)) => {
             ensure!(
                 left.len() == right.len(),
-                "operands of 'bit_xor' must have the same lengths, got {:x?} and {:x?}",
-                left,
-                right
+                "operands of 'bit_xor' must have the same lengths"
             );
             let mut ret = left.clone();
             for (l, r) in ret.iter_mut().zip(right.iter()) {
@@ -597,7 +585,7 @@ pub(crate) fn op_bit_xor(args: &[DataValue]) -> Result<DataValue> {
             }
             Ok(DataValue::Bytes(ret))
         }
-        v => bail!("cannot apply 'bit_xor' to {:?}", v),
+        _ => bail!("'bit_xor' requires bytes"),
     }
 }
 
@@ -619,7 +607,7 @@ pub(crate) fn op_unpack_bits(args: &[DataValue]) -> Result<DataValue> {
             ret.into_iter().map(DataValue::Bool).collect_vec(),
         ))
     } else {
-        bail!("cannot apply 'unpack_bits' to {:?}", args)
+        bail!("'unpack_bits' requires bytes")
     }
 }
 
@@ -648,12 +636,12 @@ pub(crate) fn op_pack_bits(args: &[DataValue]) -> Result<DataValue> {
                         }
                     }
                 }
-                v => bail!("cannot apply 'pack_bits' to {:?}", v),
+                _ => bail!("'pack_bits' requires list of booleans"),
             }
         }
         Ok(DataValue::Bytes(res.into()))
     } else {
-        bail!("cannot apply 'pack_bits' to {:?}", args)
+        bail!("'pack_bits' requires list of booleans")
     }
 }
 
@@ -666,10 +654,10 @@ pub(crate) fn op_concat(args: &[DataValue]) -> Result<DataValue> {
                 if let DataValue::Str(s) = arg {
                     ret += s;
                 } else {
-                    bail!("unexpected arg {:?} for OP_CAT", arg);
+                    bail!("'concat' requires strings, or lists");
                 }
             }
-            Ok(DataValue::Str(ret.into()))
+            Ok(DataValue::Str(SmartString::from(ret)))
         }
         DataValue::List(_) => {
             let mut ret = vec![];
@@ -677,12 +665,12 @@ pub(crate) fn op_concat(args: &[DataValue]) -> Result<DataValue> {
                 if let DataValue::List(l) = arg {
                     ret.extend_from_slice(l);
                 } else {
-                    bail!("unexpected arg {:?} for OP_CAT", arg);
+                    bail!("'concat' requires strings, or lists");
                 }
             }
             Ok(DataValue::List(ret.into()))
         }
-        arg => bail!("unexpected arg {:?} for OP_CAT", arg),
+        _ => bail!("'concat' requires strings, or lists"),
     }
 }
 
@@ -690,47 +678,47 @@ define_op!(OP_STR_INCLUDES, 2, false);
 pub(crate) fn op_str_includes(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::Str(l), DataValue::Str(r)) => Ok(DataValue::Bool(l.find(r as &str).is_some())),
-        v => bail!("cannot apply 'str_includes' to {:?}", v),
+        _ => bail!("'str_includes' requires strings"),
     }
 }
 
 define_op!(OP_LOWERCASE, 1, false);
 pub(crate) fn op_lowercase(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(s.to_lowercase().into())),
-        v => bail!("cannot apply 'lowercase' to {:?}", v),
+        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.to_lowercase()))),
+        _ => bail!("'lowercase' requires strings"),
     }
 }
 
 define_op!(OP_UPPERCASE, 1, false);
 pub(crate) fn op_uppercase(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(s.to_uppercase().into())),
-        v => bail!("cannot apply 'uppercase' to {:?}", v),
+        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.to_uppercase()))),
+        _ => bail!("'uppercase' requires strings"),
     }
 }
 
 define_op!(OP_TRIM, 1, false);
 pub(crate) fn op_trim(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(s.trim().into())),
-        v => bail!("cannot apply 'trim' to {:?}", v),
+        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.trim()))),
+        _ => bail!("'trim' requires strings"),
     }
 }
 
 define_op!(OP_TRIM_START, 1, false);
 pub(crate) fn op_trim_start(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(s.trim_start().into())),
-        v => bail!("cannot apply 'trim_start' to {:?}", v),
+        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.trim_start()))),
+        _ => bail!("'trim_start' requires strings"),
     }
 }
 
 define_op!(OP_TRIM_END, 1, false);
 pub(crate) fn op_trim_end(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(s.trim_end().into())),
-        v => bail!("cannot apply 'trim_end' to {:?}", v),
+        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.trim_end()))),
+        _ => bail!("'trim_end' requires strings"),
     }
 }
 
@@ -738,11 +726,11 @@ define_op!(OP_STARTS_WITH, 2, false);
 pub(crate) fn op_starts_with(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Str(s) => s,
-        v => bail!("unexpected arg {:?} for OP_STARTS_WITH", v),
+        _ => bail!("'starts_with' requires strings"),
     };
     let b = match &args[1] {
         DataValue::Str(s) => s,
-        v => bail!("unexpected arg {:?} for OP_STARTS_WITH", v),
+        _ => bail!("'starts_with' requires strings"),
     };
     Ok(DataValue::Bool(a.starts_with(b as &str)))
 }
@@ -751,11 +739,11 @@ define_op!(OP_ENDS_WITH, 2, false);
 pub(crate) fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
         DataValue::Str(s) => s,
-        _ => bail!("'ends_with' requires string arguments"),
+        _ => bail!("'ends_with' requires strings"),
     };
     let b = match &args[1] {
         DataValue::Str(s) => s,
-        _ => bail!("'ends_with' requires string arguments"),
+        _ => bail!("'ends_with' requires strings"),
     };
     Ok(DataValue::Bool(a.ends_with(b as &str)))
 }
@@ -767,7 +755,7 @@ pub(crate) fn op_regex(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Str(s) => {
             DataValue::Regex(RegexWrapper(regex::Regex::new(s).into_diagnostic()?))
         }
-        _ => bail!("'regex' requires string arguments"),
+        _ => bail!("'regex' requires strings"),
     })
 }
 
@@ -775,7 +763,7 @@ define_op!(OP_REGEX_MATCHES, 2, false);
 pub(crate) fn op_regex_matches(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::Str(s), DataValue::Regex(r)) => Ok(DataValue::Bool(r.0.is_match(s))),
-        _ => bail!("'regex_matches' requires string arguments"),
+        _ => bail!("'regex_matches' requires strings"),
     }
 }
 
@@ -785,7 +773,7 @@ pub(crate) fn op_regex_replace(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Str(s), DataValue::Regex(r), DataValue::Str(rp)) => {
             Ok(DataValue::Str(r.0.replace(s, rp as &str).into()))
         }
-        _ => bail!("'regex_replace' requires string arguments"),
+        _ => bail!("'regex_replace' requires strings"),
     }
 }
 
@@ -795,7 +783,7 @@ pub(crate) fn op_regex_replace_all(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Str(s), DataValue::Regex(r), DataValue::Str(rp)) => {
             Ok(DataValue::Str(r.0.replace_all(s, rp as &str).into()))
         }
-        _ => bail!("'regex_replace' requires string arguments"),
+        _ => bail!("'regex_replace' requires strings"),
     }
 }
 
@@ -809,7 +797,7 @@ pub(crate) fn op_regex_extract(args: &[DataValue]) -> Result<DataValue> {
                     .collect_vec();
             Ok(DataValue::List(found))
         }
-        _ => bail!("'regex_extract' requires string arguments"),
+        _ => bail!("'regex_extract' requires strings"),
     }
 }
 
@@ -822,7 +810,7 @@ pub(crate) fn op_regex_extract_first(args: &[DataValue]) -> Result<DataValue> {
                     .map(|v| DataValue::Str(SmartString::from(v.as_str())));
             Ok(found.unwrap_or(DataValue::Null))
         }
-        _ => bail!("'regex_extract_first' requires string arguments"),
+        _ => bail!("'regex_extract_first' requires strings"),
     }
 }
 
@@ -898,7 +886,7 @@ pub(crate) fn op_append(args: &[DataValue]) -> Result<DataValue> {
             l.push(args[1].clone());
             Ok(DataValue::List(l))
         }
-        _ => bail!("can only append to list"),
+        _ => bail!("'append' requires first argument to be a list"),
     }
 }
 
@@ -910,7 +898,7 @@ pub(crate) fn op_prepend(args: &[DataValue]) -> Result<DataValue> {
             l.extend_from_slice(pl);
             Ok(DataValue::List(l))
         }
-        _ => bail!("can only prepend to list"),
+        _ => bail!("'prepend' requires first argument to be a list"),
     }
 }
 
@@ -926,7 +914,7 @@ pub(crate) fn op_length(args: &[DataValue]) -> Result<DataValue> {
         DataValue::List(l) => l.len() as i64,
         DataValue::Str(s) => s.chars().count() as i64,
         DataValue::Bytes(b) => b.len() as i64,
-        _ => bail!("'length' requires a list"),
+        _ => bail!("'length' requires lists"),
     }))
 }
 
@@ -940,7 +928,7 @@ pub(crate) fn op_unicode_normalize(args: &[DataValue]) -> Result<DataValue> {
             "nfkd" => s.nfkd().collect(),
             u => bail!("unknown normalization {} for 'unicode_normalize'", u),
         })),
-        _ => bail!("'unicode_normalize' requires string arguments"),
+        _ => bail!("'unicode_normalize' requires strings"),
     }
 }
 
@@ -948,7 +936,7 @@ define_op!(OP_SORTED, 1, false);
 pub(crate) fn op_sorted(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
         .get_list()
-        .ok_or_else(|| miette!("'sort' requires a list"))?
+        .ok_or_else(|| miette!("'sort' requires lists"))?
         .to_vec();
     arg.sort();
     Ok(DataValue::List(arg))
@@ -958,7 +946,7 @@ define_op!(OP_REVERSE, 1, false);
 pub(crate) fn op_reverse(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
         .get_list()
-        .ok_or_else(|| miette!("'reverse' requires a list"))?
+        .ok_or_else(|| miette!("'reverse' requires lists"))?
         .to_vec();
     arg.reverse();
     Ok(DataValue::List(arg))
@@ -966,7 +954,7 @@ pub(crate) fn op_reverse(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_HAVERSINE, 4, false);
 pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
-    let gen_err = || miette!("'haversine' requires numbers as arguments");
+    let gen_err = || miette!("'haversine' requires numbers");
     let lat1 = args[0].get_float().ok_or_else(gen_err)?;
     let lon1 = args[1].get_float().ok_or_else(gen_err)?;
     let lat2 = args[2].get_float().ok_or_else(gen_err)?;
@@ -981,7 +969,7 @@ pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_HAVERSINE_DEG_INPUT, 4, false);
 pub(crate) fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
-    let gen_err = || miette!("'haversine_deg_input' requires numbers as arguments");
+    let gen_err = || miette!("'haversine_deg_input' requires numbers");
     let lat1 = args[0].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let lon1 = args[1].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
     let lat2 = args[2].get_float().ok_or_else(gen_err)? * f64::PI() / 180.;
@@ -998,7 +986,7 @@ define_op!(OP_DEG_TO_RAD, 1, false);
 pub(crate) fn op_deg_to_rad(args: &[DataValue]) -> Result<DataValue> {
     let x = args[0]
         .get_float()
-        .ok_or_else(|| miette!("'deg_to_rad' requires a number"))?;
+        .ok_or_else(|| miette!("'deg_to_rad' requires numbers"))?;
     Ok(DataValue::from(x * f64::PI() / 180.))
 }
 
@@ -1006,7 +994,7 @@ define_op!(OP_RAD_TO_DEG, 1, false);
 pub(crate) fn op_rad_to_deg(args: &[DataValue]) -> Result<DataValue> {
     let x = args[0]
         .get_float()
-        .ok_or_else(|| miette!("'rad_to_deg' requires a number"))?;
+        .ok_or_else(|| miette!("'rad_to_deg' requires numbers"))?;
     Ok(DataValue::from(x * 180. / f64::PI()))
 }
 
@@ -1014,7 +1002,7 @@ define_op!(OP_FIRST, 1, false);
 pub(crate) fn op_first(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
         .get_list()
-        .ok_or_else(|| miette!("'first' requires a list"))?
+        .ok_or_else(|| miette!("'first' requires lists"))?
         .first()
         .cloned()
         .unwrap_or(DataValue::Null))
@@ -1024,7 +1012,7 @@ define_op!(OP_LAST, 1, false);
 pub(crate) fn op_last(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
         .get_list()
-        .ok_or_else(|| miette!("'last' requires a list"))?
+        .ok_or_else(|| miette!("'last' requires lists"))?
         .last()
         .cloned()
         .unwrap_or(DataValue::Null))
@@ -1142,13 +1130,12 @@ pub(crate) fn op_chars(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(
         args[0]
             .get_string()
-            .ok_or_else(|| miette!("'chars' can only be applied to string"))?
+            .ok_or_else(|| miette!("'chars' requires strings"))?
             .chars()
             .map(|c| {
                 let mut s = SmartString::new();
                 s.push(c);
                 DataValue::Str(s)
-                // DataValue::Str(String::from(c))
             })
             .collect_vec(),
     ))
@@ -1163,7 +1150,7 @@ pub(crate) fn op_from_substrings(args: &[DataValue]) -> Result<DataValue> {
                 if let DataValue::Str(s) = arg {
                     ret.push_str(s);
                 } else {
-                    bail!("cannot add {:?} to string", arg)
+                    bail!("'from_substring' requires a list of strings")
                 }
             }
         }
@@ -1179,7 +1166,7 @@ pub(crate) fn op_encode_base64(args: &[DataValue]) -> Result<DataValue> {
             let s = base64::encode(b);
             Ok(DataValue::Str(SmartString::from(s)))
         }
-        _ => bail!("'encode_base64' can only be applied to bytes"),
+        _ => bail!("'encode_base64' requires bytes"),
     }
 }
 
@@ -1190,7 +1177,7 @@ pub(crate) fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
             let b = base64::decode(s).into_diagnostic()?;
             Ok(DataValue::Bytes(b.into()))
         }
-        _ => bail!("'decode_base64' can only be applied to string"),
+        _ => bail!("'decode_base64' requires strings"),
     }
 }
 
@@ -1235,10 +1222,10 @@ define_op!(OP_RAND_INT, 2, false);
 pub(crate) fn op_rand_int(args: &[DataValue]) -> Result<DataValue> {
     let lower = &args[0]
         .get_int()
-        .ok_or_else(|| miette!("first argument to 'rand_int' must be an integer"))?;
+        .ok_or_else(|| miette!("'rand_int' requires integers"))?;
     let upper = &args[1]
         .get_int()
-        .ok_or_else(|| miette!("second argument to 'rand_int' must be an integer"))?;
+        .ok_or_else(|| miette!("'rand_int' requires integers"))?;
     Ok(thread_rng().gen_range(*lower..=*upper).into())
 }
 
@@ -1249,7 +1236,7 @@ pub(crate) fn op_rand_choose(args: &[DataValue]) -> Result<DataValue> {
             .choose(&mut thread_rng())
             .cloned()
             .unwrap_or(DataValue::Null)),
-        _ => bail!("'rand_choice' can only be applied to list"),
+        _ => bail!("'rand_choice' requires lists"),
     }
 }
 
@@ -1257,6 +1244,6 @@ define_op!(OP_ASSERT, 1, true);
 pub(crate) fn op_assert(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Bool(true) => Ok(DataValue::Bool(true)),
-        _ => bail!("Assertion failed: {:?}", args),
+        _ => bail!("assertion failed: {:?}", args),
     }
 }
