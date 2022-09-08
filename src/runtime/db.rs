@@ -532,7 +532,7 @@ impl Db {
                         #[diagnostic(help("This is an internal error. Please file a bug."))]
                         struct CorruptKeyInMetaStoreError;
 
-                        let encoded = EncodedTuple(k_slice).decode()?;
+                        let encoded = EncodedTuple(k_slice).decode();
                         let ks: Vec<_> = encoded
                             .0
                             .into_iter()

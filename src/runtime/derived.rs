@@ -383,10 +383,7 @@ impl Iterator for SortedIter {
         match self.it.pair() {
             Err(e) => Some(Err(e.into())),
             Ok(None) => None,
-            Ok(Some((_, v_slice))) => match EncodedTuple(v_slice).decode() {
-                Ok(res) => Some(Ok(res)),
-                Err(e) => Some(Err(e)),
-            },
+            Ok(Some((_, v_slice))) => Some(Ok(EncodedTuple(v_slice).decode())),
         }
     }
 }

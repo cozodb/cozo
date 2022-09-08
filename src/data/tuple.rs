@@ -1,13 +1,10 @@
 use std::cmp::{max, min, Ordering};
 use std::fmt::{Debug, Formatter};
 
-use itertools::Itertools;
-use log::error;
 use miette::Result;
 use rmp_serde::Serializer;
 use serde::Serialize;
 
-use crate::data::encode::DataValueDeserError;
 use crate::data::json::JsonValue;
 use crate::data::value::DataValue;
 use crate::runtime::relation::RelationId;
@@ -71,19 +68,19 @@ impl<'a> From<&'a [u8]> for EncodedTuple<'a> {
 }
 
 impl<'a> EncodedTuple<'a> {
-    pub(crate) fn prefix(&self) -> Result<RelationId> {
-        // ensure!(self.0.len() >= 6, "bad data: {:x?}", self.0);
+    pub(crate) fn prefix(&self) -> RelationId {
+        debug_assert!(self.0.len() >= 6, "bad data: {:x?}", self.0);
         let id = u64::from_be_bytes([
             0, 0, self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5],
         ]);
-        Ok(RelationId(id))
+        RelationId(id)
     }
-    pub(crate) fn arity(&self) -> Result<usize> {
+    pub(crate) fn arity(&self) -> usize {
         if self.0.len() == 6 {
-            return Ok(0);
+            return 0;
         }
-        // ensure!(self.0.len() >= 8, "bad data: {:x?}", self.0);
-        Ok(u16::from_be_bytes([self.0[6], self.0[7]]) as usize)
+        debug_assert!(self.0.len() >= 8, "bad data: {:x?}", self.0);
+        u16::from_be_bytes([self.0[6], self.0[7]]) as usize
     }
     fn force_get(&self, idx: usize) -> DataValue {
         let pos = if idx == 0 {
@@ -100,12 +97,12 @@ impl<'a> EncodedTuple<'a> {
         };
         rmp_serde::from_slice(&self.0[pos..]).unwrap()
     }
-    pub(crate) fn get(&self, idx: usize) -> Result<DataValue> {
+    pub(crate) fn get(&self, idx: usize) -> DataValue {
         let pos = if idx == 0 {
-            4 * (self.arity()? + 1)
+            4 * (self.arity() + 1)
         } else {
             let len_pos = (idx + 1) * 4;
-            // ensure!(self.0.len() >= len_pos + 4, "bad data: {:x?}", self.0);
+            debug_assert!(self.0.len() >= len_pos + 4, "bad data: {:x?}", self.0);
             u32::from_be_bytes([
                 self.0[len_pos],
                 self.0[len_pos + 1],
@@ -113,19 +110,12 @@ impl<'a> EncodedTuple<'a> {
                 self.0[len_pos + 3],
             ]) as usize
         };
-        // ensure!(
-        //     pos < self.0.len(),
-        //     "bad data length for data: {:x?}",
-        //     self.0
-        // );
-        Ok(rmp_serde::from_slice(&self.0[pos..]).map_err(|err| {
-            error!(
-                "Cannot deserialize DataValue from bytes: {:x?}, {:?}",
-                &self.0[pos..],
-                err
-            );
-            DataValueDeserError
-        })?)
+        debug_assert!(
+            pos < self.0.len(),
+            "bad data length for data: {:x?}",
+            self.0
+        );
+        rmp_serde::from_slice(&self.0[pos..]).expect("data corruption when getting from tuple")
     }
 
     pub(crate) fn iter(&self) -> EncodedTupleIter<'a> {
@@ -135,9 +125,8 @@ impl<'a> EncodedTuple<'a> {
             pos: 0,
         }
     }
-    pub(crate) fn decode(&self) -> Result<Tuple> {
-        let v = self.iter().try_collect()?;
-        Ok(Tuple(v))
+    pub(crate) fn decode(&self) -> Tuple {
+        Tuple(self.iter().collect())
     }
 }
 
@@ -148,14 +137,11 @@ pub(crate) struct EncodedTupleIter<'a> {
 }
 
 impl<'a> Iterator for EncodedTupleIter<'a> {
-    type Item = Result<DataValue>;
+    type Item = DataValue;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.size == 0 {
-            let arity = match self.tuple.arity() {
-                Ok(a) => a,
-                Err(e) => return Some(Err(e)),
-            };
+            let arity = self.tuple.arity();
             self.size = arity;
         }
         if self.pos == self.size {
@@ -171,13 +157,13 @@ impl<'a> Iterator for EncodedTupleIter<'a> {
 pub(crate) fn rusty_scratch_cmp(a: &[u8], b: &[u8]) -> i8 {
     let a = EncodedTuple(a);
     let b = EncodedTuple(b);
-    match a.prefix().unwrap().cmp(&b.prefix().unwrap()) {
+    match a.prefix().cmp(&b.prefix()) {
         Ordering::Greater => return 1,
         Ordering::Equal => {}
         Ordering::Less => return -1,
     }
-    let a_len = a.arity().unwrap();
-    let b_len = b.arity().unwrap();
+    let a_len = a.arity();
+    let b_len = b.arity();
     for idx in 0..min(a_len, b_len) {
         let av = a.force_get(idx);
         let bv = b.force_get(idx);

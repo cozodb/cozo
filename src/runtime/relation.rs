@@ -140,7 +140,7 @@ impl RelationIterator {
         }
         Ok(match self.inner.key()? {
             None => None,
-            Some(k_slice) => Some(EncodedTuple(k_slice).decode()?),
+            Some(k_slice) => Some(EncodedTuple(k_slice).decode()),
         })
     }
 }
