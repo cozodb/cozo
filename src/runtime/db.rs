@@ -28,7 +28,7 @@ use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::schema::AttrTxItem;
 use crate::parse::sys::{CompactTarget, SysOp};
 use crate::parse::tx::TripleTx;
-use crate::parse::{parse_script, CozoScript};
+use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
@@ -274,7 +274,7 @@ impl Db {
                 if is_write {
                     tx.commit_tx("", false)?;
                 } else {
-                    ensure!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
+                    assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
                 }
                 for (lower, upper) in cleanups {
                     self.db.range_del(&lower, &upper, Snd)?;
@@ -335,16 +335,24 @@ impl Db {
         let mut clean_ups = vec![];
         if let Some((meta, op)) = &input_program.out_opts.store_relation {
             if *op == RelationOp::Create {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Stored relation {0} conflicts with an existing one")]
+                #[diagnostic(code(eval::stored_relation_conflict))]
+                struct StoreRelationConflict(String, #[label] SourceSpan);
+
                 ensure!(
                     !tx.relation_exists(&meta.name)?,
-                    "relation '{}' exists but is required not to be",
-                    meta.name
+                    StoreRelationConflict(meta.name.to_string(), meta.name.span)
                 )
             } else if *op != RelationOp::ReDerive {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Stored relation {0} not found")]
+                #[diagnostic(code(eval::stored_relation_not_found))]
+                struct StoreRelationNotFoundError(String, #[label] SourceSpan);
+
                 ensure!(
                     tx.relation_exists(&meta.name)?,
-                    "relation '{}' does not exist but is required to be",
-                    meta.name
+                    StoreRelationNotFoundError(meta.name.to_string(), meta.name.span)
                 )
             }
         };

@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 
-use miette::{bail, ensure, Diagnostic, Result};
+use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use cozorocks::CfHandle::Pri;
 use cozorocks::{DbIter, IterBuilder};
+use cozorocks::CfHandle::Pri;
 
 use crate::data::attr::Attribute;
 use crate::data::compare::compare_key;
@@ -45,9 +45,15 @@ impl SessionTx {
             BTreeMap::new();
         for payload in &mut payloads {
             if let EntityRep::UserTempId(symb) = &payload.entity {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Encountered temp ID {0} in non-put action")]
+                #[diagnostic(code(parser::temp_id_in_non_put_tx))]
+                #[diagnostic(help("This occurs when transacting against attribute {1}"))]
+                struct TempIdInNonPutError(String, String);
+
                 ensure!(
                     payload.action == TxAction::Put,
-                    "temp id can only be used for put actions"
+                    TempIdInNonPutError(symb.to_string(), payload.attr_name.to_string())
                 );
                 if !str_temp_to_perm_ids.contains_key(symb) {
                     let new_eid = EntityId(self.last_ent_id.fetch_add(1, Ordering::AcqRel) + 1);
@@ -207,15 +213,20 @@ impl SessionTx {
                 } else {
                     Validity::NO_HISTORY
                 };
+
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Unique constraint violated for attribute {0} and value {1:?}")]
+                #[diagnostic(code(eval::unique_constraint_violated))]
+                #[diagnostic(help("The existing one has entity ID {2:?}"))]
+                struct UniqueConstraintViolated(String, DataValue, EntityId);
+
                 if attr.with_history {
                     // back scan in time
                     for item in self.triple_av_before_scan(attr.id, v, vld_in_key) {
                         let (_, _, found_eid) = item?;
                         ensure!(
                             found_eid == eid,
-                            "unique constraint violated for attr {} with value {:?}",
-                            attr.name,
-                            v
+                            UniqueConstraintViolated(attr.name.to_string(), v.clone(), found_eid)
                         );
                     }
                     // fwd scan in time
@@ -223,9 +234,7 @@ impl SessionTx {
                         let (_, _, found_eid) = item?;
                         ensure!(
                             found_eid == eid,
-                            "unique constraint violated for attr {} with value {:?}",
-                            attr.name,
-                            v
+                            UniqueConstraintViolated(attr.name.to_string(), v.clone(), found_eid)
                         );
                     }
                 } else if let Some(v_slice) = self.tx.get(&ave_encoded, false, Pri)? {
@@ -234,9 +243,7 @@ impl SessionTx {
                         .ok_or_else(|| ExpectEntityId(attr.name.to_string(), v.clone()))?;
                     ensure!(
                         found_eid == eid,
-                        "unique constraint violated for attr {} with value {:?}",
-                        attr.name,
-                        v
+                        UniqueConstraintViolated(attr.name.to_string(), v.clone(), found_eid)
                     );
                 }
             }
@@ -280,7 +287,11 @@ impl SessionTx {
         v: &DataValue,
         vld: Validity,
     ) -> Result<EntityId> {
-        ensure!(eid.is_perm(), "temp id not allowed here: {:?}", eid);
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Attempting to amend triple {0} via reserved ID {1:?}")]
+        #[diagnostic(code(eval::amend_triple_with_reserved_id))]
+        struct AmendingTripleByTempIdError(String, EntityId);
+        ensure!(eid.is_perm(), AmendingTripleByTempIdError(attr.name.to_string(), eid));
         // checking that the eid actually exists should be done in the preprocessing step
         self.write_triple(eid, attr, v, vld, StoreOp::Retract)
     }

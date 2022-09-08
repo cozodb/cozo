@@ -31,6 +31,22 @@ pub(crate) enum RelAlgebra {
     Unification(UnificationRA),
 }
 
+impl RelAlgebra {
+    pub(crate) fn span(&self) -> SourceSpan {
+        match self {
+            RelAlgebra::Triple(i) => i.span,
+            RelAlgebra::Fixed(i) => i.span,
+            RelAlgebra::Derived(i) => i.span,
+            RelAlgebra::Relation(i) => i.span,
+            RelAlgebra::Join(i) => i.span,
+            RelAlgebra::NegJoin(i) => i.span,
+            RelAlgebra::Reorder(i) => i.relation.span(),
+            RelAlgebra::Filter(i) => i.span,
+            RelAlgebra::Unification(i) => i.span,
+        }
+    }
+}
+
 pub(crate) struct UnificationRA {
     parent: Box<RelAlgebra>,
     binding: Symbol,
@@ -146,6 +162,7 @@ pub(crate) struct FilteredRA {
     parent: Box<RelAlgebra>,
     pred: Vec<Expr>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
+    pub(crate) span: SourceSpan
 }
 
 impl FilteredRA {
@@ -354,8 +371,8 @@ impl RelAlgebra {
         }
         Ok(())
     }
-    pub(crate) fn unit() -> Self {
-        Self::Fixed(InlineFixedRA::unit())
+    pub(crate) fn unit(span: SourceSpan) -> Self {
+        Self::Fixed(InlineFixedRA::unit(span))
     }
     pub(crate) fn is_unit(&self) -> bool {
         if let RelAlgebra::Fixed(r) = self {
@@ -364,21 +381,23 @@ impl RelAlgebra {
             false
         }
     }
-    pub(crate) fn cartesian_join(self, right: RelAlgebra) -> Self {
-        self.join(right, vec![], vec![])
+    pub(crate) fn cartesian_join(self, right: RelAlgebra, span: SourceSpan) -> Self {
+        self.join(right, vec![], vec![], span)
     }
-    pub(crate) fn derived(bindings: Vec<Symbol>, storage: DerivedRelStore) -> Self {
+    pub(crate) fn derived(bindings: Vec<Symbol>, storage: DerivedRelStore, span: SourceSpan) -> Self {
         Self::Derived(DerivedRA {
             bindings,
             storage,
             filters: vec![],
+            span
         })
     }
-    pub(crate) fn relation(bindings: Vec<Symbol>, storage: RelationMetadata) -> Self {
+    pub(crate) fn relation(bindings: Vec<Symbol>, storage: RelationMetadata, span: SourceSpan) -> Self {
         Self::Relation(RelationRA {
             bindings,
             storage,
             filters: vec![],
+            span
         })
     }
     pub(crate) fn triple(
@@ -403,10 +422,12 @@ impl RelAlgebra {
         })
     }
     pub(crate) fn filter(self, filter: Expr) -> Self {
+        let span = filter.span();
         RelAlgebra::Filter(FilteredRA {
             parent: Box::new(self),
             pred: vec![filter],
             to_eliminate: Default::default(),
+            span
         })
     }
     pub(crate) fn unify(
@@ -430,6 +451,7 @@ impl RelAlgebra {
         right: RelAlgebra,
         left_keys: Vec<Symbol>,
         right_keys: Vec<Symbol>,
+        span: SourceSpan
     ) -> Self {
         RelAlgebra::Join(Box::new(InnerJoin {
             left: self,
@@ -439,6 +461,7 @@ impl RelAlgebra {
                 right_keys,
             },
             to_eliminate: Default::default(),
+            span
         }))
     }
     pub(crate) fn neg_join(
@@ -446,6 +469,7 @@ impl RelAlgebra {
         right: RelAlgebra,
         left_keys: Vec<Symbol>,
         right_keys: Vec<Symbol>,
+        span: SourceSpan
     ) -> Self {
         RelAlgebra::NegJoin(Box::new(NegJoin {
             left: self,
@@ -455,6 +479,7 @@ impl RelAlgebra {
                 right_keys,
             },
             to_eliminate: Default::default(),
+            span
         }))
     }
 }
@@ -508,14 +533,16 @@ pub(crate) struct InlineFixedRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) data: Vec<Vec<DataValue>>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
+    pub(crate) span: SourceSpan
 }
 
 impl InlineFixedRA {
-    pub(crate) fn unit() -> Self {
+    pub(crate) fn unit(span: SourceSpan) -> Self {
         Self {
             bindings: vec![],
             data: vec![vec![]],
             to_eliminate: Default::default(),
+            span
         }
     }
     pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
@@ -1342,6 +1369,7 @@ pub(crate) struct RelationRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: RelationMetadata,
     pub(crate) filters: Vec<Expr>,
+    pub(crate) span: SourceSpan
 }
 
 impl RelationRA {
@@ -1517,6 +1545,7 @@ pub(crate) struct DerivedRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: DerivedRelStore,
     pub(crate) filters: Vec<Expr>,
+    pub(crate) span: SourceSpan
 }
 
 impl DerivedRA {
@@ -1855,6 +1884,7 @@ pub(crate) struct NegJoin {
     pub(crate) right: RelAlgebra,
     pub(crate) joiner: Joiner,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
+    pub(crate) span: SourceSpan
 }
 
 impl NegJoin {
@@ -1937,6 +1967,7 @@ pub(crate) struct InnerJoin {
     pub(crate) right: RelAlgebra,
     pub(crate) joiner: Joiner,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
+    pub(crate) span: SourceSpan
 }
 
 impl InnerJoin {

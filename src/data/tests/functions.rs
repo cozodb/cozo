@@ -271,7 +271,6 @@ fn test_max_min() {
         .unwrap(),
         DataValue::from(4.0)
     );
-    assert!(op_max(&[]).is_err());
     assert!(op_max(&[DataValue::Bool(true)]).is_err());
 
     assert_eq!(op_min(&[DataValue::from(1),]).unwrap(), DataValue::from(1));
@@ -305,7 +304,6 @@ fn test_max_min() {
         .unwrap(),
         DataValue::from(1)
     );
-    assert!(op_max(&[]).is_err());
     assert!(op_max(&[DataValue::Bool(true)]).is_err());
 }
 

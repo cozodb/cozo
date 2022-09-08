@@ -25,7 +25,7 @@ struct OutPullSpecWithAttr {
     reverse: bool,
     subfields: Vec<OutPullSpecWithAttr>,
     vld: Validity,
-    span: SourceSpan
+    span: SourceSpan,
 }
 
 impl OutPullSpec {
@@ -42,7 +42,7 @@ impl OutPullSpec {
                 .map(|v| v.hydrate(tx, vld))
                 .try_collect()?,
             vld,
-            span: self.span
+            span: self.span,
         })
     }
 }
@@ -64,10 +64,15 @@ impl SessionTx {
             self.create_relation(meta.clone())?
         } else {
             let found = self.get_relation(&meta.name)?;
+
+            #[derive(Debug, Error, Diagnostic)]
+            #[error("Attempting to write into relation {0} of arity {1} with data of arity {2}")]
+            #[diagnostic(code(eval::relation_arity_mismatch))]
+            struct RelationArityMismatch(String, usize, usize);
+
             ensure!(
                 found.arity == meta.arity,
-                "arity mismatch for relation {}",
-                meta.name
+                RelationArityMismatch(found.name.to_string(), found.arity, meta.arity)
             );
             found
         };
@@ -101,11 +106,15 @@ impl SessionTx {
         spec: &OutPullSpecWithAttr,
         coll: &mut Map<String, JsonValue>,
     ) -> Result<()> {
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Cannot pull on {0}: attribute is not of type 'ref'")]
+        #[diagnostic(code(eval::reverse_pull_on_non_ref))]
+        struct PullOnNonRef(String, #[label] SourceSpan);
+
         if spec.reverse {
             ensure!(
                 spec.attr.val_type.is_ref_type(),
-                "attribute is not ref type: {}",
-                spec.attr.name
+                PullOnNonRef(spec.attr.name.to_string(), spec.span)
             );
             let back_res: Vec<_> = if spec.attr.with_history {
                 self.triple_vref_a_before_scan(id, spec.attr.id, spec.vld)
@@ -158,7 +167,7 @@ impl SessionTx {
             } else {
                 ensure!(
                     spec.attr.val_type.is_ref_type(),
-                    "sub pull only valid on ref types"
+                    PullOnNonRef(spec.attr.name.to_string(), spec.span)
                 );
                 let maps: Vec<_> = res
                     .iter()

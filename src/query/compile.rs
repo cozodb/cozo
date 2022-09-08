@@ -15,6 +15,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::query::relation::RelAlgebra;
+use crate::query::reorder::UnsafeNegation;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -77,6 +78,12 @@ pub(crate) struct CompiledRule {
 #[diagnostic(code(eval::rule_not_found))]
 struct RuleNotFound(String, #[label] SourceSpan);
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Arity mismatch for rule application {0}")]
+#[diagnostic(code(eval::rule_arity_mismatch))]
+#[diagnostic(help("Required arity: {1}, number of arguments given: {2}"))]
+struct ArityMismatch(String, usize, usize, #[label] SourceSpan);
+
 impl SessionTx {
     pub(crate) fn stratified_magic_compile(
         &mut self,
@@ -95,11 +102,6 @@ impl SessionTx {
 
         for stratum in prog.0.iter() {
             for (name, ruleset) in &stratum.prog {
-                ensure!(
-                    !const_rules.contains_key(name),
-                    "name clash between rule and const rule: {:?}",
-                    name
-                );
                 stores.insert(
                     name.clone(),
                     self.new_rule_store(
@@ -124,10 +126,10 @@ impl SessionTx {
                         match body {
                             MagicRulesOrAlgo::Rules { rules: body } => {
                                 let mut collected = Vec::with_capacity(body.len());
-                                for (rule_idx, rule) in body.iter().enumerate() {
+                                for  rule in body.iter() {
                                     let header = &rule.head;
                                     let mut relation =
-                                        self.compile_magic_rule_body(rule, k, rule_idx, &stores, header)?;
+                                        self.compile_magic_rule_body(rule, k, &stores, header)?;
                                     relation.fill_normal_binding_indices().with_context(|| {
                                         format!(
                                             "error encountered when filling binding indices for {:#?}",
@@ -137,14 +139,9 @@ impl SessionTx {
                                     collected.push(CompiledRule {
                                         aggr: rule.aggr.clone(),
                                         relation,
-                                        contained_rules: rule.contained_rules(),
+                                        contained_rules: rule.contained_rules()
                                     })
                                 }
-                                ensure!(
-                            collected.iter().map(|r| &r.aggr).all_equal(),
-                            "rule heads must contain identical aggregations: {:?}",
-                            collected
-                        );
                                 Ok((k.clone(), CompiledRuleSet::Rules(collected)))
                             }
 
@@ -162,11 +159,10 @@ impl SessionTx {
         &mut self,
         rule: &MagicRule,
         rule_name: &MagicSymbol,
-        rule_idx: usize,
         stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
         ret_vars: &[Symbol],
     ) -> Result<RelAlgebra> {
-        let mut ret = RelAlgebra::unit();
+        let mut ret = RelAlgebra::unit(rule_name.symbol().span);
         let mut seen_variables = BTreeSet::new();
         let mut serial_id = 0;
         let mut gen_symb = |span| {
@@ -202,7 +198,7 @@ impl SessionTx {
                         ret = right
                     } else {
                         debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
-                        ret = ret.join(right, join_left_keys, join_right_keys);
+                        ret = ret.join(right, join_left_keys, join_right_keys, t.span);
                     }
                 }
                 MagicAtom::Rule(rule_app) => {
@@ -215,12 +211,15 @@ impl SessionTx {
                             )
                         })?
                         .clone();
+
                     ensure!(
                         store.arity == rule_app.args.len(),
-                        "arity mismatch in rule application {:?}, expect {}, found {}",
-                        rule_app.name,
-                        store.arity,
-                        rule_app.args.len()
+                        ArityMismatch(
+                            rule_app.name.symbol().to_string(),
+                            store.arity,
+                            rule_app.args.len(),
+                            rule_app.span
+                        )
                     );
                     let mut prev_joiner_vars = vec![];
                     let mut right_joiner_vars = vec![];
@@ -238,18 +237,20 @@ impl SessionTx {
                         }
                     }
 
-                    let right = RelAlgebra::derived(right_vars, store);
+                    let right = RelAlgebra::derived(right_vars, store, rule_app.span);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
+                    ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rule_app.span);
                 }
                 MagicAtom::Relation(rel_app) => {
                     let store = self.get_relation(&rel_app.name)?;
                     ensure!(
                         store.arity == rel_app.args.len(),
-                        "arity mismatch in rule application {:?}, expect {}, found {}",
-                        rel_app.name,
-                        store.arity,
-                        rel_app.args.len()
+                        ArityMismatch(
+                            rel_app.name.to_string(),
+                            store.arity,
+                            rel_app.args.len(),
+                            rel_app.span
+                        )
                     );
                     let mut prev_joiner_vars = vec![];
                     let mut right_joiner_vars = vec![];
@@ -267,9 +268,9 @@ impl SessionTx {
                         }
                     }
 
-                    let right = RelAlgebra::relation(right_vars, store);
+                    let right = RelAlgebra::relation(right_vars, store, rel_app.span);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    ret = ret.join(right, prev_joiner_vars, right_joiner_vars);
+                    ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rel_app.span);
                 }
                 MagicAtom::NegatedAttrTriple(a_triple) => {
                     let mut join_left_keys = vec![];
@@ -294,12 +295,7 @@ impl SessionTx {
                             a_triple.value.clone()
                         }
                     };
-                    ensure!(
-                        !join_right_keys.is_empty(),
-                        "unsafe negation: {} and {} are unbound",
-                        e_kw,
-                        v_kw
-                    );
+                    ensure!(!join_right_keys.is_empty(), UnsafeNegation(a_triple.span));
                     let right = RelAlgebra::triple(
                         a_triple.attr.clone(),
                         rule.vld,
@@ -311,7 +307,7 @@ impl SessionTx {
                         ret = right;
                     } else {
                         debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
-                        ret = ret.neg_join(right, join_left_keys, join_right_keys);
+                        ret = ret.neg_join(right, join_left_keys, join_right_keys, a_triple.span);
                     }
                 }
                 MagicAtom::NegatedRule(rule_app) => {
@@ -326,10 +322,12 @@ impl SessionTx {
                         .clone();
                     ensure!(
                         store.arity == rule_app.args.len(),
-                        "arity mismatch for {:?}, expect {}, got {}",
-                        rule_app.name,
-                        store.arity,
-                        rule_app.args.len()
+                        ArityMismatch(
+                            rule_app.name.symbol().to_string(),
+                            store.arity,
+                            rule_app.args.len(),
+                            rule_app.span
+                        )
                     );
 
                     let mut prev_joiner_vars = vec![];
@@ -347,18 +345,20 @@ impl SessionTx {
                         }
                     }
 
-                    let right = RelAlgebra::derived(right_vars, store);
+                    let right = RelAlgebra::derived(right_vars, store, rule_app.span);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
+                    ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars, rule_app.span);
                 }
                 MagicAtom::NegatedRelation(relation_app) => {
                     let store = self.get_relation(&relation_app.name)?;
                     ensure!(
                         store.arity == relation_app.args.len(),
-                        "arity mismatch for {:?}, expect {}, got {}",
-                        relation_app.name,
-                        store.arity,
-                        relation_app.args.len()
+                        ArityMismatch(
+                            relation_app.name.to_string(),
+                            store.arity,
+                            relation_app.args.len(),
+                            relation_app.span
+                        )
                     );
 
                     let mut prev_joiner_vars = vec![];
@@ -376,9 +376,14 @@ impl SessionTx {
                         }
                     }
 
-                    let right = RelAlgebra::relation(right_vars, store);
+                    let right = RelAlgebra::relation(right_vars, store, relation_app.span);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars);
+                    ret = ret.neg_join(
+                        right,
+                        prev_joiner_vars,
+                        right_joiner_vars,
+                        relation_app.span,
+                    );
                 }
                 MagicAtom::Predicate(p) => {
                     if let Some(fs) = ret.get_filters() {
@@ -429,21 +434,21 @@ impl SessionTx {
         ret.eliminate_temp_vars(&ret_vars_set)?;
         let cur_ret_set: BTreeSet<_> = ret.bindings_after_eliminate().into_iter().collect();
         if cur_ret_set != ret_vars_set {
-            ret = ret.cartesian_join(RelAlgebra::unit());
+            let ret_span = ret.span();
+            ret = ret.cartesian_join(RelAlgebra::unit(ret_span), ret_span);
             ret.eliminate_temp_vars(&ret_vars_set)?;
         }
 
         let cur_ret_set: BTreeSet<_> = ret.bindings_after_eliminate().into_iter().collect();
-        ensure!(
-            cur_ret_set == ret_vars_set,
-            "unbound Symbols in rule head for {:?}.{}: Symbols required {:?}, of which only {:?} are bound.\n{:#?}\n{:#?}",
-            rule_name,
-            rule_idx,
-            ret_vars_set,
-            cur_ret_set,
-            rule,
-            ret
-        );
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Symbol {0} in rule head is unbound")]
+        #[diagnostic(code(eval::unbound_symb_in_head))]
+        struct UnboundSymbolInRuleHead(String, #[label] SourceSpan);
+
+        ensure!(cur_ret_set == ret_vars_set, {
+            let unbound = ret_vars_set.difference(&cur_ret_set).next().unwrap();
+            UnboundSymbolInRuleHead(unbound.to_string(), unbound.span)
+        });
         let cur_ret_bindings = ret.bindings_after_eliminate();
         if ret_vars != cur_ret_bindings {
             ret = ret.reorder(ret_vars.to_vec());

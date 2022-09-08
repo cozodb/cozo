@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
-use miette::{bail as bail_out, ensure as ensure_that, miette as gen_err, Result};
+use miette::{bail, ensure, miette, Result};
 
 use crate::data::value::DataValue;
 
@@ -71,7 +71,7 @@ impl NormalAggrObj for AggrAnd {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
             DataValue::Bool(v) => self.accum &= *v,
-            v => bail_out!("cannot compute 'and' for {:?}", v),
+            v => bail!("cannot compute 'and' for {:?}", v),
         }
         Ok(())
     }
@@ -91,7 +91,7 @@ impl MeetAggrObj for MeetAggrAnd {
                 *l &= *r;
                 Ok(old == *l)
             }
-            (u, v) => bail_out!("cannot compute 'and' for {:?} and {:?}", u, v),
+            (u, v) => bail!("cannot compute 'and' for {:?} and {:?}", u, v),
         }
     }
 }
@@ -107,7 +107,7 @@ impl NormalAggrObj for AggrOr {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
             DataValue::Bool(v) => self.accum |= *v,
-            v => bail_out!("cannot compute 'or' for {:?}", v),
+            v => bail!("cannot compute 'or' for {:?}", v),
         }
         Ok(())
     }
@@ -127,7 +127,7 @@ impl MeetAggrObj for MeetAggrOr {
                 *l |= *r;
                 Ok(old == *l)
             }
-            (u, v) => bail_out!("cannot compute 'or' for {:?} and {:?}", u, v),
+            (u, v) => bail!("cannot compute 'or' for {:?} and {:?}", u, v),
         }
     }
 }
@@ -207,7 +207,7 @@ impl NormalAggrObj for AggrUnion {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
             DataValue::List(v) => self.accum.extend(v.iter().cloned()),
-            v => bail_out!("cannot compute 'union' for value {:?}", v),
+            v => bail!("cannot compute 'union' for value {:?}", v),
         }
         Ok(())
     }
@@ -242,7 +242,7 @@ impl MeetAggrObj for MeetAggrUnion {
                     }
                     inserted
                 }
-                (_, v) => bail_out!("cannot compute 'union' for value {:?}", v),
+                (_, v) => bail!("cannot compute 'union' for value {:?}", v),
             });
         }
     }
@@ -263,7 +263,7 @@ impl NormalAggrObj for AggrIntersection {
                     self.accum.remove(el);
                 }
             }
-            v => bail_out!("cannot compute 'intersection' for value {:?}", v),
+            v => bail!("cannot compute 'intersection' for value {:?}", v),
         }
         Ok(())
     }
@@ -298,7 +298,7 @@ impl MeetAggrObj for MeetAggrIntersection {
                     }
                     removed
                 }
-                (_, v) => bail_out!("cannot compute 'union' for value {:?}", v),
+                (_, v) => bail!("cannot compute 'union' for value {:?}", v),
             });
         }
     }
@@ -332,7 +332,7 @@ impl NormalAggrObj for AggrStrJoin {
             self.accum.push_str(s);
             Ok(())
         } else {
-            bail_out!("cannot apply 'str_join' to {:?}", value)
+            bail!("cannot apply 'str_join' to {:?}", value)
         }
     }
 
@@ -410,7 +410,7 @@ impl NormalAggrObj for AggrVariance {
                 self.sum_sq += f * f;
                 self.count += 1;
             }
-            v => bail_out!("cannot compute 'variance': encountered value {:?}", v),
+            v => bail!("cannot compute 'variance': encountered value {:?}", v),
         }
         Ok(())
     }
@@ -441,7 +441,7 @@ impl NormalAggrObj for AggrStdDev {
                 self.sum_sq += f * f;
                 self.count += 1;
             }
-            v => bail_out!("cannot compute 'std_dev': encountered value {:?}", v),
+            v => bail!("cannot compute 'std_dev': encountered value {:?}", v),
         }
         Ok(())
     }
@@ -468,7 +468,7 @@ impl NormalAggrObj for AggrMean {
                 self.sum += n.get_float();
                 self.count += 1;
             }
-            v => bail_out!("cannot compute 'mean': encountered value {:?}", v),
+            v => bail!("cannot compute 'mean': encountered value {:?}", v),
         }
         Ok(())
     }
@@ -491,7 +491,7 @@ impl NormalAggrObj for AggrSum {
             DataValue::Num(n) => {
                 self.sum += n.get_float();
             }
-            v => bail_out!("cannot compute 'sum': encountered value {:?}", v),
+            v => bail!("cannot compute 'sum': encountered value {:?}", v),
         }
         Ok(())
     }
@@ -514,7 +514,7 @@ impl NormalAggrObj for AggrProduct {
             DataValue::Num(n) => {
                 self.product *= n.get_float();
             }
-            v => bail_out!("cannot compute 'product': encountered value {:?}", v),
+            v => bail!("cannot compute 'product': encountered value {:?}", v),
         }
         Ok(())
     }
@@ -620,7 +620,7 @@ impl NormalAggrObj for AggrChoice {
     }
 
     fn get(&self) -> Result<DataValue> {
-        self.found.clone().ok_or_else(|| gen_err!("empty choice"))
+        self.found.clone().ok_or_else(|| miette!("empty choice"))
     }
 }
 
@@ -690,7 +690,7 @@ impl NormalAggrObj for AggrMinCost {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
             DataValue::List(l) => {
-                ensure_that!(
+                ensure!(
                     l.len() == 2,
                     "'min_cost' requires a list of exactly two items as argument"
                 );
@@ -701,7 +701,7 @@ impl NormalAggrObj for AggrMinCost {
                 }
                 Ok(())
             }
-            v => bail_out!("cannot compute 'min_cost' on {:?}", v),
+            v => bail!("cannot compute 'min_cost' on {:?}", v),
         }
     }
 
@@ -716,7 +716,7 @@ impl MeetAggrObj for MeetAggrMinCost {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
         Ok(match (left, right) {
             (DataValue::List(prev), DataValue::List(l)) => {
-                ensure_that!(
+                ensure!(
                     l.len() == 2 && prev.len() == 2,
                     "'min_cost' requires a list of length 2 as argument, got {:?}, {:?}",
                     prev,
@@ -732,7 +732,7 @@ impl MeetAggrObj for MeetAggrMinCost {
                     true
                 }
             }
-            (u, v) => bail_out!("cannot compute 'min_cost' on {:?}, {:?}", u, v),
+            (u, v) => bail!("cannot compute 'min_cost' on {:?}, {:?}", u, v),
         })
     }
 }
@@ -757,7 +757,7 @@ impl NormalAggrObj for AggrMaxCost {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
             DataValue::List(l) => {
-                ensure_that!(
+                ensure!(
                     l.len() == 2,
                     "'max_cost' requires a list of exactly two items as argument"
                 );
@@ -768,7 +768,7 @@ impl NormalAggrObj for AggrMaxCost {
                 }
                 Ok(())
             }
-            v => bail_out!("cannot compute 'max_cost' on {:?}", v),
+            v => bail!("cannot compute 'max_cost' on {:?}", v),
         }
     }
 
@@ -783,7 +783,7 @@ impl MeetAggrObj for MeetAggrMaxCost {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
         Ok(match (left, right) {
             (DataValue::List(prev), DataValue::List(l)) => {
-                ensure_that!(
+                ensure!(
                     l.len() == 2 && prev.len() == 2,
                     "'max_cost' requires a list of length 2 as argument, got {:?}, {:?}",
                     prev,
@@ -799,7 +799,7 @@ impl MeetAggrObj for MeetAggrMaxCost {
                     true
                 }
             }
-            (u, v) => bail_out!("cannot compute 'max_cost' on {:?}, {:?}", u, v),
+            (u, v) => bail!("cannot compute 'max_cost' on {:?}, {:?}", u, v),
         })
     }
 }
@@ -825,7 +825,7 @@ impl NormalAggrObj for AggrShortest {
                 }
                 Ok(())
             }
-            v => bail_out!("cannot compute 'shortest' on {:?}", v),
+            v => bail!("cannot compute 'shortest' on {:?}", v),
         }
     }
 
@@ -848,7 +848,7 @@ impl MeetAggrObj for MeetAggrShortest {
             } else {
                 false
             }),
-            (l, v) => bail_out!("cannot compute 'shortest' on {:?} and {:?}", l, v),
+            (l, v) => bail!("cannot compute 'shortest' on {:?} and {:?}", l, v),
         }
     }
 }
@@ -907,7 +907,7 @@ impl NormalAggrObj for AggrBitAnd {
                 if self.res.is_empty() {
                     self.res = bs.to_vec();
                 } else {
-                    ensure_that!(
+                    ensure!(
                         self.res.len() == bs.len(),
                         "operands of 'bit_and' must have the same lengths, got {:x?} and {:x?}",
                         self.res,
@@ -919,7 +919,7 @@ impl NormalAggrObj for AggrBitAnd {
                 }
                 Ok(())
             }
-            v => bail_out!("cannot apply 'bit_and' to {:?}", v),
+            v => bail!("cannot apply 'bit_and' to {:?}", v),
         }
     }
 
@@ -937,7 +937,7 @@ impl MeetAggrObj for MeetAggrBitAnd {
                 if left == right {
                     return Ok(false);
                 }
-                ensure_that!(
+                ensure!(
                     left.len() == right.len(),
                     "operands of 'bit_and' must have the same lengths, got {:x?} and {:x?}",
                     left,
@@ -949,7 +949,7 @@ impl MeetAggrObj for MeetAggrBitAnd {
 
                 Ok(true)
             }
-            v => bail_out!("cannot apply 'bit_and' to {:?}", v),
+            v => bail!("cannot apply 'bit_and' to {:?}", v),
         }
     }
 }
@@ -968,7 +968,7 @@ impl NormalAggrObj for AggrBitOr {
                 if self.res.is_empty() {
                     self.res = bs.to_vec();
                 } else {
-                    ensure_that!(
+                    ensure!(
                         self.res.len() == bs.len(),
                         "operands of 'bit_or' must have the same lengths, got {:x?} and {:x?}",
                         self.res,
@@ -980,7 +980,7 @@ impl NormalAggrObj for AggrBitOr {
                 }
                 Ok(())
             }
-            v => bail_out!("cannot apply 'bit_or' to {:?}", v),
+            v => bail!("cannot apply 'bit_or' to {:?}", v),
         }
     }
 
@@ -998,7 +998,7 @@ impl MeetAggrObj for MeetAggrBitOr {
                 if left == right {
                     return Ok(false);
                 }
-                ensure_that!(
+                ensure!(
                     left.len() == right.len(),
                     "operands of 'bit_or' must have the same lengths, got {:x?} and {:x?}",
                     left,
@@ -1010,7 +1010,7 @@ impl MeetAggrObj for MeetAggrBitOr {
 
                 Ok(true)
             }
-            v => bail_out!("cannot apply 'bit_or' to {:?}", v),
+            v => bail!("cannot apply 'bit_or' to {:?}", v),
         }
     }
 }
@@ -1029,7 +1029,7 @@ impl NormalAggrObj for AggrBitXor {
                 if self.res.is_empty() {
                     self.res = bs.to_vec();
                 } else {
-                    ensure_that!(
+                    ensure!(
                         self.res.len() == bs.len(),
                         "operands of 'bit_xor' must have the same lengths, got {:x?} and {:x?}",
                         self.res,
@@ -1041,7 +1041,7 @@ impl NormalAggrObj for AggrBitXor {
                 }
                 Ok(())
             }
-            v => bail_out!("cannot apply 'bit_xor' to {:?}", v),
+            v => bail!("cannot apply 'bit_xor' to {:?}", v),
         }
     }
 
@@ -1124,7 +1124,7 @@ impl Aggregation {
                     AggrStrJoin::default()
                 } else {
                     let arg = args[0].get_string().ok_or_else(|| {
-                        gen_err!(
+                        miette!(
                             "the argument to 'str_join' must be a string, got {:?}",
                             args[0]
                         )
@@ -1137,12 +1137,12 @@ impl Aggregation {
                     AggrCollect::default()
                 } else {
                     let arg = args[0].get_int().ok_or_else(|| {
-                        gen_err!(
+                        miette!(
                             "the argument to 'collect' must be an integer, got {:?}",
                             args[0]
                         )
                     })?;
-                    ensure_that!(
+                    ensure!(
                         arg > 0,
                         "argument to 'collect' must be positive, got {}",
                         arg

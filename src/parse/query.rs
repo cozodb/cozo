@@ -68,6 +68,14 @@ impl Diagnostic for MultipleRuleDefinitionError {
     }
 }
 
+fn merge_spans(symbs: &[Symbol]) -> SourceSpan {
+    let mut fst = symbs.first().unwrap().span;
+    for nxt in symbs.iter().skip(1) {
+        fst = fst.merge(nxt.span);
+    }
+    fst
+}
+
 pub(crate) fn parse_query(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
@@ -94,18 +102,40 @@ pub(crate) fn parse_query(
                     Entry::Vacant(e) => {
                         e.insert(InputRulesOrAlgo::Rules { rules: vec![rule] });
                     }
-                    Entry::Occupied(mut e) => match e.get_mut() {
-                        InputRulesOrAlgo::Rules { rules: rs } => {
-                            rs.push(rule);
+                    Entry::Occupied(mut e) => {
+                        let key = e.key().to_string();
+                        match e.get_mut() {
+                            InputRulesOrAlgo::Rules { rules: rs } => {
+                                #[derive(Debug, Error, Diagnostic)]
+                                #[error("Rule {0} has multiple definitions with conflicting heads")]
+                                #[diagnostic(code(parser::head_aggr_mismatch))]
+                                #[diagnostic(help("The arity of each rule head must match. In addition, any aggregation \
+                            applied must be the same."))]
+                                struct RuleHeadMismatch(
+                                    String,
+                                    #[label] SourceSpan,
+                                    #[label] SourceSpan,
+                                );
+                                let prev = rs.first().unwrap();
+                                ensure!(prev.aggr == rule.aggr, {
+                                    RuleHeadMismatch(
+                                        key,
+                                        merge_spans(&prev.head),
+                                        merge_spans(&rule.head),
+                                    )
+                                });
+
+                                rs.push(rule);
+                            }
+                            InputRulesOrAlgo::Algo { algo } => {
+                                let algo_span = algo.span;
+                                bail!(MultipleRuleDefinitionError(
+                                    e.key().name.to_string(),
+                                    vec![rule.span, algo_span]
+                                ))
+                            }
                         }
-                        InputRulesOrAlgo::Algo { algo } => {
-                            let algo_span = algo.span;
-                            bail!(MultipleRuleDefinitionError(
-                                e.key().name.to_string(),
-                                vec![rule.span, algo_span]
-                            ))
-                        }
-                    },
+                    }
                 }
             }
             Rule::algo_rule => {
@@ -182,7 +212,15 @@ pub(crate) fn parse_query(
                     }
                 };
 
-                ensure!(!data.is_empty(), "const rules cannot be empty for {}", name);
+                #[derive(Error, Debug, Diagnostic)]
+                #[error("Constant rule {0} does not have data")]
+                #[diagnostic(code(parser::empty_const_rule))]
+                struct EmptyConstRuleError(String, #[label] SourceSpan);
+
+                ensure!(
+                    !data.is_empty(),
+                    EmptyConstRuleError(name.to_string(), span)
+                );
 
                 match const_rules.entry(MagicSymbol::Muggle { inner: name }) {
                     Entry::Vacant(e) => {
@@ -192,7 +230,22 @@ pub(crate) fn parse_query(
                             match row {
                                 DataValue::List(tuple) => {
                                     if let Some(l) = &last_len {
-                                        ensure!(*l == tuple.len(), "all rows in const rules must have the same length, got offending row {:?}", tuple);
+                                        #[derive(Error, Debug, Diagnostic)]
+                                        #[error("Constant head must have the same arity as the data given")]
+                                        #[diagnostic(code(parser::const_data_arity_mismatch))]
+                                        #[diagnostic(help(
+                                            "First row length: {0}; the mismatch: {1:?}"
+                                        ))]
+                                        struct ConstRuleRowArityMismatch(
+                                            usize,
+                                            Vec<DataValue>,
+                                            #[label] SourceSpan,
+                                        );
+
+                                        ensure!(
+                                            *l == tuple.len(),
+                                            ConstRuleRowArityMismatch(*l, tuple, span)
+                                        );
                                     };
                                     last_len = Some(tuple.len());
                                     tuples.push(Tuple(tuple));
@@ -209,9 +262,15 @@ pub(crate) fn parse_query(
                             }
                         }
                         if let Some(l) = &last_len {
+                            #[derive(Error, Debug, Diagnostic)]
+                            #[error("Constant head must have the same arity as the data given")]
+                            #[diagnostic(code(parser::const_head_data_arity_mismatch))]
+                            #[diagnostic(help("Arity by head: {0}; arity by data: {1}"))]
+                            struct ConstRuleRowHeadArityMismatch(usize, usize, #[label] SourceSpan);
+
                             ensure!(
                                 head.is_empty() || *l == head.len(),
-                                "const head must have the same length as rows, or be empty"
+                                ConstRuleRowHeadArityMismatch(head.len(), *l, merge_spans(&head),)
                             );
                         }
                         e.insert(ConstRule {
@@ -342,10 +401,14 @@ pub(crate) fn parse_query(
         let head_args = prog.get_entry_head().unwrap_or(&[]);
 
         for key in prog.out_opts.out_spec.keys() {
+            #[derive(Debug, Error, Diagnostic)]
+            #[error("The pull target {0} does not appear in the program entry head")]
+            #[diagnostic(code(parser::pull_target_not_found))]
+            struct PullArgNotFound(String, #[label] SourceSpan);
+
             ensure!(
                 head_args.contains(key),
-                "the pull target {} is not found",
-                key
+                PullArgNotFound(key.to_string(), key.span)
             );
         }
     }
@@ -592,10 +655,16 @@ fn parse_algo_rule(
 ) -> Result<(Symbol, AlgoApply)> {
     let mut src = src.into_inner();
     let (out_symbol, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
-    ensure!(
-        aggr.iter().all(|v| v.is_none()),
-        "aggregation cannot be applied to algo rule head"
-    );
+
+    #[derive(Debug, Error, Diagnostic)]
+    #[error("Algorithm rule cannot be combined with aggregation")]
+    #[diagnostic(code(parser::algo_aggr_conflict))]
+    struct AggrInAlgoError(#[label] SourceSpan);
+
+    for (a, v) in aggr.iter().zip(head.iter()) {
+        ensure!(a.is_none(), AggrInAlgoError(v.span))
+    }
+
     let mut name_pair = src.next().unwrap();
     let mut at = None;
     match name_pair.as_rule() {
@@ -689,9 +758,16 @@ fn parse_algo_rule(
     let algo_arity = algo
         .arity(Left(&rule_args), &options)
         .ok_or_else(|| AlgoNotFoundError(algo.name.to_string(), algo.name.span))?;
+
+    #[derive(Debug, Error, Diagnostic)]
+    #[error("Algorithm rule head arity mismatch")]
+    #[diagnostic(code(parser::algo_rule_head_arity_mismatch))]
+    #[diagnostic(help("Expected arity: {0}, number of arguments given: {1}"))]
+    struct AlgoRuleHeadArityMismatch(usize, usize, #[label] SourceSpan);
+
     ensure!(
         head.is_empty() || algo_arity == head.len(),
-        "algo head must have the same length as the return, or be omitted"
+        AlgoRuleHeadArityMismatch(algo_arity, head.len(), args_list_span)
     );
 
     Ok((

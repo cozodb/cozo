@@ -17,6 +17,11 @@ use crate::parse::schema::AttrTxItem;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Attribute name {0} conflicts with an existing name")]
+#[diagnostic(code(eval::attr_name_conflict))]
+struct AttrNameConflict(String);
+
 impl SessionTx {
     pub(crate) fn tx_attrs(&mut self, payloads: Vec<AttrTxItem>) -> Result<Vec<(StoreOp, AttrId)>> {
         let mut ret = Vec::with_capacity(payloads.len());
@@ -117,16 +122,18 @@ impl SessionTx {
 
     /// conflict if new attribute has same name as existing one
     pub(crate) fn new_attr(&mut self, mut attr: Attribute) -> Result<AttrId> {
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Attribute {0} cannot both be uniquely indexed and have cardinality 'many'")]
+        #[diagnostic(code(eval::card_unique_conflict))]
+        struct CardUniqueConflict(String);
         ensure!(
             !attr.cardinality.is_many() || !attr.indexing.is_unique_index(),
-            "cardinality cannot be 'many' for unique or identity attributes: {:?}",
-            attr
+            CardUniqueConflict(attr.name.to_string())
         );
 
         ensure!(
             self.attr_by_name(&attr.name)?.is_none(),
-            "new attribute conflicts with existing one for alias {}",
-            attr.name
+            AttrNameConflict(attr.name.to_string())
         );
 
         attr.id = AttrId(self.last_attr_id.fetch_add(1, Ordering::AcqRel) + 1);
@@ -144,16 +151,23 @@ impl SessionTx {
         if existing.name != attr.name {
             ensure!(
                 self.attr_by_name(&attr.name)?.is_none(),
-                "attribute alias {} conflict with existing one",
-                attr.name
+                AttrNameConflict(attr.name.to_string())
             );
+
+            #[derive(Debug, Error, Diagnostic)]
+            #[error("Attempting to change immutable properties of existing attribute {0}")]
+            #[diagnostic(code(eval::change_immutable_attr_prop))]
+            #[diagnostic(help(
+                "Currently the following are immutable: cardinality, index, history, typing"
+            ))]
+            struct ChangingImmutablePropertiesOfAttrError(String);
+
             ensure!(
                 existing.val_type == attr.val_type
                     && existing.cardinality == attr.cardinality
                     && existing.indexing == attr.indexing
                     && existing.with_history == attr.with_history,
-                "changing immutable property for {:?}",
-                attr
+                ChangingImmutablePropertiesOfAttrError(attr.name.to_string())
             );
             let kw_sentinel = encode_sentinel_attr_by_name(&existing.name);
             let attr_data = existing.encode_with_op_and_tx(StoreOp::Retract, tx_id);
