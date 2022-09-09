@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="lib/codemirror.css">
+    <script src="lib/codemirror.js"></script>
+    <script src="addon/mode/simple.js"></script>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style>
+        #cm {
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+        }
+    </style>
+</head>
+<body>
+<textarea id="cm">
+// this is a comment
+routes[a2, min_cost(cost_pair)] := [a airport.iata 'LHR'], :flies_to[a, a2, dist],
+                                   [a2 airport.iata dst],
+                                   path <- ['LHR', dst],
+                                   cost_pair <- [path, dist];
+routes[a2, min_cost(cost_pair)] := routes[a, prev], :flies_to[a, a2, dist],
+                                   [a2 airport.iata dst],
+                                   path <- append(first(prev), dst),
+                                   cost_pair <- [path, last(prev) + dist];
+?[cost, path] := routes[dst, cost_pair], cost <- last(cost_pair), path <- first(cost_pair);
+
+:order -cost;
+:limit 10;
+</textarea>
+
+<script src="main.js"></script>
+</body>
+</html>
