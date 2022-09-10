@@ -57,7 +57,7 @@ export class CozoScriptKernel extends BaseKernel {
                 this.publishExecuteResult({
                     execution_count: this.executionCount,
                     data: {
-                        'text/html': await response.text()
+                        'text/html': `<pre style="font-size: small">${await response.text()}</pre>`
                     },
                     metadata: {}
                 });
@@ -189,7 +189,7 @@ function displayValue(v: any) {
 }
 
 function displayTable(v: any) {
-    let ret = '<table>';
+    let ret = '<div style="display: flex; align-items: end; flex-direction: row;"><table>';
 
     if (v.headers) {
         ret += '<thead><tr>'
@@ -212,6 +212,10 @@ function displayTable(v: any) {
         ret += '</tr>'
     }
     ret += '</tbody></table>';
+    if (typeof v.time_taken === 'number') {
+        ret += `<span style="color: darkgrey; font-size: xx-small; margin: 13px;">Took ${v.time_taken}ms</span>`
+    }
+    ret += '</div>'
     return ret;
 }
 

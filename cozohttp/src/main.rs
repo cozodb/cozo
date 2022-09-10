@@ -51,7 +51,7 @@ impl ResponseError for RespError {
     fn error_response(&self) -> HttpResponse<BoxBody> {
         let formatted = format!("{:?}", self.err);
         let converted = convert_escaped(&formatted).unwrap();
-        HttpResponse::BadRequest().body(format!("<pre>{}</pre>", converted))
+        HttpResponse::BadRequest().body(converted)
     }
 }
 

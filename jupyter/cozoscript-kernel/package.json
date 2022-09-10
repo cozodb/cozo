@@ -6,12 +6,6 @@
     "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
     "style/**/*.{css,js,eot,gif,html,jpg,json,png,svg,woff2,ttf}"
   ],
-  "homepage": "n.a.",
-  "author": {
-    "name": "Ziyang Hu",
-    "email": "hu.ziyang@cantab.net"
-  },
-  "license": "All rights reserved",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "style": "style/index.css",
