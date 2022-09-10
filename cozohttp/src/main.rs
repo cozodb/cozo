@@ -69,18 +69,26 @@ struct Args {
     /// Port to use
     #[clap(short, long, default_value_t = 9070)]
     port: u16,
+
+    /// Open playground in browser
+    #[clap(long, action)]
+    playground: bool,
 }
 
 struct AppStateWithDb {
     db: Db,
     pass_cache: Arc<RwLock<HashMap<String, Box<[u8]>>>>,
     seed: Box<[u8]>,
+    playground: bool,
 }
 
 const PASSWORD_KEY: &str = "WEB_USER_PASSWORD";
 
 impl AppStateWithDb {
     async fn verify_password(&self, req: &HttpRequest) -> miette::Result<()> {
+        if self.playground {
+            return Ok(());
+        }
         let username = req
             .headers()
             .get(&HeaderName::from_static("x-cozo-username"))
@@ -173,9 +181,9 @@ struct QueryPayload {
 async fn query(
     body: web::Json<QueryPayload>,
     data: web::Data<AppStateWithDb>,
-    // req: HttpRequest,
+    req: HttpRequest,
 ) -> Result<impl Responder> {
-    // data.verify_password(&req).await?;
+    data.verify_password(&req).await?;
     let db = data.db.new_session()?;
     let start = Instant::now();
     let task = spawn_blocking(move || db.run_script(&body.script, &body.params));
@@ -256,55 +264,57 @@ async fn main() -> std::io::Result<()> {
         .create_if_missing(true);
     let db = Db::build(builder).unwrap();
 
-    match db.meta_range_scan(&[PASSWORD_KEY]).next() {
-        None => {
-            let (username, password) = match (
-                env::var("COZO_INITIAL_WEB_USERNAME"),
-                env::var("COZO_INITIAL_WEB_PASSWORD"),
-            ) {
-                (Ok(username), Ok(password)) => (username, password),
-                _ => {
-                    println!("Welcome to Cozo!");
-                    println!();
-                    println!(
-                        "This is the first time you are running this database at {},",
-                        args.path
-                    );
-                    println!("so let's create a username and password.");
-
-                    loop {
+    if !args.playground {
+        match db.meta_range_scan(&[PASSWORD_KEY]).next() {
+            None => {
+                let (username, password) = match (
+                    env::var("COZO_INITIAL_WEB_USERNAME"),
+                    env::var("COZO_INITIAL_WEB_PASSWORD"),
+                ) {
+                    (Ok(username), Ok(password)) => (username, password),
+                    _ => {
+                        println!("Welcome to Cozo!");
                         println!();
-                        print!("Enter a username: ");
+                        println!(
+                            "This is the first time you are running this database at {},",
+                            args.path
+                        );
+                        println!("so let's create a username and password.");
 
-                        let _ = stdout().flush();
-                        let mut username = String::new();
-                        stdin().read_line(&mut username).unwrap();
-                        let username = username.trim().to_string();
-                        if username.is_empty() {
-                            continue;
-                        }
-                        let password = rpassword::prompt_password("Enter your password: ").unwrap();
-                        let confpass = rpassword::prompt_password("Again to confirm it: ").unwrap();
+                        loop {
+                            println!();
+                            print!("Enter a username: ");
 
-                        if password.trim() != confpass.trim() {
-                            println!("Password mismatch. Try again.");
-                            continue;
+                            let _ = stdout().flush();
+                            let mut username = String::new();
+                            stdin().read_line(&mut username).unwrap();
+                            let username = username.trim().to_string();
+                            if username.is_empty() {
+                                continue;
+                            }
+                            let password = rpassword::prompt_password("Enter your password: ").unwrap();
+                            let confpass = rpassword::prompt_password("Again to confirm it: ").unwrap();
+
+                            if password.trim() != confpass.trim() {
+                                println!("Password mismatch. Try again.");
+                                continue;
+                            }
+                            println!("Done, you can now log in with your new username/password in the WebUI!");
+                            break (username, password.trim().to_string());
                         }
-                        println!("Done, you can now log in with your new username/password in the WebUI!");
-                        break (username, password.trim().to_string());
                     }
-                }
-            };
+                };
 
-            let salt = rand::thread_rng().gen::<[u8; 32]>();
-            let config = argon2config();
-            let hash = argon2::hash_encoded(password.trim().as_bytes(), &salt, &config).unwrap();
-            db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())
-                .unwrap();
-        }
-        Some(Err(err)) => panic!("{}", err),
-        Some(Ok((user, _))) => {
-            debug!("User {:?}", user[1]);
+                let salt = rand::thread_rng().gen::<[u8; 32]>();
+                let config = argon2config();
+                let hash = argon2::hash_encoded(password.trim().as_bytes(), &salt, &config).unwrap();
+                db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())
+                    .unwrap();
+            }
+            Some(Err(err)) => panic!("{}", err),
+            Some(Ok((user, _))) => {
+                debug!("User {:?}", user[1]);
+            }
         }
     }
 
@@ -312,28 +322,53 @@ async fn main() -> std::io::Result<()> {
         db,
         pass_cache: Arc::new(Default::default()),
         seed: Box::new(rand::thread_rng().gen::<[u8; 32]>()),
+        playground: args.playground,
     });
 
     let addr = (&args.bind as &str, args.port);
-    println!(
-        "Access WebUI for {} at http://{}:{}",
-        args.path, addr.0, addr.1
-    );
+    let url_to_open = if args.playground {
+        let url = format!("http://{}:{}", addr.0, addr.1);
+        println!("Access playground at {}", url);
+        println!("DO NOT run the playground in production!");
+        Some(url)
+    } else {
+        println!("Service running at http://{}:{}", addr.0, addr.1);
+        None
+    };
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         let cors = Cors::permissive();
         let generated = generate();
 
-        App::new()
+        let mut app = App::new()
             .app_data(app_state.clone())
             .wrap(cors)
             .service(query)
             .service(change_password)
             .service(assert_user)
-            .service(remove_user)
-            .service(ResourceFiles::new("/", generated))
+            .service(remove_user);
+        if args.playground {
+            app = app.service(ResourceFiles::new("/", generated));
+        }
+        app
     })
     .bind(addr)?
-    .run()
-    .await
+    .run();
+
+    if args.playground {
+        let (server_res, _) = futures::join!(server, open_url(url_to_open));
+        server_res?;
+    } else {
+        server.await?;
+    }
+    Ok(())
+}
+
+
+async fn open_url(url: Option<String>) {
+    if let Some(url) = url {
+        if webbrowser::open(&url).is_err() {
+            println!("Cannot open the browser for you. You have to do it manually.")
+        }
+    }
 }

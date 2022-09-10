@@ -22,6 +22,8 @@ rust-argon2 = "1.0.0"
 sha3 = "0.10.4"
 rand = "0.8.5"
 rpassword = "7.0.0"
+webbrowser = "0.8.0"
+futures = "0.3.24"
 cozo = { path = ".." }
 
 [build-dependencies]
