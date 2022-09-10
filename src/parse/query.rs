@@ -189,7 +189,7 @@ pub(crate) fn parse_query(
 
                 #[derive(Debug, Error, Diagnostic)]
                 #[error("Constant rules cannot have aggregation application")]
-                #[diagnostic(code(parse::aggr_in_const_rule))]
+                #[diagnostic(code(parser::aggr_in_const_rule))]
                 struct AggrInConstRuleError(#[label] SourceSpan);
 
                 for (a, v) in aggr.iter().zip(head.iter()) {

@@ -51,7 +51,7 @@ impl ResponseError for RespError {
     fn error_response(&self) -> HttpResponse<BoxBody> {
         let formatted = format!("{:?}", self.err);
         let converted = convert_escaped(&formatted).unwrap();
-        HttpResponse::BadRequest().body(converted)
+        HttpResponse::BadRequest().body(format!("<pre>{}</pre>", converted))
     }
 }
 
@@ -173,9 +173,9 @@ struct QueryPayload {
 async fn query(
     body: web::Json<QueryPayload>,
     data: web::Data<AppStateWithDb>,
-    req: HttpRequest,
+    // req: HttpRequest,
 ) -> Result<impl Responder> {
-    data.verify_password(&req).await?;
+    // data.verify_password(&req).await?;
     let db = data.db.new_session()?;
     let start = Instant::now();
     let task = spawn_blocking(move || db.run_script(&body.script, &body.params));
