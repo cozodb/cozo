@@ -604,11 +604,7 @@ fn test_unpack_bits() {
 #[test]
 fn test_concat() {
     assert_eq!(
-        op_concat(&[
-            DataValue::Str("abc".into()),
-            DataValue::Str("def".into())
-        ])
-        .unwrap(),
+        op_concat(&[DataValue::Str("abc".into()), DataValue::Str("def".into())]).unwrap(),
         DataValue::Str("abcdef".into())
     );
 
@@ -637,11 +633,7 @@ fn test_str_includes() {
         DataValue::Bool(true)
     );
     assert_eq!(
-        op_str_includes(&[
-            DataValue::Str("abcdef".into()),
-            DataValue::Str("bd".into())
-        ])
-        .unwrap(),
+        op_str_includes(&[DataValue::Str("abcdef".into()), DataValue::Str("bd".into())]).unwrap(),
         DataValue::Bool(false)
     );
 }
@@ -685,11 +677,7 @@ fn test_starts_ends_with() {
         DataValue::Bool(true)
     );
     assert_eq!(
-        op_starts_with(&[
-            DataValue::Str("abcdef".into()),
-            DataValue::Str("bc".into())
-        ])
-        .unwrap(),
+        op_starts_with(&[DataValue::Str("abcdef".into()), DataValue::Str("bc".into())]).unwrap(),
         DataValue::Bool(false)
     );
     assert_eq!(
@@ -701,11 +689,7 @@ fn test_starts_ends_with() {
         DataValue::Bool(true)
     );
     assert_eq!(
-        op_ends_with(&[
-            DataValue::Str("abcdef".into()),
-            DataValue::Str("bc".into())
-        ])
-        .unwrap(),
+        op_ends_with(&[DataValue::Str("abcdef".into()), DataValue::Str("bc".into())]).unwrap(),
         DataValue::Bool(false)
     );
 }
@@ -953,11 +937,8 @@ fn test_length() {
 #[test]
 fn test_unicode_normalize() {
     assert_eq!(
-        op_unicode_normalize(&[
-            DataValue::Str("abc".into()),
-            DataValue::Str("nfc".into())
-        ])
-        .unwrap(),
+        op_unicode_normalize(&[DataValue::Str("abc".into()), DataValue::Str("nfc".into())])
+            .unwrap(),
         DataValue::Str("abc".into())
     )
 }
@@ -1217,6 +1198,14 @@ fn test_encode_decode() {
             .unwrap(),
         DataValue::Bytes([1, 2, 3].into())
     )
+}
+
+#[test]
+fn test_to_string() {
+    assert_eq!(
+        op_to_string(&[DataValue::Bool(false)]).unwrap(),
+        DataValue::Str("false".into())
+    );
 }
 
 #[test]

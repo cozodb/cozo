@@ -152,6 +152,8 @@ The four _basic arithmetic operators_ `+`, `-`, `*`, and `/` do what you expect,
 
 ## Type checking and conversion functions
 
+`to_string(x)` will convert `x` to a string: the argument is unchanged if it is already a string, otherwise its JSON string representation will be returned.
+
 `to_float(x)` tries to convert `x` to a float. Conversion from `Number` always succeeds. Conversion from `String` has the following special cases in addition to the usual string representation:
 
 * `INF` is converted to infinity;

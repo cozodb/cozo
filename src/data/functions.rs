@@ -9,6 +9,7 @@ use smartstring::SmartString;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::data::expr::Op;
+use crate::data::json::JsonValue;
 use crate::data::value::{same_value_type, DataValue, Num, RegexWrapper};
 
 macro_rules! define_op {
@@ -1198,6 +1199,18 @@ pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
                 .into(),
         },
         v => bail!("'to_float' does not recognize {:?}", v),
+    })
+}
+
+define_op!(OP_TO_STRING, 1, false);
+pub(crate) fn op_to_string(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Str(s) => DataValue::Str(s.clone()),
+        v => {
+            let jv = JsonValue::from(v.clone());
+            let s = jv.to_string();
+            DataValue::Str(SmartString::from(s))
+        }
     })
 }
 
