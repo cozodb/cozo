@@ -4,13 +4,14 @@ schema_script = {SOI ~":schema" ~ schema_clause+ ~ EOI}
 tx_script = {SOI ~ (":tx" | "\":tx\"") ~ (tx_clause | tx_before_ensure_script | tx_after_ensure_script)* ~ EOI}
 tx_before_ensure_script = {":before" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
 tx_after_ensure_script = {":after" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
-sys_script = {SOI ~ ":db" ~ (compact_op | list_schema_op | list_relations_op | remove_relations_op | running_op | kill_op) ~ EOI}
+sys_script = {SOI ~ ":db" ~ (compact_op | list_schema_op | list_relations_op | remove_relations_op | running_op | execute_op | kill_op) ~ EOI}
 
 compact_op = {"compact" ~ (compact_opt_triples | compact_opt_relations)+}
 compact_opt_triples = {"triples"}
 compact_opt_relations = {"relations"}
 running_op = {"running"}
-kill_op = {"kill" ~  int}
+kill_op = {"kill" ~ int}
+execute_op = {"execute" ~ expr}
 list_schema_op = {"schema"}
 list_relations_op = {"relations"}
 remove_relations_op = {"remove" ~ "relation" ~ ident+ }

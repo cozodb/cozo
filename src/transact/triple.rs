@@ -218,7 +218,7 @@ impl SessionTx {
                 #[error("Unique constraint violated for attribute {0} and value {1:?}")]
                 #[diagnostic(code(eval::unique_constraint_violated))]
                 #[diagnostic(help("The existing one has entity ID {2:?}"))]
-                struct UniqueConstraintViolated(String, DataValue, EntityId);
+                struct UniqueConstraintViolated(String, DataValue, u64);
 
                 if attr.with_history {
                     // back scan in time
@@ -226,7 +226,7 @@ impl SessionTx {
                         let (_, _, found_eid) = item?;
                         ensure!(
                             found_eid == eid,
-                            UniqueConstraintViolated(attr.name.to_string(), v.clone(), found_eid)
+                            UniqueConstraintViolated(attr.name.to_string(), v.clone(), found_eid.0)
                         );
                     }
                     // fwd scan in time
@@ -234,7 +234,7 @@ impl SessionTx {
                         let (_, _, found_eid) = item?;
                         ensure!(
                             found_eid == eid,
-                            UniqueConstraintViolated(attr.name.to_string(), v.clone(), found_eid)
+                            UniqueConstraintViolated(attr.name.to_string(), v.clone(), found_eid.0)
                         );
                     }
                 } else if let Some(v_slice) = self.tx.get(&ave_encoded, false, Pri)? {
@@ -243,7 +243,7 @@ impl SessionTx {
                         .ok_or_else(|| ExpectEntityId(attr.name.to_string(), v.clone()))?;
                     ensure!(
                         found_eid == eid,
-                        UniqueConstraintViolated(attr.name.to_string(), v.clone(), found_eid)
+                        UniqueConstraintViolated(attr.name.to_string(), v.clone(), found_eid.0)
                     );
                 }
             }

@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
+use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -251,10 +252,15 @@ impl Db {
         payload: &str,
         params: &BTreeMap<String, JsonValue>,
     ) -> Result<JsonValue> {
-        self.do_run_script(payload, params)
-            .map_err(|err| err.with_source_code(payload.to_string()))
+        self.do_run_script(payload, params).map_err(|err| {
+            if err.source_code().is_some() {
+                err
+            } else {
+                err.with_source_code(payload.to_string())
+            }
+        })
     }
-    pub fn do_run_script(
+    fn do_run_script(
         &self,
         payload: &str,
         params: &BTreeMap<String, JsonValue>,
@@ -285,9 +291,6 @@ impl Db {
             CozoScript::Schema(schema) => self.transact_attributes(schema),
             CozoScript::Sys(op) => self.run_sys_op(op),
         }
-    }
-    pub fn run_json_query(&self, _payload: &JsonValue) -> Result<JsonValue> {
-        todo!()
     }
     fn run_sys_op(&self, op: SysOp) -> Result<JsonValue> {
         match op {
@@ -324,6 +327,16 @@ impl Db {
                         json!({"status": "KILLING"})
                     }
                 })
+            }
+            SysOp::ExecuteLocalScript(path) => {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Cannot execute local script")]
+                #[diagnostic(help("{0}"))]
+                #[diagnostic(code(eval::open_local_script_failed))]
+                struct LocalScriptNotFound(String);
+                let content =
+                    read_to_string(&*path).map_err(|err| LocalScriptNotFound(err.to_string()))?;
+                self.run_script(&content, &Default::default())
             }
         }
     }
