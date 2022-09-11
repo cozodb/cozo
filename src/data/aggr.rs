@@ -482,9 +482,14 @@ impl NormalAggrObj for AggrSum {
 
 define_aggr!(AGGR_PRODUCT, false);
 
-#[derive(Default)]
 pub(crate) struct AggrProduct {
     product: f64,
+}
+
+impl Default for AggrProduct {
+    fn default() -> Self {
+        Self { product: 1.0 }
+    }
 }
 
 impl NormalAggrObj for AggrProduct {
@@ -712,73 +717,6 @@ impl MeetAggrObj for MeetAggrMinCost {
                 }
             }
             (u, v) => bail!("cannot compute 'min_cost' on {:?}, {:?}", u, v),
-        })
-    }
-}
-
-define_aggr!(AGGR_MAX_COST, true);
-
-pub(crate) struct AggrMaxCost {
-    found: DataValue,
-    cost: DataValue,
-}
-
-impl Default for AggrMaxCost {
-    fn default() -> Self {
-        Self {
-            found: DataValue::Null,
-            cost: DataValue::Null,
-        }
-    }
-}
-
-impl NormalAggrObj for AggrMaxCost {
-    fn set(&mut self, value: &DataValue) -> Result<()> {
-        match value {
-            DataValue::List(l) => {
-                ensure!(
-                    l.len() == 2,
-                    "'max_cost' requires a list of exactly two items as argument"
-                );
-                let c = &l[1];
-                if *c > self.cost {
-                    self.cost = c.clone();
-                    self.found = l[0].clone();
-                }
-                Ok(())
-            }
-            v => bail!("cannot compute 'max_cost' on {:?}", v),
-        }
-    }
-
-    fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::List(vec![self.found.clone(), self.cost.clone()]))
-    }
-}
-
-pub(crate) struct MeetAggrMaxCost;
-
-impl MeetAggrObj for MeetAggrMaxCost {
-    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
-        Ok(match (left, right) {
-            (DataValue::List(prev), DataValue::List(l)) => {
-                ensure!(
-                    l.len() == 2 && prev.len() == 2,
-                    "'max_cost' requires a list of length 2 as argument, got {:?}, {:?}",
-                    prev,
-                    l
-                );
-                let cur_cost = l.get(1).unwrap();
-                let prev_cost = prev.get(1).unwrap();
-
-                if prev_cost >= cur_cost {
-                    false
-                } else {
-                    *prev = l.clone();
-                    true
-                }
-            }
-            (u, v) => bail!("cannot compute 'max_cost' on {:?}, {:?}", u, v),
         })
     }
 }
@@ -1039,7 +977,10 @@ pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
         "intersection" => &AGGR_INTERSECTION,
         "count" => &AGGR_COUNT,
         "count_unique" => &AGGR_COUNT_UNIQUE,
+        "variance" => &AGGR_VARIANCE,
+        "std_dev" => &AGGR_STD_DEV,
         "sum" => &AGGR_SUM,
+        "product" => &AGGR_PRODUCT,
         "min" => &AGGR_MIN,
         "max" => &AGGR_MAX,
         "mean" => &AGGR_MEAN,
@@ -1049,6 +990,9 @@ pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
         "shortest" => &AGGR_SHORTEST,
         "min_cost" => &AGGR_MIN_COST,
         "coalesce" => &AGGR_COALESCE,
+        "bit_and" => &AGGR_BIT_AND,
+        "bit_or" => &AGGR_BIT_OR,
+        "bit_xor" => &AGGR_BIT_XOR,
         _ => return None,
     })
 }
@@ -1068,7 +1012,6 @@ impl Aggregation {
             name if name == AGGR_INTERSECTION.name => Box::new(MeetAggrIntersection),
             name if name == AGGR_SHORTEST.name => Box::new(MeetAggrShortest),
             name if name == AGGR_MIN_COST.name => Box::new(MeetAggrMinCost),
-            name if name == AGGR_MAX_COST.name => Box::new(MeetAggrMaxCost),
             name if name == AGGR_COALESCE.name => Box::new(MeetAggrCoalesce),
             _ => unreachable!(),
         });
@@ -1098,7 +1041,6 @@ impl Aggregation {
             name if name == AGGR_INTERSECTION.name => Box::new(AggrIntersection::default()),
             name if name == AGGR_SHORTEST.name => Box::new(AggrShortest::default()),
             name if name == AGGR_MIN_COST.name => Box::new(AggrMinCost::default()),
-            name if name == AGGR_MAX_COST.name => Box::new(AggrMaxCost::default()),
             name if name == AGGR_COALESCE.name => Box::new(AggrCoalesce::default()),
             name if name == AGGR_COLLECT.name => Box::new({
                 if args.is_empty() {
