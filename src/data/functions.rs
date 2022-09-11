@@ -641,6 +641,9 @@ pub(crate) fn op_pack_bits(args: &[DataValue]) -> Result<DataValue> {
             }
         }
         Ok(DataValue::Bytes(res.into()))
+    } else if let DataValue::Set(v) = &args[0] {
+        let l = v.iter().cloned().collect_vec();
+        op_pack_bits(&[DataValue::List(l)])
     } else {
         bail!("'pack_bits' requires list of booleans")
     }
@@ -660,11 +663,13 @@ pub(crate) fn op_concat(args: &[DataValue]) -> Result<DataValue> {
             }
             Ok(DataValue::Str(SmartString::from(ret)))
         }
-        DataValue::List(_) => {
+        DataValue::List(_) | DataValue::Set(_) => {
             let mut ret = vec![];
             for arg in args {
                 if let DataValue::List(l) = arg {
                     ret.extend_from_slice(l);
+                } else if let DataValue::Set(s) = arg {
+                    ret.extend(s.iter().cloned());
                 } else {
                     bail!("'concat' requires strings, or lists");
                 }
@@ -878,7 +883,7 @@ pub(crate) fn op_is_string(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_LIST, 1, false);
 pub(crate) fn op_is_list(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(args[0], DataValue::List(_))))
+    Ok(DataValue::Bool(matches!(args[0], DataValue::List(_) | DataValue::Set(_))))
 }
 
 define_op!(OP_APPEND, 2, false);
@@ -886,6 +891,11 @@ pub(crate) fn op_append(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::List(l) => {
             let mut l = l.clone();
+            l.push(args[1].clone());
+            Ok(DataValue::List(l))
+        }
+        DataValue::Set(l) => {
+            let mut l = l.iter().cloned().collect_vec();
             l.push(args[1].clone());
             Ok(DataValue::List(l))
         }
@@ -899,6 +909,11 @@ pub(crate) fn op_prepend(args: &[DataValue]) -> Result<DataValue> {
         DataValue::List(pl) => {
             let mut l = vec![args[1].clone()];
             l.extend_from_slice(pl);
+            Ok(DataValue::List(l))
+        }
+        DataValue::Set(pl) => {
+            let mut l = vec![args[1].clone()];
+            l.extend(pl.iter().cloned());
             Ok(DataValue::List(l))
         }
         _ => bail!("'prepend' requires first argument to be a list"),
@@ -1157,6 +1172,15 @@ pub(crate) fn op_from_substrings(args: &[DataValue]) -> Result<DataValue> {
                 }
             }
         }
+        DataValue::Set(ss) => {
+            for arg in ss {
+                if let DataValue::Str(s) = arg {
+                    ret.push_str(s);
+                } else {
+                    bail!("'from_substring' requires a list of strings")
+                }
+            }
+        }
         _ => bail!("'from_substring' requires a list of strings"),
     }
     Ok(DataValue::Str(SmartString::from(ret)))
@@ -1251,6 +1275,11 @@ pub(crate) fn op_rand_choose(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::List(l) => Ok(l
             .choose(&mut thread_rng())
+            .cloned()
+            .unwrap_or(DataValue::Null)),
+        DataValue::Set(l) => Ok(l.iter().collect_vec()
+            .choose(&mut thread_rng())
+            .cloned()
             .cloned()
             .unwrap_or(DataValue::Null)),
         _ => bail!("'rand_choice' requires lists"),
