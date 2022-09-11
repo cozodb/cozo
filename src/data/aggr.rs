@@ -252,15 +252,21 @@ define_aggr!(AGGR_INTERSECTION, true);
 
 #[derive(Default)]
 pub(crate) struct AggrIntersection {
-    accum: BTreeSet<DataValue>,
+    accum: Option<BTreeSet<DataValue>>,
 }
 
 impl NormalAggrObj for AggrIntersection {
     fn set(&mut self, value: &DataValue) -> Result<()> {
         match value {
             DataValue::List(v) => {
-                for el in v.iter() {
-                    self.accum.remove(el);
+                if let Some(accum) = &mut self.accum {
+                    let new = accum
+                        .intersection(&v.iter().cloned().collect())
+                        .cloned()
+                        .collect();
+                    *accum = new;
+                } else {
+                    self.accum = Some(v.iter().cloned().collect())
                 }
             }
             v => bail!("cannot compute 'intersection' for value {:?}", v),
@@ -269,7 +275,10 @@ impl NormalAggrObj for AggrIntersection {
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::List(self.accum.iter().cloned().collect()))
+        match &self.accum {
+            None => Ok(DataValue::List(vec![])),
+            Some(l) => Ok(DataValue::List(l.iter().cloned().collect())),
+        }
     }
 }
 
@@ -285,18 +294,25 @@ impl MeetAggrObj for MeetAggrIntersection {
             }
             return Ok(match (left, right) {
                 (DataValue::Set(l), DataValue::Set(s)) => {
-                    let mut removed = false;
-                    for v in s.iter() {
-                        removed |= l.remove(v);
+                    let old_len = l.len();
+                    let new_set = l.intersection(s).cloned().collect::<BTreeSet<_>>();
+                    if old_len == new_set.len() {
+                        false
+                    } else {
+                        *l = new_set;
+                        true
                     }
-                    removed
                 }
                 (DataValue::Set(l), DataValue::List(s)) => {
-                    let mut removed = false;
-                    for v in s.iter() {
-                        removed |= l.remove(v);
+                    let old_len = l.len();
+                    let s: BTreeSet<_> = s.iter().cloned().collect();
+                    let new_set = l.intersection(&s).cloned().collect::<BTreeSet<_>>();
+                    if old_len == new_set.len() {
+                        false
+                    } else {
+                        *l = new_set;
+                        true
                     }
-                    removed
                 }
                 (_, v) => bail!("cannot compute 'union' for value {:?}", v),
             });

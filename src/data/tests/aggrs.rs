@@ -1,6 +1,8 @@
+use itertools::Itertools;
+
 use crate::data::aggr::{
-    AggrAnd, AggrGroupCount, AggrOr, AggrUnique, MeetAggrAnd, MeetAggrObj, MeetAggrOr,
-    NormalAggrObj,
+    AggrAnd, AggrGroupCount, AggrIntersection, AggrOr, AggrUnion, AggrUnique, MeetAggrAnd,
+    MeetAggrIntersection, MeetAggrObj, MeetAggrOr, MeetAggrUnion, NormalAggrObj,
 };
 use crate::data::value::DataValue;
 
@@ -90,4 +92,76 @@ fn test_group_count() {
             DataValue::List(vec![DataValue::from(3.), DataValue::from(3)])
         ])
     )
+}
+
+#[test]
+fn test_union() {
+    let mut union_aggr = AggrUnion::default();
+    union_aggr
+        .set(&DataValue::List(
+            [1, 3, 5, 2].into_iter().map(DataValue::from).collect_vec(),
+        ))
+        .unwrap();
+    union_aggr
+        .set(&DataValue::List(
+            [10, 2, 4, 6].into_iter().map(DataValue::from).collect_vec(),
+        ))
+        .unwrap();
+    assert_eq!(
+        union_aggr.get().unwrap(),
+        DataValue::List(
+            [1, 2, 3, 4, 5, 6, 10]
+                .into_iter()
+                .map(DataValue::from)
+                .collect_vec()
+        )
+    );
+    let mut v = DataValue::List([1, 3, 5, 2].into_iter().map(DataValue::from).collect_vec());
+    let m_aggr_union = MeetAggrUnion;
+    m_aggr_union
+        .update(
+            &mut v,
+            &DataValue::List([10, 2, 4, 6].into_iter().map(DataValue::from).collect_vec()),
+        )
+        .unwrap();
+    assert_eq!(
+        v,
+        DataValue::Set(
+            [1, 2, 3, 4, 5, 6, 10]
+                .into_iter()
+                .map(DataValue::from)
+                .collect()
+        )
+    );
+}
+
+#[test]
+fn test_intersection() {
+    let mut intersection_aggr = AggrIntersection::default();
+    intersection_aggr
+        .set(&DataValue::List(
+            [1, 3, 5, 2].into_iter().map(DataValue::from).collect_vec(),
+        ))
+        .unwrap();
+    intersection_aggr
+        .set(&DataValue::List(
+            [10, 2, 4, 6].into_iter().map(DataValue::from).collect_vec(),
+        ))
+        .unwrap();
+    assert_eq!(
+        intersection_aggr.get().unwrap(),
+        DataValue::List([2].into_iter().map(DataValue::from).collect_vec())
+    );
+    let mut v = DataValue::List([1, 3, 5, 2].into_iter().map(DataValue::from).collect_vec());
+    let m_aggr_intersection = MeetAggrIntersection;
+    m_aggr_intersection
+        .update(
+            &mut v,
+            &DataValue::List([10, 2, 4, 6].into_iter().map(DataValue::from).collect_vec()),
+        )
+        .unwrap();
+    assert_eq!(
+        v,
+        DataValue::Set([2].into_iter().map(DataValue::from).collect())
+    );
 }

@@ -12,6 +12,10 @@ Meet aggregations can be used as normal ones, but the reverse is impossible.
 
 `or(var)`: aggregate the logical disjunction of the variable passed in.
 
+`union(var)`: aggregate the unions of `var`, which must be a list.
+
+`intersection(var)`: aggregate the intersections of `var`, which must be a list.
+
 
 ## Normal aggregations
 
