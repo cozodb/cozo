@@ -57,7 +57,7 @@ macro_rules! define_aggr {
 
 define_aggr!(AGGR_AND, true);
 
-struct AggrAnd {
+pub(crate) struct AggrAnd {
     accum: bool,
 }
 
@@ -81,7 +81,7 @@ impl NormalAggrObj for AggrAnd {
     }
 }
 
-struct MeetAggrAnd;
+pub(crate) struct MeetAggrAnd;
 
 impl MeetAggrObj for MeetAggrAnd {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -99,7 +99,7 @@ impl MeetAggrObj for MeetAggrAnd {
 define_aggr!(AGGR_OR, true);
 
 #[derive(Default)]
-struct AggrOr {
+pub(crate) struct AggrOr {
     accum: bool,
 }
 
@@ -117,7 +117,7 @@ impl NormalAggrObj for AggrOr {
     }
 }
 
-struct MeetAggrOr;
+pub(crate) struct MeetAggrOr;
 
 impl MeetAggrObj for MeetAggrOr {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -135,7 +135,7 @@ impl MeetAggrObj for MeetAggrOr {
 define_aggr!(AGGR_UNIQUE, false);
 
 #[derive(Default)]
-struct AggrUnique {
+pub(crate) struct AggrUnique {
     accum: BTreeSet<DataValue>,
 }
 
@@ -153,7 +153,7 @@ impl NormalAggrObj for AggrUnique {
 define_aggr!(AGGR_GROUP_COUNT, false);
 
 #[derive(Default)]
-struct AggrGroupCount {
+pub(crate) struct AggrGroupCount {
     accum: BTreeMap<DataValue, i64>,
 }
 
@@ -177,7 +177,7 @@ impl NormalAggrObj for AggrGroupCount {
 define_aggr!(AGGR_COUNT_UNIQUE, false);
 
 #[derive(Default)]
-struct AggrCountUnique {
+pub(crate) struct AggrCountUnique {
     count: i64,
     accum: BTreeSet<DataValue>,
 }
@@ -199,7 +199,7 @@ impl NormalAggrObj for AggrCountUnique {
 define_aggr!(AGGR_UNION, true);
 
 #[derive(Default)]
-struct AggrUnion {
+pub(crate) struct AggrUnion {
     accum: BTreeSet<DataValue>,
 }
 
@@ -217,7 +217,7 @@ impl NormalAggrObj for AggrUnion {
     }
 }
 
-struct MeetAggrUnion;
+pub(crate) struct MeetAggrUnion;
 
 impl MeetAggrObj for MeetAggrUnion {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -251,7 +251,7 @@ impl MeetAggrObj for MeetAggrUnion {
 define_aggr!(AGGR_INTERSECTION, true);
 
 #[derive(Default)]
-struct AggrIntersection {
+pub(crate) struct AggrIntersection {
     accum: BTreeSet<DataValue>,
 }
 
@@ -273,7 +273,7 @@ impl NormalAggrObj for AggrIntersection {
     }
 }
 
-struct MeetAggrIntersection;
+pub(crate) struct MeetAggrIntersection;
 
 impl MeetAggrObj for MeetAggrIntersection {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -307,7 +307,7 @@ impl MeetAggrObj for MeetAggrIntersection {
 define_aggr!(AGGR_STR_JOIN, false);
 
 #[derive(Default)]
-struct AggrStrJoin {
+pub(crate) struct AggrStrJoin {
     separator: Option<String>,
     accum: String,
 }
@@ -344,7 +344,7 @@ impl NormalAggrObj for AggrStrJoin {
 define_aggr!(AGGR_COLLECT, false);
 
 #[derive(Default)]
-struct AggrCollect {
+pub(crate) struct AggrCollect {
     limit: Option<usize>,
     accum: Vec<DataValue>,
 }
@@ -377,7 +377,7 @@ impl NormalAggrObj for AggrCollect {
 define_aggr!(AGGR_COUNT, false);
 
 #[derive(Default)]
-struct AggrCount {
+pub(crate) struct AggrCount {
     count: i64,
 }
 
@@ -395,7 +395,7 @@ impl NormalAggrObj for AggrCount {
 define_aggr!(AGGR_VARIANCE, false);
 
 #[derive(Default)]
-struct AggrVariance {
+pub(crate) struct AggrVariance {
     count: i64,
     sum: f64,
     sum_sq: f64,
@@ -426,7 +426,7 @@ impl NormalAggrObj for AggrVariance {
 define_aggr!(AGGR_STD_DEV, false);
 
 #[derive(Default)]
-struct AggrStdDev {
+pub(crate) struct AggrStdDev {
     count: i64,
     sum: f64,
     sum_sq: f64,
@@ -456,7 +456,7 @@ impl NormalAggrObj for AggrStdDev {
 define_aggr!(AGGR_MEAN, false);
 
 #[derive(Default)]
-struct AggrMean {
+pub(crate) struct AggrMean {
     count: i64,
     sum: f64,
 }
@@ -481,7 +481,7 @@ impl NormalAggrObj for AggrMean {
 define_aggr!(AGGR_SUM, false);
 
 #[derive(Default)]
-struct AggrSum {
+pub(crate) struct AggrSum {
     sum: f64,
 }
 
@@ -504,7 +504,7 @@ impl NormalAggrObj for AggrSum {
 define_aggr!(AGGR_PRODUCT, false);
 
 #[derive(Default)]
-struct AggrProduct {
+pub(crate) struct AggrProduct {
     product: f64,
 }
 
@@ -526,7 +526,7 @@ impl NormalAggrObj for AggrProduct {
 
 define_aggr!(AGGR_MIN, true);
 
-struct AggrMin {
+pub(crate) struct AggrMin {
     found: DataValue,
 }
 
@@ -551,7 +551,7 @@ impl NormalAggrObj for AggrMin {
     }
 }
 
-struct MeetAggrMin;
+pub(crate) struct MeetAggrMin;
 
 impl MeetAggrObj for MeetAggrMin {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -566,7 +566,7 @@ impl MeetAggrObj for MeetAggrMin {
 
 define_aggr!(AGGR_MAX, true);
 
-struct AggrMax {
+pub(crate) struct AggrMax {
     found: DataValue,
 }
 
@@ -591,7 +591,7 @@ impl NormalAggrObj for AggrMax {
     }
 }
 
-struct MeetAggrMax;
+pub(crate) struct MeetAggrMax;
 
 impl MeetAggrObj for MeetAggrMax {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -607,7 +607,7 @@ impl MeetAggrObj for MeetAggrMax {
 define_aggr!(AGGR_CHOICE, true);
 
 #[derive(Default)]
-struct AggrChoice {
+pub(crate) struct AggrChoice {
     found: Option<DataValue>,
 }
 
@@ -624,7 +624,7 @@ impl NormalAggrObj for AggrChoice {
     }
 }
 
-struct MeetAggrChoice;
+pub(crate) struct MeetAggrChoice;
 
 impl MeetAggrObj for MeetAggrChoice {
     fn update(&self, _left: &mut DataValue, _right: &DataValue) -> Result<bool> {
@@ -634,7 +634,7 @@ impl MeetAggrObj for MeetAggrChoice {
 
 define_aggr!(AGGR_CHOICE_LAST, true);
 
-struct AggrChoiceLast {
+pub(crate) struct AggrChoiceLast {
     found: DataValue,
 }
 
@@ -657,7 +657,7 @@ impl NormalAggrObj for AggrChoiceLast {
     }
 }
 
-struct MeetAggrChoiceLast;
+pub(crate) struct MeetAggrChoiceLast;
 
 impl MeetAggrObj for MeetAggrChoiceLast {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -672,7 +672,7 @@ impl MeetAggrObj for MeetAggrChoiceLast {
 
 define_aggr!(AGGR_MIN_COST, true);
 
-struct AggrMinCost {
+pub(crate) struct AggrMinCost {
     found: DataValue,
     cost: DataValue,
 }
@@ -710,7 +710,7 @@ impl NormalAggrObj for AggrMinCost {
     }
 }
 
-struct MeetAggrMinCost;
+pub(crate) struct MeetAggrMinCost;
 
 impl MeetAggrObj for MeetAggrMinCost {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -739,7 +739,7 @@ impl MeetAggrObj for MeetAggrMinCost {
 
 define_aggr!(AGGR_MAX_COST, true);
 
-struct AggrMaxCost {
+pub(crate) struct AggrMaxCost {
     found: DataValue,
     cost: DataValue,
 }
@@ -777,7 +777,7 @@ impl NormalAggrObj for AggrMaxCost {
     }
 }
 
-struct MeetAggrMaxCost;
+pub(crate) struct MeetAggrMaxCost;
 
 impl MeetAggrObj for MeetAggrMaxCost {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -807,7 +807,7 @@ impl MeetAggrObj for MeetAggrMaxCost {
 define_aggr!(AGGR_SHORTEST, true);
 
 #[derive(Default)]
-struct AggrShortest {
+pub(crate) struct AggrShortest {
     found: Option<Vec<DataValue>>,
 }
 
@@ -837,7 +837,7 @@ impl NormalAggrObj for AggrShortest {
     }
 }
 
-struct MeetAggrShortest;
+pub(crate) struct MeetAggrShortest;
 
 impl MeetAggrObj for MeetAggrShortest {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -855,7 +855,7 @@ impl MeetAggrObj for MeetAggrShortest {
 
 define_aggr!(AGGR_COALESCE, true);
 
-struct AggrCoalesce {
+pub(crate) struct AggrCoalesce {
     found: DataValue,
 }
 
@@ -880,7 +880,7 @@ impl NormalAggrObj for AggrCoalesce {
     }
 }
 
-struct MeetAggrCoalesce;
+pub(crate) struct MeetAggrCoalesce;
 
 impl MeetAggrObj for MeetAggrCoalesce {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -896,7 +896,7 @@ impl MeetAggrObj for MeetAggrCoalesce {
 define_aggr!(AGGR_BIT_AND, true);
 
 #[derive(Default)]
-struct AggrBitAnd {
+pub(crate) struct AggrBitAnd {
     res: Vec<u8>,
 }
 
@@ -928,7 +928,7 @@ impl NormalAggrObj for AggrBitAnd {
     }
 }
 
-struct MeetAggrBitAnd;
+pub(crate) struct MeetAggrBitAnd;
 
 impl MeetAggrObj for MeetAggrBitAnd {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -957,7 +957,7 @@ impl MeetAggrObj for MeetAggrBitAnd {
 define_aggr!(AGGR_BIT_OR, true);
 
 #[derive(Default)]
-struct AggrBitOr {
+pub(crate) struct AggrBitOr {
     res: Vec<u8>,
 }
 
@@ -989,7 +989,7 @@ impl NormalAggrObj for AggrBitOr {
     }
 }
 
-struct MeetAggrBitOr;
+pub(crate) struct MeetAggrBitOr;
 
 impl MeetAggrObj for MeetAggrBitOr {
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -1018,7 +1018,7 @@ impl MeetAggrObj for MeetAggrBitOr {
 define_aggr!(AGGR_BIT_XOR, false);
 
 #[derive(Default)]
-struct AggrBitXor {
+pub(crate) struct AggrBitXor {
     res: Vec<u8>,
 }
 

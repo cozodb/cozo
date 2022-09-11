@@ -8,6 +8,13 @@ Meet aggregations can be used as normal ones, but the reverse is impossible.
 
 ## Meet aggregations
 
+`and(var)`: aggregate the logical conjunction of the variable passed in.
+
+`or(var)`: aggregate the logical disjunction of the variable passed in.
 
 
 ## Normal aggregations
+
+`unique(var)`: collect `var` into a list, keeping each unique value only once.
+
+`group_count(var)`: count the occurrence of unique values of `var`, putting the result into a list of lists, e.g. when applied to `'a'`, `'b'`, `'c'`, `'c'`, `'a'`, `'c'`, the results is `[['a', 2], ['b', 1], ['c', 3]]`.
