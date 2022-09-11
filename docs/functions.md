@@ -138,6 +138,14 @@ The four _basic arithmetic operators_ `+`, `-`, `*`, and `/` do what you expect,
 
 `windows(l, n)`: splits the list `l` into overlapping windows of length `n`. e.g. `windows([1, 2, 3, 4, 5], 3) == [[1, 2, 3], [2, 3, 4], [3, 4, 5]]`.
 
+## Set functions on lists
+
+`union(x, y, ...)`: computes the set-theoretic union of all the list arguments.
+
+`intersection(x, y, ...)`: computes the set-theoretic intersection of all the list arguments.
+
+`difference(x, y, ...)`: computes the set-theoretic difference of the first argument with respect to the rest.
+
 ## Functions on bytes
 
 `length(bytes)` returns the length of the byte array.

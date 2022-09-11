@@ -1271,3 +1271,44 @@ fn test_rand() {
         DataValue::from(123)
     );
 }
+
+#[test]
+fn test_set_ops() {
+    assert_eq!(
+        op_union(&[
+            DataValue::List([1, 2, 3].into_iter().map(DataValue::from).collect(),),
+            DataValue::List([2, 3, 4].into_iter().map(DataValue::from).collect(),),
+            DataValue::List([3, 4, 5].into_iter().map(DataValue::from).collect(),)
+        ])
+        .unwrap(),
+        DataValue::List([1, 2, 3, 4, 5].into_iter().map(DataValue::from).collect())
+    );
+    assert_eq!(
+        op_intersection(&[
+            DataValue::List(
+                [1, 2, 3, 4, 5, 6]
+                    .into_iter()
+                    .map(DataValue::from)
+                    .collect(),
+            ),
+            DataValue::List([2, 3, 4].into_iter().map(DataValue::from).collect(),),
+            DataValue::List([3, 4, 5].into_iter().map(DataValue::from).collect(),)
+        ])
+        .unwrap(),
+        DataValue::List([3, 4].into_iter().map(DataValue::from).collect())
+    );
+    assert_eq!(
+        op_difference(&[
+            DataValue::List(
+                [1, 2, 3, 4, 5, 6]
+                    .into_iter()
+                    .map(DataValue::from)
+                    .collect(),
+            ),
+            DataValue::List([2, 3, 4].into_iter().map(DataValue::from).collect(),),
+            DataValue::List([3, 4, 5].into_iter().map(DataValue::from).collect(),)
+        ])
+        .unwrap(),
+        DataValue::List([1, 6].into_iter().map(DataValue::from).collect())
+    );
+}

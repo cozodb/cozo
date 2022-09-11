@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::ops::{Div, Rem};
 use std::str::FromStr;
 
@@ -883,7 +884,10 @@ pub(crate) fn op_is_string(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_LIST, 1, false);
 pub(crate) fn op_is_list(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(args[0], DataValue::List(_) | DataValue::Set(_))))
+    Ok(DataValue::Bool(matches!(
+        args[0],
+        DataValue::List(_) | DataValue::Set(_)
+    )))
 }
 
 define_op!(OP_APPEND, 2, false);
@@ -1277,7 +1281,9 @@ pub(crate) fn op_rand_choose(args: &[DataValue]) -> Result<DataValue> {
             .choose(&mut thread_rng())
             .cloned()
             .unwrap_or(DataValue::Null)),
-        DataValue::Set(l) => Ok(l.iter().collect_vec()
+        DataValue::Set(l) => Ok(l
+            .iter()
+            .collect_vec()
             .choose(&mut thread_rng())
             .cloned()
             .cloned()
@@ -1292,4 +1298,70 @@ pub(crate) fn op_assert(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Bool(true) => Ok(DataValue::Bool(true)),
         _ => bail!("assertion failed: {:?}", args),
     }
+}
+
+define_op!(OP_UNION, 1, true);
+pub(crate) fn op_union(args: &[DataValue]) -> Result<DataValue> {
+    let mut ret = BTreeSet::new();
+    for arg in args {
+        match arg {
+            DataValue::List(l) => {
+                for el in l {
+                    ret.insert(el.clone());
+                }
+            }
+            DataValue::Set(s) => {
+                for el in s {
+                    ret.insert(el.clone());
+                }
+            }
+            _ => bail!("'union' requires lists"),
+        }
+    }
+    Ok(DataValue::List(ret.into_iter().collect()))
+}
+
+define_op!(OP_DIFFERENCE, 2, true);
+pub(crate) fn op_difference(args: &[DataValue]) -> Result<DataValue> {
+    let mut start: BTreeSet<_> = match &args[0] {
+        DataValue::List(l) => l.iter().cloned().collect(),
+        DataValue::Set(s) => s.iter().cloned().collect(),
+        _ => bail!("'difference' requires lists"),
+    };
+    for arg in &args[1..] {
+        match arg {
+            DataValue::List(l) => {
+                for el in l {
+                    start.remove(el);
+                }
+            }
+            DataValue::Set(s) => {
+                for el in s {
+                    start.remove(el);
+                }
+            }
+            _ => bail!("'difference' requires lists"),
+        }
+    }
+    Ok(DataValue::List(start.into_iter().collect()))
+}
+
+define_op!(OP_INTERSECTION, 1, true);
+pub(crate) fn op_intersection(args: &[DataValue]) -> Result<DataValue> {
+    let mut start: BTreeSet<_> = match &args[0] {
+        DataValue::List(l) => l.iter().cloned().collect(),
+        DataValue::Set(s) => s.iter().cloned().collect(),
+        _ => bail!("'intersection' requires lists"),
+    };
+    for arg in &args[1..] {
+        match arg {
+            DataValue::List(l) => {
+                let other: BTreeSet<_> = l.iter().cloned().collect();
+                start = start.intersection(&other).cloned().collect();
+            }
+            DataValue::Set(s) => start = start.intersection(s).cloned().collect(),
+            _ => bail!("'intersection' requires lists"),
+        }
+    }
+    Ok(DataValue::List(start.into_iter().collect()))
 }

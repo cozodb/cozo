@@ -320,43 +320,6 @@ impl MeetAggrObj for MeetAggrIntersection {
     }
 }
 
-define_aggr!(AGGR_STR_JOIN, false);
-
-#[derive(Default)]
-pub(crate) struct AggrStrJoin {
-    separator: Option<String>,
-    accum: String,
-}
-
-impl AggrStrJoin {
-    fn new(separator: String) -> Self {
-        Self {
-            separator: Some(separator),
-            accum: "".to_string(),
-        }
-    }
-}
-
-impl NormalAggrObj for AggrStrJoin {
-    fn set(&mut self, value: &DataValue) -> Result<()> {
-        if let Some(sep) = &self.separator {
-            if !self.accum.is_empty() {
-                self.accum.push_str(sep)
-            }
-        }
-        if let DataValue::Str(s) = value {
-            self.accum.push_str(s);
-            Ok(())
-        } else {
-            bail!("cannot apply 'str_join' to {:?}", value)
-        }
-    }
-
-    fn get(&self) -> Result<DataValue> {
-        todo!()
-    }
-}
-
 define_aggr!(AGGR_COLLECT, false);
 
 #[derive(Default)]
@@ -1068,8 +1031,13 @@ impl NormalAggrObj for AggrBitXor {
 
 pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
     Some(match name {
-        "count" => &AGGR_COUNT,
+        "and" => &AGGR_AND,
+        "or" => &AGGR_OR,
+        "unique" => &AGGR_UNIQUE,
         "group_count" => &AGGR_GROUP_COUNT,
+        "union" => &AGGR_UNION,
+        "intersection" => &AGGR_INTERSECTION,
+        "count" => &AGGR_COUNT,
         "count_unique" => &AGGR_COUNT_UNIQUE,
         "sum" => &AGGR_SUM,
         "min" => &AGGR_MIN,
@@ -1078,9 +1046,6 @@ pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
         "choice" => &AGGR_CHOICE,
         "choice_last" => &AGGR_CHOICE_LAST,
         "collect" => &AGGR_COLLECT,
-        "unique" => &AGGR_UNIQUE,
-        "union" => &AGGR_UNION,
-        "intersection" => &AGGR_INTERSECTION,
         "shortest" => &AGGR_SHORTEST,
         "min_cost" => &AGGR_MIN_COST,
         "coalesce" => &AGGR_COALESCE,
@@ -1135,19 +1100,6 @@ impl Aggregation {
             name if name == AGGR_MIN_COST.name => Box::new(AggrMinCost::default()),
             name if name == AGGR_MAX_COST.name => Box::new(AggrMaxCost::default()),
             name if name == AGGR_COALESCE.name => Box::new(AggrCoalesce::default()),
-            name if name == AGGR_STR_JOIN.name => Box::new({
-                if args.is_empty() {
-                    AggrStrJoin::default()
-                } else {
-                    let arg = args[0].get_string().ok_or_else(|| {
-                        miette!(
-                            "the argument to 'str_join' must be a string, got {:?}",
-                            args[0]
-                        )
-                    })?;
-                    AggrStrJoin::new(arg.to_string())
-                }
-            }),
             name if name == AGGR_COLLECT.name => Box::new({
                 if args.is_empty() {
                     AggrCollect::default()

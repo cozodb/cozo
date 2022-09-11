@@ -297,7 +297,7 @@ impl Expr {
                 #[diagnostic(code(eval::predicate_not_bool))]
                 struct PredicateTypeError(#[label] SourceSpan, DataValue);
                 bail!(PredicateTypeError(self.span(), v))
-            },
+            }
         }
     }
     pub(crate) fn extract_bound(&self, target: &Symbol) -> Result<ValueRange> {
@@ -578,6 +578,9 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "rand_int" => &OP_RAND_INT,
         "rand_choose" => &OP_RAND_CHOOSE,
         "assert" => &OP_ASSERT,
+        "union" => &OP_UNION,
+        "intersection" => &OP_INTERSECTION,
+        "difference" => &OP_DIFFERENCE,
         _ => return None,
     })
 }
