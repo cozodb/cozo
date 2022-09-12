@@ -15,6 +15,7 @@ Welcome to Cozo's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   functions
 
 
 Indices and tables
