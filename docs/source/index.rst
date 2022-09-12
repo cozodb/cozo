@@ -13,6 +13,7 @@ Welcome to Cozo's documentation!
    datatypes
    functions
    aggregations
+   algorithms
 
 
 Indices and tables

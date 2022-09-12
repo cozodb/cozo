@@ -81,25 +81,25 @@ impl AlgoHandle {
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
     ) -> Option<usize> {
         Some(match &self.name.name as &str {
-            "clustering_coefficients" => 4,
-            "degree_centrality" => 4,
-            "closeness_centrality" => 2,
-            "betweenness_centrality" => 2,
-            "depth_first_search" | "dfs" => 1,
-            "breadth_first_search" | "bfs" => 1,
-            "shortest_path_dijkstra" => 4,
-            "shortest_path_astar" => 4,
-            "k_shortest_path_yen" => 4,
-            "minimum_spanning_tree_prim" => 3,
-            "minimum_spanning_tree_kruskal" => 3,
-            "top_sort" => 2,
-            "connected_components" => 2,
-            "strongly_connected_components" | "scc" => 2,
-            "pagerank" => 2,
-            "community_detection_louvain" => 2,
-            "label_propagation" => 2,
-            "random_walk" => 3,
-            "reorder_sort" => {
+            "ClusteringCoefficients" => 4,
+            "DegreeCentrality" => 4,
+            "ClosenessCentrality" => 2,
+            "BetweennessCentrality" => 2,
+            "DepthFirstSearch" | "DFS" => 1,
+            "BreadthFirstSearch" | "BFS" => 1,
+            "ShortestPathDijkstra" => 4,
+            "ShortestPathAStar" => 4,
+            "KShortestPathYen" => 4,
+            "MinimumSpanningTreePrim" => 3,
+            "MinimumSpanningTreeKruskal" => 3,
+            "TopSort" => 2,
+            "ConnectedComponents" => 2,
+            "StronglyConnectedComponents" | "SCC" => 2,
+            "PageRank" => 2,
+            "CommunityDetectionLouvain" => 2,
+            "LabelPropagation" => 2,
+            "RandomWalk" => 3,
+            "ReorderSort" => {
                 let out_opts = opts.get("out")?;
                 match out_opts {
                     Expr::Const {
@@ -116,27 +116,27 @@ impl AlgoHandle {
 
     pub(crate) fn get_impl(&self) -> Result<Box<dyn AlgoImpl>> {
         Ok(match &self.name.name as &str {
-            "clustering_coefficients" => Box::new(ClusteringCoefficients),
-            "degree_centrality" => Box::new(DegreeCentrality),
-            "closeness_centrality" => Box::new(ClosenessCentrality),
-            "betweenness_centrality" => Box::new(BetweennessCentrality),
-            "depth_first_search" | "dfs" => Box::new(Dfs),
-            "breadth_first_search" | "bfs" => Box::new(Bfs),
-            "shortest_path_dijkstra" => Box::new(ShortestPathDijkstra),
-            "shortest_path_astar" => Box::new(ShortestPathAStar),
-            "k_shortest_path_yen" => Box::new(KShortestPathYen),
-            "minimum_spanning_tree_prim" => Box::new(MinimumSpanningTreePrim),
-            "minimum_spanning_tree_kruskal" => Box::new(MinimumSpanningTreeKruskal),
-            "top_sort" => Box::new(TopSort),
-            "connected_components" => Box::new(StronglyConnectedComponent::new(false)),
-            "strongly_connected_components" | "scc" => {
+            "ClusteringCoefficients" => Box::new(ClusteringCoefficients),
+            "DegreeCentrality" => Box::new(DegreeCentrality),
+            "ClosenessCentrality" => Box::new(ClosenessCentrality),
+            "BetweennessCentrality" => Box::new(BetweennessCentrality),
+            "DepthFirstSearch" | "DFS" => Box::new(Dfs),
+            "BreadthFirstSearch" | "BFS" => Box::new(Bfs),
+            "ShortestPathDijkstra" => Box::new(ShortestPathDijkstra),
+            "ShortestPathAStar" => Box::new(ShortestPathAStar),
+            "KShortestPathYen" => Box::new(KShortestPathYen),
+            "MinimumSpanningTreePrim" => Box::new(MinimumSpanningTreePrim),
+            "MinimumSpanningTreeKruskal" => Box::new(MinimumSpanningTreeKruskal),
+            "TopSort" => Box::new(TopSort),
+            "ConnectedComponents" => Box::new(StronglyConnectedComponent::new(false)),
+            "StronglyConnectedComponents" | "SCC" => {
                 Box::new(StronglyConnectedComponent::new(true))
             }
-            "pagerank" => Box::new(PageRank),
-            "community_detection_louvain" => Box::new(CommunityDetectionLouvain),
-            "label_propagation" => Box::new(LabelPropagation),
-            "random_walk" => Box::new(RandomWalk),
-            "reorder_sort" => Box::new(ReorderSort),
+            "PageRank" => Box::new(PageRank),
+            "CommunityDetectionLouvain" => Box::new(CommunityDetectionLouvain),
+            "LabelPropagation" => Box::new(LabelPropagation),
+            "RandomWalk" => Box::new(RandomWalk),
+            "ReorderSort" => Box::new(ReorderSort),
             name => bail!(AlgoNotFoundError(name.to_string(), self.name.span)),
         })
     }
