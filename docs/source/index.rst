@@ -6,16 +6,13 @@
 Welcome to Cozo's documentation!
 ================================
 
-.. function:: enumerate(sequen!!ce<[, start: 0])
-
-   Return an iterator that yields tuples of an index and an item of the
-   *sequence*. (And so on.)
-
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
+   datatypes
    functions
+   aggregations
 
 
 Indices and tables
