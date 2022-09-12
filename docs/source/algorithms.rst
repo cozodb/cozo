@@ -2,6 +2,9 @@
 Algorithms
 ==============================
 
+The purpose of the native, built-in algorithms in Cozo is to enable easy computation of results that would require either queries too awkward to express in pure Datalog, or time or space requirements that are unreasonable if implemented in the interpreted queries framework.
+More algorithms will be added as Cozo is further developed.
+
 .. module:: Algo
     :noindex:
 
@@ -127,7 +130,7 @@ Community detection
 
     :param undirected: Whether the graph should be interpreted as undirected. Defaults to ``false``.
     :param max_iter: The maximum number of iterations to run within each epoch of the algorithm. Defaults to 10.
-    :param delta: How much the `modularity <https://en.wikipedia.org/wiki/Modularity_(networks)>` has to change before a step in the algorithm is considered to be an improvement.
+    :param delta: How much the `modularity <https://en.wikipedia.org/wiki/Modularity_(networks)>`_ has to change before a step in the algorithm is considered to be an improvement.
     :param keep_depth: How many levels in the hierarchy of communities to keep in the final result. If omitted, all levels are kept.
     :return: Pairs containing the label for a community, and a node index belonging to the community. Each label is a list of integers with maximum length constrained by the parameter ``keep_depth``.  This list represents the hierarchy of sub-communities containing the list.
 
@@ -176,7 +179,7 @@ Centrality measures
 
 .. WARNING::
 
-    ``BetweennessCentrality`` is very expensive to compute. Plan resources accordingly.
+    ``BetweennessCentrality`` is very expensive to compute for medium to large graphs. Plan resources accordingly.
 
 ------------------
 Miscellaneous

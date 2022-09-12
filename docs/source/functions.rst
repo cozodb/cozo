@@ -220,6 +220,9 @@ Mathematics
 
     Same as the previous function, but the inputs are in degrees instead of radians. The return value is still in radians. If you want the approximate distance measured on the surface of the earth instead of the angle between two points, multiply the result by the radius of the earth, which is about ``6371`` kilometres, ``3959`` miles, or ``3440`` nautical miles.
 
+.. WARNING::
+
+    The haversine formula, when applied to the surface of the earth, which is not a perfect sphere, can result in an error of less than one percent.
 
 ------------------------
 String functions
