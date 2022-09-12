@@ -3,6 +3,7 @@ Algorithms
 ==============================
 
 .. module:: Algo
+    :noindex:
 
 ------------------
 Connectedness
@@ -106,7 +107,7 @@ Pathfinding
 
     The performance of A\* star algorithm heavily depends on how good your heuristic function is. Passing in ``0`` as the estimate is always valid, but then you really should be using Dijkstra's algorithm.
 
-    Good heuristics usually come about from a metric in the ambient space in which your data lives, e.g. spherical distance on the surface of a sphere, or Manhattan distance on a grid. :func:`Func.Math.haversine_deg_input` could be helpful for the spherical case. Note that you must use the correct units for the distance.
+    Good heuristics usually come about from a metric in the ambient space in which your data live, e.g. spherical distance on the surface of a sphere, or Manhattan distance on a grid. :func:`Func.Math.haversine_deg_input` could be helpful for the spherical case. Note that you must use the correct units for the distance.
 
     Providing a heuristic that is not guaranteed to be a lower-bound *might* be acceptable if you are fine with inaccuracies. The errors in the answers are bound by the sum of the margins of your over-estimates.
 

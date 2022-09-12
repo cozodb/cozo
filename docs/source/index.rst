@@ -8,17 +8,24 @@ Welcome to Cozo's documentation!
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Contents
 
+   intro
+   setup
+   script
+   queries
+   triples
+   sysops
    datatypes
    functions
    aggregations
    algorithms
 
 
-Indices and tables
-==================
+.. only:: html
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+    ------------
+    Indices
+    ------------
+
+    * :ref:`genindex`

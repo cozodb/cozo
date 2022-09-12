@@ -20,6 +20,7 @@ templates_path = ['_templates']
 exclude_patterns = []
 
 add_module_names = False
+latex_show_urls = 'footnote'
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

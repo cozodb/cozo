@@ -4,12 +4,15 @@ Functions
 
 Functions can be used in expressions in Cozo. All function arguments in Cozo are immutable. All functions except those having names starting with ``rand_`` are deterministic.
 
+Internally, all function arguments are partially evaluated before binding variables to input tuples. For example, the regular expression in ``regex_matches(var, '[a-zA-Z]+')`` will only be compiled once during the execution of the query, instead of being repeatedly compiled for every input tuple.
+
 ------------------------
 Equality and Comparisons
 ------------------------
 
 .. module:: Func.EqCmp
-
+    :noindex:
+    
 .. function:: eq(x, y)
 
     Equality comparison. The operator form is ``x == y`` or ``x = y``. The two arguments of the equality can be of different types, in which case the result is ``false``.
@@ -56,7 +59,8 @@ Boolean functions
 ------------------------
 
 .. module:: Func.Bool
-
+    :noindex:
+    
 .. function:: and(...)
 
     Variadic conjunction. For binary arguments it is equivalent to ``x && y``.
@@ -78,7 +82,8 @@ Mathematics
 ------------------------
 
 .. module:: Func.Math
-
+    :noindex:
+    
 .. function:: add(...)
 
     Variadic addition. The binary version is the same as ``x + y``.
@@ -209,7 +214,7 @@ Mathematics
 
 .. function:: haversine(a_lat, a_lon, b_lat, b_lon)
 
-    Computes with the `Haversine formula <https://en.wikipedia.org/wiki/Haversine_formula>`_ the angle measured in radians between two points ``a`` and ``b`` on a sphere specified by their latitudes and longitudes. The inputs are in radians. You probably want the next function since most maps measure angles in radians.
+    Computes with the `haversine formula <https://en.wikipedia.org/wiki/Haversine_formula>`_ the angle measured in radians between two points ``a`` and ``b`` on a sphere specified by their latitudes and longitudes. The inputs are in radians. You probably want the next function since most maps measure angles in radians.
 
 .. function:: haversine_deg_input(a_lat, a_lon, b_lat, b_lon)
 
@@ -221,6 +226,7 @@ String functions
 ------------------------
 
 .. module:: Func.String
+    :noindex:
 
 .. function:: length(str)
 
@@ -298,6 +304,7 @@ List functions
 --------------------------
 
 .. module:: Func.List
+    :noindex:
 
 .. function:: list(x, ...)
 
@@ -390,6 +397,7 @@ Binary functions
 ----------------
 
 .. module:: Func.Bin
+    :noindex:
 
 .. function:: length(bytes)
 
@@ -438,6 +446,7 @@ Type checking and conversions
 --------------------------------
 
 .. module:: Func.Typing
+    :noindex:
 
 .. function:: to_string(x)
 
@@ -499,6 +508,7 @@ Random functions
 -----------------
 
 .. module:: Func.Rand
+    :noindex:
 
 .. function:: rand_float()
 
@@ -522,6 +532,7 @@ Regex functions
 ------------------
 
 .. module:: Func.Regex
+    :noindex:
 
 .. function:: regex_matches(x, reg)
 

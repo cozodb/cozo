@@ -23,6 +23,7 @@ Meet aggregations
 ------------------
 
 .. module:: Aggr.Meet
+    :noindex:
 
 .. function:: min(x)
 
@@ -81,6 +82,7 @@ Ordinary aggregations
 ---------------------
 
 .. module:: Aggr.Ord
+    :noindex:
 
 .. function:: count(var)
 

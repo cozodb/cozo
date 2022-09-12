@@ -1,6 +1,10 @@
-=============
+==============
+Datatypes
+==============
+
+--------------
 Value types
-=============
+--------------
 
 A runtime value in Cozo can be of the following *value-types*:
 
@@ -48,10 +52,9 @@ There is no literal representation for ``Bytes`` due to restrictions placed by J
 
 Lists ...
 
-==============
+----------------
 Schema types
-==============
-
+----------------
 
 In schema definition, the required type for a value can be specified by any of the following *schema-types*
 
