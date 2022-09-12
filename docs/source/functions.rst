@@ -16,7 +16,7 @@ Equality and Comparisons
 
 .. NOTE::
 
-    The unify operation ``?var <- 1`` is equivalent to ``?var == 1`` if ``?var`` is bound.
+    The unify operation ``var <- 1`` is equivalent to ``var == 1`` if ``var`` is bound.
 
 .. function:: neq(x, y)
 

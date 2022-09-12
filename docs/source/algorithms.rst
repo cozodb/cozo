@@ -175,7 +175,7 @@ Centrality measures
 
 .. WARNING::
 
-    ``BetweennessCentrality`` is very expansive to compute. Plan resources accordingly.
+    ``BetweennessCentrality`` is very expensive to compute. Plan resources accordingly.
 
 ------------------
 Miscellaneous
