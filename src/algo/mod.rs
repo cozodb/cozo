@@ -11,7 +11,7 @@ use crate::algo::astar::ShortestPathAStar;
 use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
-use crate::algo::kruskal::MinimumSpanningTreeKruskal;
+use crate::algo::kruskal::MinimumSpanningForestKruskal;
 use crate::algo::label_propagation::LabelPropagation;
 use crate::algo::louvain::CommunityDetectionLouvain;
 use crate::algo::pagerank::PageRank;
@@ -126,7 +126,7 @@ impl AlgoHandle {
             "ShortestPathAStar" => Box::new(ShortestPathAStar),
             "KShortestPathYen" => Box::new(KShortestPathYen),
             "MinimumSpanningTreePrim" => Box::new(MinimumSpanningTreePrim),
-            "MinimumSpanningTreeKruskal" => Box::new(MinimumSpanningTreeKruskal),
+            "MinimumSpanningForestKruskal" => Box::new(MinimumSpanningForestKruskal),
             "TopSort" => Box::new(TopSort),
             "ConnectedComponents" => Box::new(StronglyConnectedComponent::new(false)),
             "StronglyConnectedComponents" | "SCC" => {

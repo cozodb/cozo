@@ -28,7 +28,7 @@ impl AlgoImpl for RandomWalk {
         let nodes = algo.relation(1)?;
         let starting = algo.relation(2)?;
         let iterations = algo.pos_integer_option("iterations", Some(1))?;
-        let steps = algo.pos_integer_option("steps", Some(1))?;
+        let steps = algo.pos_integer_option("steps", None)?;
 
         let mut maybe_weight = algo.expr_option("weight", None).ok();
         if let Some(weight) = &mut maybe_weight {

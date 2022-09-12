@@ -27,7 +27,7 @@ impl AlgoImpl for PageRank {
         let edges = algo.relation(0)?;
         let undirected = algo.bool_option("undirected", Some(false))?;
         let theta = algo.unit_interval_option("theta", Some(0.8))? as f32;
-        let epsilon = algo.unit_interval_option("epsilon", Some(0.8))? as f32;
+        let epsilon = algo.unit_interval_option("epsilon", Some(0.05))? as f32;
         let iterations = algo.pos_integer_option("iterations", Some(20))?;
         let (graph, indices, _) = edges.convert_edge_to_graph(undirected, tx, stores)?;
         let res = pagerank(&graph, theta, epsilon, iterations, poison)?;

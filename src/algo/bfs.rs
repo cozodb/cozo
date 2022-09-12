@@ -84,14 +84,14 @@ impl AlgoImpl for Bfs {
 
         for (starting, ending) in found {
             let mut route = vec![];
-            let mut current = ending;
+            let mut current = ending.clone();
             while current != starting {
                 route.push(current.clone());
                 current = backtrace.get(&current).unwrap().clone();
             }
-            route.push(starting);
+            route.push(starting.clone());
             route.reverse();
-            let tuple = Tuple(route);
+            let tuple = Tuple(vec![starting, ending, DataValue::List(route)]);
             out.put(tuple, 0);
         }
         Ok(())

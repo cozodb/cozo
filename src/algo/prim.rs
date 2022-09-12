@@ -1,14 +1,17 @@
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
 
+use miette::Diagnostic;
 use miette::Result;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
+use thiserror::Error;
 
 use crate::algo::AlgoImpl;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
@@ -25,12 +28,34 @@ impl AlgoImpl for MinimumSpanningTreePrim {
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;
-        let (graph, indices, _, _) =
+        let (graph, indices, inv_indices, _) =
             edges.convert_edge_to_weighted_graph(true, true, tx, stores)?;
         if graph.is_empty() {
             return Ok(());
         }
-        let msp = prim(&graph, poison)?;
+        let starting = match algo.relation(1) {
+            Err(_) => 0,
+            Ok(rel) => {
+                let tuple = rel.iter(tx, stores)?.next().ok_or_else(|| {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("The provided starting nodes relation is empty")]
+                    #[diagnostic(code(algo::empty_starting))]
+                    struct EmptyStarting(#[label] SourceSpan);
+
+                    EmptyStarting(rel.span())
+                })??;
+                let dv = &tuple.0[0];
+                *inv_indices.get(dv).ok_or_else(|| {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("The requested starting node {0:?} is not found")]
+                    #[diagnostic(code(algo::starting_node_not_found))]
+                    struct StartingNodeNotFound(DataValue, #[label] SourceSpan);
+
+                    StartingNodeNotFound(dv.clone(), rel.span())
+                })?
+            }
+        };
+        let msp = prim(&graph, starting, poison)?;
         for (src, dst, cost) in msp {
             out.put(
                 Tuple(vec![
@@ -45,7 +70,11 @@ impl AlgoImpl for MinimumSpanningTreePrim {
     }
 }
 
-fn prim(graph: &[Vec<(usize, f64)>], poison: Poison) -> Result<Vec<(usize, usize, f64)>> {
+fn prim(
+    graph: &[Vec<(usize, f64)>],
+    starting: usize,
+    poison: Poison,
+) -> Result<Vec<(usize, usize, f64)>> {
     let mut visited = vec![false; graph.len()];
     let mut mst_edges = Vec::with_capacity(graph.len() - 1);
     let mut pq = PriorityQueue::new();
@@ -61,7 +90,7 @@ fn prim(graph: &[Vec<(usize, f64)>], poison: Poison) -> Result<Vec<(usize, usize
         }
     };
 
-    relax_edges_at_node(0, &mut pq);
+    relax_edges_at_node(starting, &mut pq);
 
     while let Some((to_node, (Reverse(OrderedFloat(cost)), from_node))) = pq.pop() {
         if mst_edges.len() == graph.len() - 1 {

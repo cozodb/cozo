@@ -8,7 +8,7 @@ Functions can be used in expressions in Cozo. All function arguments in Cozo are
 Equality and Comparisons
 ------------------------
 
-.. module:: Function.EqCmp
+.. module:: Func.EqCmp
 
 .. function:: eq(x, y)
 
@@ -55,7 +55,7 @@ Equality and Comparisons
 Boolean functions
 ------------------------
 
-.. module:: Function.Bool
+.. module:: Func.Bool
 
 .. function:: and(...)
 
@@ -77,7 +77,7 @@ Boolean functions
 Mathematics
 ------------------------
 
-.. module:: Function.Math
+.. module:: Func.Math
 
 .. function:: add(...)
 
@@ -149,15 +149,15 @@ Mathematics
 
 .. function:: sin(x)
 
-    The sine trigonometric function.
+    The sine trigonometric Func.
 
 .. function:: cos(x)
 
-    The cosine trigonometric function.
+    The cosine trigonometric Func.
 
 .. function:: tan(x)
 
-    The tangent trigonometric function.
+    The tangent trigonometric Func.
 
 .. function:: asin(x)
 
@@ -173,7 +173,7 @@ Mathematics
 
 .. function:: atan2(x, y)
 
-    The inverse tangent but passing `x` and `y` separately, see https://en.wikipedia.org/wiki/Atan2.
+    The inverse tangent `atan2 <https://en.wikipedia.org/wiki/Atan2>`_ by passing `x` and `y` separately.
 
 .. function:: sinh(x)
 
@@ -209,7 +209,7 @@ Mathematics
 
 .. function:: haversine(a_lat, a_lon, b_lat, b_lon)
 
-    Returns the angle measured in radians between two points ``a`` and ``b`` on a sphere specified by their latitudes and longitudes. The inputs are in radians. You probably want the next function since most maps measure angles in radians. See https://en.wikipedia.org/wiki/Haversine_formula.
+    Computes with the `Haversine formula <https://en.wikipedia.org/wiki/Haversine_formula>`_ the angle measured in radians between two points ``a`` and ``b`` on a sphere specified by their latitudes and longitudes. The inputs are in radians. You probably want the next function since most maps measure angles in radians.
 
 .. function:: haversine_deg_input(a_lat, a_lon, b_lat, b_lon)
 
@@ -220,7 +220,7 @@ Mathematics
 String functions
 ------------------------
 
-.. module:: Function.String
+.. module:: Func.String
 
 .. function:: length(str)
 
@@ -254,15 +254,15 @@ String functions
 
 .. function:: trim(x)
 
-    Removes whitespace from both ends of the string. "Whitespace" is defined as in https://en.wikipedia.org/wiki/Whitespace_character.
+    Removes `whitespace <https://en.wikipedia.org/wiki/Whitespace_character>`_ from both ends of the string.
 
 .. function:: trim_start(x)
 
-    Removes whitespace from the start of the string.
+    Removes `whitespace <https://en.wikipedia.org/wiki/Whitespace_character>`_ from the start of the string.
 
 .. function:: trim_end(x)
 
-    Removes whitespace from the end of the string.
+    Removes `whitespace <https://en.wikipedia.org/wiki/Whitespace_character>`_ from the end of the string.
 
 .. function:: starts_with(x, y)
 
@@ -278,7 +278,7 @@ String functions
 
 .. function:: unicode_normalize(str, norm)
 
-    Converts ``str`` to the normalization specified by ``norm``. The valid values of ``norm`` are ``'nfc'``, ``'nfd'``, ``'nfkc'`` and ``'nfkd'``. See https://en.wikipedia.org/wiki/Unicode_equivalence.
+    Converts ``str`` to the `normalization <https://en.wikipedia.org/wiki/Unicode_equivalence>`_ specified by ``norm``. The valid values of ``norm`` are ``'nfc'``, ``'nfd'``, ``'nfkc'`` and ``'nfkd'``.
 
 .. function:: chars(str)
 
@@ -297,7 +297,7 @@ String functions
 List functions
 --------------------------
 
-.. module:: Function.List
+.. module:: Func.List
 
 .. function:: list(x, ...)
 
@@ -389,7 +389,7 @@ List functions
 Binary functions
 ----------------
 
-.. module:: Function.Bin
+.. module:: Func.Bin
 
 .. function:: length(bytes)
 
@@ -423,21 +423,21 @@ Binary functions
 
 .. function:: encode_base64(b)
 
-    Encodes the byte array ``b`` into the Base64 encoded string. See https://en.wikipedia.org/wiki/Base64.
+    Encodes the byte array ``b`` into the `Base64 <https://en.wikipedia.org/wiki/Base64>`_-encoded string.
 
 .. NOTE::
     ``encode_base64`` is automatically applied when output to JSON since JSON cannot represent bytes natively.
 
 .. function:: decode_base64(str)
 
-    Tries to decode the ``str`` as a Base64-encoded byte array.
+    Tries to decode the ``str`` as a `Base64 <https://en.wikipedia.org/wiki/Base64>`_-encoded byte array.
 
 
 --------------------------------
 Type checking and conversions
 --------------------------------
 
-.. module:: Function.Typing
+.. module:: Func.Typing
 
 .. function:: to_string(x)
 
@@ -498,7 +498,7 @@ Type checking and conversions
 Random functions
 -----------------
 
-.. module:: Function.Rand
+.. module:: Func.Rand
 
 .. function:: rand_float()
 
@@ -521,7 +521,7 @@ Random functions
 Regex functions
 ------------------
 
-.. module:: Function.Regex
+.. module:: Func.Regex
 
 .. function:: regex_matches(x, reg)
 

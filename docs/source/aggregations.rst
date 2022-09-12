@@ -7,7 +7,7 @@ Aggregations in Cozo can be thought of as a function that acts on a string of va
 
 There are two kinds of aggregations in Cozo, *ordinary aggregations* and *meet aggregations*. They are implemented differently in Cozo, with meet aggregations generally faster and more powerful (e.g. only meet aggregations can be recursive).
 
-The power of meet aggregations derive from the additional properties they satisfy (see also https://en.wikipedia.org/wiki/Semilattice):
+The power of meet aggregations derive from the additional properties they satisfy by forming a `semilattice <https://en.wikipedia.org/wiki/Semilattice>`_:
 
     idempotency
         the aggregate of a single value ``a`` is ``a`` itself,

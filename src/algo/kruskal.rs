@@ -14,9 +14,9 @@ use crate::runtime::db::Poison;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
-pub(crate) struct MinimumSpanningTreeKruskal;
+pub(crate) struct MinimumSpanningForestKruskal;
 
-impl AlgoImpl for MinimumSpanningTreeKruskal {
+impl AlgoImpl for MinimumSpanningForestKruskal {
     fn run(
         &mut self,
         tx: &SessionTx,
