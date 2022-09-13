@@ -152,9 +152,9 @@ fn verify_no_cycle(g: &StratifiedGraph<&'_ Symbol>, sccs: &[BTreeSet<&Symbol>]) 
                     #[derive(Debug, Error, Diagnostic)]
                     #[error("Query is unstratifiable")]
                     #[diagnostic(code(eval::unstratifiable))]
-                    #[diagnostic(help("The rule {0} is in the strongly connected component consisting of {1:?},\
-                    and is involved in at least one forbidden dependency (negation, non-meet aggregation, or \
-                    algorithm-application)."))]
+                    #[diagnostic(help("The rule '{0}' is in the strongly connected component {1:?},\n\
+                    and is involved in at least one forbidden dependency \n\
+                    (negation, non-meet aggregation, or algorithm-application)."))]
                     struct UnStratifiableProgram(String, Vec<String>);
 
                     ensure!(
