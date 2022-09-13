@@ -467,6 +467,7 @@ impl Db {
     pub(crate) fn remove_relation(&self, name: &Symbol) -> Result<()> {
         let mut tx = self.transact_write()?;
         let (lower, upper) = tx.destroy_relation(name)?;
+        tx.commit_tx("", false)?;
         self.db.range_del(&lower, &upper, Snd)?;
         Ok(())
     }

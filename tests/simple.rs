@@ -30,7 +30,7 @@ fn simple() {
         r#"
         :schema
         put person {
-            id: string identity,
+            id: string unique,
             first_name: string index,
             last_name: string index,
             age: int,

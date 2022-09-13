@@ -32,15 +32,15 @@ fn air_routes() -> Result<()> {
         :schema
 
         put country {
-            code: string identity,
+            code: string unique,
             desc: string
         }
         put continent {
-            code: string identity,
+            code: string unique,
             desc: string
         }
         put airport {
-            iata: string identity,
+            iata: string unique,
             icao: string index,
             city: string index,
             desc: string,

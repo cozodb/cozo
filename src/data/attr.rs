@@ -156,12 +156,11 @@ pub(crate) enum AttributeIndex {
     None = 0,
     Indexed = 1,
     Unique = 2,
-    Identity = 3,
 }
 
 impl AttributeIndex {
     pub(crate) fn is_unique_index(&self) -> bool {
-        matches!(self, AttributeIndex::Identity | AttributeIndex::Unique)
+        matches!(self, AttributeIndex::Unique)
     }
     pub(crate) fn should_index(&self) -> bool {
         *self != AttributeIndex::None
@@ -174,7 +173,6 @@ impl Display for AttributeIndex {
             AttributeIndex::None => write!(f, "none"),
             AttributeIndex::Indexed => write!(f, "index"),
             AttributeIndex::Unique => write!(f, "unique"),
-            AttributeIndex::Identity => write!(f, "identity"),
         }
     }
 }

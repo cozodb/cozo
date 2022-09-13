@@ -55,7 +55,6 @@ fn parse_attr_defs(src: Pairs<'_>) -> Result<Attribute> {
             "many" => attr.cardinality = AttributeCardinality::Many,
             "history" => attr.with_history = true,
             "no_history" => attr.with_history = false,
-            "identity" => attr.indexing = AttributeIndex::Identity,
             "index" => attr.indexing = AttributeIndex::Indexed,
             "no_index" => attr.indexing = AttributeIndex::None,
             "unique" => attr.indexing = AttributeIndex::Unique,

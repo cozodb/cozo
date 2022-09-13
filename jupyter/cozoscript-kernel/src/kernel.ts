@@ -62,14 +62,24 @@ export class CozoScriptKernel extends BaseKernel {
                     metadata: {}
                 });
             } else {
-                // let res = await response.json();
-                this.publishExecuteResult({
-                    execution_count: this.executionCount,
-                    data: {
-                        'text/html': displayTable(await response.json())
-                    },
-                    metadata: {}
-                });
+                let res = await response.json();
+                if ('rows' in res) {
+                    this.publishExecuteResult({
+                        execution_count: this.executionCount,
+                        data: {
+                            'text/html': displayTable(res)
+                        },
+                        metadata: {}
+                    });
+                } else {
+                    this.publishExecuteResult({
+                        execution_count: this.executionCount,
+                        data: {
+                            'text/html': `<pre style="font-size: small">${escapeHtml(JSON.stringify(res, null, 2))}</pre>`
+                        },
+                        metadata: {}
+                    });
+                }
             }
         } catch (e) {
             console.error(e);

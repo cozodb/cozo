@@ -148,11 +148,11 @@ bin_pos_int = @{"0b" ~ ASCII_BIN_DIGIT ~ ("_" | ASCII_BIN_DIGIT)*}
 int = _{(hex_pos_int | octo_pos_int | bin_pos_int | pos_int)}
 dot_float = @{
     ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
-    ~ ("." ~ ("_" | ASCII_DIGIT)+)
+    ~ ("." ~ ("_" | ASCII_DIGIT)*)
 }
 sci_float = @{
     ("0" | ASCII_NONZERO_DIGIT ~ ("_" | ASCII_DIGIT)*)
-    ~ ("." ~ ("_" | ASCII_DIGIT)+)?
+    ~ ("." ~ ("_" | ASCII_DIGIT)*)?
     ~ (^"e" ~ ("+" | "-")? ~ ("_" | ASCII_DIGIT)+)
 }
 float = _{(sci_float | dot_float)}

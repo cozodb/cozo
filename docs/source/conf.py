@@ -19,6 +19,7 @@ extensions = []
 templates_path = ['_templates']
 exclude_patterns = []
 
+add_function_parentheses = False
 add_module_names = False
 latex_show_urls = 'footnote'
 
@@ -27,3 +28,4 @@ latex_show_urls = 'footnote'
 
 html_theme = 'furo'
 html_static_path = ['_static']
+html_title = "Cozo Manual"
