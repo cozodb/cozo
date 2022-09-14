@@ -11,15 +11,26 @@
       <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
     </configurations>
   </component>
+  <component name="CargoProjects">
+    <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/.name" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/cozo.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/rocksdb.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
+    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="regenerate idea files">
+      <change beforePath="$PROJECT_DIR$/.idea/cozo.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/cozo.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozohttp/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/cozoserver/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozohttp/build.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cozoserver/build.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozohttp/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cozoserver/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozopy/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozopy/Cargo.toml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozopy/air-routes-latest-edges.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozopy/air-routes-latest-nodes.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozopy/air_routes.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozopy/cozo.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozopy/smoke.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozopy/src/lib.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/data/id.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/id.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -32,6 +43,9 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="MacroExpansionManager">
+    <option name="directoryName" value="g3ljnk28" />
+  </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
   </component>
@@ -43,14 +57,62 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.cidr.known.project.marker": "true",
     "WebServerToolWindowFactoryState": "false",
     "cf.first.check.clang-format": "false",
-    "cidr.known.project.marker": "true"
+    "cidr.known.project.marker": "true",
+    "node.js.detected.package.eslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "nodejs_package_manager_path": "yarn",
+    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true"
   }
 }]]></component>
+  <component name="RunManager">
+    <configuration name="Test data::id::p" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="command" value="test --package cozo --lib data::id::p -- --exact" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="emulateTerminal" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <envs />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="run" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="emulateTerminal" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <envs />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Cargo.Test data::id::p" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="RustProjectSettings">
+    <option name="toolchainHomeDirectory" value="$PROJECT_DIR$/../.cargo/bin" />
+  </component>
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -59,9 +121,20 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1663161524540</updated>
-      <workItem from="1663161527741" duration="2000" />
+      <workItem from="1663161527741" duration="2380000" />
     </task>
+    <task id="LOCAL-00001" summary="regenerate idea files">
+      <created>1663161616722</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1663161616722</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
     <option name="TAB_STATES">
@@ -73,5 +146,9 @@
         </entry>
       </map>
     </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="regenerate idea files" />
+    <option name="LAST_COMMIT_MESSAGE" value="regenerate idea files" />
   </component>
 </project>

@@ -52,4 +52,4 @@ cozorocks = { path = "cozorocks" }
 #debug = true
 
 [workspace]
-members = ["cozorocks", "cozohttp", "cozopy"]
+members = ["cozorocks", "cozoserver"]

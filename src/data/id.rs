@@ -1,8 +1,8 @@
 use std::fmt::{Debug, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, TimeZone, Utc};
-use miette::Diagnostic;
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use miette::{Diagnostic, Result};
 use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -45,7 +45,9 @@ impl From<i64> for Validity {
 #[error("Cannot convert {0:?} to Validity")]
 #[diagnostic(code(parser::bad_validity))]
 #[diagnostic(help(
-    "Validity can be represented by integers, or strings according to RFC2822 or RFC3339"
+"Validity can be represented by integers interpreted as microseconds since the UNIX epoch, \
+or strings according to RFC3339, \
+or in the date-only format 'YYYY-MM-DD' (with implicit time at midnight UTC)"
 ))]
 struct BadValidityError(DataValue, #[label] SourceSpan);
 
@@ -59,15 +61,24 @@ impl TryFrom<Expr> for Validity {
             return Ok(v.into());
         }
         if let Some(s) = value.get_string() {
-            let dt = DateTime::parse_from_rfc2822(s)
-                .or_else(|_| DateTime::parse_from_rfc3339(s))
-                .map_err(|_| BadValidityError(value, span))?;
-            let sysdt: SystemTime = dt.into();
-            let timestamp = sysdt.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64;
-            return Ok(Self(timestamp));
+            if let Ok(dt) = DateTime::parse_from_rfc2822(s) {
+                let sysdt: SystemTime = dt.into();
+                let timestamp = sysdt.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64;
+                return Ok(Self(timestamp));
+            }
+            if let Ok(nd) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                return Ok(Self(nd.and_hms(0, 0, 0).timestamp() * 1_000_000));
+            }
         }
         Err(BadValidityError(value, span).into())
     }
+}
+
+#[test]
+fn p() {
+    let x = NaiveDate::parse_from_str("2015-09-05", "%Y-%m-%d").unwrap();
+    let x = x.and_hms(0, 0, 0).timestamp();
+    println!("{:?}", x)
 }
 
 impl Debug for Validity {
