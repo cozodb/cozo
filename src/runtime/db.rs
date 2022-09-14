@@ -328,7 +328,14 @@ impl Db {
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::RenameAttribute(old, new) => {
-                todo!()
+                let mut tx = self.transact_write()?;
+                let mut attr = tx
+                    .attr_by_name(&old)?
+                    .ok_or_else(|| AttrNotFoundError(old.name.to_string()))?;
+                attr.name = new.name;
+                tx.amend_attr(attr)?;
+                tx.commit_tx("", false)?;
+                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::ListRunning => self.list_running(),
             SysOp::KillRunning(id) => {

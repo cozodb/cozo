@@ -23,7 +23,7 @@ fn parse_schema_clause(src: Pair<'_>) -> Result<Vec<AttrTxItem>> {
         Rule::schema_retract => StoreOp::Retract,
         _ => unreachable!(),
     };
-    let ident = src.next().unwrap().as_str().trim();
+    let ident = src.next().unwrap().as_str();
     let mut ret = vec![];
     let attr_def = src.next().unwrap();
     match attr_def.as_rule() {

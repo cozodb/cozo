@@ -31,7 +31,7 @@ var = @{(XID_START | "_") ~ (XID_CONTINUE | "_")*}
 param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 relation_ident = @{":" ~ compound_ident}
-compound_ident = {ident ~ ("." ~ ident)?}
+compound_ident = @{ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ("@" ~ expr)? ~ ":=" ~ rule_body ~ ";"?}
 const_rule = {rule_head ~ "<-" ~ expr ~ ";"?}

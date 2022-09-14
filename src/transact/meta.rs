@@ -147,27 +147,28 @@ impl SessionTx {
         let existing = self
             .attr_by_id(attr.id)?
             .ok_or_else(|| AttrNotFoundError(attr.id.0.to_string()))?;
-        let tx_id = self.get_write_tx_id()?;
-        if existing.name != attr.name {
-            ensure!(
-                self.attr_by_name(&attr.name)?.is_none(),
-                AttrNameConflict(attr.name.to_string())
-            );
 
-            #[derive(Debug, Error, Diagnostic)]
-            #[error("Attempting to change immutable properties of existing attribute {0}")]
-            #[diagnostic(code(eval::change_immutable_attr_prop))]
-            #[diagnostic(help(
-                "Currently the following are immutable: cardinality, index, history, typing"
-            ))]
-            struct ChangingImmutablePropertiesOfAttrError(String);
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Attempting to change immutable properties of existing attribute {0}")]
+        #[diagnostic(code(eval::change_immutable_attr_prop))]
+        #[diagnostic(help(
+        "Currently the following are immutable: cardinality, index, history, typing"
+        ))]
+        struct ChangingImmutablePropertiesOfAttrError(String);
 
-            ensure!(
+        ensure!(
                 existing.val_type == attr.val_type
                     && existing.cardinality == attr.cardinality
                     && existing.indexing == attr.indexing
                     && existing.with_history == attr.with_history,
                 ChangingImmutablePropertiesOfAttrError(attr.name.to_string())
+            );
+
+        let tx_id = self.get_write_tx_id()?;
+        if existing.name != attr.name {
+            ensure!(
+                self.attr_by_name(&attr.name)?.is_none(),
+                AttrNameConflict(attr.name.to_string())
             );
             let kw_sentinel = encode_sentinel_attr_by_name(&existing.name);
             let attr_data = existing.encode_with_op_and_tx(StoreOp::Retract, tx_id);
