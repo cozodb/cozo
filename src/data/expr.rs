@@ -15,7 +15,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::SourceSpan;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Expr {
     Binding {
         var: Symbol,

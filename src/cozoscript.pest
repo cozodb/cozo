@@ -91,7 +91,8 @@ term = _{ literal | param | grouping | apply | var | list }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = _{(limit_option|offset_option|out_option|sort_option|relation_option|timeout_option) ~ ";"?}
+option = _{(limit_option|offset_option|out_option|sort_option|relation_option|timeout_option|
+            assert_none_option|assert_some_option) ~ ";"?}
 limit_option = {":limit"  ~ expr}
 offset_option = {":offset" ~ expr}
 out_option = {":pull" ~ var ~ ("@" ~ expr)? ~ out_spec}
@@ -107,6 +108,8 @@ sort_arg = { sort_dir? ~ var }
 sort_dir = _{ sort_asc | sort_desc }
 sort_asc = {"+"}
 sort_desc = {"-"}
+assert_none_option = {":assert" ~ "none"}
+assert_some_option = {":assert" ~ "some"}
 
 out_spec = {"{" ~ (pull_field ~ ",")* ~ pull_field? ~ "}"}
 pull_field = {rev_pull_marker? ~ compound_ident ~ (":" ~ out_spec)?}

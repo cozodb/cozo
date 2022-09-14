@@ -32,6 +32,12 @@ pub(crate) struct ConstRule {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub(crate) enum QueryAssertion {
+    AssertNone(SourceSpan),
+    AssertSome(SourceSpan),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct QueryOutOptions {
     pub(crate) out_spec: BTreeMap<Symbol, (Vec<OutPullSpec>, Option<Validity>)>,
     pub(crate) vld: Validity,
@@ -40,6 +46,7 @@ pub(crate) struct QueryOutOptions {
     pub(crate) timeout: Option<u64>,
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
     pub(crate) store_relation: Option<(RelationMetadata, RelationOp)>,
+    pub(crate) assertion: Option<QueryAssertion>,
 }
 
 impl Default for QueryOutOptions {
@@ -52,6 +59,7 @@ impl Default for QueryOutOptions {
             timeout: None,
             sorters: vec![],
             store_relation: None,
+            assertion: None,
         }
     }
 }
@@ -502,7 +510,7 @@ impl InputProgram {
         if let Some(ConstRule { data, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
             inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
         }) {
-            return Ok(data.get(0).map(|row| row.0.len()).unwrap_or(0))
+            return Ok(data.get(0).map(|row| row.0.len()).unwrap_or(0));
         }
 
         Err(NoEntryError.into())

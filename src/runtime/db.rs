@@ -24,14 +24,14 @@ use crate::data::encode::{
 };
 use crate::data::id::{EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
-use crate::data::program::{InputProgram, RelationOp};
+use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::schema::AttrTxItem;
 use crate::parse::sys::{CompactTarget, SysOp};
 use crate::parse::tx::TripleTx;
-use crate::parse::{parse_script, CozoScript};
+use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 use crate::runtime::transact::SessionTx;
 use crate::transact::meta::AttrNotFoundError;
@@ -425,6 +425,34 @@ impl Db {
             },
             poison,
         )?;
+        if let Some(assertion) = &input_program.out_opts.assertion {
+            match assertion {
+                QueryAssertion::AssertNone(span) => {
+                    if let Some(tuple) = result.scan_all().next() {
+                        let tuple = tuple?;
+
+                        #[derive(Debug, Error, Diagnostic)]
+                        #[error(
+                            "The query is asserted to return no result, but a tuple {0:?} is found"
+                        )]
+                        #[diagnostic(code(eval::assert_none_failure))]
+                        struct AssertNoneFailure(Tuple, #[label] SourceSpan);
+                        bail!(AssertNoneFailure(tuple, *span))
+                    }
+                }
+                QueryAssertion::AssertSome(span) => {
+                    if let Some(tuple) = result.scan_all().next() {
+                        let _ = tuple?;
+                    } else {
+                        #[derive(Debug, Error, Diagnostic)]
+                        #[error("The query is asserted to return some results, but returned none")]
+                        #[diagnostic(code(eval::assert_some_failure))]
+                        struct AssertSomeFailure(#[label] SourceSpan);
+                        bail!(AssertSomeFailure(*span))
+                    }
+                }
+            }
+        }
         let json_headers = match input_program.get_entry_head() {
             Err(_) => JsonValue::Null,
             Ok(headers) => headers.iter().map(|v| json!(v.name)).collect(),

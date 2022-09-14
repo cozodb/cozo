@@ -17,7 +17,7 @@ use crate::data::id::Validity;
 use crate::data::program::{
     AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram,
     InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm,
-    MagicSymbol, QueryOutOptions, RelationOp, SortDir, TripleDir, Unification,
+    MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, TripleDir, Unification,
 };
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
@@ -44,6 +44,11 @@ struct OptionNotPosIntError(&'static str, #[label] SourceSpan);
 
 #[derive(Debug)]
 struct MultipleRuleDefinitionError(String, Vec<SourceSpan>);
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Multiple query output assertions defined")]
+#[diagnostic(code(parser::multiple_out_assert))]
+struct DuplicateQueryAssertion(#[label] SourceSpan);
 
 impl Error for MultipleRuleDefinitionError {}
 
@@ -379,6 +384,20 @@ pub(crate) fn parse_query(
                     arity: 0,
                 };
                 out_opts.store_relation = Some((meta, op));
+            }
+            Rule::assert_none_option => {
+                ensure!(
+                    out_opts.assertion.is_none(),
+                    DuplicateQueryAssertion(pair.extract_span())
+                );
+                out_opts.assertion = Some(QueryAssertion::AssertNone(pair.extract_span()))
+            }
+            Rule::assert_some_option => {
+                ensure!(
+                    out_opts.assertion.is_none(),
+                    DuplicateQueryAssertion(pair.extract_span())
+                );
+                out_opts.assertion = Some(QueryAssertion::AssertSome(pair.extract_span()))
             }
             Rule::EOI => break,
             r => unreachable!("{:?}", r),
