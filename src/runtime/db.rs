@@ -31,7 +31,7 @@ use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::schema::AttrTxItem;
 use crate::parse::sys::{CompactTarget, SysOp};
 use crate::parse::tx::TripleTx;
-use crate::parse::{parse_script, CozoScript, SourceSpan};
+use crate::parse::{parse_script, CozoScript};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 use crate::runtime::transact::SessionTx;
 use crate::transact::meta::AttrNotFoundError;
@@ -313,15 +313,22 @@ impl Db {
             }
             SysOp::ListSchema => self.current_schema(),
             SysOp::ListRelations => self.list_relations(),
-            SysOp::RemoveRelations(rs) => {
-                for r in rs.iter() {
-                    self.remove_relation(r)?;
-                }
+            SysOp::RemoveRelation(rs) => {
+                self.remove_relation(&rs)?;
+                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
+            }
+            SysOp::RenameRelation(old, new) => {
+                let mut tx = self.transact_write()?;
+                tx.rename_relation(old, new)?;
+                tx.commit_tx("", false)?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::RemoveAttribute(name) => {
                 self.remove_attribute(&name)?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
+            }
+            SysOp::RenameAttribute(old, new) => {
+                todo!()
             }
             SysOp::ListRunning => self.list_running(),
             SysOp::KillRunning(id) => {
@@ -359,21 +366,21 @@ impl Db {
                 #[derive(Debug, Error, Diagnostic)]
                 #[error("Stored relation {0} conflicts with an existing one")]
                 #[diagnostic(code(eval::stored_relation_conflict))]
-                struct StoreRelationConflict(String, #[label] SourceSpan);
+                struct StoreRelationConflict(String);
 
                 ensure!(
                     !tx.relation_exists(&meta.name)?,
-                    StoreRelationConflict(meta.name.to_string(), meta.name.span)
+                    StoreRelationConflict(meta.name.to_string())
                 )
             } else if *op != RelationOp::ReDerive {
                 #[derive(Debug, Error, Diagnostic)]
                 #[error("Stored relation {0} not found")]
                 #[diagnostic(code(eval::stored_relation_not_found))]
-                struct StoreRelationNotFoundError(String, #[label] SourceSpan);
+                struct StoreRelationNotFoundError(String);
 
                 ensure!(
                     tx.relation_exists(&meta.name)?,
-                    StoreRelationNotFoundError(meta.name.to_string(), meta.name.span)
+                    StoreRelationNotFoundError(meta.name.to_string())
                 )
             }
         };
@@ -640,7 +647,7 @@ impl Db {
         let mut collected = vec![];
         while let Some(v_slice) = it.val()? {
             let meta = RelationMetadata::decode(v_slice)?;
-            let name = meta.name.name;
+            let name = meta.name;
             let arity = meta.arity;
             collected.push(json!([name, arity]));
             it.next();

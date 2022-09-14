@@ -5,7 +5,7 @@ use log::error;
 use miette::{bail, Diagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
-use smartstring::SmartString;
+use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use cozorocks::CfHandle::Snd;
@@ -14,7 +14,6 @@ use cozorocks::DbIter;
 use crate::data::symb::Symbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
-use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
@@ -56,7 +55,7 @@ impl RelationId {
 
 #[derive(Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) struct RelationMetadata {
-    pub(crate) name: Symbol,
+    pub(crate) name: SmartString<LazyCompact>,
     pub(crate) id: RelationId,
     pub(crate) arity: usize,
 }
@@ -152,9 +151,14 @@ impl Iterator for RelationIterator {
     }
 }
 
+#[derive(Debug, Diagnostic, Error)]
+#[error("Cannot create relation {0} as one with the same name already exists")]
+#[diagnostic(code(eval::rel_name_conflict))]
+struct RelNameConflictError(String);
+
 impl SessionTx {
-    pub(crate) fn relation_exists(&self, name: &Symbol) -> Result<bool> {
-        let key = DataValue::Str(name.name.clone());
+    pub(crate) fn relation_exists(&self, name: &str) -> Result<bool> {
+        let key = DataValue::Str(SmartString::from(name));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         Ok(self.tx.exists(&encoded, false, Snd)?)
     }
@@ -162,22 +166,17 @@ impl SessionTx {
         &mut self,
         mut meta: RelationMetadata,
     ) -> Result<RelationMetadata> {
-        let key = DataValue::Str(meta.name.name.clone());
+        let key = DataValue::Str(meta.name.clone());
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
-        #[derive(Debug, Diagnostic, Error)]
-        #[error("Cannot create relation {0} as one with the same name already exists")]
-        #[diagnostic(code(eval::rel_name_conflict))]
-        struct RelNameConflictError(String, #[label] SourceSpan);
-
         if self.tx.exists(&encoded, true, Snd)? {
-            bail!(RelNameConflictError(meta.name.to_string(), meta.name.span))
+            bail!(RelNameConflictError(meta.name.to_string()))
         };
         let last_id = self.relation_store_id.fetch_add(1, Ordering::SeqCst);
         meta.id = RelationId::new(last_id + 1);
         self.tx.put(&encoded, &meta.id.raw_encode(), Snd)?;
         let name_key =
-            Tuple(vec![DataValue::Str(meta.name.name.clone())]).encode_as_key(RelationId::SYSTEM);
+            Tuple(vec![DataValue::Str(meta.name.clone())]).encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
@@ -188,30 +187,23 @@ impl SessionTx {
         self.tx.put(&t_encoded, &meta.id.raw_encode(), Snd)?;
         Ok(meta)
     }
-    pub(crate) fn get_relation(&self, name: &Symbol) -> Result<RelationMetadata> {
+    pub(crate) fn get_relation(&self, name: &str) -> Result<RelationMetadata> {
         #[derive(Error, Diagnostic, Debug)]
-        #[error("Cannot find requested stored relation '{name}'")]
+        #[error("Cannot find requested stored relation '{0}'")]
         #[diagnostic(code(query::relation_not_found))]
-        struct StoredRelationNotFoundError {
-            name: String,
-            #[label]
-            span: SourceSpan,
-        }
+        struct StoredRelationNotFoundError(String);
 
         let key = DataValue::Str(SmartString::from(name as &str));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
-        let found =
-            self.tx
-                .get(&encoded, true, Snd)?
-                .ok_or_else(|| StoredRelationNotFoundError {
-                    name: name.name.to_string(),
-                    span: name.span,
-                })?;
+        let found = self
+            .tx
+            .get(&encoded, true, Snd)?
+            .ok_or_else(|| StoredRelationNotFoundError(name.to_string()))?;
         let metadata = RelationMetadata::decode(&found)?;
         Ok(metadata)
     }
-    pub(crate) fn destroy_relation(&mut self, name: &Symbol) -> Result<(Vec<u8>, Vec<u8>)> {
+    pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<(Vec<u8>, Vec<u8>)> {
         let store = self.get_relation(name)?;
         let key = DataValue::Str(SmartString::from(name as &str));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
@@ -219,5 +211,26 @@ impl SessionTx {
         let lower_bound = Tuple::default().encode_as_key(store.id);
         let upper_bound = Tuple::default().encode_as_key(store.id.next());
         Ok((lower_bound, upper_bound))
+    }
+    pub(crate) fn rename_relation(&mut self, old: Symbol, new: Symbol) -> Result<()> {
+        let new_key = DataValue::Str(new.name.clone());
+        let new_encoded = Tuple(vec![new_key]).encode_as_key(RelationId::SYSTEM);
+
+        if self.tx.exists(&new_encoded, true, Snd)? {
+            bail!(RelNameConflictError(new.name.to_string()))
+        };
+
+        let old_key = DataValue::Str(old.name.clone());
+        let old_encoded = Tuple(vec![old_key]).encode_as_key(RelationId::SYSTEM);
+
+        let mut rel = self.get_relation(&old)?;
+        rel.name = new.name.clone();
+
+        let mut meta_val = vec![];
+        rel.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
+        self.tx.del(&old_encoded, Snd)?;
+        self.tx.put(&new_encoded, &meta_val, Snd)?;
+
+        Ok(())
     }
 }

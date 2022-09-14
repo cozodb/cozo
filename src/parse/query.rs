@@ -374,7 +374,7 @@ pub(crate) fn parse_query(
 
                 let name_p = args.next().unwrap();
                 let meta = RelationMetadata {
-                    name: Symbol::new(name_p.as_str(), name_p.extract_span()),
+                    name: SmartString::from(name_p.as_str()),
                     id: RelationId::SYSTEM,
                     arity: 0,
                 };

@@ -32,8 +32,10 @@ pub(crate) enum SysOp {
     ListRelations,
     ListRunning,
     KillRunning(u64),
-    RemoveRelations(Vec<Symbol>),
+    RemoveRelation(Symbol),
+    RenameRelation(Symbol, Symbol),
     RemoveAttribute(Symbol),
+    RenameAttribute(Symbol, Symbol),
     ExecuteLocalScript(SmartString<LazyCompact>),
 }
 
@@ -82,16 +84,30 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
         Rule::list_schema_op => SysOp::ListSchema,
         Rule::list_relations_op => SysOp::ListRelations,
         Rule::remove_relations_op => {
-            let rels = inner
-                .into_inner()
-                .map(|v| Symbol::new(v.as_str(), v.extract_span()))
-                .collect();
-            SysOp::RemoveRelations(rels)
+            let rels_p = inner.into_inner().next().unwrap();
+            let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+            SysOp::RemoveRelation(rel)
+        }
+        Rule::rename_relations_op => {
+            let mut src = inner.into_inner();
+            let rels_p = src.next().unwrap();
+            let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+            let rels_p = src.next().unwrap();
+            let new_rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+            SysOp::RenameRelation(rel, new_rel)
         }
         Rule::remove_attribute_op => {
-            let attr_name_pair = inner.into_inner().next().unwrap();
-            let attr_name = Symbol::new(attr_name_pair.as_str(), attr_name_pair.extract_span());
+            let p = inner.into_inner().next().unwrap();
+            let attr_name = Symbol::new(p.as_str(), p.extract_span());
             SysOp::RemoveAttribute(attr_name)
+        }
+        Rule::rename_attribute_op => {
+            let mut src = inner.into_inner();
+            let p = src.next().unwrap();
+            let attr_name = Symbol::new(p.as_str(), p.extract_span());
+            let p = src.next().unwrap();
+            let new_attr_name = Symbol::new(p.as_str(), p.extract_span());
+            SysOp::RenameAttribute(attr_name, new_attr_name)
         }
         _ => unreachable!(),
     })

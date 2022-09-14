@@ -1,10 +1,12 @@
 use std::borrow::BorrowMut;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
+use std::iter;
 use std::ops::Bound::Included;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicU32, Ordering};
 
+use either::{Left, Right};
 use itertools::Itertools;
 use miette::Result;
 
@@ -180,25 +182,34 @@ impl DerivedRelStore {
         poison: Poison,
     ) -> Result<bool> {
         let db_target = self.mem_db.try_read().unwrap();
-        let target = db_target.get(0).unwrap().try_read().unwrap();
-        let it = target.clone().into_iter().map(|(k, v)| {
-            if v.0.is_empty() {
-                k
-            } else {
-                let combined =
-                    k.0.into_iter()
-                        .zip(v.0.into_iter())
-                        .map(|(kel, vel)| {
-                            if matches!(kel, DataValue::Guard) {
-                                vel
-                            } else {
-                                kel
-                            }
-                        })
-                        .collect_vec();
-                Tuple(combined)
+        let target = db_target.get(0);
+        let it = match target {
+            None => {
+                Left(iter::empty())
             }
-        });
+            Some(target) => {
+                let target = target.try_read().unwrap();
+                Right(target.clone().into_iter().map(|(k, v)| {
+                    if v.0.is_empty() {
+                        k
+                    } else {
+                        let combined =
+                            k.0.into_iter()
+                                .zip(v.0.into_iter())
+                                .map(|(kel, vel)| {
+                                    if matches!(kel, DataValue::Guard) {
+                                        vel
+                                    } else {
+                                        kel
+                                    }
+                                })
+                                .collect_vec();
+                        Tuple(combined)
+                    }
+                }))
+            }
+        };
+
         let mut aggrs = aggrs.to_vec();
         let n_keys = aggrs.iter().filter(|aggr| aggr.is_none()).count();
         let grouped = it.group_by(move |tuple| tuple.0[..n_keys].to_vec());
