@@ -19,7 +19,9 @@ use cozorocks::CfHandle::{Pri, Snd};
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
-use crate::data::encode::{encode_aev_key, encode_ave_key, encode_ave_ref_key, largest_key, smallest_key};
+use crate::data::encode::{
+    encode_aev_key, encode_ave_key, encode_ave_ref_key, largest_key, smallest_key,
+};
 use crate::data::id::{EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, RelationOp};
@@ -490,11 +492,20 @@ impl Db {
         self.db.range_del(&aev_lower, &aev_upper, Pri)?;
 
         if attr.val_type.is_ref_type() {
-            // let aev_lower = encode_ave_ref_key()
-            // todo!()
+            let ave_lower =
+                encode_ave_ref_key(attr.id, EntityId::ZERO, EntityId::ZERO, Validity::MAX);
+            let ave_upper = encode_ave_ref_key(
+                attr.id,
+                EntityId::MAX_PERM,
+                EntityId::MAX_PERM,
+                Validity::MIN,
+            );
+            self.db.range_del(&ave_lower, &ave_upper, Pri)?;
         } else if attr.indexing.should_index() {
-            let ave_lower = encode_ave_key(attr.id, &DataValue::Null, EntityId::ZERO, Validity::MAX);
-            let ave_upper = encode_ave_key(attr.id, &DataValue::Bot, EntityId::MAX_PERM, Validity::MIN);
+            let ave_lower =
+                encode_ave_key(attr.id, &DataValue::Null, EntityId::ZERO, Validity::MAX);
+            let ave_upper =
+                encode_ave_key(attr.id, &DataValue::Bot, EntityId::MAX_PERM, Validity::MIN);
             self.db.range_del(&ave_lower, &ave_upper, Pri)?;
         }
 

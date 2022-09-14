@@ -180,9 +180,9 @@ impl SessionTx {
         // vae for ref types
         if attr.val_type.is_ref_type() {
             let vae_encoded = encode_ave_ref_key(
+                attr.id,
                 v.get_entity_id()
                     .ok_or_else(|| ExpectEntityId(attr.name.to_string(), v.clone()))?,
-                attr.id,
                 eid,
                 vld_in_key,
             );
@@ -467,8 +467,8 @@ impl SessionTx {
         aid: AttrId,
         v_eid: EntityId,
     ) -> impl Iterator<Item = Result<(AttrId, EntityId, EntityId)>> {
-        let lower = encode_ave_ref_key(v_eid, aid, EntityId::ZERO, Validity::MAX);
-        let upper = encode_ave_ref_key(v_eid, aid, EntityId::MAX_PERM, Validity::MIN);
+        let lower = encode_ave_ref_key(aid, v_eid, EntityId::ZERO, Validity::MAX);
+        let upper = encode_ave_ref_key(aid, v_eid, EntityId::MAX_PERM, Validity::MIN);
         TripleValueRefAttrIter::new(self.tx.iterator(Pri), lower, upper)
     }
     pub(crate) fn triple_vref_a_before_scan(
@@ -477,8 +477,8 @@ impl SessionTx {
         v_eid: EntityId,
         before: Validity,
     ) -> impl Iterator<Item = Result<(AttrId, EntityId, EntityId)>> {
-        let lower = encode_ave_ref_key(v_eid, aid, EntityId::ZERO, Validity::MAX);
-        let upper = encode_ave_ref_key(v_eid, aid, EntityId::MAX_PERM, Validity::MIN);
+        let lower = encode_ave_ref_key(aid, v_eid, EntityId::ZERO, Validity::MAX);
+        let upper = encode_ave_ref_key(aid, v_eid, EntityId::MAX_PERM, Validity::MIN);
         TripleValueRefAttrBeforeIter::new(self.tx.iterator(Pri), lower, upper, before)
     }
     pub(crate) fn triple_a_scan(

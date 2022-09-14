@@ -324,8 +324,8 @@ pub(crate) fn encode_ave_key(
 /// vld: 8 bytes
 #[inline]
 pub(crate) fn encode_ave_ref_key(
-    val: EntityId,
     aid: AttrId,
+    val: EntityId,
     eid: EntityId,
     vld: Validity,
 ) -> EncodedVec<LARGE_VEC_SIZE> {
