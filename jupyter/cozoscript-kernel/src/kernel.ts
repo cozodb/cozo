@@ -204,7 +204,7 @@ function displayTable(v: any) {
     if (v.headers) {
         ret += '<thead><tr>'
         for (const head of v.headers) {
-            ret += '<td>';
+            ret += '<td style="font-weight: bold">';
             ret += displayValue(head);
             ret += '</td>';
         }

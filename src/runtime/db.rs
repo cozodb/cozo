@@ -228,7 +228,8 @@ impl Db {
         tx.commit_tx("", false)?;
         Ok(json!({
             "tx_id": tx_id,
-            "results": res
+            "headers": ["attr_id", "op"],
+            "rows": res
         }))
     }
     pub fn current_schema(&self) -> Result<JsonValue> {
@@ -247,7 +248,7 @@ impl Db {
             })
             .try_collect()?;
         Ok(
-            json!({"rows": rows, "headers": ["id", "name", "type", "cardinality", "index", "history"]}),
+            json!({"rows": rows, "headers": ["attr_id", "name", "type", "cardinality", "index", "history"]}),
         )
     }
     pub fn run_script<'a>(
@@ -308,7 +309,7 @@ impl Db {
                         }
                     }
                 }
-                Ok(json!({"status": "OK"}))
+                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::ListSchema => self.current_schema(),
             SysOp::ListRelations => self.list_relations(),
@@ -316,22 +317,22 @@ impl Db {
                 for r in rs.iter() {
                     self.remove_relation(r)?;
                 }
-                Ok(json!({"status": "OK"}))
+                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::RemoveAttribute(name) => {
                 self.remove_attribute(&name)?;
-                Ok(json!({"status": "OK"}))
+                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::ListRunning => self.list_running(),
             SysOp::KillRunning(id) => {
                 let queries = self.running_queries.lock().unwrap();
                 Ok(match queries.get(&id) {
                     None => {
-                        json!({"status": "NOT_FOUND"})
+                        json!({"headers": ["status"], "rows": [["NOT_FOUND"]]})
                     }
                     Some(handle) => {
                         handle.poison.0.store(true, Ordering::Relaxed);
-                        json!({"status": "KILLING"})
+                        json!({"headers": ["status"], "rows": [["KILLING"]]})
                     }
                 })
             }
@@ -433,7 +434,7 @@ impl Db {
                 if let Some(c) = to_clear {
                     clean_ups.push(c);
                 }
-                Ok((json!({"relation": "OK"}), clean_ups))
+                Ok((json!({"headers": ["status"], "rows": [["OK"]]}), clean_ups))
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     sorted_iter,
@@ -459,7 +460,7 @@ impl Db {
                 if let Some(c) = to_clear {
                     clean_ups.push(c);
                 }
-                Ok((json!({"relation": "OK"}), clean_ups))
+                Ok((json!({"headers": ["status"], "rows": [["OK"]]}), clean_ups))
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     scan,

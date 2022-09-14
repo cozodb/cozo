@@ -12,8 +12,8 @@ pub(crate) enum StoreOp {
 impl Display for StoreOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            StoreOp::Retract => write!(f, "-"),
-            StoreOp::Assert => write!(f, "+"),
+            StoreOp::Retract => write!(f, "retract"),
+            StoreOp::Assert => write!(f, "assert"),
         }
     }
 }
