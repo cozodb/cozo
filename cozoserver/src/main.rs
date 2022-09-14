@@ -1,22 +1,22 @@
+use std::{env, thread};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::{Debug, Display, Formatter};
 use std::io::{stdin, stdout, Write};
 use std::str::from_utf8;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use std::{env, thread};
 
 use actix_cors::Cors;
+use actix_web::{App, HttpRequest, HttpResponse, HttpServer, post, Responder, ResponseError, web};
 use actix_web::body::BoxBody;
 use actix_web::http::header::HeaderName;
 use actix_web::rt::task::spawn_blocking;
-use actix_web::{post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, ResponseError};
 use actix_web_static_files::ResourceFiles;
 use ansi_to_html::convert_escaped;
 use clap::Parser;
 use env_logger::Env;
 use log::debug;
-use miette::{bail, miette, IntoDiagnostic};
+use miette::{bail, IntoDiagnostic, miette};
 use rand::Rng;
 use serde_json::json;
 use sha3::Digest;
@@ -133,8 +133,8 @@ impl AppStateWithDb {
             thread::sleep(Duration::from_millis(1234));
             bail!("invalid password")
         })
-        .await
-        .into_diagnostic()?
+            .await
+            .into_diagnostic()?
     }
 
     async fn reset_password(&self, user: &str, new_pass: &str) -> miette::Result<()> {
@@ -151,8 +151,8 @@ impl AppStateWithDb {
             db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())?;
             Ok(())
         })
-        .await
-        .into_diagnostic()?
+            .await
+            .into_diagnostic()?
     }
 
     async fn remove_user(&self, user: &str) -> miette::Result<()> {
@@ -186,7 +186,7 @@ async fn query(
     data.verify_password(&req).await?;
     let db = data.db.new_session()?;
     let start = Instant::now();
-    let task = spawn_blocking(move || db.run_script(&body.script, &body.params));
+    let task = spawn_blocking(move || db.run_script(&body.script, &body.params, data.playground));
     let mut result = task.await.map_err(|e| miette!(e))??;
     if let Some(obj) = result.as_object_mut() {
         obj.insert(
@@ -352,8 +352,8 @@ async fn main() -> std::io::Result<()> {
         }
         app
     })
-    .bind(addr)?
-    .run();
+        .bind(addr)?
+        .run();
 
     if args.playground {
         let (server_res, _) = futures::join!(server, open_url(url_to_open));

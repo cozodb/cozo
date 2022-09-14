@@ -1,24 +1,24 @@
+use std::{fs, thread};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::fs::read_to_string;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
-use std::{fs, thread};
 
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
-use miette::{bail, ensure, Diagnostic, Result, WrapErr};
+use miette::{bail, Diagnostic, ensure, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
 
-use cozorocks::CfHandle::{Pri, Snd};
 use cozorocks::{DbBuilder, DbIter, RocksDb};
+use cozorocks::CfHandle::{Pri, Snd};
 
-use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
+use crate::data::compare::{DB_KEY_PREFIX_LEN, rusty_cmp};
 use crate::data::encode::{
     encode_aev_key, encode_ave_key, encode_ave_ref_key, largest_key, smallest_key,
 };
@@ -26,12 +26,12 @@ use crate::data::id::{EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
+use crate::data::tuple::{EncodedTuple, rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::schema::AttrTxItem;
 use crate::parse::sys::{CompactTarget, SysOp};
 use crate::parse::tx::TripleTx;
-use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 use crate::runtime::transact::SessionTx;
 use crate::transact::meta::AttrNotFoundError;
@@ -255,8 +255,9 @@ impl Db {
         &self,
         payload: &str,
         params: &BTreeMap<String, JsonValue>,
+        lax_security: bool,
     ) -> Result<JsonValue> {
-        self.do_run_script(payload, params).map_err(|err| {
+        self.do_run_script(payload, params, lax_security).map_err(|err| {
             if err.source_code().is_some() {
                 err
             } else {
@@ -268,6 +269,7 @@ impl Db {
         &self,
         payload: &str,
         params: &BTreeMap<String, JsonValue>,
+        lax_security: bool,
     ) -> Result<JsonValue> {
         let param_pool = params
             .iter()
@@ -293,10 +295,10 @@ impl Db {
             }
             CozoScript::Tx(tx) => self.transact_triples(tx),
             CozoScript::Schema(schema) => self.transact_attributes(schema),
-            CozoScript::Sys(op) => self.run_sys_op(op),
+            CozoScript::Sys(op) => self.run_sys_op(op, lax_security),
         }
     }
-    fn run_sys_op(&self, op: SysOp) -> Result<JsonValue> {
+    fn run_sys_op(&self, op: SysOp, lax_security: bool) -> Result<JsonValue> {
         match op {
             SysOp::Compact(opts) => {
                 for opt in opts {
@@ -351,14 +353,22 @@ impl Db {
                 })
             }
             SysOp::ExecuteLocalScript(path) => {
-                #[derive(Debug, Error, Diagnostic)]
-                #[error("Cannot execute local script")]
-                #[diagnostic(help("{0}"))]
-                #[diagnostic(code(eval::open_local_script_failed))]
-                struct LocalScriptNotFound(String);
-                let content =
-                    read_to_string(&*path).map_err(|err| LocalScriptNotFound(err.to_string()))?;
-                self.run_script(&content, &Default::default())
+                if lax_security {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("Cannot execute local script")]
+                    #[diagnostic(help("{0}"))]
+                    #[diagnostic(code(eval::open_local_script_failed))]
+                    struct LocalScriptNotFound(String);
+                    let content =
+                        read_to_string(&*path).map_err(|err| LocalScriptNotFound(err.to_string()))?;
+                    self.run_script(&content, &Default::default(), lax_security)
+                } else {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("Local script execution is not allowed")]
+                    #[diagnostic(code(eval::non_lax_security))]
+                    struct NonLaxSecurity;
+                    bail!(NonLaxSecurity)
+                }
             }
         }
     }
@@ -433,7 +443,7 @@ impl Db {
 
                         #[derive(Debug, Error, Diagnostic)]
                         #[error(
-                            "The query is asserted to return no result, but a tuple {0:?} is found"
+                        "The query is asserted to return no result, but a tuple {0:?} is found"
                         )]
                         #[diagnostic(code(eval::assert_none_failure))]
                         struct AssertNoneFailure(Tuple, #[label] SourceSpan);
@@ -601,7 +611,7 @@ impl Db {
     pub fn meta_range_scan(
         &self,
         prefix: &[&str],
-    ) -> impl Iterator<Item = Result<(Vec<String>, Vec<u8>)>> {
+    ) -> impl Iterator<Item=Result<(Vec<String>, Vec<u8>)>> {
         let mut lower_bound = Tuple(vec![DataValue::Guard]);
         for p in prefix {
             lower_bound.0.push(DataValue::Str(SmartString::from(*p)));
@@ -670,7 +680,7 @@ impl Db {
         let upper = Tuple(vec![DataValue::Str(SmartString::from(String::from(
             LARGEST_UTF_CHAR,
         )))])
-        .encode_as_key(RelationId::SYSTEM);
+            .encode_as_key(RelationId::SYSTEM);
         let mut it = self
             .db
             .transact()

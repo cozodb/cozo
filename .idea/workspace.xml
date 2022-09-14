@@ -15,22 +15,10 @@
     <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="regenerate idea files">
-      <change beforePath="$PROJECT_DIR$/.idea/cozo.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/cozo.iml" afterDir="false" />
+    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="validity parsing">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozohttp/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/cozoserver/Cargo.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozohttp/build.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cozoserver/build.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozohttp/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cozoserver/src/main.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozopy/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozopy/Cargo.toml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozopy/air-routes-latest-edges.csv" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozopy/air-routes-latest-nodes.csv" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozopy/air_routes.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozopy/cozo.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozopy/smoke.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozopy/src/lib.rs" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/data/id.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/id.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozoserver/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cozoserver/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/runtime/db.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/runtime/db.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -121,7 +109,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1663161524540</updated>
-      <workItem from="1663161527741" duration="2380000" />
+      <workItem from="1663161527741" duration="3481000" />
     </task>
     <task id="LOCAL-00001" summary="regenerate idea files">
       <created>1663161616722</created>
@@ -130,7 +118,14 @@
       <option name="project" value="LOCAL" />
       <updated>1663161616722</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="validity parsing">
+      <created>1663164148035</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1663164148035</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -149,6 +144,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="regenerate idea files" />
-    <option name="LAST_COMMIT_MESSAGE" value="regenerate idea files" />
+    <MESSAGE value="validity parsing" />
+    <option name="LAST_COMMIT_MESSAGE" value="validity parsing" />
   </component>
 </project>
