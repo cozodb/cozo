@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "A database in development"
 authors = ["Ziyang Hu"]
+license = "AGPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
