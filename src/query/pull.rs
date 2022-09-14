@@ -117,11 +117,11 @@ impl SessionTx {
                 PullOnNonRef(spec.attr.name.to_string(), spec.span)
             );
             let back_res: Vec<_> = if spec.attr.with_history {
-                self.triple_vref_a_before_scan(id, spec.attr.id, spec.vld)
+                self.triple_vref_a_before_scan(spec.attr.id,id,  spec.vld)
                     .map_ok(|(_, _, e)| e)
                     .try_collect()?
             } else {
-                self.triple_vref_a_scan(id, spec.attr.id)
+                self.triple_vref_a_scan(spec.attr.id, id)
                     .map_ok(|(_, _, e)| e)
                     .try_collect()?
             };

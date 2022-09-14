@@ -19,8 +19,8 @@ use cozorocks::CfHandle::{Pri, Snd};
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 
 use crate::data::compare::{rusty_cmp, DB_KEY_PREFIX_LEN};
-use crate::data::encode::{largest_key, smallest_key};
-use crate::data::id::{TxId, Validity};
+use crate::data::encode::{encode_aev_key, encode_ave_key, encode_ave_ref_key, largest_key, smallest_key};
+use crate::data::id::{EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, RelationOp};
 use crate::data::symb::Symbol;
@@ -32,6 +32,7 @@ use crate::parse::tx::TripleTx;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 use crate::runtime::transact::SessionTx;
+use crate::transact::meta::AttrNotFoundError;
 use crate::utils::swap_option_result;
 
 struct RunningQueryHandle {
@@ -315,6 +316,10 @@ impl Db {
                 }
                 Ok(json!({"status": "OK"}))
             }
+            SysOp::RemoveAttribute(name) => {
+                self.remove_attribute(&name)?;
+                Ok(json!({"status": "OK"}))
+            }
             SysOp::ListRunning => self.list_running(),
             SysOp::KillRunning(id) => {
                 let queries = self.running_queries.lock().unwrap();
@@ -469,6 +474,30 @@ impl Db {
         let (lower, upper) = tx.destroy_relation(name)?;
         tx.commit_tx("", false)?;
         self.db.range_del(&lower, &upper, Snd)?;
+        Ok(())
+    }
+    pub(crate) fn remove_attribute(&self, name: &Symbol) -> Result<()> {
+        let mut tx = self.transact_write()?;
+        let attr = tx
+            .attr_by_name(&name)?
+            .ok_or_else(|| AttrNotFoundError(name.to_string()))?;
+
+        tx.retract_attr(attr.id)?;
+        tx.commit_tx("", false)?;
+
+        let aev_lower = encode_aev_key(attr.id, EntityId::ZERO, &DataValue::Null, Validity::MAX);
+        let aev_upper = encode_aev_key(attr.id, EntityId::MAX_PERM, &DataValue::Bot, Validity::MIN);
+        self.db.range_del(&aev_lower, &aev_upper, Pri)?;
+
+        if attr.val_type.is_ref_type() {
+            // let aev_lower = encode_ave_ref_key()
+            // todo!()
+        } else if attr.indexing.should_index() {
+            let ave_lower = encode_ave_key(attr.id, &DataValue::Null, EntityId::ZERO, Validity::MAX);
+            let ave_upper = encode_ave_key(attr.id, &DataValue::Bot, EntityId::MAX_PERM, Validity::MIN);
+            self.db.range_del(&ave_lower, &ave_upper, Pri)?;
+        }
+
         Ok(())
     }
     pub(crate) fn list_running(&self) -> Result<JsonValue> {

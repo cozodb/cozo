@@ -1,19 +1,19 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 
-use miette::{bail, Diagnostic, ensure, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use cozorocks::{DbIter, IterBuilder};
 use cozorocks::CfHandle::Pri;
+use cozorocks::{DbIter, IterBuilder};
 
 use crate::data::attr::Attribute;
 use crate::data::compare::compare_key;
 use crate::data::encode::{
-    decode_ae_key, decode_vae_key, decode_value, decode_value_from_key, decode_value_from_val,
-    encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v, encode_sentinel_attr_val,
-    encode_sentinel_entity_attr, encode_vae_key, EncodedVec, LARGE_VEC_SIZE,
+    decode_ae_key, decode_ave_ref_key, decode_value, decode_value_from_key, decode_value_from_val,
+    encode_aev_key, encode_ave_key, encode_ave_key_for_unique_v, encode_ave_ref_key,
+    encode_sentinel_attr_val, encode_sentinel_entity_attr, EncodedVec, LARGE_VEC_SIZE,
 };
 use crate::data::id::{AttrId, EntityId, Validity};
 use crate::data::triple::StoreOp;
@@ -179,7 +179,7 @@ impl SessionTx {
 
         // vae for ref types
         if attr.val_type.is_ref_type() {
-            let vae_encoded = encode_vae_key(
+            let vae_encoded = encode_ave_ref_key(
                 v.get_entity_id()
                     .ok_or_else(|| ExpectEntityId(attr.name.to_string(), v.clone()))?,
                 attr.id,
@@ -291,7 +291,10 @@ impl SessionTx {
         #[error("Attempting to amend triple {0} via reserved ID {1:?}")]
         #[diagnostic(code(eval::amend_triple_with_reserved_id))]
         struct AmendingTripleByTempIdError(String, EntityId);
-        ensure!(eid.is_perm(), AmendingTripleByTempIdError(attr.name.to_string(), eid));
+        ensure!(
+            eid.is_perm(),
+            AmendingTripleByTempIdError(attr.name.to_string(), eid)
+        );
         // checking that the eid actually exists should be done in the preprocessing step
         self.write_triple(eid, attr, v, vld, StoreOp::Retract)
     }
@@ -461,21 +464,21 @@ impl SessionTx {
     }
     pub(crate) fn triple_vref_a_scan(
         &self,
-        v_eid: EntityId,
         aid: AttrId,
-    ) -> impl Iterator<Item = Result<(EntityId, AttrId, EntityId)>> {
-        let lower = encode_vae_key(v_eid, aid, EntityId::ZERO, Validity::MAX);
-        let upper = encode_vae_key(v_eid, aid, EntityId::MAX_PERM, Validity::MIN);
+        v_eid: EntityId,
+    ) -> impl Iterator<Item = Result<(AttrId, EntityId, EntityId)>> {
+        let lower = encode_ave_ref_key(v_eid, aid, EntityId::ZERO, Validity::MAX);
+        let upper = encode_ave_ref_key(v_eid, aid, EntityId::MAX_PERM, Validity::MIN);
         TripleValueRefAttrIter::new(self.tx.iterator(Pri), lower, upper)
     }
     pub(crate) fn triple_vref_a_before_scan(
         &self,
-        v_eid: EntityId,
         aid: AttrId,
+        v_eid: EntityId,
         before: Validity,
-    ) -> impl Iterator<Item = Result<(EntityId, AttrId, EntityId)>> {
-        let lower = encode_vae_key(v_eid, aid, EntityId::ZERO, Validity::MAX);
-        let upper = encode_vae_key(v_eid, aid, EntityId::MAX_PERM, Validity::MIN);
+    ) -> impl Iterator<Item = Result<(AttrId, EntityId, EntityId)>> {
+        let lower = encode_ave_ref_key(v_eid, aid, EntityId::ZERO, Validity::MAX);
+        let upper = encode_ave_ref_key(v_eid, aid, EntityId::MAX_PERM, Validity::MIN);
         TripleValueRefAttrBeforeIter::new(self.tx.iterator(Pri), lower, upper, before)
     }
     pub(crate) fn triple_a_scan(
@@ -1020,7 +1023,7 @@ impl TripleValueRefAttrIter {
         it.seek(&lower_bound);
         Self { it, started: false }
     }
-    fn next_inner(&mut self) -> Result<Option<(EntityId, AttrId, EntityId)>> {
+    fn next_inner(&mut self) -> Result<Option<(AttrId, EntityId, EntityId)>> {
         if self.started {
             self.it.next();
         } else {
@@ -1029,15 +1032,15 @@ impl TripleValueRefAttrIter {
         match self.it.key()? {
             None => Ok(None),
             Some(k_slice) => {
-                let (v_eid, aid, eid, _) = decode_vae_key(k_slice)?;
-                Ok(Some((v_eid, aid, eid)))
+                let (aid, v_eid, eid, _) = decode_ave_ref_key(k_slice)?;
+                Ok(Some((aid, v_eid, eid)))
             }
         }
     }
 }
 
 impl Iterator for TripleValueRefAttrIter {
-    type Item = Result<(EntityId, AttrId, EntityId)>;
+    type Item = Result<(AttrId, EntityId, EntityId)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         swap_option_result(self.next_inner())
@@ -1066,13 +1069,13 @@ impl TripleValueRefAttrBeforeIter {
             before,
         }
     }
-    fn next_inner(&mut self) -> Result<Option<(EntityId, AttrId, EntityId)>> {
+    fn next_inner(&mut self) -> Result<Option<(AttrId, EntityId, EntityId)>> {
         loop {
             self.it.seek(&self.current);
             match self.it.pair()? {
                 None => return Ok(None),
                 Some((k_slice, v_slice)) => {
-                    let (v_eid, aid, eid, tid) = decode_vae_key(k_slice)?;
+                    let (aid, v_eid, eid, tid) = decode_ave_ref_key(k_slice)?;
                     if tid > self.before {
                         self.current.encoded_entity_amend_validity(self.before);
                         continue;
@@ -1081,7 +1084,7 @@ impl TripleValueRefAttrBeforeIter {
                     self.current.encoded_entity_amend_validity_to_inf_past();
                     let op = StoreOp::try_from(v_slice[0])?;
                     if op.is_assert() {
-                        return Ok(Some((v_eid, aid, eid)));
+                        return Ok(Some((aid, v_eid, eid)));
                     }
                 }
             }
@@ -1090,7 +1093,7 @@ impl TripleValueRefAttrBeforeIter {
 }
 
 impl Iterator for TripleValueRefAttrBeforeIter {
-    type Item = Result<(EntityId, AttrId, EntityId)>;
+    type Item = Result<(AttrId, EntityId, EntityId)>;
 
     fn next(&mut self) -> Option<Self::Item> {
         swap_option_result(self.next_inner())

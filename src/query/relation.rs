@@ -162,7 +162,7 @@ pub(crate) struct FilteredRA {
     parent: Box<RelAlgebra>,
     pred: Vec<Expr>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
-    pub(crate) span: SourceSpan
+    pub(crate) span: SourceSpan,
 }
 
 impl FilteredRA {
@@ -384,20 +384,28 @@ impl RelAlgebra {
     pub(crate) fn cartesian_join(self, right: RelAlgebra, span: SourceSpan) -> Self {
         self.join(right, vec![], vec![], span)
     }
-    pub(crate) fn derived(bindings: Vec<Symbol>, storage: DerivedRelStore, span: SourceSpan) -> Self {
+    pub(crate) fn derived(
+        bindings: Vec<Symbol>,
+        storage: DerivedRelStore,
+        span: SourceSpan,
+    ) -> Self {
         Self::Derived(DerivedRA {
             bindings,
             storage,
             filters: vec![],
-            span
+            span,
         })
     }
-    pub(crate) fn relation(bindings: Vec<Symbol>, storage: RelationMetadata, span: SourceSpan) -> Self {
+    pub(crate) fn relation(
+        bindings: Vec<Symbol>,
+        storage: RelationMetadata,
+        span: SourceSpan,
+    ) -> Self {
         Self::Relation(RelationRA {
             bindings,
             storage,
             filters: vec![],
-            span
+            span,
         })
     }
     pub(crate) fn triple(
@@ -427,7 +435,7 @@ impl RelAlgebra {
             parent: Box::new(self),
             pred: vec![filter],
             to_eliminate: Default::default(),
-            span
+            span,
         })
     }
     pub(crate) fn unify(
@@ -451,7 +459,7 @@ impl RelAlgebra {
         right: RelAlgebra,
         left_keys: Vec<Symbol>,
         right_keys: Vec<Symbol>,
-        span: SourceSpan
+        span: SourceSpan,
     ) -> Self {
         RelAlgebra::Join(Box::new(InnerJoin {
             left: self,
@@ -461,7 +469,7 @@ impl RelAlgebra {
                 right_keys,
             },
             to_eliminate: Default::default(),
-            span
+            span,
         }))
     }
     pub(crate) fn neg_join(
@@ -469,7 +477,7 @@ impl RelAlgebra {
         right: RelAlgebra,
         left_keys: Vec<Symbol>,
         right_keys: Vec<Symbol>,
-        span: SourceSpan
+        span: SourceSpan,
     ) -> Self {
         RelAlgebra::NegJoin(Box::new(NegJoin {
             left: self,
@@ -479,7 +487,7 @@ impl RelAlgebra {
                 right_keys,
             },
             to_eliminate: Default::default(),
-            span
+            span,
         }))
     }
 }
@@ -533,7 +541,7 @@ pub(crate) struct InlineFixedRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) data: Vec<Vec<DataValue>>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
-    pub(crate) span: SourceSpan
+    pub(crate) span: SourceSpan,
 }
 
 impl InlineFixedRA {
@@ -542,7 +550,7 @@ impl InlineFixedRA {
             bindings: vec![],
             data: vec![vec![]],
             to_eliminate: Default::default(),
-            span
+            span,
         }
     }
     pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
@@ -1092,10 +1100,10 @@ impl TripleRA {
                         .get_entity_id()
                         .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
                     let nxt = if self.attr.with_history {
-                        tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
+                        tx.triple_vref_a_before_scan(self.attr.id, v_eid, self.vld)
                             .next()
                     } else {
-                        tx.triple_vref_a_scan(v_eid, self.attr.id).next()
+                        tx.triple_vref_a_scan(self.attr.id, v_eid).next()
                     };
                     match nxt {
                         None => Ok(if !eliminate_indices.is_empty() {
@@ -1140,7 +1148,7 @@ impl TripleRA {
                     .map(move |v_eid| {
                         if self.attr.with_history {
                             Left(
-                                tx.triple_vref_a_before_scan(v_eid, self.attr.id, self.vld)
+                                tx.triple_vref_a_before_scan(self.attr.id, v_eid, self.vld)
                                     .map_ok(move |(_, _, e_id)| {
                                         let mut ret = tuple.0.clone();
                                         ret.push(e_id.as_datavalue());
@@ -1149,7 +1157,7 @@ impl TripleRA {
                                     }),
                             )
                         } else {
-                            Right(tx.triple_vref_a_scan(v_eid, self.attr.id).map_ok(
+                            Right(tx.triple_vref_a_scan(self.attr.id, v_eid).map_ok(
                                 move |(_, _, e_id)| {
                                     let mut ret = tuple.0.clone();
                                     ret.push(e_id.as_datavalue());
@@ -1369,7 +1377,7 @@ pub(crate) struct RelationRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: RelationMetadata,
     pub(crate) filters: Vec<Expr>,
-    pub(crate) span: SourceSpan
+    pub(crate) span: SourceSpan,
 }
 
 impl RelationRA {
@@ -1545,7 +1553,7 @@ pub(crate) struct DerivedRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: DerivedRelStore,
     pub(crate) filters: Vec<Expr>,
-    pub(crate) span: SourceSpan
+    pub(crate) span: SourceSpan,
 }
 
 impl DerivedRA {
@@ -1884,7 +1892,7 @@ pub(crate) struct NegJoin {
     pub(crate) right: RelAlgebra,
     pub(crate) joiner: Joiner,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
-    pub(crate) span: SourceSpan
+    pub(crate) span: SourceSpan,
 }
 
 impl NegJoin {
@@ -1967,7 +1975,7 @@ pub(crate) struct InnerJoin {
     pub(crate) right: RelAlgebra,
     pub(crate) joiner: Joiner,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
-    pub(crate) span: SourceSpan
+    pub(crate) span: SourceSpan,
 }
 
 impl InnerJoin {

@@ -394,12 +394,12 @@ impl MagicAlgoRuleArg {
                         }
                         TripleDir::Bwd => {
                             if attr.with_history {
-                                Box::new(tx.triple_vref_a_before_scan(id, attr.id, *vld).map_ok(
-                                    |(v, _, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
+                                Box::new(tx.triple_vref_a_before_scan(attr.id, id, *vld).map_ok(
+                                    |(_, v, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
                                 ))
                             } else {
-                                Box::new(tx.triple_vref_a_scan(id, attr.id).map_ok(
-                                    |(v, _, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
+                                Box::new(tx.triple_vref_a_scan(attr.id, id).map_ok(
+                                    |(_, v, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
                                 ))
                             }
                         }

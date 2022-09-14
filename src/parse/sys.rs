@@ -33,6 +33,7 @@ pub(crate) enum SysOp {
     ListRunning,
     KillRunning(u64),
     RemoveRelations(Vec<Symbol>),
+    RemoveAttribute(Symbol),
     ExecuteLocalScript(SmartString<LazyCompact>),
 }
 
@@ -86,6 +87,11 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
                 .map(|v| Symbol::new(v.as_str(), v.extract_span()))
                 .collect();
             SysOp::RemoveRelations(rels)
+        }
+        Rule::remove_attribute_op => {
+            let attr_name_pair = inner.into_inner().next().unwrap();
+            let attr_name = Symbol::new(attr_name_pair.as_str(), attr_name_pair.extract_span());
+            SysOp::RemoveAttribute(attr_name)
         }
         _ => unreachable!(),
     })

@@ -19,7 +19,7 @@ use crate::runtime::transact::TxLog;
 pub(crate) enum StorageTag {
     TripleAttrEntityValue = 1,
     TripleAttrValueEntity = 2,
-    TripleValueAttrEntity = 3,
+    TripleAttrValueRefEntity = 3,
     AttrById = 4,
     Tx = 5,
     SentinelEntityAttr = 6,
@@ -45,7 +45,7 @@ impl EncodedVec<LARGE_VEC_SIZE> {
         match StorageTag::try_from(self.inner[0]).unwrap() {
             StorageTag::TripleAttrEntityValue
             | StorageTag::TripleAttrValueEntity
-            | StorageTag::TripleValueAttrEntity => {
+            | StorageTag::TripleAttrValueRefEntity => {
                 let op = StoreOp::try_from(data[0]).unwrap();
                 let tx = TxId::from_bytes(&data[0..8]);
                 if data.len() > 8 {
@@ -96,8 +96,8 @@ impl<const N: usize> Debug for EncodedVec<N> {
                         let v = decode_value_from_key(self).unwrap();
                         write!(f, " [{:?}, {:?}, {:?}] @{:?}", e, a, v, t)
                     }
-                    StorageTag::TripleValueAttrEntity => {
-                        let (v, a, e, t) = decode_vae_key(self).unwrap();
+                    StorageTag::TripleAttrValueRefEntity => {
+                        let (v, a, e, t) = decode_ave_ref_key(self).unwrap();
                         write!(f, " [{:?}, {:?}, {:?}] @{:?}", e, a, v, t)
                     }
                     StorageTag::AttrById => {
@@ -184,7 +184,7 @@ impl TryFrom<u8> for StorageTag {
         Ok(match value {
             1 => TripleAttrEntityValue,
             2 => TripleAttrValueEntity,
-            3 => TripleValueAttrEntity,
+            3 => TripleAttrValueRefEntity,
             4 => AttrById,
             5 => Tx,
             6 => SentinelEntityAttr,
@@ -318,12 +318,12 @@ pub(crate) fn encode_ave_key(
     ret.into()
 }
 
+/// aid: 8 bytes
 /// val: 8 bytes (incl. tag)
 /// eid: 8 bytes
-/// aid: 8 bytes
 /// vld: 8 bytes
 #[inline]
-pub(crate) fn encode_vae_key(
+pub(crate) fn encode_ave_ref_key(
     val: EntityId,
     aid: AttrId,
     eid: EntityId,
@@ -331,10 +331,10 @@ pub(crate) fn encode_vae_key(
 ) -> EncodedVec<LARGE_VEC_SIZE> {
     let mut ret = SmallVec::<[u8; LARGE_VEC_SIZE]>::new();
 
-    ret.extend(val.bytes());
-    ret[0] = StorageTag::TripleValueAttrEntity as u8;
-
     ret.extend(aid.bytes());
+    ret[0] = StorageTag::TripleAttrValueRefEntity as u8;
+    ret.extend(val.bytes());
+
     ret.extend(vld.bytes());
     debug_assert_eq!(ret.len(), VEC_SIZE_24);
     ret.extend(eid.bytes());
@@ -344,13 +344,13 @@ pub(crate) fn encode_vae_key(
 }
 
 #[inline]
-pub(crate) fn decode_vae_key(src: &[u8]) -> Result<(EntityId, AttrId, EntityId, Validity)> {
-    let vid = EntityId::from_bytes(&src[0..VEC_SIZE_8]);
-    let aid = AttrId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
+pub(crate) fn decode_ave_ref_key(src: &[u8]) -> Result<(AttrId, EntityId, EntityId, Validity)> {
+    let aid = AttrId::from_bytes(&src[0..VEC_SIZE_8]);
+    let vid = EntityId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
     let vld = Validity::from_bytes(&src[VEC_SIZE_16..VEC_SIZE_24]);
     let eid = EntityId::from_bytes(&src[VEC_SIZE_24..VEC_SIZE_32]);
 
-    Ok((vid, aid, eid, vld))
+    Ok((aid, vid, eid, vld))
 }
 
 /// aid: 8 bytes (incl. tag)
