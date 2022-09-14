@@ -94,6 +94,7 @@ impl Db {
         let db_builder = builder
             .pri_use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
             .pri_use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
+            .use_bloom_filter(true, 9.9, true)
             .snd_use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
             .snd_use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false)
             .path(store_path.to_str().unwrap());

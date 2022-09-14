@@ -87,9 +87,9 @@ shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, boo
         BlockBasedTableOptions table_options;
         table_options.filter_policy.reset(NewBloomFilterPolicy(opts.bloom_filter_bits_per_key, false));
         table_options.whole_key_filtering = opts.bloom_filter_whole_key_filtering;
-        options.table_factory.reset(NewBlockBasedTableFactory(table_options));
-        cf_pri_opts.table_factory.reset(NewBlockBasedTableFactory(table_options));
         cf_snd_opts.table_factory.reset(NewBlockBasedTableFactory(table_options));
+        cf_pri_opts.table_factory.reset(NewBlockBasedTableFactory(table_options));
+        options.table_factory.reset(NewBlockBasedTableFactory(table_options));
     }
     if (opts.pri_use_capped_prefix_extractor) {
         cf_pri_opts.prefix_extractor.reset(NewCappedPrefixTransform(opts.pri_capped_prefix_extractor_len));

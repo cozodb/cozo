@@ -38,9 +38,9 @@ fn simple() {
             weight: float,
         }
     "#,
-        &params,
+        &params, false,
     )
-    .unwrap();
+        .unwrap();
     info!(
         "{}",
         to_string_pretty(&db.current_schema().unwrap()).unwrap()
@@ -103,9 +103,9 @@ fn simple() {
                 person.friend: "george"},
         }
     "#,
-        &params,
+        &params, false,
     )
-    .unwrap();
+        .unwrap();
     let query = r#"
     friend_of_friend[a, b] := [a person.friend b];
     friend_of_friend[a, b] := [a person.friend c], friend_of_friend[c, b];
@@ -120,7 +120,7 @@ fn simple() {
     :sort -n;
     "#;
 
-    let ret = db.run_script(query, &params).unwrap();
+    let ret = db.run_script(query, &params, false).unwrap();
     let res = to_string_pretty(&ret).unwrap();
     println!("{}", res);
 }

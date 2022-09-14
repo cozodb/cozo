@@ -6,6 +6,14 @@
   <component name="CMakePresetLoader"><![CDATA[{
   "useNewFormat": true
 }]]></component>
+  <component name="CMakeReloadState">
+    <option name="reloaded" value="true" />
+  </component>
+  <component name="CMakeRunConfigurationManager">
+    <generated>
+      <config projectName="cozorocks" targetName="cozorocks" />
+    </generated>
+  </component>
   <component name="CMakeSettings">
     <configurations>
       <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
@@ -15,10 +23,13 @@
     <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="validity parsing">
+    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="enforce local file security">
+      <change beforePath="$PROJECT_DIR$/.idea/cozo.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/cozo.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozoserver/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cozoserver/src/main.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cozorocks/bridge/db.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/cozorocks/bridge/db.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/runtime/db.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/runtime/db.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/air_routes.rs" beforeDir="false" afterPath="$PROJECT_DIR$/tests/air_routes.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/simple.rs" beforeDir="false" afterPath="$PROJECT_DIR$/tests/simple.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -50,6 +61,7 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.cidr.known.project.marker": "true",
     "WebServerToolWindowFactoryState": "false",
+    "cf.advertisement.text.has.clang-format": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
     "node.js.detected.package.eslint": "true",
@@ -58,7 +70,17 @@
     "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true"
   }
 }]]></component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Cargo.Test data::id::p">
+    <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" PASS_PARENT_ENVS_2="true">
+      <method v="2">
+        <option name="CLION.EXTERNAL.BUILD" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="cozorocks" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="cozorocks" TARGET_NAME="cozorocks" CONFIG_NAME="Debug">
+      <method v="2">
+        <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
+      </method>
+    </configuration>
     <configuration name="Test data::id::p" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
       <option name="command" value="test --package cozo --lib data::id::p -- --exact" />
       <option name="workingDirectory" value="file://$PROJECT_DIR$" />
@@ -92,6 +114,10 @@
         <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
       </method>
     </configuration>
+    <list>
+      <item itemvalue="Cargo.Test data::id::p" />
+      <item itemvalue="CMake Application.cozorocks" />
+    </list>
     <recent_temporary>
       <list>
         <item itemvalue="Cargo.Test data::id::p" />
@@ -109,7 +135,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1663161524540</updated>
-      <workItem from="1663161527741" duration="3481000" />
+      <workItem from="1663161527741" duration="5409000" />
     </task>
     <task id="LOCAL-00001" summary="regenerate idea files">
       <created>1663161616722</created>
@@ -125,7 +151,14 @@
       <option name="project" value="LOCAL" />
       <updated>1663164148035</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="enforce local file security">
+      <created>1663166869694</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1663166869694</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -145,6 +178,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="regenerate idea files" />
     <MESSAGE value="validity parsing" />
-    <option name="LAST_COMMIT_MESSAGE" value="validity parsing" />
+    <MESSAGE value="enforce local file security" />
+    <option name="LAST_COMMIT_MESSAGE" value="enforce local file security" />
   </component>
 </project>

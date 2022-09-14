@@ -61,13 +61,13 @@ fn air_routes() -> Result<()> {
             contains: ref many,
         }
     "#,
-        &params,
+        &params, false,
     );
 
     if attr_res.is_ok() {
         let insertions = read_to_string("tests/air-routes-data.json").into_diagnostic()?;
         let triple_insertion_time = Instant::now();
-        db.run_script(&insertions, &params)?;
+        db.run_script(&insertions, &params, false)?;
         dbg!(triple_insertion_time.elapsed());
     }
 
@@ -77,7 +77,7 @@ fn air_routes() -> Result<()> {
         ?[src, dst, distance] := [r route.src src], [r route.dst dst], [r route.distance distance];
         :relation rederive flies_to;
     "#,
-        &params,
+        &params, false,
     )?;
 
     dbg!(view_time.elapsed());
@@ -90,7 +90,7 @@ fn air_routes() -> Result<()> {
                                         [src airport.iata src_c], [dst airport.iata dst_c];
         :relation rederive flies_to_code;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(view_time2.elapsed());
 
@@ -100,7 +100,7 @@ fn air_routes() -> Result<()> {
             ?[code, lat, lon] := [n airport.iata code], [n airport.lat lat], [n airport.lon lon];
             :relation rederive code_lat_lon;
         "#,
-        &params,
+        &params, false,
     )?;
     dbg!(view_time3.elapsed());
 
@@ -118,7 +118,7 @@ fn air_routes() -> Result<()> {
     let res = db.run_script(r#"
         starting[] <- [['PEK']];
         ?[] <~ DFS(:flies_to_code[], [id <airport.iata code], starting[], condition: (code == 'LHR'));
-    "#,        &params,
+    "#, &params, false,
     )?;
     dbg!(dfs_time.elapsed());
     println!("{}", res);
@@ -129,7 +129,7 @@ fn air_routes() -> Result<()> {
         starting[] <- [['PEK']];
         ?[] <~ BFS(:flies_to_code[], [id <airport.iata code], starting[], condition: code == 'SOU');
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(bfs_time.elapsed());
     println!("{}", res);
@@ -140,7 +140,7 @@ fn air_routes() -> Result<()> {
         res[] <~ StronglyConnectedComponents(:flies_to_code[], [id <airport.iata code]);
         ?[grp, code] := res[code, grp], grp != 0;
     "#,
-        &params,
+        &params, false,
     )?;
     println!("{}", res);
     dbg!(scc_time.elapsed());
@@ -151,7 +151,7 @@ fn air_routes() -> Result<()> {
         res[] <~ ConnectedComponents(:flies_to_code[], [id <airport.iata code]);
         ?[grp, code] := res[code, grp], grp != 0;
     "#,
-        &params,
+        &params, false,
     )?;
     println!("{}", res);
     dbg!(cc_time.elapsed());
@@ -161,7 +161,7 @@ fn air_routes() -> Result<()> {
         starting[code, lat, lon] := code <- 'HFE', :code_lat_lon[code, lat, lon];
         goal[code, lat, lon] := code <- 'LHR', :code_lat_lon[code, lat, lon];
         ?[] <~ ShortestPathAStar(:flies_to_code[], :code_lat_lon[node, lat1, lon1], starting[], goal[goal, lat2, lon2], heuristic: haversine_deg_input(lat1, lon1, lat2, lon2) * 3963);
-    "#,        &params,
+    "#, &params, false,
     )?;
     println!("{}", res);
     dbg!(astar_time.elapsed());
@@ -174,7 +174,7 @@ fn air_routes() -> Result<()> {
         :order -total;
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
 
     dbg!(deg_centrality_time.elapsed());
@@ -185,7 +185,7 @@ fn air_routes() -> Result<()> {
         [614,307,307],[587,293,294],[566,282,284],[541,270,271],[527,264,263],[502,251,251],
         [497,248,249],[494,247,247],[484,242,242],[465,232,233]]"#
         )
-        .into_diagnostic()?
+            .into_diagnostic()?
     );
 
     let deg_centrality_ad_hoc_time = Instant::now();
@@ -198,7 +198,7 @@ fn air_routes() -> Result<()> {
         :order -total;
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
 
     dbg!(deg_centrality_ad_hoc_time.elapsed());
@@ -211,7 +211,7 @@ fn air_routes() -> Result<()> {
             ["DXB",494,247,247],["ATL",484,242,242]
             ]"#
         )
-        .into_diagnostic()?
+            .into_diagnostic()?
     );
 
     let dijkstra_time = Instant::now();
@@ -222,7 +222,7 @@ fn air_routes() -> Result<()> {
         res[] <~ ShortestPathDijkstra(:flies_to_code[], starting[], ending[]);
         ?[path] := res[src, dst, cost, path];
     "#,
-        &params,
+        &params, false,
     )?;
 
     dbg!(dijkstra_time.elapsed());
@@ -235,7 +235,7 @@ fn air_routes() -> Result<()> {
         ending[] <- [['SIN']];
         ?[] <~ KShortestPathYen(:flies_to_code[], starting[], ending[], k: 5);
     "#,
-        &params,
+        &params, false,
     )?;
 
     dbg!(yen_time.elapsed());
@@ -246,7 +246,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[code] := [_ airport.iata code], starts_with(code, 'US');
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(starts_with_time.elapsed());
     assert_eq!(
@@ -270,7 +270,7 @@ fn air_routes() -> Result<()> {
         r[code, dist] := [a airport.iata code], [r route.src a], [r route.distance dist];
         ?[dist] := r['PEK', dist], dist > 7000, dist <= 7722;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(range_check_time.elapsed());
     assert_eq!(
@@ -283,7 +283,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[dist] := [src airport.iata 'PEK'], :flies_to[src, _, dist], dist > 7000, dist <= 7722;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(range_check_with_view_time.elapsed());
     assert_eq!(
@@ -294,7 +294,7 @@ fn air_routes() -> Result<()> {
     let simple_query_time = Instant::now();
     let res = db.run_script(r#"
         ?[c, code, desc] := [c country.code 'CU'] or c <- 10000239, [c country.code code], [c country.desc desc];
-    "#,        &params,
+    "#, &params, false,
     )?;
     dbg!(simple_query_time.elapsed());
     assert_eq!(
@@ -307,7 +307,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[desc] := [c country.desc desc], not [a airport.country c];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(no_airports_time.elapsed());
     assert_eq!(
@@ -326,7 +326,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[code] := [a airport.iata code], not [_ route.src a], not [_ route.dst a];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(no_routes_airport_time.elapsed());
     assert_eq!(
@@ -338,7 +338,7 @@ fn air_routes() -> Result<()> {
             ["SFD"],["SFH"],["SXF"],["TUA"],["TWB"],["TXL"],["VCV"],["YEI"]
         ]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let runway_distribution_time = Instant::now();
@@ -346,7 +346,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[runways, count(a)] := [a airport.runways runways];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(runway_distribution_time.elapsed());
     assert_eq!(
@@ -369,7 +369,7 @@ fn air_routes() -> Result<()> {
         ?[code, n] := route_count[a, n], n > 180, [a airport.iata code];
         :sort -n;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(most_out_routes_time.elapsed());
     assert_eq!(
@@ -383,7 +383,7 @@ fn air_routes() -> Result<()> {
         ["YYZ",195],["BRU",194],["CPH",194],["DOH",186],["DUB",185],["CLT",184],["SVO",181]
         ]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let most_out_routes_again_time = Instant::now();
@@ -393,7 +393,7 @@ fn air_routes() -> Result<()> {
         ?[code, n] := route_count[n, a], n > 180, [a airport.iata code];
         :sort -n;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(most_out_routes_again_time.elapsed());
     assert_eq!(
@@ -407,7 +407,7 @@ fn air_routes() -> Result<()> {
         ["YYZ",195],["BRU",194],["CPH",194],["DOH",186],["DUB",185],["CLT",184],["SVO",181]
         ]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let most_out_routes_time_inv = Instant::now();
@@ -417,7 +417,7 @@ fn air_routes() -> Result<()> {
         ?[code, n] := route_count[n, a, _], n > 180, [a airport.iata code];
         :sort -n;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(most_out_routes_time_inv.elapsed());
     assert_eq!(
@@ -431,7 +431,7 @@ fn air_routes() -> Result<()> {
         ["YYZ",195],["BRU",194],["CPH",194],["DOH",186],["DUB",185],["CLT",184],["SVO",181]
         ]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let most_routes_time = Instant::now();
@@ -441,7 +441,7 @@ fn air_routes() -> Result<()> {
         ?[code, n] := route_count[a, n], n > 400, [a airport.iata code];
         :sort -n;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(most_routes_time.elapsed());
     assert_eq!(
@@ -453,7 +453,7 @@ fn air_routes() -> Result<()> {
         ["MAN",431],["LAX",426],["PVG",424],["STN",423],["MAD",412],["VIE",412],["BCN",406],
         ["BER",404],["FCO",402],["JFK",401]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let airport_with_one_route_time = Instant::now();
@@ -462,7 +462,7 @@ fn air_routes() -> Result<()> {
         route_count[a, count(r)] := [r route.src a];
         ?[count(a)] := route_count[a, n], n == 1;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(airport_with_one_route_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[777]]));
@@ -477,7 +477,7 @@ fn air_routes() -> Result<()> {
         :order -out_n;
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(single_runway_with_most_routes_time.elapsed());
     assert_eq!(
@@ -488,7 +488,7 @@ fn air_routes() -> Result<()> {
         ["BHX","Birmingham",130],["LTN","London",130],["SZX","Shenzhen",129],
         ["CKG","Chongqing",122],["STR","Stuttgart",121],["CRL","Brussels",117]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let most_routes_in_canada_time = Instant::now();
@@ -498,7 +498,7 @@ fn air_routes() -> Result<()> {
 
         :order -n_routes;
         :limit 10;
-    "#,        &params,
+    "#, &params, false,
     )?;
     dbg!(most_routes_in_canada_time.elapsed());
     assert_eq!(
@@ -520,7 +520,7 @@ fn air_routes() -> Result<()> {
     let uk_count_time = Instant::now();
     let res = db.run_script(r"
         ?[region, count(a)] := [c country.code 'UK'], [a airport.country c], [a airport.region region];
-    ",        &params,
+    ", &params, false,
     )?;
     dbg!(uk_count_time.elapsed());
     assert_eq!(
@@ -538,7 +538,7 @@ fn air_routes() -> Result<()> {
 
         :order count;
     ",
-        &params,
+        &params, false,
     )?;
     dbg!(airports_by_country.elapsed());
     assert_eq!(
@@ -571,7 +571,7 @@ fn air_routes() -> Result<()> {
     ["UK",58],["FR",59],["MX",60],["JP",65],["ID",70],["IN",77],["BR",117],["RU",129],["AU",132],
     ["CA",205],["CN",217],["US",586]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let n_airports_by_continent_time = Instant::now();
@@ -581,7 +581,7 @@ fn air_routes() -> Result<()> {
         ?[cont, max(count)] := airports_by_continent[c, count], [c continent.code cont];
         ?[cont, max(count)] := [_ continent.code cont], count <- 0;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(n_airports_by_continent_time.elapsed());
     assert_eq!(
@@ -589,7 +589,7 @@ fn air_routes() -> Result<()> {
         serde_json::Value::from_str(
             r#"[["AF",321],["AN",0],["AS",971],["EU",605],["NA",989],["OC",305],["SA",313]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let routes_per_airport_time = Instant::now();
@@ -600,7 +600,7 @@ fn air_routes() -> Result<()> {
 
         given[] <- [['A' ++ 'U' ++ 'S'],['AMS'],['JFK'],['DUB'],['MEX']];
         "#,
-        &params,
+        &params, false,
     )?;
     dbg!(routes_per_airport_time.elapsed());
     assert_eq!(
@@ -608,7 +608,7 @@ fn air_routes() -> Result<()> {
         serde_json::Value::from_str(
             r#"[["AMS",282],["AUS",95],["DUB",185],["JFK",201],["MEX",116]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let airports_by_route_number_time = Instant::now();
@@ -617,7 +617,7 @@ fn air_routes() -> Result<()> {
         route_count[a, count(r)] := [r route.src a];
         ?[n, collect(code)] := route_count[a, n], [a airport.iata code], n = 105;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(airports_by_route_number_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[105, ["TFS", "YVR"]]]));
@@ -635,7 +635,7 @@ fn air_routes() -> Result<()> {
                                [r route.src a];
         ?[max(total), collect(coll)] := two_hops[total], out_by_runways[n, ct], coll <- [n, ct];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(out_from_aus_time.elapsed());
     assert_eq!(
@@ -649,7 +649,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[name, count(a)] := [a airport.region 'US-OK'], name <- 'OK';
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(const_return_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([["OK", 4]]));
@@ -666,7 +666,7 @@ fn air_routes() -> Result<()> {
         ?[total, high, low, four, france] := total[total], high[high], low[low],
                                                   four[four], france[france];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(multi_res_time.elapsed());
     assert_eq!(
@@ -678,7 +678,7 @@ fn air_routes() -> Result<()> {
     let res = db.run_script(r#"
         target_airports[collect(a, 5)] := [a airport.iata _];
         ?[code, count(r)] := target_airports[targets], a <- ..targets, [a airport.iata code], [r route.src a];
-    "#,        &params,
+    "#, &params, false,
     )?;
     dbg!(multi_unification_time.elapsed());
     assert_eq!(
@@ -686,7 +686,7 @@ fn air_routes() -> Result<()> {
         serde_json::Value::from_str(
             r#"[["ANC",41],["ATL",242],["AUS",95],["BNA",74],["BOS",141]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let num_routes_from_eu_to_us_time = Instant::now();
@@ -700,7 +700,7 @@ fn air_routes() -> Result<()> {
                               [a2 airport.country us];
         ?[n] := routes[rs], n <- length(rs);
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(num_routes_from_eu_to_us_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[417]]));
@@ -715,7 +715,7 @@ fn air_routes() -> Result<()> {
                                 [r route.dst a2],
                                 [a2 airport.country us];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(num_airports_in_us_with_routes_from_eu_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[45]]));
@@ -732,7 +732,7 @@ fn air_routes() -> Result<()> {
                                [a2 airport.iata code];
         :order r;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(num_routes_in_us_airports_from_eu_time.elapsed());
     assert_eq!(
@@ -746,7 +746,7 @@ fn air_routes() -> Result<()> {
      ["SFO",20],["IAD",21],["PHL",22],["BOS",25],["LAX",25],["ORD",27],["MIA",28],["EWR",38],
      ["JFK",42]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let routes_from_eu_to_us_starting_with_l_time = Instant::now();
@@ -762,7 +762,7 @@ fn air_routes() -> Result<()> {
                                [a2 airport.country us],
                                [a2 airport.iata us_code];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(routes_from_eu_to_us_starting_with_l_time.elapsed());
     assert_eq!(
@@ -779,7 +779,7 @@ fn air_routes() -> Result<()> {
     ["LHR","SJC"],["LHR","SLC"],["LIS","ATL"],["LIS","BOS"],["LIS","EWR"],["LIS","IAD"],
     ["LIS","JFK"],["LIS","MIA"],["LIS","ORD"],["LIS","PHL"],["LIS","SFO"]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let len_of_names_count_time = Instant::now();
@@ -791,7 +791,7 @@ fn air_routes() -> Result<()> {
                       [a2 airport.city city_name],
                       n <- length(city_name);
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(len_of_names_count_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[866.0]]));
@@ -806,7 +806,7 @@ fn air_routes() -> Result<()> {
         :order n;
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(group_count_by_out_time.elapsed());
     assert_eq!(
@@ -814,7 +814,7 @@ fn air_routes() -> Result<()> {
         serde_json::Value::from_str(
             r#"[[0,29],[1,777],[2,649],[3,359],[4,232],[5,150],[6,139],[7,100],[8,74],[9,63]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let mean_group_count_time = Instant::now();
@@ -824,7 +824,7 @@ fn air_routes() -> Result<()> {
         rc[max(n), a] := route_count[n, a] or ([a airport.iata _], n <- 0);
         ?[mean(n)] := rc[n, _];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(mean_group_count_time.elapsed());
     let v = res
@@ -846,7 +846,7 @@ fn air_routes() -> Result<()> {
     let n_routes_from_london_uk_time = Instant::now();
     let res = db.run_script(r#"
         ?[code, count(r)] := [a airport.city 'London'], [a airport.region 'GB-ENG'], [r route.src a], [a airport.iata code];
-    "#,        &params,
+    "#, &params, false,
     )?;
     dbg!(n_routes_from_london_uk_time.elapsed());
     assert_eq!(
@@ -854,7 +854,7 @@ fn air_routes() -> Result<()> {
         serde_json::Value::from_str(
             r#"[["LCY",51],["LGW",232],["LHR",221],["LTN",130],["STN",211]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let reachable_from_london_uk_in_two_hops_time = Instant::now();
@@ -862,7 +862,7 @@ fn air_routes() -> Result<()> {
         lon_uk_airports[a] := [a airport.city 'London'], [a airport.region 'GB-ENG'];
         one_hop[a2] := lon_uk_airports[a], [r route.src a], [r route.dst a2], not lon_uk_airports[a2];
         ?[count_unique(a3)] := one_hop[a2], [r2 route.src a2], [r2 route.dst a3], not lon_uk_airports[a3];
-    "#,        &params,
+    "#, &params, false,
     )?;
     dbg!(reachable_from_london_uk_in_two_hops_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[2353]]));
@@ -874,7 +874,7 @@ fn air_routes() -> Result<()> {
         ?[src, dst] := eng_aps[a1], [r route.src a1], [r route.dst a2], eng_aps[a2],
                          [a1 airport.iata src], [a2 airport.iata dst];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(routes_within_england_time.elapsed());
     assert_eq!(
@@ -891,7 +891,7 @@ fn air_routes() -> Result<()> {
     ["NQY","LPL"],["NQY","MAN"],["NQY","SEN"],["NWI","HUY"],["NWI","MAN"],["NWI","MME"],
     ["SEN","MAN"],["SEN","NQY"],["SOU","EMA"],["SOU","LBA"],["SOU","MAN"],["SOU","NCL"]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let routes_within_england_time_no_dup = Instant::now();
@@ -902,7 +902,7 @@ fn air_routes() -> Result<()> {
                          [a1 airport.iata src], [a2 airport.iata dst],
                          pair <- sorted([src, dst]);
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(routes_within_england_time_no_dup.elapsed());
     assert_eq!(
@@ -915,7 +915,7 @@ fn air_routes() -> Result<()> {
     [["LHR","NQY"]],[["LPL","NQY"]],[["MAN","NQY"]],[["MAN","NWI"]],[["MAN","SEN"]],[["MAN","SOU"]],
     [["MME","NWI"]],[["NCL","SOU"]],[["NQY","SEN"]]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let hard_route_finding_time = Instant::now();
@@ -931,7 +931,7 @@ fn air_routes() -> Result<()> {
 
         :limit 1;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(hard_route_finding_time.elapsed());
     assert_eq!(
@@ -939,7 +939,7 @@ fn air_routes() -> Result<()> {
         serde_json::Value::from_str(
             r#"[[["AUS","BOS","YTZ","YTS","YMO","YFA","ZKE","YAT","YPO"]]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let na_from_india_time = Instant::now();
@@ -953,7 +953,7 @@ fn air_routes() -> Result<()> {
                             [ind_a airport.iata ind_c], [na_a airport.iata na_c];
 
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(na_from_india_time.elapsed());
     assert_eq!(
@@ -963,7 +963,7 @@ fn air_routes() -> Result<()> {
     ["BOM","EWR"],["BOM","JFK"],["BOM","YYZ"],["DEL","EWR"],["DEL","IAD"],["DEL","JFK"],
     ["DEL","ORD"],["DEL","SFO"],["DEL","YVR"],["DEL","YYZ"]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let eu_cities_reachable_from_fll_time = Instant::now();
@@ -976,7 +976,7 @@ fn air_routes() -> Result<()> {
                          [cont continent.code 'EU'],
                          [a2 airport.city city_name];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(eu_cities_reachable_from_fll_time.elapsed());
     assert_eq!(
@@ -985,7 +985,7 @@ fn air_routes() -> Result<()> {
             r#"[
     ["Barcelona"],["Copenhagen"],["London"],["Madrid"],["Oslo"],["Paris"],["Stockholm"]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let clt_to_eu_or_sa_time = Instant::now();
@@ -996,7 +996,7 @@ fn air_routes() -> Result<()> {
                     c_name <- ..['EU', 'SA'],
                     [a2 airport.iata code];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(clt_to_eu_or_sa_time.elapsed());
     assert_eq!(
@@ -1004,7 +1004,7 @@ fn air_routes() -> Result<()> {
         serde_json::Value::from_str(
             r#"[["BCN"],["CDG"],["DUB"],["FCO"],["FRA"],["GIG"],["GRU"],["LHR"],["MAD"],["MUC"]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let london_to_us_time = Instant::now();
@@ -1017,7 +1017,7 @@ fn air_routes() -> Result<()> {
                                 [a2 airport.country us],
                                 [a2 airport.iata us_code];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(london_to_us_time.elapsed());
     assert_eq!(
@@ -1034,7 +1034,7 @@ fn air_routes() -> Result<()> {
      ["LHR","SJC"],["LHR","SLC"],["STN","BOS"],["STN","EWR"],["STN","IAD"],["STN","SFB"]]
     "#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let tx_to_ny_time = Instant::now();
@@ -1047,7 +1047,7 @@ fn air_routes() -> Result<()> {
                                  [a airport.iata tx_code],
                                  [a2 airport.iata ny_code];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(tx_to_ny_time.elapsed());
     assert_eq!(
@@ -1059,7 +1059,7 @@ fn air_routes() -> Result<()> {
      ["IAH","JFK"],["IAH","LGA"],["SAT","EWR"],["SAT","JFK"]]
     "#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let denver_to_mexico_time = Instant::now();
@@ -1070,7 +1070,7 @@ fn air_routes() -> Result<()> {
                          [ct country.code 'MX'],
                          [a2 airport.city city_name];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(denver_to_mexico_time.elapsed());
     assert_eq!(
@@ -1080,7 +1080,7 @@ fn air_routes() -> Result<()> {
     ["Cancun"],["Cozumel"],["Guadalajara"],["Mexico City"],["Monterrey"],
     ["Puerto Vallarta"],["San José del Cabo"]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let three_cities_time = Instant::now();
@@ -1090,7 +1090,7 @@ fn air_routes() -> Result<()> {
         ?[src, dst] := three[s], [r route.src s], [r route.dst d], three[d],
                          [s airport.iata src], [d airport.iata dst];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(three_cities_time.elapsed());
     assert_eq!(
@@ -1103,7 +1103,7 @@ fn air_routes() -> Result<()> {
     ["MUC","LGW"],["MUC","LHR"],["MUC","LTN"],["MUC","ORY"],["MUC","STN"],["ORY","LCY"],
     ["ORY","LHR"],["ORY","MUC"],["STN","MUC"]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let long_distance_from_lgw_time = Instant::now();
@@ -1112,7 +1112,7 @@ fn air_routes() -> Result<()> {
         ?[city, dist] := [a airport.iata 'LGW'], [r route.src a], [r route.dst a2],
                            [r route.distance dist], dist > 4000, [a2 airport.city city];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(long_distance_from_lgw_time.elapsed());
     assert_eq!(
@@ -1129,7 +1129,7 @@ fn air_routes() -> Result<()> {
     ["Shanghai",5745],["Singapore",6751],["St. George",4076],["Taipei",6080],["Tampa",4416],
     ["Tianjin",5147],["Vancouver",4731],["Varadero",4618],["Vieux Fort",4222]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let long_routes_one_dir_time = Instant::now();
@@ -1139,7 +1139,7 @@ fn air_routes() -> Result<()> {
                                 [r route.dst d], [s airport.iata src], [d airport.iata dst],
                                 src < dst;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(long_routes_one_dir_time.elapsed());
     assert_eq!(
@@ -1154,7 +1154,7 @@ fn air_routes() -> Result<()> {
     ["LHR",9009,"PER"],["MEL",8197,"YVR"],["PEK",8884,"PTY"],["SCL",8208,"TLV"],["SEA",8059,"SIN"],
     ["SFO",8433,"SIN"]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let longest_routes_time = Instant::now();
@@ -1166,7 +1166,7 @@ fn air_routes() -> Result<()> {
         :sort -dist;
         :limit 20;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(longest_routes_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), serde_json::Value::from_str(r#"
@@ -1183,7 +1183,7 @@ fn air_routes() -> Result<()> {
                                 [a airport.iata src], [d airport.iata dst];
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(longest_routes_from_each_airports.elapsed());
     assert_eq!(*res.get("rows").unwrap(), serde_json::Value::from_str(r#"
@@ -1196,7 +1196,7 @@ fn air_routes() -> Result<()> {
         three[a] := city <- ..['London', 'Munich', 'Paris'], [a airport.city city];
         ?[sum(dist)] := three[a], [r route.src a], [r route.distance dist];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(total_distance_from_three_cities_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[2733379.0]]));
@@ -1208,7 +1208,7 @@ fn air_routes() -> Result<()> {
         ?[sum(dist)] := three[a], [r route.src a], [r route.dst a2], three[a2],
                          [r route.distance dist];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(total_distance_within_three_cities_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[10282.0]]));
@@ -1219,7 +1219,7 @@ fn air_routes() -> Result<()> {
         ?[dist] := [a airport.iata 'AUS'], [a2 airport.iata 'MEX'], [r route.src a],
                     [r route.dst a2], [r route.distance dist];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(specific_distance_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[748]]));
@@ -1232,7 +1232,7 @@ fn air_routes() -> Result<()> {
                         [r route.src s], us_a[s],
                         [r route.dst d], us_a[d];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(n_routes_between_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[597]]));
@@ -1247,7 +1247,7 @@ fn air_routes() -> Result<()> {
         :order dist;
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(one_stop_distance_time.elapsed());
     assert_eq!(
@@ -1257,7 +1257,7 @@ fn air_routes() -> Result<()> {
     [["DTW",4893],["YYZ",4901],["ORD",4912],["PIT",4916],["BNA",4923],["DFW",4926],["BOS",4944],
     ["EWR",4953],["IAD",4959],["JFK",4960]]"#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let airport_most_routes_time = Instant::now();
@@ -1268,7 +1268,7 @@ fn air_routes() -> Result<()> {
         :order -n;
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(airport_most_routes_time.elapsed());
     assert_eq!(
@@ -1279,13 +1279,13 @@ fn air_routes() -> Result<()> {
     ["ORD",264],["DFW",251],["PEK",248],["DXB",247],["ATL",242]]
     "#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let north_of_77_time = Instant::now();
     let res = db.run_script(r#"
         ?[city, latitude] := [a airport.lat lat], lat > 77, [a airport.city city], latitude <- round(lat);
-    "#,        &params,
+    "#, &params, false,
     )?;
     dbg!(north_of_77_time.elapsed());
     assert_eq!(
@@ -1298,7 +1298,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[code] := [a airport.lon lon], lon > -0.1, lon < 0.1, [a airport.iata code];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(greenwich_meridian_time.elapsed());
     assert_eq!(
@@ -1315,7 +1315,7 @@ fn air_routes() -> Result<()> {
         ?[code] := h_box[lhr_lon, lhr_lat], [a airport.lon lon], [a airport.lat lat],
                     abs(lhr_lon - lon) < 1, abs(lhr_lat - lat) < 1, [a airport.iata code];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(box_around_heathrow_time.elapsed());
     assert_eq!(
@@ -1334,7 +1334,7 @@ fn air_routes() -> Result<()> {
                                       [a airport.region region],
                                       [a airport.iata code];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(dfw_by_region_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), serde_json::Value::from_str(r#"
@@ -1353,7 +1353,7 @@ fn air_routes() -> Result<()> {
                         [b airport.iata 'NRT'], [b airport.lat b_lat], [b airport.lon b_lon],
                         deg_diff <- round(haversine_deg_input(a_lat, a_lon, b_lat, b_lon));
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(great_circle_distance.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[1.0]]));
@@ -1373,7 +1373,7 @@ fn air_routes() -> Result<()> {
                                         path <- append(prev, dst);
         ?[path] := [edi airport.iata 'EDI'], routes[edi, path];
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(aus_to_edi_time.elapsed());
     assert_eq!(*res.get("rows").unwrap(), json!([[["AUS", "BOS", "EDI"]]]));
@@ -1394,7 +1394,7 @@ fn air_routes() -> Result<()> {
         :order -len;
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(reachable_from_lhr.elapsed());
     assert_eq!(
@@ -1409,7 +1409,7 @@ fn air_routes() -> Result<()> {
     [7,["LHR","YUL","YGL","YPX","AKV","YIK","YZG"]]]
     "#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let furthest_from_lhr = Instant::now();
@@ -1432,7 +1432,7 @@ fn air_routes() -> Result<()> {
         :order -cost;
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(furthest_from_lhr.elapsed());
     assert_eq!(
@@ -1446,7 +1446,7 @@ fn air_routes() -> Result<()> {
      [11758,["LHR","NRT","AKL","BHE"]],[11751,["LHR","NRT","AKL","NSN"]]]
     "#
         )
-        .unwrap()
+            .unwrap()
     );
 
     let furthest_from_lhr_view = Instant::now();
@@ -1465,7 +1465,7 @@ fn air_routes() -> Result<()> {
         :order -cost;
         :limit 10;
     "#,
-        &params,
+        &params, false,
     )?;
     dbg!(furthest_from_lhr_view.elapsed());
     assert_eq!(
@@ -1479,7 +1479,7 @@ fn air_routes() -> Result<()> {
      [11758,["LHR","NRT","AKL","BHE"]],[11751,["LHR","NRT","AKL","NSN"]]]
     "#
         )
-        .unwrap()
+            .unwrap()
     );
 
     Ok(())
