@@ -61,15 +61,15 @@ Schema types
 In schema definition, the required type for a value can be specified by any of the following *schema-types*
 
 * ``Ref``
-* ``Component``
 * ``Int``
 * ``Float``
 * ``Bool``
 * ``String``
 * ``Bytes``
 * ``List``
+* ``Uuid``
 
-When retrieving triples' values, the schema-types ``Ref``, ``Component``, and ``Int`` are all represented by the value-type ``Number`` (actually ``Int``). The entity (the subject of the triple) is always a ``Ref``, always represented by a ``Number`` (``Int``).
+When retrieving triples' values, the schema-type ``Ref``, is represented by the type ``Uuid``. The entity (the subject of the triple) is always a ``Ref``, always represented by a ``Uuid``.
 
 Note the absence of the ``Null`` type in schema-types.
 

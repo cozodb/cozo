@@ -23,16 +23,10 @@
     <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="transactions are hard">
+    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="UUID as a DataValue">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/source/datatypes.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/datatypes.rst" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/source/functions.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/functions.rst" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/data/expr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/expr.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/data/functions.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/functions.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/data/json.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/json.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/data/tests/functions.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/tests/functions.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/data/value.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/value.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/data/attr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/attr.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -176,7 +170,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1663161524540</updated>
-      <workItem from="1663161527741" duration="26111000" />
+      <workItem from="1663161527741" duration="26450000" />
     </task>
     <task id="LOCAL-00001" summary="regenerate idea files">
       <created>1663161616722</created>
@@ -220,7 +214,14 @@
       <option name="project" value="LOCAL" />
       <updated>1663233714452</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="UUID as a DataValue">
+      <created>1663240364425</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1663240364425</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -244,6 +245,7 @@
     <MESSAGE value="reintroduce bloom filter settings" />
     <MESSAGE value="manifest file" />
     <MESSAGE value="transactions are hard" />
-    <option name="LAST_COMMIT_MESSAGE" value="transactions are hard" />
+    <MESSAGE value="UUID as a DataValue" />
+    <option name="LAST_COMMIT_MESSAGE" value="UUID as a DataValue" />
   </component>
 </project>

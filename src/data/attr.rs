@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use log::error;
-use miette::{ensure, Diagnostic, Result};
+use miette::{Diagnostic, ensure, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smallvec::SmallVec;
@@ -21,15 +21,15 @@ use crate::transact::triple::EntityNotFound;
 
 #[repr(u8)]
 #[derive(
-    Copy,
-    Clone,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Eq,
-    Debug,
-    serde_derive::Deserialize,
-    serde_derive::Serialize,
+Copy,
+Clone,
+PartialEq,
+Ord,
+PartialOrd,
+Eq,
+Debug,
+serde_derive::Deserialize,
+serde_derive::Serialize,
 )]
 pub(crate) enum AttributeCardinality {
     One = 1,
@@ -56,15 +56,15 @@ impl Display for AttributeCardinality {
 
 #[repr(u8)]
 #[derive(
-    Copy,
-    Clone,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Eq,
-    Debug,
-    serde_derive::Deserialize,
-    serde_derive::Serialize,
+Copy,
+Clone,
+PartialEq,
+Ord,
+PartialOrd,
+Eq,
+Debug,
+serde_derive::Deserialize,
+serde_derive::Serialize,
 )]
 pub(crate) enum AttributeTyping {
     Ref = 1,
@@ -75,6 +75,7 @@ pub(crate) enum AttributeTyping {
     String = 6,
     Bytes = 9,
     List = 10,
+    Uuid = 11,
 }
 
 impl AttributeTyping {
@@ -93,6 +94,7 @@ impl Display for AttributeTyping {
             AttributeTyping::String => write!(f, "string"),
             AttributeTyping::Bytes => write!(f, "bytes"),
             AttributeTyping::List => write!(f, "list"),
+            AttributeTyping::Uuid => write!(f, "uuid")
         }
     }
 }
@@ -144,13 +146,27 @@ impl AttributeTyping {
                     Err(val)
                 }
             }
+            AttributeTyping::Uuid => {
+                match val {
+                    v @ DataValue::Uuid(_) => Ok(v),
+                    DataValue::Str(s) => {
+                        match uuid::Uuid::try_parse(&s) {
+                            Ok(id) => {
+                                Ok(DataValue::uuid(id))
+                            }
+                            Err(_) => Err(DataValue::Str(s))
+                        }
+                    }
+                    v => Err(v)
+                }
+            }
         }
     }
 }
 
 #[repr(u8)]
 #[derive(
-    Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
+Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
 )]
 pub(crate) enum AttributeIndex {
     None = 0,
@@ -178,7 +194,7 @@ impl Display for AttributeIndex {
 }
 
 #[derive(
-    Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
+Clone, PartialEq, Ord, PartialOrd, Eq, Debug, serde_derive::Deserialize, serde_derive::Serialize,
 )]
 pub(crate) struct Attribute {
     pub(crate) id: AttrId,
@@ -242,7 +258,7 @@ impl Attribute {
                     #[error("Cannot find triple with temp ID '{temp_id}'")]
                     #[diagnostic(code(eval::temp_id_not_found))]
                     #[diagnostic(help(
-                        "As the attribute {attr_name} is of type 'ref', \
+                    "As the attribute {attr_name} is of type 'ref', \
                     the given value is interpreted as a temp id, \
                     but it cannot be found in the input triples."
                     ))]
@@ -319,7 +335,7 @@ impl Attribute {
                 typing: self.val_type,
                 attr_name: self.name.to_string(),
             }
-            .into()
+                .into()
         })
     }
 }
