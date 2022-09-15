@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
-use log::{debug, log_enabled, trace, Level};
+use log::{debug, Level, log_enabled, trace};
 use miette::Result;
 
 use crate::data::program::{MagicAlgoApply, MagicSymbol, NoEntryError};
-use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::data::symb::{PROG_ENTRY, Symbol};
 use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::db::Poison;
@@ -40,7 +40,7 @@ impl SessionTx {
             .get(&MagicSymbol::Muggle {
                 inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
             })
-            .ok_or_else(|| NoEntryError)?
+            .ok_or(NoEntryError)?
             .clone();
 
         for (idx, cur_prog) in strata.iter().enumerate() {
@@ -146,7 +146,7 @@ impl SessionTx {
     ) -> Result<()> {
         let mut algo_impl = algo_apply.algo.get_impl()?;
         let out = stores.get(rule_symb).unwrap();
-        algo_impl.run(self, &algo_apply, stores, out, poison)
+        algo_impl.run(self, algo_apply, stores, out, poison)
     }
     fn initial_rule_eval(
         &self,
@@ -167,10 +167,8 @@ impl SessionTx {
                 for (rule_n, rule) in ruleset.iter().enumerate() {
                     debug!("initial calculation for rule {:?}.{}", rule_symb, rule_n);
                     let mut aggr = rule.aggr.clone();
-                    for el in aggr.iter_mut() {
-                        if let Some((aggr, args)) = el {
-                            aggr.meet_init(args)?;
-                        }
+                    for (aggr, args) in aggr.iter_mut().flatten() {
+                        aggr.meet_init(args)?;
                     }
                     for item_res in rule.relation.iter(self, Some(0), &use_delta)? {
                         let item = item_res?;
@@ -201,7 +199,7 @@ impl SessionTx {
                         rule_symb, rule_n
                     );
                     for (serial, item_res) in
-                        rule.relation.iter(self, Some(0), &use_delta)?.enumerate()
+                    rule.relation.iter(self, Some(0), &use_delta)?.enumerate()
                     {
                         let item = item_res?;
                         trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
@@ -255,10 +253,8 @@ impl SessionTx {
             }
 
             let mut aggr = rule.aggr.clone();
-            for el in aggr.iter_mut() {
-                if let Some((aggr, args)) = el {
-                    aggr.meet_init(args)?;
-                }
+            for (aggr, args) in aggr.iter_mut().flatten() {
+                aggr.meet_init(args)?;
             }
 
             for (delta_key, delta_store) in stores.iter() {

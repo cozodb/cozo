@@ -113,7 +113,7 @@ impl Db {
             }
         };
 
-        let mut store_path = path_buf.clone();
+        let mut store_path = path_buf;
         store_path.push("data");
         let db_builder = builder
             .create_if_missing(is_new)
@@ -284,7 +284,7 @@ impl Db {
             json!({"rows": rows, "headers": ["attr_id", "name", "type", "cardinality", "index", "history"]}),
         )
     }
-    pub fn run_script<'a>(
+    pub fn run_script(
         &self,
         payload: &str,
         params: &BTreeMap<String, JsonValue>,
@@ -436,9 +436,9 @@ impl Db {
         };
         let default_vld = Validity::current();
         let program = input_program
-            .to_normalized_program(&tx, default_vld)?
+            .to_normalized_program(tx, default_vld)?
             .stratify()?
-            .magic_sets_rewrite(&tx, default_vld)?;
+            .magic_sets_rewrite(tx, default_vld)?;
         debug!("{:#?}", program);
         let (compiled, stores) =
             tx.stratified_magic_compile(&program, &input_program.const_rules)?;
@@ -567,7 +567,7 @@ impl Db {
     pub(crate) fn remove_attribute(&self, name: &Symbol) -> Result<()> {
         let mut tx = self.transact_write()?;
         let attr = tx
-            .attr_by_name(&name)?
+            .attr_by_name(name)?
             .ok_or_else(|| AttrNotFoundError(name.to_string()))?;
 
         tx.retract_attr(attr.id)?;
@@ -636,10 +636,7 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
         let vtx = self.db.transact().start();
-        Ok(match vtx.get(&key, false, Snd)? {
-            None => None,
-            Some(slice) => Some(slice.to_vec()),
-        })
+        Ok(vtx.get(&key, false, Snd)?.map(|slice| slice.to_vec()))
     }
     pub fn meta_range_scan(
         &self,

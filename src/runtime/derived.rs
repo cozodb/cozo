@@ -231,10 +231,8 @@ impl DerivedRelStore {
             .map(|(a, _b)| a)
             .collect_vec();
         for (_key, mut group_iter) in grouped.into_iter() {
-            for aggr_pair in &mut aggrs {
-                if let Some((aggr, args)) = aggr_pair {
-                    aggr.normal_init(args)?;
-                }
+            for (aggr, args) in aggrs.iter_mut().flatten() {
+                aggr.normal_init(args)?;
             }
             let mut aggr_res = vec![DataValue::Guard; aggrs.len()];
             let first_tuple = group_iter.next().unwrap();
@@ -279,7 +277,7 @@ impl DerivedRelStore {
         Ok(false)
     }
 
-    pub(crate) fn scan_all_for_epoch(&self, epoch: u32) -> impl Iterator<Item = Result<Tuple>> {
+    pub(crate) fn scan_all_for_epoch(&self, epoch: u32) -> impl Iterator<Item=Result<Tuple>> {
         self.ensure_mem_db_for_epoch(epoch);
         let db = self
             .mem_db
@@ -310,23 +308,23 @@ impl DerivedRelStore {
             }
         })
     }
-    pub(crate) fn scan_all(&self) -> impl Iterator<Item = Result<Tuple>> {
+    pub(crate) fn scan_all(&self) -> impl Iterator<Item=Result<Tuple>> {
         self.scan_all_for_epoch(0)
     }
-    pub(crate) fn scan_sorted(&self) -> impl Iterator<Item = Result<Tuple>> {
+    pub(crate) fn scan_sorted(&self) -> impl Iterator<Item=Result<Tuple>> {
         self.ensure_mem_db_for_epoch(0);
         let target = self.mem_db.try_read().unwrap();
         let target = target.get(0).unwrap().try_read().unwrap();
         target.clone().into_iter().map(|(_k, v)| Ok(v))
     }
-    pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item = Result<Tuple>> {
+    pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item=Result<Tuple>> {
         self.scan_prefix_for_epoch(prefix, 0)
     }
     pub(crate) fn scan_prefix_for_epoch(
         &self,
         prefix: &Tuple,
         epoch: u32,
-    ) -> impl Iterator<Item = Result<Tuple>> {
+    ) -> impl Iterator<Item=Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bot);
         let upper = Tuple(upper);
@@ -362,7 +360,7 @@ impl DerivedRelStore {
         lower: &[DataValue],
         upper: &[DataValue],
         epoch: u32,
-    ) -> impl Iterator<Item = Result<Tuple>> {
+    ) -> impl Iterator<Item=Result<Tuple>> {
         self.ensure_mem_db_for_epoch(epoch);
         let mut prefix_bound = prefix.clone();
         prefix_bound.0.extend_from_slice(lower);

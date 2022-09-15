@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use either::{Left, Right};
-use log::{debug};
+use log::debug;
 use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -80,7 +80,7 @@ impl SessionTx {
                         .attr_by_name(&payload.attr_name.name)?
                         .ok_or_else(|| AttrNotFoundError(payload.attr_name.name.to_string()))?;
                     let val =
-                        attr.coerce_value(payload.value, &mut str_temp_to_perm_ids, self, vld)?;
+                        attr.coerce_value(payload.value, &str_temp_to_perm_ids, self, vld)?;
                     match payload.entity {
                         EntityRep::Id(perm) => {
                             ret.push((
@@ -133,11 +133,9 @@ impl SessionTx {
                                 .attr_by_name(&symb)?
                                 .ok_or_else(|| AttrNotFoundError(symb.to_string()))?;
 
-                            let eid =
-                                self.eid_by_unique_av(&attr, &val, vld)?.ok_or_else(|| {
-                                    EntityNotFound(format!("{}: {:?}", attr.name, val))
-                                })?;
-                            eid
+                            self.eid_by_unique_av(&attr, &val, vld)?.ok_or_else(|| {
+                                EntityNotFound(format!("{}: {:?}", attr.name, val))
+                            })?
                         }
                     };
                     if payload.action == TxAction::Retract {

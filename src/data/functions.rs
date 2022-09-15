@@ -640,7 +640,7 @@ pub(crate) fn op_pack_bits(args: &[DataValue]) -> Result<DataValue> {
                 _ => bail!("'pack_bits' requires list of booleans"),
             }
         }
-        Ok(DataValue::Bytes(res.into()))
+        Ok(DataValue::Bytes(res))
     } else if let DataValue::Set(v) = &args[0] {
         let l = v.iter().cloned().collect_vec();
         op_pack_bits(&[DataValue::List(l)])
@@ -674,7 +674,7 @@ pub(crate) fn op_concat(args: &[DataValue]) -> Result<DataValue> {
                     bail!("'concat' requires strings, or lists");
                 }
             }
-            Ok(DataValue::List(ret.into()))
+            Ok(DataValue::List(ret))
         }
         _ => bail!("'concat' requires strings, or lists"),
     }
@@ -1205,7 +1205,7 @@ pub(crate) fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Str(s) => {
             let b = base64::decode(s).map_err(|_| miette!("Data is not properly encoded"))?;
-            Ok(DataValue::Bytes(b.into()))
+            Ok(DataValue::Bytes(b))
         }
         _ => bail!("'decode_base64' requires strings"),
     }

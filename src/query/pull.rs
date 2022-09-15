@@ -154,12 +154,12 @@ impl SessionTx {
             let name = format!("{}", spec.attr.name);
             if spec.subfields.is_empty() {
                 if spec.attr.cardinality.is_many() {
-                    coll.insert(name, res.into_iter().map(|v| JsonValue::from(v)).collect());
+                    coll.insert(name, res.into_iter().map(JsonValue::from).collect());
                 } else {
                     coll.insert(
                         name,
                         res.into_iter()
-                            .map(|v| JsonValue::from(v))
+                            .map(JsonValue::from)
                             .next()
                             .unwrap_or(JsonValue::Null),
                     );

@@ -159,7 +159,7 @@ impl SessionTx {
         #[diagnostic(help("This indicates a bug. Please report it."))]
         struct WriteInReadOnlyModeError;
 
-        Ok(self.w_tx_id.ok_or_else(|| WriteInReadOnlyModeError)?)
+        Ok(self.w_tx_id.ok_or(WriteInReadOnlyModeError)?)
     }
     pub(crate) fn bounded_scan_first(&self, lower: &[u8], upper: &[u8]) -> DbIter {
         // this is tricky, must be written like this!

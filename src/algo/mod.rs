@@ -229,7 +229,7 @@ impl MagicAlgoRuleArg {
                                 self.bindings()
                                     .get(2)
                                     .map(|s| s.span)
-                                    .unwrap_or(self.span())
+                                    .unwrap_or_else(|| self.span())
                             )
                         );
                         if f < 0. {
@@ -239,7 +239,7 @@ impl MagicAlgoRuleArg {
                                     self.bindings()
                                         .get(2)
                                         .map(|s| s.span)
-                                        .unwrap_or(self.span())
+                                        .unwrap_or_else(|| self.span())
                                 ));
                             }
                             has_neg_edge = true;
@@ -252,7 +252,7 @@ impl MagicAlgoRuleArg {
                             self.bindings()
                                 .get(2)
                                 .map(|s| s.span)
-                                .unwrap_or(self.span())
+                                .unwrap_or_else(|| self.span())
                         ))
                     }
                 },

@@ -248,7 +248,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             }
             Expr::Apply {
                 op,
-                args: args.into(),
+                args,
                 span,
             }
         }

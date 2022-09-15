@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
-use miette::{ensure, Context, Diagnostic, Result};
+use miette::{Context, Diagnostic, ensure, Result};
 use thiserror::Error;
 
 use crate::algo::AlgoNotFoundError;
@@ -52,11 +52,9 @@ impl CompiledRuleSet {
                 if !is_aggr {
                     return AggrKind::None;
                 }
-                for aggr in rules[0].aggr.iter() {
-                    if let Some((aggr, _args)) = aggr {
-                        if !aggr.is_meet {
-                            return AggrKind::Normal;
-                        }
+                for (aggr, _args) in rules[0].aggr.iter().flatten() {
+                    if !aggr.is_meet {
+                        return AggrKind::Normal;
                     }
                 }
                 AggrKind::Meet
@@ -126,7 +124,7 @@ impl SessionTx {
                         match body {
                             MagicRulesOrAlgo::Rules { rules: body } => {
                                 let mut collected = Vec::with_capacity(body.len());
-                                for  rule in body.iter() {
+                                for rule in body.iter() {
                                     let header = &rule.head;
                                     let mut relation =
                                         self.compile_magic_rule_body(rule, k, &stores, header)?;
@@ -139,7 +137,7 @@ impl SessionTx {
                                     collected.push(CompiledRule {
                                         aggr: rule.aggr.clone(),
                                         relation,
-                                        contained_rules: rule.contained_rules()
+                                        contained_rules: rule.contained_rules(),
                                     })
                                 }
                                 Ok((k.clone(), CompiledRuleSet::Rules(collected)))
@@ -444,7 +442,7 @@ impl SessionTx {
         #[error("Symbol '{0}' in rule head is unbound")]
         #[diagnostic(code(eval::unbound_symb_in_head))]
         #[diagnostic(help(
-            "Note that symbols occurring only in negated positions are not considered bound"
+        "Note that symbols occurring only in negated positions are not considered bound"
         ))]
         struct UnboundSymbolInRuleHead(String, #[label] SourceSpan);
 

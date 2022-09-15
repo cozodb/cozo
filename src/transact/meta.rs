@@ -64,7 +64,7 @@ impl SessionTx {
                     self.attr_by_id_cache.borrow_mut().insert(attr.id, None);
                     self.attr_by_kw_cache
                         .borrow_mut()
-                        .insert(attr.name.into(), None);
+                        .insert(attr.name, None);
                     None
                 } else {
                     self.attr_by_id_cache
@@ -109,7 +109,7 @@ impl SessionTx {
                         .insert(attr.id, Some(attr.clone()));
                     self.attr_by_kw_cache
                         .borrow_mut()
-                        .insert(SmartString::from(attr.name.clone()), Some(attr.clone()));
+                        .insert(attr.name.clone(), Some(attr.clone()));
                     Some(attr)
                 }
             }

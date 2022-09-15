@@ -114,10 +114,11 @@ impl EntityId {
         EntityId(Uuid::from_bytes(b.try_into().expect("wrong length of bytes for uuid")))
     }
     pub(crate) fn bytes(&self) -> [u8; 16] {
-        self.0.as_bytes().clone()
+        *self.0.as_bytes()
     }
     pub(crate) fn is_perm(&self) -> bool {
-        self.0.get_version_num() == 1
+        let v = self.0.get_version_num();
+        v > 0 && v < 5
     }
     pub(crate) fn is_placeholder(&self) -> bool {
         self.0.is_nil()

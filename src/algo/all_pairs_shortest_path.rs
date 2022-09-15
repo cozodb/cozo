@@ -7,8 +7,8 @@ use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rayon::prelude::*;
 
-use crate::algo::shortest_path_dijkstra::dijkstra_keep_ties;
 use crate::algo::AlgoImpl;
+use crate::algo::shortest_path_dijkstra::dijkstra_keep_ties;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -52,9 +52,8 @@ impl AlgoImpl for BetweennessCentrality {
                         if path.len() < 3 {
                             continue;
                         }
-                        for i in 1..(path.len() - 1) {
-                            let middle = path[i];
-                            let entry = ret.entry(middle).or_default();
+                        for middle in path.iter().take(path.len() - 1).skip(1) {
+                            let entry = ret.entry(*middle).or_default();
                             *entry += 1. / l;
                         }
                     }

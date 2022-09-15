@@ -121,7 +121,7 @@ pub(crate) enum DataValue {
 
 pub(crate) fn same_value_type(a: &DataValue, b: &DataValue) -> bool {
     use DataValue::*;
-    match (a, b) {
+    matches!((a, b),
         (Null, Null)
         | (Bool(_), Bool(_))
         | (Num(_), Num(_))
@@ -132,9 +132,7 @@ pub(crate) fn same_value_type(a: &DataValue, b: &DataValue) -> bool {
         | (Set(_), Set(_))
         | (Rev(_), Rev(_))
         | (Guard, Guard)
-        | (Bot, Bot) => true,
-        _ => false,
-    }
+        | (Bot, Bot))
 }
 
 impl From<i64> for DataValue {

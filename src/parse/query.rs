@@ -301,7 +301,7 @@ pub(crate) fn parse_query(
                     .eval_to_const()
                     .map_err(|err| OptionNotConstantError("timeout", span, [err]))?
                     .get_non_neg_int()
-                    .ok_or_else(|| OptionNotNonNegIntError("timeout", span))?;
+                    .ok_or(OptionNotNonNegIntError("timeout", span))?;
                 ensure!(timeout > 0, OptionNotPosIntError("timeout", span));
                 out_opts.timeout = Some(timeout as u64);
             }
@@ -312,7 +312,7 @@ pub(crate) fn parse_query(
                     .eval_to_const()
                     .map_err(|err| OptionNotConstantError("limit", span, [err]))?
                     .get_non_neg_int()
-                    .ok_or_else(|| OptionNotNonNegIntError("limit", span))?;
+                    .ok_or(OptionNotNonNegIntError("limit", span))?;
                 out_opts.limit = Some(limit as usize);
             }
             Rule::offset_option => {
@@ -322,7 +322,7 @@ pub(crate) fn parse_query(
                     .eval_to_const()
                     .map_err(|err| OptionNotConstantError("offset", span, [err]))?
                     .get_non_neg_int()
-                    .ok_or_else(|| OptionNotNonNegIntError("offset", span))?;
+                    .ok_or(OptionNotNonNegIntError("offset", span))?;
                 out_opts.offset = Some(offset as usize);
             }
             Rule::sort_option => {

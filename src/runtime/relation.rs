@@ -18,15 +18,15 @@ use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Debug,
-    serde_derive::Serialize,
-    serde_derive::Deserialize,
-    PartialOrd,
-    Ord,
+Copy,
+Clone,
+Eq,
+PartialEq,
+Debug,
+serde_derive::Serialize,
+serde_derive::Deserialize,
+PartialOrd,
+Ord,
 )]
 pub(crate) struct RelationId(pub(crate) u64);
 
@@ -82,7 +82,7 @@ impl RelationMetadata {
             RelationDeserError
         })?)
     }
-    pub(crate) fn scan_all(&self, tx: &SessionTx) -> impl Iterator<Item = Result<Tuple>> {
+    pub(crate) fn scan_all(&self, tx: &SessionTx) -> impl Iterator<Item=Result<Tuple>> {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
         RelationIterator::new(tx, &lower, &upper)
@@ -92,7 +92,7 @@ impl RelationMetadata {
         &self,
         tx: &SessionTx,
         prefix: &Tuple,
-    ) -> impl Iterator<Item = Result<Tuple>> {
+    ) -> impl Iterator<Item=Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bot);
         let prefix_encoded = prefix.encode_as_key(self.id);
@@ -105,7 +105,7 @@ impl RelationMetadata {
         prefix: &Tuple,
         lower: &[DataValue],
         upper: &[DataValue],
-    ) -> impl Iterator<Item = Result<Tuple>> {
+    ) -> impl Iterator<Item=Result<Tuple>> {
         let mut lower_t = prefix.clone();
         lower_t.0.extend_from_slice(lower);
         let mut upper_t = prefix.clone();
@@ -137,10 +137,7 @@ impl RelationIterator {
         } else {
             self.started = true;
         }
-        Ok(match self.inner.key()? {
-            None => None,
-            Some(k_slice) => Some(EncodedTuple(k_slice).decode()),
-        })
+        Ok(self.inner.key()?.map(|k_slice| EncodedTuple(k_slice).decode()))
     }
 }
 
@@ -224,7 +221,7 @@ impl SessionTx {
         let old_encoded = Tuple(vec![old_key]).encode_as_key(RelationId::SYSTEM);
 
         let mut rel = self.get_relation(&old)?;
-        rel.name = new.name.clone();
+        rel.name = new.name;
 
         let mut meta_val = vec![];
         rel.serialize(&mut Serializer::new(&mut meta_val)).unwrap();

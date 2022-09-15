@@ -24,7 +24,7 @@ impl Deref for PinSlice {
 
 impl Debug for PinSlice {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let to_d: &[u8] = &*self;
+        let to_d: &[u8] = self;
         write!(f, "{:?}", to_d)
     }
 }

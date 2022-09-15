@@ -100,6 +100,6 @@ impl ExtractSpan for Pair<'_> {
         let span = self.as_span();
         let start = span.start();
         let end = span.end();
-        SourceSpan(start.into(), (end - start).into())
+        SourceSpan(start, end - start)
     }
 }

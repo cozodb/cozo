@@ -357,7 +357,7 @@ impl NormalFormProgram {
                                                         || AttrNotFoundError(name.to_string()),
                                                     )?;
                                                 MagicAlgoRuleArg::Triple {
-                                                    attr: attr,
+                                                    attr,
                                                     bindings: bindings.clone(),
                                                     dir: *dir,
                                                     vld: algo_apply.vld.unwrap_or(default_vld),

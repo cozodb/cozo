@@ -841,7 +841,7 @@ impl NormalAggrObj for AggrBitAnd {
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::Bytes(self.res.clone().into()))
+        Ok(DataValue::Bytes(self.res.clone()))
     }
 }
 
@@ -902,7 +902,7 @@ impl NormalAggrObj for AggrBitOr {
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::Bytes(self.res.clone().into()))
+        Ok(DataValue::Bytes(self.res.clone()))
     }
 }
 
@@ -963,7 +963,7 @@ impl NormalAggrObj for AggrBitXor {
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::Bytes(self.res.clone().into()))
+        Ok(DataValue::Bytes(self.res.clone()))
     }
 }
 

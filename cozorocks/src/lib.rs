@@ -27,6 +27,3 @@ impl From<CfHandle> for usize {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;
