@@ -10,11 +10,10 @@ use serde_json::json;
 use cozo::Db;
 use cozorocks::DbBuilder;
 
-fn create_db(name: &str, destroy_on_exit: bool) -> Db {
+fn create_db(name: &str) -> Db {
     let builder = DbBuilder::default()
         .path(name)
-        .create_if_missing(true)
-        .destroy_on_exit(destroy_on_exit);
+        .create_if_missing(true);
     Db::build(builder).unwrap()
 }
 
@@ -25,7 +24,7 @@ fn init_logger() {
 #[test]
 fn air_routes() -> Result<()> {
     init_logger();
-    let db = create_db("_test_air_routes", false);
+    let db = create_db("_test_air_routes");
     let params: BTreeMap<String, serde_json::Value> = Default::default();
     let attr_res = db.run_script(
         r#"

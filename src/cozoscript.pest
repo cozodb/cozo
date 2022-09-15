@@ -178,9 +178,10 @@ nested_schema_clause = {compound_ident ~ ":" ~ ident+}
 
 // tx
 
-tx_clause = { (tx_put | tx_retract )? ~ tx_map ~ ";"? }
+tx_clause = { (tx_put | tx_retract_all | tx_retract )? ~ tx_map ~ ";"? }
 tx_put = {"put" ~ ("@" ~ expr)?}
 tx_retract = {"retract" ~ ("@" ~ expr)?}
+tx_retract_all = {"retract_all" ~ ("@" ~ expr)?}
 tx_map = {"{" ~ (tx_pair ~ ",")* ~ tx_pair? ~ "}"}
 tx_pair = {tx_ident ~ ":" ~ (tx_list | tx_map | expr )}
 tx_list = {"[" ~ ((expr | tx_map) ~ ",")* ~ (expr | tx_map)?  ~ "]"}

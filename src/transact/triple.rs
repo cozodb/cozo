@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 
-use miette::{bail, ensure, Diagnostic, Result};
+use either::{Left, Right};
+use log::debug;
+use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use cozorocks::CfHandle::Pri;
 use cozorocks::{DbIter, IterBuilder};
+use cozorocks::CfHandle::Pri;
 
 use crate::data::attr::Attribute;
 use crate::data::compare::compare_key;
@@ -33,6 +35,13 @@ pub(crate) struct EntityNotFound(pub(crate) String);
 #[diagnostic(code(eval::unacceptable_entity_id))]
 #[diagnostic(help("This occurs when transacting against the attribute {0}"))]
 pub(crate) struct ExpectEntityId(String, DataValue);
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Unique constraint violated for attribute {0} and value {1:?}")]
+#[diagnostic(code(eval::unique_constraint_violated))]
+#[diagnostic(help("The existing one has entity ID {2:?}"))]
+struct UniqueConstraintViolated(String, DataValue, u64);
+
 
 impl SessionTx {
     pub(crate) fn tx_triples(
@@ -103,7 +112,7 @@ impl SessionTx {
                         }
                     }
                 }
-                TxAction::Retract => {
+                TxAction::Retract | TxAction::RetractAll => {
                     let attr = self.attr_by_name(&payload.attr_name.name)?.unwrap();
                     let eid = match payload.entity {
                         EntityRep::Id(id) => id,
@@ -112,7 +121,7 @@ impl SessionTx {
                             #[error("Attempting to retract with temp ID {0}")]
                             #[diagnostic(code(eval::retract_with_temp_id))]
                             #[diagnostic(help(
-                                "This occurs when transacting against the attribute {1}"
+                            "This occurs when transacting against the attribute {1}"
                             ))]
                             struct RetractWithTempId(String, String);
                             bail!(RetractWithTempId(id.to_string(), attr.name.to_string()))
@@ -130,15 +139,37 @@ impl SessionTx {
                             eid
                         }
                     };
-                    ret.push((
-                        self.retract_triple(
-                            eid,
-                            &attr,
-                            &payload.value,
-                            payload.validity.unwrap_or(default_vld),
-                        )?,
-                        -1,
-                    ));
+                    if payload.action == TxAction::Retract {
+                        ret.push((
+                            self.retract_triple(
+                                eid,
+                                &attr,
+                                &payload.value,
+                                payload.validity.unwrap_or(default_vld),
+                            )?,
+                            -1,
+                        ));
+                    } else if payload.action == TxAction::RetractAll {
+                        let it = if attr.with_history {
+                            Left(self.triple_ae_scan(attr.id, eid))
+                        } else {
+                            Right(self.triple_ae_before_scan(attr.id, eid, payload.validity.unwrap_or(default_vld)))
+                        };
+                        for tuple in it {
+                            let (_, _, value) = tuple?;
+                            ret.push((
+                                self.retract_triple(
+                                    eid,
+                                    &attr,
+                                    &value,
+                                    payload.validity.unwrap_or(default_vld),
+                                )?,
+                                -1,
+                            ));
+                        }
+                    } else {
+                        unreachable!()
+                    }
                 }
             }
         }
@@ -171,6 +202,7 @@ impl SessionTx {
         let val_encoded = v_in_val.encode_with_op_and_tx(op, tx_id);
 
         let aev_encoded = encode_aev_key(attr.id, eid, v_in_key, vld_in_key);
+        debug!("aev encoded {:?}, {:?}, {:?}", aev_encoded, v_in_val, op);
         if real_delete {
             self.tx.del(&aev_encoded, Pri)?;
         } else {
@@ -213,12 +245,6 @@ impl SessionTx {
                 } else {
                     Validity::NO_HISTORY
                 };
-
-                #[derive(Debug, Error, Diagnostic)]
-                #[error("Unique constraint violated for attribute {0} and value {1:?}")]
-                #[diagnostic(code(eval::unique_constraint_violated))]
-                #[diagnostic(help("The existing one has entity ID {2:?}"))]
-                struct UniqueConstraintViolated(String, DataValue, u64);
 
                 if attr.with_history {
                     // back scan in time
@@ -296,7 +322,7 @@ impl SessionTx {
             AmendingTripleByTempIdError(attr.name.to_string(), eid)
         );
         // checking that the eid actually exists should be done in the preprocessing step
-        self.write_triple(eid, attr, v, vld, StoreOp::Retract)
+        self.write_triple(eid, attr, v, vld, StoreOp::Assert)
     }
 
     pub(crate) fn retract_triple(
@@ -353,7 +379,7 @@ impl SessionTx {
         &self,
         aid: AttrId,
         eid: EntityId,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, EntityId, DataValue)>> {
         let lower = encode_aev_key(aid, eid, &DataValue::Null, Validity::MAX);
         let upper = encode_aev_key(aid, eid, &DataValue::Bot, Validity::MIN);
         TripleAttrEntityIter::new(self.tx.iterator(Pri), lower, upper)
@@ -364,7 +390,7 @@ impl SessionTx {
         eid: EntityId,
         v_lower: DataValue,
         v_upper: DataValue,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, EntityId, DataValue)>> {
         let lower = encode_aev_key(aid, eid, &v_lower, Validity::MAX);
         let upper = encode_aev_key(aid, eid, &DataValue::Bot, Validity::MIN);
         TripleAttrEntityRangeIter::new(self.tx.iterator(Pri), lower, upper, v_upper)
@@ -374,7 +400,7 @@ impl SessionTx {
         aid: AttrId,
         eid: EntityId,
         before: Validity,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, EntityId, DataValue)>> {
         let lower = encode_aev_key(aid, eid, &DataValue::Null, Validity::MAX);
         let upper = encode_aev_key(aid, eid, &DataValue::Bot, Validity::MIN);
         TripleAttrEntityBeforeIter::new(self.tx.iterator(Pri), lower, upper, before)
@@ -386,7 +412,7 @@ impl SessionTx {
         v_lower: DataValue,
         v_upper: DataValue,
         before: Validity,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, EntityId, DataValue)>> {
         let lower = encode_aev_key(aid, eid, &v_lower, Validity::MAX);
         let upper = encode_aev_key(aid, eid, &DataValue::Bot, Validity::MIN);
         TripleAttrEntityRangeBeforeIter::new(self.tx.iterator(Pri), lower, upper, v_upper, before)
@@ -411,7 +437,7 @@ impl SessionTx {
         aid: AttrId,
         lower: &DataValue,
         upper_inc: &DataValue,
-    ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, DataValue, EntityId)>> {
         let lower = encode_ave_key(aid, lower, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_key(aid, &DataValue::Bot, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueRangeIter::new(self.tx.iterator(Pri), lower, upper, upper_inc.clone())
@@ -420,7 +446,7 @@ impl SessionTx {
         &self,
         aid: AttrId,
         v: &DataValue,
-    ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, DataValue, EntityId)>> {
         let lower = encode_ave_key(aid, v, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_key(aid, v, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueIter::new(self.tx.iterator(Pri), lower, upper)
@@ -431,7 +457,7 @@ impl SessionTx {
         lower: &DataValue,
         upper_inc: &DataValue,
         before: Validity,
-    ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, DataValue, EntityId)>> {
         let lower = encode_ave_key(aid, lower, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_key(aid, &DataValue::Bot, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueRangeBeforeIter::new(
@@ -447,7 +473,7 @@ impl SessionTx {
         aid: AttrId,
         v: &DataValue,
         before: Validity,
-    ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, DataValue, EntityId)>> {
         let lower = encode_ave_key(aid, v, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_key(aid, v, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueBeforeIter::new(self.tx.iterator(Pri), lower, upper, before)
@@ -457,7 +483,7 @@ impl SessionTx {
         aid: AttrId,
         v: &DataValue,
         after: Validity,
-    ) -> impl Iterator<Item = Result<(AttrId, DataValue, EntityId)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, DataValue, EntityId)>> {
         let lower = encode_ave_key(aid, v, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_key(aid, v, EntityId::MAX_PERM, Validity::MIN);
         TripleAttrValueAfterIter::new(self.tx.iterator(Pri), lower, upper, after)
@@ -466,7 +492,7 @@ impl SessionTx {
         &self,
         aid: AttrId,
         v_eid: EntityId,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, EntityId)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, EntityId, EntityId)>> {
         let lower = encode_ave_ref_key(aid, v_eid, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_ref_key(aid, v_eid, EntityId::MAX_PERM, Validity::MIN);
         TripleValueRefAttrIter::new(self.tx.iterator(Pri), lower, upper)
@@ -476,7 +502,7 @@ impl SessionTx {
         aid: AttrId,
         v_eid: EntityId,
         before: Validity,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, EntityId)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, EntityId, EntityId)>> {
         let lower = encode_ave_ref_key(aid, v_eid, EntityId::ZERO, Validity::MAX);
         let upper = encode_ave_ref_key(aid, v_eid, EntityId::MAX_PERM, Validity::MIN);
         TripleValueRefAttrBeforeIter::new(self.tx.iterator(Pri), lower, upper, before)
@@ -484,7 +510,7 @@ impl SessionTx {
     pub(crate) fn triple_a_scan(
         &self,
         aid: AttrId,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, EntityId, DataValue)>> {
         let lower = encode_aev_key(aid, EntityId::ZERO, &DataValue::Null, Validity::MAX);
         let upper = encode_aev_key(aid, EntityId::MAX_PERM, &DataValue::Bot, Validity::MIN);
         TripleAttrEntityIter::new(self.tx.iterator(Pri), lower, upper)
@@ -493,7 +519,7 @@ impl SessionTx {
         &self,
         aid: AttrId,
         before: Validity,
-    ) -> impl Iterator<Item = Result<(AttrId, EntityId, DataValue)>> {
+    ) -> impl Iterator<Item=Result<(AttrId, EntityId, DataValue)>> {
         let lower = encode_aev_key(aid, EntityId::ZERO, &DataValue::Null, Validity::MAX);
         let upper = encode_aev_key(aid, EntityId::MAX_PERM, &DataValue::Bot, Validity::MIN);
         TripleAttrEntityBeforeIter::new(self.tx.iterator(Pri), lower, upper, before)

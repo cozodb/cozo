@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fs;
 
 use log::info;
 use serde_json::to_string_pretty;
@@ -6,11 +7,10 @@ use serde_json::to_string_pretty;
 use cozo::Db;
 use cozorocks::DbBuilder;
 
-fn create_db(name: &str, destroy_on_exit: bool) -> Db {
+fn create_db(name: &str) -> Db {
     let builder = DbBuilder::default()
         .path(name)
-        .create_if_missing(true)
-        .destroy_on_exit(destroy_on_exit);
+        .create_if_missing(true);
     Db::build(builder).unwrap()
 }
 
@@ -23,7 +23,7 @@ fn test_send_sync<T: Send + Sync>(_: &T) {}
 #[test]
 fn simple() {
     init_logger();
-    let db = create_db("_test_db", true);
+    let db = create_db("_test_db");
     test_send_sync(&db);
     let params: BTreeMap<String, serde_json::Value> = Default::default();
     db.run_script(
@@ -123,4 +123,5 @@ fn simple() {
     let ret = db.run_script(query, &params, false).unwrap();
     let res = to_string_pretty(&ret).unwrap();
     println!("{}", res);
+    fs::remove_dir_all("_test_db").unwrap();
 }

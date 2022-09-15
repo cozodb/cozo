@@ -1,23 +1,28 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
-use miette::{bail, ensure, Diagnostic, Result};
+use itertools::Itertools;
+use log::debug;
+use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
+use crate::data::expr::Expr;
+use crate::data::functions::OP_LIST;
 use crate::data::id::{EntityId, Validity};
 use crate::data::program::InputProgram;
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::parse::expr::{build_expr, parse_string};
-use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
+use crate::parse::expr::{build_expr, InvalidExpression, parse_string};
+use crate::parse::query::parse_query;
 
 #[repr(u8)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub(crate) enum TxAction {
     Put,
     Retract,
+    RetractAll
 }
 
 impl Display for TxAction {
@@ -86,6 +91,7 @@ pub(crate) fn parse_tx(
             _ => unreachable!(),
         }
     }
+    debug!("Quintuples {:?}", quintuples);
     Ok(TripleTx {
         quintuples,
         before,
@@ -130,6 +136,19 @@ fn parse_tx_clause(
                 _ => unreachable!(),
             }
         }
+        Rule::tx_retract_all => {
+            op = TxAction::RetractAll;
+            let n = src.next().unwrap();
+            match n.as_rule() {
+                Rule::expr => {
+                    let vld_expr = build_expr(n, param_pool)?;
+                    vld = Some(Validity::try_from(vld_expr)?);
+                    src.next().unwrap()
+                }
+                Rule::tx_map => n,
+                _ => unreachable!(),
+            }
+        }
         _ => unreachable!(),
     };
 
@@ -159,7 +178,7 @@ fn parse_tx_map(
         match fst.as_rule() {
             Rule::tx_ident_id => {
                 ensure!(identifier.is_none(), DupKeySpecError(whole_span));
-                let expr = build_expr(src.next().unwrap(), param_pool)?;
+                let expr = parse_tx_val_inline(src.next().unwrap(), param_pool)?;
                 let eid = expr.build_perm_eid()?;
                 identifier = Some(EntityRep::Id(eid))
             }
@@ -171,7 +190,7 @@ fn parse_tx_map(
                 struct BadTempId(DataValue, #[label] SourceSpan);
 
                 ensure!(identifier.is_none(), DupKeySpecError(whole_span));
-                let expr = build_expr(src.next().unwrap(), param_pool)?;
+                let expr = parse_tx_val_inline(src.next().unwrap(), param_pool)?;
                 let span = expr.span();
                 let c = expr.eval_to_const()?;
                 let c = c.get_string().ok_or_else(|| BadTempId(c.clone(), span))?;
@@ -181,7 +200,7 @@ fn parse_tx_map(
                 ensure!(identifier.is_none(), DupKeySpecError(whole_span));
                 let expr_p = src.next().unwrap();
                 let span = expr_p.extract_span();
-                let expr = build_expr(expr_p, param_pool)?;
+                let expr = parse_tx_val_inline(expr_p, param_pool)?;
                 let c = expr.eval_to_const()?;
                 let c = match c {
                     DataValue::List(l) => l,
@@ -350,4 +369,31 @@ fn parse_tx_val(
         _ => unreachable!(),
     }
     Ok(())
+}
+
+
+fn parse_tx_val_inline(
+    pair: Pair<'_>,
+    param_pool: &BTreeMap<String, DataValue>,
+) -> Result<Expr> {
+    Ok(match pair.as_rule() {
+        Rule::expr => {
+            let mut expr = build_expr(pair, param_pool)?;
+            expr.partial_eval()?;
+            expr
+        }
+        Rule::tx_map => {
+            bail!(InvalidExpression(pair.extract_span()))
+        }
+        Rule::tx_list => {
+            let span = pair.extract_span();
+            let list_coll = pair.into_inner().map(|p| parse_tx_val_inline(p, param_pool)).try_collect()?;
+            Expr::Apply {
+                op: &OP_LIST,
+                args: list_coll,
+                span,
+            }
+        }
+        _ => unreachable!(),
+    })
 }

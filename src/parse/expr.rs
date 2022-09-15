@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use miette::{bail, ensure, Diagnostic, Result};
+use miette::{bail, Diagnostic, ensure, Result};
 use pest::prec_climber::{Operator, PrecClimber};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::data::expr::{get_op, Expr};
+use crate::data::expr::{Expr, get_op};
 use crate::data::functions::{
     OP_ADD, OP_AND, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LIST, OP_LT, OP_MINUS,
     OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
@@ -38,9 +38,14 @@ lazy_static! {
     };
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Invalid expression encountered")]
+#[diagnostic(code(parser::invalid_expression))]
+pub(crate) struct InvalidExpression(#[label] pub(crate) SourceSpan);
+
 pub(crate) fn build_expr(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<Expr> {
-    // TODO remove this when we are sure
-    assert_eq!(pair.as_rule(), Rule::expr);
+    ensure!(pair.as_rule() == Rule::expr, InvalidExpression(pair.extract_span()));
+
     PREC_CLIMBER.climb(
         pair.into_inner(),
         |v| build_unary(v, param_pool),
@@ -187,7 +192,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
                 span,
             }
         }
-        Rule::list => {
+        Rule::list | Rule::tx_list => {
             let mut collected = vec![];
             for p in p.into_inner() {
                 collected.push(build_expr(p, param_pool)?)

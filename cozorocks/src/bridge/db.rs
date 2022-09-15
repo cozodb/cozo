@@ -137,10 +137,10 @@ impl<'a> DbBuilder<'a> {
         self.opts.snd_comparator_different_bytes_can_be_equal = different_bytes_can_be_equal;
         self
     }
-    pub fn destroy_on_exit(mut self, destroy: bool) -> Self {
-        self.opts.destroy_on_exit = destroy;
-        self
-    }
+    // pub fn destroy_on_exit(mut self, destroy: bool) -> Self {
+    //     self.opts.destroy_on_exit = destroy;
+    //     self
+    // }
     pub fn build(self) -> Result<RocksDb, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
 
