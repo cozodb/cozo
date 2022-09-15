@@ -73,6 +73,7 @@ impl SessionTx {
 
         for payload in payloads {
             let vld = payload.validity.unwrap_or(default_vld);
+            debug!("tx payload {:?}", payload);
             match payload.action {
                 TxAction::Put => {
                     let attr = self
@@ -98,14 +99,14 @@ impl SessionTx {
 
                             ret.push((self.new_triple(eid, &attr, &val, vld)?, 1));
                         }
-                        EntityRep::PullByKey(symb, val) => {
-                            let attr = self
+                        EntityRep::PullByKey(symb, key) => {
+                            let key_attr = self
                                 .attr_by_name(&symb)?
                                 .ok_or_else(|| AttrNotFoundError(symb.to_string()))?;
 
                             let eid =
-                                self.eid_by_unique_av(&attr, &val, vld)?.ok_or_else(|| {
-                                    EntityNotFound(format!("{}: {:?}", attr.name, val))
+                                self.eid_by_unique_av(&key_attr, &key, vld)?.ok_or_else(|| {
+                                    EntityNotFound(format!("{}: {:?}", key_attr.name, key))
                                 })?;
 
                             ret.push((self.new_triple(eid, &attr, &val, vld)?, 1));

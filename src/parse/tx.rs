@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
-use log::trace;
 use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -91,7 +90,6 @@ pub(crate) fn parse_tx(
             _ => unreachable!(),
         }
     }
-    trace!("Quintuples {:?}", quintuples);
     Ok(TripleTx {
         quintuples,
         before,
