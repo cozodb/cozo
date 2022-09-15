@@ -56,6 +56,13 @@ impl Drop for RunningQueryCleanup {
     }
 }
 
+#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+pub(crate) struct DbManifest {
+    storage_version: u64,
+}
+
+const CURRENT_STORAGE_VERSION: u64 = 1;
+
 pub struct Db {
     db: RocksDb,
     last_attr_id: Arc<AtomicU64>,
@@ -89,9 +96,28 @@ impl Db {
         fs::create_dir_all(path)
             .map_err(|err| BadDbInit(format!("cannot create directory {}: {}", path, err)))?;
         let path_buf = PathBuf::from(path);
+
+        let is_new = {
+            let mut manifest_path = path_buf.clone();
+            manifest_path.push("manifest");
+
+            if manifest_path.exists() {
+                let existing: DbManifest = rmp_serde::from_slice(&fs::read(manifest_path).expect("reading manifest failed"))
+                    .expect("parsing manifest failed");
+                assert_eq!(existing.storage_version, CURRENT_STORAGE_VERSION, "Unknown storage version {}", existing.storage_version);
+                false
+            } else {
+                fs::write(manifest_path, rmp_serde::to_vec_named(&DbManifest {
+                    storage_version: CURRENT_STORAGE_VERSION
+                }).expect("serializing manifest failed")).expect("Writing to manifest failed");
+                true
+            }
+        };
+
         let mut store_path = path_buf.clone();
         store_path.push("data");
         let db_builder = builder
+            .create_if_missing(is_new)
             .pri_use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
             .pri_use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
             .use_bloom_filter(true, 9.9, true)
