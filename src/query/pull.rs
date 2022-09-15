@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use miette::{ensure, Diagnostic, Result};
+use miette::{Diagnostic, ensure, Result};
 use serde_json::{json, Map};
 use thiserror::Error;
 
@@ -50,7 +50,7 @@ impl OutPullSpec {
 impl SessionTx {
     pub(crate) fn execute_relation<'a>(
         &'a mut self,
-        res_iter: impl Iterator<Item = Result<Tuple>> + 'a,
+        res_iter: impl Iterator<Item=Result<Tuple>> + 'a,
         op: RelationOp,
         meta: &RelationMetadata,
     ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
@@ -117,7 +117,7 @@ impl SessionTx {
                 PullOnNonRef(spec.attr.name.to_string(), spec.span)
             );
             let back_res: Vec<_> = if spec.attr.with_history {
-                self.triple_vref_a_before_scan(spec.attr.id,id,  spec.vld)
+                self.triple_vref_a_before_scan(spec.attr.id, id, spec.vld)
                     .map_ok(|(_, _, e)| e)
                     .try_collect()?
             } else {
@@ -195,7 +195,7 @@ impl SessionTx {
     }
     pub(crate) fn run_pull_on_query_results(
         &self,
-        res_iter: impl Iterator<Item = Result<Tuple>>,
+        res_iter: impl Iterator<Item=Result<Tuple>>,
         headers: Option<&[Symbol]>,
         out_spec: &BTreeMap<Symbol, (Vec<OutPullSpec>, Option<Validity>)>,
         default_vld: Validity,
@@ -228,15 +228,14 @@ impl SessionTx {
                         #[error("Cannot interpret {0:?} as an entity")]
                         #[diagnostic(code(eval::bad_pull_id))]
                         #[diagnostic(help(
-                            "You specified pull operation for the variable '{1}', but the value in the output \
+                        "You specified pull operation for the variable '{1}', but the value in the output \
                         stream cannot be interpreted as an entity ID (must be an integer)."
                         ))]
                         struct BadPullInputError(DataValue, String, #[label] SourceSpan);
 
-                        let id =
-                            EntityId(item.get_int().ok_or_else(|| {
-                                BadPullInputError(item, symb.to_string(), symb.span)
-                            })? as u64);
+                        let id = item.get_entity_id().ok_or_else(|| {
+                            BadPullInputError(item, symb.to_string(), symb.span)
+                        })?;
                         let res = self.run_pull_on_item(id, specs)?;
                         row_collected.push(res);
                     } else {

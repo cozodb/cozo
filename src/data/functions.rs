@@ -496,12 +496,8 @@ pub(crate) fn op_mod(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_AND, 0, true);
 pub(crate) fn op_and(args: &[DataValue]) -> Result<DataValue> {
     for arg in args {
-        if let DataValue::Bool(b) = arg {
-            if !b {
-                return Ok(DataValue::Bool(false));
-            }
-        } else {
-            bail!("'and' requires booleans");
+        if !arg.get_bool().ok_or_else(|| miette!("'and' requires booleans"))? {
+            return Ok(DataValue::Bool(false));
         }
     }
     Ok(DataValue::Bool(true))
@@ -510,12 +506,8 @@ pub(crate) fn op_and(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_OR, 0, true);
 pub(crate) fn op_or(args: &[DataValue]) -> Result<DataValue> {
     for arg in args {
-        if let DataValue::Bool(b) = arg {
-            if *b {
-                return Ok(DataValue::Bool(true));
-            }
-        } else {
-            bail!("'or' requires booleans");
+        if arg.get_bool().ok_or_else(|| miette!("'or' requires booleans"))? {
+            return Ok(DataValue::Bool(true));
         }
     }
     Ok(DataValue::Bool(false))

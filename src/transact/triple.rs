@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
-use std::sync::atomic::Ordering;
 
 use either::{Left, Right};
-use log::debug;
+use log::{debug};
 use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
+use uuid::Uuid;
 
 use cozorocks::{DbIter, IterBuilder};
 use cozorocks::CfHandle::Pri;
@@ -40,7 +40,7 @@ pub(crate) struct ExpectEntityId(String, DataValue);
 #[error("Unique constraint violated for attribute {0} and value {1:?}")]
 #[diagnostic(code(eval::unique_constraint_violated))]
 #[diagnostic(help("The existing one has entity ID {2:?}"))]
-struct UniqueConstraintViolated(String, DataValue, u64);
+struct UniqueConstraintViolated(String, DataValue, Uuid);
 
 
 impl SessionTx {
@@ -65,7 +65,7 @@ impl SessionTx {
                     TempIdInNonPutError(symb.to_string(), payload.attr_name.to_string())
                 );
                 if !str_temp_to_perm_ids.contains_key(symb) {
-                    let new_eid = EntityId(self.last_ent_id.fetch_add(1, Ordering::AcqRel) + 1);
+                    let new_eid = EntityId::new_perm_id();
                     str_temp_to_perm_ids.insert(symb.clone(), new_eid);
                 }
             }
@@ -233,7 +233,7 @@ impl SessionTx {
         if attr.indexing.should_index() {
             // elide e for unique index
             let e_in_key = if attr.indexing.is_unique_index() {
-                EntityId(0)
+                EntityId::ZERO
             } else {
                 eid
             };

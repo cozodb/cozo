@@ -66,7 +66,6 @@ const CURRENT_STORAGE_VERSION: u64 = 1;
 pub struct Db {
     db: RocksDb,
     last_attr_id: Arc<AtomicU64>,
-    last_ent_id: Arc<AtomicU64>,
     last_tx_id: Arc<AtomicU64>,
     relation_store_id: Arc<AtomicU64>,
     n_sessions: Arc<AtomicUsize>,
@@ -79,8 +78,8 @@ impl Debug for Db {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Db<session {}, attrs {:?}, entities {:?}, txs {:?}, sessions: {:?}>",
-            self.session_id, self.last_tx_id, self.last_ent_id, self.last_tx_id, self.n_sessions
+            "Db<session {}, attrs {:?}, txs {:?}, sessions: {:?}>",
+            self.session_id, self.last_tx_id, self.last_tx_id, self.n_sessions
         )
     }
 }
@@ -130,7 +129,6 @@ impl Db {
         let ret = Self {
             db,
             last_attr_id: Arc::new(Default::default()),
-            last_ent_id: Arc::new(Default::default()),
             last_tx_id: Arc::new(Default::default()),
             relation_store_id: Arc::new(Default::default()),
             n_sessions: Arc::new(Default::default()),
@@ -162,7 +160,6 @@ impl Db {
         Ok(Self {
             db: self.db.clone(),
             last_attr_id: self.last_attr_id.clone(),
-            last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
             relation_store_id: self.relation_store_id.clone(),
             n_sessions: self.n_sessions.clone(),
@@ -178,8 +175,6 @@ impl Db {
             .store(tx.load_last_tx_id()?.0, Ordering::Release);
         self.last_attr_id
             .store(tx.load_last_attr_id()?.0, Ordering::Release);
-        self.last_ent_id
-            .store(tx.load_last_entity_id()?.0, Ordering::Release);
         self.relation_store_id
             .store(tx.load_last_relation_store_id()?.0, Ordering::Release);
         Ok(())
@@ -191,7 +186,6 @@ impl Db {
             relation_store_id: self.relation_store_id.clone(),
             w_tx_id: None,
             last_attr_id: self.last_attr_id.clone(),
-            last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
             attr_by_id_cache: Default::default(),
             attr_by_kw_cache: Default::default(),
@@ -209,7 +203,6 @@ impl Db {
             relation_store_id: self.relation_store_id.clone(),
             w_tx_id: Some(cur_tx_id),
             last_attr_id: self.last_attr_id.clone(),
-            last_ent_id: self.last_ent_id.clone(),
             last_tx_id: self.last_tx_id.clone(),
             attr_by_id_cache: Default::default(),
             attr_by_kw_cache: Default::default(),

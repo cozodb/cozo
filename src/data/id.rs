@@ -3,8 +3,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use miette::{Diagnostic, Result};
+use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
+use uuid::Uuid;
+use uuid::v1::Timestamp;
 
 use crate::data::expr::Expr;
 use crate::data::triple::StoreOp;
@@ -97,43 +100,50 @@ impl Debug for Validity {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, Hash)]
-pub(crate) struct EntityId(pub(crate) u64);
+pub(crate) struct EntityId(pub(crate) Uuid);
 
 impl EntityId {
-    pub(crate) const ZERO: EntityId = EntityId(0);
-    pub(crate) const MAX_TEMP: EntityId = EntityId(10_000_000);
-    pub(crate) const MIN_PERM: EntityId = EntityId(10_000_001);
-    pub(crate) const MAX_PERM: EntityId = EntityId(0x00ff_ffff_ff00_0000);
+    pub(crate) const ZERO: EntityId = EntityId(uuid::uuid!("00000000-0000-0000-0000-000000000000"));
+    pub(crate) const MAX_PERM: EntityId = EntityId(uuid::uuid!("FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"));
 
     pub(crate) fn as_datavalue(&self) -> DataValue {
-        DataValue::from(self.0 as i64)
+        DataValue::uuid(self.0)
     }
 
     pub(crate) fn from_bytes(b: &[u8]) -> Self {
-        EntityId(u64::from_be_bytes([
-            0, b[1], b[2], b[3], b[4], b[5], b[6], b[7],
-        ]))
+        EntityId(Uuid::from_bytes(b.try_into().expect("wrong length of bytes for uuid")))
     }
-    pub(crate) fn bytes(&self) -> [u8; 8] {
-        self.0.to_be_bytes()
+    pub(crate) fn bytes(&self) -> [u8; 16] {
+        self.0.as_bytes().clone()
     }
     pub(crate) fn is_perm(&self) -> bool {
-        *self >= Self::MIN_PERM
+        self.0.get_version_num() == 1
     }
     pub(crate) fn is_placeholder(&self) -> bool {
-        self.0 == 0
+        self.0.is_nil()
+    }
+    pub(crate) fn new_perm_id() -> Self {
+        let mut rng = rand::thread_rng();
+        let uuid_ctx = uuid::v1::Context::new(rng.gen());
+        let now = SystemTime::now();
+        let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
+        let ts = Timestamp::from_unix(uuid_ctx, since_epoch.as_secs(), since_epoch.subsec_nanos());
+        let mut rand_vals = [0u8; 6];
+        rng.fill(&mut rand_vals);
+        let id = uuid::Uuid::new_v1(ts, &rand_vals);
+        Self(id)
     }
 }
 
-impl From<u64> for EntityId {
-    fn from(u: u64) -> Self {
-        EntityId(u)
-    }
-}
+// impl From<u64> for EntityId {
+//     fn from(u: u64) -> Self {
+//         EntityId(u)
+//     }
+// }
 
 impl Debug for EntityId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "e{}", self.0)
+        write!(f, "{}", self.0)
     }
 }
 

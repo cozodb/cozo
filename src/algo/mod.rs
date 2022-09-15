@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use either::Either;
 use itertools::Itertools;
-use miette::{bail, ensure, Diagnostic, Result};
+use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -25,7 +25,6 @@ use crate::algo::triangles::ClusteringCoefficients;
 use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
-use crate::data::id::EntityId;
 use crate::data::program::{AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol, TripleDir};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
@@ -150,11 +149,11 @@ struct NotAnEdgeError(#[label] SourceSpan);
 
 #[derive(Error, Diagnostic, Debug)]
 #[error(
-    "The value {0:?} at the third position in the relation cannot be interpreted as edge weights"
+"The value {0:?} at the third position in the relation cannot be interpreted as edge weights"
 )]
 #[diagnostic(code(algo::invalid_edge_weight))]
 #[diagnostic(help(
-    "Edge weights must be finite numbers. Some algorithm also requires positivity."
+"Edge weights must be finite numbers. Some algorithm also requires positivity."
 ))]
 struct BadEdgeWeightError(DataValue, #[label] SourceSpan);
 
@@ -167,7 +166,7 @@ struct RuleNotFoundError(String, #[label] SourceSpan);
 #[error("Invalid reverse scanning of triples")]
 #[diagnostic(code(algo::invalid_reverse_triple_scan))]
 #[diagnostic(help(
-    "Inverse scanning of triples requires the type to be 'ref', or the value be indexed"
+"Inverse scanning of triples requires the type to be 'ref', or the value be indexed"
 ))]
 struct InvalidInverseTripleUse(String, #[label] SourceSpan);
 
@@ -175,7 +174,7 @@ struct InvalidInverseTripleUse(String, #[label] SourceSpan);
 #[error("Required node with key {missing:?} not found")]
 #[diagnostic(code(algo::node_with_key_not_found))]
 #[diagnostic(help(
-    "The relation is interpreted as a relation of nodes, but the required key is missing"
+"The relation is interpreted as a relation of nodes, but the required key is missing"
 ))]
 pub(crate) struct NodeNotFoundError {
     pub(crate) missing: DataValue,
@@ -370,14 +369,13 @@ impl MagicAlgoRuleArg {
                     #[error("Encountered bad prefix value {0:?} during triple prefix scanning")]
                     #[diagnostic(code(algo::invalid_triple_prefix))]
                     #[diagnostic(help(
-                        "Triple prefix should be an entity ID represented by an integer"
+                    "Triple prefix should be an entity ID represented by a UUID"
                     ))]
                     struct InvalidTriplePrefixError(DataValue, #[label] SourceSpan);
 
                     let id = prefix
-                        .get_int()
+                        .get_entity_id()
                         .ok_or_else(|| InvalidTriplePrefixError(prefix.clone(), self.span()))?;
-                    let id = EntityId(id as u64);
                     match dir {
                         TripleDir::Fwd => {
                             if attr.with_history {

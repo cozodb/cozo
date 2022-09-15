@@ -32,8 +32,13 @@ impl PartialOrd<Self> for UuidWrapper {
 
 impl Ord for UuidWrapper {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.to_100_nanos().cmp(&other.to_100_nanos()).then_with(||
-            self.0.as_bytes().cmp(other.0.as_bytes()))
+        match (self.to_100_nanos(), other.to_100_nanos()) {
+            (Some(a), Some(b)) => {
+                a.cmp(&b).then_with(||
+                    self.0.as_bytes().cmp(other.0.as_bytes()))
+            }
+            _ => self.0.as_bytes().cmp(other.0.as_bytes())
+        }
     }
 }
 
@@ -289,10 +294,7 @@ impl DataValue {
     }
 
     pub(crate) fn get_entity_id(&self) -> Option<EntityId> {
-        match self {
-            DataValue::Num(Num::I(id)) => Some(EntityId(*id as u64)),
-            _ => None,
-        }
+        self.get_uuid().map(EntityId)
     }
     pub(crate) fn get_list(&self) -> Option<&[DataValue]> {
         match self {
@@ -334,6 +336,15 @@ impl DataValue {
     }
     pub(crate) fn uuid(uuid: uuid::Uuid) -> Self {
         Self::Uuid(UuidWrapper(uuid))
+    }
+    pub(crate) fn get_uuid(&self) -> Option<Uuid> {
+        match self {
+            DataValue::Uuid(UuidWrapper(uuid)) => Some(*uuid),
+            DataValue::Str(s) => {
+                uuid::Uuid::try_parse(s).ok()
+            }
+            _ => None
+        }
     }
 }
 

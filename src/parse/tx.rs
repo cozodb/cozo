@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
-use log::debug;
+use log::trace;
 use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -22,7 +22,7 @@ use crate::parse::query::parse_query;
 pub(crate) enum TxAction {
     Put,
     Retract,
-    RetractAll
+    RetractAll,
 }
 
 impl Display for TxAction {
@@ -41,7 +41,7 @@ pub(crate) enum EntityRep {
 impl EntityRep {
     fn as_datavalue(&self) -> DataValue {
         match self {
-            EntityRep::Id(i) => DataValue::from(i.0 as i64),
+            EntityRep::Id(i) => DataValue::uuid(i.0),
             EntityRep::UserTempId(s) => DataValue::Str(s.clone()),
             EntityRep::PullByKey(attr, data) => {
                 DataValue::List(vec![DataValue::Str(attr.clone()), data.clone()])
@@ -91,7 +91,7 @@ pub(crate) fn parse_tx(
             _ => unreachable!(),
         }
     }
-    debug!("Quintuples {:?}", quintuples);
+    trace!("Quintuples {:?}", quintuples);
     Ok(TripleTx {
         quintuples,
         before,

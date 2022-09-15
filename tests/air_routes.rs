@@ -290,16 +290,16 @@ fn air_routes() -> Result<()> {
         json!([[7176], [7270], [7311], [7722]])
     );
 
-    let simple_query_time = Instant::now();
-    let res = db.run_script(r#"
-        ?[c, code, desc] := [c country.code 'CU'] or c <- 10000239, [c country.code code], [c country.desc desc];
-    "#, &params, false,
-    )?;
-    dbg!(simple_query_time.elapsed());
-    assert_eq!(
-        *res.get("rows").unwrap(),
-        json!([[10000060, "CU", "Cuba"], [10000239, "VN", "Viet Nam"]])
-    );
+    // let simple_query_time = Instant::now();
+    // let res = db.run_script(r#"
+    //     ?[c, code, desc] := [c country.code 'CU'] or c <- 10000239, [c country.code code], [c country.desc desc];
+    // "#, &params, false,
+    // )?;
+    // dbg!(simple_query_time.elapsed());
+    // assert_eq!(
+    //     *res.get("rows").unwrap(),
+    //     json!([[10000060, "CU", "Cuba"], [10000239, "VN", "Viet Nam"]])
+    // );
 
     let no_airports_time = Instant::now();
     let res = db.run_script(

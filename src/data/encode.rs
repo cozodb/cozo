@@ -138,7 +138,7 @@ impl<const N: usize> EncodedVec<N> {
         let tx_bytes = vld.bytes();
         #[allow(clippy::needless_range_loop)]
         for i in 1..8 {
-            self.inner[VEC_SIZE_16 + i] = tx_bytes[i];
+            self.inner[VEC_SIZE_24 + i] = tx_bytes[i];
         }
     }
     pub(crate) fn encoded_entity_amend_validity_to_inf_future(&mut self) {
@@ -197,6 +197,7 @@ impl TryFrom<u8> for StorageTag {
 }
 
 pub(crate) const LARGE_VEC_SIZE: usize = 60;
+pub(crate) const VEC_SIZE_48: usize = 48;
 pub(crate) const VEC_SIZE_32: usize = 32;
 pub(crate) const VEC_SIZE_24: usize = 24;
 pub(crate) const VEC_SIZE_16: usize = 16;
@@ -221,9 +222,9 @@ pub(crate) fn decode_value(src: &[u8]) -> Result<DataValue> {
 
 #[inline]
 pub(crate) fn decode_value_from_key(src: &[u8]) -> Result<DataValue> {
-    Ok(rmp_serde::from_slice(&src[VEC_SIZE_24..]).map_err(|err| {
+    Ok(rmp_serde::from_slice(&src[VEC_SIZE_32..]).map_err(|err| {
         error!(
-            "Cannot deserialize DataValue from bytes: {:x?}, {:?}",
+            "Cannot deserialize DataValue from bytes for key: {:x?}, {:?}",
             src, err
         );
         DataValueDeserError
@@ -234,7 +235,7 @@ pub(crate) fn decode_value_from_key(src: &[u8]) -> Result<DataValue> {
 pub(crate) fn decode_value_from_val(src: &[u8]) -> Result<DataValue> {
     Ok(rmp_serde::from_slice(&src[VEC_SIZE_8..]).map_err(|err| {
         error!(
-            "Cannot deserialize DataValue from bytes: {:x?}, {:?}",
+            "Cannot deserialize DataValue from bytes for value: {:x?}, {:?}",
             src, err
         );
         DataValueDeserError
@@ -245,8 +246,8 @@ pub(crate) fn smallest_key() -> EncodedVec<LARGE_VEC_SIZE> {
     encode_aev_key(AttrId(0), EntityId::ZERO, &DataValue::Null, Validity::MIN)
 }
 
-/// eid: 8 bytes (incl. tag)
-/// aid: 8 bytes
+/// aid: 8 bytes (incl. tag)
+/// eid: 16 bytes
 /// val: variable
 /// vld: 8 bytes
 #[inline]
@@ -263,7 +264,7 @@ pub(crate) fn encode_aev_key(
 
     ret.extend(eid.bytes());
     ret.extend(vld.bytes());
-    debug_assert_eq!(ret.len(), VEC_SIZE_24);
+    debug_assert_eq!(ret.len(), VEC_SIZE_32);
 
     val.serialize(&mut Serializer::new(&mut ret)).unwrap();
 
@@ -276,10 +277,10 @@ pub(crate) fn decode_ae_key(src: &[u8]) -> Result<(AttrId, EntityId, Validity)> 
         src[0] == StorageTag::TripleAttrEntityValue as u8
             || src[0] == StorageTag::TripleAttrValueEntity as u8
     );
-    debug_assert!(src.len() >= VEC_SIZE_24);
+    debug_assert!(src.len() >= VEC_SIZE_32);
     let aid = AttrId::from_bytes(&src[0..VEC_SIZE_8]);
-    let eid = EntityId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
-    let vld = Validity::from_bytes(&src[VEC_SIZE_16..VEC_SIZE_24]);
+    let eid = EntityId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_24]);
+    let vld = Validity::from_bytes(&src[VEC_SIZE_24..VEC_SIZE_32]);
 
     Ok((aid, eid, vld))
 }
@@ -290,12 +291,12 @@ pub(crate) fn encode_ave_key_for_unique_v(
     val: &DataValue,
     vld: Validity,
 ) -> EncodedVec<LARGE_VEC_SIZE> {
-    encode_ave_key(aid, val, EntityId(0), vld)
+    encode_ave_key(aid, val, EntityId::ZERO, vld)
 }
 
 /// aid: 8 bytes (incl. tag)
 /// val: variable
-/// eid: 8 bytes
+/// eid: 16 bytes
 /// vld: 8 bytes
 #[inline]
 pub(crate) fn encode_ave_key(
@@ -311,16 +312,16 @@ pub(crate) fn encode_ave_key(
 
     ret.extend(eid.bytes());
     ret.extend(vld.bytes());
-    debug_assert_eq!(ret.len(), VEC_SIZE_24);
+    debug_assert_eq!(ret.len(), VEC_SIZE_32);
 
     val.serialize(&mut Serializer::new(&mut ret)).unwrap();
 
     ret.into()
 }
 
-/// aid: 8 bytes
-/// val: 8 bytes (incl. tag)
-/// eid: 8 bytes
+/// aid: 8 bytes (incl. tag)
+/// val: 16 bytes
+/// eid: 16 bytes
 /// vld: 8 bytes
 #[inline]
 pub(crate) fn encode_ave_ref_key(
@@ -336,9 +337,9 @@ pub(crate) fn encode_ave_ref_key(
     ret.extend(val.bytes());
 
     ret.extend(vld.bytes());
-    debug_assert_eq!(ret.len(), VEC_SIZE_24);
-    ret.extend(eid.bytes());
     debug_assert_eq!(ret.len(), VEC_SIZE_32);
+    ret.extend(eid.bytes());
+    debug_assert_eq!(ret.len(), VEC_SIZE_48);
 
     ret.into()
 }
@@ -346,9 +347,9 @@ pub(crate) fn encode_ave_ref_key(
 #[inline]
 pub(crate) fn decode_ave_ref_key(src: &[u8]) -> Result<(AttrId, EntityId, EntityId, Validity)> {
     let aid = AttrId::from_bytes(&src[0..VEC_SIZE_8]);
-    let vid = EntityId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_16]);
-    let vld = Validity::from_bytes(&src[VEC_SIZE_16..VEC_SIZE_24]);
-    let eid = EntityId::from_bytes(&src[VEC_SIZE_24..VEC_SIZE_32]);
+    let vid = EntityId::from_bytes(&src[VEC_SIZE_8..VEC_SIZE_24]);
+    let vld = Validity::from_bytes(&src[VEC_SIZE_24..VEC_SIZE_32]);
+    let eid = EntityId::from_bytes(&src[VEC_SIZE_32..VEC_SIZE_48]);
 
     Ok((aid, vid, eid, vld))
 }
@@ -405,7 +406,7 @@ pub(crate) fn decode_sentinel_attr_val(src: &[u8]) -> Result<(AttrId, DataValue)
     let a_id = AttrId::from_bytes(&src[..VEC_SIZE_8]);
     let val = rmp_serde::from_slice(&src[VEC_SIZE_8..]).map_err(|err| {
         error!(
-            "Cannot deserialize DataValue from bytes: {:x?}, {:?}",
+            "Cannot deserialize DataValue from bytes for attribute: {:x?}, {:?}",
             src, err
         );
         DataValueDeserError

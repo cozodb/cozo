@@ -47,17 +47,7 @@ impl Expr {
     pub(crate) fn build_perm_eid(self) -> Result<EntityId> {
         let span = self.span();
         let value = self.eval_to_const()?;
-        match value.get_non_neg_int() {
-            Some(i) => {
-                let eid = EntityId(i);
-                if !eid.is_perm() {
-                    Err(BadEntityId(value, span).into())
-                } else {
-                    Ok(eid)
-                }
-            }
-            None => Err(BadEntityId(value, span).into()),
-        }
+        value.get_entity_id().ok_or_else(|| BadEntityId(value, span).into())
     }
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
@@ -185,10 +175,10 @@ impl Expr {
             {
                 if op1.name == OP_NEGATE.name {
                     if let Some(Expr::Apply {
-                        op: op2,
-                        args: arg2,
-                        ..
-                    }) = arg1.first()
+                                    op: op2,
+                                    args: arg2,
+                                    ..
+                                }) = arg1.first()
                     {
                         if op2.name == OP_NEGATE.name {
                             let mut new_self = arg2[0].clone();

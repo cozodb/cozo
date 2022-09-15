@@ -16,7 +16,7 @@ use cozorocks::{DbIter, Tx};
 
 use crate::data::attr::Attribute;
 use crate::data::encode::{
-    encode_sentinel_attr_by_id, encode_sentinel_entity_attr, encode_tx, EncodedVec,
+    encode_sentinel_attr_by_id, encode_tx, EncodedVec,
 };
 use crate::data::id::{AttrId, EntityId, TxId, Validity};
 use crate::data::program::MagicSymbol;
@@ -33,7 +33,6 @@ pub struct SessionTx {
     pub(crate) mem_store_id: Arc<AtomicU32>,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
-    pub(crate) last_ent_id: Arc<AtomicU64>,
     pub(crate) last_tx_id: Arc<AtomicU64>,
     pub(crate) attr_by_id_cache: RefCell<BTreeMap<AttrId, Option<Attribute>>>,
     pub(crate) attr_by_kw_cache: RefCell<BTreeMap<SmartString<LazyCompact>, Option<Attribute>>>,
@@ -105,17 +104,6 @@ impl SessionTx {
         self.attr_by_id_cache.borrow_mut().clear();
         self.attr_by_kw_cache.borrow_mut().clear();
         self.eid_by_attr_val_cache.borrow_mut().clear();
-    }
-
-    pub(crate) fn load_last_entity_id(&self) -> Result<EntityId> {
-        let e_lower = encode_sentinel_entity_attr(EntityId::MIN_PERM, AttrId::MIN_PERM);
-        let e_upper = encode_sentinel_entity_attr(EntityId::MAX_PERM, AttrId::MIN_PERM);
-        let it = self.bounded_scan_last(&e_lower, &e_upper);
-
-        Ok(match it.key()? {
-            None => EntityId::MAX_TEMP,
-            Some(data) => EntityId::from_bytes(data),
-        })
     }
 
     pub(crate) fn load_last_attr_id(&self) -> Result<AttrId> {
