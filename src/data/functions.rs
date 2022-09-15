@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::ops::{Div, Rem};
 use std::str::FromStr;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use itertools::Itertools;
 use miette::{bail, ensure, miette, Result};
@@ -8,10 +9,11 @@ use num_traits::FloatConst;
 use rand::prelude::*;
 use smartstring::SmartString;
 use unicode_normalization::UnicodeNormalization;
+use uuid::v1::Timestamp;
 
 use crate::data::expr::Op;
 use crate::data::json::JsonValue;
-use crate::data::value::{same_value_type, DataValue, Num, RegexWrapper};
+use crate::data::value::{DataValue, Num, RegexWrapper, same_value_type, UuidWrapper};
 
 macro_rules! define_op {
     ($name:ident, $min_arity:expr, $vararg:expr) => {
@@ -36,6 +38,11 @@ pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
         | (DataValue::Num(Num::I(i)), DataValue::Num(Num::F(f))) => *i as f64 == *f,
         (a, b) => a == b,
     }))
+}
+
+define_op!(OP_IS_UUID, 1, false);
+pub(crate) fn op_is_uuid(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(matches!(args[0], DataValue::Uuid(_))))
 }
 
 define_op!(OP_IS_IN, 2, false);
@@ -983,9 +990,9 @@ pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)?;
     let ret = 2.
         * f64::asin(f64::sqrt(
-            f64::sin((lat1 - lat2) / 2.).powi(2)
-                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-        ));
+        f64::sin((lat1 - lat2) / 2.).powi(2)
+            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+    ));
     Ok(DataValue::from(ret))
 }
 
@@ -998,9 +1005,9 @@ pub(crate) fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)? * f64::PI() / 180.;
     let ret = 2.
         * f64::asin(f64::sqrt(
-            f64::sin((lat1 - lat2) / 2.).powi(2)
-                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-        ));
+        f64::sin((lat1 - lat2) / 2.).powi(2)
+            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+    ));
     Ok(DataValue::from(ret))
 }
 
@@ -1364,4 +1371,48 @@ pub(crate) fn op_intersection(args: &[DataValue]) -> Result<DataValue> {
         }
     }
     Ok(DataValue::List(start.into_iter().collect()))
+}
+
+define_op!(OP_TO_UUID, 1, false);
+pub(crate) fn op_to_uuid(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        d @ DataValue::Uuid(_u) => Ok(d.clone()),
+        DataValue::Str(s) => {
+            let id = uuid::Uuid::try_parse(s).map_err(|_| miette!("invalid UUID"))?;
+            Ok(DataValue::uuid(id))
+        }
+        _ => bail!("'to_uuid' requires a string")
+    }
+}
+
+define_op!(OP_RAND_UUID_V1, 0, false);
+pub(crate) fn op_rand_uuid_v1(_args: &[DataValue]) -> Result<DataValue> {
+    let mut rng = rand::thread_rng();
+    let uuid_ctx = uuid::v1::Context::new(rng.gen());
+    let now = SystemTime::now();
+    let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
+    let ts = Timestamp::from_unix(uuid_ctx, since_epoch.as_secs(), since_epoch.subsec_nanos());
+    let mut rand_vals = [0u8; 6];
+    rng.fill(&mut rand_vals);
+    let id = uuid::Uuid::new_v1(ts, &rand_vals);
+    Ok(DataValue::uuid(id))
+}
+
+define_op!(OP_RAND_UUID_V4, 0, false);
+pub(crate) fn op_rand_uuid_v4(_args: &[DataValue]) -> Result<DataValue> {
+    let id = uuid::Uuid::new_v4();
+    Ok(DataValue::uuid(id))
+}
+
+define_op!(OP_UUID_TIMESTAMP, 1, false);
+pub(crate) fn op_uuid_timestamp(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Uuid(UuidWrapper(id)) => {
+            match id.get_timestamp() {
+                None => DataValue::Null,
+                Some(t) => (t.to_unix().0 as i64).into()
+            }
+        }
+        _ => bail!("not an UUID")
+    })
 }

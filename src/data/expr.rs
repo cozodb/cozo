@@ -544,6 +544,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "is_finite" => &OP_IS_FINITE,
         "is_infinite" => &OP_IS_INFINITE,
         "is_nan" => &OP_IS_NAN,
+        "is_uuid" => &OP_IS_UUID,
         "length" => &OP_LENGTH,
         "sorted" => &OP_SORTED,
         "reverse" => &OP_REVERSE,
@@ -581,6 +582,10 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "union" => &OP_UNION,
         "intersection" => &OP_INTERSECTION,
         "difference" => &OP_DIFFERENCE,
+        "to_uuid" => &OP_TO_UUID,
+        "rand_uuid_v1" => &OP_RAND_UUID_V1,
+        "rand_uuid_v4" => &OP_RAND_UUID_V4,
+        "uuid_timestamp" => &OP_UUID_TIMESTAMP,
         _ => return None,
     })
 }

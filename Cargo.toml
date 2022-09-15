@@ -40,6 +40,7 @@ nalgebra = "0.31.1"
 approx = "0.5.1"
 unicode-normalization = "0.1.21"
 thiserror = "1.0.34"
+uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
 cozorocks = { path = "cozorocks" }
 
 #[target.'cfg(not(target_env = "msvc"))'.dependencies]

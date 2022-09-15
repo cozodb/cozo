@@ -23,16 +23,16 @@
     <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="manifest file">
+    <list default="true" id="fb7002fa-47b1-45d9-bc6d-711b16e752b3" name="Changes" comment="transactions are hard">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cozorocks/src/bridge/db.rs" beforeDir="false" afterPath="$PROJECT_DIR$/cozorocks/src/bridge/db.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/cozoscript.pest" beforeDir="false" afterPath="$PROJECT_DIR$/src/cozoscript.pest" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/parse/expr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/parse/expr.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/parse/tx.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/parse/tx.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/runtime/db.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/runtime/db.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/transact/triple.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/transact/triple.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/air_routes.rs" beforeDir="false" afterPath="$PROJECT_DIR$/tests/air_routes.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tests/simple.rs" beforeDir="false" afterPath="$PROJECT_DIR$/tests/simple.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/source/datatypes.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/datatypes.rst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/source/functions.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/functions.rst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/data/expr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/expr.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/data/functions.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/functions.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/data/json.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/json.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/data/tests/functions.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/tests/functions.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/data/value.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/data/value.rs" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -73,7 +73,7 @@
     "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true"
   }
 }]]></component>
-  <component name="RunManager" selected="Cargo.Test data::id::p">
+  <component name="RunManager" selected="Cargo.Test data::tests::functions::test_uuid">
     <configuration default="true" type="CLionExternalRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" PASS_PARENT_ENVS_2="true">
       <method v="2">
         <option name="CLION.EXTERNAL.BUILD" enabled="true" />
@@ -86,6 +86,40 @@
     </configuration>
     <configuration name="Test data::id::p" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
       <option name="command" value="test --package cozo --lib data::id::p -- --exact" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="emulateTerminal" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <envs />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Test data::json::x" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="command" value="test --package cozo --lib data::json::x -- --exact" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="emulateTerminal" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <envs />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Test data::tests::functions::test_uuid" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="command" value="test --package cozo --lib data::tests::functions::test_uuid -- --exact" />
       <option name="workingDirectory" value="file://$PROJECT_DIR$" />
       <option name="channel" value="DEFAULT" />
       <option name="requiredFeatures" value="true" />
@@ -118,11 +152,15 @@
       </method>
     </configuration>
     <list>
+      <item itemvalue="Cargo.Test data::json::x" />
+      <item itemvalue="Cargo.Test data::tests::functions::test_uuid" />
       <item itemvalue="Cargo.Test data::id::p" />
       <item itemvalue="CMake Application.cozorocks" />
     </list>
     <recent_temporary>
       <list>
+        <item itemvalue="Cargo.Test data::tests::functions::test_uuid" />
+        <item itemvalue="Cargo.Test data::json::x" />
         <item itemvalue="Cargo.Test data::id::p" />
       </list>
     </recent_temporary>
@@ -138,7 +176,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1663161524540</updated>
-      <workItem from="1663161527741" duration="19713000" />
+      <workItem from="1663161527741" duration="26111000" />
     </task>
     <task id="LOCAL-00001" summary="regenerate idea files">
       <created>1663161616722</created>
@@ -175,7 +213,14 @@
       <option name="project" value="LOCAL" />
       <updated>1663220906043</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="transactions are hard">
+      <created>1663233714452</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1663233714452</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -198,6 +243,7 @@
     <MESSAGE value="enforce local file security" />
     <MESSAGE value="reintroduce bloom filter settings" />
     <MESSAGE value="manifest file" />
-    <option name="LAST_COMMIT_MESSAGE" value="manifest file" />
+    <MESSAGE value="transactions are hard" />
+    <option name="LAST_COMMIT_MESSAGE" value="transactions are hard" />
   </component>
 </project>

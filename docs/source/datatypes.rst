@@ -13,6 +13,7 @@ A runtime value in Cozo can be of the following *value-types*:
 * ``Number``
 * ``String``
 * ``Bytes``
+* ``Uuid``
 * ``List``
 
 ``Number`` can be ``Float`` (double precision) or ``Int`` (signed, 64 bits). Cozo will auto-promote ``Int`` to ``Float`` when necessary.
@@ -28,6 +29,7 @@ Within each type values are *compared* according to logic custom to each type:
 * Lists are ordered lexicographically by their elements;
 * Bytes are compared lexicographically;
 * Strings are ordered lexicographically by their UTF-8 byte representations.
+* If two UUIDs are both of version one, they are compared based on their timestamp. Otherwise, or when the timestamp comparison results in a tie, they are compared by their bytes.
 
 .. WARNING::
 

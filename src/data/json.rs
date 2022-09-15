@@ -88,9 +88,10 @@ impl From<DataValue> for JsonValue {
             }
             DataValue::Regex(r) => {
                 json!(r.0.as_str())
-            } // DataValue::Map(m) => {
-              //     JsonValue::Array(m.into_iter().map(|(k, v)| json!([k, v])).collect())
-              // }
+            }
+            DataValue::Uuid(u) => {
+                json!(u.0)
+            }
         }
     }
 }
@@ -98,8 +99,8 @@ impl From<DataValue> for JsonValue {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
-    use crate::data::json::JsonValue;
 
+    use crate::data::json::JsonValue;
     use crate::data::value::DataValue;
 
     #[test]

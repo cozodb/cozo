@@ -465,6 +465,13 @@ Type checking and conversions
     * ``PI`` is converted to pi (3.14159...);
     * ``E`` is converted to the base of natural logarithms, or Euler's constant (2.71828...).
 
+.. function:: to_uuid(x)
+
+    Tries to convert ``x`` to a UUID. The input must either be a hyphenated UUID string representation or already a UUID for it to succeed.
+
+.. function:: uuid_timestamp(x)
+
+    Extracts the timestamp from a UUID version 1, as nanoseconds since the UNIX epoch divided by 100. If the UUID is not of version 1, ``null`` is returned. If ``x`` is not a UUID, an error is raised.
 
 .. function:: is_null(x)
 
@@ -506,6 +513,10 @@ Type checking and conversions
 
     Checks for strings.
 
+.. function:: is_uuid(x)
+
+    Checks for UUIDs.
+
 -----------------
 Random functions
 -----------------
@@ -529,6 +540,13 @@ Random functions
 
     Randomly chooses an element from ``list`` and returns it. If the list is empty, it returns ``null``.
 
+.. function:: rand_uuid_v1()
+
+    Generate a random UUID, version 1 (random bits plus timestamp).
+
+.. function:: rand_uuid_v4()
+
+    Generate a random UUID, version 4 (completely random bits).
 
 ------------------
 Regex functions

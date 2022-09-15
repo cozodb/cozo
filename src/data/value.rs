@@ -9,10 +9,33 @@ use rmp_serde::Serializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
+use uuid::Uuid;
 
 use crate::data::encode::EncodedVec;
 use crate::data::id::{EntityId, TxId};
 use crate::data::triple::StoreOp;
+
+#[derive(Clone, Hash, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
+pub(crate) struct UuidWrapper(pub(crate) Uuid);
+
+impl UuidWrapper {
+    pub(crate) fn to_100_nanos(&self) -> Option<u64> {
+        self.0.get_timestamp().map(|t| t.to_unix_nanos())
+    }
+}
+
+impl PartialOrd<Self> for UuidWrapper {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for UuidWrapper {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.to_100_nanos().cmp(&other.to_100_nanos()).then_with(||
+            self.0.as_bytes().cmp(other.0.as_bytes()))
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct RegexWrapper(pub(crate) Regex);
@@ -25,8 +48,8 @@ impl Hash for RegexWrapper {
 
 impl Serialize for RegexWrapper {
     fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
+        where
+            S: serde::Serializer,
     {
         panic!("serializing regex");
     }
@@ -34,8 +57,8 @@ impl Serialize for RegexWrapper {
 
 impl<'de> Deserialize<'de> for RegexWrapper {
     fn deserialize<D>(_deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
+        where
+            D: Deserializer<'de>,
     {
         panic!("deserializing regex");
     }
@@ -62,7 +85,7 @@ impl PartialOrd for RegexWrapper {
 }
 
 #[derive(
-    Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
+Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
 pub(crate) enum DataValue {
     #[serde(rename = "0", alias = "Null")]
@@ -75,6 +98,8 @@ pub(crate) enum DataValue {
     Str(SmartString<LazyCompact>),
     #[serde(rename = "X", alias = "Bytes", with = "serde_bytes")]
     Bytes(Vec<u8>),
+    #[serde(rename = "U", alias = "Uuid")]
+    Uuid(UuidWrapper),
     #[serde(rename = "R", alias = "Regex")]
     Regex(RegexWrapper),
     #[serde(rename = "L", alias = "List")]
@@ -240,6 +265,10 @@ impl Debug for DataValue {
             DataValue::Guard => {
                 write!(f, "guard")
             }
+            DataValue::Uuid(u) => {
+                let encoded = base64::encode_config(u.0.as_bytes(), base64::URL_SAFE_NO_PAD);
+                write!(f, "{}", encoded)
+            }
         }
     }
 }
@@ -296,6 +325,15 @@ impl DataValue {
             DataValue::Num(n) => Some(n.get_float()),
             _ => None,
         }
+    }
+    pub(crate) fn get_bool(&self) -> Option<bool> {
+        match self {
+            DataValue::Bool(b) => Some(*b),
+            _ => None
+        }
+    }
+    pub(crate) fn uuid(uuid: uuid::Uuid) -> Self {
+        Self::Uuid(UuidWrapper(uuid))
     }
 }
 
