@@ -471,7 +471,7 @@ Type checking and conversions
 
 .. function:: uuid_timestamp(x)
 
-    Extracts the timestamp from a UUID version 1, as nanoseconds since the UNIX epoch divided by 100. If the UUID is not of version 1, ``null`` is returned. If ``x`` is not a UUID, an error is raised.
+    Extracts the timestamp from a UUID version 1, as seconds since the UNIX epoch. If the UUID is not of version 1, ``null`` is returned. If ``x`` is not a UUID, an error is raised.
 
 .. function:: is_null(x)
 
