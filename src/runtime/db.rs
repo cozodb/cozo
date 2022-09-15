@@ -219,17 +219,8 @@ impl Db {
             self.run_query(&mut tx, before_prog)
                 .wrap_err("Triple store transaction failed as a pre-condition failed")?;
         }
-        let mut counter: BTreeMap<EntityId, (isize, isize)> = BTreeMap::new();
-        let res = tx
+        let tx_counter = tx
             .tx_triples(payloads.quintuples)?;
-        for (key, change) in res {
-            let (asserts, retracts) = counter.entry(key).or_default();
-            if change > 0 {
-                *asserts += change;
-            } else {
-                *retracts -= change;
-            }
-        }
 
         for after_prog in payloads.after {
             self.run_query(&mut tx, after_prog)
@@ -238,14 +229,10 @@ impl Db {
         let tx_id = tx.get_write_tx_id()?;
         tx.commit_tx()?;
 
-        let counted_res: JsonValue = counter.into_iter().map(|(k, (v1, v2))|
-            json!([k.0, v1, v2])
-        ).collect();
-
         Ok(json!({
             "tx_id": tx_id,
-            "headers": ["entity_id", "asserts", "retracts"],
-            "rows": counted_res
+            "headers": ["asserts", "retracts"],
+            "rows": [tx_counter.asserts, tx_counter.retracts]
         }))
     }
     fn transact_attributes(&self, attrs: Vec<AttrTxItem>) -> Result<JsonValue> {

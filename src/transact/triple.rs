@@ -42,14 +42,19 @@ pub(crate) struct ExpectEntityId(String, DataValue);
 #[diagnostic(help("The existing one has entity ID {2:?}"))]
 struct UniqueConstraintViolated(String, DataValue, Uuid);
 
+#[derive(Default)]
+pub(crate) struct TxCounter {
+    pub(crate) asserts: usize,
+    pub(crate) retracts: usize,
+}
 
 impl SessionTx {
     pub(crate) fn tx_triples(
         &mut self,
         mut payloads: Vec<Quintuple>,
-    ) -> Result<Vec<(EntityId, isize)>> {
+    ) -> Result<TxCounter> {
         let default_vld = Validity::current();
-        let mut ret = Vec::with_capacity(payloads.len());
+        let mut ret = TxCounter::default();
         let mut str_temp_to_perm_ids: BTreeMap<SmartString<LazyCompact>, EntityId> =
             BTreeMap::new();
         for payload in &mut payloads {
@@ -83,21 +88,19 @@ impl SessionTx {
                         attr.coerce_value(payload.value, &str_temp_to_perm_ids, self, vld)?;
                     match payload.entity {
                         EntityRep::Id(perm) => {
-                            ret.push((
-                                self.amend_triple(
-                                    perm,
-                                    &attr,
-                                    &val,
-                                    payload.validity.unwrap_or(vld),
-                                )?,
-                                1,
-                            ));
+                            self.amend_triple(
+                                perm,
+                                &attr,
+                                &val,
+                                payload.validity.unwrap_or(vld),
+                            )?;
+                            ret.asserts += 1;
                         }
 
                         EntityRep::UserTempId(tempid) => {
                             let eid = *str_temp_to_perm_ids.get(&tempid).unwrap();
-
-                            ret.push((self.new_triple(eid, &attr, &val, vld)?, 1));
+                            self.new_triple(eid, &attr, &val, vld)?;
+                            ret.asserts += 1;
                         }
                         EntityRep::PullByKey(symb, key) => {
                             let key_attr = self
@@ -109,7 +112,8 @@ impl SessionTx {
                                     EntityNotFound(format!("{}: {:?}", key_attr.name, key))
                                 })?;
 
-                            ret.push((self.new_triple(eid, &attr, &val, vld)?, 1));
+                            self.new_triple(eid, &attr, &val, vld)?;
+                            ret.asserts += 1;
                         }
                     }
                 }
@@ -139,15 +143,13 @@ impl SessionTx {
                         }
                     };
                     if payload.action == TxAction::Retract {
-                        ret.push((
-                            self.retract_triple(
-                                eid,
-                                &attr,
-                                &payload.value,
-                                payload.validity.unwrap_or(default_vld),
-                            )?,
-                            -1,
-                        ));
+                        self.retract_triple(
+                            eid,
+                            &attr,
+                            &payload.value,
+                            payload.validity.unwrap_or(default_vld),
+                        )?;
+                        ret.retracts += 1;
                     } else if payload.action == TxAction::RetractAll {
                         let it = if attr.with_history {
                             Left(self.triple_ae_scan(attr.id, eid))
@@ -156,15 +158,13 @@ impl SessionTx {
                         };
                         for tuple in it {
                             let (_, _, value) = tuple?;
-                            ret.push((
-                                self.retract_triple(
-                                    eid,
-                                    &attr,
-                                    &value,
-                                    payload.validity.unwrap_or(default_vld),
-                                )?,
-                                -1,
-                            ));
+                            self.retract_triple(
+                                eid,
+                                &attr,
+                                &value,
+                                payload.validity.unwrap_or(default_vld),
+                            )?;
+                            ret.retracts += 1;
                         }
                     } else {
                         unreachable!()
@@ -181,7 +181,7 @@ impl SessionTx {
         v: &DataValue,
         vld: Validity,
         op: StoreOp,
-    ) -> Result<EntityId> {
+    ) -> Result<()> {
         let tx_id = self.get_write_tx_id()?;
         let vld_in_key = if attr.with_history {
             vld
@@ -292,7 +292,7 @@ impl SessionTx {
             Pri,
         )?;
 
-        Ok(eid)
+        Ok(())
     }
 
     pub(crate) fn new_triple(
@@ -301,7 +301,7 @@ impl SessionTx {
         attr: &Attribute,
         v: &DataValue,
         vld: Validity,
-    ) -> Result<EntityId> {
+    ) -> Result<()> {
         self.write_triple(eid, attr, v, vld, StoreOp::Assert)
     }
 
@@ -311,7 +311,7 @@ impl SessionTx {
         attr: &Attribute,
         v: &DataValue,
         vld: Validity,
-    ) -> Result<EntityId> {
+    ) -> Result<()> {
         #[derive(Debug, Error, Diagnostic)]
         #[error("Attempting to amend triple {0} via reserved ID {1:?}")]
         #[diagnostic(code(eval::amend_triple_with_reserved_id))]
