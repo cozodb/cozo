@@ -232,7 +232,7 @@ impl Db {
         Ok(json!({
             "tx_id": tx_id,
             "headers": ["asserts", "retracts"],
-            "rows": [tx_counter.asserts, tx_counter.retracts]
+            "rows": [[tx_counter.asserts, tx_counter.retracts]]
         }))
     }
     fn transact_attributes(&self, attrs: Vec<AttrTxItem>) -> Result<JsonValue> {
