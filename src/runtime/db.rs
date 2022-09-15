@@ -186,7 +186,6 @@ impl Db {
             relation_store_id: self.relation_store_id.clone(),
             w_tx_id: None,
             last_attr_id: self.last_attr_id.clone(),
-            last_tx_id: self.last_tx_id.clone(),
             attr_by_id_cache: Default::default(),
             attr_by_kw_cache: Default::default(),
             eid_by_attr_val_cache: Default::default(),
@@ -203,7 +202,6 @@ impl Db {
             relation_store_id: self.relation_store_id.clone(),
             w_tx_id: Some(cur_tx_id),
             last_attr_id: self.last_attr_id.clone(),
-            last_tx_id: self.last_tx_id.clone(),
             attr_by_id_cache: Default::default(),
             attr_by_kw_cache: Default::default(),
             eid_by_attr_val_cache: Default::default(),
@@ -238,7 +236,7 @@ impl Db {
                 .wrap_err("Triple store transaction failed as a post-condition failed")?;
         }
         let tx_id = tx.get_write_tx_id()?;
-        tx.commit_tx("", false)?;
+        tx.commit_tx()?;
 
         let counted_res: JsonValue = counter.into_iter().map(|(k, (v1, v2))|
             json!([k.0, v1, v2])
@@ -258,7 +256,7 @@ impl Db {
             .map(|(op, aid)| json!([aid.0, op.to_string()]))
             .collect();
         let tx_id = tx.get_write_tx_id()?;
-        tx.commit_tx("", false)?;
+        tx.commit_tx()?;
         Ok(json!({
             "tx_id": tx_id,
             "headers": ["attr_id", "op"],
@@ -317,7 +315,7 @@ impl Db {
                 };
                 let (res, cleanups) = self.run_query(&mut tx, p)?;
                 if is_write {
-                    tx.commit_tx("", false)?;
+                    tx.commit_tx()?;
                 } else {
                     assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
                 }
@@ -355,7 +353,7 @@ impl Db {
             SysOp::RenameRelation(old, new) => {
                 let mut tx = self.transact_write()?;
                 tx.rename_relation(old, new)?;
-                tx.commit_tx("", false)?;
+                tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::RemoveAttribute(name) => {
@@ -369,7 +367,7 @@ impl Db {
                     .ok_or_else(|| AttrNotFoundError(old.name.to_string()))?;
                 attr.name = new.name;
                 tx.amend_attr(attr)?;
-                tx.commit_tx("", false)?;
+                tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::ListRunning => self.list_running(),
@@ -560,7 +558,7 @@ impl Db {
     pub(crate) fn remove_relation(&self, name: &Symbol) -> Result<()> {
         let mut tx = self.transact_write()?;
         let (lower, upper) = tx.destroy_relation(name)?;
-        tx.commit_tx("", false)?;
+        tx.commit_tx()?;
         self.db.range_del(&lower, &upper, Snd)?;
         Ok(())
     }
@@ -571,7 +569,7 @@ impl Db {
             .ok_or_else(|| AttrNotFoundError(name.to_string()))?;
 
         tx.retract_attr(attr.id)?;
-        tx.commit_tx("", false)?;
+        tx.commit_tx()?;
 
         let aev_lower = encode_aev_key(attr.id, EntityId::ZERO, &DataValue::Null, Validity::MAX);
         let aev_upper = encode_aev_key(attr.id, EntityId::MAX_PERM, &DataValue::Bot, Validity::MIN);

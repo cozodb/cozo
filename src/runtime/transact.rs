@@ -33,7 +33,6 @@ pub struct SessionTx {
     pub(crate) mem_store_id: Arc<AtomicU32>,
     pub(crate) w_tx_id: Option<TxId>,
     pub(crate) last_attr_id: Arc<AtomicU64>,
-    pub(crate) last_tx_id: Arc<AtomicU64>,
     pub(crate) attr_by_id_cache: RefCell<BTreeMap<AttrId, Option<Attribute>>>,
     pub(crate) attr_by_kw_cache: RefCell<BTreeMap<SmartString<LazyCompact>, Option<Attribute>>>,
     pub(crate) eid_by_attr_val_cache:
@@ -46,7 +45,6 @@ pub struct SessionTx {
 )]
 pub(crate) struct TxLog {
     pub(crate) id: TxId,
-    pub(crate) comment: String,
     pub(crate) ts: Validity,
 }
 
@@ -57,11 +55,10 @@ pub(crate) struct TxLog {
 pub(crate) struct TxLogDeserError;
 
 impl TxLog {
-    pub(crate) fn new(id: TxId, comment: &str) -> Self {
+    pub(crate) fn new(id: TxId) -> Self {
         let timestamp = Validity::current();
         Self {
             id,
-            comment: comment.to_string(),
             ts: timestamp,
         }
     }
@@ -100,12 +97,6 @@ impl SessionTx {
         )
     }
 
-    pub(crate) fn clear_cache(&self) {
-        self.attr_by_id_cache.borrow_mut().clear();
-        self.attr_by_kw_cache.borrow_mut().clear();
-        self.eid_by_attr_val_cache.borrow_mut().clear();
-    }
-
     pub(crate) fn load_last_attr_id(&self) -> Result<AttrId> {
         let e_lower = encode_sentinel_attr_by_id(AttrId::MIN_PERM);
         let e_upper = encode_sentinel_attr_by_id(AttrId::MAX_PERM);
@@ -136,19 +127,13 @@ impl SessionTx {
         })
     }
 
-    pub fn commit_tx(&mut self, comment: &str, refresh: bool) -> Result<()> {
+    pub fn commit_tx(&mut self) -> Result<()> {
         let tx_id = self.get_write_tx_id()?;
         let encoded = encode_tx(tx_id);
 
-        let log = TxLog::new(tx_id, comment);
+        let log = TxLog::new(tx_id);
         self.tx.put(&encoded, &log.encode(), Pri)?;
         self.tx.commit()?;
-        if refresh {
-            let new_tx_id = TxId(self.last_tx_id.fetch_add(1, Ordering::AcqRel) + 1);
-            self.tx.set_snapshot();
-            self.w_tx_id = Some(new_tx_id);
-            self.clear_cache();
-        }
         Ok(())
     }
 
