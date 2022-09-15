@@ -31,3 +31,4 @@ _test*
 .DS_Store
 flamegraph.svg
 release.zip
+.idea
