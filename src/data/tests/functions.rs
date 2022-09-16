@@ -1319,7 +1319,7 @@ fn test_uuid() {
     let v1 = op_rand_uuid_v1(&[]).unwrap();
     let v4 = op_rand_uuid_v4(&[]).unwrap();
     assert!(op_is_uuid(&[v4]).unwrap().get_bool().unwrap());
-    assert!(op_uuid_timestamp(&[v1]).unwrap().get_int().is_some());
+    assert!(op_uuid_timestamp(&[v1]).unwrap().get_float().is_some());
     assert!(op_to_uuid(&[DataValue::Str(SmartString::from(""))]).is_err());
     assert!(op_to_uuid(&[DataValue::Str(SmartString::from("f3b4958c-52a1-11e7-802a-010203040506"))]).is_ok());
 }

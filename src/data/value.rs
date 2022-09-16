@@ -18,12 +18,6 @@ use crate::data::triple::StoreOp;
 #[derive(Clone, Hash, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) struct UuidWrapper(pub(crate) Uuid);
 
-impl UuidWrapper {
-    pub(crate) fn to_100_nanos(&self) -> Option<u64> {
-        self.0.get_timestamp().map(|t| t.to_unix_nanos())
-    }
-}
-
 impl PartialOrd<Self> for UuidWrapper {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -32,13 +26,12 @@ impl PartialOrd<Self> for UuidWrapper {
 
 impl Ord for UuidWrapper {
     fn cmp(&self, other: &Self) -> Ordering {
-        match (self.to_100_nanos(), other.to_100_nanos()) {
-            (Some(a), Some(b)) => {
-                a.cmp(&b).then_with(||
-                    self.0.as_bytes().cmp(other.0.as_bytes()))
-            }
-            _ => self.0.as_bytes().cmp(other.0.as_bytes())
-        }
+        let (s_l, s_m, s_h, s_rest) = self.0.as_fields();
+        let (o_l, o_m, o_h, o_rest) = other.0.as_fields();
+        s_h.cmp(&o_h)
+            .then_with(|| s_m.cmp(&o_m))
+            .then_with(|| s_l.cmp(&o_l))
+            .then_with(|| s_rest.cmp(&o_rest))
     }
 }
 

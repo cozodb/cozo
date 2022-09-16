@@ -29,7 +29,7 @@ Within each type values are *compared* according to logic custom to each type:
 * Lists are ordered lexicographically by their elements;
 * Bytes are compared lexicographically;
 * Strings are ordered lexicographically by their UTF-8 byte representations.
-* If two UUIDs are both of version one, they are compared based on their timestamp. Otherwise, or when the timestamp comparison results in a tie, they are compared by their bytes.
+* UUIDs are sorted in a way that UUIDv1 with similar timestamps are near each other. This is to improve data locality and should be considered an implementation detail. Depending on the order of UUID in your application is nor recommended.
 
 .. WARNING::
 

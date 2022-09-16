@@ -600,6 +600,7 @@ impl TripleAttrEntityBeforeIter {
                 Some((k_slice, v_slice)) => {
                     let (aid, eid, tid) = decode_ae_key(k_slice)?;
                     if tid > self.before {
+                        self.current.copy_from_slice(k_slice);
                         self.current.encoded_entity_amend_validity(self.before);
                         continue;
                     }
@@ -714,6 +715,7 @@ impl TripleAttrEntityRangeBeforeIter {
                 Some((k_slice, v_slice)) => {
                     let (aid, eid, tid) = decode_ae_key(k_slice)?;
                     if tid > self.before {
+                        self.current.copy_from_slice(k_slice);
                         self.current.encoded_entity_amend_validity(self.before);
                         continue;
                     }
@@ -839,6 +841,7 @@ impl TripleAttrValueRangeBeforeIter {
                             .expect("entity ID expected");
                     }
                     if tid > self.before {
+                        self.current.copy_from_slice(k_slice);
                         self.current.encoded_entity_amend_validity(self.before);
                         continue;
                     }
@@ -948,6 +951,7 @@ impl TripleAttrValueBeforeIter {
                             .expect("entity ID expected");
                     }
                     if tid > self.before {
+                        self.current.copy_from_slice(k_slice);
                         self.current.encoded_entity_amend_validity(self.before);
                         continue;
                     }
@@ -1102,6 +1106,7 @@ impl TripleValueRefAttrBeforeIter {
                 Some((k_slice, v_slice)) => {
                     let (aid, v_eid, eid, tid) = decode_ave_ref_key(k_slice)?;
                     if tid > self.before {
+                        self.current.copy_from_slice(k_slice);
                         self.current.encoded_entity_amend_validity(self.before);
                         continue;
                     }
