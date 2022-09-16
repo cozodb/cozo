@@ -19,7 +19,7 @@ remove_relations_op = {"remove" ~ "relation" ~ ident }
 rename_relations_op = {"rename" ~ "relation" ~ ident ~ ident }
 remove_attribute_op = {"remove" ~ "attr" ~ compound_ident }
 rename_attribute_op = {"rename" ~ "attr" ~ compound_ident ~ compound_ident}
-history_op = {"history" ~ from_clause? ~ to_clause? ~ "for" ~ expr ~ ":" ~ (compound_ident ~ ",")* ~ compound_ident}
+history_op = {"history" ~ from_clause? ~ to_clause? ~ "for" ~ (expr ~ ",")* ~ expr ~ ":" ~ (compound_ident ~ ",")* ~ compound_ident}
 from_clause = {"from" ~ expr}
 to_clause = {"to" ~ expr}
 

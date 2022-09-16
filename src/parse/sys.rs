@@ -1,24 +1,26 @@
 use std::collections::BTreeSet;
 
-use miette::{bail, Diagnostic, Result};
+use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
+use crate::data::id::Validity;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::parse::{ExtractSpan, Pairs, ParseError, Rule, SourceSpan};
 use crate::parse::expr::build_expr;
-use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
+use crate::parse::tx::EntityRep;
 
 #[derive(
-    Debug,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Copy,
-    Clone,
-    serde_derive::Serialize,
-    serde_derive::Deserialize,
+Debug,
+Eq,
+PartialEq,
+Ord,
+PartialOrd,
+Copy,
+Clone,
+serde_derive::Serialize,
+serde_derive::Deserialize,
 )]
 pub(crate) enum CompactTarget {
     Triples,
@@ -37,6 +39,12 @@ pub(crate) enum SysOp {
     RemoveAttribute(Symbol),
     RenameAttribute(Symbol, Symbol),
     ExecuteLocalScript(SmartString<LazyCompact>),
+    History {
+        from: Option<Validity>,
+        to: Option<Validity>,
+        entities: Vec<EntityRep>,
+        attributes: Vec<Symbol>,
+    },
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -108,6 +116,56 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
             let p = src.next().unwrap();
             let new_attr_name = Symbol::new(p.as_str(), p.extract_span());
             SysOp::RenameAttribute(attr_name, new_attr_name)
+        }
+        Rule::history_op => {
+            let mut from = None;
+            let mut to = None;
+            let mut attributes = vec![];
+            let mut entities = vec![];
+            for p in inner.into_inner() {
+                match p.as_rule() {
+                    Rule::from_clause => {
+                        let expr = build_expr(p.into_inner().next().unwrap(), &Default::default())?;
+                        let vld = Validity::try_from(expr)?;
+                        from = Some(vld)
+                    }
+                    Rule::to_clause => {
+                        let expr = build_expr(p.into_inner().next().unwrap(), &Default::default())?;
+                        let vld = Validity::try_from(expr)?;
+                        to = Some(vld)
+                    }
+                    Rule::expr => {
+                        let span = p.extract_span();
+                        match build_expr(p, &Default::default())?.eval_to_const()? {
+                            v @ DataValue::Str(_) => {
+                                let e = v.get_entity_id().ok_or_else(|| ParseError { span })?;
+                                entities.push(EntityRep::Id(e))
+                            }
+                            DataValue::List(c) => {
+                                ensure!(c.len() == 2, ParseError { span });
+                                let mut c = c.into_iter();
+                                let attr = match c.next().unwrap() {
+                                    DataValue::Str(s) => s,
+                                    _ => bail!(ParseError { span }),
+                                };
+                                let val = c.next().unwrap();
+                                entities.push(EntityRep::PullByKey(attr, val));
+                            }
+                            _ => {}
+                        }
+                    }
+                    Rule::compound_ident => {
+                        attributes.push(Symbol::new(SmartString::from(p.as_str()), p.extract_span()))
+                    }
+                    _ => unreachable!()
+                }
+            }
+            SysOp::History {
+                from,
+                to,
+                entities,
+                attributes,
+            }
         }
         _ => unreachable!(),
     })

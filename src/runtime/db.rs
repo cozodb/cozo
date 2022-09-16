@@ -19,22 +19,22 @@ use cozorocks::{DbBuilder, DbIter, RocksDb};
 use cozorocks::CfHandle::{Pri, Snd};
 
 use crate::data::compare::{DB_KEY_PREFIX_LEN, rusty_cmp};
-use crate::data::encode::{
-    encode_aev_key, encode_ave_key, encode_ave_ref_key, largest_key, smallest_key,
-};
+use crate::data::encode::{decode_ae_key, decode_value_from_key, decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_ref_key, largest_key, smallest_key};
 use crate::data::id::{EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
+use crate::data::triple::StoreOp;
 use crate::data::tuple::{EncodedTuple, rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::schema::AttrTxItem;
 use crate::parse::sys::{CompactTarget, SysOp};
-use crate::parse::tx::TripleTx;
+use crate::parse::tx::{EntityRep, TripleTx};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 use crate::runtime::transact::SessionTx;
 use crate::transact::meta::AttrNotFoundError;
+use crate::transact::triple::EntityNotFound;
 use crate::utils::swap_option_result;
 
 struct RunningQueryHandle {
@@ -388,7 +388,80 @@ impl Db {
                     bail!(NonLaxSecurity)
                 }
             }
+            SysOp::History { from, to, entities, attributes, } => {
+                self.pull_history(from, to, entities, attributes)
+            }
         }
+    }
+    fn pull_history(&self, from: Option<Validity>, to: Option<Validity>, entities: Vec<EntityRep>, attributes: Vec<Symbol>) -> Result<JsonValue> {
+        let tx = self.transact()?;
+        let to_vld = to.unwrap_or(Validity::MAX);
+        let from_vld = from.unwrap_or(Validity::MIN);
+        let mut ret = vec![];
+
+        for entity in entities {
+            let eid = match entity {
+                EntityRep::Id(id) => id,
+                EntityRep::PullByKey(k, v) => {
+                    let attr = tx.attr_by_name(&k)?
+                        .ok_or_else(|| AttrNotFoundError(k.to_string()))?;
+                    tx.eid_by_unique_av(&attr, &v, to_vld)?.ok_or_else(|| {
+                        EntityNotFound(format!("{}: {:?}", attr.name, v))
+                    })?
+                }
+                _ => unreachable!()
+            };
+
+            for attr_name in &attributes {
+                let attr = tx.attr_by_name(&attr_name)?
+                    .ok_or_else(|| AttrNotFoundError(attr_name.to_string()))?;
+                let mut lower_bound = encode_aev_key(attr.id, eid, &DataValue::Null, to_vld);
+                let upper_bound = encode_aev_key(attr.id, eid, &DataValue::Bot, to_vld);
+                let mut it = tx.tx.iterator(Pri).upper_bound(&upper_bound).start();
+                it.seek(&lower_bound);
+                while let Some((k_slice, v_slice)) = it.pair()? {
+                    let (_aid, eid, vld) = decode_ae_key(k_slice)?;
+
+                    if vld != Validity::NO_HISTORY {
+                        if vld > to_vld {
+                            lower_bound.copy_from_slice(k_slice);
+                            lower_bound.encoded_entity_amend_validity(to_vld);
+                            it.seek(&lower_bound);
+                            continue;
+                        } else if vld < from_vld {
+                            lower_bound.copy_from_slice(k_slice);
+                            lower_bound.encoded_entity_amend_validity_to_inf_past();
+                            it.seek(&lower_bound);
+                            continue;
+                        }
+                    }
+                    let op = StoreOp::try_from(v_slice[0])?;
+                    let v = match op {
+                        StoreOp::Retract => DataValue::Null,
+                        StoreOp::Assert => {
+                            let mut v = decode_value_from_key(k_slice)?;
+                            if v == DataValue::Guard {
+                                v = decode_value_from_val(v_slice)?;
+                            }
+                            v
+                        }
+                    };
+                    let tss = if vld == Validity::NO_HISTORY {
+                        JsonValue::Null
+                    } else {
+                        json!(vld.0)
+                    };
+                    let v_json = JsonValue::from(v);
+                    ret.push(json!([eid.0, attr.name, tss, format!("{:?}", vld), op.to_string(), v_json]));
+                    it.next();
+                }
+            }
+        }
+
+        Ok(json!({
+            "headers": ["entity_id", "attr", "timestamp", "timestamp_str", "op", "value"],
+            "rows": ret
+        }))
     }
     fn run_query(
         &self,

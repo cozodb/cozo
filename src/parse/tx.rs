@@ -31,7 +31,7 @@ impl Display for TxAction {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) enum EntityRep {
     Id(EntityId),
     UserTempId(SmartString<LazyCompact>),
