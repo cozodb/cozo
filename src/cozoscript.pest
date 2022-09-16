@@ -4,7 +4,7 @@ schema_script = {SOI ~":schema" ~ schema_clause+ ~ EOI}
 tx_script = {SOI ~ (":tx" | "\":tx\"") ~ (tx_clause | tx_before_ensure_script | tx_after_ensure_script)* ~ EOI}
 tx_before_ensure_script = {":before" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
 tx_after_ensure_script = {":after" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
-sys_script = {SOI ~ ":db" ~ (compact_op | list_schema_op | list_relations_op | remove_relations_op |
+sys_script = {SOI ~ ":db" ~ (compact_op | list_schema_op | list_relations_op | history_op | remove_relations_op |
                     remove_attribute_op | rename_relations_op | rename_attribute_op | running_op | execute_op | kill_op) ~ EOI}
 
 compact_op = {"compact" ~ (compact_opt_triples | compact_opt_relations)+}
@@ -19,7 +19,9 @@ remove_relations_op = {"remove" ~ "relation" ~ ident }
 rename_relations_op = {"rename" ~ "relation" ~ ident ~ ident }
 remove_attribute_op = {"remove" ~ "attr" ~ compound_ident }
 rename_attribute_op = {"rename" ~ "attr" ~ compound_ident ~ compound_ident}
-
+history_op = {"history" ~ from_clause? ~ to_clause? ~ "for" ~ expr ~ ":" ~ (compound_ident ~ ",")* ~ compound_ident}
+from_clause = {"from" ~ expr}
+to_clause = {"to" ~ expr}
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 BLOCK_COMMENT = _{ "/*" ~ (BLOCK_COMMENT | !"*/" ~ ANY)* ~ "*/" }
@@ -178,10 +180,10 @@ nested_schema_clause = {compound_ident ~ ":" ~ ident+}
 
 // tx
 
-tx_clause = { (tx_put | tx_retract_all | tx_retract )? ~ tx_map ~ ";"? }
-tx_put = {"put" ~ ("@" ~ expr)?}
-tx_retract = {"retract" ~ ("@" ~ expr)?}
-tx_retract_all = {"retract_all" ~ ("@" ~ expr)?}
+tx_clause = { (tx_put | tx_retract_all | tx_retract )?  ~ ("@" ~ expr)? ~ tx_map ~ ";"? }
+tx_put = {"put"}
+tx_retract = {"retract"}
+tx_retract_all = {"retract_all"}
 tx_map = {"{" ~ (tx_pair ~ ",")* ~ tx_pair? ~ "}"}
 tx_pair = {tx_ident ~ ":" ~ (tx_list | tx_map | expr )}
 tx_list = {"[" ~ ((expr | tx_map) ~ ",")* ~ (expr | tx_map)?  ~ "]"}

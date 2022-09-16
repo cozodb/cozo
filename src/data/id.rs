@@ -64,7 +64,7 @@ impl TryFrom<Expr> for Validity {
             return Ok(v.into());
         }
         if let Some(s) = value.get_string() {
-            if let Ok(dt) = DateTime::parse_from_rfc2822(s) {
+            if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
                 let sysdt: SystemTime = dt.into();
                 let timestamp = sysdt.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64;
                 return Ok(Self(timestamp));

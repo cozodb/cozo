@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
+use log::debug;
 use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -147,8 +148,15 @@ fn parse_tx_clause(
                 _ => unreachable!(),
             }
         }
+        Rule::expr => {
+            let vld_expr = build_expr(nxt, param_pool)?;
+            vld = Some(Validity::try_from(vld_expr)?);
+            src.next().unwrap()
+        }
         _ => unreachable!(),
     };
+
+    debug!("{:?}", vld);
 
     parse_tx_map(map_p, op, vld, param_pool, temp_id_serial, coll)?;
     Ok(())
