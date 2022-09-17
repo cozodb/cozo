@@ -554,12 +554,12 @@ impl Db {
                 }
             }
         }
-        let json_headers = match input_program.get_entry_head() {
+        let json_headers = match input_program.get_entry_out_head() {
             Err(_) => JsonValue::Null,
-            Ok(headers) => headers.iter().map(|v| json!(v.name)).collect(),
+            Ok(headers) => headers.into_iter().map(|v| json!(v.name)).collect(),
         };
         if !input_program.out_opts.sorters.is_empty() {
-            let entry_head = input_program.get_entry_head()?.to_vec();
+            let entry_head = input_program.get_entry_out_head()?;
             let sorted_result =
                 tx.sort_and_collect(result, &input_program.out_opts.sorters, &entry_head)?;
             let sorted_iter = if let Some(offset) = input_program.out_opts.offset {
@@ -581,7 +581,7 @@ impl Db {
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     sorted_iter,
-                    input_program.get_entry_head().ok(),
+                    input_program.get_entry_out_head().ok(),
                     &input_program.out_opts.out_spec,
                     default_vld,
                 )?;
@@ -607,7 +607,7 @@ impl Db {
             } else {
                 let ret: Vec<_> = tx.run_pull_on_query_results(
                     scan,
-                    input_program.get_entry_head().ok(),
+                    input_program.get_entry_out_head().ok(),
                     &input_program.out_opts.out_spec,
                     default_vld,
                 )?;

@@ -95,9 +95,10 @@ grouping = { "(" ~ expr ~ ")" }
 
 option = _{(limit_option|offset_option|out_option|sort_option|relation_option|timeout_option|
             assert_none_option|assert_some_option) ~ ";"?}
+out_arg = @{var ~ ("(" ~ var ~ ")")?}
 limit_option = {":limit"  ~ expr}
 offset_option = {":offset" ~ expr}
-out_option = {":pull" ~ var ~ ("@" ~ expr)? ~ out_spec}
+out_option = {":pull" ~ out_arg ~ ("@" ~ expr)? ~ out_spec}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
 relation_option = {":relation" ~ relation_op ~ compound_ident}
 relation_op = _{relation_create | relation_rederive | relation_put | relation_retract}
@@ -106,7 +107,7 @@ relation_rederive = {"rederive"}
 relation_put = {"put"}
 relation_retract = {"retract"}
 timeout_option = {":timeout" ~ expr }
-sort_arg = { sort_dir? ~ var }
+sort_arg = { sort_dir? ~ out_arg }
 sort_dir = _{ sort_asc | sort_desc }
 sort_asc = {"+"}
 sort_desc = {"-"}

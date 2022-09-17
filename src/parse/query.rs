@@ -332,7 +332,7 @@ pub(crate) fn parse_query(
                     let mut span = part.extract_span();
                     for a in part.into_inner() {
                         match a.as_rule() {
-                            Rule::var => {
+                            Rule::out_arg => {
                                 var = a.as_str();
                                 span = a.extract_span();
                             }
@@ -438,7 +438,7 @@ pub(crate) fn parse_query(
         #[diagnostic(code(parser::sort_key_not_found))]
         struct SortKeyNotFound(String, #[label] SourceSpan);
 
-        let head_args = prog.get_entry_head().unwrap_or(&[]);
+        let head_args = prog.get_entry_out_head()?;
 
         for (sorter, _) in &prog.out_opts.sorters {
             ensure!(

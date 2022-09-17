@@ -196,7 +196,7 @@ impl SessionTx {
     pub(crate) fn run_pull_on_query_results(
         &self,
         res_iter: impl Iterator<Item=Result<Tuple>>,
-        headers: Option<&[Symbol]>,
+        headers: Option<Vec<Symbol>>,
         out_spec: &BTreeMap<Symbol, (Vec<OutPullSpec>, Option<Validity>)>,
         default_vld: Validity,
     ) -> Result<Vec<JsonValue>> {
@@ -205,7 +205,7 @@ impl SessionTx {
                 .map_ok(|tuple| tuple.0.into_iter().map(JsonValue::from).collect())
                 .try_collect()?)
         } else {
-            let headers = headers.unwrap_or(&[]);
+            let headers = headers.unwrap_or(vec![]);
             let mut idx2pull: Vec<Option<(Vec<_>, _)>> = Vec::with_capacity(headers.len());
             for head in headers.iter() {
                 match out_spec.get(head) {

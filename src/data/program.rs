@@ -1,9 +1,9 @@
-use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
+use std::collections::btree_map::Entry;
 use std::fmt::{Debug, Formatter};
 
 use either::{Left, Right};
-use miette::{ensure, Diagnostic, Result};
+use miette::{Diagnostic, ensure, Result};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -13,7 +13,7 @@ use crate::data::aggr::Aggregation;
 use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
 use crate::data::id::Validity;
-use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::data::symb::{PROG_ENTRY, Symbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::pull::OutPullSpec;
@@ -226,7 +226,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                .into()),
+                    .into()),
             },
         }
     }
@@ -251,7 +251,7 @@ impl MagicAlgoApply {
                         span: self.span,
                         algo_name: self.algo.name.to_string(),
                     }
-                    .into()),
+                        .into()),
                 },
                 _ => Err(WrongAlgoOptionError {
                     name: name.to_string(),
@@ -259,7 +259,7 @@ impl MagicAlgoApply {
                     algo_name: self.algo.name.to_string(),
                     help: "a positive integer is required".to_string(),
                 }
-                .into()),
+                    .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
@@ -268,7 +268,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                .into()),
+                    .into()),
             },
         }
     }
@@ -297,7 +297,7 @@ impl MagicAlgoApply {
                         span: self.span,
                         algo_name: self.algo.name.to_string(),
                     }
-                    .into()),
+                        .into()),
                 },
                 _ => Err(WrongAlgoOptionError {
                     name: name.to_string(),
@@ -305,7 +305,7 @@ impl MagicAlgoApply {
                     algo_name: self.algo.name.to_string(),
                     help: "a non-negative integer is required".to_string(),
                 }
-                .into()),
+                    .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
@@ -314,7 +314,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                .into()),
+                    .into()),
             },
         }
     }
@@ -340,7 +340,7 @@ impl MagicAlgoApply {
                     algo_name: self.algo.name.to_string(),
                     help: "a number between 0. and 1. is required".to_string(),
                 }
-                .into()),
+                    .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
@@ -349,7 +349,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                .into()),
+                    .into()),
             },
         }
     }
@@ -363,7 +363,7 @@ impl MagicAlgoApply {
                     algo_name: self.algo.name.to_string(),
                     help: "a boolean value is required".to_string(),
                 }
-                .into()),
+                    .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
@@ -372,7 +372,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                .into()),
+                    .into()),
             },
         }
     }
@@ -515,6 +515,46 @@ impl InputProgram {
 
         Err(NoEntryError.into())
     }
+    pub(crate) fn get_entry_out_head(&self) -> Result<Vec<Symbol>> {
+        if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
+            return match entry {
+                InputRulesOrAlgo::Rules { rules } => {
+                    let head = &rules.last().unwrap().head;
+                    let mut ret = Vec::with_capacity(head.len());
+                    let aggrs = &rules.last().unwrap().aggr;
+                    for (symb, aggr) in head.iter().zip(aggrs.iter()) {
+                        if let Some((aggr, _)) = aggr {
+                            ret.push(Symbol::new(
+                                &format!("{}({})", aggr.name.strip_prefix("AGGR_").unwrap().to_ascii_lowercase(),
+                                         symb), symb.span))
+                        } else {
+                            ret.push(symb.clone())
+                        }
+                    }
+                    Ok(ret)
+                }
+                InputRulesOrAlgo::Algo { algo: algo_apply } => {
+                    if algo_apply.head.is_empty() {
+                        Err(EntryHeadNotExplicitlyDefinedError(entry.first_span()).into())
+                    } else {
+                        Ok(algo_apply.head.to_vec())
+                    }
+                }
+            };
+        }
+
+        if let Some(ConstRule { bindings, span, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
+            inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
+        }) {
+            return if bindings.is_empty() {
+                Err(EntryHeadNotExplicitlyDefinedError(*span).into())
+            } else {
+                Ok(bindings.to_vec())
+            };
+        }
+
+        Err(NoEntryError.into())
+    }
     pub(crate) fn get_entry_head(&self) -> Result<&[Symbol]> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
@@ -561,7 +601,7 @@ impl InputProgram {
                             inner: rule.body.clone(),
                             span: rule.span,
                         }
-                        .disjunctive_normal_form(tx)?;
+                            .disjunctive_normal_form(tx)?;
                         let mut new_head = Vec::with_capacity(rule.head.len());
                         let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
                         for symb in rule.head.iter() {

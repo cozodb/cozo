@@ -729,7 +729,7 @@ fn air_routes() -> Result<()> {
                                [r route.dst a2],
                                [a2 airport.country us],
                                [a2 airport.iata code];
-        :order r;
+        :order count(r);
     "#,
         &params, false,
     )?;
