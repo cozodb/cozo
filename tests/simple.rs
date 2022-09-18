@@ -114,9 +114,9 @@ fn simple() {
                not friend_of_friend[alice, a],
                [a person.first_name n];
 
-    // :limit 1;
-    // :out {friend: ?a[person.first_name as first_name,
-    //                  person.last_name as last_name]};
+    # :limit 1;
+    # :out {friend: ?a[person.first_name as first_name,
+    #                  person.last_name as last_name]};
     :sort -n;
     "#;
 

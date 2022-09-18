@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use miette::{bail, Diagnostic, ensure, Result};
-use smartstring::SmartString;
+use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::data::id::Validity;
@@ -38,6 +38,7 @@ pub(crate) enum SysOp {
     RenameRelation(Symbol, Symbol),
     RemoveAttribute(Symbol),
     RenameAttribute(Symbol, Symbol),
+    ExecuteLocalScript(SmartString<LazyCompact>),
     History {
         from: Option<Validity>,
         to: Option<Validity>,
@@ -71,6 +72,22 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
             let i = u64::from_str_radix(i_str.as_str(), 10)
                 .map_err(|_| ProcessIdError(i_str.as_str().to_string(), i_str.extract_span()))?;
             SysOp::KillRunning(i)
+        }
+        Rule::execute_op => {
+            let ex = inner.into_inner().next().unwrap();
+            let span = ex.extract_span();
+            let s = build_expr(ex, &Default::default())?;
+            let path = match s.eval_to_const() {
+                Ok(DataValue::Str(s)) => s,
+                _ => {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("Expect path string")]
+                    #[diagnostic(code(parser::bad_path_given))]
+                    struct NotAPathError(#[label] SourceSpan);
+                    bail!(NotAPathError(span));
+                }
+            };
+            SysOp::ExecuteLocalScript(path)
         }
         Rule::list_schema_op => SysOp::ListSchema,
         Rule::list_relations_op => SysOp::ListRelations,

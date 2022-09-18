@@ -5,13 +5,14 @@ tx_script = {SOI ~ (":tx" | "\":tx\"") ~ (tx_clause | tx_before_ensure_script | 
 tx_before_ensure_script = {":before" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
 tx_after_ensure_script = {":after" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
 sys_script = {SOI ~ ":db" ~ (compact_op | list_schema_op | list_relations_op | history_op | remove_relations_op |
-                    remove_attribute_op | rename_relations_op | rename_attribute_op | running_op | kill_op) ~ EOI}
+                    remove_attribute_op | rename_relations_op | rename_attribute_op | running_op | execute_op | kill_op) ~ EOI}
 
 compact_op = {"compact" ~ (compact_opt_triples | compact_opt_relations)+}
 compact_opt_triples = {"triples"}
 compact_opt_relations = {"relations"}
 running_op = {"running"}
 kill_op = {"kill" ~ int}
+execute_op = {"execute" ~ expr}
 list_schema_op = {"schema"}
 list_relations_op = {"relations"}
 remove_relations_op = {"remove" ~ "relation" ~ ident }
@@ -24,7 +25,7 @@ to_clause = {"to" ~ expr}
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 BLOCK_COMMENT = _{ "/*" ~ (BLOCK_COMMENT | !"*/" ~ ANY)* ~ "*/" }
-LINE_COMMENT = _{ "//" ~ (!"\n" ~ ANY)* }
+LINE_COMMENT = _{ "#" ~ (!"\n" ~ ANY)* }
 COMMENT = _{(BLOCK_COMMENT | LINE_COMMENT)}
 
 prog_entry = {"?"}
@@ -134,7 +135,7 @@ s_char = {
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
 raw_string = {
-    "r" ~ PUSH("#"*) ~ "\""    // push the number signs onto the stack
+    "r" ~ PUSH("_"*) ~ "\""    // push the number signs onto the stack
     ~ raw_string_inner
     ~ "\"" ~ POP               // match a quotation mark and the number signs
 }

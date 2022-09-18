@@ -1,6 +1,7 @@
 use std::{fs, thread};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
+use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -366,6 +367,16 @@ impl Db {
                         json!({"headers": ["status"], "rows": [["KILLING"]]})
                     }
                 })
+            }
+            SysOp::ExecuteLocalScript(path) => {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Cannot execute local script")]
+                #[diagnostic(help("{0}"))]
+                #[diagnostic(code(eval::open_local_script_failed))]
+                struct LocalScriptNotFound(String);
+                let content =
+                    read_to_string(&*path).map_err(|err| LocalScriptNotFound(err.to_string()))?;
+                self.run_script(&content, &Default::default())
             }
             SysOp::History { from, to, entities, attributes, } => {
                 self.pull_history(from, to, entities, attributes)

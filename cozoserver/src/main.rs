@@ -1,15 +1,16 @@
-use std::{env, thread};
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::{stdin, stdout, Write};
 use std::str::from_utf8;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use actix_cors::Cors;
 use actix_web::{App, HttpRequest, HttpResponse, HttpServer, post, Responder, ResponseError, web};
 use actix_web::body::BoxBody;
 use actix_web::http::header::HeaderName;
+use actix_web::middleware::Logger;
 use actix_web::rt::task::spawn_blocking;
 use clap::Parser;
 use env_logger::Env;
@@ -94,14 +95,15 @@ impl AppStateWithDb {
             .ok_or_else(|| miette!("not authenticated"))?
             .to_str()
             .into_diagnostic()?;
-        if let Some(stored) = self.pass_cache.read().unwrap().get(username).cloned() {
+        let existing = self.pass_cache.try_read().map_err(|e| miette!(e.to_string()))?.get(username).cloned();
+        if let Some(stored) = existing {
             let mut seed = self.seed.to_vec();
             seed.extend_from_slice(password.as_bytes());
             let digest: &[u8] = &sha3::Sha3_256::digest(&seed);
             if *stored == *digest {
                 return Ok(());
             } else {
-                self.pass_cache.write().unwrap().remove(username);
+                self.pass_cache.try_write().map_err(|e| miette!(e.to_string()))?.remove(username);
                 bail!("invalid password")
             }
         }
@@ -117,13 +119,11 @@ impl AppStateWithDb {
                     seed.extend_from_slice(password.as_bytes());
                     let easy_digest: &[u8] = &sha3::Sha3_256::digest(&seed);
                     pass_cache
-                        .write()
-                        .unwrap()
+                        .try_write().map_err(|e| miette!(e.to_string()))?
                         .insert(username, easy_digest.into());
                     return Ok(());
                 }
             }
-            thread::sleep(Duration::from_millis(1234));
             bail!("invalid password")
         })
             .await
@@ -136,7 +136,7 @@ impl AppStateWithDb {
         let username = user.to_string();
         let new_pass = new_pass.to_string();
         spawn_blocking(move || -> miette::Result<()> {
-            pass_cache.write().unwrap().remove(&username);
+            pass_cache.try_write().map_err(|e| miette!(e.to_string()))?.remove(&username);
             let salt = rand::thread_rng().gen::<[u8; 32]>();
             let config = argon2config();
             let hash =
@@ -149,7 +149,7 @@ impl AppStateWithDb {
     }
 
     async fn remove_user(&self, user: &str) -> miette::Result<()> {
-        self.pass_cache.write().unwrap().remove(user);
+        self.pass_cache.try_write().map_err(|e| miette!(e.to_string()))?.remove(user);
         self.db.remove_meta_kv(&[PASSWORD_KEY, &user])?;
         Ok(())
     }
@@ -321,6 +321,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(app_state.clone())
             .wrap(Cors::permissive())
+            .wrap(Logger::default())
             .service(query)
             .service(change_password)
             .service(assert_user)
