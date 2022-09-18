@@ -38,7 +38,7 @@ fn simple() {
             weight: float,
         }
     "#,
-        &params, false,
+        &params,
     )
         .unwrap();
     info!(
@@ -103,7 +103,7 @@ fn simple() {
                 person.friend: "george"},
         }
     "#,
-        &params, false,
+        &params,
     )
         .unwrap();
     let query = r#"
@@ -120,7 +120,7 @@ fn simple() {
     :sort -n;
     "#;
 
-    let ret = db.run_script(query, &params, false).unwrap();
+    let ret = db.run_script(query, &params).unwrap();
     let res = to_string_pretty(&ret).unwrap();
     println!("{}", res);
     fs::remove_dir_all("_test_db").unwrap();

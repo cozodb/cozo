@@ -1,7 +1,6 @@
 use std::{fs, thread};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -273,9 +272,8 @@ impl Db {
         &self,
         payload: &str,
         params: &BTreeMap<String, JsonValue>,
-        lax_security: bool,
     ) -> Result<JsonValue> {
-        self.do_run_script(payload, params, lax_security).map_err(|err| {
+        self.do_run_script(payload, params).map_err(|err| {
             if err.source_code().is_some() {
                 err
             } else {
@@ -287,7 +285,6 @@ impl Db {
         &self,
         payload: &str,
         params: &BTreeMap<String, JsonValue>,
-        lax_security: bool,
     ) -> Result<JsonValue> {
         let param_pool = params
             .iter()
@@ -313,10 +310,10 @@ impl Db {
             }
             CozoScript::Tx(tx) => self.transact_triples(tx),
             CozoScript::Schema(schema) => self.transact_attributes(schema),
-            CozoScript::Sys(op) => self.run_sys_op(op, lax_security),
+            CozoScript::Sys(op) => self.run_sys_op(op),
         }
     }
-    fn run_sys_op(&self, op: SysOp, lax_security: bool) -> Result<JsonValue> {
+    fn run_sys_op(&self, op: SysOp) -> Result<JsonValue> {
         match op {
             SysOp::Compact(opts) => {
                 for opt in opts {
@@ -369,24 +366,6 @@ impl Db {
                         json!({"headers": ["status"], "rows": [["KILLING"]]})
                     }
                 })
-            }
-            SysOp::ExecuteLocalScript(path) => {
-                if lax_security {
-                    #[derive(Debug, Error, Diagnostic)]
-                    #[error("Cannot execute local script")]
-                    #[diagnostic(help("{0}"))]
-                    #[diagnostic(code(eval::open_local_script_failed))]
-                    struct LocalScriptNotFound(String);
-                    let content =
-                        read_to_string(&*path).map_err(|err| LocalScriptNotFound(err.to_string()))?;
-                    self.run_script(&content, &Default::default(), lax_security)
-                } else {
-                    #[derive(Debug, Error, Diagnostic)]
-                    #[error("Local script execution is not allowed")]
-                    #[diagnostic(code(eval::non_lax_security))]
-                    struct NonLaxSecurity;
-                    bail!(NonLaxSecurity)
-                }
             }
             SysOp::History { from, to, entities, attributes, } => {
                 self.pull_history(from, to, entities, attributes)

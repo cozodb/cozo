@@ -11,8 +11,6 @@ use actix_web::{App, HttpRequest, HttpResponse, HttpServer, post, Responder, Res
 use actix_web::body::BoxBody;
 use actix_web::http::header::HeaderName;
 use actix_web::rt::task::spawn_blocking;
-use actix_web_static_files::ResourceFiles;
-use ansi_to_html::convert_escaped;
 use clap::Parser;
 use env_logger::Env;
 use log::debug;
@@ -50,8 +48,7 @@ impl From<cozo::Error> for RespError {
 impl ResponseError for RespError {
     fn error_response(&self) -> HttpResponse<BoxBody> {
         let formatted = format!("{:?}", self.err);
-        let converted = convert_escaped(&formatted).unwrap();
-        HttpResponse::BadRequest().body(converted)
+        HttpResponse::BadRequest().body(formatted)
     }
 }
 
@@ -79,16 +76,12 @@ struct AppStateWithDb {
     db: Db,
     pass_cache: Arc<RwLock<HashMap<String, Box<[u8]>>>>,
     seed: Box<[u8]>,
-    playground: bool,
 }
 
 const PASSWORD_KEY: &str = "WEB_USER_PASSWORD";
 
 impl AppStateWithDb {
     async fn verify_password(&self, req: &HttpRequest) -> miette::Result<()> {
-        if self.playground {
-            return Ok(());
-        }
         let username = req
             .headers()
             .get(&HeaderName::from_static("x-cozo-username"))
@@ -186,7 +179,7 @@ async fn query(
     data.verify_password(&req).await?;
     let db = data.db.new_session()?;
     let start = Instant::now();
-    let task = spawn_blocking(move || db.run_script(&body.script, &body.params, data.playground));
+    let task = spawn_blocking(move || db.run_script(&body.script, &body.params));
     let mut result = task.await.map_err(|e| miette!(e))??;
     if let Some(obj) = result.as_object_mut() {
         obj.insert(
@@ -252,8 +245,6 @@ async fn remove_user(
     Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
 }
 
-include!(concat!(env!("OUT_DIR"), "/generated.rs"));
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
@@ -264,57 +255,56 @@ async fn main() -> std::io::Result<()> {
         .create_if_missing(true);
     let db = Db::build(builder).unwrap();
 
-    if !args.playground {
-        match db.meta_range_scan(&[PASSWORD_KEY]).next() {
-            None => {
-                let (username, password) = match (
-                    env::var("COZO_INITIAL_WEB_USERNAME"),
-                    env::var("COZO_INITIAL_WEB_PASSWORD"),
-                ) {
-                    (Ok(username), Ok(password)) => (username, password),
-                    _ => {
-                        println!("Welcome to Cozo!");
+
+    match db.meta_range_scan(&[PASSWORD_KEY]).next() {
+        None => {
+            let (username, password) = match (
+                env::var("COZO_INITIAL_WEB_USERNAME"),
+                env::var("COZO_INITIAL_WEB_PASSWORD"),
+            ) {
+                (Ok(username), Ok(password)) => (username, password),
+                _ => {
+                    println!("Welcome to Cozo!");
+                    println!();
+                    println!(
+                        "This is the first time you are running this database at {},",
+                        args.path
+                    );
+                    println!("so let's create a username and password.");
+
+                    loop {
                         println!();
-                        println!(
-                            "This is the first time you are running this database at {},",
-                            args.path
-                        );
-                        println!("so let's create a username and password.");
+                        print!("Enter a username: ");
 
-                        loop {
-                            println!();
-                            print!("Enter a username: ");
-
-                            let _ = stdout().flush();
-                            let mut username = String::new();
-                            stdin().read_line(&mut username).unwrap();
-                            let username = username.trim().to_string();
-                            if username.is_empty() {
-                                continue;
-                            }
-                            let password = rpassword::prompt_password("Enter your password: ").unwrap();
-                            let confpass = rpassword::prompt_password("Again to confirm it: ").unwrap();
-
-                            if password.trim() != confpass.trim() {
-                                println!("Password mismatch. Try again.");
-                                continue;
-                            }
-                            println!("Done, you can now log in with your new username/password in the WebUI!");
-                            break (username, password.trim().to_string());
+                        let _ = stdout().flush();
+                        let mut username = String::new();
+                        stdin().read_line(&mut username).unwrap();
+                        let username = username.trim().to_string();
+                        if username.is_empty() {
+                            continue;
                         }
-                    }
-                };
+                        let password = rpassword::prompt_password("Enter your password: ").unwrap();
+                        let confpass = rpassword::prompt_password("Again to confirm it: ").unwrap();
 
-                let salt = rand::thread_rng().gen::<[u8; 32]>();
-                let config = argon2config();
-                let hash = argon2::hash_encoded(password.trim().as_bytes(), &salt, &config).unwrap();
-                db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())
-                    .unwrap();
-            }
-            Some(Err(err)) => panic!("{}", err),
-            Some(Ok((user, _))) => {
-                debug!("User {:?}", user[1]);
-            }
+                        if password.trim() != confpass.trim() {
+                            println!("Password mismatch. Try again.");
+                            continue;
+                        }
+                        println!("Done, you can now log in with your new username/password in the WebUI!");
+                        break (username, password.trim().to_string());
+                    }
+                }
+            };
+
+            let salt = rand::thread_rng().gen::<[u8; 32]>();
+            let config = argon2config();
+            let hash = argon2::hash_encoded(password.trim().as_bytes(), &salt, &config).unwrap();
+            db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())
+                .unwrap();
+        }
+        Some(Err(err)) => panic!("{}", err),
+        Some(Ok((user, _))) => {
+            debug!("User {:?}", user[1]);
         }
     }
 
@@ -322,53 +312,21 @@ async fn main() -> std::io::Result<()> {
         db,
         pass_cache: Arc::new(Default::default()),
         seed: Box::new(rand::thread_rng().gen::<[u8; 32]>()),
-        playground: args.playground,
     });
 
     let addr = (&args.bind as &str, args.port);
-    let url_to_open = if args.playground {
-        let url = format!("http://{}:{}", addr.0, addr.1);
-        println!("Access playground at {}", url);
-        println!("DO NOT run the playground in production!");
-        Some(url)
-    } else {
-        println!("Service running at http://{}:{}", addr.0, addr.1);
-        None
-    };
+    println!("Service running at http://{}:{}", addr.0, addr.1);
 
-    let server = HttpServer::new(move || {
-        let cors = Cors::permissive();
-        let generated = generate();
-
-        let mut app = App::new()
+    HttpServer::new(move || {
+        App::new()
             .app_data(app_state.clone())
-            .wrap(cors)
+            .wrap(Cors::permissive())
             .service(query)
             .service(change_password)
             .service(assert_user)
-            .service(remove_user);
-        if args.playground {
-            app = app.service(ResourceFiles::new("/", generated));
-        }
-        app
+            .service(remove_user)
     })
         .bind(addr)?
-        .run();
-
-    if args.playground {
-        let (server_res, _) = futures::join!(server, open_url(url_to_open));
-        server_res?;
-    } else {
-        server.await?;
-    }
-    Ok(())
-}
-
-
-async fn open_url(url: Option<String>) {
-    if let Some(url) = url {
-        if webbrowser::open(&url).is_err() {
-            println!("Cannot open the browser for you. You have to do it manually.")
-        }
-    }
+        .run()
+        .await
 }
