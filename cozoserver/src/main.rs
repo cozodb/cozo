@@ -290,7 +290,6 @@ async fn main() -> std::io::Result<()> {
                             println!("Password mismatch. Try again.");
                             continue;
                         }
-                        println!("Done, you can now log in with your new username/password in the WebUI!");
                         break (username, password.trim().to_string());
                     }
                 }
