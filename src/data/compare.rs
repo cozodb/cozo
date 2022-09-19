@@ -6,7 +6,7 @@ use crate::data::encode::{
 };
 
 pub(crate) fn rusty_cmp(a: &[u8], b: &[u8]) -> i8 {
-    match compare_key(a, b) {
+    match compare_triple_store_key(a, b) {
         Ordering::Greater => 1,
         Ordering::Equal => 0,
         Ordering::Less => -1,
@@ -25,7 +25,7 @@ macro_rules! return_if_resolved {
 }
 
 #[inline]
-pub(crate) fn compare_key(a: &[u8], b: &[u8]) -> Ordering {
+pub(crate) fn compare_triple_store_key(a: &[u8], b: &[u8]) -> Ordering {
     use StorageTag::*;
 
     return_if_resolved!(a[0].cmp(&b[0]));

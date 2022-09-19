@@ -28,7 +28,7 @@ impl Debug for Tuple {
     }
 }
 
-pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
+pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item=Result<Tuple>> + 'a>;
 
 impl Tuple {
     pub(crate) fn encode_as_key(&self, prefix: RelationId) -> Vec<u8> {
@@ -155,12 +155,20 @@ impl<'a> Iterator for EncodedTupleIter<'a> {
 }
 
 pub(crate) fn rusty_scratch_cmp(a: &[u8], b: &[u8]) -> i8 {
+    match compare_tuple_keys(a, b) {
+        Ordering::Greater => 1,
+        Ordering::Equal => 0,
+        Ordering::Less => -1,
+    }
+}
+
+
+pub(crate) fn compare_tuple_keys(a: &[u8], b: &[u8]) -> Ordering {
     let a = EncodedTuple(a);
     let b = EncodedTuple(b);
     match a.prefix().cmp(&b.prefix()) {
-        Ordering::Greater => return 1,
         Ordering::Equal => {}
-        Ordering::Less => return -1,
+        o => return o,
     }
     let a_len = a.arity();
     let b_len = b.arity();
@@ -168,14 +176,9 @@ pub(crate) fn rusty_scratch_cmp(a: &[u8], b: &[u8]) -> i8 {
         let av = a.force_get(idx);
         let bv = b.force_get(idx);
         match av.cmp(&bv) {
-            Ordering::Greater => return 1,
             Ordering::Equal => {}
-            Ordering::Less => return -1,
+            o => return o,
         }
     }
-    match a_len.cmp(&b_len) {
-        Ordering::Greater => 1,
-        Ordering::Equal => 0,
-        Ordering::Less => -1,
-    }
+    a_len.cmp(&b_len)
 }

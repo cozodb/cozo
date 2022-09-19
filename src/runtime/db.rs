@@ -1,4 +1,5 @@
 use std::{fs, thread};
+use std::cmp::Ordering::Greater;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::fs::read_to_string;
@@ -18,14 +19,14 @@ use thiserror::Error;
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 use cozorocks::CfHandle::{Pri, Snd};
 
-use crate::data::compare::{DB_KEY_PREFIX_LEN, rusty_cmp};
+use crate::data::compare::{compare_triple_store_key, DB_KEY_PREFIX_LEN, rusty_cmp};
 use crate::data::encode::{decode_ae_key, decode_value_from_key, decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_ref_key, largest_key, smallest_key};
 use crate::data::id::{EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
 use crate::data::triple::StoreOp;
-use crate::data::tuple::{EncodedTuple, rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
+use crate::data::tuple::{compare_tuple_keys, EncodedTuple, rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::schema::AttrTxItem;
@@ -410,6 +411,10 @@ impl Db {
                 let mut it = tx.tx.iterator(Pri).upper_bound(&upper_bound).start();
                 it.seek(&lower_bound);
                 while let Some((k_slice, v_slice)) = it.pair()? {
+                    if compare_triple_store_key(&upper_bound, k_slice) != Greater {
+                        break;
+                    }
+
                     let (_aid, eid, vld) = decode_ae_key(k_slice)?;
 
                     if vld != Validity::NO_HISTORY {
@@ -694,19 +699,21 @@ impl Db {
         for p in prefix {
             lower_bound.0.push(DataValue::Str(SmartString::from(*p)));
         }
-        let upper_bound = Tuple(vec![DataValue::Bot]);
+        let upper_data_bound = Tuple(vec![DataValue::Bot]);
+        let upper_bound = upper_data_bound.encode_as_key(RelationId::SYSTEM);
         let mut it = self
             .db
             .transact()
             .start()
             .iterator(Snd)
-            .upper_bound(&upper_bound.encode_as_key(RelationId::SYSTEM))
+            .upper_bound(&upper_bound)
             .start();
         it.seek(&lower_bound.encode_as_key(RelationId::SYSTEM));
 
         struct CustomIter {
             it: DbIter,
             started: bool,
+            upper_bound: Vec<u8>
         }
 
         impl CustomIter {
@@ -719,6 +726,10 @@ impl Db {
                 match self.it.pair()? {
                     None => Ok(None),
                     Some((k_slice, v_slice)) => {
+                        if compare_tuple_keys(&self.upper_bound, k_slice) != Greater {
+                            return Ok(None);
+                        }
+
                         #[derive(Debug, Error, Diagnostic)]
                         #[error("Encountered corrupt key in meta store")]
                         #[diagnostic(code(db::corrupt_meta_key))]
@@ -750,7 +761,7 @@ impl Db {
             }
         }
 
-        CustomIter { it, started: false }
+        CustomIter { it, started: false, upper_bound }
     }
     pub fn list_relations(&self) -> Result<JsonValue> {
         let lower =
@@ -768,7 +779,10 @@ impl Db {
             .start();
         it.seek(&lower);
         let mut collected = vec![];
-        while let Some(v_slice) = it.val()? {
+        while let Some((k_slice, v_slice)) = it.pair()? {
+            if compare_tuple_keys(&upper, k_slice) != Greater {
+                break;
+            }
             let meta = RelationMetadata::decode(v_slice)?;
             let name = meta.name;
             let arity = meta.arity;

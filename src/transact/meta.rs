@@ -1,3 +1,4 @@
+use std::cmp::Ordering::Greater;
 use std::sync::atomic::Ordering;
 
 use miette::{bail, ensure, Diagnostic, Result};
@@ -8,11 +9,13 @@ use cozorocks::CfHandle::Pri;
 use cozorocks::{DbIter, IterBuilder};
 
 use crate::data::attr::Attribute;
+use crate::data::compare::compare_triple_store_key;
 use crate::data::encode::{
     encode_attr_by_id, encode_sentinel_attr_by_id, encode_sentinel_attr_by_name, VEC_SIZE_8,
 };
 use crate::data::id::AttrId;
 use crate::data::triple::StoreOp;
+use crate::EncodedVec;
 use crate::parse::schema::AttrTxItem;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
@@ -216,13 +219,14 @@ pub(crate) struct AttrNotFoundError(pub(crate) String);
 struct AttrIter {
     it: DbIter,
     started: bool,
+    upper_bound: EncodedVec<8>
 }
 
 impl AttrIter {
     fn new(builder: IterBuilder) -> Self {
         let upper_bound = encode_sentinel_attr_by_id(AttrId::MAX_PERM);
         let it = builder.upper_bound(&upper_bound).start();
-        Self { it, started: false }
+        Self { it, started: false, upper_bound }
     }
 
     fn next_inner(&mut self) -> Result<Option<Attribute>> {
@@ -234,9 +238,13 @@ impl AttrIter {
             self.it.next();
         }
         loop {
-            match self.it.val()? {
+            match self.it.pair()? {
                 None => return Ok(None),
-                Some(v) => {
+                Some((k_slice, v)) => {
+                    if compare_triple_store_key(&self.upper_bound, k_slice) != Greater {
+                        return Ok(None);
+                    }
+
                     let found_op = StoreOp::try_from(v[0])?;
                     if found_op.is_retract() {
                         self.it.next();

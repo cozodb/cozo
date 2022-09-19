@@ -13,7 +13,7 @@ use uuid::v1::Timestamp;
 
 use crate::data::expr::Op;
 use crate::data::json::JsonValue;
-use crate::data::value::{DataValue, Num, RegexWrapper, same_value_type, UuidWrapper};
+use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper};
 
 macro_rules! define_op {
     ($name:ident, $min_arity:expr, $vararg:expr) => {
@@ -24,6 +24,26 @@ macro_rules! define_op {
             inner: ::casey::lower!($name),
         };
     };
+}
+
+
+fn ensure_same_value_type(a: &DataValue, b: &DataValue) -> Result<()> {
+    use DataValue::*;
+    if !matches!((a, b),
+        (Null, Null)
+        | (Bool(_), Bool(_))
+        | (Num(_), Num(_))
+        | (Str(_), Str(_))
+        | (Bytes(_), Bytes(_))
+        | (Regex(_), Regex(_))
+        | (List(_), List(_))
+        | (Set(_), Set(_))
+        | (Rev(_), Rev(_))
+        | (Guard, Guard)
+        | (Bot, Bot)) {
+        bail!("comparison can only be done between the same datatypes, got {:?} and {:?}", a, b)
+    }
+    Ok(())
 }
 
 define_op!(OP_LIST, 0, true);
@@ -65,10 +85,7 @@ pub(crate) fn op_neq(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_GT, 2, false);
 pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(
-        same_value_type(&args[0], &args[1]),
-        "comparison can only be done between the same datatypes"
-    );
+    ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => *l as f64 > *r as f64,
         (DataValue::Num(Num::I(l)), DataValue::Num(Num::F(r))) => *l as f64 > *r as f64,
@@ -78,10 +95,7 @@ pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_GE, 2, false);
 pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(
-        same_value_type(&args[0], &args[1]),
-        "comparison can only be done between the same datatypes"
-    );
+    ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => *l as f64 >= *r as f64,
         (DataValue::Num(Num::I(l)), DataValue::Num(Num::F(r))) => *l as f64 >= *r as f64,
@@ -91,10 +105,7 @@ pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_LT, 2, false);
 pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(
-        same_value_type(&args[0], &args[1]),
-        "comparison can only be done between the same datatypes"
-    );
+    ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => (*l as f64) < (*r as f64),
         (DataValue::Num(Num::I(l)), DataValue::Num(Num::F(r))) => (*l as f64) < (*r as f64),
@@ -104,10 +115,7 @@ pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_LE, 2, false);
 pub(crate) fn op_le(args: &[DataValue]) -> Result<DataValue> {
-    ensure!(
-        same_value_type(&args[0], &args[1]),
-        "comparison can only be done between the same datatypes"
-    );
+    ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
         (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => (*l as f64) <= (*r as f64),
         (DataValue::Num(Num::I(l)), DataValue::Num(Num::F(r))) => (*l as f64) <= (*r as f64),

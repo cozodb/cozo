@@ -1,3 +1,4 @@
+use std::cmp::Ordering::Greater;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::Ordering;
 
@@ -12,7 +13,7 @@ use cozorocks::CfHandle::Snd;
 use cozorocks::DbIter;
 
 use crate::data::symb::Symbol;
-use crate::data::tuple::{EncodedTuple, Tuple};
+use crate::data::tuple::{compare_tuple_keys, EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
@@ -120,6 +121,7 @@ impl RelationMetadata {
 struct RelationIterator {
     inner: DbIter,
     started: bool,
+    upper_bound: Vec<u8>,
 }
 
 impl RelationIterator {
@@ -129,6 +131,7 @@ impl RelationIterator {
         Self {
             inner,
             started: false,
+            upper_bound: upper.to_vec(),
         }
     }
     fn next_inner(&mut self) -> Result<Option<Tuple>> {
@@ -137,7 +140,16 @@ impl RelationIterator {
         } else {
             self.started = true;
         }
-        Ok(self.inner.key()?.map(|k_slice| EncodedTuple(k_slice).decode()))
+        Ok(match self.inner.key()? {
+            None => None,
+            Some(k_slice) => {
+                if compare_tuple_keys(&self.upper_bound, k_slice) != Greater {
+                    None
+                } else {
+                    Some(EncodedTuple(k_slice).decode())
+                }
+            }
+        })
     }
 }
 

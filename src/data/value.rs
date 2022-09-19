@@ -112,21 +112,6 @@ pub(crate) enum DataValue {
     Bot,
 }
 
-pub(crate) fn same_value_type(a: &DataValue, b: &DataValue) -> bool {
-    use DataValue::*;
-    matches!((a, b),
-        (Null, Null)
-        | (Bool(_), Bool(_))
-        | (Num(_), Num(_))
-        | (Str(_), Str(_))
-        | (Bytes(_), Bytes(_))
-        | (Regex(_), Regex(_))
-        | (List(_), List(_))
-        | (Set(_), Set(_))
-        | (Rev(_), Rev(_))
-        | (Guard, Guard)
-        | (Bot, Bot))
-}
 
 impl From<i64> for DataValue {
     fn from(v: i64) -> Self {
