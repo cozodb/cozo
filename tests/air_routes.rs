@@ -30,15 +30,15 @@ fn air_routes() -> Result<()> {
         r#"
         :schema
 
-        put country {
+        :put country {
             code: string unique,
             desc: string
         }
-        put continent {
+        :put continent {
             code: string unique,
             desc: string
         }
-        put airport {
+        :put airport {
             iata: string unique,
             icao: string index,
             city: string index,
@@ -51,12 +51,12 @@ fn air_routes() -> Result<()> {
             lat: float,
             lon: float
         }
-        put route {
+        :put route {
             src: ref,
             dst: ref,
             distance: int
         }
-        put geo {
+        :put geo {
             contains: ref many,
         }
     "#,

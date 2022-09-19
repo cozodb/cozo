@@ -29,7 +29,7 @@ fn simple() {
     db.run_script(
         r#"
         :schema
-        put person {
+        :put person {
             id: string unique,
             first_name: string index,
             last_name: string index,
