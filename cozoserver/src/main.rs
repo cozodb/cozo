@@ -67,10 +67,6 @@ struct Args {
     /// Port to use
     #[clap(short, long, default_value_t = 9070)]
     port: u16,
-
-    /// Open playground in browser
-    #[clap(long, action)]
-    playground: bool,
 }
 
 struct AppStateWithDb {
