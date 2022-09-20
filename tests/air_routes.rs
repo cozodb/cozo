@@ -157,8 +157,8 @@ fn air_routes() -> Result<()> {
 
     let astar_time = Instant::now();
     let res = db.run_script(r#"
-        starting[code, lat, lon] := code <- 'HFE', :code_lat_lon[code, lat, lon];
-        goal[code, lat, lon] := code <- 'LHR', :code_lat_lon[code, lat, lon];
+        starting[code, lat, lon] := code = 'HFE', :code_lat_lon[code, lat, lon];
+        goal[code, lat, lon] := code = 'LHR', :code_lat_lon[code, lat, lon];
         ?[] <~ ShortestPathAStar(:flies_to_code[], :code_lat_lon[node, lat1, lon1], starting[], goal[goal, lat2, lon2], heuristic: haversine_deg_input(lat1, lon1, lat2, lon2) * 3963);
     "#, &params,
     )?;
@@ -292,7 +292,7 @@ fn air_routes() -> Result<()> {
 
     // let simple_query_time = Instant::now();
     // let res = db.run_script(r#"
-    //     ?[c, code, desc] := [c country.code 'CU'] or c <- 10000239, [c country.code code], [c country.desc desc];
+    //     ?[c, code, desc] := [c country.code 'CU'] or c = 10000239, [c country.code code], [c country.desc desc];
     // "#, &params, 
     // )?;
     // dbg!(simple_query_time.elapsed());
@@ -412,7 +412,7 @@ fn air_routes() -> Result<()> {
     let most_out_routes_time_inv = Instant::now();
     let res = db.run_script(
         r#"
-        route_count[count(r), a, x] := [r route.src a], x <- 1;
+        route_count[count(r), a, x] := [r route.src a], x = 1;
         ?[code, n] := route_count[n, a, _], n > 180, [a airport.iata code];
         :sort -n;
     "#,
@@ -533,7 +533,7 @@ fn air_routes() -> Result<()> {
         airports_by_country[c, count(a)] := [a airport.country c];
         country_count[c, max(count)] := airports_by_country[c, count];
         ?[code, count] := [c country.code code], country_count[c, count];
-        ?[code, count] := [c country.code code], not country_count[c, _], count <- 0;
+        ?[code, count] := [c country.code code], not country_count[c, _], count = 0;
 
         :order count;
     ",
@@ -578,7 +578,7 @@ fn air_routes() -> Result<()> {
         r#"
         airports_by_continent[c, count(a)] := [a airport.iata _], [c geo.contains a];
         ?[cont, max(count)] := airports_by_continent[c, count], [c continent.code cont];
-        ?[cont, max(count)] := [_ continent.code cont], count <- 0;
+        ?[cont, max(count)] := [_ continent.code cont], count = 0;
     "#,
         &params,
     )?;
@@ -632,7 +632,7 @@ fn air_routes() -> Result<()> {
                                [r1 route.src aus],
                                [r1 route.dst a],
                                [r route.src a];
-        ?[max(total), collect(coll)] := two_hops[total], out_by_runways[n, ct], coll <- [n, ct];
+        ?[max(total), collect(coll)] := two_hops[total], out_by_runways[n, ct], coll = [n, ct];
     "#,
         &params,
     )?;
@@ -646,7 +646,7 @@ fn air_routes() -> Result<()> {
     let const_return_time = Instant::now();
     let res = db.run_script(
         r#"
-        ?[name, count(a)] := [a airport.region 'US-OK'], name <- 'OK';
+        ?[name, count(a)] := [a airport.region 'US-OK'], name = 'OK';
     "#,
         &params,
     )?;
@@ -676,7 +676,7 @@ fn air_routes() -> Result<()> {
     let multi_unification_time = Instant::now();
     let res = db.run_script(r#"
         target_airports[collect(a, 5)] := [a airport.iata _];
-        ?[code, count(r)] := target_airports[targets], a <- ..targets, [a airport.iata code], [r route.src a];
+        ?[code, count(r)] := target_airports[targets], a in targets, [a airport.iata code], [r route.src a];
     "#, &params,
     )?;
     dbg!(multi_unification_time.elapsed());
@@ -697,7 +697,7 @@ fn air_routes() -> Result<()> {
                               [r route.src a],
                               [r route.dst a2],
                               [a2 airport.country us];
-        ?[n] := routes[rs], n <- length(rs);
+        ?[n] := routes[rs], n = length(rs);
     "#,
         &params,
     )?;
@@ -788,7 +788,7 @@ fn air_routes() -> Result<()> {
                       [r route.src a],
                       [r route.dst a2],
                       [a2 airport.city city_name],
-                      n <- length(city_name);
+                      n = length(city_name);
     "#,
         &params,
     )?;
@@ -800,7 +800,7 @@ fn air_routes() -> Result<()> {
         r#"
         route_count[count(r), a] := [r route.src a];
         rc[max(n), a] := route_count[n, a];
-        rc[max(n), a] := [a airport.iata _], n <- 0;
+        rc[max(n), a] := [a airport.iata _], n = 0;
         ?[n, count(a)] := rc[n, a];
         :order n;
         :limit 10;
@@ -820,7 +820,7 @@ fn air_routes() -> Result<()> {
     let res = db.run_script(
         r#"
         route_count[count(r), a] := [r route.src a];
-        rc[max(n), a] := route_count[n, a] or ([a airport.iata _], n <- 0);
+        rc[max(n), a] := route_count[n, a] or ([a airport.iata _], n = 0);
         ?[mean(n)] := rc[n, _];
     "#,
         &params,
@@ -899,7 +899,7 @@ fn air_routes() -> Result<()> {
         eng_aps[a] := [a airport.region 'GB-ENG'];
         ?[pair] := eng_aps[a1], [r route.src a1], [r route.dst a2], eng_aps[a2],
                          [a1 airport.iata src], [a2 airport.iata dst],
-                         pair <- sorted([src, dst]);
+                         pair = sorted([src, dst]);
     "#,
         &params,
     )?;
@@ -922,10 +922,10 @@ fn air_routes() -> Result<()> {
         r#"
         reachable[a, choice(p)] := [s airport.iata 'AUS'],
                                      [r route.src s], [r route.dst a],
-                                     [a airport.iata code], code != 'YYZ', p <- ['AUS', code];
+                                     [a airport.iata code], code != 'YYZ', p = ['AUS', code];
         reachable[a, choice(p)] := reachable[b, prev],
                                      [r route.src b], [r route.dst a], [a airport.iata code],
-                                     code != 'YYZ', p <- append(prev, code);
+                                     code != 'YYZ', p = append(prev, code);
         ?[p] := reachable[a, p], [a airport.iata 'YPO'];
 
         :limit 1;
@@ -948,7 +948,7 @@ fn air_routes() -> Result<()> {
                             [r route.src ind_a], [r route.dst na_a],
                             [na_a airport.country dst_country],
                             [dst_country country.code dst_country_name],
-                            dst_country_name <- ..['US', 'CA'],
+                            dst_country_name in ['US', 'CA'],
                             [ind_a airport.iata ind_c], [na_a airport.iata na_c];
 
     "#,
@@ -992,7 +992,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[code] := [a airport.iata 'CLT'], [r route.src a], [r route.dst a2],
                     [cont geo.contains a2], [cont continent.code c_name],
-                    c_name <- ..['EU', 'SA'],
+                    c_name in ['EU', 'SA'],
                     [a2 airport.iata code];
     "#,
         &params,
@@ -1009,7 +1009,7 @@ fn air_routes() -> Result<()> {
     let london_to_us_time = Instant::now();
     let res = db.run_script(
         r#"
-        ?[l_code, us_code] := l_code <- ..['LHR', 'LCY', 'LGW', 'LTN', 'STN'],
+        ?[l_code, us_code] := l_code in ['LHR', 'LCY', 'LGW', 'LTN', 'STN'],
                                 [a airport.iata l_code],
                                 [r route.src a], [r route.dst a2],
                                 [us country.code 'US'],
@@ -1085,7 +1085,7 @@ fn air_routes() -> Result<()> {
     let three_cities_time = Instant::now();
     let res = db.run_script(
         r#"
-        three[a] := city <- ..['London', 'Munich', 'Paris'], [a airport.city city];
+        three[a] := city in ['London', 'Munich', 'Paris'], [a airport.city city];
         ?[src, dst] := three[s], [r route.src s], [r route.dst d], three[d],
                          [s airport.iata src], [d airport.iata dst];
     "#,
@@ -1192,7 +1192,7 @@ fn air_routes() -> Result<()> {
     let total_distance_from_three_cities_time = Instant::now();
     let res = db.run_script(
         r#"
-        three[a] := city <- ..['London', 'Munich', 'Paris'], [a airport.city city];
+        three[a] := city in ['London', 'Munich', 'Paris'], [a airport.city city];
         ?[sum(dist)] := three[a], [r route.src a], [r route.distance dist];
     "#,
         &params,
@@ -1203,7 +1203,7 @@ fn air_routes() -> Result<()> {
     let total_distance_within_three_cities_time = Instant::now();
     let res = db.run_script(
         r#"
-        three[a] := city <- ..['London', 'Munich', 'Paris'], [a airport.city city];
+        three[a] := city in ['London', 'Munich', 'Paris'], [a airport.city city];
         ?[sum(dist)] := three[a], [r route.src a], [r route.dst a2], three[a2],
                          [r route.distance dist];
     "#,
@@ -1241,7 +1241,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[code, dist] := [s airport.iata 'AUS'], [r1 route.src s], [r1 route.dst a],
            [r2 route.src a], [r2 route.dst d], [d airport.iata 'LHR'],
-           [r1 route.distance dis1], [r2 route.distance dis2], dist <- dis1 + dis2,
+           [r1 route.distance dis1], [r2 route.distance dis2], dist = dis1 + dis2,
            [a airport.iata code];
         :order dist;
         :limit 10;
@@ -1283,7 +1283,7 @@ fn air_routes() -> Result<()> {
 
     let north_of_77_time = Instant::now();
     let res = db.run_script(r#"
-        ?[city, latitude] := [a airport.lat lat], lat > 77, [a airport.city city], latitude <- round(lat);
+        ?[city, latitude] := [a airport.lat lat], lat > 77, [a airport.city city], latitude = round(lat);
     "#, &params,
     )?;
     dbg!(north_of_77_time.elapsed());
@@ -1329,7 +1329,7 @@ fn air_routes() -> Result<()> {
                                       [us country.code 'US'],
                                       [r route.src dfw],
                                       [r route.dst a], [a airport.country us],
-                                      region <- ..['US-CA', 'US-TX', 'US-FL', 'US-CO', 'US-IL'],
+                                      region in ['US-CA', 'US-TX', 'US-FL', 'US-CO', 'US-IL'],
                                       [a airport.region region],
                                       [a airport.iata code];
     "#,
@@ -1350,7 +1350,7 @@ fn air_routes() -> Result<()> {
         r#"
         ?[deg_diff] := [a airport.iata 'SFO'], [a airport.lat a_lat], [a airport.lon a_lon],
                         [b airport.iata 'NRT'], [b airport.lat b_lat], [b airport.lon b_lon],
-                        deg_diff <- round(haversine_deg_input(a_lat, a_lon, b_lat, b_lon));
+                        deg_diff = round(haversine_deg_input(a_lat, a_lon, b_lat, b_lon));
     "#,
         &params,
     )?;
@@ -1365,11 +1365,11 @@ fn air_routes() -> Result<()> {
         routes[a2, shortest(path)] := [a airport.iata 'AUS'], [r route.src a],
                                         [r route.dst a2], us_uk_airports[a2],
                                         [a2 airport.iata dst],
-                                        path <- ['AUS', dst];
+                                        path = ['AUS', dst];
         routes[a2, shortest(path)] := routes[a, prev], [r route.src a],
                                         [r route.dst a2], us_uk_airports[a2],
                                         [a2 airport.iata dst],
-                                        path <- append(prev, dst);
+                                        path = append(prev, dst);
         ?[path] := [edi airport.iata 'EDI'], routes[edi, path];
     "#,
         &params,
@@ -1383,12 +1383,12 @@ fn air_routes() -> Result<()> {
         routes[a2, shortest(path)] := [a airport.iata 'LHR'], [r route.src a],
                                         [r route.dst a2],
                                         [a2 airport.iata dst],
-                                        path <- ['LHR', dst];
+                                        path = ['LHR', dst];
         routes[a2, shortest(path)] := routes[a, prev], [r route.src a],
                                         [r route.dst a2],
                                         [a2 airport.iata dst],
-                                        path <- append(prev, dst);
-        ?[len, path] := routes[_, path], len <- length(path);
+                                        path = append(prev, dst);
+        ?[len, path] := routes[_, path], len = length(path);
 
         :order -len;
         :limit 10;
@@ -1418,15 +1418,15 @@ fn air_routes() -> Result<()> {
                                              [r route.dst a2],
                                              [r route.distance dist],
                                              [a2 airport.iata dst],
-                                             path <- ['LHR', dst],
-                                             cost_pair <- [path, dist];
+                                             path = ['LHR', dst],
+                                             cost_pair = [path, dist];
         routes[a2, min_cost(cost_pair)] := routes[a, prev], [r route.src a],
                                              [r route.dst a2],
                                              [r route.distance dist],
                                              [a2 airport.iata dst],
-                                             path <- append(first(prev), dst),
-                                             cost_pair <- [path, last(prev) + dist];
-        ?[cost, path] := routes[dst, cost_pair], cost <- last(cost_pair), path <- first(cost_pair);
+                                             path = append(first(prev), dst),
+                                             cost_pair = [path, last(prev) + dist];
+        ?[cost, path] := routes[dst, cost_pair], cost = last(cost_pair), path = first(cost_pair);
 
         :order -cost;
         :limit 10;
@@ -1453,13 +1453,13 @@ fn air_routes() -> Result<()> {
         r#"
         routes[a2, min_cost(cost_pair)] := [a airport.iata 'LHR'], :flies_to[a, a2, dist],
                                              [a2 airport.iata dst],
-                                             path <- ['LHR', dst],
-                                             cost_pair <- [path, dist];
+                                             path = ['LHR', dst],
+                                             cost_pair = [path, dist];
         routes[a2, min_cost(cost_pair)] := routes[a, prev], :flies_to[a, a2, dist],
                                              [a2 airport.iata dst],
-                                             path <- append(first(prev), dst),
-                                             cost_pair <- [path, last(prev) + dist];
-        ?[cost, path] := routes[dst, cost_pair], cost <- last(cost_pair), path <- first(cost_pair);
+                                             path = append(first(prev), dst),
+                                             cost_pair = [path, last(prev) + dist];
+        ?[cost, path] := routes[dst, cost_pair], cost = last(cost_pair), path = first(cost_pair);
 
         :order -cost;
         :limit 10;

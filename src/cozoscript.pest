@@ -57,8 +57,8 @@ relation_apply = {relation_ident ~ "[" ~ apply_args ~ "]"}
 
 disjunction = {(atom ~ "or" )* ~ atom}
 atom = _{grouped | triple | negation | relation_apply | rule_apply | unify_multi | unify | expr }
-unify = {var ~ ("is" | "<-") ~ expr}
-unify_multi = {var ~ ("is_in" | ("<-" ~ "..")) ~ expr}
+unify = {var ~ "=" ~ expr}
+unify_multi = {var ~ "in" ~ expr}
 negation = {"not" ~ atom}
 triple = { "[" ~ expr ~ compound_ident ~ expr ~ "]"}
 // triple_pull = {compound_ident ~ "[" ~ expr ~ "]"}
