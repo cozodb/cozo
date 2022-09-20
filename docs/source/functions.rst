@@ -17,10 +17,6 @@ Equality and Comparisons
 
     Equality comparison. The operator form is ``x == y`` or ``x = y``. The two arguments of the equality can be of different types, in which case the result is ``false``.
 
-.. NOTE::
-
-    The unify operation ``var <- 1`` is equivalent to ``var == 1`` if ``var`` is bound.
-
 .. function:: neq(x, y)
 
     Inequality comparison. The operator form is ``x != y``. The two arguments of the equality can be of different types, in which case the result is ``true``.
@@ -342,10 +338,6 @@ List functions
 .. function:: slice(l, start, end)
 
     Returns the slice of list between the index ``start`` (inclusive) and ``end`` (exclusive). Negative numbers may be used, which is interpreted as counting from the end of the list. E.g. ``slice([1, 2, 3, 4], 1, 3) == [2, 3]``, ``slice([1, 2, 3, 4], 1, -1) == [2, 3]``.
-
-.. TIP::
-
-    The spread-unify operator ``var <- ..[1, 2, 3]`` is equivalent to ``is_in(var, [1, 2, 3])`` if ``var`` is bound.
 
 .. function:: concat(x, ...)
 
