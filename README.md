@@ -9,3 +9,19 @@ Every few days a new database comes out and is advertised to be the Next Big Thi
 [^1]: Or cassandra if the data is really too big, but cassandra is not as nice to use.
 
 Yeah, we know there are graph databases designed just for this use case. We've used dozens of them at various stages. Some of them use syntax that is an improvement over SQL for simple graph cases but is actually not substantially more expressive for complicated situations. Some of them are super powerful but require you to write semi-imperative code. A few of them are "multi-paradigm" and attempt to support different logical data models simultaneously, with the result that none was supported very well. So we are not very satisfied.
+
+## Goals and non-goals
+
+In a sense, Cozo is our ongoing experiment for building a database that is powerful, reliable and at the same time a joy to use.
+
+* Clean syntax, easy to write and read, even when dealing with convoluted problems.
+* Well-defined semantics, even when dealing with recursions.
+* Efficient short-cuts for common graph queries.
+* No elaborate set-up necessary for ad-hoc queries and explorations.
+* Integrity and consistency of data when explicitly required.
+
+At the moment, the following are non-goals (but may change in the future)
+
+* Sharding, distributed system. This would greatly increase the complexity of the system, and we don't think it is appropriate to pour energy into it at this experimentation stage.
+* Additional query languages, e.g. SQL, GraphQL.
+* Support for more paradigms, e.g. a document store.
