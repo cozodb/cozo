@@ -89,8 +89,13 @@ impl SessionTx {
     ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, DerivedRelStore>)> {
         let mut stores: BTreeMap<MagicSymbol, DerivedRelStore> = Default::default();
 
-        for (name, ConstRule { data, .. }) in const_rules {
-            let store = self.new_rule_store(name.clone(), data[0].0.len());
+        for (name, ConstRule { data, bindings, .. }) in const_rules {
+            let arity = if bindings.is_empty() {
+                data[0].0.len()
+            } else {
+                bindings.len()
+            };
+            let store = self.new_rule_store(name.clone(), arity);
             for tuple in data {
                 store.put(tuple.clone(), 0);
             }

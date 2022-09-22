@@ -218,10 +218,11 @@ pub(crate) fn parse_query(
                 #[derive(Error, Debug, Diagnostic)]
                 #[error("Constant rule {0} does not have data")]
                 #[diagnostic(code(parser::empty_const_rule))]
+                #[diagnostic(help("If you insist on using this empty rule, explicitly give its head"))]
                 struct EmptyConstRuleError(String, #[label] SourceSpan);
 
                 ensure!(
-                    !data.is_empty(),
+                    !head.is_empty() || !data.is_empty(),
                     EmptyConstRuleError(name.to_string(), span)
                 );
 
