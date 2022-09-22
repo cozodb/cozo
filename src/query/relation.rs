@@ -14,7 +14,7 @@ use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::derived::{DerivedRelStore, DerivedRelStoreId};
-use crate::runtime::relation::RelationMetadata;
+use crate::runtime::relation::RelationHandle;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) enum RelAlgebra {
@@ -381,7 +381,7 @@ impl RelAlgebra {
     }
     pub(crate) fn relation(
         bindings: Vec<Symbol>,
-        storage: RelationMetadata,
+        storage: RelationHandle,
         span: SourceSpan,
     ) -> Self {
         Self::Relation(RelationRA {
@@ -644,7 +644,7 @@ fn get_eliminate_indices(bindings: &[Symbol], eliminate: &BTreeSet<Symbol>) -> B
 #[derive(Debug)]
 pub(crate) struct RelationRA {
     pub(crate) bindings: Vec<Symbol>,
-    pub(crate) storage: RelationMetadata,
+    pub(crate) storage: RelationHandle,
     pub(crate) filters: Vec<Expr>,
     pub(crate) span: SourceSpan,
 }

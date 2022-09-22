@@ -654,6 +654,49 @@ impl MeetAggrObj for MeetAggrChoiceLast {
     }
 }
 
+define_aggr!(AGGR_LATEST_BY, false);
+
+pub(crate) struct AggrLatestBy {
+    found: DataValue,
+    cost: DataValue,
+}
+
+
+impl Default for AggrLatestBy {
+    fn default() -> Self {
+        Self {
+            found: DataValue::Null,
+            cost: DataValue::Null,
+        }
+    }
+}
+
+
+impl NormalAggrObj for AggrLatestBy {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::List(l) => {
+                ensure!(
+                    l.len() == 2,
+                    "'latest_by' requires a list of exactly two items as argument"
+                );
+                let c = &l[1];
+                if *c > self.cost {
+                    self.cost = c.clone();
+                    self.found = l[0].clone();
+                }
+                Ok(())
+            }
+            v => bail!("cannot compute 'latest_by' on {:?}", v),
+        }
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(self.found.clone())
+    }
+}
+
+
 define_aggr!(AGGR_MIN_COST, true);
 
 pub(crate) struct AggrMinCost {
@@ -993,6 +1036,7 @@ pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
         "bit_and" => &AGGR_BIT_AND,
         "bit_or" => &AGGR_BIT_OR,
         "bit_xor" => &AGGR_BIT_XOR,
+        "latest_by" => &AGGR_LATEST_BY,
         _ => return None,
     })
 }
@@ -1041,6 +1085,7 @@ impl Aggregation {
             name if name == AGGR_INTERSECTION.name => Box::new(AggrIntersection::default()),
             name if name == AGGR_SHORTEST.name => Box::new(AggrShortest::default()),
             name if name == AGGR_MIN_COST.name => Box::new(AggrMinCost::default()),
+            name if name == AGGR_LATEST_BY.name => Box::new(AggrLatestBy::default()),
             name if name == AGGR_COALESCE.name => Box::new(AggrCoalesce::default()),
             name if name == AGGR_COLLECT.name => Box::new({
                 if args.is_empty() {

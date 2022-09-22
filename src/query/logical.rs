@@ -4,11 +4,7 @@ use itertools::Itertools;
 use miette::{bail, Result};
 
 use crate::data::expr::Expr;
-use crate::data::program::{
-    InputAtom, InputRelationApplyAtom, InputRuleApplyAtom, InputTerm,
-    NormalFormAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom,
-    TempSymbGen, Unification,
-};
+use crate::data::program::{InputAtom, InputNamedFieldRelationApplyAtom, InputRelationApplyAtom, InputRuleApplyAtom, InputTerm, NormalFormAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom, TempSymbGen, Unification};
 use crate::query::reorder::UnsafeNegation;
 use crate::runtime::transact::SessionTx;
 
@@ -51,9 +47,10 @@ pub(crate) struct Conjunction(pub(crate) Vec<NormalFormAtom>);
 impl InputAtom {
     pub(crate) fn negation_normal_form(self) -> Result<Self> {
         Ok(match self {
-            a @ (InputAtom::Rule { inner: _ }
-            | InputAtom::Predicate { inner: _ }
-            | InputAtom::Relation { inner: _ }) => a,
+            a @ (InputAtom::Rule { .. }
+            | InputAtom::NamedFieldRelation { .. }
+            | InputAtom::Predicate { .. }
+            | InputAtom::Relation { .. }) => a,
             InputAtom::Conjunction { inner: args, span } => InputAtom::Conjunction {
                 inner: args
                     .into_iter()
@@ -70,8 +67,9 @@ impl InputAtom {
             },
             InputAtom::Unification { inner: unif } => InputAtom::Unification { inner: unif },
             InputAtom::Negation { inner: arg, span } => match *arg {
-                a @ (InputAtom::Rule { inner: _ }
-                | InputAtom::Relation { inner: _ }) => InputAtom::Negation {
+                a @ (InputAtom::Rule { .. }
+                | InputAtom::NamedFieldRelation { .. }
+                | InputAtom::Relation { .. }) => InputAtom::Negation {
                     inner: Box::new(a),
                     span,
                 },
@@ -148,6 +146,21 @@ impl InputAtom {
                 result
             }
             InputAtom::Rule { inner: r } => r.normalize(false, gen),
+            InputAtom::NamedFieldRelation { inner: InputNamedFieldRelationApplyAtom { name, mut args, span } } => {
+                let stored = tx.get_relation(&name)?;
+                let mut new_args = vec![];
+                for (arg_name, _) in stored.metadata.keys.iter().chain(stored.metadata.dependents.iter()) {
+                    let arg = args.remove(arg_name)
+                        .unwrap_or_else(|| InputTerm::Var { name: gen.next(span) });
+                    new_args.push(arg)
+                }
+                let r = InputRuleApplyAtom {
+                    name,
+                    args: new_args,
+                    span,
+                };
+                r.normalize(false, gen)
+            }
             InputAtom::Relation { inner: v } => v.normalize(false, gen),
             InputAtom::Predicate { inner: mut p } => {
                 p.partial_eval()?;

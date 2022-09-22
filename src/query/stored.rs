@@ -5,7 +5,7 @@ use cozorocks::CfHandle::Snd;
 
 use crate::data::program::RelationOp;
 use crate::data::tuple::Tuple;
-use crate::runtime::relation::RelationMetadata;
+use crate::runtime::relation::RelationHandle;
 use crate::runtime::transact::SessionTx;
 
 impl SessionTx {
@@ -13,7 +13,7 @@ impl SessionTx {
         &'a mut self,
         res_iter: impl Iterator<Item=Result<Tuple>> + 'a,
         op: RelationOp,
-        meta: &RelationMetadata,
+        meta: &RelationHandle,
     ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = None;
         if op == RelationOp::ReDerive {
@@ -32,8 +32,8 @@ impl SessionTx {
             struct RelationArityMismatch(String, usize, usize);
 
             ensure!(
-                found.arity == meta.arity,
-                RelationArityMismatch(found.name.to_string(), found.arity, meta.arity)
+                found.arity() == meta.arity(),
+                RelationArityMismatch(found.name.to_string(), found.arity(), meta.arity())
             );
             found
         };

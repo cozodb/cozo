@@ -26,7 +26,7 @@ use crate::data::tuple::{compare_tuple_keys, EncodedTuple, rusty_scratch_cmp, SC
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::{CompactTarget, SysOp};
-use crate::runtime::relation::{RelationId, RelationMetadata};
+use crate::runtime::relation::{RelationId, RelationHandle};
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
@@ -567,9 +567,9 @@ impl Db {
             if compare_tuple_keys(&upper, k_slice) != Greater {
                 break;
             }
-            let meta = RelationMetadata::decode(v_slice)?;
+            let meta = RelationHandle::decode(v_slice)?;
+            let arity = meta.arity();
             let name = meta.name;
-            let arity = meta.arity;
             collected.push(json!([name, arity]));
             it.next();
         }

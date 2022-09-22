@@ -6,6 +6,7 @@ pub(crate) mod expr;
 pub(crate) mod program;
 pub(crate) mod aggr;
 pub(crate) mod functions;
+pub(crate) mod relation;
 
 #[cfg(test)]
 mod tests;

@@ -78,7 +78,7 @@ fn test_unique() {
         DataValue::List(vec![
             DataValue::Bool(true),
             DataValue::from(1),
-            DataValue::from(2)
+            DataValue::from(2),
         ])
     );
 }
@@ -100,7 +100,7 @@ fn test_group_count() {
         DataValue::List(vec![
             DataValue::List(vec![DataValue::from(1.), DataValue::from(2)]),
             DataValue::List(vec![DataValue::from(2.), DataValue::from(1)]),
-            DataValue::List(vec![DataValue::from(3.), DataValue::from(3)])
+            DataValue::List(vec![DataValue::from(3.), DataValue::from(3)]),
         ])
     )
 }
@@ -368,7 +368,7 @@ fn test_choice() {
     assert_eq!(choice_aggr.get().unwrap(), DataValue::from(1));
 
     let m_choice_aggr = aggr.meet_op.unwrap();
-    let mut v= DataValue::from(5);
+    let mut v = DataValue::from(5);
     m_choice_aggr.update(&mut v, &DataValue::from(1)).unwrap();
     m_choice_aggr.update(&mut v, &DataValue::from(2)).unwrap();
     m_choice_aggr.update(&mut v, &DataValue::from(3)).unwrap();
@@ -388,7 +388,7 @@ fn test_choice_last() {
     assert_eq!(choice_aggr.get().unwrap(), DataValue::from(3));
 
     let m_choice_aggr = aggr.meet_op.unwrap();
-    let mut v= DataValue::from(5);
+    let mut v = DataValue::from(5);
     m_choice_aggr.update(&mut v, &DataValue::from(1)).unwrap();
     m_choice_aggr.update(&mut v, &DataValue::from(2)).unwrap();
     m_choice_aggr.update(&mut v, &DataValue::from(3)).unwrap();
@@ -412,6 +412,18 @@ fn test_min_cost() {
     m_min_cost_aggr.update(&mut v, &DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)])).unwrap();
     m_min_cost_aggr.update(&mut v, &DataValue::List(vec![DataValue::Bool(false), DataValue::from(2)])).unwrap();
     assert_eq!(v, DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)]));
+}
+
+#[test]
+fn test_latest_by() {
+    let mut aggr = parse_aggr("latest_by").unwrap().clone();
+    aggr.normal_init(&[]).unwrap();
+
+    let mut latest_by_aggr = aggr.normal_op.unwrap();
+    latest_by_aggr.set(&DataValue::List(vec![DataValue::Null, DataValue::from(3)])).unwrap();
+    latest_by_aggr.set(&DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)])).unwrap();
+    latest_by_aggr.set(&DataValue::List(vec![DataValue::Bool(false), DataValue::from(2)])).unwrap();
+    assert_eq!(latest_by_aggr.get().unwrap(), DataValue::Null);
 }
 
 #[test]

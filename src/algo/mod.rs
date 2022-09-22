@@ -355,8 +355,8 @@ impl MagicAlgoRuleArg {
                 store.arity
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
-                let meta = tx.get_relation(name)?;
-                meta.arity
+                let handle = tx.get_relation(name)?;
+                handle.arity()
             }
         })
     }

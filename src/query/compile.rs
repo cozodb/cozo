@@ -217,10 +217,10 @@ impl SessionTx {
                 MagicAtom::Relation(rel_app) => {
                     let store = self.get_relation(&rel_app.name)?;
                     ensure!(
-                        store.arity == rel_app.args.len(),
+                        store.arity() == rel_app.args.len(),
                         ArityMismatch(
                             rel_app.name.to_string(),
-                            store.arity,
+                            store.arity(),
                             rel_app.args.len(),
                             rel_app.span
                         )
@@ -287,10 +287,10 @@ impl SessionTx {
                 MagicAtom::NegatedRelation(relation_app) => {
                     let store = self.get_relation(&relation_app.name)?;
                     ensure!(
-                        store.arity == relation_app.args.len(),
+                        store.arity() == relation_app.args.len(),
                         ArityMismatch(
                             relation_app.name.to_string(),
-                            store.arity,
+                            store.arity(),
                             relation_app.args.len(),
                             relation_app.span
                         )

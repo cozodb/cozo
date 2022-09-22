@@ -290,6 +290,15 @@ impl DataValue {
     pub(crate) fn uuid(uuid: uuid::Uuid) -> Self {
         Self::Uuid(UuidWrapper(uuid))
     }
+    pub(crate) fn get_uuid(&self) -> Option<Uuid> {
+        match self {
+            DataValue::Uuid(UuidWrapper(uuid)) => Some(*uuid),
+            DataValue::Str(s) => {
+                uuid::Uuid::try_parse(s).ok()
+            }
+            _ => None
+        }
+    }
 }
 
 pub(crate) const LARGEST_UTF_CHAR: char = '\u{10ffff}';

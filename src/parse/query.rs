@@ -6,24 +6,20 @@ use std::fmt::{Display, Formatter};
 
 use either::Left;
 use itertools::Itertools;
-use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
+use miette::{bail, Diagnostic, ensure, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::algo::{AlgoHandle, AlgoNotFoundError};
-use crate::data::aggr::{parse_aggr, Aggregation};
+use crate::data::aggr::{Aggregation, parse_aggr};
 use crate::data::expr::Expr;
-use crate::data::program::{
-    AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputProgram,
-    InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm,
-    MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
-};
+use crate::data::program::{AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification};
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::expr::build_expr;
 use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
-use crate::runtime::relation::{RelationId, RelationMetadata};
+use crate::parse::expr::build_expr;
+use crate::runtime::relation::{RelationHandle, RelationId};
 
 #[derive(Error, Diagnostic, Debug)]
 #[error("Query option {0} is not constant")]
@@ -64,7 +60,7 @@ impl Diagnostic for MultipleRuleDefinitionError {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         Some(Box::new("parser::mult_rule_def"))
     }
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+    fn labels(&self) -> Option<Box<dyn Iterator<Item=LabeledSpan> + '_>> {
         Some(Box::new(
             self.1.iter().map(|s| LabeledSpan::new_with_span(None, s)),
         ))
@@ -207,7 +203,7 @@ pub(crate) fn parse_query(
                         #[error("Bad body for constant rule: {0:?}")]
                         #[diagnostic(code(parser::bad_body_for_const))]
                         #[diagnostic(help(
-                            "The body of a constant rule should evaluate to a list of lists"
+                        "The body of a constant rule should evaluate to a list of lists"
                         ))]
                         struct ConstRuleBodyNotList(DataValue);
 
@@ -238,7 +234,7 @@ pub(crate) fn parse_query(
                                         #[error("Constant head must have the same arity as the data given")]
                                         #[diagnostic(code(parser::const_data_arity_mismatch))]
                                         #[diagnostic(help(
-                                            "First row length: {0}; the mismatch: {1:?}"
+                                        "First row length: {0}; the mismatch: {1:?}"
                                         ))]
                                         struct ConstRuleRowArityMismatch(
                                             usize,
@@ -354,10 +350,10 @@ pub(crate) fn parse_query(
                 };
 
                 let name_p = args.next().unwrap();
-                let meta = RelationMetadata {
+                let meta = RelationHandle {
                     name: SmartString::from(name_p.as_str()),
                     id: RelationId::SYSTEM,
-                    arity: 0,
+                    metadata: todo!(),
                 };
                 out_opts.store_relation = Some((meta, op));
             }
@@ -389,7 +385,8 @@ pub(crate) fn parse_query(
     let head_arity = prog.get_entry_arity()?;
 
     if let Some((meta, _)) = prog.out_opts.store_relation.borrow_mut() {
-        meta.arity = head_arity;
+        todo!()
+        // meta.arity = head_arity;
     }
 
     if !prog.out_opts.sorters.is_empty() {
@@ -548,6 +545,27 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                     args,
                     span,
                 },
+            }
+        }
+        Rule::relation_named_apply => {
+            let span = src.extract_span();
+            let mut src = src.into_inner();
+            let name_p = src.next().unwrap();
+            let name = Symbol::new(&name_p.as_str()[1..], name_p.extract_span());
+            let args = src.next().unwrap()
+                .into_inner()
+                .map(|pair| -> Result<(SmartString<LazyCompact>, InputTerm<DataValue>)> {
+                    let mut inner = pair.into_inner();
+                    let name = SmartString::from(name_p.as_str());
+                    let arg = parse_rule_arg(inner.next().unwrap(), param_pool)?;
+                    Ok((name, arg))
+                }).try_collect()?;
+            InputAtom::NamedFieldRelation {
+                inner: InputNamedFieldRelationApplyAtom {
+                    name,
+                    args,
+                    span,
+                }
             }
         }
         rule => unreachable!("{:?}", rule),

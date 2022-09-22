@@ -16,7 +16,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::derived::DerivedRelStore;
-use crate::runtime::relation::RelationMetadata;
+use crate::runtime::relation::RelationHandle;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, ConstRule>;
@@ -40,7 +40,7 @@ pub(crate) struct QueryOutOptions {
     pub(crate) offset: Option<usize>,
     pub(crate) timeout: Option<u64>,
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
-    pub(crate) store_relation: Option<(RelationMetadata, RelationOp)>,
+    pub(crate) store_relation: Option<(RelationHandle, RelationOp)>,
     pub(crate) assertion: Option<QueryAssertion>,
 }
 
@@ -800,6 +800,9 @@ pub(crate) enum InputAtom {
     Rule {
         inner: InputRuleApplyAtom,
     },
+    NamedFieldRelation {
+        inner: InputNamedFieldRelationApplyAtom,
+    },
     Relation {
         inner: InputRelationApplyAtom,
     },
@@ -830,6 +833,7 @@ impl InputAtom {
             | InputAtom::Conjunction { span, .. }
             | InputAtom::Disjunction { span, .. } => *span,
             InputAtom::Rule { inner, .. } => inner.span,
+            InputAtom::NamedFieldRelation {inner, ..} => inner.span,
             InputAtom::Relation { inner, .. } => inner.span,
             InputAtom::Predicate { inner, .. } => inner.span(),
             InputAtom::Unification { inner, .. } => inner.span,
@@ -861,6 +865,14 @@ pub(crate) enum MagicAtom {
 pub(crate) struct InputRuleApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<InputTerm<DataValue>>,
+    pub(crate) span: SourceSpan,
+}
+
+
+#[derive(Clone, Debug)]
+pub(crate) struct InputNamedFieldRelationApplyAtom {
+    pub(crate) name: Symbol,
+    pub(crate) args: BTreeMap<SmartString<LazyCompact>, InputTerm<DataValue>>,
     pub(crate) span: SourceSpan,
 }
 

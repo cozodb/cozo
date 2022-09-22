@@ -108,6 +108,11 @@ Ordinary aggregations
 
     ``var`` must be bytes. Returns the bitwise 'xor' of the values.
 
+.. function:: latest_by([data, time])
+
+    The argument should be a list of two elements and this aggregation returns the ``data`` of the maximum ``cost``. This is very similar to ``min_cost``, the differences being that maximum instead of minimum is used, only the data itself is returned, and the aggregation is deliberately note a meet aggregation. Intended to be used in timestamped audit trails.
+
+
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 Statistical aggregations
 ^^^^^^^^^^^^^^^^^^^^^^^^^

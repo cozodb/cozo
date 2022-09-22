@@ -12,6 +12,7 @@ use thiserror::Error;
 use cozorocks::CfHandle::Snd;
 use cozorocks::DbIter;
 
+use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::Symbol;
 use crate::data::tuple::{compare_tuple_keys, EncodedTuple, Tuple};
 use crate::data::value::DataValue;
@@ -55,13 +56,13 @@ impl RelationId {
 }
 
 #[derive(Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) struct RelationMetadata {
+pub(crate) struct RelationHandle {
     pub(crate) name: SmartString<LazyCompact>,
     pub(crate) id: RelationId,
-    pub(crate) arity: usize,
+    pub(crate) metadata: StoredRelationMetadata,
 }
 
-impl Debug for RelationMetadata {
+impl Debug for RelationHandle {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Relation<{}>", self.name)
     }
@@ -73,7 +74,10 @@ impl Debug for RelationMetadata {
 #[diagnostic(help("This could indicate a bug. Consider file a bug report."))]
 pub(crate) struct RelationDeserError;
 
-impl RelationMetadata {
+impl RelationHandle {
+    pub(crate) fn arity(&self) -> usize {
+        self.metadata.dependents.len() + self.metadata.keys.len()
+    }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
         Ok(rmp_serde::from_slice(data).map_err(|_| {
             error!(
@@ -173,8 +177,8 @@ impl SessionTx {
     }
     pub(crate) fn create_relation(
         &mut self,
-        mut meta: RelationMetadata,
-    ) -> Result<RelationMetadata> {
+        mut meta: RelationHandle,
+    ) -> Result<RelationHandle> {
         let key = DataValue::Str(meta.name.clone());
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
@@ -196,7 +200,7 @@ impl SessionTx {
         self.tx.put(&t_encoded, &meta.id.raw_encode(), Snd)?;
         Ok(meta)
     }
-    pub(crate) fn get_relation(&self, name: &str) -> Result<RelationMetadata> {
+    pub(crate) fn get_relation(&self, name: &str) -> Result<RelationHandle> {
         #[derive(Error, Diagnostic, Debug)]
         #[error("Cannot find requested stored relation '{0}'")]
         #[diagnostic(code(query::relation_not_found))]
@@ -209,7 +213,7 @@ impl SessionTx {
             .tx
             .get(&encoded, true, Snd)?
             .ok_or_else(|| StoredRelationNotFoundError(name.to_string()))?;
-        let metadata = RelationMetadata::decode(&found)?;
+        let metadata = RelationHandle::decode(&found)?;
         Ok(metadata)
     }
     pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<(Vec<u8>, Vec<u8>)> {

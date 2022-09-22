@@ -44,15 +44,18 @@ algo_relation_rel = {relation_ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
 rule_apply = {ident ~ "[" ~ apply_args ~ "]"}
+relation_named_apply = {relation_ident ~ "{" ~ named_apply_args ~ "}"}
 relation_apply = {relation_ident ~ "[" ~ apply_args ~ "]"}
 
 disjunction = {(atom ~ "or" )* ~ atom}
-atom = _{grouped | negation | relation_apply | rule_apply | unify_multi | unify | expr }
+atom = _{grouped | negation | relation_named_apply | relation_apply | rule_apply | unify_multi | unify | expr }
 unify = {var ~ "=" ~ expr}
 unify_multi = {var ~ "in" ~ expr}
 negation = {"not" ~ atom}
 apply = {ident ~ "(" ~ apply_args ~ ")"}
 apply_args = {(expr ~ ",")* ~ expr?}
+named_apply_args = {(named_apply_pair ~ ",")* ~ named_apply_pair?}
+named_apply_pair = {ident ~ "=" ~ expr}
 grouped = _{"(" ~ rule_body ~ ")"}
 
 expr = {unary ~ (operation ~ unary)*}
@@ -88,7 +91,7 @@ out_arg = @{var ~ ("(" ~ var ~ ")")?}
 limit_option = {":limit"  ~ expr}
 offset_option = {":offset" ~ expr}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
-relation_option = {":relation" ~ relation_op ~ compound_ident}
+relation_option = {":relation" ~ relation_op ~ compound_ident ~ table_schema?}
 relation_op = _{relation_create | relation_rederive | relation_put | relation_retract}
 relation_create = {"create"}
 relation_rederive = {"rederive"}
@@ -156,3 +159,18 @@ sci_float = @{
 float = _{(sci_float | dot_float)}
 number = _{(float | int)}
 literal = _{ null | boolean | number | string}
+
+// schema
+
+table_schema = {"{" ~ table_cols ~ "=>" ~ table_cols ~ "}"}
+table_cols = {(table_col ~ ",")* ~ table_col?}
+table_col = {ident ~ ":" ~ col_type ~ ("=" ~ ident)?}
+col_type = {(any_type | int_type | float_type | string_type | bytes_type | uuid_type | list_type | tuple_type) ~ "?"?}
+any_type = {"Any"}
+int_type = {"Int"}
+float_type = {"Float"}
+string_type = {"String"}
+bytes_type = {"Bytes"}
+uuid_type = {"Uuid"}
+list_type = {"[" ~ col_type ~ (";" ~ expr)? ~ "]"}
+tuple_type = {"(" ~ (col_type ~ ",")* ~ col_type? ~ ")"}
