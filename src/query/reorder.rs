@@ -39,11 +39,6 @@ impl NormalFormRule {
                         }
                     }
                 }
-                NormalFormAtom::AttrTriple(t) => {
-                    seen_variables.insert(t.value.clone());
-                    seen_variables.insert(t.entity.clone());
-                    round_1_collected.push(NormalFormAtom::AttrTriple(t));
-                }
                 NormalFormAtom::Rule(mut r) => {
                     for arg in &mut r.args {
                         seen_variables.insert(arg.clone());
@@ -55,9 +50,6 @@ impl NormalFormRule {
                         seen_variables.insert(arg.clone());
                     }
                     round_1_collected.push(NormalFormAtom::Relation(v))
-                }
-                NormalFormAtom::NegatedAttrTriple(t) => {
-                    pending.push(NormalFormAtom::NegatedAttrTriple(t))
                 }
                 NormalFormAtom::NegatedRule(r) => pending.push(NormalFormAtom::NegatedRule(r)),
                 NormalFormAtom::NegatedRelation(v) => {
@@ -76,11 +68,6 @@ impl NormalFormRule {
             mem::swap(&mut last_pending, &mut pending);
             pending.clear();
             match atom {
-                NormalFormAtom::AttrTriple(t) => {
-                    seen_variables.insert(t.value.clone());
-                    seen_variables.insert(t.entity.clone());
-                    collected.push(NormalFormAtom::AttrTriple(t))
-                }
                 NormalFormAtom::Rule(r) => {
                     seen_variables.extend(r.args.iter().cloned());
                     collected.push(NormalFormAtom::Rule(r))
@@ -89,8 +76,7 @@ impl NormalFormRule {
                     seen_variables.extend(v.args.iter().cloned());
                     collected.push(NormalFormAtom::Relation(v))
                 }
-                NormalFormAtom::NegatedAttrTriple(_)
-                | NormalFormAtom::NegatedRule(_)
+                NormalFormAtom::NegatedRule(_)
                 | NormalFormAtom::NegatedRelation(_)
                 | NormalFormAtom::Predicate(_) => {
                     unreachable!()
@@ -102,16 +88,8 @@ impl NormalFormRule {
             }
             for atom in last_pending.iter() {
                 match atom {
-                    NormalFormAtom::AttrTriple(_)
-                    | NormalFormAtom::Rule(_)
+                    NormalFormAtom::Rule(_)
                     | NormalFormAtom::Relation(_) => unreachable!(),
-                    NormalFormAtom::NegatedAttrTriple(t) => {
-                        if seen_variables.contains(&t.value) && seen_variables.contains(&t.entity) {
-                            collected.push(NormalFormAtom::NegatedAttrTriple(t.clone()));
-                        } else {
-                            pending.push(NormalFormAtom::NegatedAttrTriple(t.clone()));
-                        }
-                    }
                     NormalFormAtom::NegatedRule(r) => {
                         if r.args.iter().all(|a| seen_variables.contains(a)) {
                             collected.push(NormalFormAtom::NegatedRule(r.clone()));
@@ -147,16 +125,8 @@ impl NormalFormRule {
         if !pending.is_empty() {
             for atom in pending {
                 match atom {
-                    NormalFormAtom::AttrTriple(_)
-                    | NormalFormAtom::Rule(_)
+                    NormalFormAtom::Rule(_)
                     | NormalFormAtom::Relation(_) => unreachable!(),
-                    NormalFormAtom::NegatedAttrTriple(t) => {
-                        if seen_variables.contains(&t.value) || seen_variables.contains(&t.entity) {
-                            collected.push(NormalFormAtom::NegatedAttrTriple(t.clone()));
-                        } else {
-                            bail!(UnsafeNegation(t.span))
-                        }
-                    }
                     NormalFormAtom::NegatedRule(r) => {
                         if r.args.iter().any(|a| seen_variables.contains(a)) {
                             collected.push(NormalFormAtom::NegatedRule(r.clone()));
@@ -185,7 +155,6 @@ impl NormalFormRule {
             head: self.head,
             aggr: self.aggr,
             body: collected,
-            vld: self.vld,
         })
     }
 }

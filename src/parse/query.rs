@@ -13,17 +13,15 @@ use thiserror::Error;
 use crate::algo::{AlgoHandle, AlgoNotFoundError};
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
-use crate::data::id::Validity;
 use crate::data::program::{
-    AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputAttrTripleAtom, InputProgram,
+    AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputProgram,
     InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm,
-    MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, TripleDir, Unification,
+    MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
 };
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
-use crate::parse::pull::parse_out_options;
 use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 
@@ -344,29 +342,6 @@ pub(crate) fn parse_query(
                     out_opts.sorters.push((Symbol::new(var, span), dir));
                 }
             }
-            Rule::out_option => {
-                if out_opts.store_relation.is_some() {
-                    #[derive(Error, Diagnostic, Debug)]
-                    #[error("Cannot specify both pull options and relation options")]
-                    #[diagnostic(code(parser::pull_rel_conflict))]
-                    struct PullSpecRelationConflictError(#[label] SourceSpan);
-
-                    bail!(PullSpecRelationConflictError(pair.extract_span()));
-                }
-                let (target, vld, specs) = parse_out_options(pair, param_pool)?;
-                let span = target.span;
-                match out_opts.out_spec.entry(target) {
-                    Entry::Vacant(e) => e.insert((specs, vld)),
-                    Entry::Occupied(e) => {
-                        #[derive(Debug, Error, Diagnostic)]
-                        #[error("Duplicate specification of pull spec")]
-                        #[diagnostic(code(parser::dup_pull_specs))]
-                        struct DupSpecError(#[label] SourceSpan, #[label] SourceSpan);
-
-                        bail!(DupSpecError(span, e.key().span))
-                    }
-                };
-            }
             Rule::relation_option => {
                 let mut args = pair.into_inner();
                 let op = match args.next().unwrap().as_rule() {
@@ -416,22 +391,6 @@ pub(crate) fn parse_query(
         meta.arity = head_arity;
     }
 
-    if !prog.out_opts.out_spec.is_empty() {
-        let head_args = prog.get_entry_head().unwrap_or(&[]);
-
-        for key in prog.out_opts.out_spec.keys() {
-            #[derive(Debug, Error, Diagnostic)]
-            #[error("The pull target '{0}' does not appear in the program entry head")]
-            #[diagnostic(code(parser::pull_target_not_found))]
-            struct PullArgNotFound(String, #[label] SourceSpan);
-
-            ensure!(
-                head_args.contains(key),
-                PullArgNotFound(key.to_string(), key.span)
-            );
-        }
-    }
-
     if !prog.out_opts.sorters.is_empty() {
         #[derive(Debug, Error, Diagnostic)]
         #[error("Sort key '{0}' not found")]
@@ -467,15 +426,7 @@ fn parse_rule(
     struct EmptyRuleHead(#[label] SourceSpan);
 
     ensure!(!head.is_empty(), EmptyRuleHead(head_span));
-
-    let mut at = None;
-    let mut body = src.next().unwrap();
-    if body.as_rule() == Rule::expr {
-        let vld = build_expr(body, param_pool)?;
-        let vld = Validity::try_from(vld)?;
-        at = Some(vld);
-        body = src.next().unwrap();
-    }
+    let body = src.next().unwrap();
     let mut body_clauses = vec![];
     for atom_src in body.into_inner() {
         body_clauses.push(parse_disjunction(atom_src, param_pool)?)
@@ -487,7 +438,6 @@ fn parse_rule(
             head,
             aggr,
             body: body_clauses,
-            vld: at,
             span,
         },
     ))
@@ -523,7 +473,6 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
             }
         }
         Rule::disjunction => parse_disjunction(src, param_pool)?,
-        Rule::triple => parse_triple(src, param_pool)?,
         Rule::negation => {
             let span = src.extract_span();
             let inner = parse_atom(src.into_inner().next().unwrap(), param_pool)?;
@@ -601,22 +550,6 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
             }
         }
         rule => unreachable!("{:?}", rule),
-    })
-}
-
-fn parse_triple(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<InputAtom> {
-    let span = src.extract_span();
-    let mut src = src.into_inner();
-    let e_p = src.next().unwrap();
-    let attr_p = src.next().unwrap();
-    let v_p = src.next().unwrap();
-    Ok(InputAtom::AttrTriple {
-        inner: InputAttrTripleAtom {
-            attr: Symbol::new(attr_p.as_str(), attr_p.extract_span()),
-            entity: parse_rule_arg(e_p, param_pool)?,
-            value: parse_rule_arg(v_p, param_pool)?,
-            span,
-        },
     })
 }
 
@@ -709,18 +642,7 @@ fn parse_algo_rule(
         ensure!(a.is_none(), AggrInAlgoError(v.span))
     }
 
-    let mut name_pair = src.next().unwrap();
-    let mut at = None;
-    match name_pair.as_rule() {
-        Rule::expr => {
-            let vld = build_expr(name_pair, param_pool)?;
-            let vld = Validity::try_from(vld)?;
-            at = Some(vld);
-            name_pair = src.next().unwrap();
-        }
-        Rule::ident => {}
-        _ => unreachable!(),
-    }
+    let name_pair = src.next().unwrap();
     let algo_name = &name_pair.as_str();
     let mut rule_args: Vec<AlgoRuleArg> = vec![];
     let mut options: BTreeMap<SmartString<LazyCompact>, Expr> = Default::default();
@@ -760,30 +682,6 @@ fn parse_algo_rule(
                             span,
                         })
                     }
-                    Rule::algo_triple_rel => {
-                        let mut els = inner.into_inner();
-                        let fst = els.next().unwrap();
-                        let mdl = els.next().unwrap();
-                        let mut dir = TripleDir::Fwd;
-                        let ident = match mdl.as_rule() {
-                            Rule::rev_triple_marker => {
-                                dir = TripleDir::Bwd;
-                                els.next().unwrap()
-                            }
-                            Rule::compound_ident => mdl,
-                            _ => unreachable!(),
-                        };
-                        let snd = els.next().unwrap();
-                        rule_args.push(AlgoRuleArg::Triple {
-                            name: Symbol::new(ident.as_str(), ident.extract_span()),
-                            bindings: vec![
-                                Symbol::new(fst.as_str(), fst.extract_span()),
-                                Symbol::new(snd.as_str(), snd.extract_span()),
-                            ],
-                            dir,
-                            span,
-                        });
-                    }
                     _ => unreachable!(),
                 }
             }
@@ -821,7 +719,6 @@ fn parse_algo_rule(
             rule_args,
             options,
             head,
-            vld: at,
             span: args_list_span,
         },
     ))

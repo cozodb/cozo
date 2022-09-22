@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use either::Either;
-use itertools::Itertools;
 use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -25,7 +24,7 @@ use crate::algo::triangles::ClusteringCoefficients;
 use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
-use crate::data::program::{AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol, TripleDir};
+use crate::data::program::{AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
@@ -341,69 +340,6 @@ impl MagicAlgoRuleArg {
                 let t = Tuple(vec![prefix.clone()]);
                 Box::new(relation.scan_prefix(tx, &t))
             }
-            MagicAlgoRuleArg::Triple {
-                attr,
-                dir,
-                vld,
-                span,
-                ..
-            } => {
-                if *dir == TripleDir::Bwd && !attr.val_type.is_ref_type() {
-                    ensure!(
-                        attr.indexing.should_index(),
-                        InvalidInverseTripleUse(attr.name.to_string(), *span)
-                    );
-                    if attr.with_history {
-                        Box::new(
-                            tx.triple_av_before_scan(attr.id, prefix, *vld)
-                                .map_ok(|(_, v, eid)| Tuple(vec![v, eid.as_datavalue()])),
-                        )
-                    } else {
-                        Box::new(
-                            tx.triple_av_scan(attr.id, prefix)
-                                .map_ok(|(_, v, eid)| Tuple(vec![v, eid.as_datavalue()])),
-                        )
-                    }
-                } else {
-                    #[derive(Error, Diagnostic, Debug)]
-                    #[error("Encountered bad prefix value {0:?} during triple prefix scanning")]
-                    #[diagnostic(code(algo::invalid_triple_prefix))]
-                    #[diagnostic(help(
-                    "Triple prefix should be an entity ID represented by a UUID"
-                    ))]
-                    struct InvalidTriplePrefixError(DataValue, #[label] SourceSpan);
-
-                    let id = prefix
-                        .get_entity_id()
-                        .ok_or_else(|| InvalidTriplePrefixError(prefix.clone(), self.span()))?;
-                    match dir {
-                        TripleDir::Fwd => {
-                            if attr.with_history {
-                                Box::new(
-                                    tx.triple_ae_before_scan(attr.id, id, *vld)
-                                        .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
-                                )
-                            } else {
-                                Box::new(
-                                    tx.triple_ae_scan(attr.id, id)
-                                        .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
-                                )
-                            }
-                        }
-                        TripleDir::Bwd => {
-                            if attr.with_history {
-                                Box::new(tx.triple_vref_a_before_scan(attr.id, id, *vld).map_ok(
-                                    |(_, v, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
-                                ))
-                            } else {
-                                Box::new(tx.triple_vref_a_scan(attr.id, id).map_ok(
-                                    |(_, v, eid)| Tuple(vec![v.as_datavalue(), eid.as_datavalue()]),
-                                ))
-                            }
-                        }
-                    }
-                }
-            }
         })
     }
     pub(crate) fn arity(
@@ -422,7 +358,6 @@ impl MagicAlgoRuleArg {
                 let meta = tx.get_relation(name)?;
                 meta.arity
             }
-            MagicAlgoRuleArg::Triple { .. } => 2,
         })
     }
     pub(crate) fn iter<'a>(
@@ -441,39 +376,6 @@ impl MagicAlgoRuleArg {
                 let relation = tx.get_relation(name)?;
                 Box::new(relation.scan_all(tx))
             }
-            MagicAlgoRuleArg::Triple {
-                attr: name,
-                dir,
-                vld,
-                ..
-            } => match dir {
-                TripleDir::Fwd => {
-                    if name.with_history {
-                        Box::new(
-                            tx.triple_a_before_scan(name.id, *vld)
-                                .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
-                        )
-                    } else {
-                        Box::new(
-                            tx.triple_a_scan(name.id)
-                                .map_ok(|(_, eid, v)| Tuple(vec![eid.as_datavalue(), v])),
-                        )
-                    }
-                }
-                TripleDir::Bwd => {
-                    if name.with_history {
-                        Box::new(
-                            tx.triple_a_before_scan(name.id, *vld)
-                                .map_ok(|(_, eid, v)| Tuple(vec![v, eid.as_datavalue()])),
-                        )
-                    } else {
-                        Box::new(
-                            tx.triple_a_scan(name.id)
-                                .map_ok(|(_, eid, v)| Tuple(vec![v, eid.as_datavalue()])),
-                        )
-                    }
-                }
-            },
         })
     }
 }

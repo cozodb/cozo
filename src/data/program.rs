@@ -10,13 +10,10 @@ use thiserror::Error;
 
 use crate::algo::{AlgoHandle, AlgoNotFoundError};
 use crate::data::aggr::Aggregation;
-use crate::data::attr::Attribute;
 use crate::data::expr::Expr;
-use crate::data::id::Validity;
 use crate::data::symb::{PROG_ENTRY, Symbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::pull::OutPullSpec;
 use crate::parse::SourceSpan;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::relation::RelationMetadata;
@@ -39,8 +36,6 @@ pub(crate) enum QueryAssertion {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct QueryOutOptions {
-    pub(crate) out_spec: BTreeMap<Symbol, (Vec<OutPullSpec>, Option<Validity>)>,
-    pub(crate) vld: Validity,
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
     pub(crate) timeout: Option<u64>,
@@ -52,8 +47,6 @@ pub(crate) struct QueryOutOptions {
 impl Default for QueryOutOptions {
     fn default() -> Self {
         Self {
-            out_spec: BTreeMap::default(),
-            vld: Validity::current(),
             limit: None,
             offset: None,
             timeout: None,
@@ -121,7 +114,6 @@ pub(crate) struct AlgoApply {
     pub(crate) rule_args: Vec<AlgoRuleArg>,
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
     pub(crate) head: Vec<Symbol>,
-    pub(crate) vld: Option<Validity>,
     pub(crate) span: SourceSpan,
 }
 
@@ -388,12 +380,6 @@ impl Debug for MagicAlgoApply {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) enum TripleDir {
-    Fwd,
-    Bwd,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) enum AlgoRuleArg {
     InMem {
@@ -404,12 +390,6 @@ pub(crate) enum AlgoRuleArg {
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
-        span: SourceSpan,
-    },
-    Triple {
-        name: Symbol,
-        bindings: Vec<Symbol>,
-        dir: TripleDir,
         span: SourceSpan,
     },
 }
@@ -426,46 +406,25 @@ pub(crate) enum MagicAlgoRuleArg {
         bindings: Vec<Symbol>,
         span: SourceSpan,
     },
-    Triple {
-        attr: Attribute,
-        bindings: Vec<Symbol>,
-        dir: TripleDir,
-        vld: Validity,
-        span: SourceSpan,
-    },
 }
 
 impl MagicAlgoRuleArg {
     pub(crate) fn bindings(&self) -> &[Symbol] {
         match self {
             MagicAlgoRuleArg::InMem { bindings, .. }
-            | MagicAlgoRuleArg::Stored { bindings, .. }
-            | MagicAlgoRuleArg::Triple { bindings, .. } => bindings,
+            | MagicAlgoRuleArg::Stored { bindings, .. } => bindings,
         }
     }
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             MagicAlgoRuleArg::InMem { span, .. }
-            | MagicAlgoRuleArg::Stored { span, .. }
-            | MagicAlgoRuleArg::Triple { span, .. } => *span,
+            | MagicAlgoRuleArg::Stored { span, .. } => *span,
         }
     }
     pub(crate) fn get_binding_map(&self, starting: usize) -> BTreeMap<Symbol, usize> {
         let bindings = match self {
             MagicAlgoRuleArg::InMem { bindings, .. }
             | MagicAlgoRuleArg::Stored { bindings, .. } => bindings,
-            MagicAlgoRuleArg::Triple { bindings, dir, .. } => {
-                if *dir == TripleDir::Bwd {
-                    return bindings
-                        .iter()
-                        .rev()
-                        .enumerate()
-                        .map(|(idx, symb)| (symb.clone(), idx))
-                        .collect();
-                } else {
-                    bindings
-                }
-            }
         };
         bindings
             .iter()
@@ -555,36 +514,9 @@ impl InputProgram {
 
         Err(NoEntryError.into())
     }
-    pub(crate) fn get_entry_head(&self) -> Result<&[Symbol]> {
-        if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
-            return match entry {
-                InputRulesOrAlgo::Rules { rules } => Ok(&rules.last().unwrap().head),
-                InputRulesOrAlgo::Algo { algo: algo_apply } => {
-                    if algo_apply.head.is_empty() {
-                        Err(EntryHeadNotExplicitlyDefinedError(entry.first_span()).into())
-                    } else {
-                        Ok(&algo_apply.head)
-                    }
-                }
-            };
-        }
-
-        if let Some(ConstRule { bindings, span, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
-            inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
-        }) {
-            return if bindings.is_empty() {
-                Err(EntryHeadNotExplicitlyDefinedError(*span).into())
-            } else {
-                Ok(bindings)
-            };
-        }
-
-        Err(NoEntryError.into())
-    }
     pub(crate) fn to_normalized_program(
         &self,
         tx: &SessionTx,
-        default_vld: Validity,
     ) -> Result<NormalFormProgram> {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
         for (k, rules_or_algo) in &self.prog {
@@ -636,7 +568,6 @@ impl InputProgram {
                                 head: new_head.clone(),
                                 aggr: rule.aggr.clone(),
                                 body,
-                                vld: rule.vld.unwrap_or(default_vld),
                             };
                             collected_rules.push(normalized_rule.convert_to_well_ordered_rule()?);
                         }
@@ -832,7 +763,6 @@ pub(crate) struct InputRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<InputAtom>,
-    pub(crate) vld: Option<Validity>,
     pub(crate) span: SourceSpan,
 }
 
@@ -841,7 +771,6 @@ pub(crate) struct NormalFormRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<NormalFormAtom>,
-    pub(crate) vld: Validity,
 }
 
 #[derive(Debug, Clone)]
@@ -849,7 +778,6 @@ pub(crate) struct MagicRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<MagicAtom>,
-    pub(crate) vld: Validity,
 }
 
 impl MagicRule {
@@ -869,9 +797,6 @@ impl MagicRule {
 
 #[derive(Debug, Clone)]
 pub(crate) enum InputAtom {
-    AttrTriple {
-        inner: InputAttrTripleAtom,
-    },
     Rule {
         inner: InputRuleApplyAtom,
     },
@@ -904,7 +829,6 @@ impl InputAtom {
             InputAtom::Negation { span, .. }
             | InputAtom::Conjunction { span, .. }
             | InputAtom::Disjunction { span, .. } => *span,
-            InputAtom::AttrTriple { inner, .. } => inner.span,
             InputAtom::Rule { inner, .. } => inner.span,
             InputAtom::Relation { inner, .. } => inner.span,
             InputAtom::Predicate { inner, .. } => inner.span(),
@@ -915,80 +839,22 @@ impl InputAtom {
 
 #[derive(Debug, Clone)]
 pub(crate) enum NormalFormAtom {
-    AttrTriple(NormalFormAttrTripleAtom),
     Rule(NormalFormRuleApplyAtom),
     Relation(NormalFormRelationApplyAtom),
-    NegatedAttrTriple(NormalFormAttrTripleAtom),
     NegatedRule(NormalFormRuleApplyAtom),
     NegatedRelation(NormalFormRelationApplyAtom),
     Predicate(Expr),
     Unification(Unification),
 }
 
-// impl NormalFormAtom {
-//     pub(crate) fn span(&self) -> SourceSpan {
-//         match self {
-//             NormalFormAtom::AttrTriple(inner) => inner.span,
-//             NormalFormAtom::Rule(inner) => inner.span,
-//             NormalFormAtom::Relation(inner) => inner.span,
-//             NormalFormAtom::NegatedAttrTriple(inner) => inner.span,
-//             NormalFormAtom::NegatedRule(inner) => inner.span,
-//             NormalFormAtom::NegatedRelation(inner) => inner.span,
-//             NormalFormAtom::Predicate(inner) => inner.span(),
-//             NormalFormAtom::Unification(inner) => inner.span
-//         }
-//     }
-// }
-
 #[derive(Debug, Clone)]
 pub(crate) enum MagicAtom {
-    AttrTriple(MagicAttrTripleAtom),
     Rule(MagicRuleApplyAtom),
     Relation(MagicRelationApplyAtom),
     Predicate(Expr),
-    NegatedAttrTriple(MagicAttrTripleAtom),
     NegatedRule(MagicRuleApplyAtom),
     NegatedRelation(MagicRelationApplyAtom),
     Unification(Unification),
-}
-
-// impl MagicAtom {
-//     pub(crate) fn span(&self) -> SourceSpan {
-//         match self {
-//             MagicAtom::AttrTriple(inner) => inner.span,
-//             MagicAtom::Rule(inner) => inner.span,
-//             MagicAtom::Relation(inner) => inner.span,
-//             MagicAtom::NegatedAttrTriple(inner) => inner.span,
-//             MagicAtom::NegatedRule(inner) => inner.span,
-//             MagicAtom::NegatedRelation(inner) => inner.span,
-//             MagicAtom::Predicate(inner) => inner.span(),
-//             MagicAtom::Unification(inner) => inner.span
-//         }
-//     }
-// }
-
-#[derive(Clone, Debug)]
-pub(crate) struct InputAttrTripleAtom {
-    pub(crate) attr: Symbol,
-    pub(crate) entity: InputTerm<DataValue>,
-    pub(crate) value: InputTerm<DataValue>,
-    pub(crate) span: SourceSpan,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct NormalFormAttrTripleAtom {
-    pub(crate) attr: Attribute,
-    pub(crate) entity: Symbol,
-    pub(crate) value: Symbol,
-    pub(crate) span: SourceSpan,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct MagicAttrTripleAtom {
-    pub(crate) attr: Attribute,
-    pub(crate) entity: Symbol,
-    pub(crate) value: Symbol,
-    pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]

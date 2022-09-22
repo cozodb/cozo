@@ -15,7 +15,6 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::query::relation::RelAlgebra;
-use crate::query::reorder::UnsafeNegation;
 use crate::runtime::derived::DerivedRelStore;
 use crate::runtime::transact::SessionTx;
 
@@ -170,35 +169,6 @@ impl SessionTx {
         };
         for atom in &rule.body {
             match atom {
-                MagicAtom::AttrTriple(t) => {
-                    let mut join_left_keys = vec![];
-                    let mut join_right_keys = vec![];
-                    let e_kw = if seen_variables.contains(&t.entity) {
-                        let kw = gen_symb(t.entity.span);
-                        join_left_keys.push(t.entity.clone());
-                        join_right_keys.push(kw.clone());
-                        kw
-                    } else {
-                        seen_variables.insert(t.entity.clone());
-                        t.entity.clone()
-                    };
-                    let v_kw = if seen_variables.contains(&t.value) {
-                        let kw = gen_symb(t.value.span);
-                        join_left_keys.push(t.value.clone());
-                        join_right_keys.push(kw.clone());
-                        kw
-                    } else {
-                        seen_variables.insert(t.value.clone());
-                        t.value.clone()
-                    };
-                    let right = RelAlgebra::triple(t.attr.clone(), rule.vld, e_kw, v_kw, t.span);
-                    if ret.is_unit() {
-                        ret = right
-                    } else {
-                        debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
-                        ret = ret.join(right, join_left_keys, join_right_keys, t.span);
-                    }
-                }
                 MagicAtom::Rule(rule_app) => {
                     let store = stores
                         .get(&rule_app.name)
@@ -269,44 +239,6 @@ impl SessionTx {
                     let right = RelAlgebra::relation(right_vars, store, rel_app.span);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rel_app.span);
-                }
-                MagicAtom::NegatedAttrTriple(a_triple) => {
-                    let mut join_left_keys = vec![];
-                    let mut join_right_keys = vec![];
-                    let e_kw = {
-                        if seen_variables.contains(&a_triple.entity) {
-                            let kw = gen_symb(a_triple.entity.span);
-                            join_left_keys.push(a_triple.entity.clone());
-                            join_right_keys.push(kw.clone());
-                            kw
-                        } else {
-                            a_triple.entity.clone()
-                        }
-                    };
-                    let v_kw = {
-                        if seen_variables.contains(&a_triple.value) {
-                            let kw = gen_symb(a_triple.value.span);
-                            join_left_keys.push(a_triple.value.clone());
-                            join_right_keys.push(kw.clone());
-                            kw
-                        } else {
-                            a_triple.value.clone()
-                        }
-                    };
-                    ensure!(!join_right_keys.is_empty(), UnsafeNegation(a_triple.span));
-                    let right = RelAlgebra::triple(
-                        a_triple.attr.clone(),
-                        rule.vld,
-                        e_kw,
-                        v_kw,
-                        a_triple.span,
-                    );
-                    if ret.is_unit() {
-                        ret = right;
-                    } else {
-                        debug_assert_eq!(join_left_keys.len(), join_right_keys.len());
-                        ret = ret.neg_join(right, join_left_keys, join_right_keys, a_triple.span);
-                    }
                 }
                 MagicAtom::NegatedRule(rule_app) => {
                     let store = stores

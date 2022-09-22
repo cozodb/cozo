@@ -5,17 +5,14 @@ use itertools::Itertools;
 use miette::{Result};
 use smallvec::SmallVec;
 
-use crate::data::id::Validity;
 use crate::data::program::{
-    AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicAttrTripleAtom, MagicProgram,
+    AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicProgram,
     MagicRelationApplyAtom, MagicRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol,
     NormalFormAlgoOrRules, NormalFormAtom, NormalFormProgram, NormalFormRule,
     StratifiedMagicProgram, StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::parse::SourceSpan;
-use crate::runtime::transact::SessionTx;
-use crate::transact::meta::AttrNotFoundError;
 
 impl NormalFormProgram {
     pub(crate) fn exempt_aggr_rules_for_magic_sets(&self, exempt_rules: &mut BTreeSet<Symbol>) {
@@ -40,14 +37,12 @@ impl NormalFormProgram {
 impl StratifiedNormalFormProgram {
     pub(crate) fn magic_sets_rewrite(
         self,
-        tx: &SessionTx,
-        default_vld: Validity,
     ) -> Result<StratifiedMagicProgram> {
         let mut exempt_rules = BTreeSet::from([Symbol::new(PROG_ENTRY, SourceSpan(0, 0))]);
         let mut collected = vec![];
         for prog in self.0 {
             prog.exempt_aggr_rules_for_magic_sets(&mut exempt_rules);
-            let adorned = prog.adorn(&exempt_rules, tx, default_vld)?;
+            let adorned = prog.adorn(&exempt_rules)?;
             collected.push(adorned.magic_rewrite());
             exempt_rules.extend(prog.get_downstream_rules());
         }
@@ -138,7 +133,6 @@ fn magic_rewrite_ruleset(
                         head: sup_args.clone(),
                         aggr: sup_aggr,
                         body: sup_body,
-                        vld: rule.vld,
                     }],
                 },
             );
@@ -154,15 +148,9 @@ fn magic_rewrite_ruleset(
         for atom in rule.body {
             match atom {
                 a @ (MagicAtom::Predicate(_)
-                | MagicAtom::NegatedAttrTriple(_)
                 | MagicAtom::NegatedRule(_)
                 | MagicAtom::NegatedRelation(_)) => {
                     collected_atoms.push(a);
-                }
-                MagicAtom::AttrTriple(t) => {
-                    seen_bindings.insert(t.entity.clone());
-                    seen_bindings.insert(t.value.clone());
-                    collected_atoms.push(MagicAtom::AttrTriple(t));
                 }
                 MagicAtom::Relation(v) => {
                     seen_bindings.extend(v.args.iter().cloned());
@@ -191,7 +179,6 @@ fn magic_rewrite_ruleset(
                             head: args.clone(),
                             aggr: vec![None; args.len()],
                             body: sup_rule_atoms,
-                            vld: rule.vld,
                         });
 
                         // add the sup rule application to the collected atoms
@@ -232,7 +219,6 @@ fn magic_rewrite_ruleset(
                             head: inp_args,
                             aggr: inp_aggr,
                             body: vec![sup_rule_app],
-                            vld: rule.vld,
                         });
                     }
                     seen_bindings.extend(r_app.args.iter().cloned());
@@ -251,7 +237,6 @@ fn magic_rewrite_ruleset(
             head: rule.head,
             aggr: rule.aggr,
             body: collected_atoms,
-            vld: rule.vld,
         });
     }
 }
@@ -291,8 +276,6 @@ impl NormalFormProgram {
     fn adorn(
         &self,
         upstream_rules: &BTreeSet<Symbol>,
-        tx: &SessionTx,
-        default_vld: Validity,
     ) -> Result<MagicProgram> {
         let rules_to_rewrite: BTreeSet<_> = self
             .prog
@@ -346,24 +329,6 @@ impl NormalFormProgram {
                                                 bindings: bindings.clone(),
                                                 span: *span,
                                             },
-                                            AlgoRuleArg::Triple {
-                                                name,
-                                                bindings,
-                                                dir,
-                                                span,
-                                            } => {
-                                                let attr =
-                                                    tx.attr_by_name(&name.name)?.ok_or_else(
-                                                        || AttrNotFoundError(name.to_string()),
-                                                    )?;
-                                                MagicAlgoRuleArg::Triple {
-                                                    attr,
-                                                    bindings: bindings.clone(),
-                                                    dir: *dir,
-                                                    vld: algo_apply.vld.unwrap_or(default_vld),
-                                                    span: *span,
-                                                }
-                                            }
                                         })
                                     })
                                     .try_collect()?,
@@ -436,21 +401,6 @@ impl NormalFormAtom {
         rules_to_rewrite: &BTreeSet<Symbol>,
     ) -> MagicAtom {
         match self {
-            NormalFormAtom::AttrTriple(a) => {
-                let t = MagicAttrTripleAtom {
-                    attr: a.attr.clone(),
-                    entity: a.entity.clone(),
-                    value: a.value.clone(),
-                    span: a.span,
-                };
-                if !seen_bindings.contains(&a.entity) {
-                    seen_bindings.insert(a.entity.clone());
-                }
-                if !seen_bindings.contains(&a.value) {
-                    seen_bindings.insert(a.value.clone());
-                }
-                MagicAtom::AttrTriple(t)
-            }
             NormalFormAtom::Relation(v) => {
                 let v = MagicRelationApplyAtom {
                     name: v.name.clone(),
@@ -498,14 +448,6 @@ impl NormalFormAtom {
                     })
                 }
             }
-            NormalFormAtom::NegatedAttrTriple(na) => {
-                MagicAtom::NegatedAttrTriple(MagicAttrTripleAtom {
-                    attr: na.attr.clone(),
-                    entity: na.entity.clone(),
-                    value: na.value.clone(),
-                    span: na.span,
-                })
-            }
             NormalFormAtom::NegatedRule(nr) => MagicAtom::NegatedRule(MagicRuleApplyAtom {
                 name: MagicSymbol::Muggle {
                     inner: nr.name.clone(),
@@ -545,7 +487,6 @@ impl NormalFormRule {
             head: self.head.clone(),
             aggr: self.aggr.clone(),
             body: ret_body,
-            vld: self.vld,
         }
     }
 }

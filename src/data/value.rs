@@ -5,15 +5,9 @@ use std::hash::{Hash, Hasher};
 
 use ordered_float::OrderedFloat;
 use regex::Regex;
-use rmp_serde::Serializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
-
-use crate::data::encode::EncodedVec;
-use crate::data::id::{EntityId, TxId};
-use crate::data::triple::StoreOp;
 
 #[derive(Clone, Hash, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) struct UuidWrapper(pub(crate) Uuid);
@@ -254,24 +248,7 @@ impl Debug for DataValue {
     }
 }
 
-pub(crate) const INLINE_VAL_SIZE_LIMIT: usize = 60;
-
 impl DataValue {
-    pub(crate) fn encode_with_op_and_tx(
-        &self,
-        op: StoreOp,
-        txid: TxId,
-    ) -> EncodedVec<INLINE_VAL_SIZE_LIMIT> {
-        let mut ret = SmallVec::<[u8; INLINE_VAL_SIZE_LIMIT]>::new();
-        ret.extend(txid.bytes());
-        ret[0] = op as u8;
-        self.serialize(&mut Serializer::new(&mut ret)).unwrap();
-        ret.into()
-    }
-
-    pub(crate) fn get_entity_id(&self) -> Option<EntityId> {
-        self.get_uuid().map(EntityId)
-    }
     pub(crate) fn get_list(&self) -> Option<&[DataValue]> {
         match self {
             DataValue::List(l) => Some(l),
@@ -312,15 +289,6 @@ impl DataValue {
     }
     pub(crate) fn uuid(uuid: uuid::Uuid) -> Self {
         Self::Uuid(UuidWrapper(uuid))
-    }
-    pub(crate) fn get_uuid(&self) -> Option<Uuid> {
-        match self {
-            DataValue::Uuid(UuidWrapper(uuid)) => Some(*uuid),
-            DataValue::Str(s) => {
-                uuid::Uuid::try_parse(s).ok()
-            }
-            _ => None
-        }
     }
 }
 

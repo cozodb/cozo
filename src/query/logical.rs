@@ -5,13 +5,12 @@ use miette::{bail, Result};
 
 use crate::data::expr::Expr;
 use crate::data::program::{
-    InputAtom, InputAttrTripleAtom, InputRelationApplyAtom, InputRuleApplyAtom, InputTerm,
-    NormalFormAtom, NormalFormAttrTripleAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom,
+    InputAtom, InputRelationApplyAtom, InputRuleApplyAtom, InputTerm,
+    NormalFormAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom,
     TempSymbGen, Unification,
 };
 use crate::query::reorder::UnsafeNegation;
 use crate::runtime::transact::SessionTx;
-use crate::transact::meta::AttrNotFoundError;
 
 #[derive(Debug)]
 pub(crate) struct Disjunction {
@@ -52,8 +51,7 @@ pub(crate) struct Conjunction(pub(crate) Vec<NormalFormAtom>);
 impl InputAtom {
     pub(crate) fn negation_normal_form(self) -> Result<Self> {
         Ok(match self {
-            a @ (InputAtom::AttrTriple { inner: _ }
-            | InputAtom::Rule { inner: _ }
+            a @ (InputAtom::Rule { inner: _ }
             | InputAtom::Predicate { inner: _ }
             | InputAtom::Relation { inner: _ }) => a,
             InputAtom::Conjunction { inner: args, span } => InputAtom::Conjunction {
@@ -72,8 +70,7 @@ impl InputAtom {
             },
             InputAtom::Unification { inner: unif } => InputAtom::Unification { inner: unif },
             InputAtom::Negation { inner: arg, span } => match *arg {
-                a @ (InputAtom::AttrTriple { inner: _ }
-                | InputAtom::Rule { inner: _ }
+                a @ (InputAtom::Rule { inner: _ }
                 | InputAtom::Relation { inner: _ }) => InputAtom::Negation {
                     inner: Box::new(a),
                     span,
@@ -91,7 +88,7 @@ impl InputAtom {
                                 inner: Box::new(a),
                                 span,
                             }
-                            .negation_normal_form()
+                                .negation_normal_form()
                         })
                         .try_collect()?,
                     span,
@@ -105,7 +102,7 @@ impl InputAtom {
                                 inner: Box::new(a),
                                 span,
                             }
-                            .negation_normal_form()
+                                .negation_normal_form()
                         })
                         .try_collect()?,
                     span,
@@ -150,7 +147,6 @@ impl InputAtom {
                 }
                 result
             }
-            InputAtom::AttrTriple { inner: a } => a.normalize(false, gen, tx)?,
             InputAtom::Rule { inner: r } => r.normalize(false, gen),
             InputAtom::Relation { inner: v } => v.normalize(false, gen),
             InputAtom::Predicate { inner: mut p } => {
@@ -159,7 +155,6 @@ impl InputAtom {
             }
             InputAtom::Negation { inner: n, .. } => match *n {
                 InputAtom::Rule { inner: r } => r.normalize(true, gen),
-                InputAtom::AttrTriple { inner: r } => r.normalize(true, gen, tx)?,
                 InputAtom::Relation { inner: v } => v.normalize(true, gen),
                 _ => unreachable!(),
             },
@@ -223,151 +218,6 @@ impl InputRuleApplyAtom {
             })
         });
         Disjunction::conj(ret)
-    }
-}
-
-impl InputAttrTripleAtom {
-    fn normalize(
-        self,
-        is_negated: bool,
-        gen: &mut TempSymbGen,
-        tx: &SessionTx,
-    ) -> Result<Disjunction> {
-        let attr = tx
-            .attr_by_name(&self.attr.name)?
-            .ok_or_else(|| AttrNotFoundError(self.attr.name.to_string()))?;
-        let wrap = |atom| {
-            if is_negated {
-                NormalFormAtom::NegatedAttrTriple(atom)
-            } else {
-                NormalFormAtom::AttrTriple(atom)
-            }
-        };
-        let original_span = self.span;
-        Ok(Disjunction::conj(match (self.entity, self.value) {
-            (
-                InputTerm::Const {
-                    val: eid,
-                    span: first_span,
-                },
-                InputTerm::Const {
-                    val,
-                    span: second_span,
-                },
-            ) => {
-                let ekw = gen.next(first_span);
-                let vkw = gen.next(second_span);
-                let atom = NormalFormAttrTripleAtom {
-                    attr,
-                    entity: ekw.clone(),
-                    value: vkw.clone(),
-                    span: original_span,
-                };
-                let ret = wrap(atom);
-                let ue = NormalFormAtom::Unification(Unification {
-                    binding: ekw,
-                    expr: Expr::Const {
-                        val: eid,
-                        span: first_span,
-                    },
-                    one_many_unif: false,
-                    span: first_span,
-                });
-                let uv = NormalFormAtom::Unification(Unification {
-                    binding: vkw,
-                    expr: Expr::Const {
-                        val,
-                        span: second_span,
-                    },
-                    one_many_unif: false,
-                    span: second_span,
-                });
-                vec![ue, uv, ret]
-            }
-            (
-                InputTerm::Var { name: ekw },
-                InputTerm::Const {
-                    val,
-                    span: second_span,
-                },
-            ) => {
-                let vkw = gen.next(second_span);
-                let atom = NormalFormAttrTripleAtom {
-                    attr,
-                    entity: ekw,
-                    value: vkw.clone(),
-                    span: original_span,
-                };
-                let ret = wrap(atom);
-                let uv = NormalFormAtom::Unification(Unification {
-                    binding: vkw,
-                    expr: Expr::Const {
-                        val,
-                        span: second_span,
-                    },
-                    one_many_unif: false,
-                    span: second_span,
-                });
-                vec![uv, ret]
-            }
-            (
-                InputTerm::Const {
-                    val: eid,
-                    span: first_span,
-                },
-                InputTerm::Var { name: vkw },
-            ) => {
-                let ekw = gen.next(vkw.span);
-                let atom = NormalFormAttrTripleAtom {
-                    attr,
-                    entity: ekw.clone(),
-                    value: vkw,
-                    span: original_span,
-                };
-                let ret = wrap(atom);
-                let ue = NormalFormAtom::Unification(Unification {
-                    binding: ekw,
-                    expr: Expr::Const {
-                        val: eid,
-                        span: first_span,
-                    },
-                    one_many_unif: false,
-                    span: first_span,
-                });
-                vec![ue, ret]
-            }
-            (InputTerm::Var { name: ekw }, InputTerm::Var { name: vkw }) => {
-                if ekw == vkw {
-                    let dup = gen.next(vkw.span);
-                    let atom = NormalFormAttrTripleAtom {
-                        attr,
-                        entity: ekw,
-                        value: dup.clone(),
-                        span: vkw.span,
-                    };
-                    vec![
-                        NormalFormAtom::Unification(Unification {
-                            binding: dup,
-                            expr: Expr::Binding {
-                                var: vkw,
-                                tuple_pos: None,
-                            },
-                            one_many_unif: false,
-                            span: original_span,
-                        }),
-                        wrap(atom),
-                    ]
-                } else {
-                    let ret = wrap(NormalFormAttrTripleAtom {
-                        attr,
-                        entity: ekw,
-                        value: vkw,
-                        span: original_span,
-                    });
-                    vec![ret]
-                }
-            }
-        }))
     }
 }
 

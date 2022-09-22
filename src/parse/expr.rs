@@ -192,7 +192,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
                 span,
             }
         }
-        Rule::list | Rule::tx_list => {
+        Rule::list => {
             let mut collected = vec![];
             for p in p.into_inner() {
                 collected.push(build_expr(p, param_pool)?)

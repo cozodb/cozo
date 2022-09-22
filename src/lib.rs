@@ -3,7 +3,6 @@
 pub use miette::Error;
 
 pub use cozorocks::DbBuilder;
-pub use data::encode::EncodedVec;
 pub use runtime::db::Db;
 
 // #[cfg(not(target_env = "msvc"))]
@@ -17,6 +16,5 @@ pub(crate) mod data;
 pub(crate) mod parse;
 pub(crate) mod query;
 pub(crate) mod runtime;
-pub(crate) mod transact;
 pub(crate) mod utils;
 pub(crate) mod algo;

@@ -9,7 +9,6 @@ use smartstring::SmartString;
 use thiserror::Error;
 
 use crate::data::functions::*;
-use crate::data::id::EntityId;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
@@ -44,11 +43,6 @@ struct BadEntityId(DataValue, #[label] SourceSpan);
 struct EvalRaisedError(#[label] SourceSpan, #[help] String);
 
 impl Expr {
-    pub(crate) fn build_perm_eid(self) -> Result<EntityId> {
-        let span = self.span();
-        let value = self.eval_to_const()?;
-        value.get_entity_id().ok_or_else(|| BadEntityId(value, span).into())
-    }
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             Expr::Binding { var, .. } => var.span,
@@ -208,43 +202,6 @@ impl Expr {
             }
         }
     }
-    pub(crate) fn eval_bound(&self, bindings: &Tuple) -> Result<Self> {
-        Ok(match self {
-            Expr::Binding { var, tuple_pos: i } => match bindings.0.get(i.unwrap()) {
-                None => Expr::Binding {
-                    var: var.clone(),
-                    tuple_pos: *i,
-                },
-                Some(v) => Expr::Const {
-                    val: v.clone(),
-                    span: var.span,
-                },
-            },
-            e @ Expr::Const { .. } => e.clone(),
-            Expr::Apply { op, args, span } => {
-                let args: Box<[Expr]> =
-                    args.iter().map(|v| v.eval_bound(bindings)).try_collect()?;
-                let const_args = args
-                    .iter()
-                    .map(|v| v.get_const().cloned())
-                    .collect::<Option<Box<[DataValue]>>>();
-                match const_args {
-                    None => Expr::Apply {
-                        op: *op,
-                        args,
-                        span: *span,
-                    },
-                    Some(args) => match (op.inner)(&args) {
-                        Ok(res) => Expr::Const {
-                            val: res,
-                            span: *span,
-                        },
-                        Err(msg) => bail!(EvalRaisedError(self.span(), msg.to_string())),
-                    },
-                }
-            }
-        })
-    }
     pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
         match self {
             Expr::Binding { var, tuple_pos, .. } => match tuple_pos {
@@ -376,22 +333,6 @@ pub(crate) fn compute_bounds(
     }
 
     Ok((lowers, uppers))
-}
-
-pub(crate) fn compute_single_bound(
-    filters: &[Expr],
-    symbol: &Symbol,
-) -> Result<Option<(DataValue, DataValue)>> {
-    let mut cur_bound = ValueRange::default();
-    for filter in filters {
-        let nxt = filter.extract_bound(symbol)?;
-        cur_bound = cur_bound.merge(nxt);
-    }
-    Ok(if cur_bound == ValueRange::default() {
-        None
-    } else {
-        Some((cur_bound.lower, cur_bound.upper))
-    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

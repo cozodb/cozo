@@ -18,12 +18,10 @@ use crate::query::graph::{
 impl NormalFormAtom {
     fn contained_rules(&self) -> BTreeMap<&Symbol, bool> {
         match self {
-            NormalFormAtom::AttrTriple(_)
-            | NormalFormAtom::Relation(_)
+            NormalFormAtom::Relation(_)
             | NormalFormAtom::NegatedRelation(_)
             | NormalFormAtom::Predicate(_)
-            | NormalFormAtom::Unification(_)
-            | NormalFormAtom::NegatedAttrTriple(_) => Default::default(),
+            | NormalFormAtom::Unification(_) => Default::default(),
             NormalFormAtom::Rule(r) => BTreeMap::from([(&r.name, false)]),
             NormalFormAtom::NegatedRule(r) => BTreeMap::from([(&r.name, true)]),
         }
@@ -129,7 +127,6 @@ fn convert_normal_form_program_to_graph(
                             ret.insert(name, true);
                         }
                         AlgoRuleArg::Stored { .. } => {}
-                        AlgoRuleArg::Triple { .. } => {}
                     }
                 }
                 (k, ret)

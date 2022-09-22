@@ -6,12 +6,12 @@ use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
-use miette::{bail, Diagnostic, ensure, Result, WrapErr};
+use miette::{bail, Diagnostic, ensure, Result};
 use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
@@ -19,27 +19,19 @@ use thiserror::Error;
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 use cozorocks::CfHandle::{Pri, Snd};
 
-use crate::data::compare::{compare_triple_store_key, DB_KEY_PREFIX_LEN, rusty_cmp};
-use crate::data::encode::{decode_ae_key, decode_value_from_key, decode_value_from_val, encode_aev_key, encode_ave_key, encode_ave_ref_key, largest_key, smallest_key};
-use crate::data::id::{EntityId, TxId, Validity};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
-use crate::data::triple::StoreOp;
 use crate::data::tuple::{compare_tuple_keys, EncodedTuple, rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::{CozoScript, parse_script, SourceSpan};
-use crate::parse::schema::AttrTxItem;
 use crate::parse::sys::{CompactTarget, SysOp};
-use crate::parse::tx::{EntityRep, TripleTx};
 use crate::runtime::relation::{RelationId, RelationMetadata};
 use crate::runtime::transact::SessionTx;
-use crate::transact::meta::AttrNotFoundError;
-use crate::transact::triple::EntityNotFound;
 use crate::utils::swap_option_result;
 
 struct RunningQueryHandle {
-    started_at: Validity,
+    started_at: f64,
     poison: Poison,
 }
 
@@ -66,8 +58,6 @@ const CURRENT_STORAGE_VERSION: u64 = 1;
 
 pub struct Db {
     db: RocksDb,
-    last_attr_id: Arc<AtomicU64>,
-    last_tx_id: Arc<AtomicU64>,
     relation_store_id: Arc<AtomicU64>,
     n_sessions: Arc<AtomicUsize>,
     queries_count: Arc<AtomicU64>,
@@ -79,8 +69,8 @@ impl Debug for Db {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Db<session {}, attrs {:?}, txs {:?}, sessions: {:?}>",
-            self.session_id, self.last_tx_id, self.last_tx_id, self.n_sessions
+            "Db<session {}, sessions: {:?}>",
+            self.session_id, self.n_sessions
         )
     }
 }
@@ -118,8 +108,9 @@ impl Db {
         store_path.push("data");
         let db_builder = builder
             .create_if_missing(is_new)
-            .pri_use_capped_prefix_extractor(true, DB_KEY_PREFIX_LEN)
-            .pri_use_custom_comparator("cozo_rusty_cmp", rusty_cmp, false)
+            // TODO
+            .pri_use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
+            .pri_use_custom_comparator("cozo_rusty_cmp", rusty_scratch_cmp, false)
             .use_bloom_filter(true, 9.9, true)
             .snd_use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
             .snd_use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false)
@@ -129,8 +120,6 @@ impl Db {
 
         let ret = Self {
             db,
-            last_attr_id: Arc::new(Default::default()),
-            last_tx_id: Arc::new(Default::default()),
             relation_store_id: Arc::new(Default::default()),
             n_sessions: Arc::new(Default::default()),
             queries_count: Arc::new(Default::default()),
@@ -139,13 +128,6 @@ impl Db {
         };
         ret.load_last_ids()?;
         Ok(ret)
-    }
-
-    pub fn compact_triple_store(&self) -> Result<()> {
-        let l = smallest_key();
-        let u = largest_key();
-        self.db.range_compact(&l, &u, Pri)?;
-        Ok(())
     }
 
     pub fn compact_relation(&self) -> Result<()> {
@@ -160,8 +142,6 @@ impl Db {
 
         Ok(Self {
             db: self.db.clone(),
-            last_attr_id: self.last_attr_id.clone(),
-            last_tx_id: self.last_tx_id.clone(),
             relation_store_id: self.relation_store_id.clone(),
             n_sessions: self.n_sessions.clone(),
             queries_count: self.queries_count.clone(),
@@ -172,10 +152,6 @@ impl Db {
 
     fn load_last_ids(&self) -> Result<()> {
         let tx = self.transact()?;
-        self.last_tx_id
-            .store(tx.load_last_tx_id()?.0, Ordering::Release);
-        self.last_attr_id
-            .store(tx.load_last_attr_id()?.0, Ordering::Release);
         self.relation_store_id
             .store(tx.load_last_relation_store_id()?.0, Ordering::Release);
         Ok(())
@@ -185,27 +161,14 @@ impl Db {
             tx: self.db.transact().set_snapshot(true).start(),
             mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
-            w_tx_id: None,
-            last_attr_id: self.last_attr_id.clone(),
-            attr_by_id_cache: Default::default(),
-            attr_by_kw_cache: Default::default(),
-            eid_by_attr_val_cache: Default::default(),
         };
         Ok(ret)
     }
     pub fn transact_write(&self) -> Result<SessionTx> {
-        let last_tx_id = self.last_tx_id.fetch_add(1, Ordering::AcqRel);
-        let cur_tx_id = TxId(last_tx_id + 1);
-
         let ret = SessionTx {
             tx: self.db.transact().set_snapshot(true).start(),
             mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
-            w_tx_id: Some(cur_tx_id),
-            last_attr_id: self.last_attr_id.clone(),
-            attr_by_id_cache: Default::default(),
-            attr_by_kw_cache: Default::default(),
-            eid_by_attr_val_cache: Default::default(),
         };
         Ok(ret)
     }
@@ -213,62 +176,6 @@ impl Db {
         let mut it = self.db.transact().start().iterator(Pri).start();
         it.seek_to_start();
         it
-    }
-    fn transact_triples(&self, payloads: TripleTx) -> Result<JsonValue> {
-        let mut tx = self.transact_write()?;
-        for before_prog in payloads.before {
-            self.run_query(&mut tx, before_prog)
-                .wrap_err("Triple store transaction failed as a pre-condition failed")?;
-        }
-        let tx_counter = tx
-            .tx_triples(payloads.quintuples)?;
-
-        for after_prog in payloads.after {
-            self.run_query(&mut tx, after_prog)
-                .wrap_err("Triple store transaction failed as a post-condition failed")?;
-        }
-        let tx_id = tx.get_write_tx_id()?;
-        tx.commit_tx()?;
-
-        Ok(json!({
-            "tx_id": tx_id,
-            "headers": ["asserts", "retracts"],
-            "rows": [[tx_counter.asserts, tx_counter.retracts]]
-        }))
-    }
-    fn transact_attributes(&self, attrs: Vec<AttrTxItem>) -> Result<JsonValue> {
-        let mut tx = self.transact_write()?;
-        let res: JsonValue = tx
-            .tx_attrs(attrs)?
-            .iter()
-            .map(|(op, aid)| json!([aid.0, op.to_string()]))
-            .collect();
-        let tx_id = tx.get_write_tx_id()?;
-        tx.commit_tx()?;
-        Ok(json!({
-            "tx_id": tx_id,
-            "headers": ["attr_id", "op"],
-            "rows": res
-        }))
-    }
-    pub fn current_schema(&self) -> Result<JsonValue> {
-        let mut tx = self.transact()?;
-        let rows: Vec<_> = tx
-            .all_attrs()
-            .map_ok(|v| {
-                vec![
-                    json!(v.id.0),
-                    json!(v.name),
-                    json!(v.val_type.to_string()),
-                    json!(v.cardinality.to_string()),
-                    json!(v.indexing.to_string()),
-                    json!(v.with_history),
-                ]
-            })
-            .try_collect()?;
-        Ok(
-            json!({"rows": rows, "headers": ["attr_id", "name", "type", "cardinality", "index", "history"]}),
-        )
     }
     pub fn run_script(
         &self,
@@ -310,8 +217,6 @@ impl Db {
                 }
                 Ok(res)
             }
-            CozoScript::Tx(tx) => self.transact_triples(tx),
-            CozoScript::Schema(schema) => self.transact_attributes(schema),
             CozoScript::Sys(op) => self.run_sys_op(op),
         }
     }
@@ -320,9 +225,6 @@ impl Db {
             SysOp::Compact(opts) => {
                 for opt in opts {
                     match opt {
-                        CompactTarget::Triples => {
-                            self.compact_triple_store()?;
-                        }
                         CompactTarget::Relations => {
                             self.compact_relation()?;
                         }
@@ -330,7 +232,6 @@ impl Db {
                 }
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
-            SysOp::ListSchema => self.current_schema(),
             SysOp::ListRelations => self.list_relations(),
             SysOp::RemoveRelation(rs) => {
                 self.remove_relation(&rs)?;
@@ -339,20 +240,6 @@ impl Db {
             SysOp::RenameRelation(old, new) => {
                 let mut tx = self.transact_write()?;
                 tx.rename_relation(old, new)?;
-                tx.commit_tx()?;
-                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
-            }
-            SysOp::RemoveAttribute(name) => {
-                self.remove_attribute(&name)?;
-                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
-            }
-            SysOp::RenameAttribute(old, new) => {
-                let mut tx = self.transact_write()?;
-                let mut attr = tx
-                    .attr_by_name(&old)?
-                    .ok_or_else(|| AttrNotFoundError(old.name.to_string()))?;
-                attr.name = new.name;
-                tx.amend_attr(attr)?;
                 tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
@@ -379,84 +266,7 @@ impl Db {
                     read_to_string(&*path).map_err(|err| LocalScriptNotFound(err.to_string()))?;
                 self.run_script(&content, &Default::default())
             }
-            SysOp::History { from, to, entities, attributes, } => {
-                self.pull_history(from, to, entities, attributes)
-            }
         }
-    }
-    fn pull_history(&self, from: Option<Validity>, to: Option<Validity>, entities: Vec<EntityRep>, attributes: Vec<Symbol>) -> Result<JsonValue> {
-        let tx = self.transact()?;
-        let to_vld = to.unwrap_or(Validity::MAX);
-        let from_vld = from.unwrap_or(Validity::MIN);
-        let mut ret = vec![];
-
-        for entity in entities {
-            let eid = match entity {
-                EntityRep::Id(id) => id,
-                EntityRep::PullByKey(k, v) => {
-                    let attr = tx.attr_by_name(&k)?
-                        .ok_or_else(|| AttrNotFoundError(k.to_string()))?;
-                    tx.eid_by_unique_av(&attr, &v, to_vld)?.ok_or_else(|| {
-                        EntityNotFound(format!("{}: {:?}", attr.name, v))
-                    })?
-                }
-                _ => unreachable!()
-            };
-
-            for attr_name in &attributes {
-                let attr = tx.attr_by_name(&attr_name)?
-                    .ok_or_else(|| AttrNotFoundError(attr_name.to_string()))?;
-                let mut lower_bound = encode_aev_key(attr.id, eid, &DataValue::Null, to_vld);
-                let upper_bound = encode_aev_key(attr.id, eid, &DataValue::Bot, to_vld);
-                let mut it = tx.tx.iterator(Pri).upper_bound(&upper_bound).start();
-                it.seek(&lower_bound);
-                while let Some((k_slice, v_slice)) = it.pair()? {
-                    if compare_triple_store_key(&upper_bound, k_slice) != Greater {
-                        break;
-                    }
-
-                    let (_aid, eid, vld) = decode_ae_key(k_slice)?;
-
-                    if vld != Validity::NO_HISTORY {
-                        if vld > to_vld {
-                            lower_bound.copy_from_slice(k_slice);
-                            lower_bound.encoded_entity_amend_validity(to_vld);
-                            it.seek(&lower_bound);
-                            continue;
-                        } else if vld < from_vld {
-                            lower_bound.copy_from_slice(k_slice);
-                            lower_bound.encoded_entity_amend_validity_to_inf_past();
-                            it.seek(&lower_bound);
-                            continue;
-                        }
-                    }
-                    let op = StoreOp::try_from(v_slice[0])?;
-                    let v = match op {
-                        StoreOp::Retract => DataValue::Null,
-                        StoreOp::Assert => {
-                            let mut v = decode_value_from_key(k_slice)?;
-                            if v == DataValue::Guard {
-                                v = decode_value_from_val(v_slice)?;
-                            }
-                            v
-                        }
-                    };
-                    let tss = if vld == Validity::NO_HISTORY {
-                        JsonValue::Null
-                    } else {
-                        json!(vld.0)
-                    };
-                    let v_json = JsonValue::from(v);
-                    ret.push(json!([eid.0, attr.name, tss, format!("{:?}", vld), op.to_string(), v_json]));
-                    it.next();
-                }
-            }
-        }
-
-        Ok(json!({
-            "headers": ["entity_id", "attr", "timestamp", "timestamp_str", "op", "value"],
-            "rows": ret
-        }))
     }
     fn run_query(
         &self,
@@ -487,11 +297,10 @@ impl Db {
                 )
             }
         };
-        let default_vld = Validity::current();
         let program = input_program
-            .to_normalized_program(tx, default_vld)?
+            .to_normalized_program(tx)?
             .stratify()?
-            .magic_sets_rewrite(tx, default_vld)?;
+            .magic_sets_rewrite()?;
         debug!("{:#?}", program);
         let (compiled, stores) =
             tx.stratified_magic_compile(&program, &input_program.const_rules)?;
@@ -501,8 +310,16 @@ impl Db {
             poison.set_timeout(secs);
         }
         let id = self.queries_count.fetch_add(1, Ordering::AcqRel);
+
+
+        let now = SystemTime::now();
+        let since_the_epoch = now
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs_f64();
+
         let handle = RunningQueryHandle {
-            started_at: Validity::current(),
+            started_at: since_the_epoch,
             poison: poison.clone(),
         };
         self.running_queries.lock().unwrap().insert(id, handle);
@@ -574,12 +391,12 @@ impl Db {
                 }
                 Ok((json!({"headers": ["status"], "rows": [["OK"]]}), clean_ups))
             } else {
-                let ret: Vec<_> = tx.run_pull_on_query_results(
-                    sorted_iter,
-                    input_program.get_entry_out_head().ok(),
-                    &input_program.out_opts.out_spec,
-                    default_vld,
-                )?;
+                let ret: Vec<Vec<JsonValue>> = sorted_iter
+                    .map_ok(|tuple| -> Vec<JsonValue> {
+                        tuple.0.into_iter().map(JsonValue::from).collect()
+                    })
+                    .try_collect()?;
+
                 Ok((json!({ "rows": ret, "headers": json_headers }), clean_ups))
             }
         } else {
@@ -600,12 +417,12 @@ impl Db {
                 }
                 Ok((json!({"headers": ["status"], "rows": [["OK"]]}), clean_ups))
             } else {
-                let ret: Vec<_> = tx.run_pull_on_query_results(
-                    scan,
-                    input_program.get_entry_out_head().ok(),
-                    &input_program.out_opts.out_spec,
-                    default_vld,
-                )?;
+                let ret: Vec<Vec<JsonValue>> = scan
+                    .map_ok(|tuple| -> Vec<JsonValue>  {
+                        tuple.0.into_iter().map(JsonValue::from).collect()
+                    })
+                    .try_collect()?;
+
                 Ok((json!({ "rows": ret, "headers": json_headers }), clean_ups))
             }
         }
@@ -615,39 +432,6 @@ impl Db {
         let (lower, upper) = tx.destroy_relation(name)?;
         tx.commit_tx()?;
         self.db.range_del(&lower, &upper, Snd)?;
-        Ok(())
-    }
-    pub(crate) fn remove_attribute(&self, name: &Symbol) -> Result<()> {
-        let mut tx = self.transact_write()?;
-        let attr = tx
-            .attr_by_name(name)?
-            .ok_or_else(|| AttrNotFoundError(name.to_string()))?;
-
-        tx.retract_attr(attr.id)?;
-        tx.commit_tx()?;
-
-        let aev_lower = encode_aev_key(attr.id, EntityId::ZERO, &DataValue::Null, Validity::MAX);
-        let aev_upper = encode_aev_key(attr.id, EntityId::MAX_PERM, &DataValue::Bot, Validity::MIN);
-        self.db.range_del(&aev_lower, &aev_upper, Pri)?;
-
-        if attr.val_type.is_ref_type() {
-            let ave_lower =
-                encode_ave_ref_key(attr.id, EntityId::ZERO, EntityId::ZERO, Validity::MAX);
-            let ave_upper = encode_ave_ref_key(
-                attr.id,
-                EntityId::MAX_PERM,
-                EntityId::MAX_PERM,
-                Validity::MIN,
-            );
-            self.db.range_del(&ave_lower, &ave_upper, Pri)?;
-        } else if attr.indexing.should_index() {
-            let ave_lower =
-                encode_ave_key(attr.id, &DataValue::Null, EntityId::ZERO, Validity::MAX);
-            let ave_upper =
-                encode_ave_key(attr.id, &DataValue::Bot, EntityId::MAX_PERM, Validity::MIN);
-            self.db.range_del(&ave_lower, &ave_upper, Pri)?;
-        }
-
         Ok(())
     }
     pub(crate) fn list_running(&self) -> Result<JsonValue> {
@@ -713,7 +497,7 @@ impl Db {
         struct CustomIter {
             it: DbIter,
             started: bool,
-            upper_bound: Vec<u8>
+            upper_bound: Vec<u8>,
         }
 
         impl CustomIter {

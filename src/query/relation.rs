@@ -8,9 +8,7 @@ use log::error;
 use miette::{Diagnostic, Result};
 use thiserror::Error;
 
-use crate::data::attr::Attribute;
-use crate::data::expr::{compute_bounds, compute_single_bound, Expr};
-use crate::data::id::{AttrId, EntityId, Validity};
+use crate::data::expr::{compute_bounds, Expr};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
@@ -21,7 +19,6 @@ use crate::runtime::transact::SessionTx;
 
 pub(crate) enum RelAlgebra {
     Fixed(InlineFixedRA),
-    Triple(TripleRA),
     Derived(DerivedRA),
     Relation(RelationRA),
     Join(Box<InnerJoin>),
@@ -34,7 +31,6 @@ pub(crate) enum RelAlgebra {
 impl RelAlgebra {
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
-            RelAlgebra::Triple(i) => i.span,
             RelAlgebra::Fixed(i) => i.span,
             RelAlgebra::Derived(i) => i.span,
             RelAlgebra::Relation(i) => i.span,
@@ -250,12 +246,6 @@ impl Debug for RelAlgebra {
                         .finish()
                 }
             }
-            RelAlgebra::Triple(r) => f
-                .debug_tuple("Triple")
-                .field(&bindings)
-                .field(&r.attr.name)
-                .field(&r.filters)
-                .finish(),
             RelAlgebra::Derived(r) => f
                 .debug_tuple("Derived")
                 .field(&bindings)
@@ -312,7 +302,6 @@ impl Debug for RelAlgebra {
 impl RelAlgebra {
     pub(crate) fn get_filters(&mut self) -> Option<&mut Vec<Expr>> {
         match self {
-            RelAlgebra::Triple(t) => Some(&mut t.filters),
             RelAlgebra::Derived(d) => Some(&mut d.filters),
             RelAlgebra::Join(j) => j.right.get_filters(),
             RelAlgebra::Filter(f) => Some(&mut f.pred),
@@ -322,9 +311,6 @@ impl RelAlgebra {
     pub(crate) fn fill_normal_binding_indices(&mut self) -> Result<()> {
         match self {
             RelAlgebra::Fixed(_) => {}
-            RelAlgebra::Triple(t) => {
-                t.fill_binding_indices()?;
-            }
             RelAlgebra::Derived(d) => {
                 d.fill_binding_indices()?;
             }
@@ -359,9 +345,6 @@ impl RelAlgebra {
     }
     pub(crate) fn fill_join_binding_indices(&mut self, bindings: Vec<Symbol>) -> Result<()> {
         match self {
-            RelAlgebra::Triple(t) => {
-                t.fill_join_binding_indices(&bindings)?;
-            }
             RelAlgebra::Derived(d) => {
                 d.fill_join_binding_indices(&bindings)?;
             }
@@ -404,21 +387,6 @@ impl RelAlgebra {
         Self::Relation(RelationRA {
             bindings,
             storage,
-            filters: vec![],
-            span,
-        })
-    }
-    pub(crate) fn triple(
-        attr: Attribute,
-        vld: Validity,
-        e_binding: Symbol,
-        v_binding: Symbol,
-        span: SourceSpan,
-    ) -> Self {
-        Self::Triple(TripleRA {
-            attr,
-            vld,
-            bindings: [e_binding, v_binding],
             filters: vec![],
             span,
         })
@@ -624,15 +592,6 @@ impl InlineFixedRA {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct TripleRA {
-    pub(crate) attr: Attribute,
-    pub(crate) vld: Validity,
-    pub(crate) bindings: [Symbol; 2],
-    pub(crate) filters: Vec<Expr>,
-    pub(crate) span: SourceSpan,
-}
-
 pub(crate) fn flatten_err<T, E1: Into<miette::Error>, E2: Into<miette::Error>>(
     v: std::result::Result<std::result::Result<T, E2>, E1>,
 ) -> Result<T> {
@@ -666,696 +625,6 @@ fn filter_iter(
         Some(Ok(t))
     })
     .map(flatten_err)
-}
-
-impl TripleRA {
-    fn fill_binding_indices(&mut self) -> Result<()> {
-        let bindings: BTreeMap<_, _> = self
-            .bindings
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(a, b)| (b, a))
-            .collect();
-        for e in self.filters.iter_mut() {
-            e.fill_binding_indices(&bindings)?;
-        }
-        Ok(())
-    }
-
-    fn fill_join_binding_indices(&mut self, bindings: &[Symbol]) -> Result<()> {
-        let bindings: BTreeMap<_, _> = bindings
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(a, b)| (b, a))
-            .collect();
-        for e in self.filters.iter_mut() {
-            e.fill_binding_indices(&bindings)?;
-        }
-        Ok(())
-    }
-
-    fn iter<'a>(&'a self, tx: &'a SessionTx) -> Result<TupleIter<'a>> {
-        self.join(
-            Box::new(iter::once(Ok(Tuple::default()))),
-            (vec![], vec![]),
-            tx,
-            Default::default(),
-        )
-    }
-
-    pub(crate) fn neg_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        match right_join_indices.len() {
-            2 => {
-                let right_first = *right_join_indices.first().unwrap();
-                let right_second = *right_join_indices.last().unwrap();
-                let left_first = *left_join_indices.first().unwrap();
-                let left_second = *left_join_indices.last().unwrap();
-                match (right_first, right_second) {
-                    (0, 1) => {
-                        self.neg_ev_join(left_iter, left_first, left_second, tx, eliminate_indices)
-                    }
-                    (1, 0) => {
-                        self.neg_ev_join(left_iter, left_second, left_first, tx, eliminate_indices)
-                    }
-                    _ => panic!("should not happen"),
-                }
-            }
-            1 => {
-                if right_join_indices[0] == 0 {
-                    self.neg_e_join(left_iter, left_join_indices[0], tx, eliminate_indices)
-                } else if self.attr.val_type.is_ref_type() {
-                    self.neg_v_ref_join(left_iter, left_join_indices[0], tx, eliminate_indices)
-                } else if self.attr.indexing.should_index() {
-                    self.neg_v_index_join(left_iter, left_join_indices[0], tx, eliminate_indices)
-                } else {
-                    self.neg_v_no_index_join(left_iter, left_join_indices[0], tx, eliminate_indices)
-                }
-            }
-            _ => unreachable!(),
-        }
-    }
-    pub(crate) fn join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        match right_join_indices.len() {
-            0 => self.cartesian_join(left_iter, tx, eliminate_indices),
-            2 => {
-                let right_first = *right_join_indices.first().unwrap();
-                let right_second = *right_join_indices.last().unwrap();
-                let left_first = *left_join_indices.first().unwrap();
-                let left_second = *left_join_indices.last().unwrap();
-                match (right_first, right_second) {
-                    (0, 1) => {
-                        self.ev_join(left_iter, left_first, left_second, tx, eliminate_indices)
-                    }
-                    (1, 0) => {
-                        self.ev_join(left_iter, left_second, left_first, tx, eliminate_indices)
-                    }
-                    _ => panic!("should not happen"),
-                }
-            }
-            1 => {
-                if right_join_indices[0] == 0 {
-                    self.e_join(left_iter, left_join_indices[0], tx, eliminate_indices)
-                } else if self.attr.val_type.is_ref_type() {
-                    self.v_ref_join(left_iter, left_join_indices[0], tx, eliminate_indices)
-                } else if self.attr.indexing.should_index() {
-                    self.v_index_join(left_iter, left_join_indices[0], tx, eliminate_indices)
-                } else {
-                    self.v_no_index_join(left_iter, left_join_indices[0], tx, eliminate_indices)
-                }
-            }
-            _ => unreachable!(),
-        }
-    }
-    fn cartesian_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        // [f, f] not really a join
-        if self.attr.indexing.should_index() && !self.filters.is_empty() {
-            if let Some((l_bound, u_bound)) =
-                compute_single_bound(&self.filters, &self.bindings[1])?
-            {
-                let it = left_iter
-                    .map_ok(move |tuple| {
-                        if self.attr.with_history {
-                            Left(
-                                tx.triple_av_range_before_scan(
-                                    self.attr.id,
-                                    &l_bound,
-                                    &u_bound,
-                                    self.vld,
-                                )
-                                .map_ok(move |(_, val, e_id)| {
-                                    let mut ret = tuple.0.clone();
-                                    ret.push(e_id.as_datavalue());
-                                    ret.push(val);
-                                    Tuple(ret)
-                                }),
-                            )
-                        } else {
-                            Right(
-                                tx.triple_av_range_scan(self.attr.id, &l_bound, &u_bound)
-                                    .map_ok(move |(_, val, e_id)| {
-                                        let mut ret = tuple.0.clone();
-                                        ret.push(e_id.as_datavalue());
-                                        ret.push(val);
-                                        Tuple(ret)
-                                    }),
-                            )
-                        }
-                    })
-                    .flatten_ok()
-                    .map(flatten_err);
-                return self.return_filtered_iter(it, eliminate_indices);
-            }
-        }
-        let it = left_iter
-            .map_ok(|tuple| {
-                if self.attr.indexing.should_index() {
-                    if let Ok(Some((l_bound, u_bound))) =
-                        compute_single_bound(&self.filters, &self.bindings[1])
-                    {
-                        return Left(if self.attr.with_history {
-                            Left(
-                                tx.triple_av_range_before_scan(
-                                    self.attr.id,
-                                    &l_bound,
-                                    &u_bound,
-                                    self.vld,
-                                )
-                                .map_ok(move |(_, val, e_id)| {
-                                    let mut ret = tuple.0.clone();
-                                    ret.push(e_id.as_datavalue());
-                                    ret.push(val);
-                                    Tuple(ret)
-                                }),
-                            )
-                        } else {
-                            Right(
-                                tx.triple_av_range_scan(self.attr.id, &l_bound, &u_bound)
-                                    .map_ok(move |(_, val, e_id)| {
-                                        let mut ret = tuple.0.clone();
-                                        ret.push(e_id.as_datavalue());
-                                        ret.push(val);
-                                        Tuple(ret)
-                                    }),
-                            )
-                        });
-                    }
-                }
-                Right(if self.attr.with_history {
-                    Left(tx.triple_a_before_scan(self.attr.id, self.vld).map_ok(
-                        move |(_, e_id, val)| {
-                            let mut ret = tuple.0.clone();
-                            ret.push(e_id.as_datavalue());
-                            ret.push(val);
-                            Tuple(ret)
-                        },
-                    ))
-                } else {
-                    Right(
-                        tx.triple_a_scan(self.attr.id)
-                            .map_ok(move |(_, e_id, val)| {
-                                let mut ret = tuple.0.clone();
-                                ret.push(e_id.as_datavalue());
-                                ret.push(val);
-                                Tuple(ret)
-                            }),
-                    )
-                })
-            })
-            .flatten_ok()
-            .map(flatten_err);
-        self.return_filtered_iter(it, eliminate_indices)
-    }
-    fn neg_ev_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_e_idx: usize,
-        left_v_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        Ok(Box::new(
-            left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let dv = tuple.0.get(left_e_idx).unwrap();
-                    let eid = dv
-                        .get_entity_id()
-                        .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
-                    let v = tuple.0.get(left_v_idx).unwrap();
-                    let exists = tx.aev_exists(self.attr.id, eid, v, self.vld)?;
-                    Ok(if exists {
-                        None
-                    } else if !eliminate_indices.is_empty() {
-                        Some(Tuple(
-                            tuple
-                                .0
-                                .into_iter()
-                                .enumerate()
-                                .filter_map(|(i, v)| {
-                                    if eliminate_indices.contains(&i) {
-                                        None
-                                    } else {
-                                        Some(v)
-                                    }
-                                })
-                                .collect_vec(),
-                        ))
-                    } else {
-                        Some(tuple)
-                    })
-                })
-                .map(flatten_err)
-                .filter_map(invert_option_err),
-        ))
-    }
-    fn ev_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_e_idx: usize,
-        left_v_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        // [b, b] actually a filter
-        let it = left_iter
-            .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                let dv = tuple.0.get(left_e_idx).unwrap();
-                let eid = dv
-                    .get_entity_id()
-                    .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
-                let v = tuple.0.get(left_v_idx).unwrap();
-                let exists = tx.aev_exists(self.attr.id, eid, v, self.vld)?;
-                if exists {
-                    let v = v.clone();
-                    let mut ret = tuple.0;
-                    ret.push(eid.as_datavalue());
-                    ret.push(v);
-                    Ok(Some(Tuple(ret)))
-                } else {
-                    Ok(None)
-                }
-            })
-            .map(flatten_err)
-            .filter_map(invert_option_err);
-        self.return_filtered_iter(it, eliminate_indices)
-    }
-    fn neg_e_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_e_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        Ok(Box::new(
-            left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let dv = tuple.0.get(left_e_idx).unwrap();
-                    let eid = dv
-                        .get_entity_id()
-                        .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
-                    let nxt = if self.attr.with_history {
-                        tx.triple_ae_before_scan(self.attr.id, eid, self.vld).next()
-                    } else {
-                        tx.triple_ae_scan(self.attr.id, eid).next()
-                    };
-                    match nxt {
-                        None => Ok(if !eliminate_indices.is_empty() {
-                            Some(Tuple(
-                                tuple
-                                    .0
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec(),
-                            ))
-                        } else {
-                            Some(tuple)
-                        }),
-                        Some(Ok(_)) => Ok(None),
-                        Some(Err(e)) => Err(e),
-                    }
-                })
-                .map(flatten_err)
-                .filter_map(invert_option_err),
-        ))
-    }
-    fn e_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_e_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        // [b, f]
-        let mut no_bound_found = false;
-        let it = left_iter
-            .map_ok(move |tuple| -> Result<_> {
-                let bounds = if !self.filters.is_empty() && !no_bound_found {
-                    let reduced_filters: Vec<_> = self
-                        .filters
-                        .iter()
-                        .map(|f| f.eval_bound(&tuple))
-                        .try_collect()
-                        .unwrap();
-                    match compute_bounds(&reduced_filters, &self.bindings[1..]) {
-                        Ok((l_bound, r_bound)) => {
-                            let l_bound = l_bound.into_iter().next().unwrap();
-                            let r_bound = r_bound.into_iter().next().unwrap();
-                            if l_bound != DataValue::Null || r_bound != DataValue::Bot {
-                                Some((l_bound, r_bound))
-                            } else {
-                                None
-                            }
-                        }
-                        Err(e) => {
-                            error!("internel error {}", e);
-                            no_bound_found = true;
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
-                let dv = tuple.0.get(left_e_idx).unwrap();
-                let eid = dv
-                    .get_entity_id()
-                    .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
-
-                let clj = move |(_, eid, val): (AttrId, EntityId, DataValue)| {
-                    let mut ret = tuple.0.clone();
-                    ret.push(eid.as_datavalue());
-                    ret.push(val);
-                    Tuple(ret)
-                };
-                Ok(if let Some((l_bound, r_bound)) = bounds {
-                    Left(if self.attr.with_history {
-                        Left(
-                            tx.triple_ae_range_before_scan(
-                                self.attr.id,
-                                eid,
-                                l_bound,
-                                r_bound,
-                                self.vld,
-                            )
-                            .map_ok(clj),
-                        )
-                    } else {
-                        Right(
-                            tx.triple_ae_range_scan(self.attr.id, eid, l_bound, r_bound)
-                                .map_ok(clj),
-                        )
-                    })
-                } else {
-                    Right(if self.attr.with_history {
-                        Left(
-                            tx.triple_ae_before_scan(self.attr.id, eid, self.vld)
-                                .map_ok(clj),
-                        )
-                    } else {
-                        Right(tx.triple_ae_scan(self.attr.id, eid).map_ok(clj))
-                    })
-                })
-            })
-            .map(flatten_err)
-            .flatten_ok()
-            .map(flatten_err);
-        self.return_filtered_iter(it, eliminate_indices)
-    }
-    fn neg_v_ref_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_v_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        Ok(Box::new(
-            left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let dv = tuple.0.get(left_v_idx).unwrap();
-                    let v_eid = dv
-                        .get_entity_id()
-                        .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))?;
-                    let nxt = if self.attr.with_history {
-                        tx.triple_vref_a_before_scan(self.attr.id, v_eid, self.vld)
-                            .next()
-                    } else {
-                        tx.triple_vref_a_scan(self.attr.id, v_eid).next()
-                    };
-                    match nxt {
-                        None => Ok(if !eliminate_indices.is_empty() {
-                            Some(Tuple(
-                                tuple
-                                    .0
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec(),
-                            ))
-                        } else {
-                            Some(tuple)
-                        }),
-                        Some(Ok(_)) => Ok(None),
-                        Some(Err(e)) => Err(e),
-                    }
-                })
-                .map(flatten_err)
-                .filter_map(invert_option_err),
-        ))
-    }
-    fn v_ref_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_v_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        // [f, b] where b is a ref
-        let it = left_iter
-            .map_ok(move |tuple| {
-                let dv = tuple.0.get(left_v_idx).unwrap();
-                dv.get_entity_id()
-                    .ok_or_else(|| EntityIdExpected(dv.clone(), self.span))
-                    .map(move |v_eid| {
-                        if self.attr.with_history {
-                            Left(
-                                tx.triple_vref_a_before_scan(self.attr.id, v_eid, self.vld)
-                                    .map_ok(move |(_, _, e_id)| {
-                                        let mut ret = tuple.0.clone();
-                                        ret.push(e_id.as_datavalue());
-                                        ret.push(v_eid.as_datavalue());
-                                        Tuple(ret)
-                                    }),
-                            )
-                        } else {
-                            Right(tx.triple_vref_a_scan(self.attr.id, v_eid).map_ok(
-                                move |(_, _, e_id)| {
-                                    let mut ret = tuple.0.clone();
-                                    ret.push(e_id.as_datavalue());
-                                    ret.push(v_eid.as_datavalue());
-                                    Tuple(ret)
-                                },
-                            ))
-                        }
-                    })
-            })
-            .map(flatten_err)
-            .flatten_ok()
-            .map(flatten_err);
-        self.return_filtered_iter(it, eliminate_indices)
-    }
-    fn neg_v_index_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_v_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        Ok(Box::new(
-            left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let val = tuple.0.get(left_v_idx).unwrap();
-                    let nxt = if self.attr.with_history {
-                        tx.triple_av_before_scan(self.attr.id, val, self.vld).next()
-                    } else {
-                        tx.triple_av_scan(self.attr.id, val).next()
-                    };
-                    match nxt {
-                        None => Ok(if !eliminate_indices.is_empty() {
-                            Some(Tuple(
-                                tuple
-                                    .0
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec(),
-                            ))
-                        } else {
-                            Some(tuple)
-                        }),
-                        Some(Ok(_)) => Ok(None),
-                        Some(Err(e)) => Err(e),
-                    }
-                })
-                .map(flatten_err)
-                .filter_map(invert_option_err),
-        ))
-    }
-    fn v_index_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_v_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        // [f, b] where b is indexed
-        let it = left_iter
-            .map_ok(move |tuple| {
-                let val = tuple.0.get(left_v_idx).unwrap();
-                if self.attr.with_history {
-                    Left(
-                        tx.triple_av_before_scan(self.attr.id, val, self.vld)
-                            .map_ok(move |(_, val, eid): (AttrId, DataValue, EntityId)| {
-                                let mut ret = tuple.0.clone();
-                                ret.push(eid.as_datavalue());
-                                ret.push(val);
-                                Tuple(ret)
-                            }),
-                    )
-                } else {
-                    Right(tx.triple_av_scan(self.attr.id, val).map_ok(
-                        move |(_, val, eid): (AttrId, DataValue, EntityId)| {
-                            let mut ret = tuple.0.clone();
-                            ret.push(eid.as_datavalue());
-                            ret.push(val);
-                            Tuple(ret)
-                        },
-                    ))
-                }
-            })
-            .flatten_ok()
-            .map(flatten_err);
-        self.return_filtered_iter(it, eliminate_indices)
-    }
-    fn neg_v_no_index_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_v_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        Ok(Box::new(
-            left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let val = tuple.0.get(left_v_idx).unwrap();
-                    let it = if self.attr.with_history {
-                        Left(tx.triple_a_before_scan(self.attr.id, self.vld))
-                    } else {
-                        Right(tx.triple_a_scan(self.attr.id))
-                    };
-                    for item in it {
-                        let (_, _, found_val) = item?;
-                        if *val == found_val {
-                            return Ok(None);
-                        }
-                    }
-                    Ok(if !eliminate_indices.is_empty() {
-                        Some(Tuple(
-                            tuple
-                                .0
-                                .into_iter()
-                                .enumerate()
-                                .filter_map(|(i, v)| {
-                                    if eliminate_indices.contains(&i) {
-                                        None
-                                    } else {
-                                        Some(v)
-                                    }
-                                })
-                                .collect_vec(),
-                        ))
-                    } else {
-                        Some(tuple)
-                    })
-                })
-                .map(flatten_err)
-                .filter_map(invert_option_err),
-        ))
-    }
-    fn v_no_index_join<'a>(
-        &'a self,
-        left_iter: TupleIter<'a>,
-        left_v_idx: usize,
-        tx: &'a SessionTx,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        // [f, b] where b is not indexed
-        let throwaway = tx.new_temp_store(SourceSpan(0, 0));
-        let it = if self.attr.with_history {
-            Left(tx.triple_a_before_scan(self.attr.id, self.vld))
-        } else {
-            Right(tx.triple_a_scan(self.attr.id))
-        };
-        for item in it {
-            match item {
-                Err(e) => return Ok(Box::new([Err(e)].into_iter())),
-                Ok((_, eid, val)) => {
-                    let t = Tuple(vec![val, eid.as_datavalue()]);
-                    throwaway.put(t, 0);
-                }
-            }
-        }
-        let it = left_iter
-            .map_ok(move |tuple| {
-                let val = tuple.0.get(left_v_idx).unwrap();
-                let prefix = Tuple(vec![val.clone()]);
-                throwaway
-                    .scan_prefix(&prefix)
-                    .map_ok(move |Tuple(mut found)| {
-                        let v_eid = found.pop().unwrap();
-                        let mut ret = tuple.0.clone();
-                        ret.push(v_eid);
-                        Tuple(ret)
-                    })
-            })
-            .flatten_ok()
-            .map(flatten_err);
-        self.return_filtered_iter(it, eliminate_indices)
-    }
-    fn return_filtered_iter<'a>(
-        &'a self,
-        it: impl Iterator<Item = Result<Tuple>> + 'a,
-        eliminate_indices: BTreeSet<usize>,
-    ) -> Result<TupleIter<'a>> {
-        Ok(
-            match (self.filters.is_empty(), eliminate_indices.is_empty()) {
-                (true, true) => Box::new(it),
-                (true, false) => {
-                    Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
-                }
-                (false, true) => Box::new(filter_iter(self.filters.clone(), it)),
-                (false, false) => Box::new(
-                    filter_iter(self.filters.clone(), it)
-                        .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
-                ),
-            },
-        )
-    }
 }
 
 fn get_eliminate_indices(bindings: &[Symbol], eliminate: &BTreeSet<Symbol>) -> BTreeSet<usize> {
@@ -1813,7 +1082,6 @@ impl RelAlgebra {
     pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         match self {
             RelAlgebra::Fixed(r) => r.do_eliminate_temp_vars(used),
-            RelAlgebra::Triple(_r) => Ok(()),
             RelAlgebra::Derived(_r) => Ok(()),
             RelAlgebra::Relation(_v) => Ok(()),
             RelAlgebra::Join(r) => r.do_eliminate_temp_vars(used),
@@ -1827,7 +1095,6 @@ impl RelAlgebra {
     fn eliminate_set(&self) -> Option<&BTreeSet<Symbol>> {
         match self {
             RelAlgebra::Fixed(r) => Some(&r.to_eliminate),
-            RelAlgebra::Triple(_) => None,
             RelAlgebra::Derived(_) => None,
             RelAlgebra::Relation(_) => None,
             RelAlgebra::Join(r) => Some(&r.to_eliminate),
@@ -1852,7 +1119,6 @@ impl RelAlgebra {
     fn bindings_before_eliminate(&self) -> Vec<Symbol> {
         match self {
             RelAlgebra::Fixed(f) => f.bindings.clone(),
-            RelAlgebra::Triple(t) => t.bindings.to_vec(),
             RelAlgebra::Derived(d) => d.bindings.clone(),
             RelAlgebra::Relation(v) => v.bindings.clone(),
             RelAlgebra::Join(j) => j.bindings(),
@@ -1874,7 +1140,6 @@ impl RelAlgebra {
     ) -> Result<TupleIter<'a>> {
         match self {
             RelAlgebra::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone()))))),
-            RelAlgebra::Triple(r) => r.iter(tx),
             RelAlgebra::Derived(r) => r.iter(epoch, use_delta),
             RelAlgebra::Relation(v) => v.iter(tx),
             RelAlgebra::Join(j) => j.iter(tx, epoch, use_delta),
@@ -1918,21 +1183,6 @@ impl NegJoin {
         let bindings = self.left.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         match &self.right {
-            RelAlgebra::Triple(r) => {
-                let join_indices = self
-                    .joiner
-                    .join_indices(
-                        &self.left.bindings_after_eliminate(),
-                        &self.right.bindings_after_eliminate(),
-                    )
-                    .unwrap();
-                r.neg_join(
-                    self.left.iter(tx, epoch, use_delta)?,
-                    join_indices,
-                    tx,
-                    eliminate_indices,
-                )
-            }
             RelAlgebra::Derived(r) => {
                 let join_indices = self
                     .joiner
@@ -1988,7 +1238,6 @@ impl InnerJoin {
         let mut left = used.clone();
         left.extend(self.joiner.left_keys.clone());
         if let Some(filters) = match &self.right {
-            RelAlgebra::Triple(r) => Some(&r.filters),
             RelAlgebra::Derived(r) => Some(&r.filters),
             _ => None,
         } {
@@ -2029,21 +1278,6 @@ impl InnerJoin {
                 f.join(
                     self.left.iter(tx, epoch, use_delta)?,
                     join_indices,
-                    eliminate_indices,
-                )
-            }
-            RelAlgebra::Triple(r) => {
-                let join_indices = self
-                    .joiner
-                    .join_indices(
-                        &self.left.bindings_after_eliminate(),
-                        &self.right.bindings_after_eliminate(),
-                    )
-                    .unwrap();
-                r.join(
-                    self.left.iter(tx, epoch, use_delta)?,
-                    join_indices,
-                    tx,
                     eliminate_indices,
                 )
             }
