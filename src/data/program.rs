@@ -466,10 +466,14 @@ impl InputProgram {
             };
         }
 
-        if let Some(ConstRule { data, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
+        if let Some(ConstRule { bindings, data, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
             inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
         }) {
-            return Ok(data.get(0).map(|row| row.0.len()).unwrap_or(0));
+            if bindings.is_empty() {
+                return Ok(data.get(0).map(|row| row.0.len()).unwrap_or(0));
+            } else {
+                return Ok(bindings.len())
+            }
         }
 
         Err(NoEntryError.into())

@@ -122,10 +122,7 @@ impl RelationHandle {
         let start = self.metadata.keys.len();
         let len = self.metadata.dependents.len();
         let mut ret = self.encode_key_prefix(len);
-        dbg!(&tuple);
         for i in 0..len {
-            dbg!(i);
-            dbg!(start);
             self.encode_key_element(&mut ret, i, &tuple.0[i + start])
         }
         Ok(ret)
@@ -141,7 +138,7 @@ impl RelationHandle {
                         actual_arity: *arity,
                         span: *span
                     }
-                )
+                );
             }
             InputRelationHandle::Defined { metadata, .. } => {
                 // check that every given key is found and compatible

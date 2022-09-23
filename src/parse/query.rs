@@ -6,20 +6,24 @@ use std::fmt::{Display, Formatter};
 
 use either::Left;
 use itertools::Itertools;
-use miette::{bail, Diagnostic, ensure, LabeledSpan, Report, Result};
+use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::algo::{AlgoHandle, AlgoNotFoundError};
-use crate::data::aggr::{Aggregation, parse_aggr};
+use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
-use crate::data::program::{AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, InputTerm, MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification};
-use crate::data::symb::Symbol;
+use crate::data::program::{
+    AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputNamedFieldRelationApplyAtom,
+    InputProgram, InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo,
+    InputTerm, MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
+};
+use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::parse::expr::build_expr;
 use crate::parse::schema::parse_schema;
+use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::runtime::relation::InputRelationHandle;
 
 #[derive(Error, Diagnostic, Debug)]
@@ -61,7 +65,7 @@ impl Diagnostic for MultipleRuleDefinitionError {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         Some(Box::new("parser::mult_rule_def"))
     }
-    fn labels(&self) -> Option<Box<dyn Iterator<Item=LabeledSpan> + '_>> {
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         Some(Box::new(
             self.1.iter().map(|s| LabeledSpan::new_with_span(None, s)),
         ))
@@ -204,7 +208,7 @@ pub(crate) fn parse_query(
                         #[error("Bad body for constant rule: {0:?}")]
                         #[diagnostic(code(parser::bad_body_for_const))]
                         #[diagnostic(help(
-                        "The body of a constant rule should evaluate to a list of lists"
+                            "The body of a constant rule should evaluate to a list of lists"
                         ))]
                         struct ConstRuleBodyNotList(DataValue);
 
@@ -215,7 +219,9 @@ pub(crate) fn parse_query(
                 #[derive(Error, Debug, Diagnostic)]
                 #[error("Constant rule {0} does not have data")]
                 #[diagnostic(code(parser::empty_const_rule))]
-                #[diagnostic(help("If you insist on using this empty rule, explicitly give its head"))]
+                #[diagnostic(help(
+                    "If you insist on using this empty rule, explicitly give its head"
+                ))]
                 struct EmptyConstRuleError(String, #[label] SourceSpan);
 
                 ensure!(
@@ -235,7 +241,7 @@ pub(crate) fn parse_query(
                                         #[error("Constant head must have the same arity as the data given")]
                                         #[diagnostic(code(parser::const_data_arity_mismatch))]
                                         #[diagnostic(help(
-                                        "First row length: {0}; the mismatch: {1:?}"
+                                            "First row length: {0}; the mismatch: {1:?}"
                                         ))]
                                         struct ConstRuleRowArityMismatch(
                                             usize,
@@ -355,15 +361,27 @@ pub(crate) fn parse_query(
                 let name = Symbol::new(name_p.as_str(), name_p.extract_span());
                 match args.next() {
                     None => {
-                        out_opts.store_relation = Some((InputRelationHandle::AdHoc {
-                            name,
-                            arity: 0,
-                            span,
-                        }, op))
+                        out_opts.store_relation = Some((
+                            InputRelationHandle::AdHoc {
+                                name,
+                                arity: 0,
+                                span,
+                            },
+                            op,
+                        ))
                     }
                     Some(schema_p) => {
                         let (metadata, key_bindings, dep_bindings) = parse_schema(schema_p)?;
-                        out_opts.store_relation = Some((InputRelationHandle::Defined { name, metadata, key_bindings, dep_bindings, span }, op))
+                        out_opts.store_relation = Some((
+                            InputRelationHandle::Defined {
+                                name,
+                                metadata,
+                                key_bindings,
+                                dep_bindings,
+                                span,
+                            },
+                            op,
+                        ))
                     }
                 }
             }
@@ -392,9 +410,36 @@ pub(crate) fn parse_query(
         out_opts,
     };
 
+    if prog.prog.is_empty() && prog.const_rules.is_empty() {
+        if let Some((
+            InputRelationHandle::Defined {
+                key_bindings,
+                dep_bindings,
+                ..
+            },
+            RelationOp::Create,
+        )) = &prog.out_opts.store_relation
+        {
+            let mut bindings = key_bindings.clone();
+            bindings.extend_from_slice(dep_bindings);
+            prog.const_rules.insert(
+                MagicSymbol::Muggle {
+                    inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
+                },
+                ConstRule {
+                    bindings,
+                    data: vec![],
+                    span: SourceSpan(0, 0),
+                },
+            );
+        }
+    }
+
     let head_arity = prog.get_entry_arity()?;
 
-    if let Some((InputRelationHandle::AdHoc { arity, .. }, _)) = prog.out_opts.store_relation.borrow_mut() {
+    if let Some((InputRelationHandle::AdHoc { arity, .. }, _)) =
+        prog.out_opts.store_relation.borrow_mut()
+    {
         *arity = head_arity
     }
 
@@ -561,21 +606,22 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
             let mut src = src.into_inner();
             let name_p = src.next().unwrap();
             let name = Symbol::new(&name_p.as_str()[1..], name_p.extract_span());
-            let args = src.next().unwrap()
+            let args = src
+                .next()
+                .unwrap()
                 .into_inner()
-                .map(|pair| -> Result<(SmartString<LazyCompact>, InputTerm<DataValue>)> {
-                    let mut inner = pair.into_inner();
-                    let name_p = inner.next().unwrap();
-                    let name = SmartString::from(name_p.as_str());
-                    let arg = parse_rule_arg(inner.next().unwrap(), param_pool)?;
-                    Ok((name, arg))
-                }).try_collect()?;
+                .map(
+                    |pair| -> Result<(SmartString<LazyCompact>, InputTerm<DataValue>)> {
+                        let mut inner = pair.into_inner();
+                        let name_p = inner.next().unwrap();
+                        let name = SmartString::from(name_p.as_str());
+                        let arg = parse_rule_arg(inner.next().unwrap(), param_pool)?;
+                        Ok((name, arg))
+                    },
+                )
+                .try_collect()?;
             InputAtom::NamedFieldRelation {
-                inner: InputNamedFieldRelationApplyAtom {
-                    name,
-                    args,
-                    span,
-                }
+                inner: InputNamedFieldRelationApplyAtom { name, args, span },
             }
         }
         rule => unreachable!("{:?}", rule),
