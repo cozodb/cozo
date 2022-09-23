@@ -61,13 +61,13 @@ impl SessionTx {
                 span,
                 ..
             } => {
-                let key_extractors = make_extractors(
-                    &relation_store.metadata.keys,
-                    &metadata.keys,
-                    key_bindings,
-                    headers,
-                )?;
                 if op == RelationOp::Retract {
+                    let key_extractors = make_extractors(
+                        &relation_store.metadata.keys,
+                        &metadata.keys,
+                        key_bindings,
+                        headers,
+                    )?;
                     for tuple in res_iter {
                         let tuple = tuple?;
                         let extracted: Vec<_> = key_extractors
@@ -78,26 +78,32 @@ impl SessionTx {
                         self.tx.del(&key, Snd)?;
                     }
                 } else {
+                    let mut key_extractors = make_extractors(
+                        &relation_store.metadata.keys,
+                        &metadata.keys,
+                        key_bindings,
+                        headers,
+                    )?;
+
                     let val_extractors = make_extractors(
                         &relation_store.metadata.dependents,
                         &metadata.dependents,
                         dep_bindings,
                         headers,
                     )?;
+                    key_extractors.extend(val_extractors);
+
                     for tuple in res_iter {
                         let tuple = tuple?;
 
-                        let extracted: Vec<_> = key_extractors
-                            .iter()
-                            .map(|ex| ex.extract_data(&tuple))
-                            .try_collect()?;
-                        let key = relation_store.adhoc_encode_key(&Tuple(extracted), *span)?;
-
-                        let extracted: Vec<_> = val_extractors
-                            .iter()
-                            .map(|ex| ex.extract_data(&tuple))
-                            .try_collect()?;
-                        let val = relation_store.adhoc_encode_val(&Tuple(extracted), *span)?;
+                        let extracted = Tuple(
+                            key_extractors
+                                .iter()
+                                .map(|ex| ex.extract_data(&tuple))
+                                .try_collect()?,
+                        );
+                        let key = relation_store.adhoc_encode_key(&extracted, *span)?;
+                        let val = relation_store.adhoc_encode_val(&extracted, *span)?;
 
                         self.tx.put(&key, &val, Snd)?;
                     }

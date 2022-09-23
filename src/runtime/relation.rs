@@ -122,7 +122,10 @@ impl RelationHandle {
         let start = self.metadata.keys.len();
         let len = self.metadata.dependents.len();
         let mut ret = self.encode_key_prefix(len);
+        dbg!(&tuple);
         for i in 0..len {
+            dbg!(i);
+            dbg!(start);
             self.encode_key_element(&mut ret, i, &tuple.0[i + start])
         }
         Ok(ret)
@@ -244,9 +247,11 @@ impl RelationHandle {
         tx: &SessionTx,
         prefix: &Tuple,
     ) -> impl Iterator<Item = Result<Tuple>> {
-        let mut upper = prefix.0.clone();
+        let mut lower = prefix.0.clone();
+        lower.truncate(self.metadata.keys.len());
+        let mut upper = lower.clone();
         upper.push(DataValue::Bot);
-        let prefix_encoded = prefix.encode_as_key(self.id);
+        let prefix_encoded = Tuple(lower).encode_as_key(self.id);
         let upper_encoded = Tuple(upper).encode_as_key(self.id);
         RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
     }
@@ -290,13 +295,20 @@ impl RelationIterator {
         } else {
             self.started = true;
         }
-        Ok(match self.inner.key()? {
+        Ok(match self.inner.pair()? {
             None => None,
-            Some(k_slice) => {
+            Some((k_slice, v_slice)) => {
                 if compare_tuple_keys(&self.upper_bound, k_slice) != Greater {
                     None
                 } else {
-                    Some(EncodedTuple(k_slice).decode())
+                    let mut tup = EncodedTuple(k_slice).decode();
+                    if !v_slice.is_empty() {
+                        let v_tup = EncodedTuple(v_slice);
+                        if v_tup.arity() > 0 {
+                            tup.0.extend(v_tup.decode().0);
+                        }
+                    }
+                    Some(tup)
                 }
             }
         })
