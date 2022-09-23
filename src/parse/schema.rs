@@ -75,8 +75,8 @@ fn parse_col(pair: Pair<'_>) -> Result<(ColumnDef, Symbol)> {
         match nxt.as_rule() {
             Rule::col_type => typing = parse_type(nxt)?,
             Rule::expr => default_gen = Some(build_expr(nxt, &Default::default())?),
-            Rule::ident => binding_candidate = Some(Symbol::new(nxt.as_str(), nxt.extract_span())),
-            _ => unreachable!()
+            Rule::out_arg => binding_candidate = Some(Symbol::new(nxt.as_str(), nxt.extract_span())),
+            r => unreachable!("{:?}", r)
         }
     }
     let binding = binding_candidate.unwrap_or_else(||

@@ -4,7 +4,7 @@ use std::fmt::{Debug, Formatter};
 use std::sync::atomic::Ordering;
 
 use log::error;
-use miette::{bail, Diagnostic, ensure, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smartstring::{LazyCompact, SmartString};
@@ -22,15 +22,15 @@ use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
 #[derive(
-Copy,
-Clone,
-Eq,
-PartialEq,
-Debug,
-serde_derive::Serialize,
-serde_derive::Deserialize,
-PartialOrd,
-Ord,
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Debug,
+    serde_derive::Serialize,
+    serde_derive::Deserialize,
+    PartialOrd,
+    Ord,
 )]
 pub(crate) struct RelationId(pub(crate) u64);
 
@@ -101,27 +101,24 @@ impl RelationHandle {
         }
         val.serialize(&mut Serializer::new(ret)).unwrap();
     }
-    pub(crate) fn adhoc_encode_key(&self, tuple: &Tuple) -> Result<Vec<u8>> {
+    pub(crate) fn adhoc_encode_key(&self, tuple: &Tuple, span: SourceSpan) -> Result<Vec<u8>> {
         let len = self.metadata.keys.len();
-        ensure!(tuple.0.len() >= len, StoredRelArityMismatch {
-            name: self.name.to_string(),
-            expect_arity: self.arity(),
-            actual_arity: tuple.0.len(),
-            span: SourceSpan(0, 0)
-        });
+        ensure!(
+            tuple.0.len() >= len,
+            StoredRelArityMismatch {
+                name: self.name.to_string(),
+                expect_arity: self.arity(),
+                actual_arity: tuple.0.len(),
+                span
+            }
+        );
         let mut ret = self.encode_key_prefix(len);
         for i in 0..len {
             self.encode_key_element(&mut ret, i, &tuple.0[i])
         }
         Ok(ret)
     }
-    pub(crate) fn adhoc_encode_val(&self, tuple: &Tuple) -> Result<Vec<u8>> {
-        ensure!(tuple.0.len() == self.arity(), StoredRelArityMismatch {
-            name: self.name.to_string(),
-            expect_arity: self.arity(),
-            actual_arity: tuple.0.len(),
-            span: SourceSpan(0, 0)
-        });
+    pub(crate) fn adhoc_encode_val(&self, tuple: &Tuple, _span: SourceSpan) -> Result<Vec<u8>> {
         let start = self.metadata.keys.len();
         let len = self.metadata.dependents.len();
         let mut ret = self.encode_key_prefix(len);
@@ -132,13 +129,16 @@ impl RelationHandle {
     }
     pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle) -> Result<()> {
         match inp {
-            InputRelationHandle::AdHoc { arity, name } => {
-                ensure!(*arity == self.arity(), StoredRelArityMismatch {
-                    name: inp.name().to_string(),
-                    expect_arity: self.arity(),
-                    actual_arity: *arity,
-                    span: name.span
-                })
+            InputRelationHandle::AdHoc { arity, span, .. } => {
+                ensure!(
+                    *arity == self.arity(),
+                    StoredRelArityMismatch {
+                        name: inp.name().to_string(),
+                        expect_arity: self.arity(),
+                        actual_arity: *arity,
+                        span: *span
+                    }
+                )
             }
             InputRelationHandle::Defined { metadata, .. } => {
                 // check that every given key is found and compatible
@@ -163,15 +163,25 @@ impl RelationHandle {
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) enum InputRelationHandle {
-    AdHoc { name: Symbol, arity: usize },
-    Defined { name: Symbol, metadata: StoredRelationMetadata, key_bindings: Vec<Symbol>, dep_bindings: Vec<Symbol> },
+    AdHoc {
+        name: Symbol,
+        arity: usize,
+        span: SourceSpan,
+    },
+    Defined {
+        name: Symbol,
+        metadata: StoredRelationMetadata,
+        key_bindings: Vec<Symbol>,
+        dep_bindings: Vec<Symbol>,
+        span: SourceSpan,
+    },
 }
 
 impl InputRelationHandle {
     pub(crate) fn name(&self) -> &Symbol {
         match self {
             InputRelationHandle::AdHoc { name, .. } => name,
-            InputRelationHandle::Defined { name, .. } => name
+            InputRelationHandle::Defined { name, .. } => name,
         }
     }
     pub(crate) fn get_store_meta(&self) -> StoredRelationMetadata {
@@ -181,7 +191,10 @@ impl InputRelationHandle {
                 for i in 0..*arity {
                     keys.push(ColumnDef {
                         name: SmartString::from(format!("_{}", i)),
-                        typing: NullableColType { coltype: ColType::Any, nullable: true },
+                        typing: NullableColType {
+                            coltype: ColType::Any,
+                            nullable: true,
+                        },
                         default_gen: None,
                     });
                 }
@@ -190,7 +203,7 @@ impl InputRelationHandle {
                     dependents: vec![],
                 }
             }
-            InputRelationHandle::Defined { metadata, .. } => metadata.clone()
+            InputRelationHandle::Defined { metadata, .. } => metadata.clone(),
         }
     }
 }
@@ -220,7 +233,7 @@ impl RelationHandle {
             RelationDeserError
         })?)
     }
-    pub(crate) fn scan_all(&self, tx: &SessionTx) -> impl Iterator<Item=Result<Tuple>> {
+    pub(crate) fn scan_all(&self, tx: &SessionTx) -> impl Iterator<Item = Result<Tuple>> {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
         RelationIterator::new(tx, &lower, &upper)
@@ -230,7 +243,7 @@ impl RelationHandle {
         &self,
         tx: &SessionTx,
         prefix: &Tuple,
-    ) -> impl Iterator<Item=Result<Tuple>> {
+    ) -> impl Iterator<Item = Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bot);
         let prefix_encoded = prefix.encode_as_key(self.id);
@@ -243,7 +256,7 @@ impl RelationHandle {
         prefix: &Tuple,
         lower: &[DataValue],
         upper: &[DataValue],
-    ) -> impl Iterator<Item=Result<Tuple>> {
+    ) -> impl Iterator<Item = Result<Tuple>> {
         let mut lower_t = prefix.clone();
         lower_t.0.extend_from_slice(lower);
         let mut upper_t = prefix.clone();

@@ -154,7 +154,7 @@ impl InputAtom {
                         .unwrap_or_else(|| InputTerm::Var { name: gen.next(span) });
                     new_args.push(arg)
                 }
-                let r = InputRuleApplyAtom {
+                let r = InputRelationApplyAtom {
                     name,
                     args: new_args,
                     span,

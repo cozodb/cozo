@@ -55,7 +55,7 @@ negation = {"not" ~ atom}
 apply = {ident ~ "(" ~ apply_args ~ ")"}
 apply_args = {(expr ~ ",")* ~ expr?}
 named_apply_args = {(named_apply_pair ~ ",")* ~ named_apply_pair?}
-named_apply_pair = {ident ~ "=" ~ expr}
+named_apply_pair = {ident ~ ":" ~ expr}
 grouped = _{"(" ~ rule_body ~ ")"}
 
 expr = {unary ~ (operation ~ unary)*}

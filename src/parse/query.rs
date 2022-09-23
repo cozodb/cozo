@@ -341,6 +341,7 @@ pub(crate) fn parse_query(
                 }
             }
             Rule::relation_option => {
+                let span = pair.extract_span();
                 let mut args = pair.into_inner();
                 let op = match args.next().unwrap().as_rule() {
                     Rule::relation_create => RelationOp::Create,
@@ -357,11 +358,12 @@ pub(crate) fn parse_query(
                         out_opts.store_relation = Some((InputRelationHandle::AdHoc {
                             name,
                             arity: 0,
+                            span,
                         }, op))
                     }
                     Some(schema_p) => {
                         let (metadata, key_bindings, dep_bindings) = parse_schema(schema_p)?;
-                        out_opts.store_relation = Some((InputRelationHandle::Defined { name, metadata, key_bindings, dep_bindings }, op))
+                        out_opts.store_relation = Some((InputRelationHandle::Defined { name, metadata, key_bindings, dep_bindings, span }, op))
                     }
                 }
             }
@@ -563,6 +565,7 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 .into_inner()
                 .map(|pair| -> Result<(SmartString<LazyCompact>, InputTerm<DataValue>)> {
                     let mut inner = pair.into_inner();
+                    let name_p = inner.next().unwrap();
                     let name = SmartString::from(name_p.as_str());
                     let arg = parse_rule_arg(inner.next().unwrap(), param_pool)?;
                     Ok((name, arg))
@@ -594,7 +597,7 @@ fn parse_rule_arg(
                 _ => bail!(ParseError { span }),
             }
         }
-        _ => unreachable!(),
+        r => unreachable!("{:?}", r),
     })
 }
 

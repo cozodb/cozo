@@ -18,11 +18,10 @@ use crate::runtime::transact::SessionTx;
 #[diagnostic(code(eval::relation_arity_mismatch))]
 struct RelationArityMismatch(String, usize, usize);
 
-
 impl SessionTx {
     pub(crate) fn execute_relation<'a>(
         &'a mut self,
-        res_iter: impl Iterator<Item=Result<Tuple>> + 'a,
+        res_iter: impl Iterator<Item = Result<Tuple>> + 'a,
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
@@ -39,41 +38,66 @@ impl SessionTx {
             self.get_relation(&meta.name())?
         };
         match meta {
-            InputRelationHandle::AdHoc { .. } => {
+            InputRelationHandle::AdHoc { span, .. } => {
                 if op == RelationOp::Retract {
                     for tuple in res_iter {
                         let tuple = tuple?;
-                        let key = relation_store.adhoc_encode_key(&tuple)?;
+                        let key = relation_store.adhoc_encode_key(&tuple, *span)?;
                         self.tx.del(&key, Snd)?;
                     }
                 } else {
                     for tuple in res_iter {
                         let tuple = tuple?;
-                        let key = relation_store.adhoc_encode_key(&tuple)?;
-                        let val = relation_store.adhoc_encode_val(&tuple)?;
+                        let key = relation_store.adhoc_encode_key(&tuple, *span)?;
+                        let val = relation_store.adhoc_encode_val(&tuple, *span)?;
                         self.tx.put(&key, &val, Snd)?;
                     }
                 }
             }
-            InputRelationHandle::Defined { metadata, key_bindings, dep_bindings, .. } => {
-                let key_extractors = make_extractors(&relation_store.metadata.keys, &metadata.keys, key_bindings, headers)?;
+            InputRelationHandle::Defined {
+                metadata,
+                key_bindings,
+                dep_bindings,
+                span,
+                ..
+            } => {
+                let key_extractors = make_extractors(
+                    &relation_store.metadata.keys,
+                    &metadata.keys,
+                    key_bindings,
+                    headers,
+                )?;
                 if op == RelationOp::Retract {
                     for tuple in res_iter {
                         let tuple = tuple?;
-                        let extracted: Vec<_> = key_extractors.iter().map(|ex| ex.extract_data(&tuple)).try_collect()?;
-                        let key = relation_store.adhoc_encode_key(&Tuple(extracted))?;
+                        let extracted: Vec<_> = key_extractors
+                            .iter()
+                            .map(|ex| ex.extract_data(&tuple))
+                            .try_collect()?;
+                        let key = relation_store.adhoc_encode_key(&Tuple(extracted), *span)?;
                         self.tx.del(&key, Snd)?;
                     }
                 } else {
-                    let val_extractors = make_extractors(&relation_store.metadata.dependents, &metadata.dependents, dep_bindings, headers)?;
+                    let val_extractors = make_extractors(
+                        &relation_store.metadata.dependents,
+                        &metadata.dependents,
+                        dep_bindings,
+                        headers,
+                    )?;
                     for tuple in res_iter {
                         let tuple = tuple?;
 
-                        let extracted: Vec<_> = key_extractors.iter().map(|ex| ex.extract_data(&tuple)).try_collect()?;
-                        let key = relation_store.adhoc_encode_key(&Tuple(extracted))?;
+                        let extracted: Vec<_> = key_extractors
+                            .iter()
+                            .map(|ex| ex.extract_data(&tuple))
+                            .try_collect()?;
+                        let key = relation_store.adhoc_encode_key(&Tuple(extracted), *span)?;
 
-                        let extracted: Vec<_> = val_extractors.iter().map(|ex| ex.extract_data(&tuple)).try_collect()?;
-                        let val = relation_store.adhoc_encode_key(&Tuple(extracted))?;
+                        let extracted: Vec<_> = val_extractors
+                            .iter()
+                            .map(|ex| ex.extract_data(&tuple))
+                            .try_collect()?;
+                        let val = relation_store.adhoc_encode_val(&Tuple(extracted), *span)?;
 
                         self.tx.put(&key, &val, Snd)?;
                     }
@@ -83,7 +107,6 @@ impl SessionTx {
         Ok(to_clear)
     }
 }
-
 
 enum DataExtractor {
     DefaultExtractor(Expr, NullableColType),
@@ -96,19 +119,29 @@ impl DataExtractor {
             DataExtractor::DefaultExtractor(expr, typ) => {
                 typ.coerce(expr.clone().eval_to_const()?)?
             }
-            DataExtractor::IndexExtractor(i, typ) => {
-                typ.coerce(tuple.0[*i].clone())?
-            }
+            DataExtractor::IndexExtractor(i, typ) => typ.coerce(tuple.0[*i].clone())?,
         })
     }
 }
 
-fn make_extractors(stored: &[ColumnDef], input: &[ColumnDef], bindings: &[Symbol], tuple_headers: &[Symbol])
-                   -> Result<Vec<DataExtractor>> {
-    stored.iter().map(|s| make_extractor(s, input, bindings, tuple_headers)).try_collect()
+fn make_extractors(
+    stored: &[ColumnDef],
+    input: &[ColumnDef],
+    bindings: &[Symbol],
+    tuple_headers: &[Symbol],
+) -> Result<Vec<DataExtractor>> {
+    stored
+        .iter()
+        .map(|s| make_extractor(s, input, bindings, tuple_headers))
+        .try_collect()
 }
 
-fn make_extractor(stored: &ColumnDef, input: &[ColumnDef], bindings: &[Symbol], tuple_headers: &[Symbol]) -> Result<DataExtractor> {
+fn make_extractor(
+    stored: &ColumnDef,
+    input: &[ColumnDef],
+    bindings: &[Symbol],
+    tuple_headers: &[Symbol],
+) -> Result<DataExtractor> {
     for (inp_col, inp_binding) in input.iter().zip(bindings.iter()) {
         if inp_col.name == stored.name {
             for (idx, tuple_head) in tuple_headers.iter().enumerate() {
@@ -119,7 +152,10 @@ fn make_extractor(stored: &ColumnDef, input: &[ColumnDef], bindings: &[Symbol], 
         }
     }
     if let Some(expr) = &stored.default_gen {
-        Ok(DataExtractor::DefaultExtractor(expr.clone(), stored.typing.clone()))
+        Ok(DataExtractor::DefaultExtractor(
+            expr.clone(),
+            stored.typing.clone(),
+        ))
     } else {
         #[derive(Debug, Error, Diagnostic)]
         #[error("Cannot make extractor for column {0}")]

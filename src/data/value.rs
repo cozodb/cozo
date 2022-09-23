@@ -40,8 +40,8 @@ impl Hash for RegexWrapper {
 
 impl Serialize for RegexWrapper {
     fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
+    where
+        S: serde::Serializer,
     {
         panic!("serializing regex");
     }
@@ -49,8 +49,8 @@ impl Serialize for RegexWrapper {
 
 impl<'de> Deserialize<'de> for RegexWrapper {
     fn deserialize<D>(_deserializer: D) -> std::result::Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         panic!("deserializing regex");
     }
@@ -77,7 +77,7 @@ impl PartialOrd for RegexWrapper {
 }
 
 #[derive(
-Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
+    Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
 pub(crate) enum DataValue {
     #[serde(rename = "0", alias = "Null")]
@@ -105,7 +105,6 @@ pub(crate) enum DataValue {
     #[serde(rename = "_", alias = "Bot")]
     Bot,
 }
-
 
 impl From<i64> for DataValue {
     fn from(v: i64) -> Self {
@@ -284,7 +283,7 @@ impl DataValue {
     pub(crate) fn get_bool(&self) -> Option<bool> {
         match self {
             DataValue::Bool(b) => Some(*b),
-            _ => None
+            _ => None,
         }
     }
     pub(crate) fn uuid(uuid: uuid::Uuid) -> Self {
@@ -293,10 +292,8 @@ impl DataValue {
     pub(crate) fn get_uuid(&self) -> Option<Uuid> {
         match self {
             DataValue::Uuid(UuidWrapper(uuid)) => Some(*uuid),
-            DataValue::Str(s) => {
-                uuid::Uuid::try_parse(s).ok()
-            }
-            _ => None
+            DataValue::Str(s) => uuid::Uuid::try_parse(s).ok(),
+            _ => None,
         }
     }
 }
