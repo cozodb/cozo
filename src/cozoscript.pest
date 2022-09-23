@@ -162,9 +162,9 @@ literal = _{ null | boolean | number | string}
 
 // schema
 
-table_schema = {"{" ~ table_cols ~ "=>" ~ table_cols ~ "}"}
+table_schema = {"{" ~ table_cols ~ ("=>" ~ table_cols)? ~ "}"}
 table_cols = {(table_col ~ ",")* ~ table_col?}
-table_col = {ident ~ ":" ~ col_type ~ ("default" ~ expr)? ~ ("=" ~ ident)?}
+table_col = {ident ~ (":" ~ col_type)? ~ ("default" ~ expr)? ~ ("=" ~ out_arg)?}
 col_type = {(any_type | int_type | float_type | string_type | bytes_type | uuid_type | list_type | tuple_type) ~ "?"?}
 any_type = {"Any"}
 int_type = {"Int"}

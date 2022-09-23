@@ -26,7 +26,7 @@ use crate::data::tuple::{compare_tuple_keys, EncodedTuple, rusty_scratch_cmp, SC
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::{CompactTarget, SysOp};
-use crate::runtime::relation::{RelationId, RelationHandle};
+use crate::runtime::relation::{RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
@@ -282,8 +282,8 @@ impl Db {
                 struct StoreRelationConflict(String);
 
                 ensure!(
-                    !tx.relation_exists(&meta.name)?,
-                    StoreRelationConflict(meta.name.to_string())
+                    !tx.relation_exists(&meta.name())?,
+                    StoreRelationConflict(meta.name().to_string())
                 )
             } else if *op != RelationOp::ReDerive {
                 #[derive(Debug, Error, Diagnostic)]
@@ -291,10 +291,14 @@ impl Db {
                 #[diagnostic(code(eval::stored_relation_not_found))]
                 struct StoreRelationNotFoundError(String);
 
+                let existing = tx.get_relation(&meta.name())?;
+
                 ensure!(
-                    tx.relation_exists(&meta.name)?,
-                    StoreRelationNotFoundError(meta.name.to_string())
-                )
+                    tx.relation_exists(&meta.name())?,
+                    StoreRelationNotFoundError(meta.name().to_string())
+                );
+
+                existing.ensure_compatible(meta)?;
             }
         };
         let program = input_program
@@ -384,8 +388,8 @@ impl Db {
             } else {
                 Right(sorted_iter)
             };
-            if let Some((meta, relation_op)) = input_program.out_opts.store_relation {
-                let to_clear = tx.execute_relation(sorted_iter, relation_op, &meta)?;
+            if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
+                let to_clear = tx.execute_relation(sorted_iter, *relation_op, &meta, &input_program.get_entry_out_head_or_default()?)?;
                 if let Some(c) = to_clear {
                     clean_ups.push(c);
                 }
@@ -410,8 +414,8 @@ impl Db {
                 Left(result.scan_all())
             };
 
-            if let Some((meta, relation_op)) = input_program.out_opts.store_relation {
-                let to_clear = tx.execute_relation(scan, relation_op, &meta)?;
+            if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
+                let to_clear = tx.execute_relation(scan, *relation_op, &meta, &input_program.get_entry_out_head_or_default()?)?;
                 if let Some(c) = to_clear {
                     clean_ups.push(c);
                 }

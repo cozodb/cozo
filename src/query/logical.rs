@@ -149,8 +149,8 @@ impl InputAtom {
             InputAtom::NamedFieldRelation { inner: InputNamedFieldRelationApplyAtom { name, mut args, span } } => {
                 let stored = tx.get_relation(&name)?;
                 let mut new_args = vec![];
-                for (arg_name, _) in stored.metadata.keys.iter().chain(stored.metadata.dependents.iter()) {
-                    let arg = args.remove(arg_name)
+                for col_def in stored.metadata.keys.iter().chain(stored.metadata.dependents.iter()) {
+                    let arg = args.remove(&col_def.name)
                         .unwrap_or_else(|| InputTerm::Var { name: gen.next(span) });
                     new_args.push(arg)
                 }

@@ -16,7 +16,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::derived::DerivedRelStore;
-use crate::runtime::relation::{InputRelationHandle};
+use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, ConstRule>;
@@ -474,6 +474,15 @@ impl InputProgram {
 
         Err(NoEntryError.into())
     }
+    pub(crate) fn get_entry_out_head_or_default(&self) -> Result<Vec<Symbol>> {
+        match self.get_entry_out_head() {
+            Ok(r) => Ok(r),
+            Err(_) => {
+                let arity = self.get_entry_arity()?;
+                Ok((0..arity).map(|i| Symbol::new(format!("_{}", i), SourceSpan(0, 0))).collect())
+            }
+        }
+    }
     pub(crate) fn get_entry_out_head(&self) -> Result<Vec<Symbol>> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
@@ -833,7 +842,7 @@ impl InputAtom {
             | InputAtom::Conjunction { span, .. }
             | InputAtom::Disjunction { span, .. } => *span,
             InputAtom::Rule { inner, .. } => inner.span,
-            InputAtom::NamedFieldRelation {inner, ..} => inner.span,
+            InputAtom::NamedFieldRelation { inner, .. } => inner.span,
             InputAtom::Relation { inner, .. } => inner.span,
             InputAtom::Predicate { inner, .. } => inner.span(),
             InputAtom::Unification { inner, .. } => inner.span,

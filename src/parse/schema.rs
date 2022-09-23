@@ -1,51 +1,86 @@
+use std::collections::BTreeSet;
+
 use itertools::Itertools;
-use miette::{Diagnostic, ensure, Result};
-use smartstring::{LazyCompact, SmartString};
+use miette::{bail, Diagnostic, ensure, Result};
+use smartstring::SmartString;
 use thiserror::Error;
 
-use crate::data::expr::Expr;
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::{ExtractSpan, Pair, Rule, SourceSpan};
 use crate::parse::expr::build_expr;
 
-pub(crate) fn build_schema(pair: Pair<'_>) -> Result<(StoredRelationMetadata, Vec<Option<Symbol>>)> {
-    assert_eq!(pair.as_rule(), Rule::table_schema);
+pub(crate) fn parse_schema(pair: Pair<'_>) -> Result<(StoredRelationMetadata, Vec<Symbol>, Vec<Symbol>)> {
+    // assert_eq!(pair.as_rule(), Rule::table_schema);
+    let span = pair.extract_span();
 
     let mut src = pair.into_inner();
     let mut keys = vec![];
     let mut dependents = vec![];
-    let mut idents = vec![];
+    let mut key_bindings = vec![];
+    let mut dep_bindings = vec![];
+    let mut seen_names = BTreeSet::new();
+
+    #[derive(Debug, Error, Diagnostic)]
+    #[error("Column {0} is defined multiple times")]
+    #[diagnostic(code(parser::dup_name_in_cols))]
+    struct DuplicateNameInCols(String, #[label] SourceSpan);
     for p in src.next().unwrap().into_inner() {
+        let span = p.extract_span();
         let (col, ident) = parse_col(p)?;
+        if !seen_names.insert(col.name.clone()) {
+            bail!(DuplicateNameInCols(col.name.to_string(), span));
+        }
         keys.push(col);
-        idents.push(ident)
+        key_bindings.push(ident)
     }
-    for p in src.next().unwrap().into_inner() {
-        let (col, ident) = parse_col(p)?;
-        dependents.push(col);
-        idents.push(ident)
+    if let Some(ps) = src.next() {
+        for p in ps.into_inner() {
+            let span = p.extract_span();
+            let (col, ident) = parse_col(p)?;
+            if !seen_names.insert(col.name.clone()) {
+                bail!(DuplicateNameInCols(col.name.to_string(), span));
+            }
+            dependents.push(col);
+            dep_bindings.push(ident)
+        }
+    }
+
+    if seen_names.is_empty() {
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Empty schema is not allowed here")]
+        #[diagnostic(code(parser::empty_rel_schema))]
+        struct EmptySchema(#[label] SourceSpan);
+        bail!(EmptySchema(span))
     }
 
     Ok((StoredRelationMetadata {
         keys,
         dependents,
-    }, idents))
+    }, key_bindings, dep_bindings))
 }
 
-fn parse_col(pair: Pair<'_>) -> Result<(ColumnDef, Option<Symbol>)> {
+fn parse_col(pair: Pair<'_>) -> Result<(ColumnDef, Symbol)> {
     let mut src = pair.into_inner();
-    let name = SmartString::from(src.next().unwrap().as_str());
-    let typing = parse_type(src.next().unwrap())?;
+    let name_p = src.next().unwrap();
+    let name = SmartString::from(name_p.as_str());
+    let mut typing = NullableColType {
+        coltype: ColType::Any,
+        nullable: true,
+    };
     let mut default_gen = None;
-    let mut binding = None;
+    let mut binding_candidate = None;
     for nxt in src {
         match nxt.as_rule() {
+            Rule::col_type => typing = parse_type(nxt)?,
             Rule::expr => default_gen = Some(build_expr(nxt, &Default::default())?),
-            Rule::ident => binding = Some(Symbol::new(nxt.as_str(), nxt.extract_span()))
+            Rule::ident => binding_candidate = Some(Symbol::new(nxt.as_str(), nxt.extract_span())),
+            _ => unreachable!()
         }
     }
+    let binding = binding_candidate.unwrap_or_else(||
+        Symbol::new(&name as &str, name_p.extract_span()));
     Ok((ColumnDef {
         name,
         typing,
@@ -87,7 +122,7 @@ fn parse_type_inner(pair: Pair<'_>) -> Result<ColType> {
 
                     let n = dv.get_int()
                         .ok_or_else(|| BadListLenSpec(dv, span))?;
-                    ensure!(n >=0, BadListLenSpec(dv, span));
+                    ensure!(n >= 0, BadListLenSpec(DataValue::from(n), span));
                     Some(n as usize)
                 }
             };
@@ -96,5 +131,6 @@ fn parse_type_inner(pair: Pair<'_>) -> Result<ColType> {
         Rule::tuple_type => {
             ColType::Tuple(pair.into_inner().map(|p| parse_type(p)).try_collect()?)
         }
+        _ => unreachable!()
     })
 }

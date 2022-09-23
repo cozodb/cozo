@@ -19,7 +19,8 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::parse::expr::build_expr;
-use crate::runtime::relation::{InputRelationHandle, RelationHandle, RelationId};
+use crate::parse::schema::parse_schema;
+use crate::runtime::relation::InputRelationHandle;
 
 #[derive(Error, Diagnostic, Debug)]
 #[error("Query option {0} is not constant")]
@@ -359,7 +360,8 @@ pub(crate) fn parse_query(
                         }, op))
                     }
                     Some(schema_p) => {
-                        todo!()
+                        let (metadata, key_bindings, dep_bindings) = parse_schema(schema_p)?;
+                        out_opts.store_relation = Some((InputRelationHandle::Defined { name, metadata, key_bindings, dep_bindings }, op))
                     }
                 }
             }
@@ -390,9 +392,8 @@ pub(crate) fn parse_query(
 
     let head_arity = prog.get_entry_arity()?;
 
-    if let Some((meta, _)) = prog.out_opts.store_relation.borrow_mut() {
-        todo!()
-        // meta.arity = head_arity;
+    if let Some((InputRelationHandle::AdHoc { arity, .. }, _)) = prog.out_opts.store_relation.borrow_mut() {
+        *arity = head_arity
     }
 
     if !prog.out_opts.sorters.is_empty() {

@@ -1,9 +1,10 @@
+use std::cmp::max;
 use std::cmp::Ordering::Greater;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::Ordering;
 
 use log::error;
-use miette::{bail, Diagnostic, Result};
+use miette::{bail, Diagnostic, ensure, Result};
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smartstring::{LazyCompact, SmartString};
@@ -12,10 +13,11 @@ use thiserror::Error;
 use cozorocks::CfHandle::Snd;
 use cozorocks::DbIter;
 
-use crate::data::relation::StoredRelationMetadata;
+use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{compare_tuple_keys, EncodedTuple, Tuple};
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
 
@@ -62,10 +64,135 @@ pub(crate) struct RelationHandle {
     pub(crate) metadata: StoredRelationMetadata,
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Arity mismatch for stored relation {name}: expect {expect_arity}, got {actual_arity}")]
+#[diagnostic(code(eval::stored_rel_arity_mismatch))]
+struct StoredRelArityMismatch {
+    name: String,
+    expect_arity: usize,
+    actual_arity: usize,
+    #[label]
+    span: SourceSpan,
+}
+
+impl RelationHandle {
+    fn encode_key_prefix(&self, len: usize) -> Vec<u8> {
+        let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
+        let prefix_bytes = self.id.0.to_be_bytes();
+        ret.extend([
+            prefix_bytes[2],
+            prefix_bytes[3],
+            prefix_bytes[4],
+            prefix_bytes[5],
+            prefix_bytes[6],
+            prefix_bytes[7],
+        ]);
+        ret.extend((len as u16).to_be_bytes());
+        ret.resize(max(6, 4 * (len + 1)), 0);
+
+        ret
+    }
+    fn encode_key_element(&self, ret: &mut Vec<u8>, idx: usize, val: &DataValue) {
+        if idx > 0 {
+            let pos = (ret.len() as u32).to_be_bytes();
+            for (i, u) in pos.iter().enumerate() {
+                ret[4 * (1 + idx) + i] = *u;
+            }
+        }
+        val.serialize(&mut Serializer::new(ret)).unwrap();
+    }
+    pub(crate) fn adhoc_encode_key(&self, tuple: &Tuple) -> Result<Vec<u8>> {
+        let len = self.metadata.keys.len();
+        ensure!(tuple.0.len() >= len, StoredRelArityMismatch {
+            name: self.name.to_string(),
+            expect_arity: self.arity(),
+            actual_arity: tuple.0.len(),
+            span: SourceSpan(0, 0)
+        });
+        let mut ret = self.encode_key_prefix(len);
+        for i in 0..len {
+            self.encode_key_element(&mut ret, i, &tuple.0[i])
+        }
+        Ok(ret)
+    }
+    pub(crate) fn adhoc_encode_val(&self, tuple: &Tuple) -> Result<Vec<u8>> {
+        ensure!(tuple.0.len() == self.arity(), StoredRelArityMismatch {
+            name: self.name.to_string(),
+            expect_arity: self.arity(),
+            actual_arity: tuple.0.len(),
+            span: SourceSpan(0, 0)
+        });
+        let start = self.metadata.keys.len();
+        let len = self.metadata.dependents.len();
+        let mut ret = self.encode_key_prefix(len);
+        for i in 0..len {
+            self.encode_key_element(&mut ret, i, &tuple.0[i + start])
+        }
+        Ok(ret)
+    }
+    pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle) -> Result<()> {
+        match inp {
+            InputRelationHandle::AdHoc { arity, name } => {
+                ensure!(*arity == self.arity(), StoredRelArityMismatch {
+                    name: inp.name().to_string(),
+                    expect_arity: self.arity(),
+                    actual_arity: *arity,
+                    span: name.span
+                })
+            }
+            InputRelationHandle::Defined { metadata, .. } => {
+                // check that every given key is found and compatible
+                for col in &metadata.keys {
+                    self.metadata.compatible_with_col(col, true)?
+                }
+                for col in &metadata.dependents {
+                    self.metadata.compatible_with_col(col, false)?
+                }
+                // check that every key is provided or has default
+                for col in &self.metadata.keys {
+                    metadata.satisfied_by_required_col(col, true)?;
+                }
+                for col in &self.metadata.dependents {
+                    metadata.satisfied_by_required_col(col, false)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) enum InputRelationHandle {
     AdHoc { name: Symbol, arity: usize },
-    Defined { name: Symbol, metadata: StoredRelationMetadata },
+    Defined { name: Symbol, metadata: StoredRelationMetadata, key_bindings: Vec<Symbol>, dep_bindings: Vec<Symbol> },
+}
+
+impl InputRelationHandle {
+    pub(crate) fn name(&self) -> &Symbol {
+        match self {
+            InputRelationHandle::AdHoc { name, .. } => name,
+            InputRelationHandle::Defined { name, .. } => name
+        }
+    }
+    pub(crate) fn get_store_meta(&self) -> StoredRelationMetadata {
+        match self {
+            InputRelationHandle::AdHoc { arity, .. } => {
+                let mut keys = vec![];
+                for i in 0..*arity {
+                    keys.push(ColumnDef {
+                        name: SmartString::from(format!("_{}", i)),
+                        typing: NullableColType { coltype: ColType::Any, nullable: true },
+                        default_gen: None,
+                    });
+                }
+                StoredRelationMetadata {
+                    keys,
+                    dependents: vec![],
+                }
+            }
+            InputRelationHandle::Defined { metadata, .. } => metadata.clone()
+        }
+    }
 }
 
 impl Debug for RelationHandle {
@@ -183,16 +310,23 @@ impl SessionTx {
     }
     pub(crate) fn create_relation(
         &mut self,
-        mut meta: RelationHandle,
+        input_meta: InputRelationHandle,
     ) -> Result<RelationHandle> {
-        let key = DataValue::Str(meta.name.clone());
+        let key = DataValue::Str(input_meta.name().name.clone());
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
         if self.tx.exists(&encoded, true, Snd)? {
-            bail!(RelNameConflictError(meta.name.to_string()))
+            bail!(RelNameConflictError(input_meta.name().to_string()))
         };
+
+        let metadata = input_meta.get_store_meta();
         let last_id = self.relation_store_id.fetch_add(1, Ordering::SeqCst);
-        meta.id = RelationId::new(last_id + 1);
+        let meta = RelationHandle {
+            name: input_meta.name().name.clone(),
+            id: RelationId::new(last_id + 1),
+            metadata,
+        };
+
         self.tx.put(&encoded, &meta.id.raw_encode(), Snd)?;
         let name_key =
             Tuple(vec![DataValue::Str(meta.name.clone())]).encode_as_key(RelationId::SYSTEM);

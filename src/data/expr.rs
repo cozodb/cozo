@@ -5,6 +5,8 @@ use std::mem;
 
 use itertools::Itertools;
 use miette::{bail, Diagnostic, Result};
+use serde::{Deserializer, Serializer};
+use serde::de::{Error, Visitor};
 use smartstring::SmartString;
 use thiserror::Error;
 
@@ -14,7 +16,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::SourceSpan;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) enum Expr {
     Binding {
         var: Symbol,
@@ -389,6 +391,32 @@ pub(crate) struct Op {
     pub(crate) min_arity: usize,
     pub(crate) vararg: bool,
     pub(crate) inner: fn(&[DataValue]) -> Result<DataValue>,
+}
+
+impl serde::Serialize for &'_ Op {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> where S: Serializer {
+        serializer.serialize_str(self.name)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for &'static Op {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error> where D: Deserializer<'de> {
+        deserializer.deserialize_str(OpVisitor)
+    }
+}
+
+struct OpVisitor;
+
+impl<'de> Visitor<'de> for OpVisitor {
+    type Value = &'static Op;
+
+    fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("name of the op")
+    }
+
+    fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E> where E: Error {
+        Ok(get_op(v).ok_or_else(|| E::custom(format!("op not found in serialized data: {}", v)))?)
+    }
 }
 
 impl PartialEq for Op {
