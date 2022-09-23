@@ -19,7 +19,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
 use crate::parse::expr::build_expr;
-use crate::runtime::relation::{RelationHandle, RelationId};
+use crate::runtime::relation::{InputRelationHandle, RelationHandle, RelationId};
 
 #[derive(Error, Diagnostic, Debug)]
 #[error("Query option {0} is not constant")]
@@ -350,12 +350,18 @@ pub(crate) fn parse_query(
                 };
 
                 let name_p = args.next().unwrap();
-                let meta = RelationHandle {
-                    name: SmartString::from(name_p.as_str()),
-                    id: RelationId::SYSTEM,
-                    metadata: todo!(),
-                };
-                out_opts.store_relation = Some((meta, op));
+                let name = Symbol::new(name_p.as_str(), name_p.extract_span());
+                match args.next() {
+                    None => {
+                        out_opts.store_relation = Some((InputRelationHandle::AdHoc {
+                            name,
+                            arity: 0,
+                        }, op))
+                    }
+                    Some(schema_p) => {
+                        todo!()
+                    }
+                }
             }
             Rule::assert_none_option => {
                 ensure!(

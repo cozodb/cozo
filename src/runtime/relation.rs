@@ -62,6 +62,12 @@ pub(crate) struct RelationHandle {
     pub(crate) metadata: StoredRelationMetadata,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
+pub(crate) enum InputRelationHandle {
+    AdHoc { name: Symbol, arity: usize },
+    Defined { name: Symbol, metadata: StoredRelationMetadata },
+}
+
 impl Debug for RelationHandle {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Relation<{}>", self.name)

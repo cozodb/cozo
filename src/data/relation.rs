@@ -3,12 +3,13 @@ use miette::{bail, Diagnostic, ensure, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
+use crate::data::expr::Expr;
 use crate::data::value::{DataValue, UuidWrapper};
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) struct NullableColType {
-    coltype: ColType,
-    nullable: bool,
+    pub(crate) coltype: ColType,
+    pub(crate) nullable: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
@@ -27,9 +28,16 @@ pub(crate) enum ColType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
+pub(crate) struct ColumnDef {
+    pub(crate) name: SmartString<LazyCompact>,
+    pub(crate) typing: NullableColType,
+    pub(crate) default_gen: Option<Expr>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) struct StoredRelationMetadata {
-    pub(crate) keys: Vec<(SmartString<LazyCompact>, NullableColType)>,
-    pub(crate) dependents: Vec<(SmartString<LazyCompact>, NullableColType)>,
+    pub(crate) keys: Vec<ColumnDef>,
+    pub(crate) dependents: Vec<ColumnDef>,
 }
 
 impl NullableColType {

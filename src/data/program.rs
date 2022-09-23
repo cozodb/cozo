@@ -16,7 +16,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::derived::DerivedRelStore;
-use crate::runtime::relation::RelationHandle;
+use crate::runtime::relation::{InputRelationHandle};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, ConstRule>;
@@ -40,7 +40,7 @@ pub(crate) struct QueryOutOptions {
     pub(crate) offset: Option<usize>,
     pub(crate) timeout: Option<u64>,
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
-    pub(crate) store_relation: Option<(RelationHandle, RelationOp)>,
+    pub(crate) store_relation: Option<(InputRelationHandle, RelationOp)>,
     pub(crate) assertion: Option<QueryAssertion>,
 }
 
