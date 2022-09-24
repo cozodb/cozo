@@ -9,7 +9,7 @@ use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::{AlgoHandle, AlgoNotFoundError};
+use crate::algo::AlgoHandle;
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::program::{
@@ -468,11 +468,16 @@ pub(crate) fn parse_query(
         if let Some((handle, RelationOp::Create)) = &prog.out_opts.store_relation {
             let mut bindings = handle.dep_bindings.clone();
             bindings.extend_from_slice(&handle.key_bindings);
-            prog.const_rules.insert(MagicSymbol::Muggle {inner: Symbol::new(PROG_ENTRY, Default::default())}, ConstRule {
-                bindings,
-                data: vec![],
-                span: Default::default()
-            });
+            prog.const_rules.insert(
+                MagicSymbol::Muggle {
+                    inner: Symbol::new(PROG_ENTRY, Default::default()),
+                },
+                ConstRule {
+                    bindings,
+                    data: vec![],
+                    span: Default::default(),
+                },
+            );
         }
     }
 
@@ -805,9 +810,7 @@ fn parse_algo_rule(
     }
 
     let algo = AlgoHandle::new(algo_name, name_pair.extract_span());
-    let algo_arity = algo
-        .arity(Left(&rule_args), &options)
-        .ok_or_else(|| AlgoNotFoundError(algo.name.to_string(), algo.name.span))?;
+    let algo_arity = algo.arity(Left(&rule_args), &options)?;
 
     #[derive(Debug, Error, Diagnostic)]
     #[error("Algorithm rule head arity mismatch")]

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use either::Either;
-use miette::{bail, Diagnostic, ensure, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -10,6 +10,7 @@ use crate::algo::astar::ShortestPathAStar;
 use crate::algo::bfs::Bfs;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
+use crate::algo::jlines::JsonReader;
 use crate::algo::kruskal::MinimumSpanningForestKruskal;
 use crate::algo::label_propagation::LabelPropagation;
 use crate::algo::louvain::CommunityDetectionLouvain;
@@ -38,6 +39,7 @@ pub(crate) mod astar;
 pub(crate) mod bfs;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
+pub(crate) mod jlines;
 pub(crate) mod kruskal;
 pub(crate) mod label_propagation;
 pub(crate) mod louvain;
@@ -77,8 +79,13 @@ impl AlgoHandle {
         &self,
         _args: Either<&[AlgoRuleArg], &[MagicAlgoRuleArg]>,
         opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
-    ) -> Option<usize> {
-        Some(match &self.name.name as &str {
+    ) -> Result<usize> {
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Cannot determine arity for algo {0} since {1}")]
+        #[diagnostic(code(parser::no_algo_arity))]
+        struct CannotDetermineArity(String, String, #[label] SourceSpan);
+
+        Ok(match &self.name.name as &str {
             "ClusteringCoefficients" => 4,
             "DegreeCentrality" => 4,
             "ClosenessCentrality" => 2,
@@ -97,18 +104,61 @@ impl AlgoHandle {
             "CommunityDetectionLouvain" => 2,
             "LabelPropagation" => 2,
             "RandomWalk" => 3,
-            "ReorderSort" => {
-                let out_opts = opts.get("out")?;
+            n @ "ReorderSort" => {
+                let out_opts = opts.get("out").ok_or_else(|| {
+                    CannotDetermineArity(
+                        n.to_string(),
+                        "option 'out' not provided".to_string(),
+                        self.name.span,
+                    )
+                })?;
                 match out_opts {
                     Expr::Const {
                         val: DataValue::List(l),
                         ..
                     } => l.len() + 1,
                     Expr::Apply { op, args, .. } if **op == OP_LIST => args.len() + 1,
-                    _ => return None,
+                    _ => bail!(CannotDetermineArity(
+                        n.to_string(),
+                        "invalid option 'out' given, expect a list".to_string(),
+                        self.name.span
+                    )),
                 }
             }
-            _ => return None,
+            n @ "JsonReader" => {
+                let with_row_num = match opts.get("prepend_index") {
+                    None => 0,
+                    Some(Expr::Const {
+                        val: DataValue::Bool(true),
+                        ..
+                    }) => 1,
+                    Some(Expr::Const {
+                        val: DataValue::Bool(false),
+                        ..
+                    }) => 0,
+                    _ => bail!(CannotDetermineArity(
+                        n.to_string(),
+                        "invalid option 'prepend_index' given, expect a boolean".to_string(),
+                        self.name.span
+                    )),
+                };
+                let fields = opts.get("fields").ok_or_else(|| {
+                    CannotDetermineArity(
+                        n.to_string(),
+                        "option 'fields' not provided".to_string(),
+                        self.name.span,
+                    )
+                })?;
+                match fields.clone().eval_to_const()? {
+                    DataValue::List(l) => l.len() + with_row_num,
+                    _ => bail!(CannotDetermineArity(
+                        n.to_string(),
+                        "invalid option 'fields' given, expect a list".to_string(),
+                        self.name.span
+                    )),
+                }
+            }
+            n => bail!(AlgoNotFoundError(n.to_string(), self.name.span)),
         })
     }
 
@@ -135,6 +185,7 @@ impl AlgoHandle {
             "LabelPropagation" => Box::new(LabelPropagation),
             "RandomWalk" => Box::new(RandomWalk),
             "ReorderSort" => Box::new(ReorderSort),
+            "JsonReader" => Box::new(JsonReader),
             name => bail!(AlgoNotFoundError(name.to_string(), self.name.span)),
         })
     }
@@ -148,11 +199,11 @@ struct NotAnEdgeError(#[label] SourceSpan);
 
 #[derive(Error, Diagnostic, Debug)]
 #[error(
-"The value {0:?} at the third position in the relation cannot be interpreted as edge weights"
+    "The value {0:?} at the third position in the relation cannot be interpreted as edge weights"
 )]
 #[diagnostic(code(algo::invalid_edge_weight))]
 #[diagnostic(help(
-"Edge weights must be finite numbers. Some algorithm also requires positivity."
+    "Edge weights must be finite numbers. Some algorithm also requires positivity."
 ))]
 struct BadEdgeWeightError(DataValue, #[label] SourceSpan);
 
@@ -165,7 +216,7 @@ struct RuleNotFoundError(String, #[label] SourceSpan);
 #[error("Invalid reverse scanning of triples")]
 #[diagnostic(code(algo::invalid_reverse_triple_scan))]
 #[diagnostic(help(
-"Inverse scanning of triples requires the type to be 'ref', or the value be indexed"
+    "Inverse scanning of triples requires the type to be 'ref', or the value be indexed"
 ))]
 struct InvalidInverseTripleUse(String, #[label] SourceSpan);
 
@@ -173,7 +224,7 @@ struct InvalidInverseTripleUse(String, #[label] SourceSpan);
 #[error("Required node with key {missing:?} not found")]
 #[diagnostic(code(algo::node_with_key_not_found))]
 #[diagnostic(help(
-"The relation is interpreted as a relation of nodes, but the required key is missing"
+    "The relation is interpreted as a relation of nodes, but the required key is missing"
 ))]
 pub(crate) struct NodeNotFoundError {
     pub(crate) missing: DataValue,

@@ -4,7 +4,6 @@ use itertools::Itertools;
 use miette::{Context, Diagnostic, ensure, Result};
 use thiserror::Error;
 
-use crate::algo::AlgoNotFoundError;
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{
@@ -108,9 +107,7 @@ impl SessionTx {
                     name.clone(),
                     self.new_rule_store(
                         name.clone(),
-                        ruleset.arity().ok_or_else(|| {
-                            AlgoNotFoundError(name.symbol().to_string(), name.symbol().span)
-                        })?,
+                        ruleset.arity()?,
                     ),
                 );
             }

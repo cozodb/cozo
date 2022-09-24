@@ -8,7 +8,7 @@ use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::{AlgoHandle, AlgoNotFoundError};
+use crate::algo::AlgoHandle;
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -118,7 +118,7 @@ pub(crate) struct AlgoApply {
 }
 
 impl AlgoApply {
-    pub(crate) fn arity(&self) -> Option<usize> {
+    pub(crate) fn arity(&self) -> Result<usize> {
         self.algo.arity(Left(&self.rule_args), &self.options)
     }
 }
@@ -164,7 +164,7 @@ pub(crate) struct WrongAlgoOptionError {
 }
 
 impl MagicAlgoApply {
-    pub(crate) fn arity(&self) -> Option<usize> {
+    pub(crate) fn arity(&self) -> Result<usize> {
         self.algo.arity(Right(&self.rule_args), &self.options)
     }
     pub(crate) fn relation_with_min_len(
@@ -484,11 +484,7 @@ impl InputProgram {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
                 InputRulesOrAlgo::Rules { rules } => Ok(rules.last().unwrap().head.len()),
-                InputRulesOrAlgo::Algo { algo: algo_apply } => {
-                    algo_apply.arity().ok_or_else(|| {
-                        AlgoNotFoundError(algo_apply.algo.name.to_string(), algo_apply.span).into()
-                    })
-                }
+                InputRulesOrAlgo::Algo { algo: algo_apply } => algo_apply.arity(),
             };
         }
 
@@ -678,8 +674,8 @@ impl Default for MagicRulesOrAlgo {
 }
 
 impl MagicRulesOrAlgo {
-    pub(crate) fn arity(&self) -> Option<usize> {
-        Some(match self {
+    pub(crate) fn arity(&self) -> Result<usize> {
+        Ok(match self {
             MagicRulesOrAlgo::Rules { rules } => rules.first().unwrap().head.len(),
             MagicRulesOrAlgo::Algo { algo } => algo.arity()?,
         })
