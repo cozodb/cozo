@@ -13,7 +13,7 @@ use thiserror::Error;
 use cozorocks::CfHandle::Snd;
 use cozorocks::DbIter;
 
-use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
+use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::Symbol;
 use crate::data::tuple::{compare_tuple_keys, EncodedTuple, Tuple};
 use crate::data::value::DataValue;
@@ -128,84 +128,32 @@ impl RelationHandle {
         Ok(ret)
     }
     pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle) -> Result<()> {
-        match inp {
-            InputRelationHandle::AdHoc { arity, span, .. } => {
-                ensure!(
-                    *arity == self.arity(),
-                    StoredRelArityMismatch {
-                        name: inp.name().to_string(),
-                        expect_arity: self.arity(),
-                        actual_arity: *arity,
-                        span: *span
-                    }
-                );
-            }
-            InputRelationHandle::Defined { metadata, .. } => {
-                // check that every given key is found and compatible
-                for col in &metadata.keys {
-                    self.metadata.compatible_with_col(col, true)?
-                }
-                for col in &metadata.dependents {
-                    self.metadata.compatible_with_col(col, false)?
-                }
-                // check that every key is provided or has default
-                for col in &self.metadata.keys {
-                    metadata.satisfied_by_required_col(col, true)?;
-                }
-                for col in &self.metadata.dependents {
-                    metadata.satisfied_by_required_col(col, false)?;
-                }
-            }
+        let InputRelationHandle { metadata, .. } = inp;
+        // check that every given key is found and compatible
+        for col in &metadata.keys {
+            self.metadata.compatible_with_col(col, true)?
+        }
+        for col in &metadata.dependents {
+            self.metadata.compatible_with_col(col, false)?
+        }
+        // check that every key is provided or has default
+        for col in &self.metadata.keys {
+            metadata.satisfied_by_required_col(col, true)?;
+        }
+        for col in &self.metadata.dependents {
+            metadata.satisfied_by_required_col(col, false)?;
         }
         Ok(())
     }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) enum InputRelationHandle {
-    AdHoc {
-        name: Symbol,
-        arity: usize,
-        span: SourceSpan,
-    },
-    Defined {
-        name: Symbol,
-        metadata: StoredRelationMetadata,
-        key_bindings: Vec<Symbol>,
-        dep_bindings: Vec<Symbol>,
-        span: SourceSpan,
-    },
-}
-
-impl InputRelationHandle {
-    pub(crate) fn name(&self) -> &Symbol {
-        match self {
-            InputRelationHandle::AdHoc { name, .. } => name,
-            InputRelationHandle::Defined { name, .. } => name,
-        }
-    }
-    pub(crate) fn get_store_meta(&self) -> StoredRelationMetadata {
-        match self {
-            InputRelationHandle::AdHoc { arity, .. } => {
-                let mut keys = vec![];
-                for i in 0..*arity {
-                    keys.push(ColumnDef {
-                        name: SmartString::from(format!("_{}", i)),
-                        typing: NullableColType {
-                            coltype: ColType::Any,
-                            nullable: true,
-                        },
-                        default_gen: None,
-                    });
-                }
-                StoredRelationMetadata {
-                    keys,
-                    dependents: vec![],
-                }
-            }
-            InputRelationHandle::Defined { metadata, .. } => metadata.clone(),
-        }
-    }
+pub(crate) struct InputRelationHandle {
+    pub(crate) name: Symbol,
+    pub(crate) metadata: StoredRelationMetadata,
+    pub(crate) key_bindings: Vec<Symbol>,
+    pub(crate) dep_bindings: Vec<Symbol>,
+    pub(crate) span: SourceSpan,
 }
 
 impl Debug for RelationHandle {
@@ -225,10 +173,11 @@ impl RelationHandle {
         self.metadata.dependents.len() + self.metadata.keys.len()
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
-        Ok(rmp_serde::from_slice(data).map_err(|_| {
+        Ok(rmp_serde::from_slice(data).map_err(|e| {
             error!(
-                "Cannot deserialize relation metadata from bytes: {:x?}",
-                data
+                "Cannot deserialize relation metadata from bytes: {:x?}, {:?}",
+                data,
+                e
             );
             RelationDeserError
         })?)
@@ -334,17 +283,17 @@ impl SessionTx {
         &mut self,
         input_meta: InputRelationHandle,
     ) -> Result<RelationHandle> {
-        let key = DataValue::Str(input_meta.name().name.clone());
+        let key = DataValue::Str(input_meta.name.name.clone());
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
         if self.tx.exists(&encoded, true, Snd)? {
-            bail!(RelNameConflictError(input_meta.name().to_string()))
+            bail!(RelNameConflictError(input_meta.name.to_string()))
         };
 
-        let metadata = input_meta.get_store_meta();
+        let metadata = input_meta.metadata.clone();
         let last_id = self.relation_store_id.fetch_add(1, Ordering::SeqCst);
         let meta = RelationHandle {
-            name: input_meta.name().name.clone(),
+            name: input_meta.name.name.clone(),
             id: RelationId::new(last_id + 1),
             metadata,
         };

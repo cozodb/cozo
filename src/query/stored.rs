@@ -14,7 +14,7 @@ use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::transact::SessionTx;
 
 #[derive(Debug, Error, Diagnostic)]
-#[error("Attempting to write into relation {0} of arity {1} with data of arity {2}")]
+#[error("attempting to write into relation {0} of arity {1} with data of arity {2}")]
 #[diagnostic(code(eval::relation_arity_mismatch))]
 struct RelationArityMismatch(String, usize, usize);
 
@@ -28,88 +28,70 @@ impl SessionTx {
     ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = None;
         if op == RelationOp::ReDerive {
-            if let Ok(c) = self.destroy_relation(&meta.name()) {
+            if let Ok(c) = self.destroy_relation(&meta.name) {
                 to_clear = Some(c);
             }
         }
         let relation_store = if op == RelationOp::ReDerive || op == RelationOp::Create {
             self.create_relation(meta.clone())?
         } else {
-            self.get_relation(&meta.name())?
+            self.get_relation(&meta.name)?
         };
-        match meta {
-            InputRelationHandle::AdHoc { span, .. } => {
-                if op == RelationOp::Retract {
-                    for tuple in res_iter {
-                        let tuple = tuple?;
-                        let key = relation_store.adhoc_encode_key(&tuple, *span)?;
-                        self.tx.del(&key, Snd)?;
-                    }
-                } else {
-                    for tuple in res_iter {
-                        let tuple = tuple?;
-                        let key = relation_store.adhoc_encode_key(&tuple, *span)?;
-                        let val = relation_store.adhoc_encode_val(&tuple, *span)?;
-                        self.tx.put(&key, &val, Snd)?;
-                    }
-                }
-            }
-            InputRelationHandle::Defined {
-                metadata,
+        let InputRelationHandle {
+            metadata,
+            key_bindings,
+            dep_bindings,
+            span,
+            ..
+        } = meta;
+        if op == RelationOp::Retract {
+            let key_extractors = make_extractors(
+                &relation_store.metadata.keys,
+                &metadata.keys,
                 key_bindings,
+                headers,
+            )?;
+            for tuple in res_iter {
+                let tuple = tuple?;
+                let extracted: Vec<_> = key_extractors
+                    .iter()
+                    .map(|ex| ex.extract_data(&tuple))
+                    .try_collect()?;
+                let key = relation_store.adhoc_encode_key(&Tuple(extracted), *span)?;
+                self.tx.del(&key, Snd)?;
+            }
+        } else {
+            let mut key_extractors = make_extractors(
+                &relation_store.metadata.keys,
+                &metadata.keys,
+                key_bindings,
+                headers,
+            )?;
+
+            let val_extractors = make_extractors(
+                &relation_store.metadata.dependents,
+                &metadata.dependents,
                 dep_bindings,
-                span,
-                ..
-            } => {
-                if op == RelationOp::Retract {
-                    let key_extractors = make_extractors(
-                        &relation_store.metadata.keys,
-                        &metadata.keys,
-                        key_bindings,
-                        headers,
-                    )?;
-                    for tuple in res_iter {
-                        let tuple = tuple?;
-                        let extracted: Vec<_> = key_extractors
-                            .iter()
-                            .map(|ex| ex.extract_data(&tuple))
-                            .try_collect()?;
-                        let key = relation_store.adhoc_encode_key(&Tuple(extracted), *span)?;
-                        self.tx.del(&key, Snd)?;
-                    }
-                } else {
-                    let mut key_extractors = make_extractors(
-                        &relation_store.metadata.keys,
-                        &metadata.keys,
-                        key_bindings,
-                        headers,
-                    )?;
+                headers,
+            )?;
+            key_extractors.extend(val_extractors);
 
-                    let val_extractors = make_extractors(
-                        &relation_store.metadata.dependents,
-                        &metadata.dependents,
-                        dep_bindings,
-                        headers,
-                    )?;
-                    key_extractors.extend(val_extractors);
+            for tuple in res_iter {
+                let tuple = tuple?;
 
-                    for tuple in res_iter {
-                        let tuple = tuple?;
+                let extracted = Tuple(
+                    key_extractors
+                        .iter()
+                        .map(|ex| ex.extract_data(&tuple))
+                        .try_collect()?,
+                );
+                let key = relation_store.adhoc_encode_key(&extracted, *span)?;
+                let val = relation_store.adhoc_encode_val(&extracted, *span)?;
 
-                        let extracted = Tuple(
-                            key_extractors
-                                .iter()
-                                .map(|ex| ex.extract_data(&tuple))
-                                .try_collect()?,
-                        );
-                        let key = relation_store.adhoc_encode_key(&extracted, *span)?;
-                        let val = relation_store.adhoc_encode_val(&extracted, *span)?;
-
-                        self.tx.put(&key, &val, Snd)?;
-                    }
-                }
+                self.tx.put(&key, &val, Snd)?;
             }
         }
+
         Ok(to_clear)
     }
 }
@@ -164,7 +146,7 @@ fn make_extractor(
         ))
     } else {
         #[derive(Debug, Error, Diagnostic)]
-        #[error("Cannot make extractor for column {0}")]
+        #[error("cannot make extractor for column {0}")]
         #[diagnostic(code(eval::unable_to_make_extractor))]
         struct UnableToMakeExtractor(String);
         Err(UnableToMakeExtractor(stored.name.to_string()).into())

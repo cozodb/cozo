@@ -2,7 +2,7 @@ script = _{sys_script | query_script}
 query_script = {SOI ~":query"? ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
 tx_before_ensure_script = {":before" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
 tx_after_ensure_script = {":after" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
-sys_script = {SOI ~ ":db" ~ (compact_op | list_relations_op | remove_relations_op |
+sys_script = {SOI ~ ":db" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op |
                     rename_relations_op | running_op | execute_op | kill_op) ~ EOI}
 
 compact_op = {"compact" ~ compact_opt_relations+}
@@ -11,8 +11,9 @@ running_op = {"running"}
 kill_op = {"kill" ~ int}
 execute_op = {"execute" ~ expr}
 list_relations_op = {"relations"}
-remove_relations_op = {"remove" ~ "relation" ~ ident }
-rename_relations_op = {"rename" ~ "relation" ~ ident ~ ident }
+list_relation_op = {"relation" ~ "columns" ~ ident}
+remove_relations_op = {"relation" ~ "remove" ~ ident }
+rename_relations_op = {"relation" ~ "rename" ~ ident ~ ident }
 from_clause = {"from" ~ expr}
 to_clause = {"to" ~ expr}
 

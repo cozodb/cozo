@@ -1,31 +1,33 @@
-use std::{fs, thread};
 use std::cmp::Ordering::Greater;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::fs::read_to_string;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{fs, thread};
 
 use either::{Left, Right};
 use itertools::Itertools;
 use log::debug;
-use miette::{bail, Diagnostic, ensure, Result};
+use miette::{bail, ensure, Diagnostic, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
 
-use cozorocks::{DbBuilder, DbIter, RocksDb};
 use cozorocks::CfHandle::{Pri, Snd};
+use cozorocks::{DbBuilder, DbIter, RocksDb};
 
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{compare_tuple_keys, EncodedTuple, rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
+use crate::data::tuple::{
+    compare_tuple_keys, rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN,
+};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::{CompactTarget, SysOp};
+use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::runtime::relation::{RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
@@ -92,14 +94,25 @@ impl Db {
             manifest_path.push("manifest");
 
             if manifest_path.exists() {
-                let existing: DbManifest = rmp_serde::from_slice(&fs::read(manifest_path).expect("reading manifest failed"))
-                    .expect("parsing manifest failed");
-                assert_eq!(existing.storage_version, CURRENT_STORAGE_VERSION, "Unknown storage version {}", existing.storage_version);
+                let existing: DbManifest = rmp_serde::from_slice(
+                    &fs::read(manifest_path).expect("reading manifest failed"),
+                )
+                .expect("parsing manifest failed");
+                assert_eq!(
+                    existing.storage_version, CURRENT_STORAGE_VERSION,
+                    "Unknown storage version {}",
+                    existing.storage_version
+                );
                 false
             } else {
-                fs::write(manifest_path, rmp_serde::to_vec_named(&DbManifest {
-                    storage_version: CURRENT_STORAGE_VERSION
-                }).expect("serializing manifest failed")).expect("Writing to manifest failed");
+                fs::write(
+                    manifest_path,
+                    rmp_serde::to_vec_named(&DbManifest {
+                        storage_version: CURRENT_STORAGE_VERSION,
+                    })
+                    .expect("serializing manifest failed"),
+                )
+                .expect("Writing to manifest failed");
                 true
             }
         };
@@ -237,6 +250,7 @@ impl Db {
                 self.remove_relation(&rs)?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
+            SysOp::ListRelation(rs) => self.list_relation(&rs),
             SysOp::RenameRelation(old, new) => {
                 let mut tx = self.transact_write()?;
                 tx.rename_relation(old, new)?;
@@ -282,8 +296,8 @@ impl Db {
                 struct StoreRelationConflict(String);
 
                 ensure!(
-                    !tx.relation_exists(&meta.name())?,
-                    StoreRelationConflict(meta.name().to_string())
+                    !tx.relation_exists(&meta.name)?,
+                    StoreRelationConflict(meta.name.to_string())
                 )
             } else if *op != RelationOp::ReDerive {
                 #[derive(Debug, Error, Diagnostic)]
@@ -291,11 +305,11 @@ impl Db {
                 #[diagnostic(code(eval::stored_relation_not_found))]
                 struct StoreRelationNotFoundError(String);
 
-                let existing = tx.get_relation(&meta.name())?;
+                let existing = tx.get_relation(&meta.name)?;
 
                 ensure!(
-                    tx.relation_exists(&meta.name())?,
-                    StoreRelationNotFoundError(meta.name().to_string())
+                    tx.relation_exists(&meta.name)?,
+                    StoreRelationNotFoundError(meta.name.to_string())
                 );
 
                 existing.ensure_compatible(meta)?;
@@ -314,7 +328,6 @@ impl Db {
             poison.set_timeout(secs);
         }
         let id = self.queries_count.fetch_add(1, Ordering::AcqRel);
-
 
         let now = SystemTime::now();
         let since_the_epoch = now
@@ -350,7 +363,7 @@ impl Db {
 
                         #[derive(Debug, Error, Diagnostic)]
                         #[error(
-                        "The query is asserted to return no result, but a tuple {0:?} is found"
+                            "The query is asserted to return no result, but a tuple {0:?} is found"
                         )]
                         #[diagnostic(code(eval::assert_none_failure))]
                         struct AssertNoneFailure(Tuple, #[label] SourceSpan);
@@ -389,7 +402,14 @@ impl Db {
                 Right(sorted_iter)
             };
             if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
-                let to_clear = tx.execute_relation(sorted_iter, *relation_op, &meta, &input_program.get_entry_out_head_or_default()?)?;
+                let to_clear = tx
+                    .execute_relation(
+                        sorted_iter,
+                        *relation_op,
+                        &meta,
+                        &input_program.get_entry_out_head_or_default()?,
+                    )
+                    .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 if let Some(c) = to_clear {
                     clean_ups.push(c);
                 }
@@ -415,14 +435,21 @@ impl Db {
             };
 
             if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
-                let to_clear = tx.execute_relation(scan, *relation_op, &meta, &input_program.get_entry_out_head_or_default()?)?;
+                let to_clear = tx
+                    .execute_relation(
+                        scan,
+                        *relation_op,
+                        &meta,
+                        &input_program.get_entry_out_head_or_default()?,
+                    )
+                    .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 if let Some(c) = to_clear {
                     clean_ups.push(c);
                 }
                 Ok((json!({"headers": ["status"], "rows": [["OK"]]}), clean_ups))
             } else {
                 let ret: Vec<Vec<JsonValue>> = scan
-                    .map_ok(|tuple| -> Vec<JsonValue>  {
+                    .map_ok(|tuple| -> Vec<JsonValue> {
                         tuple.0.into_iter().map(JsonValue::from).collect()
                     })
                     .try_collect()?;
@@ -482,7 +509,7 @@ impl Db {
     pub fn meta_range_scan(
         &self,
         prefix: &[&str],
-    ) -> impl Iterator<Item=Result<(Vec<String>, Vec<u8>)>> {
+    ) -> impl Iterator<Item = Result<(Vec<String>, Vec<u8>)>> {
         let mut lower_bound = Tuple(vec![DataValue::Guard]);
         for p in prefix {
             lower_bound.0.push(DataValue::Str(SmartString::from(*p)));
@@ -549,7 +576,38 @@ impl Db {
             }
         }
 
-        CustomIter { it, started: false, upper_bound }
+        CustomIter {
+            it,
+            started: false,
+            upper_bound,
+        }
+    }
+    pub fn list_relation(&self, name: &str) -> Result<JsonValue> {
+        let tx = self.transact()?;
+        let handle = tx.get_relation(name)?;
+        let mut ret = vec![];
+        let mut idx = 0;
+        for col in &handle.metadata.keys {
+            ret.push(json!([
+                col.name,
+                true,
+                idx,
+                col.typing.to_string(),
+                col.default_gen.is_some()
+            ]));
+            idx += 1;
+        }
+        for col in &handle.metadata.dependents {
+            ret.push(json!([
+                col.name,
+                false,
+                idx,
+                col.typing.to_string(),
+                col.default_gen.is_some()
+            ]));
+            idx += 1;
+        }
+        Ok(json!({"rows": ret, "headers": ["column", "is_key", "index", "type", "has_default"]}))
     }
     pub fn list_relations(&self) -> Result<JsonValue> {
         let lower =
@@ -557,7 +615,7 @@ impl Db {
         let upper = Tuple(vec![DataValue::Str(SmartString::from(String::from(
             LARGEST_UTF_CHAR,
         )))])
-            .encode_as_key(RelationId::SYSTEM);
+        .encode_as_key(RelationId::SYSTEM);
         let mut it = self
             .db
             .transact()
@@ -572,12 +630,14 @@ impl Db {
                 break;
             }
             let meta = RelationHandle::decode(v_slice)?;
-            let arity = meta.arity();
+            let n_keys = meta.metadata.keys.len();
+            let n_dependents = meta.metadata.dependents.len();
+            let arity = n_keys + n_dependents;
             let name = meta.name;
-            collected.push(json!([name, arity]));
+            collected.push(json!([name, arity, n_keys, n_dependents]));
             it.next();
         }
-        Ok(json!({"rows": collected, "headers": ["name", "arity"]}))
+        Ok(json!({"rows": collected, "headers": ["name", "arity", "n_keys", "n_non_keys"]}))
     }
 }
 

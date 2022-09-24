@@ -27,6 +27,7 @@ pub(crate) enum CompactTarget {
 #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) enum SysOp {
     Compact(BTreeSet<CompactTarget>),
+    ListRelation(Symbol),
     ListRelations,
     ListRunning,
     KillRunning(u64),
@@ -81,6 +82,11 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
             let rels_p = inner.into_inner().next().unwrap();
             let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
             SysOp::RemoveRelation(rel)
+        }
+        Rule::list_relation_op => {
+            let rels_p = inner.into_inner().next().unwrap();
+            let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+            SysOp::ListRelation(rel)
         }
         Rule::rename_relations_op => {
             let mut src = inner.into_inner();

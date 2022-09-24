@@ -415,7 +415,8 @@ impl<'de> Visitor<'de> for OpVisitor {
     }
 
     fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E> where E: Error {
-        Ok(get_op(v).ok_or_else(|| E::custom(format!("op not found in serialized data: {}", v)))?)
+        let name = v.strip_prefix("OP_").unwrap().to_ascii_lowercase();
+        Ok(get_op(&name).ok_or_else(|| E::custom(format!("op not found in serialized data: {}", v)))?)
     }
 }
 

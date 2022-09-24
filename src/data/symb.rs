@@ -3,8 +3,10 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
+use miette::{bail, Diagnostic, Result};
 use serde_derive::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
 use crate::parse::SourceSpan;
 
@@ -69,6 +71,17 @@ impl Symbol {
     }
     pub(crate) fn is_prog_entry(&self) -> bool {
         self.name == "?"
+    }
+    pub(crate) fn ensure_valid_field(&self) -> Result<()> {
+        if self.name.contains('(') || self.name.contains(')') {
+            #[derive(Debug, Error, Diagnostic)]
+            #[error("The symbol {0} is not valid as a field")]
+            #[diagnostic(code(parser::symbol_invalid_as_field))]
+            struct SymbolInvalidAsField(String, #[label] SourceSpan);
+
+            bail!(SymbolInvalidAsField(self.name.to_string(), self.span))
+        }
+        Ok(())
     }
 }
 

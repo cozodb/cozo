@@ -1,10 +1,9 @@
-use std::borrow::BorrowMut;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use either::Left;
+use either::{Left, Right};
 use itertools::Itertools;
 use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
@@ -18,6 +17,7 @@ use crate::data::program::{
     InputProgram, InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo,
     InputTerm, MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
 };
+use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -87,6 +87,7 @@ pub(crate) fn parse_query(
     let mut progs: BTreeMap<Symbol, InputRulesOrAlgo> = Default::default();
     let mut const_rules: ConstRules = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
+    let mut stored_relation = None;
 
     for pair in src {
         match pair.as_rule() {
@@ -360,20 +361,11 @@ pub(crate) fn parse_query(
                 let name_p = args.next().unwrap();
                 let name = Symbol::new(name_p.as_str(), name_p.extract_span());
                 match args.next() {
-                    None => {
-                        out_opts.store_relation = Some((
-                            InputRelationHandle::AdHoc {
-                                name,
-                                arity: 0,
-                                span,
-                            },
-                            op,
-                        ))
-                    }
+                    None => stored_relation = Some(Left((name, span, op))),
                     Some(schema_p) => {
                         let (metadata, key_bindings, dep_bindings) = parse_schema(schema_p)?;
-                        out_opts.store_relation = Some((
-                            InputRelationHandle::Defined {
+                        stored_relation = Some(Right((
+                            InputRelationHandle {
                                 name,
                                 metadata,
                                 key_bindings,
@@ -381,7 +373,7 @@ pub(crate) fn parse_query(
                                 span,
                             },
                             op,
-                        ))
+                        )))
                     }
                 }
             }
@@ -412,7 +404,7 @@ pub(crate) fn parse_query(
 
     if prog.prog.is_empty() && prog.const_rules.is_empty() {
         if let Some((
-            InputRelationHandle::Defined {
+            InputRelationHandle {
                 key_bindings,
                 dep_bindings,
                 ..
@@ -435,12 +427,41 @@ pub(crate) fn parse_query(
         }
     }
 
-    let head_arity = prog.get_entry_arity()?;
+    // let head_arity = prog.get_entry_arity()?;
 
-    if let Some((InputRelationHandle::AdHoc { arity, .. }, _)) =
-        prog.out_opts.store_relation.borrow_mut()
-    {
-        *arity = head_arity
+    match stored_relation {
+        None => {}
+        Some(Left((name, span, op))) => {
+            let head = prog.get_entry_out_head()?;
+            for symb in &head {
+                symb.ensure_valid_field()?;
+            }
+
+            let metadata = StoredRelationMetadata {
+                keys: head
+                    .iter()
+                    .map(|s| ColumnDef {
+                        name: s.name.clone(),
+                        typing: NullableColType {
+                            coltype: ColType::Any,
+                            nullable: true,
+                        },
+                        default_gen: None,
+                    })
+                    .collect(),
+                dependents: vec![],
+            };
+
+            let handle = InputRelationHandle {
+                name,
+                metadata,
+                key_bindings: head,
+                dep_bindings: vec![],
+                span,
+            };
+            prog.out_opts.store_relation = Some((handle, op))
+        }
+        Some(Right(r)) => prog.out_opts.store_relation = Some(r),
     }
 
     if !prog.out_opts.sorters.is_empty() {
