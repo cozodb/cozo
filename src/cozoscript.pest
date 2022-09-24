@@ -1,7 +1,7 @@
 script = _{sys_script | multi_script | query_script}
 query_script = {SOI ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
 query_script_inner = {"{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
-multi_script = {SOI ~ query_script_inner ~ EOI}
+multi_script = {SOI ~ query_script_inner+ ~ EOI}
 sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op |
                     rename_relations_op | running_op | kill_op) ~ EOI}
 
@@ -91,12 +91,12 @@ out_arg = @{var ~ ("(" ~ var ~ ")")?}
 limit_option = {":limit"  ~ expr}
 offset_option = {":offset" ~ expr}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
-relation_option = {":relation" ~ relation_op ~ compound_ident ~ table_schema?}
+relation_option = {relation_op ~ compound_ident ~ table_schema?}
 relation_op = _{relation_create | relation_rederive | relation_put | relation_retract}
-relation_create = {"create"}
-relation_rederive = {"rederive"}
-relation_put = {"put"}
-relation_retract = {"retract"}
+relation_create = {":create"}
+relation_rederive = {":rederive"}
+relation_put = {":put"}
+relation_retract = {":retract"}
 timeout_option = {":timeout" ~ expr }
 sort_arg = { sort_dir? ~ out_arg }
 sort_dir = _{ sort_asc | sort_desc }
@@ -164,7 +164,7 @@ literal = _{ null | boolean | number | string}
 
 table_schema = {"{" ~ table_cols ~ ("=>" ~ table_cols)? ~ "}"}
 table_cols = {(table_col ~ ",")* ~ table_col?}
-table_col = {ident ~ (":" ~ col_type)? ~ ("default" ~ expr)? ~ ("=" ~ out_arg)?}
+table_col = {ident ~ (":" ~ col_type)? ~ (("default" ~ expr) | ("=" ~ out_arg))?}
 col_type = {(any_type | int_type | float_type | string_type | bytes_type | uuid_type | list_type | tuple_type) ~ "?"?}
 any_type = {"Any"}
 int_type = {"Int"}

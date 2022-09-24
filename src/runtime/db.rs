@@ -212,13 +212,20 @@ impl Db {
             .map(|(k, v)| (k.clone(), DataValue::from(v)))
             .collect();
         match parse_script(payload, &param_pool)? {
-            CozoScript::Query(p) => {
-                let (mut tx, is_write) = if p.out_opts.store_relation.is_some() {
-                    (self.transact_write()?, true)
+            CozoScript::Multi(ps) => {
+                let is_write = ps.iter().any(|p| p.out_opts.store_relation.is_some());
+                let mut tx = if is_write {
+                    self.transact_write()?
                 } else {
-                    (self.transact()?, false)
+                    self.transact()?
                 };
-                let (res, cleanups) = self.run_query(&mut tx, p)?;
+                let mut res = json!(null);
+                let mut cleanups = vec![];
+                for p in ps {
+                    let (q_res, q_cleanups) = self.run_query(&mut tx, p)?;
+                    res = q_res;
+                    cleanups.extend(q_cleanups);
+                }
                 if is_write {
                     tx.commit_tx()?;
                 } else {

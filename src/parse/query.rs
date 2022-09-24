@@ -464,6 +464,18 @@ pub(crate) fn parse_query(
         Some(Right(r)) => prog.out_opts.store_relation = Some(r),
     }
 
+    if prog.prog.is_empty() && prog.const_rules.is_empty() {
+        if let Some((handle, RelationOp::Create)) = &prog.out_opts.store_relation {
+            let mut bindings = handle.dep_bindings.clone();
+            bindings.extend_from_slice(&handle.key_bindings);
+            prog.const_rules.insert(MagicSymbol::Muggle {inner: Symbol::new(PROG_ENTRY, Default::default())}, ConstRule {
+                bindings,
+                data: vec![],
+                span: Default::default()
+            });
+        }
+    }
+
     if !prog.out_opts.sorters.is_empty() {
         #[derive(Debug, Error, Diagnostic)]
         #[error("Sort key '{0}' not found")]

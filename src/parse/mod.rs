@@ -23,7 +23,7 @@ pub(crate) type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 pub(crate) type Pairs<'a> = pest::iterators::Pairs<'a, Rule>;
 
 pub(crate) enum CozoScript {
-    Query(InputProgram),
+    Multi(Vec<InputProgram>),
     Sys(SysOp),
 }
 
@@ -77,7 +77,19 @@ pub(crate) fn parse_script(
         .next()
         .unwrap();
     Ok(match parsed.as_rule() {
-        Rule::query_script => CozoScript::Query(parse_query(parsed.into_inner(), param_pool)?),
+        Rule::query_script => {
+            let q = parse_query(parsed.into_inner(), param_pool)?;
+            CozoScript::Multi(vec![q])
+        },
+        Rule::multi_script => {
+            let mut qs = vec![];
+            for pair in parsed.into_inner() {
+                if pair.as_rule() != Rule::EOI {
+                    qs.push(parse_query(pair.into_inner(), param_pool)?);
+                }
+            }
+            CozoScript::Multi(qs)
+        }
         Rule::sys_script => CozoScript::Sys(parse_sys(parsed.into_inner())?),
         _ => unreachable!(),
     })

@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
 use either::{Left, Right};
-use miette::{Diagnostic, ensure, Result};
+use miette::{ensure, Diagnostic, Result};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -11,7 +11,7 @@ use thiserror::Error;
 use crate::algo::{AlgoHandle, AlgoNotFoundError};
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
-use crate::data::symb::{PROG_ENTRY, Symbol};
+use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
@@ -218,7 +218,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                    .into()),
+                .into()),
             },
         }
     }
@@ -243,7 +243,7 @@ impl MagicAlgoApply {
                         span: self.span,
                         algo_name: self.algo.name.to_string(),
                     }
-                        .into()),
+                    .into()),
                 },
                 _ => Err(WrongAlgoOptionError {
                     name: name.to_string(),
@@ -251,7 +251,7 @@ impl MagicAlgoApply {
                     algo_name: self.algo.name.to_string(),
                     help: "a positive integer is required".to_string(),
                 }
-                    .into()),
+                .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
@@ -260,7 +260,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                    .into()),
+                .into()),
             },
         }
     }
@@ -289,7 +289,7 @@ impl MagicAlgoApply {
                         span: self.span,
                         algo_name: self.algo.name.to_string(),
                     }
-                        .into()),
+                    .into()),
                 },
                 _ => Err(WrongAlgoOptionError {
                     name: name.to_string(),
@@ -297,7 +297,7 @@ impl MagicAlgoApply {
                     algo_name: self.algo.name.to_string(),
                     help: "a non-negative integer is required".to_string(),
                 }
-                    .into()),
+                .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
@@ -306,7 +306,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                    .into()),
+                .into()),
             },
         }
     }
@@ -332,7 +332,7 @@ impl MagicAlgoApply {
                     algo_name: self.algo.name.to_string(),
                     help: "a number between 0. and 1. is required".to_string(),
                 }
-                    .into()),
+                .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
@@ -341,7 +341,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                    .into()),
+                .into()),
             },
         }
     }
@@ -355,7 +355,7 @@ impl MagicAlgoApply {
                     algo_name: self.algo.name.to_string(),
                     help: "a boolean value is required".to_string(),
                 }
-                    .into()),
+                .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
@@ -364,7 +364,7 @@ impl MagicAlgoApply {
                     span: self.span,
                     algo_name: self.algo.name.to_string(),
                 }
-                    .into()),
+                .into()),
             },
         }
     }
@@ -417,8 +417,7 @@ impl MagicAlgoRuleArg {
     }
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
-            MagicAlgoRuleArg::InMem { span, .. }
-            | MagicAlgoRuleArg::Stored { span, .. } => *span,
+            MagicAlgoRuleArg::InMem { span, .. } | MagicAlgoRuleArg::Stored { span, .. } => *span,
         }
     }
     pub(crate) fn get_binding_map(&self, starting: usize) -> BTreeMap<Symbol, usize> {
@@ -472,7 +471,7 @@ impl InputProgram {
             if bindings.is_empty() {
                 return Ok(data.get(0).map(|row| row.0.len()).unwrap_or(0));
             } else {
-                return Ok(bindings.len())
+                return Ok(bindings.len());
             }
         }
 
@@ -483,7 +482,9 @@ impl InputProgram {
             Ok(r) => Ok(r),
             Err(_) => {
                 let arity = self.get_entry_arity()?;
-                Ok((0..arity).map(|i| Symbol::new(format!("_{}", i), SourceSpan(0, 0))).collect())
+                Ok((0..arity)
+                    .map(|i| Symbol::new(format!("_{}", i), SourceSpan(0, 0)))
+                    .collect())
             }
         }
     }
@@ -497,8 +498,16 @@ impl InputProgram {
                     for (symb, aggr) in head.iter().zip(aggrs.iter()) {
                         if let Some((aggr, _)) = aggr {
                             ret.push(Symbol::new(
-                                &format!("{}({})", aggr.name.strip_prefix("AGGR_").unwrap().to_ascii_lowercase(),
-                                         symb), symb.span))
+                                &format!(
+                                    "{}({})",
+                                    aggr.name
+                                        .strip_prefix("AGGR_")
+                                        .unwrap()
+                                        .to_ascii_lowercase(),
+                                    symb
+                                ),
+                                symb.span,
+                            ))
                         } else {
                             ret.push(symb.clone())
                         }
@@ -527,10 +536,7 @@ impl InputProgram {
 
         Err(NoEntryError.into())
     }
-    pub(crate) fn to_normalized_program(
-        &self,
-        tx: &SessionTx,
-    ) -> Result<NormalFormProgram> {
+    pub(crate) fn to_normalized_program(&self, tx: &SessionTx) -> Result<NormalFormProgram> {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
         for (k, rules_or_algo) in &self.prog {
             match rules_or_algo {
@@ -546,7 +552,7 @@ impl InputProgram {
                             inner: rule.body.clone(),
                             span: rule.span,
                         }
-                            .disjunctive_normal_form(tx)?;
+                        .disjunctive_normal_form(tx)?;
                         let mut new_head = Vec::with_capacity(rule.head.len());
                         let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
                         for symb in rule.head.iter() {
@@ -880,7 +886,6 @@ pub(crate) struct InputRuleApplyAtom {
     pub(crate) args: Vec<InputTerm<DataValue>>,
     pub(crate) span: SourceSpan,
 }
-
 
 #[derive(Clone, Debug)]
 pub(crate) struct InputNamedFieldRelationApplyAtom {
