@@ -1,15 +1,14 @@
-script = _{sys_script | query_script}
-query_script = {SOI ~":query"? ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
-tx_before_ensure_script = {":before" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
-tx_after_ensure_script = {":after" ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
-sys_script = {SOI ~ ":db" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op |
-                    rename_relations_op | running_op | execute_op | kill_op) ~ EOI}
+script = _{sys_script | multi_script | query_script}
+query_script = {SOI ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
+query_script_inner = {"{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
+multi_script = {SOI ~ query_script_inner ~ EOI}
+sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op |
+                    rename_relations_op | running_op | kill_op) ~ EOI}
 
 compact_op = {"compact" ~ compact_opt_relations+}
 compact_opt_relations = {"relations"}
 running_op = {"running"}
 kill_op = {"kill" ~ int}
-execute_op = {"execute" ~ expr}
 list_relations_op = {"relations"}
 list_relation_op = {"relation" ~ "columns" ~ ident}
 remove_relations_op = {"relation" ~ "remove" ~ ident }

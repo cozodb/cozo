@@ -5,8 +5,8 @@ use std::mem;
 
 use itertools::Itertools;
 use miette::{bail, Diagnostic, Result};
-use serde::{Deserializer, Serializer};
 use serde::de::{Error, Visitor};
+use serde::{Deserializer, Serializer};
 use smartstring::SmartString;
 use thiserror::Error;
 
@@ -24,14 +24,26 @@ pub(crate) enum Expr {
     },
     Const {
         val: DataValue,
+        #[serde(skip)]
         span: SourceSpan,
     },
     Apply {
         op: &'static Op,
         args: Box<[Expr]>,
+        #[serde(skip)]
+        span: SourceSpan,
+    },
+    Cond {
+        clauses: Vec<(Expr, Expr)>,
+        #[serde(skip)]
         span: SourceSpan,
     },
 }
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Found value {1:?} where a boolean value is expected")]
+#[diagnostic(code(eval::predicate_not_bool))]
+struct PredicateTypeError(#[label] SourceSpan, DataValue);
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("Cannot build entity ID from {0:?}")]
@@ -48,7 +60,7 @@ impl Expr {
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             Expr::Binding { var, .. } => var.span,
-            Expr::Const { span, .. } | Expr::Apply { span, .. } => *span,
+            Expr::Const { span, .. } | Expr::Apply { span, .. } | Expr::Cond { span, .. } => *span,
         }
     }
     pub(crate) fn get_binding(&self) -> Option<&Symbol> {
@@ -115,6 +127,12 @@ impl Expr {
                     arg.fill_binding_indices(binding_map)?;
                 }
             }
+            Expr::Cond { clauses, .. } => {
+                for (cond, val) in clauses {
+                    cond.fill_binding_indices(binding_map)?;
+                    val.fill_binding_indices(binding_map)?;
+                }
+            }
         }
         Ok(())
     }
@@ -134,6 +152,12 @@ impl Expr {
             Expr::Apply { args, .. } => {
                 for arg in args.iter() {
                     arg.do_binding_indices(coll);
+                }
+            }
+            Expr::Cond { clauses, .. } => {
+                for (cond, val) in clauses {
+                    cond.do_binding_indices(coll);
+                    val.do_binding_indices(coll)
                 }
             }
         }
@@ -171,10 +195,10 @@ impl Expr {
             {
                 if op1.name == OP_NEGATE.name {
                     if let Some(Expr::Apply {
-                                    op: op2,
-                                    args: arg2,
-                                    ..
-                                }) = arg1.first()
+                        op: op2,
+                        args: arg2,
+                        ..
+                    }) = arg1.first()
                     {
                         if op2.name == OP_NEGATE.name {
                             let mut new_self = arg2[0].clone();
@@ -200,6 +224,12 @@ impl Expr {
             Expr::Apply { args, .. } => {
                 for arg in args.iter() {
                     arg.collect_bindings(coll)
+                }
+            }
+            Expr::Cond { clauses, .. } => {
+                for (cond, val) in clauses {
+                    cond.collect_bindings(coll);
+                    val.collect_bindings(coll)
                 }
             }
         }
@@ -235,23 +265,32 @@ impl Expr {
                 Ok((op.inner)(&args)
                     .map_err(|err| EvalRaisedError(self.span(), err.to_string()))?)
             }
+            Expr::Cond { clauses, .. } => {
+                for (cond, val) in clauses {
+                    let cond_val = cond.eval(bindings)?;
+                    let cond_val = cond_val
+                        .get_bool()
+                        .ok_or_else(|| PredicateTypeError(cond.span(), cond_val))?;
+
+                    if cond_val {
+                        return val.eval(bindings);
+                    }
+                }
+                return Ok(DataValue::Null);
+            }
         }
     }
     pub(crate) fn eval_pred(&self, bindings: &Tuple) -> Result<bool> {
         match self.eval(bindings)? {
             DataValue::Bool(b) => Ok(b),
             v => {
-                #[derive(Debug, Error, Diagnostic)]
-                #[error("Found value {1:?} where a boolean value is expected")]
-                #[diagnostic(code(eval::predicate_not_bool))]
-                struct PredicateTypeError(#[label] SourceSpan, DataValue);
                 bail!(PredicateTypeError(self.span(), v))
             }
         }
     }
     pub(crate) fn extract_bound(&self, target: &Symbol) -> Result<ValueRange> {
         Ok(match self {
-            Expr::Binding { .. } | Expr::Const { .. } => ValueRange::default(),
+            Expr::Binding { .. } | Expr::Const { .. } | Expr::Cond { .. } => ValueRange::default(),
             Expr::Apply { op, args, .. } => match op.name {
                 n if n == OP_GE.name || n == OP_GT.name => {
                     if let Some(symb) = args[0].get_binding() {
@@ -394,13 +433,19 @@ pub(crate) struct Op {
 }
 
 impl serde::Serialize for &'_ Op {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         serializer.serialize_str(self.name)
     }
 }
 
 impl<'de> serde::Deserialize<'de> for &'static Op {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error> where D: Deserializer<'de> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
         deserializer.deserialize_str(OpVisitor)
     }
 }
@@ -414,9 +459,13 @@ impl<'de> Visitor<'de> for OpVisitor {
         formatter.write_str("name of the op")
     }
 
-    fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E> where E: Error {
+    fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
+    where
+        E: Error,
+    {
         let name = v.strip_prefix("OP_").unwrap().to_ascii_lowercase();
-        Ok(get_op(&name).ok_or_else(|| E::custom(format!("op not found in serialized data: {}", v)))?)
+        Ok(get_op(&name)
+            .ok_or_else(|| E::custom(format!("op not found in serialized data: {}", v)))?)
     }
 }
 
@@ -551,7 +600,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
 }
 
 impl Op {
-    pub(crate) fn post_process_args(&self, args: &mut Box<[Expr]>) {
+    pub(crate) fn post_process_args(&self, args: &mut Vec<Expr>) {
         if self.name.starts_with("OP_REGEX_") {
             args[1] = Expr::Apply {
                 op: &OP_REGEX,

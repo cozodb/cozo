@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use miette::{bail, Diagnostic, ensure, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use pest::prec_climber::{Operator, PrecClimber};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::data::expr::{Expr, get_op};
+use crate::data::expr::{get_op, Expr};
 use crate::data::functions::{
     OP_ADD, OP_AND, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LIST, OP_LT, OP_MINUS,
     OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
@@ -44,7 +44,10 @@ lazy_static! {
 pub(crate) struct InvalidExpression(#[label] pub(crate) SourceSpan);
 
 pub(crate) fn build_expr(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<Expr> {
-    ensure!(pair.as_rule() == Rule::expr, InvalidExpression(pair.extract_span()));
+    ensure!(
+        pair.as_rule() == Rule::expr,
+        InvalidExpression(pair.extract_span())
+    );
 
     PREC_CLIMBER.climb(
         pair.into_inner(),
@@ -207,7 +210,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             let mut p = p.into_inner();
             let ident_p = p.next().unwrap();
             let ident = ident_p.as_str();
-            let mut args: Box<_> = p
+            let mut args: Vec<_> = p
                 .next()
                 .unwrap()
                 .into_inner()
@@ -218,38 +221,83 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             #[diagnostic(code(parser::func_not_function))]
             struct FuncNotFoundError(String, #[label] SourceSpan);
 
-            let op = get_op(ident)
-                .ok_or_else(|| FuncNotFoundError(ident.to_string(), ident_p.extract_span()))?;
-            op.post_process_args(&mut args);
+            match ident {
+                "cond" => {
+                    if args.len() & 1 == 1 {
+                        args.insert(
+                            args.len() - 1,
+                            Expr::Const {
+                                val: DataValue::Bool(true),
+                                span: args.last().unwrap().span(),
+                            },
+                        )
+                    }
+                    let clauses = args
+                        .chunks(2)
+                        .map(|pair| (pair[0].clone(), pair[1].clone()))
+                        .collect_vec();
+                    Expr::Cond { clauses, span }
+                }
+                "if" => {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("wrong number of arguments to if: 2 or 3 required")]
+                    #[diagnostic(code(parser::bad_if))]
+                    struct WrongArgsToIf(#[label] SourceSpan);
 
-            #[derive(Error, Diagnostic, Debug)]
-            #[error("Wrong number of arguments for function '{0}'")]
-            #[diagnostic(code(parser::func_wrong_num_args))]
-            struct WrongNumArgsError(String, #[label] SourceSpan, #[help] String);
+                    ensure!(args.len() == 2 || args.len() == 3, WrongArgsToIf(span));
 
-            if op.vararg {
-                ensure!(
-                    op.min_arity <= args.len(),
-                    WrongNumArgsError(
-                        ident.to_string(),
+                    let mut clauses = vec![];
+                    let mut args = args.into_iter();
+                    let cond = args.next().unwrap();
+                    let then = args.next().unwrap();
+                    clauses.push((cond, then));
+                    if let Some(else_clause) = args.next() {
+                        clauses.push((
+                            Expr::Const {
+                                val: DataValue::Bool(true),
+                                span,
+                            },
+                            else_clause,
+                        ))
+                    }
+                    Expr::Cond { clauses, span }
+                }
+                _ => {
+                    let op = get_op(ident).ok_or_else(|| {
+                        FuncNotFoundError(ident.to_string(), ident_p.extract_span())
+                    })?;
+                    op.post_process_args(&mut args);
+
+                    #[derive(Error, Diagnostic, Debug)]
+                    #[error("Wrong number of arguments for function '{0}'")]
+                    #[diagnostic(code(parser::func_wrong_num_args))]
+                    struct WrongNumArgsError(String, #[label] SourceSpan, #[help] String);
+
+                    if op.vararg {
+                        ensure!(
+                            op.min_arity <= args.len(),
+                            WrongNumArgsError(
+                                ident.to_string(),
+                                span,
+                                format!("Need at least {} argument(s)", op.min_arity)
+                            )
+                        );
+                    } else {
+                        ensure!(
+                            op.min_arity == args.len(),
+                            WrongNumArgsError(
+                                ident.to_string(),
+                                span,
+                                format!("Need exactly {} argument(s)", op.min_arity)
+                            )
+                        );
+                    }
+                    Expr::Apply {
+                        op,
+                        args: args.into(),
                         span,
-                        format!("Need at least {} argument(s)", op.min_arity)
-                    )
-                );
-            } else {
-                ensure!(
-                    op.min_arity == args.len(),
-                    WrongNumArgsError(
-                        ident.to_string(),
-                        span,
-                        format!("Need exactly {} argument(s)", op.min_arity)
-                    )
-                );
-            }
-            Expr::Apply {
-                op,
-                args,
-                span,
+                    }
+                }
             }
         }
         Rule::grouping => build_expr(p.into_inner().next().unwrap(), param_pool)?,

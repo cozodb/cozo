@@ -1,24 +1,21 @@
 use std::collections::BTreeSet;
 
-use miette::{bail, Diagnostic, Result};
-use smartstring::{LazyCompact, SmartString};
+use miette::{Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::symb::Symbol;
-use crate::data::value::DataValue;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
-use crate::parse::expr::build_expr;
 
 #[derive(
-Debug,
-Eq,
-PartialEq,
-Ord,
-PartialOrd,
-Copy,
-Clone,
-serde_derive::Serialize,
-serde_derive::Deserialize,
+    Debug,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Copy,
+    Clone,
+    serde_derive::Serialize,
+    serde_derive::Deserialize,
 )]
 pub(crate) enum CompactTarget {
     Relations,
@@ -33,7 +30,6 @@ pub(crate) enum SysOp {
     KillRunning(u64),
     RemoveRelation(Symbol),
     RenameRelation(Symbol, Symbol),
-    ExecuteLocalScript(SmartString<LazyCompact>),
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -60,22 +56,6 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
             let i = u64::from_str_radix(i_str.as_str(), 10)
                 .map_err(|_| ProcessIdError(i_str.as_str().to_string(), i_str.extract_span()))?;
             SysOp::KillRunning(i)
-        }
-        Rule::execute_op => {
-            let ex = inner.into_inner().next().unwrap();
-            let span = ex.extract_span();
-            let s = build_expr(ex, &Default::default())?;
-            let path = match s.eval_to_const() {
-                Ok(DataValue::Str(s)) => s,
-                _ => {
-                    #[derive(Debug, Error, Diagnostic)]
-                    #[error("Expect path string")]
-                    #[diagnostic(code(parser::bad_path_given))]
-                    struct NotAPathError(#[label] SourceSpan);
-                    bail!(NotAPathError(span));
-                }
-            };
-            SysOp::ExecuteLocalScript(path)
         }
         Rule::list_relations_op => SysOp::ListRelations,
         Rule::remove_relations_op => {
