@@ -222,6 +222,33 @@ impl MagicAlgoApply {
             },
         }
     }
+    pub(crate) fn string_option(
+        &self,
+        name: &str,
+        default: Option<&str>,
+    ) -> Result<SmartString<LazyCompact>> {
+        match self.options.get(name) {
+            Some(ex) => match ex.clone().eval_to_const()? {
+                DataValue::Str(s) => Ok(s),
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: ex.span(),
+                    algo_name: self.algo.name.to_string(),
+                    help: "a string is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.span,
+                    algo_name: self.algo.name.to_string(),
+                }
+                .into()),
+                Some(s) => Ok(SmartString::from(s)),
+            },
+        }
+    }
     pub(crate) fn pos_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
         match self.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {

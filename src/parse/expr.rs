@@ -222,6 +222,10 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             struct FuncNotFoundError(String, #[label] SourceSpan);
 
             match ident {
+                "try" => Expr::Try {
+                    clauses: args,
+                    span,
+                },
                 "cond" => {
                     if args.len() & 1 == 1 {
                         args.insert(

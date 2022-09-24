@@ -38,6 +38,11 @@ pub(crate) enum Expr {
         #[serde(skip)]
         span: SourceSpan,
     },
+    Try {
+        clauses: Vec<Expr>,
+        #[serde(skip)]
+        span: SourceSpan,
+    },
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -60,7 +65,10 @@ impl Expr {
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             Expr::Binding { var, .. } => var.span,
-            Expr::Const { span, .. } | Expr::Apply { span, .. } | Expr::Cond { span, .. } => *span,
+            Expr::Const { span, .. }
+            | Expr::Apply { span, .. }
+            | Expr::Cond { span, .. }
+            | Expr::Try { span, .. } => *span,
         }
     }
     pub(crate) fn get_binding(&self) -> Option<&Symbol> {
@@ -133,6 +141,11 @@ impl Expr {
                     val.fill_binding_indices(binding_map)?;
                 }
             }
+            Expr::Try { clauses, .. } => {
+                for clause in clauses {
+                    clause.fill_binding_indices(binding_map)?;
+                }
+            }
         }
         Ok(())
     }
@@ -158,6 +171,11 @@ impl Expr {
                 for (cond, val) in clauses {
                     cond.do_binding_indices(coll);
                     val.do_binding_indices(coll)
+                }
+            }
+            Expr::Try { clauses, .. } => {
+                for clause in clauses {
+                    clause.do_binding_indices(coll)
                 }
             }
         }
@@ -232,6 +250,11 @@ impl Expr {
                     val.collect_bindings(coll)
                 }
             }
+            Expr::Try { clauses, .. } => {
+                for clause in clauses {
+                    clause.collect_bindings(coll);
+                }
+            }
         }
     }
     pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
@@ -278,6 +301,19 @@ impl Expr {
                 }
                 return Ok(DataValue::Null);
             }
+            Expr::Try { clauses, .. } => {
+                if clauses.is_empty() {
+                    Ok(DataValue::Null)
+                } else {
+                    for i in 0..clauses.len() - 1 {
+                        let res = clauses[i].eval(bindings);
+                        if res.is_ok() {
+                            return res;
+                        }
+                    }
+                    clauses[clauses.len() - 1].eval(bindings)
+                }
+            }
         }
     }
     pub(crate) fn eval_pred(&self, bindings: &Tuple) -> Result<bool> {
@@ -290,7 +326,9 @@ impl Expr {
     }
     pub(crate) fn extract_bound(&self, target: &Symbol) -> Result<ValueRange> {
         Ok(match self {
-            Expr::Binding { .. } | Expr::Const { .. } | Expr::Cond { .. } => ValueRange::default(),
+            Expr::Binding { .. } | Expr::Const { .. } | Expr::Cond { .. } | Expr::Try { .. } => {
+                ValueRange::default()
+            }
             Expr::Apply { op, args, .. } => match op.name {
                 n if n == OP_GE.name || n == OP_GT.name => {
                     if let Some(symb) = args[0].get_binding() {
