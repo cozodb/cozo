@@ -42,16 +42,14 @@ struct SstFileWriterBridge {
 
 struct RocksDbBridge {
     unique_ptr<Comparator> pri_comparator;
-    unique_ptr<Comparator> snd_comparator;
     unique_ptr<TransactionDB> db;
-    vector<ColumnFamilyHandle *> cf_handles;
 
     bool destroy_on_exit;
     string db_path;
 
-    inline unique_ptr<SstFileWriterBridge> get_sst_writer(rust::Str path, size_t idx, RocksDbStatus &status) const {
+    inline unique_ptr<SstFileWriterBridge> get_sst_writer(rust::Str path, RocksDbStatus &status) const {
         DB *db_ = get_base_db();
-        auto cf = cf_handles[idx];
+        auto cf = db->DefaultColumnFamily();
         Options options_ = db_->GetOptions(cf);
         auto sst_file_writer = std::make_unique<SstFileWriterBridge>(EnvOptions(), options_);
         string path_(path);
@@ -60,11 +58,11 @@ struct RocksDbBridge {
         return sst_file_writer;
     }
 
-    inline void ingest_sst(rust::Str path, size_t idx, RocksDbStatus &status) const {
+    inline void ingest_sst(rust::Str path, RocksDbStatus &status) const {
         IngestExternalFileOptions ifo;
         DB *db_ = get_base_db();
         string path_(path);
-        auto cf = cf_handles[idx];
+        auto cf = db->DefaultColumnFamily();
         write_status(db_->IngestExternalFile(cf, {std::move(path_)}, ifo), status);
     }
 
@@ -74,13 +72,13 @@ struct RocksDbBridge {
 
 
     [[nodiscard]] inline unique_ptr<TxBridge> transact() const {
-        auto ret = make_unique<TxBridge>(&*this->db, cf_handles);
+        auto ret = make_unique<TxBridge>(&*this->db, db->DefaultColumnFamily());
         return ret;
     }
 
-    inline void del_range(RustBytes start, RustBytes end, size_t idx, RocksDbStatus &status) const {
+    inline void del_range(RustBytes start, RustBytes end, RocksDbStatus &status) const {
         WriteBatch batch;
-        auto cf = cf_handles[idx];
+        auto cf = db->DefaultColumnFamily();
         auto s = batch.DeleteRange(cf, convert_slice(start), convert_slice(end));
         if (!s.ok()) {
             write_status(s, status);
@@ -94,9 +92,9 @@ struct RocksDbBridge {
         write_status(s2, status);
     }
 
-    void compact_range(RustBytes start, RustBytes end, size_t idx, RocksDbStatus &status) const {
+    void compact_range(RustBytes start, RustBytes end, RocksDbStatus &status) const {
         CompactRangeOptions options;
-        auto cf = cf_handles[idx];
+        auto cf = db->DefaultColumnFamily();
         auto start_s = convert_slice(start);
         auto end_s = convert_slice(end);
         auto s = db->CompactRange(options, cf, &start_s, &end_s);
@@ -143,7 +141,6 @@ public:
 };
 
 shared_ptr<RocksDbBridge>
-open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn pri_cmp_impl,
-        RustComparatorFn snd_cmp_impl);
+open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl);
 
 #endif //COZOROCKS_DB_H

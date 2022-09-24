@@ -15,7 +15,6 @@ use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
 
-use cozorocks::CfHandle::{Pri, Snd};
 use cozorocks::{DbBuilder, DbIter, RocksDb};
 
 use crate::data::json::JsonValue;
@@ -120,12 +119,9 @@ impl Db {
         store_path.push("data");
         let db_builder = builder
             .create_if_missing(is_new)
-            // TODO
-            .pri_use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
-            .pri_use_custom_comparator("cozo_rusty_cmp", rusty_scratch_cmp, false)
+            .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
+            .use_custom_comparator("cozo_rusty_cmp", rusty_scratch_cmp, false)
             .use_bloom_filter(true, 9.9, true)
-            .snd_use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
-            .snd_use_custom_comparator("cozo_rusty_scratch_cmp", rusty_scratch_cmp, false)
             .path(store_path.to_str().unwrap());
 
         let db = db_builder.build()?;
@@ -145,7 +141,7 @@ impl Db {
     pub fn compact_relation(&self) -> Result<()> {
         let l = Tuple::default().encode_as_key(RelationId(0));
         let u = Tuple(vec![DataValue::Bot]).encode_as_key(RelationId(u64::MAX));
-        self.db.range_compact(&l, &u, Snd)?;
+        self.db.range_compact(&l, &u)?;
         Ok(())
     }
 
@@ -183,11 +179,6 @@ impl Db {
             relation_store_id: self.relation_store_id.clone(),
         };
         Ok(ret)
-    }
-    pub fn total_iter(&self) -> DbIter {
-        let mut it = self.db.transact().start().iterator(Pri).start();
-        it.seek_to_start();
-        it
     }
     pub fn run_script(
         &self,
@@ -232,7 +223,7 @@ impl Db {
                     assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
                 }
                 for (lower, upper) in cleanups {
-                    self.db.range_del(&lower, &upper, Snd)?;
+                    self.db.range_del(&lower, &upper)?;
                 }
                 Ok(res)
             }
@@ -458,7 +449,7 @@ impl Db {
         let mut tx = self.transact_write()?;
         let (lower, upper) = tx.destroy_relation(name)?;
         tx.commit_tx()?;
-        self.db.range_del(&lower, &upper, Snd)?;
+        self.db.range_del(&lower, &upper)?;
         Ok(())
     }
     pub(crate) fn list_running(&self) -> Result<JsonValue> {
@@ -478,7 +469,7 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
         let mut vtx = self.db.transact().start();
-        vtx.put(&key, v, Snd)?;
+        vtx.put(&key, v)?;
         vtx.commit()?;
         Ok(())
     }
@@ -489,7 +480,7 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
         let mut vtx = self.db.transact().start();
-        vtx.del(&key, Snd)?;
+        vtx.del(&key)?;
         vtx.commit()?;
         Ok(())
     }
@@ -500,7 +491,7 @@ impl Db {
         }
         let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
         let vtx = self.db.transact().start();
-        Ok(vtx.get(&key, false, Snd)?.map(|slice| slice.to_vec()))
+        Ok(vtx.get(&key, false)?.map(|slice| slice.to_vec()))
     }
     pub fn meta_range_scan(
         &self,
@@ -516,7 +507,7 @@ impl Db {
             .db
             .transact()
             .start()
-            .iterator(Snd)
+            .iterator()
             .upper_bound(&upper_bound)
             .start();
         it.seek(&lower_bound.encode_as_key(RelationId::SYSTEM));
@@ -616,7 +607,7 @@ impl Db {
             .db
             .transact()
             .start()
-            .iterator(Snd)
+            .iterator()
             .upper_bound(&upper)
             .start();
         it.seek(&lower);

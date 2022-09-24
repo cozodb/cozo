@@ -2,8 +2,6 @@ use itertools::Itertools;
 use miette::{Diagnostic, Result};
 use thiserror::Error;
 
-use cozorocks::CfHandle::Snd;
-
 use crate::data::expr::Expr;
 use crate::data::program::RelationOp;
 use crate::data::relation::{ColumnDef, NullableColType};
@@ -58,7 +56,7 @@ impl SessionTx {
                     .map(|ex| ex.extract_data(&tuple))
                     .try_collect()?;
                 let key = relation_store.adhoc_encode_key(&Tuple(extracted), *span)?;
-                self.tx.del(&key, Snd)?;
+                self.tx.del(&key)?;
             }
         } else {
             let mut key_extractors = make_extractors(
@@ -88,7 +86,7 @@ impl SessionTx {
                 let key = relation_store.adhoc_encode_key(&extracted, *span)?;
                 let val = relation_store.adhoc_encode_val(&extracted, *span)?;
 
-                self.tx.put(&key, &val, Snd)?;
+                self.tx.put(&key, &val)?;
             }
         }
 

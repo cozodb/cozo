@@ -26,18 +26,12 @@ pub(crate) mod ffi {
         pub use_bloom_filter: bool,
         pub bloom_filter_bits_per_key: f64,
         pub bloom_filter_whole_key_filtering: bool,
-        pub pri_use_capped_prefix_extractor: bool,
-        pub pri_capped_prefix_extractor_len: usize,
-        pub pri_use_fixed_prefix_extractor: bool,
-        pub pri_fixed_prefix_extractor_len: usize,
-        pub snd_use_capped_prefix_extractor: bool,
-        pub snd_capped_prefix_extractor_len: usize,
-        pub snd_use_fixed_prefix_extractor: bool,
-        pub snd_fixed_prefix_extractor_len: usize,
-        pub pri_comparator_name: &'a str,
-        pub pri_comparator_different_bytes_can_be_equal: bool,
-        pub snd_comparator_name: &'a str,
-        pub snd_comparator_different_bytes_can_be_equal: bool,
+        pub use_capped_prefix_extractor: bool,
+        pub capped_prefix_extractor_len: usize,
+        pub use_fixed_prefix_extractor: bool,
+        pub fixed_prefix_extractor_len: usize,
+        pub comparator_name: &'a str,
+        pub comparator_different_bytes_can_be_equal: bool,
         pub destroy_on_exit: bool,
     }
 
@@ -124,31 +118,27 @@ pub(crate) mod ffi {
             builder: &DbOpts,
             status: &mut RocksDbStatus,
             use_cmp: bool,
-            pri_cmp_impl: fn(&[u8], &[u8]) -> i8,
-            snd_cmp_impl: fn(&[u8], &[u8]) -> i8,
+            cmp_impl: fn(&[u8], &[u8]) -> i8,
         ) -> SharedPtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
         fn del_range(
             self: &RocksDbBridge,
             lower: &[u8],
             upper: &[u8],
-            idx: usize,
             status: &mut RocksDbStatus,
         );
         fn compact_range(
             self: &RocksDbBridge,
             lower: &[u8],
             upper: &[u8],
-            idx: usize,
             status: &mut RocksDbStatus,
         );
         fn get_sst_writer(
             self: &RocksDbBridge,
             path: &str,
-            idx: usize,
             status: &mut RocksDbStatus,
         ) -> UniquePtr<SstFileWriterBridge>;
-        fn ingest_sst(self: &RocksDbBridge, path: &str, idx: usize, status: &mut RocksDbStatus);
+        fn ingest_sst(self: &RocksDbBridge, path: &str, status: &mut RocksDbStatus);
 
         type SstFileWriterBridge;
         fn put(
@@ -171,30 +161,27 @@ pub(crate) mod ffi {
             self: &TxBridge,
             key: &[u8],
             for_update: bool,
-            idx: usize,
             status: &mut RocksDbStatus,
         ) -> UniquePtr<PinnableSlice>;
         fn exists(
             self: &TxBridge,
             key: &[u8],
             for_update: bool,
-            idx: usize,
             status: &mut RocksDbStatus,
         );
         fn put(
             self: Pin<&mut TxBridge>,
             key: &[u8],
             val: &[u8],
-            idx: usize,
             status: &mut RocksDbStatus,
         );
-        fn del(self: Pin<&mut TxBridge>, key: &[u8], idx: usize, status: &mut RocksDbStatus);
+        fn del(self: Pin<&mut TxBridge>, key: &[u8], status: &mut RocksDbStatus);
         fn commit(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn rollback(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn rollback_to_savepoint(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn pop_savepoint(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn set_savepoint(self: Pin<&mut TxBridge>);
-        fn iterator(self: &TxBridge, idx: usize) -> UniquePtr<IterBridge>;
+        fn iterator(self: &TxBridge) -> UniquePtr<IterBridge>;
 
         type IterBridge;
         fn start(self: Pin<&mut IterBridge>);

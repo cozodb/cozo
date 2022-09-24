@@ -12,18 +12,3 @@ pub use bridge::tx::Tx;
 pub use bridge::tx::TxBuilder;
 
 pub(crate) mod bridge;
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum CfHandle {
-    Pri,
-    Snd,
-}
-
-impl From<CfHandle> for usize {
-    fn from(s: CfHandle) -> Self {
-        match s {
-            CfHandle::Pri => 0,
-            CfHandle::Snd => 1,
-        }
-    }
-}

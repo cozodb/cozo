@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use miette::Result;
 
 use cozorocks::Tx;
-use cozorocks::CfHandle::Snd;
 
 use crate::data::program::MagicSymbol;
 use crate::data::symb::Symbol;
@@ -42,7 +41,7 @@ impl SessionTx {
     pub(crate) fn load_last_relation_store_id(&self) -> Result<RelationId> {
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
-        let found = self.tx.get(&t_encoded, false, Snd)?;
+        let found = self.tx.get(&t_encoded, false)?;
         Ok(match found {
             None => RelationId::SYSTEM,
             Some(slice) => RelationId::raw_decode(&slice),

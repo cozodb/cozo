@@ -4,12 +4,10 @@ use cxx::*;
 
 use crate::bridge::ffi::*;
 use crate::bridge::tx::TxBuilder;
-use crate::CfHandle;
 
 #[derive(Default, Clone)]
 pub struct DbBuilder<'a> {
-    pub pri_cmp_fn: Option<fn(&[u8], &[u8]) -> i8>,
-    pub snd_cmp_fn: Option<fn(&[u8], &[u8]) -> i8>,
+    pub cmp_fn: Option<fn(&[u8], &[u8]) -> i8>,
     pub opts: DbOpts<'a>,
 }
 
@@ -29,18 +27,12 @@ impl<'a> Default for DbOpts<'a> {
             use_bloom_filter: false,
             bloom_filter_bits_per_key: 0.0,
             bloom_filter_whole_key_filtering: false,
-            pri_use_capped_prefix_extractor: false,
-            pri_capped_prefix_extractor_len: 0,
-            pri_use_fixed_prefix_extractor: false,
-            pri_fixed_prefix_extractor_len: 0,
-            pri_comparator_name: "",
-            pri_comparator_different_bytes_can_be_equal: false,
-            snd_use_capped_prefix_extractor: false,
-            snd_capped_prefix_extractor_len: 0,
-            snd_use_fixed_prefix_extractor: false,
-            snd_fixed_prefix_extractor_len: 0,
-            snd_comparator_name: "",
-            snd_comparator_different_bytes_can_be_equal: false,
+            use_capped_prefix_extractor: false,
+            capped_prefix_extractor_len: 0,
+            use_fixed_prefix_extractor: false,
+            fixed_prefix_extractor_len: 0,
+            comparator_name: "",
+            comparator_different_bytes_can_be_equal: false,
             destroy_on_exit: false,
         }
     }
@@ -95,52 +87,27 @@ impl<'a> DbBuilder<'a> {
         self.opts.bloom_filter_whole_key_filtering = whole_key_filtering;
         self
     }
-    pub fn pri_use_capped_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
-        self.opts.pri_use_capped_prefix_extractor = enable;
-        self.opts.pri_capped_prefix_extractor_len = len;
+    pub fn use_capped_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
+        self.opts.use_capped_prefix_extractor = enable;
+        self.opts.capped_prefix_extractor_len = len;
         self
     }
-    pub fn snd_use_capped_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
-        self.opts.snd_use_capped_prefix_extractor = enable;
-        self.opts.snd_capped_prefix_extractor_len = len;
+    pub fn use_fixed_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
+        self.opts.use_fixed_prefix_extractor = enable;
+        self.opts.fixed_prefix_extractor_len = len;
         self
     }
-    pub fn pri_use_fixed_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
-        self.opts.pri_use_fixed_prefix_extractor = enable;
-        self.opts.pri_fixed_prefix_extractor_len = len;
-        self
-    }
-    pub fn snd_use_fixed_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
-        self.opts.snd_use_fixed_prefix_extractor = enable;
-        self.opts.snd_fixed_prefix_extractor_len = len;
-        self
-    }
-    pub fn pri_use_custom_comparator(
+    pub fn use_custom_comparator(
         mut self,
         name: &'a str,
         cmp: fn(&[u8], &[u8]) -> i8,
         different_bytes_can_be_equal: bool,
     ) -> Self {
-        self.pri_cmp_fn = Some(cmp);
-        self.opts.pri_comparator_name = name;
-        self.opts.pri_comparator_different_bytes_can_be_equal = different_bytes_can_be_equal;
+        self.cmp_fn = Some(cmp);
+        self.opts.comparator_name = name;
+        self.opts.comparator_different_bytes_can_be_equal = different_bytes_can_be_equal;
         self
     }
-    pub fn snd_use_custom_comparator(
-        mut self,
-        name: &'a str,
-        cmp: fn(&[u8], &[u8]) -> i8,
-        different_bytes_can_be_equal: bool,
-    ) -> Self {
-        self.snd_cmp_fn = Some(cmp);
-        self.opts.snd_comparator_name = name;
-        self.opts.snd_comparator_different_bytes_can_be_equal = different_bytes_can_be_equal;
-        self
-    }
-    // pub fn destroy_on_exit(mut self, destroy: bool) -> Self {
-    //     self.opts.destroy_on_exit = destroy;
-    //     self
-    // }
     pub fn build(self) -> Result<RocksDb, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
 
@@ -151,9 +118,8 @@ impl<'a> DbBuilder<'a> {
         let result = open_db(
             &self.opts,
             &mut status,
-            self.pri_cmp_fn.is_some() || self.snd_cmp_fn.is_some(),
-            self.pri_cmp_fn.unwrap_or(dummy),
-            self.snd_cmp_fn.unwrap_or(dummy)
+            self.cmp_fn.is_some(),
+            self.cmp_fn.unwrap_or(dummy),
         );
         if status.is_ok() {
             Ok(RocksDb { inner: result })
@@ -178,9 +144,9 @@ impl RocksDb {
         }
     }
     #[inline]
-    pub fn range_del(&self, lower: &[u8], upper: &[u8], handle: CfHandle) -> Result<(), RocksDbStatus> {
+    pub fn range_del(&self, lower: &[u8], upper: &[u8]) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.del_range(lower, upper, handle.into(), &mut status);
+        self.inner.del_range(lower, upper, &mut status);
         if status.is_ok() {
             Ok(())
         } else {
@@ -188,27 +154,27 @@ impl RocksDb {
         }
     }
     #[inline]
-    pub fn range_compact(&self, lower: &[u8], upper: &[u8], handle: CfHandle) -> Result<(), RocksDbStatus> {
+    pub fn range_compact(&self, lower: &[u8], upper: &[u8]) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.compact_range(lower, upper, handle.into(), &mut status);
+        self.inner.compact_range(lower, upper, &mut status);
         if status.is_ok() {
             Ok(())
         } else {
             Err(status)
         }
     }
-    pub fn get_sst_writer(&self, path: &str, handle: CfHandle) -> Result<SstWriter, RocksDbStatus> {
+    pub fn get_sst_writer(&self, path: &str) -> Result<SstWriter, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        let ret = self.inner.get_sst_writer(path, handle.into(), &mut status);
+        let ret = self.inner.get_sst_writer(path, &mut status);
         if status.is_ok() {
             Ok(SstWriter { inner: ret })
         } else {
             Err(status)
         }
     }
-    pub fn ingest_sst_file(&self, path: &str, handle: CfHandle) -> Result<(), RocksDbStatus> {
+    pub fn ingest_sst_file(&self, path: &str) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.ingest_sst(path, handle.into(), &mut status);
+        self.inner.ingest_sst(path, &mut status);
         if status.is_ok() {
             Ok(())
         } else {

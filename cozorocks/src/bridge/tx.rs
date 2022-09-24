@@ -5,7 +5,6 @@ use cxx::*;
 
 use crate::bridge::ffi::*;
 use crate::bridge::iter::IterBuilder;
-use crate::CfHandle;
 
 pub struct TxBuilder {
     pub(crate) inner: UniquePtr<TxBridge>,
@@ -85,9 +84,9 @@ impl Tx {
         self.inner.pin_mut().clear_snapshot()
     }
     #[inline]
-    pub fn put(&mut self, key: &[u8], val: &[u8], handle: CfHandle) -> Result<(), RocksDbStatus> {
+    pub fn put(&mut self, key: &[u8], val: &[u8]) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.pin_mut().put(key, val, handle.into(), &mut status);
+        self.inner.pin_mut().put(key, val, &mut status);
         if status.is_ok() {
             Ok(())
         } else {
@@ -95,9 +94,9 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn del(&mut self, key: &[u8], handle: CfHandle) -> Result<(), RocksDbStatus> {
+    pub fn del(&mut self, key: &[u8]) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.pin_mut().del(key, handle.into(), &mut status);
+        self.inner.pin_mut().del(key, &mut status);
         if status.is_ok() {
             Ok(())
         } else {
@@ -105,9 +104,9 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn get(&self, key: &[u8], for_update: bool, handle: CfHandle) -> Result<Option<PinSlice>, RocksDbStatus> {
+    pub fn get(&self, key: &[u8], for_update: bool) -> Result<Option<PinSlice>, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        let ret = self.inner.get(key, for_update, handle.into(), &mut status);
+        let ret = self.inner.get(key, for_update, &mut status);
         match status.code {
             StatusCode::kOk => Ok(Some(PinSlice { inner: ret })),
             StatusCode::kNotFound => Ok(None),
@@ -115,9 +114,9 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn exists(&self, key: &[u8], for_update: bool, handle: CfHandle) -> Result<bool, RocksDbStatus> {
+    pub fn exists(&self, key: &[u8], for_update: bool) -> Result<bool, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.exists(key, for_update, handle.into(), &mut status);
+        self.inner.exists(key, for_update, &mut status);
         match status.code {
             StatusCode::kOk => Ok(true),
             StatusCode::kNotFound => Ok(false),
@@ -169,9 +168,9 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn iterator(&self, handle: CfHandle) -> IterBuilder {
+    pub fn iterator(&self) -> IterBuilder {
         IterBuilder {
-            inner: self.inner.iterator(handle.into()),
+            inner: self.inner.iterator(),
         }
             .auto_prefix_mode(true)
     }

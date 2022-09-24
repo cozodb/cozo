@@ -18,9 +18,9 @@ struct TxBridge {
     unique_ptr<ReadOptions> r_opts;
     unique_ptr<OptimisticTransactionOptions> o_tx_opts;
     unique_ptr<TransactionOptions> p_tx_opts;
-    vector<ColumnFamilyHandle *> cf_handles;
+    ColumnFamilyHandle * cf_handle;
 
-    explicit TxBridge(TransactionDB *tdb_, vector<ColumnFamilyHandle *> cf_handles_) :
+    explicit TxBridge(TransactionDB *tdb_, ColumnFamilyHandle * cf_handle_) :
             odb(nullptr),
             tdb(tdb_),
             tx(),
@@ -28,7 +28,7 @@ struct TxBridge {
             r_opts(new ReadOptions),
             o_tx_opts(nullptr),
             p_tx_opts(new TransactionOptions),
-            cf_handles(cf_handles_) {
+            cf_handle(cf_handle_) {
         r_opts->ignore_range_deletions = true;
     }
 
@@ -48,9 +48,8 @@ struct TxBridge {
         r_opts->fill_cache = val;
     }
 
-    inline unique_ptr<IterBridge> iterator(size_t idx) const {
-        auto cf = cf_handles[idx];
-        return make_unique<IterBridge>(&*tx, cf);
+    inline unique_ptr<IterBridge> iterator() const {
+        return make_unique<IterBridge>(&*tx);
     };
 
     inline void set_snapshot(bool val) {
@@ -79,41 +78,37 @@ struct TxBridge {
 
     void start();
 
-    inline unique_ptr<PinnableSlice> get(RustBytes key, bool for_update, size_t idx, RocksDbStatus &status) const {
+    inline unique_ptr<PinnableSlice> get(RustBytes key, bool for_update, RocksDbStatus &status) const {
         Slice key_ = convert_slice(key);
         auto ret = make_unique<PinnableSlice>();
-        auto cf = cf_handles[idx];
         if (for_update) {
-            auto s = tx->GetForUpdate(*r_opts, cf, key_, &*ret);
+            auto s = tx->GetForUpdate(*r_opts, cf_handle, key_, &*ret);
             write_status(s, status);
         } else {
-            auto s = tx->Get(*r_opts, cf, key_, &*ret);
+            auto s = tx->Get(*r_opts, key_, &*ret);
             write_status(s, status);
         }
         return ret;
     }
 
-    inline void exists(RustBytes key, bool for_update, size_t idx, RocksDbStatus &status) const {
+    inline void exists(RustBytes key, bool for_update, RocksDbStatus &status) const {
         Slice key_ = convert_slice(key);
-        auto cf = cf_handles[idx];
         auto ret = PinnableSlice();
         if (for_update) {
-            auto s = tx->GetForUpdate(*r_opts, cf, key_, &ret);
+            auto s = tx->GetForUpdate(*r_opts, cf_handle, key_, &ret);
             write_status(s, status);
         } else {
-            auto s = tx->Get(*r_opts, cf, key_, &ret);
+            auto s = tx->Get(*r_opts, key_, &ret);
             write_status(s, status);
         }
     }
 
-    inline void put(RustBytes key, RustBytes val, size_t idx, RocksDbStatus &status) {
-        auto cf = cf_handles[idx];
-        write_status(tx->Put(cf, convert_slice(key), convert_slice(val)), status);
+    inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) {
+        write_status(tx->Put(convert_slice(key), convert_slice(val)), status);
     }
 
-    inline void del(RustBytes key, size_t idx, RocksDbStatus &status) {
-        auto cf = cf_handles[idx];
-        write_status(tx->Delete(cf, convert_slice(key)), status);
+    inline void del(RustBytes key, RocksDbStatus &status) {
+        write_status(tx->Delete(convert_slice(key)), status);
     }
 
     inline void commit(RocksDbStatus &status) {

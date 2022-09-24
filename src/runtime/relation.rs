@@ -10,7 +10,6 @@ use serde::Serialize;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use cozorocks::CfHandle::Snd;
 use cozorocks::DbIter;
 
 use crate::data::relation::StoredRelationMetadata;
@@ -227,7 +226,7 @@ struct RelationIterator {
 
 impl RelationIterator {
     fn new(sess: &SessionTx, lower: &[u8], upper: &[u8]) -> Self {
-        let mut inner = sess.tx.iterator(Snd).upper_bound(upper).start();
+        let mut inner = sess.tx.iterator().upper_bound(upper).start();
         inner.seek(lower);
         Self {
             inner,
@@ -277,7 +276,7 @@ impl SessionTx {
     pub(crate) fn relation_exists(&self, name: &str) -> Result<bool> {
         let key = DataValue::Str(SmartString::from(name));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
-        Ok(self.tx.exists(&encoded, false, Snd)?)
+        Ok(self.tx.exists(&encoded, false)?)
     }
     pub(crate) fn create_relation(
         &mut self,
@@ -286,7 +285,7 @@ impl SessionTx {
         let key = DataValue::Str(input_meta.name.name.clone());
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
 
-        if self.tx.exists(&encoded, true, Snd)? {
+        if self.tx.exists(&encoded, true)? {
             bail!(RelNameConflictError(input_meta.name.to_string()))
         };
 
@@ -298,17 +297,17 @@ impl SessionTx {
             metadata,
         };
 
-        self.tx.put(&encoded, &meta.id.raw_encode(), Snd)?;
+        self.tx.put(&encoded, &meta.id.raw_encode())?;
         let name_key =
             Tuple(vec![DataValue::Str(meta.name.clone())]).encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
-        self.tx.put(&name_key, &meta_val, Snd)?;
+        self.tx.put(&name_key, &meta_val)?;
 
         let tuple = Tuple(vec![DataValue::Null]);
         let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
-        self.tx.put(&t_encoded, &meta.id.raw_encode(), Snd)?;
+        self.tx.put(&t_encoded, &meta.id.raw_encode())?;
         Ok(meta)
     }
     pub(crate) fn get_relation(&self, name: &str) -> Result<RelationHandle> {
@@ -322,7 +321,7 @@ impl SessionTx {
 
         let found = self
             .tx
-            .get(&encoded, true, Snd)?
+            .get(&encoded, true)?
             .ok_or_else(|| StoredRelationNotFoundError(name.to_string()))?;
         let metadata = RelationHandle::decode(&found)?;
         Ok(metadata)
@@ -331,7 +330,7 @@ impl SessionTx {
         let store = self.get_relation(name)?;
         let key = DataValue::Str(SmartString::from(name as &str));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
-        self.tx.del(&encoded, Snd)?;
+        self.tx.del(&encoded)?;
         let lower_bound = Tuple::default().encode_as_key(store.id);
         let upper_bound = Tuple::default().encode_as_key(store.id.next());
         Ok((lower_bound, upper_bound))
@@ -340,7 +339,7 @@ impl SessionTx {
         let new_key = DataValue::Str(new.name.clone());
         let new_encoded = Tuple(vec![new_key]).encode_as_key(RelationId::SYSTEM);
 
-        if self.tx.exists(&new_encoded, true, Snd)? {
+        if self.tx.exists(&new_encoded, true)? {
             bail!(RelNameConflictError(new.name.to_string()))
         };
 
@@ -352,8 +351,8 @@ impl SessionTx {
 
         let mut meta_val = vec![];
         rel.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
-        self.tx.del(&old_encoded, Snd)?;
-        self.tx.put(&new_encoded, &meta_val, Snd)?;
+        self.tx.del(&old_encoded)?;
+        self.tx.put(&new_encoded, &meta_val)?;
 
         Ok(())
     }
