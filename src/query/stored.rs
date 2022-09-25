@@ -29,21 +29,26 @@ impl SessionTx {
         headers: &[Symbol],
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = vec![];
+        let mut rederive_old_triggers = None;
         if op == RelationOp::ReDerive {
             if let Ok(old_handle) = self.get_relation(&meta.name) {
                 if old_handle.has_triggers() {
-                    // handle active triggers
+                    rederive_old_triggers = Some((old_handle.put_triggers, old_handle.retract_triggers))
                 }
             }
             if let Ok(c) = self.destroy_relation(&meta.name) {
                 to_clear.push(c);
             }
         }
-        let relation_store = if op == RelationOp::ReDerive || op == RelationOp::Create {
+        let mut relation_store = if op == RelationOp::ReDerive || op == RelationOp::Create {
             self.create_relation(meta.clone())?
         } else {
             self.get_relation(&meta.name)?
         };
+        if let Some((old_put, old_retract)) = rederive_old_triggers {
+            relation_store.put_triggers = old_put;
+            relation_store.retract_triggers = old_retract;
+        }
         let InputRelationHandle {
             metadata,
             key_bindings,
