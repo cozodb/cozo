@@ -61,6 +61,8 @@ pub(crate) struct RelationHandle {
     pub(crate) name: SmartString<LazyCompact>,
     pub(crate) id: RelationId,
     pub(crate) metadata: StoredRelationMetadata,
+    pub(crate) put_triggers: Vec<String>,
+    pub(crate) retract_triggers: Vec<String>
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -75,6 +77,9 @@ struct StoredRelArityMismatch {
 }
 
 impl RelationHandle {
+    pub(crate) fn has_triggers(&self) -> bool {
+        !self.put_triggers.is_empty() || !self.retract_triggers.is_empty()
+    }
     fn encode_key_prefix(&self, len: usize) -> Vec<u8> {
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
         let prefix_bytes = self.id.0.to_be_bytes();
@@ -175,8 +180,7 @@ impl RelationHandle {
         Ok(rmp_serde::from_slice(data).map_err(|e| {
             error!(
                 "Cannot deserialize relation metadata from bytes: {:x?}, {:?}",
-                data,
-                e
+                data, e
             );
             RelationDeserError
         })?)
@@ -278,6 +282,21 @@ impl SessionTx {
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         Ok(self.tx.exists(&encoded, false)?)
     }
+    pub(crate) fn set_relation_triggers(&mut self, name: Symbol , puts: Vec<String>, retracts: Vec<String>) -> Result<()> {
+        let mut original = self.get_relation(&name)?;
+        original.put_triggers = puts;
+        original.retract_triggers = retracts;
+
+        let name_key =
+            Tuple(vec![DataValue::Str(original.name.clone())]).encode_as_key(RelationId::SYSTEM);
+
+        let mut meta_val = vec![];
+        original.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
+            .unwrap();
+        self.tx.put(&name_key, &meta_val)?;
+
+        Ok(())
+    }
     pub(crate) fn create_relation(
         &mut self,
         input_meta: InputRelationHandle,
@@ -295,6 +314,8 @@ impl SessionTx {
             name: input_meta.name.name.clone(),
             id: RelationId::new(last_id + 1),
             metadata,
+            put_triggers: vec![],
+            retract_triggers: vec![]
         };
 
         self.tx.put(&encoded, &meta.id.raw_encode())?;
@@ -302,7 +323,8 @@ impl SessionTx {
             Tuple(vec![DataValue::Str(meta.name.clone())]).encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
-        meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map()).unwrap();
+        meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
+            .unwrap();
         self.tx.put(&name_key, &meta_val)?;
 
         let tuple = Tuple(vec![DataValue::Null]);

@@ -1,9 +1,10 @@
 use std::cmp::{max, min};
 use std::collections::BTreeMap;
 
-use miette::{Diagnostic, Result, IntoDiagnostic};
+use miette::{bail, ensure, Diagnostic, IntoDiagnostic, Result};
 use pest::error::InputLocation;
 use pest::Parser;
+use thiserror::Error;
 
 use crate::data::program::InputProgram;
 use crate::data::relation::NullableColType;
@@ -14,8 +15,8 @@ use crate::parse::sys::{parse_sys, SysOp};
 
 pub(crate) mod expr;
 pub(crate) mod query;
-pub(crate) mod sys;
 pub(crate) mod schema;
+pub(crate) mod sys;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "cozoscript.pest"]
@@ -29,7 +30,27 @@ pub(crate) enum CozoScript {
     Sys(SysOp),
 }
 
-#[derive(Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Default)]
+impl CozoScript {
+    pub(crate) fn get_single_program(self) -> Result<InputProgram> {
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("expect script to contain only a single program")]
+        #[diagnostic(code(parser::expect_singleton))]
+        struct ExpectSingleProgram;
+        match self {
+            CozoScript::Multi(v) => {
+                ensure!(v.len() == 1, ExpectSingleProgram);
+                Ok(v.into_iter().next().unwrap())
+            }
+            CozoScript::Sys(_) => {
+                bail!(ExpectSingleProgram)
+            }
+        }
+    }
+}
+
+#[derive(
+    Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Default,
+)]
 pub(crate) struct SourceSpan(pub(crate) usize, pub(crate) usize);
 
 impl SourceSpan {
@@ -65,7 +86,10 @@ pub(crate) struct ParseError {
 }
 
 pub(crate) fn parse_type(src: &str) -> Result<NullableColType> {
-    let parsed = CozoScriptParser::parse(Rule::col_type_with_term, src).into_diagnostic()?.next().unwrap();
+    let parsed = CozoScriptParser::parse(Rule::col_type_with_term, src)
+        .into_diagnostic()?
+        .next()
+        .unwrap();
     parse_nullable_type(parsed.into_inner().next().unwrap())
 }
 
@@ -87,7 +111,7 @@ pub(crate) fn parse_script(
         Rule::query_script => {
             let q = parse_query(parsed.into_inner(), param_pool)?;
             CozoScript::Multi(vec![q])
-        },
+        }
         Rule::multi_script => {
             let mut qs = vec![];
             for pair in parsed.into_inner() {

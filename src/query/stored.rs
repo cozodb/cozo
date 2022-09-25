@@ -1,13 +1,16 @@
 use itertools::Itertools;
 use miette::{Diagnostic, Result};
+use smartstring::SmartString;
 use thiserror::Error;
 
 use crate::data::expr::Expr;
-use crate::data::program::RelationOp;
+use crate::data::program::{ConstRule, MagicSymbol, RelationOp};
 use crate::data::relation::{ColumnDef, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::Db;
+use crate::parse::parse_script;
 use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::transact::SessionTx;
 
@@ -19,15 +22,21 @@ struct RelationArityMismatch(String, usize, usize);
 impl SessionTx {
     pub(crate) fn execute_relation<'a>(
         &'a mut self,
+        db: &Db,
         res_iter: impl Iterator<Item = Result<Tuple>> + 'a,
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
-    ) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
-        let mut to_clear = None;
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+        let mut to_clear = vec![];
         if op == RelationOp::ReDerive {
+            if let Ok(old_handle) = self.get_relation(&meta.name) {
+                if old_handle.has_triggers() {
+                    // handle active triggers
+                }
+            }
             if let Ok(c) = self.destroy_relation(&meta.name) {
-                to_clear = Some(c);
+                to_clear.push(c);
             }
         }
         let relation_store = if op == RelationOp::ReDerive || op == RelationOp::Create {
@@ -49,14 +58,42 @@ impl SessionTx {
                 key_bindings,
                 headers,
             )?;
+
+            let has_triggers = !relation_store.retract_triggers.is_empty();
+            let mut collected = vec![];
+
             for tuple in res_iter {
                 let tuple = tuple?;
                 let extracted: Vec<_> = key_extractors
                     .iter()
                     .map(|ex| ex.extract_data(&tuple))
                     .try_collect()?;
+                if has_triggers {
+                    collected.push(Tuple(extracted.clone()));
+                }
                 let key = relation_store.adhoc_encode_key(&Tuple(extracted), *span)?;
                 self.tx.del(&key)?;
+            }
+
+            for trigger in &relation_store.retract_triggers {
+                let mut program = parse_script(trigger, &Default::default())?.get_single_program()?;
+                let rule = ConstRule {
+                    bindings: vec![],
+                    data: collected.clone(),
+                    span: Default::default()
+                };
+                program.const_rules.insert(MagicSymbol::Muggle {
+                    inner: Symbol::new(SmartString::from("_"), Default::default())
+                }, rule);
+
+                let (_, cleanups) = db.run_query(self, program).map_err(|err| {
+                    if err.source_code().is_some() {
+                        err
+                    } else {
+                        err.with_source_code(trigger.to_string())
+                    }
+                })?;
+                to_clear.extend(cleanups);
             }
         } else {
             let mut key_extractors = make_extractors(
@@ -65,6 +102,9 @@ impl SessionTx {
                 key_bindings,
                 headers,
             )?;
+
+            let has_triggers = !relation_store.put_triggers.is_empty();
+            let mut collected = vec![];
 
             let val_extractors = make_extractors(
                 &relation_store.metadata.dependents,
@@ -83,10 +123,37 @@ impl SessionTx {
                         .map(|ex| ex.extract_data(&tuple))
                         .try_collect()?,
                 );
+                if has_triggers {
+                    collected.push(extracted.clone());
+                }
+
                 let key = relation_store.adhoc_encode_key(&extracted, *span)?;
                 let val = relation_store.adhoc_encode_val(&extracted, *span)?;
 
                 self.tx.put(&key, &val)?;
+            }
+
+            if has_triggers {
+                for trigger in &relation_store.put_triggers {
+                    let mut program = parse_script(trigger, &Default::default())?.get_single_program()?;
+                    let rule = ConstRule {
+                        bindings: vec![],
+                        data: collected.clone(),
+                        span: Default::default()
+                    };
+                    program.const_rules.insert(MagicSymbol::Muggle {
+                        inner: Symbol::new(SmartString::from("_"), Default::default())
+                    }, rule);
+
+                    let (_, cleanups) = db.run_query(self, program).map_err(|err| {
+                        if err.source_code().is_some() {
+                            err
+                        } else {
+                            err.with_source_code(trigger.to_string())
+                        }
+                    })?;
+                    to_clear.extend(cleanups);
+                }
             }
         }
 

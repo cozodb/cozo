@@ -3,7 +3,7 @@ query_script = {SOI ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
 query_script_inner = {"{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
 multi_script = {SOI ~ query_script_inner+ ~ EOI}
 sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op | trigger_relation_op |
-                    rename_relations_op | running_op | kill_op) ~ EOI}
+                    trigger_relation_show_op | rename_relations_op | running_op | kill_op) ~ EOI}
 
 compact_op = {"compact" ~ compact_opt_relations+}
 compact_opt_relations = {"relations"}
@@ -15,9 +15,9 @@ remove_relations_op = {"relation" ~ "remove" ~ (compound_ident ~ ",")* ~ compoun
 rename_relations_op = {"relation" ~ "rename" ~ (rename_pair ~ ",")* ~ rename_pair }
 trigger_relation_show_op = {"relation" ~ "show_triggers" ~ compound_ident }
 trigger_relation_op = {"relation" ~ "set_triggers" ~ compound_ident ~ trigger_clause* }
-trigger_clause = { (trigger_put | trigger_retract) ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}" }
-trigger_put = {"put"}
-trigger_retract = {"retract"}
+trigger_clause = { (trigger_put | trigger_retract) ~ query_script_inner }
+trigger_put = {"on_put"}
+trigger_retract = {"on_retract"}
 rename_pair = {compound_ident ~ "->" ~ compound_ident}
 from_clause = {"from" ~ expr}
 to_clause = {"to" ~ expr}
@@ -31,6 +31,7 @@ prog_entry = {"?"}
 var = @{(XID_START | "_") ~ (XID_CONTINUE | "_")*}
 param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
+underscore_ident = @{("_" | XID_START) ~ ("_" | XID_CONTINUE)*}
 relation_ident = @{":" ~ compound_ident}
 compound_ident = @{ident ~ ("." ~ ident)?}
 
@@ -49,7 +50,7 @@ algo_rule_rel = {ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
 algo_relation_rel = {relation_ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
-rule_apply = {ident ~ "[" ~ apply_args ~ "]"}
+rule_apply = {underscore_ident ~ "[" ~ apply_args ~ "]"}
 relation_named_apply = {relation_ident ~ "{" ~ named_apply_args ~ "}"}
 relation_apply = {relation_ident ~ "[" ~ apply_args ~ "]"}
 

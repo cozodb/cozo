@@ -273,9 +273,27 @@ impl Db {
                     }
                 })
             }
+            SysOp::ShowTrigger(name) => {
+                let tx = self.transact()?;
+                let rel = tx.get_relation(&name)?;
+                let mut ret = vec![];
+                for (i, trigger) in rel.put_triggers.iter().enumerate() {
+                    ret.push(json!(["put", i, trigger]))
+                }
+                for (i, trigger) in rel.retract_triggers.iter().enumerate() {
+                    ret.push(json!(["retract", i, trigger]))
+                }
+                Ok(json!({"headers": ["type", "idx", "trigger"], "rows": ret}))
+            }
+            SysOp::SetTriggers(name, puts, retracts) => {
+                let mut tx = self.transact_write()?;
+                tx.set_relation_triggers(name, puts, retracts)?;
+                tx.commit_tx()?;
+                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
+            }
         }
     }
-    fn run_query(
+    pub(crate) fn run_query(
         &self,
         tx: &mut SessionTx,
         input_program: InputProgram,
@@ -397,15 +415,14 @@ impl Db {
             if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(
+                        self,
                         sorted_iter,
                         *relation_op,
                         &meta,
                         &input_program.get_entry_out_head_or_default()?,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
-                if let Some(c) = to_clear {
-                    clean_ups.push(c);
-                }
+                clean_ups.extend(to_clear);
                 Ok((json!({"headers": ["status"], "rows": [["OK"]]}), clean_ups))
             } else {
                 let ret: Vec<Vec<JsonValue>> = sorted_iter
@@ -430,15 +447,14 @@ impl Db {
             if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(
+                        self,
                         scan,
                         *relation_op,
                         &meta,
                         &input_program.get_entry_out_head_or_default()?,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
-                if let Some(c) = to_clear {
-                    clean_ups.push(c);
-                }
+                clean_ups.extend(to_clear);
                 Ok((json!({"headers": ["status"], "rows": [["OK"]]}), clean_ups))
             } else {
                 let ret: Vec<Vec<JsonValue>> = scan
@@ -625,10 +641,19 @@ impl Db {
             let n_dependents = meta.metadata.dependents.len();
             let arity = n_keys + n_dependents;
             let name = meta.name;
-            collected.push(json!([name, arity, n_keys, n_dependents]));
+            collected.push(json!([
+                name,
+                arity,
+                n_keys,
+                n_dependents,
+                meta.put_triggers.len(),
+                meta.retract_triggers.len()
+            ]));
             it.next();
         }
-        Ok(json!({"rows": collected, "headers": ["name", "arity", "n_keys", "n_non_keys"]}))
+        Ok(
+            json!({"rows": collected, "headers": ["name", "arity", "n_keys", "n_non_keys", "n_put_triggers", "n_retract_triggers"]}),
+        )
     }
 }
 

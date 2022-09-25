@@ -5,6 +5,7 @@ use miette::{Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::symb::Symbol;
+use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 
 #[derive(
@@ -31,6 +32,8 @@ pub(crate) enum SysOp {
     KillRunning(u64),
     RemoveRelation(Vec<Symbol>),
     RenameRelation(Vec<(Symbol, Symbol)>),
+    ShowTrigger(Symbol),
+    SetTriggers(Symbol, Vec<String>, Vec<String>),
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -85,6 +88,31 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
                 })
                 .collect_vec();
             SysOp::RenameRelation(rename_pairs)
+        }
+        Rule::trigger_relation_show_op => {
+            let rels_p = inner.into_inner().next().unwrap();
+            let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+            SysOp::ShowTrigger(rel)
+        }
+        Rule::trigger_relation_op => {
+            let mut src = inner.into_inner();
+            let rels_p = src.next().unwrap();
+            let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+            let mut puts = vec![];
+            let mut retracts = vec![];
+            for clause in src {
+                let mut clause_inner = clause.into_inner();
+                let op = clause_inner.next().unwrap();
+                let script = clause_inner.next().unwrap();
+                let script_str = script.as_str();
+                parse_query(script.into_inner(), &Default::default())?;
+                match op.as_rule() {
+                    Rule::trigger_put => puts.push(script_str.to_string()),
+                    Rule::trigger_retract => retracts.push(script_str.to_string()),
+                    r => unreachable!("{:?}", r)
+                }
+            }
+            SysOp::SetTriggers(rel, puts, retracts)
         }
         _ => unreachable!(),
     })
