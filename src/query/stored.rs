@@ -7,12 +7,12 @@ use crate::data::expr::Expr;
 use crate::data::program::{ConstRule, MagicSymbol, RelationOp};
 use crate::data::relation::{ColumnDef, NullableColType};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
+use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
-use crate::Db;
 use crate::parse::parse_script;
 use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::transact::SessionTx;
+use crate::Db;
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("attempting to write into relation {0} of arity {1} with data of arity {2}")]
@@ -60,40 +60,84 @@ impl SessionTx {
             )?;
 
             let has_triggers = !relation_store.retract_triggers.is_empty();
-            let mut collected = vec![];
+            let mut new_tuples = vec![];
+            let mut old_tuples = vec![];
 
             for tuple in res_iter {
                 let tuple = tuple?;
-                let extracted: Vec<_> = key_extractors
-                    .iter()
-                    .map(|ex| ex.extract_data(&tuple))
-                    .try_collect()?;
+                let extracted = Tuple(
+                    key_extractors
+                        .iter()
+                        .map(|ex| ex.extract_data(&tuple))
+                        .try_collect()?,
+                );
+                let key = relation_store.adhoc_encode_key(&extracted, *span)?;
                 if has_triggers {
-                    collected.push(Tuple(extracted.clone()));
+                    if let Some(existing) = self.tx.get(&key, false)? {
+                        let mut tup = extracted.clone();
+                        if !existing.is_empty() {
+                            let v_tup = EncodedTuple(&existing);
+                            if v_tup.arity() > 0 {
+                                tup.0.extend(v_tup.decode().0);
+                            }
+                        }
+                        old_tuples.push(tup);
+                    }
+                    new_tuples.push(extracted.clone());
                 }
-                let key = relation_store.adhoc_encode_key(&Tuple(extracted), *span)?;
                 self.tx.del(&key)?;
             }
 
-            for trigger in &relation_store.retract_triggers {
-                let mut program = parse_script(trigger, &Default::default())?.get_single_program()?;
-                let rule = ConstRule {
-                    bindings: vec![],
-                    data: collected.clone(),
-                    span: Default::default()
-                };
-                program.const_rules.insert(MagicSymbol::Muggle {
-                    inner: Symbol::new(SmartString::from("_"), Default::default())
-                }, rule);
+            if has_triggers && !new_tuples.is_empty() {
+                for trigger in &relation_store.retract_triggers {
+                    let mut program =
+                        parse_script(trigger, &Default::default())?.get_single_program()?;
 
-                let (_, cleanups) = db.run_query(self, program).map_err(|err| {
-                    if err.source_code().is_some() {
-                        err
-                    } else {
-                        err.with_source_code(trigger.to_string())
-                    }
-                })?;
-                to_clear.extend(cleanups);
+                    let mut bindings = relation_store
+                        .metadata
+                        .keys
+                        .iter()
+                        .map(|k| Symbol::new(k.name.clone(), Default::default()))
+                        .collect_vec();
+
+                    program.const_rules.insert(
+                        MagicSymbol::Muggle {
+                            inner: Symbol::new(SmartString::from("_new"), Default::default()),
+                        },
+                        ConstRule {
+                            bindings: bindings.clone(),
+                            data: new_tuples.clone(),
+                            span: Default::default(),
+                        },
+                    );
+
+                    let v_bindings = relation_store
+                        .metadata
+                        .dependents
+                        .iter()
+                        .map(|k| Symbol::new(k.name.clone(), Default::default()));
+                    bindings.extend(v_bindings);
+
+                    program.const_rules.insert(
+                        MagicSymbol::Muggle {
+                            inner: Symbol::new(SmartString::from("_old"), Default::default()),
+                        },
+                        ConstRule {
+                            bindings,
+                            data: old_tuples.clone(),
+                            span: Default::default(),
+                        },
+                    );
+
+                    let (_, cleanups) = db.run_query(self, program).map_err(|err| {
+                        if err.source_code().is_some() {
+                            err
+                        } else {
+                            err.with_source_code(trigger.to_string())
+                        }
+                    })?;
+                    to_clear.extend(cleanups);
+                }
             }
         } else {
             let mut key_extractors = make_extractors(
@@ -104,7 +148,8 @@ impl SessionTx {
             )?;
 
             let has_triggers = !relation_store.put_triggers.is_empty();
-            let mut collected = vec![];
+            let mut new_tuples = vec![];
+            let mut old_tuples = vec![];
 
             let val_extractors = make_extractors(
                 &relation_store.metadata.dependents,
@@ -123,27 +168,68 @@ impl SessionTx {
                         .map(|ex| ex.extract_data(&tuple))
                         .try_collect()?,
                 );
-                if has_triggers {
-                    collected.push(extracted.clone());
-                }
 
                 let key = relation_store.adhoc_encode_key(&extracted, *span)?;
                 let val = relation_store.adhoc_encode_val(&extracted, *span)?;
 
+                if has_triggers {
+                    if let Some(existing) = self.tx.get(&key, false)? {
+                        let mut tup = extracted.clone();
+                        if !existing.is_empty() {
+                            let v_tup = EncodedTuple(&existing);
+                            if v_tup.arity() > 0 {
+                                tup.0.extend(v_tup.decode().0);
+                            }
+                        }
+                        old_tuples.push(tup);
+                    }
+
+                    new_tuples.push(extracted.clone());
+                }
+
                 self.tx.put(&key, &val)?;
             }
 
-            if has_triggers {
+            if has_triggers && !new_tuples.is_empty() {
                 for trigger in &relation_store.put_triggers {
-                    let mut program = parse_script(trigger, &Default::default())?.get_single_program()?;
-                    let rule = ConstRule {
-                        bindings: vec![],
-                        data: collected.clone(),
-                        span: Default::default()
-                    };
-                    program.const_rules.insert(MagicSymbol::Muggle {
-                        inner: Symbol::new(SmartString::from("_"), Default::default())
-                    }, rule);
+                    let mut program =
+                        parse_script(trigger, &Default::default())?.get_single_program()?;
+
+
+                    let mut bindings = relation_store
+                        .metadata
+                        .keys
+                        .iter()
+                        .map(|k| Symbol::new(k.name.clone(), Default::default()))
+                        .collect_vec();
+                    let v_bindings = relation_store
+                        .metadata
+                        .dependents
+                        .iter()
+                        .map(|k| Symbol::new(k.name.clone(), Default::default()));
+                    bindings.extend(v_bindings);
+
+                    program.const_rules.insert(
+                        MagicSymbol::Muggle {
+                            inner: Symbol::new(SmartString::from("_new"), Default::default()),
+                        },
+                        ConstRule {
+                            bindings: bindings.clone(),
+                            data: new_tuples.clone(),
+                            span: Default::default(),
+                        },
+                    );
+
+                    program.const_rules.insert(
+                        MagicSymbol::Muggle {
+                            inner: Symbol::new(SmartString::from("_old"), Default::default()),
+                        },
+                        ConstRule {
+                            bindings,
+                            data: old_tuples.clone(),
+                            span: Default::default(),
+                        },
+                    );
 
                     let (_, cleanups) = db.run_query(self, program).map_err(|err| {
                         if err.source_code().is_some() {
