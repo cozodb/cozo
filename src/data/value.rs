@@ -139,7 +139,13 @@ impl Num {
     pub(crate) fn get_int(&self) -> Option<i64> {
         match self {
             Num::I(i) => Some(*i),
-            _ => None,
+            Num::F(f) => {
+                if f.round() == *f {
+                    Some(*f as i64)
+                } else {
+                    None
+                }
+            }
         }
     }
     pub(crate) fn get_float(&self) -> f64 {

@@ -653,7 +653,12 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                         let mut inner = pair.into_inner();
                         let name_p = inner.next().unwrap();
                         let name = SmartString::from(name_p.as_str());
-                        let arg = parse_rule_arg(inner.next().unwrap(), param_pool)?;
+                        let arg = match inner.next() {
+                            Some(a) => parse_rule_arg(a, param_pool)?,
+                            None => InputTerm::Var {
+                                name: Symbol::new(name.clone(), name_p.extract_span()),
+                            },
+                        };
                         Ok((name, arg))
                     },
                 )

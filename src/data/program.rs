@@ -145,10 +145,10 @@ pub(crate) struct MagicAlgoApply {
 #[error("Cannot find a required named option '{name}' for '{algo_name}'")]
 #[diagnostic(code(algo::arg_not_found))]
 pub(crate) struct AlgoOptionNotFoundError {
-    name: String,
+    pub(crate) name: String,
     #[label]
-    span: SourceSpan,
-    algo_name: String,
+    pub(crate) span: SourceSpan,
+    pub(crate) algo_name: String,
 }
 
 #[derive(Error, Diagnostic, Debug)]

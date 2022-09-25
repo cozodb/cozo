@@ -43,6 +43,7 @@ unicode-normalization = "0.1.21"
 thiserror = "1.0.34"
 uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
 sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres", "mysql", "mssql", "sqlite"] }
+csv = "1.1.6"
 cozorocks = { path = "cozorocks" }
 
 #[target.'cfg(not(target_env = "msvc"))'.dependencies]

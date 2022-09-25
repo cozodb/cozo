@@ -1,13 +1,15 @@
 use std::cmp::{max, min};
 use std::collections::BTreeMap;
 
-use miette::{Diagnostic, Result};
+use miette::{Diagnostic, Result, IntoDiagnostic};
 use pest::error::InputLocation;
 use pest::Parser;
 
 use crate::data::program::InputProgram;
+use crate::data::relation::NullableColType;
 use crate::data::value::DataValue;
 use crate::parse::query::parse_query;
+use crate::parse::schema::parse_nullable_type;
 use crate::parse::sys::{parse_sys, SysOp};
 
 pub(crate) mod expr;
@@ -60,6 +62,11 @@ impl From<SourceSpan> for miette::SourceSpan {
 pub(crate) struct ParseError {
     #[label]
     pub(crate) span: SourceSpan,
+}
+
+pub(crate) fn parse_type(src: &str) -> Result<NullableColType> {
+    let parsed = CozoScriptParser::parse(Rule::col_type_with_term, src).into_diagnostic()?.next().unwrap();
+    parse_nullable_type(parsed.into_inner().next().unwrap())
 }
 
 pub(crate) fn parse_script(

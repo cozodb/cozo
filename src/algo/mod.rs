@@ -8,6 +8,7 @@ use thiserror::Error;
 use crate::algo::all_pairs_shortest_path::{BetweennessCentrality, ClosenessCentrality};
 use crate::algo::astar::ShortestPathAStar;
 use crate::algo::bfs::Bfs;
+use crate::algo::csv::CsvReader;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
 use crate::algo::jlines::JsonReader;
@@ -25,7 +26,9 @@ use crate::algo::triangles::ClusteringCoefficients;
 use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
-use crate::data::program::{AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol};
+use crate::data::program::{
+    AlgoOptionNotFoundError, AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol,
+};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
@@ -37,6 +40,7 @@ use crate::runtime::transact::SessionTx;
 pub(crate) mod all_pairs_shortest_path;
 pub(crate) mod astar;
 pub(crate) mod bfs;
+pub(crate) mod csv;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
 pub(crate) mod jlines;
@@ -125,6 +129,38 @@ impl AlgoHandle {
                     )),
                 }
             }
+            n @ "CsvReader" => {
+                let with_row_num = match opts.get("prepend_index") {
+                    None => 0,
+                    Some(Expr::Const {
+                             val: DataValue::Bool(true),
+                             ..
+                         }) => 1,
+                    Some(Expr::Const {
+                             val: DataValue::Bool(false),
+                             ..
+                         }) => 0,
+                    _ => bail!(CannotDetermineArity(
+                        n.to_string(),
+                        "invalid option 'prepend_index' given, expect a boolean".to_string(),
+                        self.name.span
+                    )),
+                };
+                let columns = opts.get("types").ok_or_else(|| AlgoOptionNotFoundError {
+                    name: "types".to_string(),
+                    span: self.name.span,
+                    algo_name: n.to_string(),
+                })?;
+                let columns = columns.clone().eval_to_const()?;
+                if let Some(l) = columns.get_list() {
+                    return Ok(l.len() + with_row_num);
+                }
+                bail!(CannotDetermineArity(
+                    n.to_string(),
+                    "invalid option 'types' given, expect positive number or list".to_string(),
+                    self.name.span
+                ))
+            }
             n @ "JsonReader" => {
                 let with_row_num = match opts.get("prepend_index") {
                     None => 0,
@@ -186,7 +222,7 @@ impl AlgoHandle {
             "RandomWalk" => Box::new(RandomWalk),
             "ReorderSort" => Box::new(ReorderSort),
             "JsonReader" => Box::new(JsonReader),
-            "CsvReader" => todo!(),
+            "CsvReader" => Box::new(CsvReader),
             "RemoteCozo" => todo!(),
             "SqlDb" => todo!(),
             name => bail!(AlgoNotFoundError(name.to_string(), self.name.span)),

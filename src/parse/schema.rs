@@ -73,7 +73,7 @@ fn parse_col(pair: Pair<'_>) -> Result<(ColumnDef, Symbol)> {
     let mut binding_candidate = None;
     for nxt in src {
         match nxt.as_rule() {
-            Rule::col_type => typing = parse_type(nxt)?,
+            Rule::col_type => typing = parse_nullable_type(nxt)?,
             Rule::expr => default_gen = Some(build_expr(nxt, &Default::default())?),
             Rule::out_arg => binding_candidate = Some(Symbol::new(nxt.as_str(), nxt.extract_span())),
             r => unreachable!("{:?}", r)
@@ -88,7 +88,7 @@ fn parse_col(pair: Pair<'_>) -> Result<(ColumnDef, Symbol)> {
     }, binding))
 }
 
-fn parse_type(pair: Pair<'_>) -> Result<NullableColType> {
+pub(crate) fn parse_nullable_type(pair: Pair<'_>) -> Result<NullableColType> {
     let nullable = pair.as_str().ends_with('?');
     let coltype = parse_type_inner(pair.into_inner().next().unwrap())?;
     Ok(NullableColType {
@@ -107,7 +107,7 @@ fn parse_type_inner(pair: Pair<'_>) -> Result<ColType> {
         Rule::uuid_type => ColType::Uuid,
         Rule::list_type => {
             let mut inner = pair.into_inner();
-            let eltype = parse_type(inner.next().unwrap())?;
+            let eltype = parse_nullable_type(inner.next().unwrap())?;
             let len = match inner.next() {
                 None => None,
                 Some(len_p) => {
@@ -129,7 +129,7 @@ fn parse_type_inner(pair: Pair<'_>) -> Result<ColType> {
             ColType::List { eltype: eltype.into(), len }
         }
         Rule::tuple_type => {
-            ColType::Tuple(pair.into_inner().map(|p| parse_type(p)).try_collect()?)
+            ColType::Tuple(pair.into_inner().map(|p| parse_nullable_type(p)).try_collect()?)
         }
         _ => unreachable!()
     })
