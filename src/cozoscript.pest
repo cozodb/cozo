@@ -2,7 +2,7 @@ script = _{sys_script | multi_script | query_script}
 query_script = {SOI ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
 query_script_inner = {"{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
 multi_script = {SOI ~ query_script_inner+ ~ EOI}
-sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op |
+sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op | trigger_relation_op |
                     rename_relations_op | running_op | kill_op) ~ EOI}
 
 compact_op = {"compact" ~ compact_opt_relations+}
@@ -13,6 +13,11 @@ list_relations_op = {"relations"}
 list_relation_op = {"relation" ~ "columns" ~ compound_ident}
 remove_relations_op = {"relation" ~ "remove" ~ (compound_ident ~ ",")* ~ compound_ident }
 rename_relations_op = {"relation" ~ "rename" ~ (rename_pair ~ ",")* ~ rename_pair }
+trigger_relation_show_op = {"relation" ~ "show_triggers" ~ compound_ident }
+trigger_relation_op = {"relation" ~ "set_triggers" ~ compound_ident ~ trigger_clause* }
+trigger_clause = { (trigger_put | trigger_retract) ~ "{" ~ (option | rule | const_rule | algo_rule)+ ~ "}" }
+trigger_put = {"put"}
+trigger_retract = {"retract"}
 rename_pair = {compound_ident ~ "->" ~ compound_ident}
 from_clause = {"from" ~ expr}
 to_clause = {"to" ~ expr}

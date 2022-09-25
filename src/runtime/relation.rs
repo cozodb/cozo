@@ -302,7 +302,7 @@ impl SessionTx {
             Tuple(vec![DataValue::Str(meta.name.clone())]).encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
-        meta.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
+        meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map()).unwrap();
         self.tx.put(&name_key, &meta_val)?;
 
         let tuple = Tuple(vec![DataValue::Null]);
