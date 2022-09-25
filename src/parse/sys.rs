@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use itertools::Itertools;
 use miette::{Diagnostic, Result};
 use thiserror::Error;
 
@@ -28,8 +29,8 @@ pub(crate) enum SysOp {
     ListRelations,
     ListRunning,
     KillRunning(u64),
-    RemoveRelation(Symbol),
-    RenameRelation(Symbol, Symbol),
+    RemoveRelation(Vec<Symbol>),
+    RenameRelation(Vec<(Symbol, Symbol)>),
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -59,8 +60,11 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
         }
         Rule::list_relations_op => SysOp::ListRelations,
         Rule::remove_relations_op => {
-            let rels_p = inner.into_inner().next().unwrap();
-            let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+            let rel = inner
+                .into_inner()
+                .map(|rels_p| Symbol::new(rels_p.as_str(), rels_p.extract_span()))
+                .collect_vec();
+
             SysOp::RemoveRelation(rel)
         }
         Rule::list_relation_op => {
@@ -69,12 +73,18 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
             SysOp::ListRelation(rel)
         }
         Rule::rename_relations_op => {
-            let mut src = inner.into_inner();
-            let rels_p = src.next().unwrap();
-            let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
-            let rels_p = src.next().unwrap();
-            let new_rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
-            SysOp::RenameRelation(rel, new_rel)
+            let rename_pairs = inner
+                .into_inner()
+                .map(|pair| {
+                    let mut src = pair.into_inner();
+                    let rels_p = src.next().unwrap();
+                    let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+                    let rels_p = src.next().unwrap();
+                    let new_rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+                    (rel, new_rel)
+                })
+                .collect_vec();
+            SysOp::RenameRelation(rename_pairs)
         }
         _ => unreachable!(),
     })

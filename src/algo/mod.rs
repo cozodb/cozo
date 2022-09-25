@@ -186,6 +186,9 @@ impl AlgoHandle {
             "RandomWalk" => Box::new(RandomWalk),
             "ReorderSort" => Box::new(ReorderSort),
             "JsonReader" => Box::new(JsonReader),
+            "CsvReader" => todo!(),
+            "RemoteCozo" => todo!(),
+            "SqlDb" => todo!(),
             name => bail!(AlgoNotFoundError(name.to_string(), self.name.span)),
         })
     }

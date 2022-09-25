@@ -243,14 +243,20 @@ impl Db {
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::ListRelations => self.list_relations(),
-            SysOp::RemoveRelation(rs) => {
-                self.remove_relation(&rs)?;
+            SysOp::RemoveRelation(rel_names) => {
+                let mut tx = self.transact_write()?;
+                for rs in rel_names {
+                    self.remove_relation(&rs, &mut tx)?;
+                }
+                tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::ListRelation(rs) => self.list_relation(&rs),
-            SysOp::RenameRelation(old, new) => {
+            SysOp::RenameRelation(rename_pairs) => {
                 let mut tx = self.transact_write()?;
-                tx.rename_relation(old, new)?;
+                for (old, new) in rename_pairs {
+                    tx.rename_relation(old, new)?;
+                }
                 tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
@@ -445,10 +451,8 @@ impl Db {
             }
         }
     }
-    pub(crate) fn remove_relation(&self, name: &Symbol) -> Result<()> {
-        let mut tx = self.transact_write()?;
+    pub(crate) fn remove_relation(&self, name: &Symbol, tx: &mut SessionTx) -> Result<()> {
         let (lower, upper) = tx.destroy_relation(name)?;
-        tx.commit_tx()?;
         self.db.range_del(&lower, &upper)?;
         Ok(())
     }

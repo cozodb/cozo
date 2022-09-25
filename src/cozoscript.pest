@@ -10,9 +10,10 @@ compact_opt_relations = {"relations"}
 running_op = {"running"}
 kill_op = {"kill" ~ int}
 list_relations_op = {"relations"}
-list_relation_op = {"relation" ~ "columns" ~ ident}
-remove_relations_op = {"relation" ~ "remove" ~ ident }
-rename_relations_op = {"relation" ~ "rename" ~ ident ~ ident }
+list_relation_op = {"relation" ~ "columns" ~ compound_ident}
+remove_relations_op = {"relation" ~ "remove" ~ (compound_ident ~ ",")* ~ compound_ident }
+rename_relations_op = {"relation" ~ "rename" ~ (rename_pair ~ ",")* ~ rename_pair }
+rename_pair = {compound_ident ~ "->" ~ compound_ident}
 from_clause = {"from" ~ expr}
 to_clause = {"to" ~ expr}
 
@@ -104,10 +105,6 @@ sort_asc = {"+"}
 sort_desc = {"-"}
 assert_none_option = {":assert" ~ "none"}
 assert_some_option = {":assert" ~ "some"}
-
-out_spec = {"{" ~ (pull_field ~ ",")* ~ pull_field? ~ "}"}
-pull_field = {rev_pull_marker? ~ compound_ident ~ (":" ~ out_spec)?}
-rev_pull_marker = {"<"}
 
 // literals
 
