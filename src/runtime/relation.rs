@@ -62,8 +62,8 @@ pub(crate) struct RelationHandle {
     pub(crate) id: RelationId,
     pub(crate) metadata: StoredRelationMetadata,
     pub(crate) put_triggers: Vec<String>,
-    pub(crate) del_triggers: Vec<String>,
-    pub(crate) overwrite_triggers: Vec<String>,
+    pub(crate) rm_triggers: Vec<String>,
+    pub(crate) replace_triggers: Vec<String>,
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -79,7 +79,7 @@ struct StoredRelArityMismatch {
 
 impl RelationHandle {
     pub(crate) fn has_triggers(&self) -> bool {
-        !self.put_triggers.is_empty() || !self.del_triggers.is_empty()
+        !self.put_triggers.is_empty() || !self.rm_triggers.is_empty()
     }
     fn encode_key_prefix(&self, len: usize) -> Vec<u8> {
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
@@ -287,13 +287,13 @@ impl SessionTx {
         &mut self,
         name: Symbol,
         puts: Vec<String>,
-        dels: Vec<String>,
-        overwrites: Vec<String>,
+        rms: Vec<String>,
+        replaces: Vec<String>,
     ) -> Result<()> {
         let mut original = self.get_relation(&name)?;
         original.put_triggers = puts;
-        original.del_triggers = dels;
-        original.overwrite_triggers = overwrites;
+        original.rm_triggers = rms;
+        original.replace_triggers = replaces;
 
         let name_key =
             Tuple(vec![DataValue::Str(original.name.clone())]).encode_as_key(RelationId::SYSTEM);
@@ -324,8 +324,8 @@ impl SessionTx {
             id: RelationId::new(last_id + 1),
             metadata,
             put_triggers: vec![],
-            del_triggers: vec![],
-            overwrite_triggers: vec![],
+            rm_triggers: vec![],
+            replace_triggers: vec![],
         };
 
         self.tx.put(&encoded, &meta.id.raw_encode())?;

@@ -76,9 +76,9 @@ pub(crate) enum SortDir {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum RelationOp {
     Create,
-    Overwrite,
+    Replace,
     Put,
-    Del,
+    Rm,
 }
 
 #[derive(Default)]

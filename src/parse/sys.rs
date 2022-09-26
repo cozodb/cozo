@@ -99,8 +99,8 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
             let rels_p = src.next().unwrap();
             let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
             let mut puts = vec![];
-            let mut dels = vec![];
-            let mut overwrites = vec![];
+            let mut rms = vec![];
+            let mut replaces = vec![];
             for clause in src {
                 let mut clause_inner = clause.into_inner();
                 let op = clause_inner.next().unwrap();
@@ -109,12 +109,12 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
                 parse_query(script.into_inner(), &Default::default())?;
                 match op.as_rule() {
                     Rule::trigger_put => puts.push(script_str.to_string()),
-                    Rule::trigger_del => dels.push(script_str.to_string()),
-                    Rule::trigger_overwrite => overwrites.push(script_str.to_string()),
+                    Rule::trigger_rm => rms.push(script_str.to_string()),
+                    Rule::trigger_replace => replaces.push(script_str.to_string()),
                     r => unreachable!("{:?}", r)
                 }
             }
-            SysOp::SetTriggers(rel, puts, dels, overwrites)
+            SysOp::SetTriggers(rel, puts, rms, replaces)
         }
         _ => unreachable!(),
     })

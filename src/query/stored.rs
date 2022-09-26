@@ -29,13 +29,13 @@ impl SessionTx {
         headers: &[Symbol],
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = vec![];
-        let mut overwrite_old_triggers = None;
-        if op == RelationOp::Overwrite {
+        let mut replaced_old_triggers = None;
+        if op == RelationOp::Replace {
             if let Ok(old_handle) = self.get_relation(&meta.name) {
                 if old_handle.has_triggers() {
-                    overwrite_old_triggers = Some((old_handle.put_triggers, old_handle.del_triggers))
+                    replaced_old_triggers = Some((old_handle.put_triggers, old_handle.rm_triggers))
                 }
-                for trigger in &old_handle.overwrite_triggers {
+                for trigger in &old_handle.replace_triggers {
                     let program =
                         parse_script(trigger, &Default::default())?.get_single_program()?;
 
@@ -53,14 +53,14 @@ impl SessionTx {
                 to_clear.push(c);
             }
         }
-        let mut relation_store = if op == RelationOp::Overwrite || op == RelationOp::Create {
+        let mut relation_store = if op == RelationOp::Replace || op == RelationOp::Create {
             self.create_relation(meta.clone())?
         } else {
             self.get_relation(&meta.name)?
         };
-        if let Some((old_put, old_retract)) = overwrite_old_triggers {
+        if let Some((old_put, old_retract)) = replaced_old_triggers {
             relation_store.put_triggers = old_put;
-            relation_store.del_triggers = old_retract;
+            relation_store.rm_triggers = old_retract;
         }
         let InputRelationHandle {
             metadata,
@@ -69,7 +69,7 @@ impl SessionTx {
             span,
             ..
         } = meta;
-        if op == RelationOp::Del {
+        if op == RelationOp::Rm {
             let key_extractors = make_extractors(
                 &relation_store.metadata.keys,
                 &metadata.keys,
@@ -77,7 +77,7 @@ impl SessionTx {
                 headers,
             )?;
 
-            let has_triggers = !relation_store.del_triggers.is_empty();
+            let has_triggers = !relation_store.rm_triggers.is_empty();
             let mut new_tuples = vec![];
             let mut old_tuples = vec![];
 
@@ -107,7 +107,7 @@ impl SessionTx {
             }
 
             if has_triggers && !new_tuples.is_empty() {
-                for trigger in &relation_store.del_triggers {
+                for trigger in &relation_store.rm_triggers {
                     let mut program =
                         parse_script(trigger, &Default::default())?.get_single_program()?;
 

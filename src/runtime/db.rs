@@ -280,17 +280,17 @@ impl Db {
                 for (i, trigger) in rel.put_triggers.iter().enumerate() {
                     ret.push(json!(["put", i, trigger]))
                 }
-                for (i, trigger) in rel.del_triggers.iter().enumerate() {
-                    ret.push(json!(["del", i, trigger]))
+                for (i, trigger) in rel.rm_triggers.iter().enumerate() {
+                    ret.push(json!(["rm", i, trigger]))
                 }
-                for (i, trigger) in rel.overwrite_triggers.iter().enumerate() {
-                    ret.push(json!(["overwrite", i, trigger]))
+                for (i, trigger) in rel.replace_triggers.iter().enumerate() {
+                    ret.push(json!(["replace", i, trigger]))
                 }
                 Ok(json!({"headers": ["type", "idx", "trigger"], "rows": ret}))
             }
-            SysOp::SetTriggers(name, puts, dels, overwrites) => {
+            SysOp::SetTriggers(name, puts, rms, replaces) => {
                 let mut tx = self.transact_write()?;
-                tx.set_relation_triggers(name, puts, dels, overwrites)?;
+                tx.set_relation_triggers(name, puts, rms, replaces)?;
                 tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
@@ -313,7 +313,7 @@ impl Db {
                     !tx.relation_exists(&meta.name)?,
                     StoreRelationConflict(meta.name.to_string())
                 )
-            } else if *op != RelationOp::Overwrite {
+            } else if *op != RelationOp::Replace {
                 #[derive(Debug, Error, Diagnostic)]
                 #[error("Stored relation {0} not found")]
                 #[diagnostic(code(eval::stored_relation_not_found))]
@@ -650,14 +650,14 @@ impl Db {
                 n_keys,
                 n_dependents,
                 meta.put_triggers.len(),
-                meta.del_triggers.len(),
-                meta.overwrite_triggers.len(),
+                meta.rm_triggers.len(),
+                meta.replace_triggers.len(),
             ]));
             it.next();
         }
         Ok(
             json!({"rows": collected, "headers":
-                ["name", "arity", "n_keys", "n_non_keys", "n_put_triggers", "n_del_triggers", "n_overwrite_trigers"]}),
+                ["name", "arity", "n_keys", "n_non_keys", "n_put_triggers", "n_rm_triggers", "n_replace_triggers"]}),
         )
     }
 }

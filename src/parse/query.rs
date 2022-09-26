@@ -352,9 +352,9 @@ pub(crate) fn parse_query(
                 let mut args = pair.into_inner();
                 let op = match args.next().unwrap().as_rule() {
                     Rule::relation_create => RelationOp::Create,
-                    Rule::relation_overwrite => RelationOp::Overwrite,
+                    Rule::relation_replace => RelationOp::Replace,
                     Rule::relation_put => RelationOp::Put,
-                    Rule::relation_del => RelationOp::Del,
+                    Rule::relation_rm => RelationOp::Rm,
                     _ => unreachable!(),
                 };
 
