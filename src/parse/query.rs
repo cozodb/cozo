@@ -352,9 +352,9 @@ pub(crate) fn parse_query(
                 let mut args = pair.into_inner();
                 let op = match args.next().unwrap().as_rule() {
                     Rule::relation_create => RelationOp::Create,
-                    Rule::relation_rederive => RelationOp::ReDerive,
+                    Rule::relation_overwrite => RelationOp::Overwrite,
                     Rule::relation_put => RelationOp::Put,
-                    Rule::relation_retract => RelationOp::Retract,
+                    Rule::relation_del => RelationOp::Del,
                     _ => unreachable!(),
                 };
 
@@ -449,7 +449,7 @@ pub(crate) fn parse_query(
                         default_gen: None,
                     })
                     .collect(),
-                dependents: vec![],
+                non_keys: vec![],
             };
 
             let handle = InputRelationHandle {

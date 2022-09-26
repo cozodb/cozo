@@ -33,7 +33,7 @@ pub(crate) enum SysOp {
     RemoveRelation(Vec<Symbol>),
     RenameRelation(Vec<(Symbol, Symbol)>),
     ShowTrigger(Symbol),
-    SetTriggers(Symbol, Vec<String>, Vec<String>),
+    SetTriggers(Symbol, Vec<String>, Vec<String>, Vec<String>),
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -99,7 +99,8 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
             let rels_p = src.next().unwrap();
             let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
             let mut puts = vec![];
-            let mut retracts = vec![];
+            let mut dels = vec![];
+            let mut overwrites = vec![];
             for clause in src {
                 let mut clause_inner = clause.into_inner();
                 let op = clause_inner.next().unwrap();
@@ -108,11 +109,12 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
                 parse_query(script.into_inner(), &Default::default())?;
                 match op.as_rule() {
                     Rule::trigger_put => puts.push(script_str.to_string()),
-                    Rule::trigger_retract => retracts.push(script_str.to_string()),
+                    Rule::trigger_del => dels.push(script_str.to_string()),
+                    Rule::trigger_overwrite => overwrites.push(script_str.to_string()),
                     r => unreachable!("{:?}", r)
                 }
             }
-            SysOp::SetTriggers(rel, puts, retracts)
+            SysOp::SetTriggers(rel, puts, dels, overwrites)
         }
         _ => unreachable!(),
     })

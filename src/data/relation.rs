@@ -75,12 +75,12 @@ pub(crate) struct ColumnDef {
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) struct StoredRelationMetadata {
     pub(crate) keys: Vec<ColumnDef>,
-    pub(crate) dependents: Vec<ColumnDef>,
+    pub(crate) non_keys: Vec<ColumnDef>,
 }
 
 impl StoredRelationMetadata {
     pub(crate) fn satisfied_by_required_col(&self, col: &ColumnDef, is_key: bool) -> Result<()> {
-        let targets = if is_key { &self.keys } else { &self.dependents };
+        let targets = if is_key { &self.keys } else { &self.non_keys };
         for target in targets {
             if target.name == col.name {
                 return Ok(());
@@ -97,7 +97,7 @@ impl StoredRelationMetadata {
         Ok(())
     }
     pub(crate) fn compatible_with_col(&self, col: &ColumnDef, is_key: bool) -> Result<()> {
-        let targets = if is_key { &self.keys } else { &self.dependents };
+        let targets = if is_key { &self.keys } else { &self.non_keys };
         for target in targets {
             if target.name == col.name {
                 #[derive(Debug, Error, Diagnostic)]

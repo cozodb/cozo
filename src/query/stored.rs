@@ -29,25 +29,38 @@ impl SessionTx {
         headers: &[Symbol],
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = vec![];
-        let mut rederive_old_triggers = None;
-        if op == RelationOp::ReDerive {
+        let mut overwrite_old_triggers = None;
+        if op == RelationOp::Overwrite {
             if let Ok(old_handle) = self.get_relation(&meta.name) {
                 if old_handle.has_triggers() {
-                    rederive_old_triggers = Some((old_handle.put_triggers, old_handle.retract_triggers))
+                    overwrite_old_triggers = Some((old_handle.put_triggers, old_handle.del_triggers))
+                }
+                for trigger in &old_handle.overwrite_triggers {
+                    let program =
+                        parse_script(trigger, &Default::default())?.get_single_program()?;
+
+                    let (_, cleanups) = db.run_query(self, program).map_err(|err| {
+                        if err.source_code().is_some() {
+                            err
+                        } else {
+                            err.with_source_code(trigger.to_string())
+                        }
+                    })?;
+                    to_clear.extend(cleanups);
                 }
             }
             if let Ok(c) = self.destroy_relation(&meta.name) {
                 to_clear.push(c);
             }
         }
-        let mut relation_store = if op == RelationOp::ReDerive || op == RelationOp::Create {
+        let mut relation_store = if op == RelationOp::Overwrite || op == RelationOp::Create {
             self.create_relation(meta.clone())?
         } else {
             self.get_relation(&meta.name)?
         };
-        if let Some((old_put, old_retract)) = rederive_old_triggers {
+        if let Some((old_put, old_retract)) = overwrite_old_triggers {
             relation_store.put_triggers = old_put;
-            relation_store.retract_triggers = old_retract;
+            relation_store.del_triggers = old_retract;
         }
         let InputRelationHandle {
             metadata,
@@ -56,7 +69,7 @@ impl SessionTx {
             span,
             ..
         } = meta;
-        if op == RelationOp::Retract {
+        if op == RelationOp::Del {
             let key_extractors = make_extractors(
                 &relation_store.metadata.keys,
                 &metadata.keys,
@@ -64,7 +77,7 @@ impl SessionTx {
                 headers,
             )?;
 
-            let has_triggers = !relation_store.retract_triggers.is_empty();
+            let has_triggers = !relation_store.del_triggers.is_empty();
             let mut new_tuples = vec![];
             let mut old_tuples = vec![];
 
@@ -94,7 +107,7 @@ impl SessionTx {
             }
 
             if has_triggers && !new_tuples.is_empty() {
-                for trigger in &relation_store.retract_triggers {
+                for trigger in &relation_store.del_triggers {
                     let mut program =
                         parse_script(trigger, &Default::default())?.get_single_program()?;
 
@@ -118,7 +131,7 @@ impl SessionTx {
 
                     let v_bindings = relation_store
                         .metadata
-                        .dependents
+                        .non_keys
                         .iter()
                         .map(|k| Symbol::new(k.name.clone(), Default::default()));
                     bindings.extend(v_bindings);
@@ -157,8 +170,8 @@ impl SessionTx {
             let mut old_tuples = vec![];
 
             let val_extractors = make_extractors(
-                &relation_store.metadata.dependents,
-                &metadata.dependents,
+                &relation_store.metadata.non_keys,
+                &metadata.non_keys,
                 dep_bindings,
                 headers,
             )?;
@@ -200,7 +213,6 @@ impl SessionTx {
                     let mut program =
                         parse_script(trigger, &Default::default())?.get_single_program()?;
 
-
                     let mut bindings = relation_store
                         .metadata
                         .keys
@@ -209,7 +221,7 @@ impl SessionTx {
                         .collect_vec();
                     let v_bindings = relation_store
                         .metadata
-                        .dependents
+                        .non_keys
                         .iter()
                         .map(|k| Symbol::new(k.name.clone(), Default::default()));
                     bindings.extend(v_bindings);

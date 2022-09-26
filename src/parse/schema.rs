@@ -57,7 +57,7 @@ pub(crate) fn parse_schema(pair: Pair<'_>) -> Result<(StoredRelationMetadata, Ve
 
     Ok((StoredRelationMetadata {
         keys,
-        dependents,
+        non_keys: dependents,
     }, key_bindings, dep_bindings))
 }
 

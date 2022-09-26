@@ -62,7 +62,8 @@ pub(crate) struct RelationHandle {
     pub(crate) id: RelationId,
     pub(crate) metadata: StoredRelationMetadata,
     pub(crate) put_triggers: Vec<String>,
-    pub(crate) retract_triggers: Vec<String>
+    pub(crate) del_triggers: Vec<String>,
+    pub(crate) overwrite_triggers: Vec<String>,
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -78,7 +79,7 @@ struct StoredRelArityMismatch {
 
 impl RelationHandle {
     pub(crate) fn has_triggers(&self) -> bool {
-        !self.put_triggers.is_empty() || !self.retract_triggers.is_empty()
+        !self.put_triggers.is_empty() || !self.del_triggers.is_empty()
     }
     fn encode_key_prefix(&self, len: usize) -> Vec<u8> {
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
@@ -124,7 +125,7 @@ impl RelationHandle {
     }
     pub(crate) fn adhoc_encode_val(&self, tuple: &Tuple, _span: SourceSpan) -> Result<Vec<u8>> {
         let start = self.metadata.keys.len();
-        let len = self.metadata.dependents.len();
+        let len = self.metadata.non_keys.len();
         let mut ret = self.encode_key_prefix(len);
         for i in 0..len {
             self.encode_key_element(&mut ret, i, &tuple.0[i + start])
@@ -137,14 +138,14 @@ impl RelationHandle {
         for col in &metadata.keys {
             self.metadata.compatible_with_col(col, true)?
         }
-        for col in &metadata.dependents {
+        for col in &metadata.non_keys {
             self.metadata.compatible_with_col(col, false)?
         }
         // check that every key is provided or has default
         for col in &self.metadata.keys {
             metadata.satisfied_by_required_col(col, true)?;
         }
-        for col in &self.metadata.dependents {
+        for col in &self.metadata.non_keys {
             metadata.satisfied_by_required_col(col, false)?;
         }
         Ok(())
@@ -174,7 +175,7 @@ pub(crate) struct RelationDeserError;
 
 impl RelationHandle {
     pub(crate) fn arity(&self) -> usize {
-        self.metadata.dependents.len() + self.metadata.keys.len()
+        self.metadata.non_keys.len() + self.metadata.keys.len()
     }
     pub(crate) fn decode(data: &[u8]) -> Result<Self> {
         Ok(rmp_serde::from_slice(data).map_err(|e| {
@@ -282,16 +283,24 @@ impl SessionTx {
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         Ok(self.tx.exists(&encoded, false)?)
     }
-    pub(crate) fn set_relation_triggers(&mut self, name: Symbol , puts: Vec<String>, retracts: Vec<String>) -> Result<()> {
+    pub(crate) fn set_relation_triggers(
+        &mut self,
+        name: Symbol,
+        puts: Vec<String>,
+        dels: Vec<String>,
+        overwrites: Vec<String>,
+    ) -> Result<()> {
         let mut original = self.get_relation(&name)?;
         original.put_triggers = puts;
-        original.retract_triggers = retracts;
+        original.del_triggers = dels;
+        original.overwrite_triggers = overwrites;
 
         let name_key =
             Tuple(vec![DataValue::Str(original.name.clone())]).encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
-        original.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
+        original
+            .serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
             .unwrap();
         self.tx.put(&name_key, &meta_val)?;
 
@@ -315,7 +324,8 @@ impl SessionTx {
             id: RelationId::new(last_id + 1),
             metadata,
             put_triggers: vec![],
-            retract_triggers: vec![]
+            del_triggers: vec![],
+            overwrite_triggers: vec![],
         };
 
         self.tx.put(&encoded, &meta.id.raw_encode())?;

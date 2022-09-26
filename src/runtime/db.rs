@@ -280,14 +280,17 @@ impl Db {
                 for (i, trigger) in rel.put_triggers.iter().enumerate() {
                     ret.push(json!(["put", i, trigger]))
                 }
-                for (i, trigger) in rel.retract_triggers.iter().enumerate() {
-                    ret.push(json!(["retract", i, trigger]))
+                for (i, trigger) in rel.del_triggers.iter().enumerate() {
+                    ret.push(json!(["del", i, trigger]))
+                }
+                for (i, trigger) in rel.overwrite_triggers.iter().enumerate() {
+                    ret.push(json!(["overwrite", i, trigger]))
                 }
                 Ok(json!({"headers": ["type", "idx", "trigger"], "rows": ret}))
             }
-            SysOp::SetTriggers(name, puts, retracts) => {
+            SysOp::SetTriggers(name, puts, dels, overwrites) => {
                 let mut tx = self.transact_write()?;
-                tx.set_relation_triggers(name, puts, retracts)?;
+                tx.set_relation_triggers(name, puts, dels, overwrites)?;
                 tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
@@ -310,7 +313,7 @@ impl Db {
                     !tx.relation_exists(&meta.name)?,
                     StoreRelationConflict(meta.name.to_string())
                 )
-            } else if *op != RelationOp::ReDerive {
+            } else if *op != RelationOp::Overwrite {
                 #[derive(Debug, Error, Diagnostic)]
                 #[error("Stored relation {0} not found")]
                 #[diagnostic(code(eval::stored_relation_not_found))]
@@ -604,7 +607,7 @@ impl Db {
             ]));
             idx += 1;
         }
-        for col in &handle.metadata.dependents {
+        for col in &handle.metadata.non_keys {
             ret.push(json!([
                 col.name,
                 false,
@@ -638,7 +641,7 @@ impl Db {
             }
             let meta = RelationHandle::decode(v_slice)?;
             let n_keys = meta.metadata.keys.len();
-            let n_dependents = meta.metadata.dependents.len();
+            let n_dependents = meta.metadata.non_keys.len();
             let arity = n_keys + n_dependents;
             let name = meta.name;
             collected.push(json!([
@@ -647,12 +650,14 @@ impl Db {
                 n_keys,
                 n_dependents,
                 meta.put_triggers.len(),
-                meta.retract_triggers.len()
+                meta.del_triggers.len(),
+                meta.overwrite_triggers.len(),
             ]));
             it.next();
         }
         Ok(
-            json!({"rows": collected, "headers": ["name", "arity", "n_keys", "n_non_keys", "n_put_triggers", "n_retract_triggers"]}),
+            json!({"rows": collected, "headers":
+                ["name", "arity", "n_keys", "n_non_keys", "n_put_triggers", "n_del_triggers", "n_overwrite_trigers"]}),
         )
     }
 }
