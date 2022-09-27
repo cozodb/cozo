@@ -334,14 +334,22 @@ impl Expr {
                     if let Some(symb) = args[0].get_binding() {
                         if let Some(val) = args[1].get_const() {
                             if target == symb {
-                                return Ok(ValueRange::lower_bound(val.clone()));
+                                let tar_val = match val.get_int() {
+                                    Some(i) => DataValue::from(i),
+                                    None => val.clone()
+                                };
+                                return Ok(ValueRange::lower_bound(tar_val));
                             }
                         }
                     }
                     if let Some(symb) = args[1].get_binding() {
                         if let Some(val) = args[0].get_const() {
                             if target == symb {
-                                return Ok(ValueRange::upper_bound(val.clone()));
+                                let tar_val = match val.get_float() {
+                                    Some(i) => DataValue::from(i),
+                                    None => val.clone()
+                                };
+                                return Ok(ValueRange::upper_bound(tar_val));
                             }
                         }
                     }
@@ -351,14 +359,24 @@ impl Expr {
                     if let Some(symb) = args[0].get_binding() {
                         if let Some(val) = args[1].get_const() {
                             if target == symb {
-                                return Ok(ValueRange::upper_bound(val.clone()));
+                                let tar_val = match val.get_float() {
+                                    Some(i) => DataValue::from(i),
+                                    None => val.clone()
+                                };
+
+                                return Ok(ValueRange::upper_bound(tar_val));
                             }
                         }
                     }
                     if let Some(symb) = args[1].get_binding() {
                         if let Some(val) = args[0].get_const() {
                             if target == symb {
-                                return Ok(ValueRange::lower_bound(val.clone()));
+                                let tar_val = match val.get_int() {
+                                    Some(i) => DataValue::from(i),
+                                    None => val.clone()
+                                };
+
+                                return Ok(ValueRange::lower_bound(tar_val));
                             }
                         }
                     }
