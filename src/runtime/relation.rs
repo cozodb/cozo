@@ -290,7 +290,7 @@ impl SessionTx {
         rms: Vec<String>,
         replaces: Vec<String>,
     ) -> Result<()> {
-        let mut original = self.get_relation(&name)?;
+        let mut original = self.get_relation(&name, true)?;
         original.put_triggers = puts;
         original.rm_triggers = rms;
         original.replace_triggers = replaces;
@@ -342,7 +342,7 @@ impl SessionTx {
         self.tx.put(&t_encoded, &meta.id.raw_encode())?;
         Ok(meta)
     }
-    pub(crate) fn get_relation(&self, name: &str) -> Result<RelationHandle> {
+    pub(crate) fn get_relation(&self, name: &str, lock: bool) -> Result<RelationHandle> {
         #[derive(Error, Diagnostic, Debug)]
         #[error("Cannot find requested stored relation '{0}'")]
         #[diagnostic(code(query::relation_not_found))]
@@ -353,13 +353,13 @@ impl SessionTx {
 
         let found = self
             .tx
-            .get(&encoded, false)?
+            .get(&encoded, lock)?
             .ok_or_else(|| StoredRelationNotFoundError(name.to_string()))?;
         let metadata = RelationHandle::decode(&found)?;
         Ok(metadata)
     }
     pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<(Vec<u8>, Vec<u8>)> {
-        let store = self.get_relation(name)?;
+        let store = self.get_relation(name, true)?;
         let key = DataValue::Str(SmartString::from(name as &str));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         self.tx.del(&encoded)?;
@@ -378,7 +378,7 @@ impl SessionTx {
         let old_key = DataValue::Str(old.name.clone());
         let old_encoded = Tuple(vec![old_key]).encode_as_key(RelationId::SYSTEM);
 
-        let mut rel = self.get_relation(&old)?;
+        let mut rel = self.get_relation(&old, true)?;
         rel.name = new.name;
 
         let mut meta_val = vec![];

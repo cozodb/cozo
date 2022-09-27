@@ -31,7 +31,7 @@ impl SessionTx {
         let mut to_clear = vec![];
         let mut replaced_old_triggers = None;
         if op == RelationOp::Replace {
-            if let Ok(old_handle) = self.get_relation(&meta.name) {
+            if let Ok(old_handle) = self.get_relation(&meta.name, true) {
                 if old_handle.has_triggers() {
                     replaced_old_triggers = Some((old_handle.put_triggers, old_handle.rm_triggers))
                 }
@@ -56,7 +56,7 @@ impl SessionTx {
         let mut relation_store = if op == RelationOp::Replace || op == RelationOp::Create {
             self.create_relation(meta.clone())?
         } else {
-            self.get_relation(&meta.name)?
+            self.get_relation(&meta.name, true)?
         };
         if let Some((old_put, old_retract)) = replaced_old_triggers {
             relation_store.put_triggers = old_put;

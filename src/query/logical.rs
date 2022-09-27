@@ -147,7 +147,7 @@ impl InputAtom {
             }
             InputAtom::Rule { inner: r } => r.normalize(false, gen),
             InputAtom::NamedFieldRelation { inner: InputNamedFieldRelationApplyAtom { name, mut args, span } } => {
-                let stored = tx.get_relation(&name)?;
+                let stored = tx.get_relation(&name, false)?;
                 let mut new_args = vec![];
                 for col_def in stored.metadata.keys.iter().chain(stored.metadata.non_keys.iter()) {
                     let arg = args.remove(&col_def.name)

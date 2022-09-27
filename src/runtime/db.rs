@@ -275,7 +275,7 @@ impl Db {
             }
             SysOp::ShowTrigger(name) => {
                 let tx = self.transact()?;
-                let rel = tx.get_relation(&name)?;
+                let rel = tx.get_relation(&name, false)?;
                 let mut ret = vec![];
                 for (i, trigger) in rel.put_triggers.iter().enumerate() {
                     ret.push(json!(["put", i, trigger]))
@@ -319,7 +319,7 @@ impl Db {
                 #[diagnostic(code(eval::stored_relation_not_found))]
                 struct StoreRelationNotFoundError(String);
 
-                let existing = tx.get_relation(&meta.name)?;
+                let existing = tx.get_relation(&meta.name, true)?;
 
                 ensure!(
                     tx.relation_exists(&meta.name)?,
@@ -594,7 +594,7 @@ impl Db {
     }
     pub fn list_relation(&self, name: &str) -> Result<JsonValue> {
         let tx = self.transact()?;
-        let handle = tx.get_relation(name)?;
+        let handle = tx.get_relation(name, false)?;
         let mut ret = vec![];
         let mut idx = 0;
         for col in &handle.metadata.keys {

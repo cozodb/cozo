@@ -426,7 +426,7 @@ impl MagicAlgoRuleArg {
                 Box::new(store.scan_prefix(&t))
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
-                let relation = tx.get_relation(name)?;
+                let relation = tx.get_relation(name, false)?;
                 let t = Tuple(vec![prefix.clone()]);
                 Box::new(relation.scan_prefix(tx, &t))
             }
@@ -445,7 +445,7 @@ impl MagicAlgoRuleArg {
                 store.arity
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
-                let handle = tx.get_relation(name)?;
+                let handle = tx.get_relation(name, false)?;
                 handle.arity()
             }
         })
@@ -463,7 +463,7 @@ impl MagicAlgoRuleArg {
                 Box::new(store.scan_all())
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
-                let relation = tx.get_relation(name)?;
+                let relation = tx.get_relation(name, false)?;
                 Box::new(relation.scan_all(tx))
             }
         })
