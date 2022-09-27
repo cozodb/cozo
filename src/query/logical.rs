@@ -4,7 +4,11 @@ use itertools::Itertools;
 use miette::{bail, Result};
 
 use crate::data::expr::Expr;
-use crate::data::program::{InputAtom, InputNamedFieldRelationApplyAtom, InputRelationApplyAtom, InputRuleApplyAtom, InputTerm, NormalFormAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom, TempSymbGen, Unification};
+use crate::data::program::{
+    InputAtom, InputNamedFieldRelationApplyAtom, InputRelationApplyAtom, InputRuleApplyAtom,
+    InputTerm, NormalFormAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom, TempSymbGen,
+    Unification,
+};
 use crate::query::reorder::UnsafeNegation;
 use crate::runtime::transact::SessionTx;
 
@@ -86,7 +90,7 @@ impl InputAtom {
                                 inner: Box::new(a),
                                 span,
                             }
-                                .negation_normal_form()
+                            .negation_normal_form()
                         })
                         .try_collect()?,
                     span,
@@ -100,7 +104,7 @@ impl InputAtom {
                                 inner: Box::new(a),
                                 span,
                             }
-                                .negation_normal_form()
+                            .negation_normal_form()
                         })
                         .try_collect()?,
                     span,
@@ -116,6 +120,37 @@ impl InputAtom {
         let neg_form = self.negation_normal_form()?;
         let mut gen = TempSymbGen::default();
         neg_form.do_disjunctive_normal_form(&mut gen, tx)
+    }
+
+    fn convert_named_field_relation(
+        InputNamedFieldRelationApplyAtom {
+            name,
+            mut args,
+            span,
+        }: InputNamedFieldRelationApplyAtom,
+        gen: &mut TempSymbGen,
+        tx: &SessionTx,
+    ) -> Result<InputRelationApplyAtom> {
+        let stored = tx.get_relation(&name, false)?;
+        let mut new_args = vec![];
+        for col_def in stored
+            .metadata
+            .keys
+            .iter()
+            .chain(stored.metadata.non_keys.iter())
+        {
+            let arg = args
+                .remove(&col_def.name)
+                .unwrap_or_else(|| InputTerm::Var {
+                    name: gen.next(span),
+                });
+            new_args.push(arg)
+        }
+        Ok(InputRelationApplyAtom {
+            name,
+            args: new_args,
+            span,
+        })
     }
 
     fn do_disjunctive_normal_form(
@@ -146,19 +181,8 @@ impl InputAtom {
                 result
             }
             InputAtom::Rule { inner: r } => r.normalize(false, gen),
-            InputAtom::NamedFieldRelation { inner: InputNamedFieldRelationApplyAtom { name, mut args, span } } => {
-                let stored = tx.get_relation(&name, false)?;
-                let mut new_args = vec![];
-                for col_def in stored.metadata.keys.iter().chain(stored.metadata.non_keys.iter()) {
-                    let arg = args.remove(&col_def.name)
-                        .unwrap_or_else(|| InputTerm::Var { name: gen.next(span) });
-                    new_args.push(arg)
-                }
-                let r = InputRelationApplyAtom {
-                    name,
-                    args: new_args,
-                    span,
-                };
+            InputAtom::NamedFieldRelation { inner } => {
+                let r = Self::convert_named_field_relation(inner, gen, tx)?;
                 r.normalize(false, gen)
             }
             InputAtom::Relation { inner: v } => v.normalize(false, gen),
@@ -169,6 +193,10 @@ impl InputAtom {
             InputAtom::Negation { inner: n, .. } => match *n {
                 InputAtom::Rule { inner: r } => r.normalize(true, gen),
                 InputAtom::Relation { inner: v } => v.normalize(true, gen),
+                InputAtom::NamedFieldRelation { inner } => {
+                    let r = Self::convert_named_field_relation(inner, gen, tx)?;
+                    r.normalize(true, gen)
+                }
                 _ => unreachable!(),
             },
             InputAtom::Unification { inner: u } => {
