@@ -448,7 +448,6 @@ fn most_out_routes() {
     dbg!(most_out_routes.elapsed());
 }
 
-
 #[test]
 fn most_out_routes_again() {
     check_relations();
@@ -476,44 +475,65 @@ fn most_out_routes_again() {
             ["YYZ",195],["BRU",194],["CPH",194],["DOH",187],["DUB",185],["CLT",184],["SVO",181]
             ]"#
         )
-            .unwrap()
+        .unwrap()
     );
     dbg!(most_out_routes_again.elapsed());
 }
 
-//     let most_routes_time = Instant::now();
-//     let res = db.run_script(
-//         r#"
-//         route_count[a, count(r)] := [r route.src a] or [r route.dst a];
-//         ?[code, n] := route_count[a, n], n > 400, [a airport.iata code];
-//         :sort -n;
-//     "#,
-//         &params,
-//     )?;
-//     dbg!(most_routes_time.elapsed());
-//     assert_eq!(
-//         *res.get("rows").unwrap(),
-//         serde_json::Value::from_str(
-//             r#"[
-//         ["FRA",614],["IST",614],["CDG",587],["AMS",566],["MUC",541],["ORD",527],["DFW",502],
-//         ["PEK",497],["DXB",494],["ATL",484],["DME",465],["LGW",464],["LHR",442],["DEN",432],
-//         ["MAN",431],["LAX",426],["PVG",424],["STN",423],["MAD",412],["VIE",412],["BCN",406],
-//         ["BER",404],["FCO",402],["JFK",401]]"#
-//         )
-//             .unwrap()
-//     );
-//
-//     let airport_with_one_route_time = Instant::now();
-//     let res = db.run_script(
-//         r#"
-//         route_count[a, count(r)] := [r route.src a];
-//         ?[count(a)] := route_count[a, n], n == 1;
-//     "#,
-//         &params,
-//     )?;
-//     dbg!(airport_with_one_route_time.elapsed());
-//     assert_eq!(*res.get("rows").unwrap(), json!([[777]]));
-//
+#[test]
+fn most_routes() {
+    check_relations();
+    let most_routes = Instant::now();
+
+    let res = TEST_DB
+        .run_script(
+            r#"
+        route_count[a, count(a)] := :route{fr: a}
+        route_count[a, count(a)] := :route{to: a}
+        ?[code, n] := route_count[code, n], n > 400
+        :sort -n;
+    "#,
+            &Default::default(),
+        )
+        .unwrap();
+    let rows = res.get("rows").unwrap();
+    assert_eq!(
+        *rows,
+        serde_json::Value::from_str(
+            r#"[
+            ["FRA",620],["IST",618],["CDG",587],["AMS",568],["MUC",541],["ORD",529],["DFW",506],
+            ["PEK",497],["DXB",496],["ATL",484],["DME",465],["LGW",464],["LHR",442],["DEN",434],
+            ["MAN",431],["LAX",428],["PVG",426],["STN",423],["MAD",412],["VIE",412],["JFK",407],
+            ["BCN",406],["EWR",406],["BER",404],["FCO",402]]"#
+        )
+        .unwrap()
+    );
+    dbg!(most_routes.elapsed());
+}
+
+#[test]
+fn airport_with_one_route() {
+
+    check_relations();
+    let airport_with_one_route = Instant::now();
+
+    let res = TEST_DB
+        .run_script(
+            r#"
+        route_count[fr, count(fr)] := :route{fr}
+        ?[count(a)] := route_count[a, n], n == 1;
+    "#,
+            &Default::default(),
+        )
+        .unwrap();
+    let rows = res.get("rows").unwrap();
+    assert_eq!(
+        *rows,
+        json!([[777]])
+    );
+    dbg!(airport_with_one_route.elapsed());
+}
+
 //     let single_runway_with_most_routes_time = Instant::now();
 //     let res = db.run_script(
 //         r#"
