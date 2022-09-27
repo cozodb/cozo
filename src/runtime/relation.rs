@@ -353,7 +353,7 @@ impl SessionTx {
 
         let found = self
             .tx
-            .get(&encoded, true)?
+            .get(&encoded, false)?
             .ok_or_else(|| StoredRelationNotFoundError(name.to_string()))?;
         let metadata = RelationHandle::decode(&found)?;
         Ok(metadata)
