@@ -13,8 +13,8 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
-use crate::runtime::stored::{StoredRelation, StoredRelationId};
 use crate::runtime::relation::RelationHandle;
+use crate::runtime::stored::{StoredRelation, StoredRelationId};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) enum RelAlgebra {
@@ -756,27 +756,25 @@ impl RelationRA {
             left_to_prefix_indices.push(left_join_indices[*idx]);
         }
 
+        let mut right_join_vals = BTreeSet::new();
+        for tuple in self.storage.scan_all(tx) {
+            let tuple = tuple?;
+            let to_join: Box<[DataValue]> = right_join_indices.iter().map(|i| {
+                tuple.0[*i].clone()
+            }).collect();
+            right_join_vals.insert(to_join);
+        }
+
         Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let prefix = Tuple(
-                        left_to_prefix_indices
-                            .iter()
-                            .map(|i| tuple.0[*i].clone())
-                            .collect_vec(),
-                    );
-
-                    'outer: for found in self.storage.scan_prefix(tx, &prefix) {
-                        let found = found?;
-                        for (left_idx, right_idx) in
-                            left_join_indices.iter().zip(right_join_indices.iter())
-                        {
-                            if tuple.0[*left_idx] != found.0[*right_idx] {
-                                continue 'outer;
-                            }
-                        }
-                        return Ok(None);
+                    let left_join_vals: Box<[DataValue]> = left_join_indices.iter().map(|i| {
+                        tuple.0[*i].clone()
+                    }).collect();
+                    if right_join_vals.contains(&left_join_vals) {
+                        return Ok(None)
                     }
+
                     Ok(Some(if !eliminate_indices.is_empty() {
                         Tuple(
                             tuple
@@ -902,26 +900,23 @@ impl StoredRelationRA {
             left_to_prefix_indices.push(left_join_indices[*idx]);
         }
 
+        let mut right_join_vals = BTreeSet::new();
+        for tuple in self.storage.scan_all() {
+            let tuple = tuple?;
+            let to_join: Box<[DataValue]> = right_join_indices.iter().map(|i| {
+                tuple.0[*i].clone()
+            }).collect();
+            right_join_vals.insert(to_join);
+        }
+
         Ok(Box::new(
             left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let prefix = Tuple(
-                        left_to_prefix_indices
-                            .iter()
-                            .map(|i| tuple.0[*i].clone())
-                            .collect_vec(),
-                    );
-
-                    'outer: for found in self.storage.scan_prefix(&prefix) {
-                        let found = found?;
-                        for (left_idx, right_idx) in
-                            left_join_indices.iter().zip(right_join_indices.iter())
-                        {
-                            if tuple.0[*left_idx] != found.0[*right_idx] {
-                                continue 'outer;
-                            }
-                        }
-                        return Ok(None);
+                    let left_join_vals: Box<[DataValue]> = left_join_indices.iter().map(|i| {
+                        tuple.0[*i].clone()
+                    }).collect();
+                    if right_join_vals.contains(&left_join_vals) {
+                        return Ok(None)
                     }
                     Ok(Some(if !eliminate_indices.is_empty() {
                         Tuple(

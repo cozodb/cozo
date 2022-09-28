@@ -1839,7 +1839,6 @@ fn furthest_from_lhr() {
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
-    println!("{}", rows);
     assert_eq!(
         *rows,
         serde_json::Value::from_str(r#"[
