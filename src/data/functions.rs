@@ -3,6 +3,7 @@ use std::ops::{Div, Rem};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::{TimeZone, Utc};
 use itertools::Itertools;
 use miette::{bail, ensure, miette, Result};
 use num_traits::FloatConst;
@@ -26,22 +27,27 @@ macro_rules! define_op {
     };
 }
 
-
 fn ensure_same_value_type(a: &DataValue, b: &DataValue) -> Result<()> {
     use DataValue::*;
-    if !matches!((a, b),
+    if !matches!(
+        (a, b),
         (Null, Null)
-        | (Bool(_), Bool(_))
-        | (Num(_), Num(_))
-        | (Str(_), Str(_))
-        | (Bytes(_), Bytes(_))
-        | (Regex(_), Regex(_))
-        | (List(_), List(_))
-        | (Set(_), Set(_))
-        | (Rev(_), Rev(_))
-        | (Guard, Guard)
-        | (Bot, Bot)) {
-        bail!("comparison can only be done between the same datatypes, got {:?} and {:?}", a, b)
+            | (Bool(_), Bool(_))
+            | (Num(_), Num(_))
+            | (Str(_), Str(_))
+            | (Bytes(_), Bytes(_))
+            | (Regex(_), Regex(_))
+            | (List(_), List(_))
+            | (Set(_), Set(_))
+            | (Rev(_), Rev(_))
+            | (Guard, Guard)
+            | (Bot, Bot)
+    ) {
+        bail!(
+            "comparison can only be done between the same datatypes, got {:?} and {:?}",
+            a,
+            b
+        )
     }
     Ok(())
 }
@@ -504,7 +510,10 @@ pub(crate) fn op_mod(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_AND, 0, true);
 pub(crate) fn op_and(args: &[DataValue]) -> Result<DataValue> {
     for arg in args {
-        if !arg.get_bool().ok_or_else(|| miette!("'and' requires booleans"))? {
+        if !arg
+            .get_bool()
+            .ok_or_else(|| miette!("'and' requires booleans"))?
+        {
             return Ok(DataValue::Bool(false));
         }
     }
@@ -514,7 +523,10 @@ pub(crate) fn op_and(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_OR, 0, true);
 pub(crate) fn op_or(args: &[DataValue]) -> Result<DataValue> {
     for arg in args {
-        if arg.get_bool().ok_or_else(|| miette!("'or' requires booleans"))? {
+        if arg
+            .get_bool()
+            .ok_or_else(|| miette!("'or' requires booleans"))?
+        {
             return Ok(DataValue::Bool(true));
         }
     }
@@ -990,9 +1002,9 @@ pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)?;
     let ret = 2.
         * f64::asin(f64::sqrt(
-        f64::sin((lat1 - lat2) / 2.).powi(2)
-            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-    ));
+            f64::sin((lat1 - lat2) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+        ));
     Ok(DataValue::from(ret))
 }
 
@@ -1005,9 +1017,9 @@ pub(crate) fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)? * f64::PI() / 180.;
     let ret = 2.
         * f64::asin(f64::sqrt(
-        f64::sin((lat1 - lat2) / 2.).powi(2)
-            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-    ));
+            f64::sin((lat1 - lat2) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+        ));
     Ok(DataValue::from(ret))
 }
 
@@ -1381,7 +1393,39 @@ pub(crate) fn op_to_uuid(args: &[DataValue]) -> Result<DataValue> {
             let id = uuid::Uuid::try_parse(s).map_err(|_| miette!("invalid UUID"))?;
             Ok(DataValue::uuid(id))
         }
-        _ => bail!("'to_uuid' requires a string")
+        _ => bail!("'to_uuid' requires a string"),
+    }
+}
+
+define_op!(OP_NOW, 0, false);
+pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
+    let now = SystemTime::now();
+    Ok(DataValue::from(
+        now.duration_since(UNIX_EPOCH).unwrap().as_secs_f64(),
+    ))
+}
+
+define_op!(OP_FORMAT_TIMESTAMP, 1, true);
+pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
+    let f = args[0]
+        .get_float()
+        .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
+    let millis = (f * 1000.) as i64;
+    let dt = Utc.timestamp_millis(millis);
+    match args.get(1) {
+        Some(tz_v) => {
+            let tz_s = tz_v.get_string().ok_or_else(|| {
+                miette!("'format_timestamp' timezone specification requires a string")
+            })?;
+            let tz = chrono_tz::Tz::from_str(tz_s).map_err(|_| miette!("bad timezone specification"))?;
+            let dt_tz = dt.with_timezone(&tz);
+            let s = SmartString::from(dt_tz.to_rfc3339());
+            Ok(DataValue::Str(s))
+        }
+        None => {
+            let s = SmartString::from(dt.to_rfc3339());
+            Ok(DataValue::Str(s))
+        }
     }
 }
 
@@ -1407,12 +1451,10 @@ pub(crate) fn op_rand_uuid_v4(_args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_UUID_TIMESTAMP, 1, false);
 pub(crate) fn op_uuid_timestamp(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
-        DataValue::Uuid(UuidWrapper(id)) => {
-            match id.get_timestamp() {
-                None => DataValue::Null,
-                Some(t) => (t.to_unix_nanos() as f64 / 1_000_000_000.).into()
-            }
-        }
-        _ => bail!("not an UUID")
+        DataValue::Uuid(UuidWrapper(id)) => match id.get_timestamp() {
+            None => DataValue::Null,
+            Some(t) => (t.to_unix_nanos() as f64 / 1_000_000_000.).into(),
+        },
+        _ => bail!("not an UUID"),
     })
 }

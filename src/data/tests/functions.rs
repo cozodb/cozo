@@ -1323,3 +1323,10 @@ fn test_uuid() {
     assert!(op_to_uuid(&[DataValue::Str(SmartString::from(""))]).is_err());
     assert!(op_to_uuid(&[DataValue::Str(SmartString::from("f3b4958c-52a1-11e7-802a-010203040506"))]).is_ok());
 }
+
+#[test]
+fn test_now() {
+    let now = op_now(&[]).unwrap();
+    assert!(matches!(now, DataValue::Num(_)));
+    op_format_timestamp(&[now]).unwrap();
+}

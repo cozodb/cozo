@@ -624,3 +624,18 @@ Empty matches::
     \z    only the end of the text
     \b    a Unicode word boundary (\w on one side and \W, \A, or \z on the other)
     \B    not a Unicode word boundary
+
+
+--------------------
+Misc functions
+--------------------
+
+.. function:: now()
+
+    Returns the current timestamp as seconds since the UNIX epoch.
+
+.. function:: format_timestamp(ts, tz?)
+
+    Interpret ``ts`` as seconds since the epoch and format as a string according to `RFC3339 <https://www.rfc-editor.org/rfc/rfc3339>`_.
+
+    If a second string argument is provided, it is interpreted as a `timezone <https://en.wikipedia.org/wiki/Tz_database>`_ and used to format the timestamp.

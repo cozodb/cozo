@@ -651,6 +651,8 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "rand_uuid_v1" => &OP_RAND_UUID_V1,
         "rand_uuid_v4" => &OP_RAND_UUID_V4,
         "uuid_timestamp" => &OP_UUID_TIMESTAMP,
+        "now" => &OP_NOW,
+        "format_timestamp" => &OP_FORMAT_TIMESTAMP,
         _ => return None,
     })
 }
