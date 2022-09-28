@@ -46,9 +46,11 @@ head_arg = {aggr_arg | var}
 aggr_arg = {ident ~ "(" ~ var ~ ("," ~ expr)* ~ ")"}
 algo_arg = _{algo_rel | algo_opt_pair}
 algo_opt_pair = {ident ~ ":" ~ expr}
-algo_rel = {algo_rule_rel | algo_relation_rel }
+algo_rel = {algo_rule_rel | algo_relation_rel | algo_named_relation_rel }
 algo_rule_rel = {ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
 algo_relation_rel = {relation_ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
+algo_named_relation_rel = {relation_ident ~ "{" ~ (algo_named_relation_arg_pair ~ ",")* ~ algo_named_relation_arg_pair? ~ "}"}
+algo_named_relation_arg_pair = {ident ~ (":" ~ ident)?}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
 rule_apply = {underscore_ident ~ "[" ~ apply_args ~ "]"}

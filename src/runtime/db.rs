@@ -332,7 +332,7 @@ impl Db {
         let program = input_program
             .to_normalized_program(tx)?
             .stratify()?
-            .magic_sets_rewrite()?;
+            .magic_sets_rewrite(tx)?;
         debug!("{:#?}", program);
         let (compiled, stores) =
             tx.stratified_magic_compile(&program, &input_program.const_rules)?;

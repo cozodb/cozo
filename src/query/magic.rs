@@ -2,17 +2,20 @@ use std::collections::BTreeSet;
 use std::mem;
 
 use itertools::Itertools;
-use miette::{Result};
+use miette::{ensure, Result};
 use smallvec::SmallVec;
+use smartstring::SmartString;
 
 use crate::data::program::{
-    AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicProgram,
-    MagicRelationApplyAtom, MagicRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol,
-    NormalFormAlgoOrRules, NormalFormAtom, NormalFormProgram, NormalFormRule,
-    StratifiedMagicProgram, StratifiedNormalFormProgram,
+    AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicProgram, MagicRelationApplyAtom,
+    MagicRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol, NormalFormAlgoOrRules,
+    NormalFormAtom, NormalFormProgram, NormalFormRule, StratifiedMagicProgram,
+    StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::parse::SourceSpan;
+use crate::query::logical::NamedFieldNotFound;
+use crate::runtime::transact::SessionTx;
 
 impl NormalFormProgram {
     pub(crate) fn exempt_aggr_rules_for_magic_sets(&self, exempt_rules: &mut BTreeSet<Symbol>) {
@@ -35,14 +38,12 @@ impl NormalFormProgram {
 }
 
 impl StratifiedNormalFormProgram {
-    pub(crate) fn magic_sets_rewrite(
-        self,
-    ) -> Result<StratifiedMagicProgram> {
+    pub(crate) fn magic_sets_rewrite(self, tx: &SessionTx) -> Result<StratifiedMagicProgram> {
         let mut exempt_rules = BTreeSet::from([Symbol::new(PROG_ENTRY, SourceSpan(0, 0))]);
         let mut collected = vec![];
         for prog in self.0 {
             prog.exempt_aggr_rules_for_magic_sets(&mut exempt_rules);
-            let adorned = prog.adorn(&exempt_rules)?;
+            let adorned = prog.adorn(&exempt_rules, tx)?;
             collected.push(adorned.magic_rewrite());
             exempt_rules.extend(prog.get_downstream_rules());
         }
@@ -273,10 +274,7 @@ impl NormalFormProgram {
         }
         downstream_rules
     }
-    fn adorn(
-        &self,
-        upstream_rules: &BTreeSet<Symbol>,
-    ) -> Result<MagicProgram> {
+    fn adorn(&self, upstream_rules: &BTreeSet<Symbol>, tx: &SessionTx) -> Result<MagicProgram> {
         let rules_to_rewrite: BTreeSet<_> = self
             .prog
             .keys()
@@ -329,6 +327,49 @@ impl NormalFormProgram {
                                                 bindings: bindings.clone(),
                                                 span: *span,
                                             },
+                                            AlgoRuleArg::NamedStored {
+                                                name,
+                                                bindings,
+                                                span,
+                                            } => {
+                                                let relation = tx.get_relation(&name, false)?;
+                                                let fields: BTreeSet<_> = relation
+                                                    .metadata
+                                                    .keys
+                                                    .iter()
+                                                    .chain(relation.metadata.non_keys.iter())
+                                                    .map(|col| &col.name)
+                                                    .collect();
+                                                for k in bindings.keys() {
+                                                    ensure!(
+                                                        fields.contains(&k),
+                                                        NamedFieldNotFound(
+                                                            name.to_string(),
+                                                            k.to_string(),
+                                                            *span
+                                                        )
+                                                    );
+                                                }
+                                                let new_bindings = relation
+                                                    .metadata
+                                                    .keys
+                                                    .iter()
+                                                    .chain(relation.metadata.non_keys.iter())
+                                                    .enumerate()
+                                                    .map(|(i, col)| match bindings.get(&col.name) {
+                                                        None => Symbol::new(
+                                                            SmartString::from(format!("{}", i)),
+                                                            Default::default(),
+                                                        ),
+                                                        Some(k) => k.clone(),
+                                                    })
+                                                    .collect_vec();
+                                                MagicAlgoRuleArg::Stored {
+                                                    name: name.clone(),
+                                                    bindings: new_bindings,
+                                                    span: *span,
+                                                }
+                                            }
                                         })
                                     })
                                     .try_collect()?,

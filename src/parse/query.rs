@@ -670,7 +670,6 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
     })
 }
 
-
 fn parse_rule_head(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
@@ -773,6 +772,31 @@ fn parse_algo_rule(
                             .map(|v| Symbol::new(v.as_str(), v.extract_span()))
                             .collect_vec();
                         rule_args.push(AlgoRuleArg::Stored {
+                            name: Symbol::new(
+                                name.as_str().strip_prefix(':').unwrap(),
+                                name.extract_span(),
+                            ),
+                            bindings,
+                            span,
+                        })
+                    }
+                    Rule::algo_named_relation_rel => {
+                        let mut els = inner.into_inner();
+                        let name = els.next().unwrap();
+                        let bindings = els
+                            .map(|v| {
+                                let mut vs = v.into_inner();
+                                let kp = vs.next().unwrap();
+                                let k = SmartString::from(kp.as_str());
+                                let v = match vs.next() {
+                                    Some(vp) => Symbol::new(vp.as_str(), vp.extract_span()),
+                                    None => Symbol::new(k.clone(), kp.extract_span()),
+                                };
+                                (k, v)
+                            })
+                            .collect();
+
+                        rule_args.push(AlgoRuleArg::NamedStored {
                             name: Symbol::new(
                                 name.as_str().strip_prefix(':').unwrap(),
                                 name.extract_span(),

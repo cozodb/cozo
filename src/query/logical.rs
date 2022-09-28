@@ -1,14 +1,15 @@
 use std::collections::BTreeSet;
 
 use itertools::Itertools;
-use miette::{bail, Result};
+use miette::{bail, ensure, Diagnostic, Result};
+use thiserror::Error;
 
 use crate::data::expr::Expr;
 use crate::data::program::{
     InputAtom, InputNamedFieldRelationApplyAtom, InputRelationApplyAtom, InputRuleApplyAtom,
-    NormalFormAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom, TempSymbGen,
-    Unification,
+    NormalFormAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom, TempSymbGen, Unification,
 };
+use crate::parse::SourceSpan;
 use crate::query::reorder::UnsafeNegation;
 use crate::runtime::transact::SessionTx;
 
@@ -132,6 +133,19 @@ impl InputAtom {
         tx: &SessionTx,
     ) -> Result<InputRelationApplyAtom> {
         let stored = tx.get_relation(&name, false)?;
+        let fields: BTreeSet<_> = stored
+            .metadata
+            .keys
+            .iter()
+            .chain(stored.metadata.non_keys.iter())
+            .map(|col| &col.name)
+            .collect();
+        for k in args.keys() {
+            ensure!(
+                fields.contains(k),
+                NamedFieldNotFound(name.to_string(), k.to_string(), span)
+            );
+        }
         let mut new_args = vec![];
         for col_def in stored
             .metadata
@@ -269,7 +283,7 @@ impl InputRelationApplyAtom {
         let mut seen_variables = BTreeSet::new();
         for arg in self.args {
             match arg {
-                Expr::Binding {var, ..} => {
+                Expr::Binding { var, .. } => {
                     if seen_variables.insert(var.clone()) {
                         args.push(var);
                     } else {
@@ -319,3 +333,12 @@ impl InputRelationApplyAtom {
         Disjunction::conj(ret)
     }
 }
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("stored relation '{0}' does not have field '{1}'")]
+#[diagnostic(code(eval::named_field_not_found))]
+pub(crate) struct NamedFieldNotFound(
+    pub(crate) String,
+    pub(crate) String,
+    #[label] pub(crate) SourceSpan,
+);

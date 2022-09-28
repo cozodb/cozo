@@ -419,6 +419,11 @@ pub(crate) enum AlgoRuleArg {
         bindings: Vec<Symbol>,
         span: SourceSpan,
     },
+    NamedStored {
+        name: Symbol,
+        bindings: BTreeMap<SmartString<LazyCompact>, Symbol>,
+        span: SourceSpan,
+    }
 }
 
 #[derive(Debug, Clone)]
