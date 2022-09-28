@@ -1417,7 +1417,7 @@ pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
             let tz_s = tz_v.get_string().ok_or_else(|| {
                 miette!("'format_timestamp' timezone specification requires a string")
             })?;
-            let tz = chrono_tz::Tz::from_str(tz_s).map_err(|_| miette!("bad timezone specification"))?;
+            let tz = chrono_tz::Tz::from_str(tz_s).map_err(|_| miette!("bad timezone specification: {}", tz_s))?;
             let dt_tz = dt.with_timezone(&tz);
             let s = SmartString::from(dt_tz.to_rfc3339());
             Ok(DataValue::Str(s))
