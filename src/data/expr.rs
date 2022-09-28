@@ -336,7 +336,7 @@ impl Expr {
                             if target == symb {
                                 let tar_val = match val.get_int() {
                                     Some(i) => DataValue::from(i),
-                                    None => val.clone()
+                                    None => val.clone(),
                                 };
                                 return Ok(ValueRange::lower_bound(tar_val));
                             }
@@ -347,7 +347,7 @@ impl Expr {
                             if target == symb {
                                 let tar_val = match val.get_float() {
                                     Some(i) => DataValue::from(i),
-                                    None => val.clone()
+                                    None => val.clone(),
                                 };
                                 return Ok(ValueRange::upper_bound(tar_val));
                             }
@@ -361,7 +361,7 @@ impl Expr {
                             if target == symb {
                                 let tar_val = match val.get_float() {
                                     Some(i) => DataValue::from(i),
-                                    None => val.clone()
+                                    None => val.clone(),
                                 };
 
                                 return Ok(ValueRange::upper_bound(tar_val));
@@ -373,7 +373,7 @@ impl Expr {
                             if target == symb {
                                 let tar_val = match val.get_int() {
                                     Some(i) => DataValue::from(i),
-                                    None => val.clone()
+                                    None => val.clone(),
                                 };
 
                                 return Ok(ValueRange::lower_bound(tar_val));
@@ -653,6 +653,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "uuid_timestamp" => &OP_UUID_TIMESTAMP,
         "now" => &OP_NOW,
         "format_timestamp" => &OP_FORMAT_TIMESTAMP,
+        "parse_timestamp" => &OP_PARSE_TIMESTAMP,
         _ => return None,
     })
 }

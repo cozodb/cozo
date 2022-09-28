@@ -756,6 +756,7 @@ impl RelationRA {
             left_to_prefix_indices.push(left_join_indices[*idx]);
         }
 
+        // TODO don't build the whole thing is prefix scan suffices
         let mut right_join_vals = BTreeSet::new();
         for tuple in self.storage.scan_all(tx) {
             let tuple = tuple?;

@@ -3,7 +3,7 @@ use std::ops::{Div, Rem};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use itertools::Itertools;
 use miette::{bail, ensure, miette, Result};
 use num_traits::FloatConst;
@@ -1417,7 +1417,8 @@ pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
             let tz_s = tz_v.get_string().ok_or_else(|| {
                 miette!("'format_timestamp' timezone specification requires a string")
             })?;
-            let tz = chrono_tz::Tz::from_str(tz_s).map_err(|_| miette!("bad timezone specification: {}", tz_s))?;
+            let tz = chrono_tz::Tz::from_str(tz_s)
+                .map_err(|_| miette!("bad timezone specification: {}", tz_s))?;
             let dt_tz = dt.with_timezone(&tz);
             let s = SmartString::from(dt_tz.to_rfc3339());
             Ok(DataValue::Str(s))
@@ -1427,6 +1428,18 @@ pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
             Ok(DataValue::Str(s))
         }
     }
+}
+
+define_op!(OP_PARSE_TIMESTAMP, 1, false);
+pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
+    let s = args[0]
+        .get_string()
+        .ok_or_else(|| miette!("'parse_timestamp' expects a string"))?;
+    let dt = DateTime::parse_from_rfc3339(s).map_err(|_| miette!("bad datetime: {}", s))?;
+    let st: SystemTime = dt.into();
+    Ok(DataValue::from(
+        st.duration_since(UNIX_EPOCH).unwrap().as_secs_f64(),
+    ))
 }
 
 define_op!(OP_RAND_UUID_V1, 0, false);

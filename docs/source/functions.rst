@@ -627,7 +627,7 @@ Empty matches::
 
 
 --------------------
-Misc functions
+Timestamp functions
 --------------------
 
 .. function:: now()
@@ -639,3 +639,7 @@ Misc functions
     Interpret ``ts`` as seconds since the epoch and format as a string according to `RFC3339 <https://www.rfc-editor.org/rfc/rfc3339>`_.
 
     If a second string argument is provided, it is interpreted as a `timezone <https://en.wikipedia.org/wiki/Tz_database>`_ and used to format the timestamp.
+
+.. function:: parse_timestamp(str)
+
+    Parse ``str`` into seconds since the epoch according to RFC3339.

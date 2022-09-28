@@ -1328,5 +1328,6 @@ fn test_uuid() {
 fn test_now() {
     let now = op_now(&[]).unwrap();
     assert!(matches!(now, DataValue::Num(_)));
-    op_format_timestamp(&[now]).unwrap();
+    let s = op_format_timestamp(&[now]).unwrap();
+    let _dt = op_parse_timestamp(&[s]).unwrap();
 }
