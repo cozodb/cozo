@@ -15,7 +15,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{
     AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputNamedFieldRelationApplyAtom,
     InputProgram, InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo,
-    InputTerm, MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
+    MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
 };
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -23,7 +23,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
 use crate::parse::schema::parse_schema;
-use crate::parse::{ExtractSpan, Pair, Pairs, ParseError, Rule, SourceSpan};
+use crate::parse::{ExtractSpan, Pair, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::InputRelationHandle;
 
 #[derive(Error, Diagnostic, Debug)]
@@ -611,7 +611,7 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 .next()
                 .unwrap()
                 .into_inner()
-                .map(|v| parse_rule_arg(v, param_pool))
+                .map(|v| build_expr(v, param_pool))
                 .try_collect()?;
             InputAtom::Rule {
                 inner: InputRuleApplyAtom {
@@ -629,7 +629,7 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 .next()
                 .unwrap()
                 .into_inner()
-                .map(|v| parse_rule_arg(v, param_pool))
+                .map(|v| build_expr(v, param_pool))
                 .try_collect()?;
             InputAtom::Relation {
                 inner: InputRelationApplyAtom {
@@ -648,20 +648,19 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 .next()
                 .unwrap()
                 .into_inner()
-                .map(
-                    |pair| -> Result<(SmartString<LazyCompact>, InputTerm<DataValue>)> {
-                        let mut inner = pair.into_inner();
-                        let name_p = inner.next().unwrap();
-                        let name = SmartString::from(name_p.as_str());
-                        let arg = match inner.next() {
-                            Some(a) => parse_rule_arg(a, param_pool)?,
-                            None => InputTerm::Var {
-                                name: Symbol::new(name.clone(), name_p.extract_span()),
-                            },
-                        };
-                        Ok((name, arg))
-                    },
-                )
+                .map(|pair| -> Result<(SmartString<LazyCompact>, Expr)> {
+                    let mut inner = pair.into_inner();
+                    let name_p = inner.next().unwrap();
+                    let name = SmartString::from(name_p.as_str());
+                    let arg = match inner.next() {
+                        Some(a) => build_expr(a, param_pool)?,
+                        None => Expr::Binding {
+                            var: Symbol::new(name.clone(), name_p.extract_span()),
+                            tuple_pos: None,
+                        },
+                    };
+                    Ok((name, arg))
+                })
                 .try_collect()?;
             InputAtom::NamedFieldRelation {
                 inner: InputNamedFieldRelationApplyAtom { name, args, span },
@@ -671,24 +670,6 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
     })
 }
 
-fn parse_rule_arg(
-    src: Pair<'_>,
-    param_pool: &BTreeMap<String, DataValue>,
-) -> Result<InputTerm<DataValue>> {
-    Ok(match src.as_rule() {
-        Rule::expr => {
-            let mut p = build_expr(src, param_pool)?;
-            let span = p.span();
-            p.partial_eval()?;
-            match p {
-                Expr::Binding { var, .. } => InputTerm::Var { name: var },
-                Expr::Const { val, .. } => InputTerm::Const { val, span },
-                _ => bail!(ParseError { span }),
-            }
-        }
-        r => unreachable!("{:?}", r),
-    })
-}
 
 fn parse_rule_head(
     src: Pair<'_>,

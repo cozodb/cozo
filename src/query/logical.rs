@@ -6,7 +6,7 @@ use miette::{bail, Result};
 use crate::data::expr::Expr;
 use crate::data::program::{
     InputAtom, InputNamedFieldRelationApplyAtom, InputRelationApplyAtom, InputRuleApplyAtom,
-    InputTerm, NormalFormAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom, TempSymbGen,
+    NormalFormAtom, NormalFormRelationApplyAtom, NormalFormRuleApplyAtom, TempSymbGen,
     Unification,
 };
 use crate::query::reorder::UnsafeNegation;
@@ -139,11 +139,10 @@ impl InputAtom {
             .iter()
             .chain(stored.metadata.non_keys.iter())
         {
-            let arg = args
-                .remove(&col_def.name)
-                .unwrap_or_else(|| InputTerm::Var {
-                    name: gen.next(span),
-                });
+            let arg = args.remove(&col_def.name).unwrap_or_else(|| Expr::Binding {
+                var: gen.next(span),
+                tuple_pos: None,
+            });
             new_args.push(arg)
         }
         Ok(InputRelationApplyAtom {
@@ -213,15 +212,15 @@ impl InputRuleApplyAtom {
         let mut seen_variables = BTreeSet::new();
         for arg in self.args {
             match arg {
-                InputTerm::Var { name: kw } => {
-                    if seen_variables.insert(kw.clone()) {
-                        args.push(kw);
+                Expr::Binding { var, .. } => {
+                    if seen_variables.insert(var.clone()) {
+                        args.push(var);
                     } else {
-                        let dup = gen.next(kw.span);
+                        let dup = gen.next(var.span);
                         let unif = NormalFormAtom::Unification(Unification {
                             binding: dup.clone(),
                             expr: Expr::Binding {
-                                var: kw,
+                                var,
                                 tuple_pos: None,
                             },
                             one_many_unif: false,
@@ -231,12 +230,13 @@ impl InputRuleApplyAtom {
                         args.push(dup);
                     }
                 }
-                InputTerm::Const { val, span } => {
+                expr => {
+                    let span = expr.span();
                     let kw = gen.next(span);
                     args.push(kw.clone());
                     let unif = NormalFormAtom::Unification(Unification {
                         binding: kw,
-                        expr: Expr::Const { val, span },
+                        expr,
                         one_many_unif: false,
                         span,
                     });
@@ -269,16 +269,16 @@ impl InputRelationApplyAtom {
         let mut seen_variables = BTreeSet::new();
         for arg in self.args {
             match arg {
-                InputTerm::Var { name: kw } => {
-                    if seen_variables.insert(kw.clone()) {
-                        args.push(kw);
+                Expr::Binding {var, ..} => {
+                    if seen_variables.insert(var.clone()) {
+                        args.push(var);
                     } else {
-                        let span = kw.span;
+                        let span = var.span;
                         let dup = gen.next(span);
                         let unif = NormalFormAtom::Unification(Unification {
                             binding: dup.clone(),
                             expr: Expr::Binding {
-                                var: kw,
+                                var,
                                 tuple_pos: None,
                             },
                             one_many_unif: false,
@@ -288,12 +288,13 @@ impl InputRelationApplyAtom {
                         args.push(dup);
                     }
                 }
-                InputTerm::Const { val, span } => {
+                expr => {
+                    let span = expr.span();
                     let kw = gen.next(span);
                     args.push(kw.clone());
                     let unif = NormalFormAtom::Unification(Unification {
                         binding: kw,
-                        expr: Expr::Const { val, span },
+                        expr,
                         one_many_unif: false,
                         span,
                     });

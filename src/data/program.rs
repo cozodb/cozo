@@ -906,21 +906,21 @@ pub(crate) enum MagicAtom {
 #[derive(Clone, Debug)]
 pub(crate) struct InputRuleApplyAtom {
     pub(crate) name: Symbol,
-    pub(crate) args: Vec<InputTerm<DataValue>>,
+    pub(crate) args: Vec<Expr>,
     pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct InputNamedFieldRelationApplyAtom {
     pub(crate) name: Symbol,
-    pub(crate) args: BTreeMap<SmartString<LazyCompact>, InputTerm<DataValue>>,
+    pub(crate) args: BTreeMap<SmartString<LazyCompact>, Expr>,
     pub(crate) span: SourceSpan,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct InputRelationApplyAtom {
     pub(crate) name: Symbol,
-    pub(crate) args: Vec<InputTerm<DataValue>>,
+    pub(crate) args: Vec<Expr>,
     pub(crate) span: SourceSpan,
 }
 
@@ -950,12 +950,6 @@ pub(crate) struct MagicRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
     pub(crate) span: SourceSpan,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) enum InputTerm<T> {
-    Var { name: Symbol },
-    Const { val: T, span: SourceSpan },
 }
 
 #[derive(Clone, Debug)]
