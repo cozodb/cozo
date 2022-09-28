@@ -8,7 +8,7 @@ use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
-use crate::runtime::derived::DerivedRelStore;
+use crate::runtime::stored::StoredRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct ClusteringCoefficients;
@@ -18,8 +18,8 @@ impl AlgoImpl for ClusteringCoefficients {
         &mut self,
         tx: &SessionTx,
         algo: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
-        out: &DerivedRelStore,
+        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        out: &StoredRelation,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;

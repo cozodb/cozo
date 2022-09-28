@@ -15,7 +15,7 @@ use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
-use crate::runtime::derived::DerivedRelStore;
+use crate::runtime::stored::StoredRelation;
 use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::transact::SessionTx;
 
@@ -172,7 +172,7 @@ impl MagicAlgoApply {
         idx: usize,
         len: usize,
         tx: &SessionTx,
-        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        stores: &BTreeMap<MagicSymbol, StoredRelation>,
     ) -> Result<&MagicAlgoRuleArg> {
         #[derive(Error, Diagnostic, Debug)]
         #[error("Input relation to algorithm has insufficient arity")]

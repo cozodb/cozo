@@ -13,13 +13,13 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
-use crate::runtime::derived::{DerivedRelStore, DerivedRelStoreId};
+use crate::runtime::stored::{StoredRelation, StoredRelationId};
 use crate::runtime::relation::RelationHandle;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) enum RelAlgebra {
     Fixed(InlineFixedRA),
-    Derived(DerivedRA),
+    Stored(StoredRelationRA),
     Relation(RelationRA),
     Join(Box<InnerJoin>),
     NegJoin(Box<NegJoin>),
@@ -32,7 +32,7 @@ impl RelAlgebra {
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             RelAlgebra::Fixed(i) => i.span,
-            RelAlgebra::Derived(i) => i.span,
+            RelAlgebra::Stored(i) => i.span,
             RelAlgebra::Relation(i) => i.span,
             RelAlgebra::Join(i) => i.span,
             RelAlgebra::NegJoin(i) => i.span,
@@ -103,7 +103,7 @@ impl UnificationRA {
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<DerivedRelStoreId>,
+        use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
         let mut bindings = self.parent.bindings_after_eliminate();
         bindings.push(self.binding.clone());
@@ -193,7 +193,7 @@ impl FilteredRA {
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<DerivedRelStoreId>,
+        use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
         let bindings = self.parent.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
@@ -246,7 +246,7 @@ impl Debug for RelAlgebra {
                         .finish()
                 }
             }
-            RelAlgebra::Derived(r) => f
+            RelAlgebra::Stored(r) => f
                 .debug_tuple("Derived")
                 .field(&bindings)
                 .field(&r.storage.rule_name)
@@ -302,7 +302,7 @@ impl Debug for RelAlgebra {
 impl RelAlgebra {
     pub(crate) fn get_filters(&mut self) -> Option<&mut Vec<Expr>> {
         match self {
-            RelAlgebra::Derived(d) => Some(&mut d.filters),
+            RelAlgebra::Stored(d) => Some(&mut d.filters),
             RelAlgebra::Join(j) => j.right.get_filters(),
             RelAlgebra::Filter(f) => Some(&mut f.pred),
             _ => None,
@@ -311,7 +311,7 @@ impl RelAlgebra {
     pub(crate) fn fill_normal_binding_indices(&mut self) -> Result<()> {
         match self {
             RelAlgebra::Fixed(_) => {}
-            RelAlgebra::Derived(d) => {
+            RelAlgebra::Stored(d) => {
                 d.fill_binding_indices()?;
             }
             RelAlgebra::Relation(v) => {
@@ -345,7 +345,7 @@ impl RelAlgebra {
     }
     pub(crate) fn fill_join_binding_indices(&mut self, bindings: Vec<Symbol>) -> Result<()> {
         match self {
-            RelAlgebra::Derived(d) => {
+            RelAlgebra::Stored(d) => {
                 d.fill_join_binding_indices(&bindings)?;
             }
             r => {
@@ -369,10 +369,10 @@ impl RelAlgebra {
     }
     pub(crate) fn derived(
         bindings: Vec<Symbol>,
-        storage: DerivedRelStore,
+        storage: StoredRelation,
         span: SourceSpan,
     ) -> Self {
-        Self::Derived(DerivedRA {
+        Self::Stored(StoredRelationRA {
             bindings,
             storage,
             filters: vec![],
@@ -474,7 +474,7 @@ impl ReorderRA {
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<DerivedRelStoreId>,
+        use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
         let old_order = self.relation.bindings_after_eliminate();
         let old_order_indices: BTreeMap<_, _> = old_order
@@ -818,14 +818,14 @@ impl RelationRA {
 }
 
 #[derive(Debug)]
-pub(crate) struct DerivedRA {
+pub(crate) struct StoredRelationRA {
     pub(crate) bindings: Vec<Symbol>,
-    pub(crate) storage: DerivedRelStore,
+    pub(crate) storage: StoredRelation,
     pub(crate) filters: Vec<Expr>,
     pub(crate) span: SourceSpan,
 }
 
-impl DerivedRA {
+impl StoredRelationRA {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
@@ -856,7 +856,7 @@ impl DerivedRA {
     fn iter(
         &self,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<DerivedRelStoreId>,
+        use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'_>> {
         if epoch == Some(0) && use_delta.contains(&self.storage.id) {
             return Ok(Box::new(iter::empty()));
@@ -952,7 +952,7 @@ impl DerivedRA {
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<DerivedRelStoreId>,
+        use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
         if epoch == Some(0) && use_delta.contains(&self.storage.id) {
             return Ok(Box::new(iter::empty()));
@@ -1082,7 +1082,7 @@ impl RelAlgebra {
     pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         match self {
             RelAlgebra::Fixed(r) => r.do_eliminate_temp_vars(used),
-            RelAlgebra::Derived(_r) => Ok(()),
+            RelAlgebra::Stored(_r) => Ok(()),
             RelAlgebra::Relation(_v) => Ok(()),
             RelAlgebra::Join(r) => r.do_eliminate_temp_vars(used),
             RelAlgebra::Reorder(r) => r.relation.eliminate_temp_vars(used),
@@ -1095,7 +1095,7 @@ impl RelAlgebra {
     fn eliminate_set(&self) -> Option<&BTreeSet<Symbol>> {
         match self {
             RelAlgebra::Fixed(r) => Some(&r.to_eliminate),
-            RelAlgebra::Derived(_) => None,
+            RelAlgebra::Stored(_) => None,
             RelAlgebra::Relation(_) => None,
             RelAlgebra::Join(r) => Some(&r.to_eliminate),
             RelAlgebra::Reorder(_) => None,
@@ -1119,7 +1119,7 @@ impl RelAlgebra {
     fn bindings_before_eliminate(&self) -> Vec<Symbol> {
         match self {
             RelAlgebra::Fixed(f) => f.bindings.clone(),
-            RelAlgebra::Derived(d) => d.bindings.clone(),
+            RelAlgebra::Stored(d) => d.bindings.clone(),
             RelAlgebra::Relation(v) => v.bindings.clone(),
             RelAlgebra::Join(j) => j.bindings(),
             RelAlgebra::Reorder(r) => r.bindings(),
@@ -1136,11 +1136,11 @@ impl RelAlgebra {
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<DerivedRelStoreId>,
+        use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
         match self {
             RelAlgebra::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone()))))),
-            RelAlgebra::Derived(r) => r.iter(epoch, use_delta),
+            RelAlgebra::Stored(r) => r.iter(epoch, use_delta),
             RelAlgebra::Relation(v) => v.iter(tx),
             RelAlgebra::Join(j) => j.iter(tx, epoch, use_delta),
             RelAlgebra::Reorder(r) => r.iter(tx, epoch, use_delta),
@@ -1178,12 +1178,12 @@ impl NegJoin {
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<DerivedRelStoreId>,
+        use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
         let bindings = self.left.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         match &self.right {
-            RelAlgebra::Derived(r) => {
+            RelAlgebra::Stored(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1238,7 +1238,7 @@ impl InnerJoin {
         let mut left = used.clone();
         left.extend(self.joiner.left_keys.clone());
         if let Some(filters) = match &self.right {
-            RelAlgebra::Derived(r) => Some(&r.filters),
+            RelAlgebra::Stored(r) => Some(&r.filters),
             _ => None,
         } {
             for filter in filters {
@@ -1262,7 +1262,7 @@ impl InnerJoin {
         &'a self,
         tx: &'a SessionTx,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<DerivedRelStoreId>,
+        use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
         let bindings = self.bindings();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
@@ -1281,7 +1281,7 @@ impl InnerJoin {
                     eliminate_indices,
                 )
             }
-            RelAlgebra::Derived(r) => {
+            RelAlgebra::Stored(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1336,7 +1336,7 @@ impl InnerJoin {
         tx: &'a SessionTx,
         eliminate_indices: BTreeSet<usize>,
         epoch: Option<u32>,
-        use_delta: &BTreeSet<DerivedRelStoreId>,
+        use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
         let right_bindings = self.right.bindings_after_eliminate();
         let (left_join_indices, right_join_indices) = self

@@ -11,7 +11,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::derived::DerivedRelStore;
+use crate::runtime::stored::StoredRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct ReorderSort;
@@ -21,8 +21,8 @@ impl AlgoImpl for ReorderSort {
         &mut self,
         tx: &SessionTx,
         algo: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
-        out: &DerivedRelStore,
+        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        out: &StoredRelation,
         poison: Poison,
     ) -> Result<()> {
         let in_rel = algo.relation(0)?;

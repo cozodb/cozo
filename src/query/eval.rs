@@ -9,7 +9,7 @@ use crate::data::symb::{PROG_ENTRY, Symbol};
 use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::db::Poison;
-use crate::runtime::derived::DerivedRelStore;
+use crate::runtime::stored::StoredRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct QueryLimiter {
@@ -32,10 +32,10 @@ impl SessionTx {
     pub(crate) fn stratified_magic_evaluate(
         &self,
         strata: &[CompiledProgram],
-        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        stores: &BTreeMap<MagicSymbol, StoredRelation>,
         num_to_take: Option<usize>,
         poison: Poison,
-    ) -> Result<DerivedRelStore> {
+    ) -> Result<StoredRelation> {
         let ret_area = stores
             .get(&MagicSymbol::Muggle {
                 inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
@@ -52,7 +52,7 @@ impl SessionTx {
     fn semi_naive_magic_evaluate(
         &self,
         prog: &CompiledProgram,
-        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        stores: &BTreeMap<MagicSymbol, StoredRelation>,
         num_to_take: Option<usize>,
         poison: Poison,
     ) -> Result<()> {
@@ -141,7 +141,7 @@ impl SessionTx {
         &self,
         rule_symb: &MagicSymbol,
         algo_apply: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        stores: &BTreeMap<MagicSymbol, StoredRelation>,
         poison: Poison,
     ) -> Result<()> {
         let mut algo_impl = algo_apply.algo.get_impl()?;
@@ -153,7 +153,7 @@ impl SessionTx {
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         aggr_kind: AggrKind,
-        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        stores: &BTreeMap<MagicSymbol, StoredRelation>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
@@ -230,7 +230,7 @@ impl SessionTx {
         ruleset: &[CompiledRule],
         epoch: u32,
         is_meet_aggr: bool,
-        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        stores: &BTreeMap<MagicSymbol, StoredRelation>,
         prev_changed: &BTreeMap<&MagicSymbol, bool>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,

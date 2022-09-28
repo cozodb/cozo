@@ -14,7 +14,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::query::relation::RelAlgebra;
-use crate::runtime::derived::DerivedRelStore;
+use crate::runtime::stored::StoredRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type CompiledProgram = BTreeMap<MagicSymbol, CompiledRuleSet>;
@@ -85,8 +85,8 @@ impl SessionTx {
         &mut self,
         prog: &StratifiedMagicProgram,
         const_rules: &ConstRules,
-    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, DerivedRelStore>)> {
-        let mut stores: BTreeMap<MagicSymbol, DerivedRelStore> = Default::default();
+    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, StoredRelation>)> {
+        let mut stores: BTreeMap<MagicSymbol, StoredRelation> = Default::default();
 
         for (name, ConstRule { data, bindings, .. }) in const_rules {
             let arity = if bindings.is_empty() {
@@ -158,7 +158,7 @@ impl SessionTx {
         &mut self,
         rule: &MagicRule,
         rule_name: &MagicSymbol,
-        stores: &BTreeMap<MagicSymbol, DerivedRelStore>,
+        stores: &BTreeMap<MagicSymbol, StoredRelation>,
         ret_vars: &[Symbol],
     ) -> Result<RelAlgebra> {
         let mut ret = RelAlgebra::unit(rule_name.symbol().span);

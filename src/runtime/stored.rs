@@ -20,35 +20,35 @@ use crate::query::eval::QueryLimiter;
 use crate::runtime::db::Poison;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) struct DerivedRelStoreId(pub(crate) u32);
+pub(crate) struct StoredRelationId(pub(crate) u32);
 
-impl Debug for DerivedRelStoreId {
+impl Debug for StoredRelationId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "t{}", self.0)
     }
 }
 
 #[derive(Clone)]
-pub(crate) struct DerivedRelStore {
+pub(crate) struct StoredRelation {
     mem_db: Arc<RwLock<Vec<Arc<RwLock<BTreeMap<Tuple, Tuple>>>>>>,
     epoch_size: Arc<AtomicU32>,
-    pub(crate) id: DerivedRelStoreId,
+    pub(crate) id: StoredRelationId,
     pub(crate) rule_name: MagicSymbol,
     pub(crate) arity: usize,
 }
 
-impl Debug for DerivedRelStore {
+impl Debug for StoredRelation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "TempStore<{}>", self.id.0)
     }
 }
 
-impl DerivedRelStore {
+impl StoredRelation {
     pub(crate) fn new(
-        id: DerivedRelStoreId,
+        id: StoredRelationId,
         rule_name: MagicSymbol,
         arity: usize,
-    ) -> DerivedRelStore {
+    ) -> StoredRelation {
         Self {
             epoch_size: Default::default(),
             mem_db: Default::default(),
@@ -177,7 +177,7 @@ impl DerivedRelStore {
     pub(crate) fn normal_aggr_scan_and_put(
         &self,
         aggrs: &[Option<(Aggregation, Vec<DataValue>)>],
-        store: &DerivedRelStore,
+        store: &StoredRelation,
         mut limiter: Option<&mut QueryLimiter>,
         poison: Poison,
     ) -> Result<bool> {
