@@ -5,7 +5,6 @@ use miette::Result;
 use rmp_serde::Serializer;
 use serde::Serialize;
 
-use crate::data::json::JsonValue;
 use crate::data::value::DataValue;
 use crate::runtime::relation::RelationId;
 
@@ -16,15 +15,7 @@ pub(crate) struct Tuple(pub(crate) Vec<DataValue>);
 
 impl Debug for Tuple {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[")?;
-        for (i, v) in self.0.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            let j = JsonValue::from(v.clone());
-            write!(f, "{}", j)?;
-        }
-        write!(f, "]")
+        f.debug_list().entries(&self.0).finish()
     }
 }
 

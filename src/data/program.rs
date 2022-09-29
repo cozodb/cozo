@@ -1,6 +1,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use either::{Left, Right};
 use miette::{ensure, Diagnostic, Result};
@@ -11,12 +11,13 @@ use thiserror::Error;
 use crate::algo::AlgoHandle;
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
+use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
-use crate::runtime::stored::StoredRelation;
 use crate::runtime::relation::InputRelationHandle;
+use crate::runtime::stored::StoredRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, ConstRule>;
@@ -34,7 +35,7 @@ pub(crate) enum QueryAssertion {
     AssertSome(SourceSpan),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub(crate) struct QueryOutOptions {
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
@@ -42,6 +43,103 @@ pub(crate) struct QueryOutOptions {
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
     pub(crate) store_relation: Option<(InputRelationHandle, RelationOp)>,
     pub(crate) assertion: Option<QueryAssertion>,
+}
+
+impl Debug for QueryOutOptions {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl Display for QueryOutOptions {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(l) = self.limit {
+            write!(f, ":limit {};\n", l)?;
+        }
+        if let Some(l) = self.offset {
+            write!(f, ":offset {};\n", l)?;
+        }
+        if let Some(l) = self.timeout {
+            write!(f, ":timeout {};\n", l)?;
+        }
+        for (symb, dir) in &self.sorters {
+            write!(f, ":order ")?;
+            if *dir == SortDir::Dsc {
+                write!(f, "-")?;
+            }
+            write!(f, "{};\n", symb)?;
+        }
+        if let Some((
+            InputRelationHandle {
+                name,
+                metadata: StoredRelationMetadata { keys, non_keys },
+                key_bindings,
+                dep_bindings,
+                ..
+            },
+            op,
+        )) = &self.store_relation
+        {
+            match op {
+                RelationOp::Create => {
+                    write!(f, ":create ")?;
+                }
+                RelationOp::Replace => {
+                    write!(f, ":replace ")?;
+                }
+                RelationOp::Put => {
+                    write!(f, ":put ")?;
+                }
+                RelationOp::Rm => {
+                    write!(f, ":rm ")?;
+                }
+            }
+            write!(f, "{} {{", name)?;
+            let mut is_first = true;
+            for (col, bind) in keys.iter().zip(key_bindings) {
+                if is_first {
+                    is_first = false
+                } else {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}: {}", col.name, col.typing)?;
+                if let Some(gen) = &col.default_gen {
+                    write!(f, " default {}", gen)?;
+                } else {
+                    write!(f, " = {}", bind)?;
+                }
+            }
+            write!(f, " => ")?;
+            let mut is_first = true;
+            for (col, bind) in non_keys.iter().zip(dep_bindings) {
+                if is_first {
+                    is_first = false
+                } else {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}: {}", col.name, col.typing)?;
+                if let Some(gen) = &col.default_gen {
+                    write!(f, " default {}", gen)?;
+                } else {
+                    write!(f, " = {}", bind)?;
+                }
+            }
+            write!(f, "}};\n")?;
+        }
+
+        if let Some(a) = &self.assertion {
+            match a {
+                QueryAssertion::AssertNone(_) => {
+                    write!(f, ":assert none;\n")?;
+                }
+                QueryAssertion::AssertSome(_) => {
+                    write!(f, ":assert some;\n")?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for QueryOutOptions {
@@ -407,7 +505,7 @@ impl Debug for MagicAlgoApply {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) enum AlgoRuleArg {
     InMem {
         name: Symbol,
@@ -423,6 +521,36 @@ pub(crate) enum AlgoRuleArg {
         name: Symbol,
         bindings: BTreeMap<SmartString<LazyCompact>, Symbol>,
         span: SourceSpan,
+    },
+}
+
+impl Debug for AlgoRuleArg {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl Display for AlgoRuleArg {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AlgoRuleArg::InMem { name, bindings, .. } => {
+                write!(f, "{}", name)?;
+                f.debug_list().entries(bindings).finish()?;
+            }
+            AlgoRuleArg::Stored { name, bindings, .. } => {
+                write!(f, ":{}", name)?;
+                f.debug_list().entries(bindings).finish()?;
+            }
+            AlgoRuleArg::NamedStored { name, bindings, .. } => {
+                write!(f, ":")?;
+                let mut sf = f.debug_struct(name);
+                for (k, v) in bindings {
+                    sf.field(k, v);
+                }
+                sf.finish()?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -470,6 +598,88 @@ pub(crate) struct InputProgram {
     pub(crate) prog: BTreeMap<Symbol, InputRulesOrAlgo>,
     pub(crate) const_rules: ConstRules,
     pub(crate) out_opts: QueryOutOptions,
+}
+
+impl Display for InputProgram {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for (name, rule) in &self.const_rules {
+            write!(f, "{}", name.symbol())?;
+            f.debug_list().entries(&rule.bindings).finish()?;
+            write!(f, " <- ")?;
+            f.debug_list().entries(&rule.data).finish()?;
+            write!(f, ";\n")?;
+        }
+        for (name, rules) in &self.prog {
+            match rules {
+                InputRulesOrAlgo::Rules { rules, .. } => {
+                    for InputRule {
+                        head, aggr, body, ..
+                    } in rules
+                    {
+                        write!(f, "{}[", name)?;
+
+                        for (i, (h, a)) in head.iter().zip(aggr).enumerate() {
+                            if i > 0 {
+                                write!(f, ", ")?;
+                            }
+                            if let Some((aggr, aggr_args)) = a {
+                                write!(f, "{}({}", aggr.name, h)?;
+                                for aga in aggr_args {
+                                    write!(f, ", {}", aga)?;
+                                }
+                                write!(f, ")")?;
+                            } else {
+                                write!(f, "{}", h)?;
+                            }
+                        }
+                        write!(f, "] := ")?;
+                        for (i, atom) in body.iter().enumerate() {
+                            if i > 0 {
+                                write!(f, ", ")?;
+                            }
+                            write!(f, "{}", atom)?;
+                        }
+                        write!(f, ";\n")?;
+                    }
+                }
+                InputRulesOrAlgo::Algo {
+                    algo:
+                        AlgoApply {
+                            algo,
+                            rule_args,
+                            options,
+                            head,
+                            ..
+                        },
+                } => {
+                    write!(f, "{}", name)?;
+                    f.debug_list().entries(head).finish()?;
+                    write!(f, " <~ ")?;
+                    write!(f, "{}(", algo.name)?;
+                    let mut first = true;
+                    for rule_arg in rule_args {
+                        if first {
+                            first = false;
+                        } else {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", rule_arg)?;
+                    }
+                    for (k, v) in options {
+                        if first {
+                            first = false;
+                        } else {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}: {}", k, v)?;
+                    }
+                    write!(f, ");\n")?;
+                }
+            }
+        }
+        write!(f, "{}", self.out_opts)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -842,7 +1052,7 @@ impl MagicRule {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) enum InputAtom {
     Rule {
         inner: InputRuleApplyAtom,
@@ -871,6 +1081,81 @@ pub(crate) enum InputAtom {
     Unification {
         inner: Unification,
     },
+}
+
+impl Debug for InputAtom {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl Display for InputAtom {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InputAtom::Rule {
+                inner: InputRuleApplyAtom { name, args, .. },
+            } => {
+                write!(f, "{}", name)?;
+                f.debug_list().entries(args).finish()?;
+            }
+            InputAtom::NamedFieldRelation {
+                inner: InputNamedFieldRelationApplyAtom { name, args, .. },
+            } => {
+                f.write_str(":")?;
+                let mut sf = f.debug_struct(name);
+                for (k, v) in args {
+                    sf.field(k, v);
+                }
+                sf.finish()?;
+            }
+            InputAtom::Relation {
+                inner: InputRelationApplyAtom { name, args, .. },
+            } => {
+                write!(f, ":{}", name)?;
+                f.debug_list().entries(args).finish()?;
+            }
+            InputAtom::Predicate { inner } => {
+                write!(f, "{}", inner)?;
+            }
+            InputAtom::Negation { inner, .. } => {
+                write!(f, "not {}", inner)?;
+            }
+            InputAtom::Conjunction { inner, .. } => {
+                for (i, a) in inner.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " and ")?;
+                    }
+                    write!(f, "({})", a)?;
+                }
+            }
+            InputAtom::Disjunction { inner, .. } => {
+                for (i, a) in inner.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " or ")?;
+                    }
+                    write!(f, "({})", a)?;
+                }
+            }
+            InputAtom::Unification {
+                inner:
+                    Unification {
+                        binding,
+                        expr,
+                        one_many_unif,
+                        ..
+                    },
+            } => {
+                write!(f, "{}", binding)?;
+                if *one_many_unif {
+                    write!(f, " in ")?;
+                } else {
+                    write!(f, " = ")?;
+                }
+                write!(f, "{}", expr)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl InputAtom {

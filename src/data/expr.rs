@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::mem;
 
 use itertools::Itertools;
@@ -16,7 +16,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::SourceSpan;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde_derive::Serialize, serde_derive::Deserialize)]
+#[derive(Clone, PartialEq, Eq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) enum Expr {
     Binding {
         var: Symbol,
@@ -43,6 +43,48 @@ pub(crate) enum Expr {
         #[serde(skip)]
         span: SourceSpan,
     },
+}
+
+impl Debug for Expr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Binding { var, .. } => {
+                write!(f, "{}", var.name)
+            }
+            Expr::Const { val, .. } => {
+                write!(f, "{}", val)
+            }
+            Expr::Apply { op, args, .. } => {
+                let mut writer =
+                    f.debug_tuple(op.name.strip_prefix("OP_").unwrap().to_lowercase().as_str());
+                for arg in args.iter() {
+                    writer.field(arg);
+                }
+                writer.finish()
+            }
+            Expr::Cond { clauses, .. } => {
+                let mut writer = f.debug_tuple("cond");
+                for (cond, expr) in clauses {
+                    writer.field(cond);
+                    writer.field(expr);
+                }
+                writer.finish()
+            }
+            Expr::Try { clauses, .. } => {
+                let mut writer = f.debug_tuple("try");
+                for clause in clauses {
+                    writer.field(clause);
+                }
+                writer.finish()
+            }
+        }
+    }
 }
 
 #[derive(Debug, Error, Diagnostic)]

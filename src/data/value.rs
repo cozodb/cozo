@@ -168,7 +168,20 @@ impl Display for Num {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Num::I(i) => write!(f, "{}", i),
-            Num::F(n) => write!(f, "{}", n),
+            Num::F(n) => {
+                if n.is_nan() {
+                    write!(f, r#"to_float("NAN")"#)
+                } else if n.is_infinite() {
+                    if n.is_sign_negative() {
+                        write!(f, r#"to_float("NEG_INF")"#)
+                    } else {
+                        write!(f, r#"to_float("INF")"#)
+                    }
+                }
+                else {
+                    write!(f, "{}", n)
+                }
+            },
         }
     }
 }
@@ -215,40 +228,37 @@ impl Ord for Num {
 
 impl Debug for DataValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl Display for DataValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            DataValue::Null => {
-                write!(f, "null")
-            }
-            DataValue::Bool(b) => {
-                write!(f, "{}", b)
-            }
-            DataValue::Num(i) => {
-                write!(f, "{}", i)
-            }
-            DataValue::Str(s) => {
-                write!(f, "{:?}", s)
-            }
-            DataValue::Regex(r) => {
-                write!(f, "{:?}", r.0.as_str())
-            }
+            DataValue::Null => f.write_str("null"),
+            DataValue::Bool(b) => write!(f, "{}", b),
+            DataValue::Num(n) => write!(f, "{}", n),
+            DataValue::Str(s) => write!(f, "{:?}", s),
             DataValue::Bytes(b) => {
-                write!(f, "bytes(len={})", b.len())
-            }
-            DataValue::List(t) => f.debug_list().entries(t.iter()).finish(),
-            DataValue::Set(t) => f.debug_list().entries(t.iter()).finish(),
-            DataValue::Rev(v) => {
-                write!(f, "desc<{:?}>", v)
-            }
-            DataValue::Bot => {
-                write!(f, "bottom")
-            }
-            DataValue::Guard => {
-                write!(f, "guard")
+                let bs = base64::encode(b);
+                write!(f, "decode_base64({:?})", bs)
             }
             DataValue::Uuid(u) => {
-                let encoded = base64::encode_config(u.0.as_bytes(), base64::URL_SAFE_NO_PAD);
-                write!(f, "{}", encoded)
+                let us = u.0.to_string();
+                write!(f, "to_uuid({:?})", us)
             }
+            DataValue::Regex(rx) => {
+                write!(f, "regex({:?})", rx.0.as_str())
+            }
+            DataValue::List(ls) => f.debug_list().entries(ls).finish(),
+            DataValue::Set(s) => f.debug_list().entries(s).finish(),
+            DataValue::Rev(rev) => {
+                write!(f, "{}", rev.0)
+            }
+            DataValue::Guard => {
+                write!(f, "null")
+            }
+            DataValue::Bot => write!(f, "null"),
         }
     }
 }
@@ -311,6 +321,8 @@ mod tests {
     use std::collections::{BTreeMap, HashMap};
     use std::mem::size_of;
 
+    use smartstring::SmartString;
+
     use crate::data::symb::Symbol;
     use crate::data::value::DataValue;
 
@@ -337,5 +349,24 @@ mod tests {
             s.as_bytes()[3]
         );
         dbg!(s);
+    }
+
+
+    #[test]
+    fn display_datavalues() {
+        println!("{}", DataValue::Null);
+        println!("{}", DataValue::Bool(true));
+        println!("{}", DataValue::from(-1));
+        println!("{}", DataValue::from(-1121212121.331212121));
+        println!("{}", DataValue::from(f64::NAN));
+        println!("{}", DataValue::from(f64::NEG_INFINITY));
+        println!(
+            "{}",
+            DataValue::List(vec![
+                DataValue::Bool(false),
+                DataValue::Str(SmartString::from(r###"abc"你"好'啊👌"###)),
+                DataValue::from(f64::NEG_INFINITY)
+            ])
+        );
     }
 }

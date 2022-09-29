@@ -295,6 +295,7 @@ impl Db {
         tx: &mut SessionTx,
         input_program: InputProgram,
     ) -> Result<(JsonValue, Vec<(Vec<u8>, Vec<u8>)>)> {
+        debug!("{}", input_program);
         let mut clean_ups = vec![];
         if let Some((meta, op)) = &input_program.out_opts.store_relation {
             if *op == RelationOp::Create {
