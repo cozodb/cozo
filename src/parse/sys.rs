@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use itertools::Itertools;
 use miette::{Diagnostic, Result};
 use thiserror::Error;
@@ -8,24 +6,9 @@ use crate::data::symb::Symbol;
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 
-#[derive(
-    Debug,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Copy,
-    Clone,
-    serde_derive::Serialize,
-    serde_derive::Deserialize,
-)]
-pub(crate) enum CompactTarget {
-    Relations,
-}
-
 #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) enum SysOp {
-    Compact(BTreeSet<CompactTarget>),
+    Compact,
     ListRelation(Symbol),
     ListRelations,
     ListRunning,
@@ -44,16 +27,7 @@ struct ProcessIdError(String, #[label] SourceSpan);
 pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
     let inner = src.next().unwrap();
     Ok(match inner.as_rule() {
-        Rule::compact_op => {
-            let ops = inner
-                .into_inner()
-                .map(|v| match v.as_rule() {
-                    Rule::compact_opt_relations => CompactTarget::Relations,
-                    _ => unreachable!(),
-                })
-                .collect();
-            SysOp::Compact(ops)
-        }
+        Rule::compact_op => SysOp::Compact,
         Rule::running_op => SysOp::ListRunning,
         Rule::kill_op => {
             let i_str = inner.into_inner().next().unwrap();
@@ -111,7 +85,7 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
                     Rule::trigger_put => puts.push(script_str.to_string()),
                     Rule::trigger_rm => rms.push(script_str.to_string()),
                     Rule::trigger_replace => replaces.push(script_str.to_string()),
-                    r => unreachable!("{:?}", r)
+                    r => unreachable!("{:?}", r),
                 }
             }
             SysOp::SetTriggers(rel, puts, rms, replaces)

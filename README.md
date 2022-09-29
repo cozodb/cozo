@@ -1,6 +1,6 @@
 # The Cozo Database
 
-Cozo is a graph-focused, dual-storage transactional database designed by and for data hackers. It's free and open-source software.
+Cozo is a graph-focused relational database designed by and for data hackers. It's free and open-source software.
 
 ## Another database?!
 
@@ -24,4 +24,4 @@ At the moment, the following are non-goals (but may change in the future)
 
 * Sharding, distributed system. This would greatly increase the complexity of the system, and we don't think it is appropriate to pour energy into it at this experimentation stage.
 * Additional query languages, e.g. SQL, GraphQL.
-* Support for more paradigms, e.g. a document store.
+* Support for more paradigms, e.g. a document store. many a date

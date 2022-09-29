@@ -24,7 +24,7 @@ use crate::data::tuple::{
     compare_tuple_keys, rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN,
 };
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::parse::sys::{CompactTarget, SysOp};
+use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::runtime::relation::{RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
@@ -232,14 +232,8 @@ impl Db {
     }
     fn run_sys_op(&self, op: SysOp) -> Result<JsonValue> {
         match op {
-            SysOp::Compact(opts) => {
-                for opt in opts {
-                    match opt {
-                        CompactTarget::Relations => {
-                            self.compact_relation()?;
-                        }
-                    }
-                }
+            SysOp::Compact => {
+                self.compact_relation()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::ListRelations => self.list_relations(),
@@ -655,10 +649,8 @@ impl Db {
             ]));
             it.next();
         }
-        Ok(
-            json!({"rows": collected, "headers":
-                ["name", "arity", "n_keys", "n_non_keys", "n_put_triggers", "n_rm_triggers", "n_replace_triggers"]}),
-        )
+        Ok(json!({"rows": collected, "headers":
+                ["name", "arity", "n_keys", "n_non_keys", "n_put_triggers", "n_rm_triggers", "n_replace_triggers"]}))
     }
 }
 
