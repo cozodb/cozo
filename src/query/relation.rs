@@ -927,12 +927,6 @@ impl StoredRelationRA {
             Box::new(filter_iter(self.filters.clone(), it))
         })
     }
-    fn join_is_prefix(&self, right_join_indices: &[usize]) -> bool {
-        let mut indices = right_join_indices.to_vec();
-        indices.sort();
-        let l = indices.len();
-        indices.into_iter().eq(0..l)
-    }
     fn neg_join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
@@ -1382,7 +1376,7 @@ impl InnerJoin {
                         &self.right.bindings_after_eliminate(),
                     )
                     .unwrap();
-                if r.join_is_prefix(&join_indices.1) {
+                if join_is_prefix(&join_indices.1) {
                     r.prefix_join(
                         self.left.iter(tx, epoch, use_delta)?,
                         join_indices,
