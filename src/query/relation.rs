@@ -756,48 +756,96 @@ impl RelationRA {
             left_to_prefix_indices.push(left_join_indices[*idx]);
         }
 
-        // TODO don't build the whole thing is prefix scan suffices
-        let mut right_join_vals = BTreeSet::new();
-        for tuple in self.storage.scan_all(tx) {
-            let tuple = tuple?;
-            let to_join: Box<[DataValue]> = right_join_indices.iter().map(|i| {
-                tuple.0[*i].clone()
-            }).collect();
-            right_join_vals.insert(to_join);
-        }
-
-        Ok(Box::new(
-            left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let left_join_vals: Box<[DataValue]> = left_join_indices.iter().map(|i| {
-                        tuple.0[*i].clone()
-                    }).collect();
-                    if right_join_vals.contains(&left_join_vals) {
-                        return Ok(None)
-                    }
-
-                    Ok(Some(if !eliminate_indices.is_empty() {
-                        Tuple(
-                            tuple
-                                .0
-                                .into_iter()
-                                .enumerate()
-                                .filter_map(|(i, v)| {
-                                    if eliminate_indices.contains(&i) {
-                                        None
-                                    } else {
-                                        Some(v)
-                                    }
-                                })
+        if join_is_prefix(&right_join_indices) {
+            Ok(Box::new(
+                left_iter
+                    .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                        let prefix = Tuple(
+                            left_to_prefix_indices
+                                .iter()
+                                .map(|i| tuple.0[*i].clone())
                                 .collect_vec(),
-                        )
-                    } else {
-                        tuple
-                    }))
-                })
-                .map(flatten_err)
-                .filter_map(invert_option_err),
-        ))
+                        );
+
+                        'outer: for found in self.storage.scan_prefix(tx, &prefix) {
+                            let found = found?;
+                            for (left_idx, right_idx) in
+                                left_join_indices.iter().zip(right_join_indices.iter())
+                            {
+                                if tuple.0[*left_idx] != found.0[*right_idx] {
+                                    continue 'outer;
+                                }
+                            }
+                            return Ok(None);
+                        }
+
+                        Ok(Some(if !eliminate_indices.is_empty() {
+                            Tuple(
+                                tuple
+                                    .0
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter_map(|(i, v)| {
+                                        if eliminate_indices.contains(&i) {
+                                            None
+                                        } else {
+                                            Some(v)
+                                        }
+                                    })
+                                    .collect_vec(),
+                            )
+                        } else {
+                            tuple
+                        }))
+                    })
+                    .map(flatten_err)
+                    .filter_map(invert_option_err),
+            ))
+        } else {
+            let mut right_join_vals = BTreeSet::new();
+
+            for tuple in self.storage.scan_all(tx) {
+                let tuple = tuple?;
+                let to_join: Box<[DataValue]> = right_join_indices
+                    .iter()
+                    .map(|i| tuple.0[*i].clone())
+                    .collect();
+                right_join_vals.insert(to_join);
+            }
+            Ok(Box::new(
+                left_iter
+                    .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                        let left_join_vals: Box<[DataValue]> = left_join_indices
+                            .iter()
+                            .map(|i| tuple.0[*i].clone())
+                            .collect();
+                        if right_join_vals.contains(&left_join_vals) {
+                            return Ok(None);
+                        }
+
+                        Ok(Some(if !eliminate_indices.is_empty() {
+                            Tuple(
+                                tuple
+                                    .0
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter_map(|(i, v)| {
+                                        if eliminate_indices.contains(&i) {
+                                            None
+                                        } else {
+                                            Some(v)
+                                        }
+                                    })
+                                    .collect_vec(),
+                            )
+                        } else {
+                            tuple
+                        }))
+                    })
+                    .map(flatten_err)
+                    .filter_map(invert_option_err),
+            ))
+        }
     }
 
     fn iter(&self, tx: &SessionTx) -> Result<TupleIter<'_>> {
@@ -808,12 +856,13 @@ impl RelationRA {
             Box::new(filter_iter(self.filters.clone(), it))
         })
     }
-    fn join_is_prefix(&self, right_join_indices: &[usize]) -> bool {
-        let mut indices = right_join_indices.to_vec();
-        indices.sort();
-        let l = indices.len();
-        indices.into_iter().eq(0..l)
-    }
+}
+
+fn join_is_prefix(right_join_indices: &[usize]) -> bool {
+    let mut indices = right_join_indices.to_vec();
+    indices.sort();
+    let l = indices.len();
+    indices.into_iter().eq(0..l)
 }
 
 #[derive(Debug)]
@@ -900,47 +949,95 @@ impl StoredRelationRA {
             }
             left_to_prefix_indices.push(left_join_indices[*idx]);
         }
-
-        let mut right_join_vals = BTreeSet::new();
-        for tuple in self.storage.scan_all() {
-            let tuple = tuple?;
-            let to_join: Box<[DataValue]> = right_join_indices.iter().map(|i| {
-                tuple.0[*i].clone()
-            }).collect();
-            right_join_vals.insert(to_join);
-        }
-
-        Ok(Box::new(
-            left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let left_join_vals: Box<[DataValue]> = left_join_indices.iter().map(|i| {
-                        tuple.0[*i].clone()
-                    }).collect();
-                    if right_join_vals.contains(&left_join_vals) {
-                        return Ok(None)
-                    }
-                    Ok(Some(if !eliminate_indices.is_empty() {
-                        Tuple(
-                            tuple
-                                .0
-                                .into_iter()
-                                .enumerate()
-                                .filter_map(|(i, v)| {
-                                    if eliminate_indices.contains(&i) {
-                                        None
-                                    } else {
-                                        Some(v)
-                                    }
-                                })
+        if join_is_prefix(&right_join_indices) {
+            Ok(Box::new(
+                left_iter
+                    .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                        let prefix = Tuple(
+                            left_to_prefix_indices
+                                .iter()
+                                .map(|i| tuple.0[*i].clone())
                                 .collect_vec(),
-                        )
-                    } else {
-                        tuple
-                    }))
-                })
-                .map(flatten_err)
-                .filter_map(invert_option_err),
-        ))
+                        );
+
+                        'outer: for found in self.storage.scan_prefix(&prefix) {
+                            let found = found?;
+                            for (left_idx, right_idx) in
+                            left_join_indices.iter().zip(right_join_indices.iter())
+                            {
+                                if tuple.0[*left_idx] != found.0[*right_idx] {
+                                    continue 'outer;
+                                }
+                            }
+                            return Ok(None);
+                        }
+
+                        Ok(Some(if !eliminate_indices.is_empty() {
+                            Tuple(
+                                tuple
+                                    .0
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter_map(|(i, v)| {
+                                        if eliminate_indices.contains(&i) {
+                                            None
+                                        } else {
+                                            Some(v)
+                                        }
+                                    })
+                                    .collect_vec(),
+                            )
+                        } else {
+                            tuple
+                        }))
+                    })
+                    .map(flatten_err)
+                    .filter_map(invert_option_err),
+            ))
+        } else {
+            let mut right_join_vals = BTreeSet::new();
+            for tuple in self.storage.scan_all() {
+                let tuple = tuple?;
+                let to_join: Box<[DataValue]> = right_join_indices
+                    .iter()
+                    .map(|i| tuple.0[*i].clone())
+                    .collect();
+                right_join_vals.insert(to_join);
+            }
+
+            Ok(Box::new(
+                left_iter
+                    .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                        let left_join_vals: Box<[DataValue]> = left_join_indices
+                            .iter()
+                            .map(|i| tuple.0[*i].clone())
+                            .collect();
+                        if right_join_vals.contains(&left_join_vals) {
+                            return Ok(None);
+                        }
+                        Ok(Some(if !eliminate_indices.is_empty() {
+                            Tuple(
+                                tuple
+                                    .0
+                                    .into_iter()
+                                    .enumerate()
+                                    .filter_map(|(i, v)| {
+                                        if eliminate_indices.contains(&i) {
+                                            None
+                                        } else {
+                                            Some(v)
+                                        }
+                                    })
+                                    .collect_vec(),
+                            )
+                        } else {
+                            tuple
+                        }))
+                    })
+                    .map(flatten_err)
+                    .filter_map(invert_option_err),
+            ))
+        }
     }
     fn prefix_join<'a>(
         &'a self,
@@ -1305,7 +1402,7 @@ impl InnerJoin {
                         &self.right.bindings_after_eliminate(),
                     )
                     .unwrap();
-                if r.join_is_prefix(&join_indices.1) {
+                if join_is_prefix(&join_indices.1) {
                     r.prefix_join(
                         tx,
                         self.left.iter(tx, epoch, use_delta)?,
