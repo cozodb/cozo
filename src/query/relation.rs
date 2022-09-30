@@ -6,6 +6,8 @@ use either::{Left, Right};
 use itertools::Itertools;
 use log::error;
 use miette::{Diagnostic, Result};
+use serde_json::json;
+use sqlx::types::JsonValue;
 use thiserror::Error;
 
 use crate::data::expr::{compute_bounds, Expr};
@@ -26,6 +28,52 @@ pub(crate) enum RelAlgebra {
     Reorder(ReorderRA),
     Filter(FilteredRA),
     Unification(UnificationRA),
+}
+
+impl RelAlgebra {
+    pub(crate) fn flatten_display(&self, idx: usize) -> (Vec<Vec<JsonValue>>, usize) {
+        let bindings_before = self.bindings_before_eliminate();
+        let bindings_after = self.bindings_after_eliminate();
+        let (new_idx, rel_type, mut flattened): (usize, &str, Vec<Vec<JsonValue>>) = match self {
+            RelAlgebra::Fixed(_) => (idx + 1, "Fixed", vec![]),
+            RelAlgebra::Stored(_) => (idx + 1, "Stored", vec![]),
+            RelAlgebra::Relation(_) => (idx + 1, "Rule", vec![]),
+            RelAlgebra::Join(inner) => {
+                let InnerJoin {
+                    left,
+                    right,
+                    joiner,
+                    to_eliminate,
+                    span,
+                } = inner.as_ref();
+                let (mut left_prev, left_idx) = left.flatten_display(idx);
+                let (right_prev, right_idx) = right.flatten_display(left_idx);
+                left_prev.extend(right_prev);
+                (right_idx + 1, "Join", left_prev)
+            }
+            RelAlgebra::NegJoin(_) => (todo!(), "Negation", todo!()),
+            RelAlgebra::Reorder(_) => (todo!(), "Reorder", todo!()),
+            RelAlgebra::Filter(_) => (todo!(), "Filter", todo!()),
+            RelAlgebra::Unification(UnificationRA {
+                parent,
+                binding,
+                expr,
+                is_multi,
+                to_eliminate,
+                span,
+            }) => {
+                let rel_type = if *is_multi { "MultiUnify" } else { "Unify" };
+                let (prev, prev_idx) = parent.flatten_display(idx);
+                (prev_idx + 1, rel_type, prev)
+            }
+        };
+        flattened.push(vec![
+            json!(rel_type),
+            json!(bindings_before),
+            json!(bindings_after),
+        ]);
+        (flattened, new_idx)
+    }
 }
 
 impl RelAlgebra {
@@ -957,7 +1005,7 @@ impl StoredRelationRA {
                         'outer: for found in self.storage.scan_prefix(&prefix) {
                             let found = found?;
                             for (left_idx, right_idx) in
-                            left_join_indices.iter().zip(right_join_indices.iter())
+                                left_join_indices.iter().zip(right_join_indices.iter())
                             {
                                 if tuple.0[*left_idx] != found.0[*right_idx] {
                                     continue 'outer;
