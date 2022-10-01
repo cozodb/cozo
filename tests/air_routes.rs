@@ -10,10 +10,12 @@ use cozorocks::DbBuilder;
 
 lazy_static! {
     static ref TEST_DB: Db = {
+        let creation = Instant::now();
         let path = "_test_air_routes";
         _ = std::fs::remove_dir_all(path);
         let builder = DbBuilder::default().path(path).create_if_missing(true);
         let db = Db::build(builder).unwrap();
+        dbg!(creation.elapsed());
 
         let init = Instant::now();
         db.run_script(r##"
