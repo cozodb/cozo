@@ -312,15 +312,17 @@ impl Expr {
                 }
                 Some(i) => {
                     #[derive(Error, Diagnostic, Debug)]
-                    #[error("The tuple bound by variable '{0}' is too short")]
+                    #[error("The tuple bound by variable '{0}' is too short: index is {1}, length is {2}")]
                     #[diagnostic(help("This is definitely a bug. Please report it."))]
                     #[diagnostic(code(eval::unbound))]
-                    struct TupleTooShortError(String, #[label] SourceSpan);
+                    struct TupleTooShortError(String, usize, usize, #[label] SourceSpan);
 
                     Ok(bindings
                         .0
                         .get(*i)
-                        .ok_or_else(|| TupleTooShortError(var.name.to_string(), var.span))?
+                        .ok_or_else(|| {
+                            TupleTooShortError(var.name.to_string(), *i, bindings.0.len(), var.span)
+                        })?
                         .clone())
                 }
             },

@@ -14,7 +14,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::stored::StoredRelation;
+use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct JsonReader;
@@ -24,8 +24,8 @@ impl AlgoImpl for JsonReader {
         &mut self,
         _tx: &SessionTx,
         algo: &MagicAlgoApply,
-        _stores: &BTreeMap<MagicSymbol, StoredRelation>,
-        out: &StoredRelation,
+        _stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        out: &InMemRelation,
         _poison: Poison,
     ) -> Result<()> {
         let url = algo.string_option("url", None)?;

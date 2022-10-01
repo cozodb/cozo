@@ -3,11 +3,12 @@ query_script = {SOI ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
 query_script_inner = {"{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
 multi_script = {SOI ~ query_script_inner+ ~ EOI}
 sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op | trigger_relation_op |
-                    trigger_relation_show_op | rename_relations_op | running_op | kill_op) ~ EOI}
+                    trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op) ~ EOI}
 
 compact_op = {"compact"}
 running_op = {"running"}
 kill_op = {"kill" ~ int}
+explain_op = {"explain" ~ query_script_inner}
 list_relations_op = {"relations"}
 list_relation_op = {"relation" ~ "columns" ~ compound_ident}
 remove_relations_op = {"relation" ~ "remove" ~ (compound_ident ~ ",")* ~ compound_ident }

@@ -29,7 +29,7 @@ impl Debug for StoredRelationId {
 }
 
 #[derive(Clone)]
-pub(crate) struct StoredRelation {
+pub(crate) struct InMemRelation {
     mem_db: Arc<RwLock<Vec<Arc<RwLock<BTreeMap<Tuple, Tuple>>>>>>,
     epoch_size: Arc<AtomicU32>,
     pub(crate) id: StoredRelationId,
@@ -37,18 +37,18 @@ pub(crate) struct StoredRelation {
     pub(crate) arity: usize,
 }
 
-impl Debug for StoredRelation {
+impl Debug for InMemRelation {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "TempStore<{}>", self.id.0)
     }
 }
 
-impl StoredRelation {
+impl InMemRelation {
     pub(crate) fn new(
         id: StoredRelationId,
         rule_name: MagicSymbol,
         arity: usize,
-    ) -> StoredRelation {
+    ) -> InMemRelation {
         Self {
             epoch_size: Default::default(),
             mem_db: Default::default(),
@@ -177,7 +177,7 @@ impl StoredRelation {
     pub(crate) fn normal_aggr_scan_and_put(
         &self,
         aggrs: &[Option<(Aggregation, Vec<DataValue>)>],
-        store: &StoredRelation,
+        store: &InMemRelation,
         mut limiter: Option<&mut QueryLimiter>,
         poison: Poison,
     ) -> Result<bool> {

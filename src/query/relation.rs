@@ -4,10 +4,8 @@ use std::iter;
 
 use either::{Left, Right};
 use itertools::Itertools;
-use log::error;
+use log::{debug, error};
 use miette::{Diagnostic, Result};
-use serde_json::json;
-use sqlx::types::JsonValue;
 use thiserror::Error;
 
 use crate::data::expr::{compute_bounds, Expr};
@@ -15,13 +13,14 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
+use crate::runtime::in_mem::{InMemRelation, StoredRelationId};
 use crate::runtime::relation::RelationHandle;
-use crate::runtime::stored::{StoredRelation, StoredRelationId};
 use crate::runtime::transact::SessionTx;
+use crate::utils::swap_option_result;
 
 pub(crate) enum RelAlgebra {
     Fixed(InlineFixedRA),
-    Stored(StoredRelationRA),
+    InMem(InMemRelationRA),
     Relation(RelationRA),
     Join(Box<InnerJoin>),
     NegJoin(Box<NegJoin>),
@@ -31,56 +30,10 @@ pub(crate) enum RelAlgebra {
 }
 
 impl RelAlgebra {
-    pub(crate) fn flatten_display(&self, idx: usize) -> (Vec<Vec<JsonValue>>, usize) {
-        let bindings_before = self.bindings_before_eliminate();
-        let bindings_after = self.bindings_after_eliminate();
-        let (new_idx, rel_type, mut flattened): (usize, &str, Vec<Vec<JsonValue>>) = match self {
-            RelAlgebra::Fixed(_) => (idx + 1, "Fixed", vec![]),
-            RelAlgebra::Stored(_) => (idx + 1, "Stored", vec![]),
-            RelAlgebra::Relation(_) => (idx + 1, "Rule", vec![]),
-            RelAlgebra::Join(inner) => {
-                let InnerJoin {
-                    left,
-                    right,
-                    joiner,
-                    to_eliminate,
-                    span,
-                } = inner.as_ref();
-                let (mut left_prev, left_idx) = left.flatten_display(idx);
-                let (right_prev, right_idx) = right.flatten_display(left_idx);
-                left_prev.extend(right_prev);
-                (right_idx + 1, "Join", left_prev)
-            }
-            RelAlgebra::NegJoin(_) => (todo!(), "Negation", todo!()),
-            RelAlgebra::Reorder(_) => (todo!(), "Reorder", todo!()),
-            RelAlgebra::Filter(_) => (todo!(), "Filter", todo!()),
-            RelAlgebra::Unification(UnificationRA {
-                parent,
-                binding,
-                expr,
-                is_multi,
-                to_eliminate,
-                span,
-            }) => {
-                let rel_type = if *is_multi { "MultiUnify" } else { "Unify" };
-                let (prev, prev_idx) = parent.flatten_display(idx);
-                (prev_idx + 1, rel_type, prev)
-            }
-        };
-        flattened.push(vec![
-            json!(rel_type),
-            json!(bindings_before),
-            json!(bindings_after),
-        ]);
-        (flattened, new_idx)
-    }
-}
-
-impl RelAlgebra {
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             RelAlgebra::Fixed(i) => i.span,
-            RelAlgebra::Stored(i) => i.span,
+            RelAlgebra::InMem(i) => i.span,
             RelAlgebra::Relation(i) => i.span,
             RelAlgebra::Join(i) => i.span,
             RelAlgebra::NegJoin(i) => i.span,
@@ -92,12 +45,12 @@ impl RelAlgebra {
 }
 
 pub(crate) struct UnificationRA {
-    parent: Box<RelAlgebra>,
-    binding: Symbol,
-    expr: Expr,
-    is_multi: bool,
+    pub(crate) parent: Box<RelAlgebra>,
+    pub(crate) binding: Symbol,
+    pub(crate) expr: Expr,
+    pub(crate) is_multi: bool,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
-    span: SourceSpan,
+    pub(crate) span: SourceSpan,
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -203,8 +156,8 @@ impl UnificationRA {
 }
 
 pub(crate) struct FilteredRA {
-    parent: Box<RelAlgebra>,
-    pred: Vec<Expr>,
+    pub(crate) parent: Box<RelAlgebra>,
+    pub(crate) pred: Vec<Expr>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
     pub(crate) span: SourceSpan,
 }
@@ -294,7 +247,7 @@ impl Debug for RelAlgebra {
                         .finish()
                 }
             }
-            RelAlgebra::Stored(r) => f
+            RelAlgebra::InMem(r) => f
                 .debug_tuple("Derived")
                 .field(&bindings)
                 .field(&r.storage.rule_name)
@@ -348,56 +301,32 @@ impl Debug for RelAlgebra {
 }
 
 impl RelAlgebra {
-    pub(crate) fn get_filters(&mut self) -> Option<&mut Vec<Expr>> {
-        match self {
-            RelAlgebra::Stored(d) => Some(&mut d.filters),
-            RelAlgebra::Join(j) => j.right.get_filters(),
-            RelAlgebra::Filter(f) => Some(&mut f.pred),
-            _ => None,
-        }
-    }
-    pub(crate) fn fill_normal_binding_indices(&mut self) -> Result<()> {
+    pub(crate) fn fill_binding_indices(&mut self) -> Result<()> {
         match self {
             RelAlgebra::Fixed(_) => {}
-            RelAlgebra::Stored(d) => {
+            RelAlgebra::InMem(d) => {
                 d.fill_binding_indices()?;
             }
             RelAlgebra::Relation(v) => {
                 v.fill_binding_indices()?;
             }
             RelAlgebra::Reorder(r) => {
-                r.relation.fill_normal_binding_indices()?;
+                r.relation.fill_binding_indices()?;
             }
             RelAlgebra::Filter(f) => {
-                f.parent.fill_normal_binding_indices()?;
+                f.parent.fill_binding_indices()?;
                 f.fill_binding_indices()?
             }
             RelAlgebra::NegJoin(r) => {
-                r.left.fill_normal_binding_indices()?;
+                r.left.fill_binding_indices()?;
             }
             RelAlgebra::Unification(u) => {
-                u.parent.fill_normal_binding_indices()?;
+                u.parent.fill_binding_indices()?;
                 u.fill_binding_indices()?
             }
             RelAlgebra::Join(r) => {
-                r.left.fill_normal_binding_indices()?;
-            }
-        }
-        if matches!(self, RelAlgebra::Join(_)) {
-            let bindings = self.bindings_before_eliminate();
-            if let RelAlgebra::Join(r) = self {
-                r.right.fill_join_binding_indices(bindings)?;
-            }
-        }
-        Ok(())
-    }
-    pub(crate) fn fill_join_binding_indices(&mut self, bindings: Vec<Symbol>) -> Result<()> {
-        match self {
-            RelAlgebra::Stored(d) => {
-                d.fill_join_binding_indices(&bindings)?;
-            }
-            r => {
-                r.fill_normal_binding_indices()?;
+                r.left.fill_binding_indices()?;
+                r.right.fill_binding_indices()?;
             }
         }
         Ok(())
@@ -415,12 +344,8 @@ impl RelAlgebra {
     pub(crate) fn cartesian_join(self, right: RelAlgebra, span: SourceSpan) -> Self {
         self.join(right, vec![], vec![], span)
     }
-    pub(crate) fn derived(
-        bindings: Vec<Symbol>,
-        storage: StoredRelation,
-        span: SourceSpan,
-    ) -> Self {
-        Self::Stored(StoredRelationRA {
+    pub(crate) fn derived(bindings: Vec<Symbol>, storage: InMemRelation, span: SourceSpan) -> Self {
+        Self::InMem(InMemRelationRA {
             bindings,
             storage,
             filters: vec![],
@@ -446,13 +371,106 @@ impl RelAlgebra {
         })
     }
     pub(crate) fn filter(self, filter: Expr) -> Self {
-        let span = filter.span();
-        RelAlgebra::Filter(FilteredRA {
-            parent: Box::new(self),
-            pred: vec![filter],
-            to_eliminate: Default::default(),
-            span,
-        })
+        match self {
+            s @ (RelAlgebra::Fixed(_)
+            | RelAlgebra::Reorder(_)
+            | RelAlgebra::NegJoin(_)
+            | RelAlgebra::Unification(_)) => {
+                let span = filter.span();
+                RelAlgebra::Filter(FilteredRA {
+                    parent: Box::new(s),
+                    pred: vec![filter],
+                    to_eliminate: Default::default(),
+                    span,
+                })
+            }
+            RelAlgebra::Filter(FilteredRA {
+                parent,
+                mut pred,
+                to_eliminate,
+                span,
+            }) => {
+                pred.push(filter);
+                RelAlgebra::Filter(FilteredRA {
+                    parent,
+                    pred,
+                    to_eliminate,
+                    span,
+                })
+            }
+            RelAlgebra::InMem(InMemRelationRA {
+                bindings,
+                storage,
+                mut filters,
+                span,
+            }) => {
+                filters.push(filter);
+                RelAlgebra::InMem(InMemRelationRA {
+                    bindings,
+                    storage,
+                    filters,
+                    span,
+                })
+            }
+            RelAlgebra::Relation(RelationRA {
+                bindings,
+                storage,
+                mut filters,
+                span,
+            }) => {
+                filters.push(filter);
+                RelAlgebra::Relation(RelationRA {
+                    bindings,
+                    storage,
+                    filters,
+                    span,
+                })
+            }
+            RelAlgebra::Join(inner) => {
+                let filters = filter.to_conjunction();
+                let left_bindings: BTreeSet<Symbol> =
+                    inner.left.bindings_before_eliminate().into_iter().collect();
+                let right_bindings: BTreeSet<Symbol> = inner
+                    .right
+                    .bindings_before_eliminate()
+                    .into_iter()
+                    .collect();
+                let mut remaining = vec![];
+                let InnerJoin {
+                    mut left,
+                    mut right,
+                    joiner,
+                    to_eliminate,
+                    span,
+                } = *inner;
+                for filter in filters {
+                    let f_bindings = filter.bindings();
+                    if f_bindings.is_subset(&left_bindings) {
+                        left = left.filter(filter);
+                    } else if f_bindings.is_subset(&right_bindings) {
+                        right = right.filter(filter);
+                    } else {
+                        remaining.push(filter);
+                    }
+                }
+                let mut joined = RelAlgebra::Join(Box::new(InnerJoin {
+                    left,
+                    right,
+                    joiner,
+                    to_eliminate,
+                    span,
+                }));
+                if !remaining.is_empty() {
+                    joined = RelAlgebra::Filter(FilteredRA {
+                        parent: Box::new(joined),
+                        pred: remaining,
+                        to_eliminate: Default::default(),
+                        span,
+                    });
+                }
+                joined
+            }
+        }
     }
     pub(crate) fn unify(
         self,
@@ -580,6 +598,15 @@ impl InlineFixedRA {
 }
 
 impl InlineFixedRA {
+    pub(crate) fn join_type(&self) -> &str {
+        if self.data.is_empty() {
+            "null_join"
+        } else if self.data.len() == 1 {
+            "singleton_join"
+        } else {
+            "fixed_join"
+        }
+    }
     pub(crate) fn join<'a>(
         &'a self,
         left_iter: TupleIter<'a>,
@@ -666,7 +693,10 @@ fn filter_iter(
         for p in filters.iter() {
             match p.eval_pred(&t) {
                 Ok(false) => return None,
-                Err(e) => return Some(Err(e)),
+                Err(e) => {
+                    debug!("{:?}", t);
+                    return Some(Err(e));
+                }
                 Ok(true) => {}
             }
         }
@@ -735,6 +765,7 @@ impl RelationRA {
                         .map(|i| tuple.0[*i].clone())
                         .collect_vec(),
                 );
+                let filters = self.filters.clone();
 
                 if !skip_range_check && !self.filters.is_empty() {
                     let other_bindings = &self.bindings[right_join_indices.len()..];
@@ -748,12 +779,19 @@ impl RelationRA {
                         return Left(
                             self.storage
                                 .scan_bounded_prefix(tx, &prefix, &l_bound, &u_bound)
-                                .filter_map_ok(move |found| {
-                                    // dbg!("filter", &tuple, &prefix, &found);
+                                .map(move |res_found| -> Result<Option<Tuple>> {
+                                    let found = res_found?;
+                                    for p in filters.iter() {
+                                        if !p.eval_pred(&found)? {
+                                            return Ok(None);
+                                        }
+                                    }
                                     let mut ret = tuple.0.clone();
                                     ret.extend(found.0);
-                                    Some(Tuple(ret))
-                                }),
+                                    Ok(Some(Tuple(ret)))
+                                })
+                                .map(swap_option_result)
+                                .flatten(),
                         );
                     }
                 }
@@ -761,29 +799,28 @@ impl RelationRA {
                 Right(
                     self.storage
                         .scan_prefix(tx, &prefix)
-                        .filter_map_ok(move |found| {
-                            // dbg!("filter", &tuple, &prefix, &found);
+                        .map(move |res_found| -> Result<Option<Tuple>> {
+                            let found = res_found?;
+                            for p in filters.iter() {
+                                if !p.eval_pred(&found)? {
+                                    return Ok(None);
+                                }
+                            }
                             let mut ret = tuple.0.clone();
                             ret.extend(found.0);
-                            Some(Tuple(ret))
-                        }),
+                            Ok(Some(Tuple(ret)))
+                        })
+                        .map(swap_option_result)
+                        .flatten(),
                 )
             })
             .flatten_ok()
             .map(flatten_err);
-        Ok(
-            match (self.filters.is_empty(), eliminate_indices.is_empty()) {
-                (true, true) => Box::new(it),
-                (true, false) => {
-                    Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
-                }
-                (false, true) => Box::new(filter_iter(self.filters.clone(), it)),
-                (false, false) => Box::new(
-                    filter_iter(self.filters.clone(), it)
-                        .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
-                ),
-            },
-        )
+        Ok(if eliminate_indices.is_empty() {
+            Box::new(it)
+        } else {
+            Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+        })
     }
 
     fn neg_join<'a>(
@@ -914,30 +951,17 @@ fn join_is_prefix(right_join_indices: &[usize]) -> bool {
 }
 
 #[derive(Debug)]
-pub(crate) struct StoredRelationRA {
+pub(crate) struct InMemRelationRA {
     pub(crate) bindings: Vec<Symbol>,
-    pub(crate) storage: StoredRelation,
+    pub(crate) storage: InMemRelation,
     pub(crate) filters: Vec<Expr>,
     pub(crate) span: SourceSpan,
 }
 
-impl StoredRelationRA {
+impl InMemRelationRA {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
-            .iter()
-            .cloned()
-            .enumerate()
-            .map(|(a, b)| (b, a))
-            .collect();
-        for e in self.filters.iter_mut() {
-            e.fill_binding_indices(&bindings)?;
-        }
-        Ok(())
-    }
-
-    fn fill_join_binding_indices(&mut self, bindings: &[Symbol]) -> Result<()> {
-        let bindings: BTreeMap<_, _> = bindings
             .iter()
             .cloned()
             .enumerate()
@@ -1118,6 +1142,8 @@ impl StoredRelationRA {
                         .collect_vec(),
                 );
 
+                let filters = self.filters.clone();
+
                 if !skip_range_check && !self.filters.is_empty() {
                     let other_bindings = &self.bindings[right_join_indices.len()..];
                     let (l_bound, u_bound) = match compute_bounds(&self.filters, other_bindings) {
@@ -1132,12 +1158,19 @@ impl StoredRelationRA {
                                 .scan_bounded_prefix_for_epoch(
                                     &prefix, &l_bound, &u_bound, scan_epoch,
                                 )
-                                .filter_map_ok(move |found| {
-                                    // dbg!("filter", &tuple, &prefix, &found);
+                                .map(move |res_found| -> Result<Option<Tuple>> {
+                                    let found = res_found?;
+                                    for p in filters.iter() {
+                                        if !p.eval_pred(&found)? {
+                                            return Ok(None);
+                                        }
+                                    }
                                     let mut ret = tuple.0.clone();
                                     ret.extend(found.0);
-                                    Some(Tuple(ret))
-                                }),
+                                    Ok(Some(Tuple(ret)))
+                                })
+                                .map(swap_option_result)
+                                .flatten(),
                         );
                     }
                 }
@@ -1145,29 +1178,28 @@ impl StoredRelationRA {
                 Right(
                     self.storage
                         .scan_prefix_for_epoch(&prefix, scan_epoch)
-                        .filter_map_ok(move |found| {
-                            // dbg!("filter", &tuple, &prefix, &found);
+                        .map(move |res_found| -> Result<Option<Tuple>> {
+                            let found = res_found?;
+                            for p in filters.iter() {
+                                if !p.eval_pred(&found)? {
+                                    return Ok(None);
+                                }
+                            }
                             let mut ret = tuple.0.clone();
                             ret.extend(found.0);
-                            Some(Tuple(ret))
-                        }),
+                            Ok(Some(Tuple(ret)))
+                        })
+                        .map(swap_option_result)
+                        .flatten(),
                 )
             })
             .flatten_ok()
             .map(flatten_err);
-        Ok(
-            match (self.filters.is_empty(), eliminate_indices.is_empty()) {
-                (true, true) => Box::new(it),
-                (true, false) => {
-                    Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
-                }
-                (false, true) => Box::new(filter_iter(self.filters.clone(), it)),
-                (false, false) => Box::new(
-                    filter_iter(self.filters.clone(), it)
-                        .map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)),
-                ),
-            },
-        )
+        Ok(if eliminate_indices.is_empty() {
+            Box::new(it)
+        } else {
+            Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+        })
     }
 }
 
@@ -1186,6 +1218,13 @@ impl Debug for Joiner {
 }
 
 impl Joiner {
+    pub(crate) fn as_map(&self) -> BTreeMap<&str, &str> {
+        self.left_keys
+            .iter()
+            .zip(self.right_keys.iter())
+            .map(|(l, r)| (&l.name as &str, &r.name as &str))
+            .collect()
+    }
     pub(crate) fn join_indices(
         &self,
         left_bindings: &[Symbol],
@@ -1217,7 +1256,7 @@ impl RelAlgebra {
     pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         match self {
             RelAlgebra::Fixed(r) => r.do_eliminate_temp_vars(used),
-            RelAlgebra::Stored(_r) => Ok(()),
+            RelAlgebra::InMem(_r) => Ok(()),
             RelAlgebra::Relation(_v) => Ok(()),
             RelAlgebra::Join(r) => r.do_eliminate_temp_vars(used),
             RelAlgebra::Reorder(r) => r.relation.eliminate_temp_vars(used),
@@ -1230,7 +1269,7 @@ impl RelAlgebra {
     fn eliminate_set(&self) -> Option<&BTreeSet<Symbol>> {
         match self {
             RelAlgebra::Fixed(r) => Some(&r.to_eliminate),
-            RelAlgebra::Stored(_) => None,
+            RelAlgebra::InMem(_) => None,
             RelAlgebra::Relation(_) => None,
             RelAlgebra::Join(r) => Some(&r.to_eliminate),
             RelAlgebra::Reorder(_) => None,
@@ -1254,7 +1293,7 @@ impl RelAlgebra {
     fn bindings_before_eliminate(&self) -> Vec<Symbol> {
         match self {
             RelAlgebra::Fixed(f) => f.bindings.clone(),
-            RelAlgebra::Stored(d) => d.bindings.clone(),
+            RelAlgebra::InMem(d) => d.bindings.clone(),
             RelAlgebra::Relation(v) => v.bindings.clone(),
             RelAlgebra::Join(j) => j.bindings(),
             RelAlgebra::Reorder(r) => r.bindings(),
@@ -1275,7 +1314,7 @@ impl RelAlgebra {
     ) -> Result<TupleIter<'a>> {
         match self {
             RelAlgebra::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone()))))),
-            RelAlgebra::Stored(r) => r.iter(epoch, use_delta),
+            RelAlgebra::InMem(r) => r.iter(epoch, use_delta),
             RelAlgebra::Relation(v) => v.iter(tx),
             RelAlgebra::Join(j) => j.iter(tx, epoch, use_delta),
             RelAlgebra::Reorder(r) => r.iter(tx, epoch, use_delta),
@@ -1309,6 +1348,42 @@ impl NegJoin {
         Ok(())
     }
 
+    pub(crate) fn join_type(&self) -> &str {
+        match &self.right {
+            RelAlgebra::InMem(_) => {
+                let join_indices = self
+                    .joiner
+                    .join_indices(
+                        &self.left.bindings_after_eliminate(),
+                        &self.right.bindings_after_eliminate(),
+                    )
+                    .unwrap();
+                if join_is_prefix(&join_indices.1) {
+                    "mem_neg_prefix_join"
+                } else {
+                    "mem_neg_mat_join"
+                }
+            }
+            RelAlgebra::Relation(_) => {
+                let join_indices = self
+                    .joiner
+                    .join_indices(
+                        &self.left.bindings_after_eliminate(),
+                        &self.right.bindings_after_eliminate(),
+                    )
+                    .unwrap();
+                if join_is_prefix(&join_indices.1) {
+                    "stored_neg_prefix_join"
+                } else {
+                    "stored_neg_mat_join"
+                }
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+
     pub(crate) fn iter<'a>(
         &'a self,
         tx: &'a SessionTx,
@@ -1318,7 +1393,7 @@ impl NegJoin {
         let bindings = self.left.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         match &self.right {
-            RelAlgebra::Stored(r) => {
+            RelAlgebra::InMem(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1373,7 +1448,7 @@ impl InnerJoin {
         let mut left = used.clone();
         left.extend(self.joiner.left_keys.clone());
         if let Some(filters) = match &self.right {
-            RelAlgebra::Stored(r) => Some(&r.filters),
+            RelAlgebra::InMem(r) => Some(&r.filters),
             _ => None,
         } {
             for filter in filters {
@@ -1392,6 +1467,48 @@ impl InnerJoin {
         ret.extend(self.right.bindings_after_eliminate());
         debug_assert_eq!(ret.len(), ret.iter().collect::<BTreeSet<_>>().len());
         ret
+    }
+    pub(crate) fn join_type(&self) -> &str {
+        match &self.right {
+            RelAlgebra::Fixed(f) => f.join_type(),
+            RelAlgebra::InMem(_) => {
+                let join_indices = self
+                    .joiner
+                    .join_indices(
+                        &self.left.bindings_after_eliminate(),
+                        &self.right.bindings_after_eliminate(),
+                    )
+                    .unwrap();
+                if join_is_prefix(&join_indices.1) {
+                    "mem_prefix_join"
+                } else {
+                    "mem_mat_join"
+                }
+            }
+            RelAlgebra::Relation(_) => {
+                let join_indices = self
+                    .joiner
+                    .join_indices(
+                        &self.left.bindings_after_eliminate(),
+                        &self.right.bindings_after_eliminate(),
+                    )
+                    .unwrap();
+                if join_is_prefix(&join_indices.1) {
+                    "stored_prefix_join"
+                } else {
+                    "stored_mat_join"
+                }
+            }
+            RelAlgebra::Join(_) | RelAlgebra::Filter(_) | RelAlgebra::Unification(_) => {
+                "generic_mat_join"
+            }
+            RelAlgebra::Reorder(_) => {
+                panic!("joining on reordered")
+            }
+            RelAlgebra::NegJoin(_) => {
+                panic!("joining on NegJoin")
+            }
+        }
     }
     pub(crate) fn iter<'a>(
         &'a self,
@@ -1416,7 +1533,7 @@ impl InnerJoin {
                     eliminate_indices,
                 )
             }
-            RelAlgebra::Stored(r) => {
+            RelAlgebra::InMem(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(

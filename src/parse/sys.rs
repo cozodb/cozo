@@ -1,18 +1,22 @@
+use std::collections::BTreeMap;
+
 use itertools::Itertools;
 use miette::{Diagnostic, Result};
 use thiserror::Error;
 
+use crate::data::program::InputProgram;
 use crate::data::symb::Symbol;
+use crate::data::value::DataValue;
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 
-#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) enum SysOp {
     Compact,
     ListRelation(Symbol),
     ListRelations,
     ListRunning,
     KillRunning(u64),
+    Explain(InputProgram),
     RemoveRelation(Vec<Symbol>),
     RenameRelation(Vec<(Symbol, Symbol)>),
     ShowTrigger(Symbol),
@@ -24,7 +28,10 @@ pub(crate) enum SysOp {
 #[diagnostic(code(parser::not_proc_id))]
 struct ProcessIdError(String, #[label] SourceSpan);
 
-pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
+pub(crate) fn parse_sys(
+    mut src: Pairs<'_>,
+    param_pool: &BTreeMap<String, DataValue>,
+) -> Result<SysOp> {
     let inner = src.next().unwrap();
     Ok(match inner.as_rule() {
         Rule::compact_op => SysOp::Compact,
@@ -34,6 +41,10 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
             let i = u64::from_str_radix(i_str.as_str(), 10)
                 .map_err(|_| ProcessIdError(i_str.as_str().to_string(), i_str.extract_span()))?;
             SysOp::KillRunning(i)
+        }
+        Rule::explain_op => {
+            let prog = parse_query(inner.into_inner().next().unwrap().into_inner(), param_pool)?;
+            SysOp::Explain(prog)
         }
         Rule::list_relations_op => SysOp::ListRelations,
         Rule::remove_relations_op => {
@@ -90,6 +101,6 @@ pub(crate) fn parse_sys(mut src: Pairs<'_>) -> Result<SysOp> {
             }
             SysOp::SetTriggers(rel, puts, rms, replaces)
         }
-        _ => unreachable!(),
+        rule => unreachable!("{:?}", rule),
     })
 }

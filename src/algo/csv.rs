@@ -12,7 +12,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::parse_type;
 use crate::runtime::db::Poison;
-use crate::runtime::stored::StoredRelation;
+use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct CsvReader;
@@ -22,8 +22,8 @@ impl AlgoImpl for CsvReader {
         &mut self,
         _tx: &SessionTx,
         algo: &MagicAlgoApply,
-        _stores: &BTreeMap<MagicSymbol, StoredRelation>,
-        out: &StoredRelation,
+        _stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        out: &InMemRelation,
         _poison: Poison,
     ) -> Result<()> {
         let delimiter = algo.string_option("delimiter", Some(","))?;

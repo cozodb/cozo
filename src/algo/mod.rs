@@ -34,7 +34,7 @@ use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::stored::StoredRelation;
+use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) mod all_pairs_shortest_path;
@@ -62,8 +62,8 @@ pub(crate) trait AlgoImpl {
         &mut self,
         tx: &SessionTx,
         algo: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
-        out: &StoredRelation,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        out: &InMemRelation,
         poison: Poison,
     ) -> Result<()>;
 }
@@ -291,7 +291,7 @@ impl MagicAlgoRuleArg {
         undirected: bool,
         allow_negative_edges: bool,
         tx: &SessionTx,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<(
         Vec<Vec<(usize, f64)>>,
         Vec<DataValue>,
@@ -375,7 +375,7 @@ impl MagicAlgoRuleArg {
         &self,
         undirected: bool,
         tx: &SessionTx,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
         let mut graph: Vec<Vec<usize>> = vec![];
         let mut indices: Vec<DataValue> = vec![];
@@ -415,7 +415,7 @@ impl MagicAlgoRuleArg {
         &'a self,
         prefix: &DataValue,
         tx: &'a SessionTx,
-        stores: &'a BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
             MagicAlgoRuleArg::InMem { name, .. } => {
@@ -435,7 +435,7 @@ impl MagicAlgoRuleArg {
     pub(crate) fn arity(
         &self,
         tx: &SessionTx,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<usize> {
         Ok(match self {
             MagicAlgoRuleArg::InMem { name, .. } => {
@@ -453,7 +453,7 @@ impl MagicAlgoRuleArg {
     pub(crate) fn iter<'a>(
         &'a self,
         tx: &'a SessionTx,
-        stores: &'a BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
             MagicAlgoRuleArg::InMem { name, .. } => {

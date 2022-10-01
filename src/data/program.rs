@@ -17,7 +17,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::relation::InputRelationHandle;
-use crate::runtime::stored::StoredRelation;
+use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, ConstRule>;
@@ -270,7 +270,7 @@ impl MagicAlgoApply {
         idx: usize,
         len: usize,
         tx: &SessionTx,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<&MagicAlgoRuleArg> {
         #[derive(Error, Diagnostic, Debug)]
         #[error("Input relation to algorithm has insufficient arity")]
@@ -937,6 +937,12 @@ impl MagicSymbol {
             | MagicSymbol::Input { inner, .. }
             | MagicSymbol::Sup { inner, .. } => inner,
         }
+    }
+}
+
+impl Display for MagicSymbol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 

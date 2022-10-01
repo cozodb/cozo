@@ -121,7 +121,7 @@ pub(crate) fn parse_script(
             }
             CozoScript::Multi(qs)
         }
-        Rule::sys_script => CozoScript::Sys(parse_sys(parsed.into_inner())?),
+        Rule::sys_script => CozoScript::Sys(parse_sys(parsed.into_inner(), param_pool)?),
         _ => unreachable!(),
     })
 }

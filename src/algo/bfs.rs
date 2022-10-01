@@ -7,7 +7,7 @@ use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::runtime::db::Poison;
-use crate::runtime::stored::StoredRelation;
+use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct Bfs;
@@ -17,8 +17,8 @@ impl AlgoImpl for Bfs {
         &mut self,
         tx: &SessionTx,
         algo: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
-        out: &StoredRelation,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        out: &InMemRelation,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation_with_min_len(0, 2, tx, stores)?;

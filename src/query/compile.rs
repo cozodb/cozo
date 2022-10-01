@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
-use miette::{Context, Diagnostic, ensure, Result};
+use miette::{ensure, Context, Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::aggr::Aggregation;
@@ -14,7 +14,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::query::relation::RelAlgebra;
-use crate::runtime::stored::StoredRelation;
+use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type CompiledProgram = BTreeMap<MagicSymbol, CompiledRuleSet>;
@@ -85,8 +85,8 @@ impl SessionTx {
         &mut self,
         prog: &StratifiedMagicProgram,
         const_rules: &ConstRules,
-    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, StoredRelation>)> {
-        let mut stores: BTreeMap<MagicSymbol, StoredRelation> = Default::default();
+    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, InMemRelation>)> {
+        let mut stores: BTreeMap<MagicSymbol, InMemRelation> = Default::default();
 
         for (name, ConstRule { data, bindings, .. }) in const_rules {
             let arity = if bindings.is_empty() {
@@ -105,10 +105,7 @@ impl SessionTx {
             for (name, ruleset) in &stratum.prog {
                 stores.insert(
                     name.clone(),
-                    self.new_rule_store(
-                        name.clone(),
-                        ruleset.arity()?,
-                    ),
+                    self.new_rule_store(name.clone(), ruleset.arity()?),
                 );
             }
         }
@@ -129,7 +126,7 @@ impl SessionTx {
                                     let header = &rule.head;
                                     let mut relation =
                                         self.compile_magic_rule_body(rule, k, &stores, header)?;
-                                    relation.fill_normal_binding_indices().with_context(|| {
+                                    relation.fill_binding_indices().with_context(|| {
                                         format!(
                                             "error encountered when filling binding indices for {:#?}",
                                             relation
@@ -158,7 +155,7 @@ impl SessionTx {
         &mut self,
         rule: &MagicRule,
         rule_name: &MagicSymbol,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
         ret_vars: &[Symbol],
     ) -> Result<RelAlgebra> {
         let mut ret = RelAlgebra::unit(rule_name.symbol().span);
@@ -318,11 +315,7 @@ impl SessionTx {
                     );
                 }
                 MagicAtom::Predicate(p) => {
-                    if let Some(fs) = ret.get_filters() {
-                        fs.extend(p.to_conjunction());
-                    } else {
-                        ret = ret.filter(p.clone());
-                    }
+                    ret = ret.filter(p.clone());
                 }
                 MagicAtom::Unification(u) => {
                     if seen_variables.contains(&u.binding) {
@@ -349,11 +342,7 @@ impl SessionTx {
                                 u.span,
                             )
                         };
-                        if let Some(fs) = ret.get_filters() {
-                            fs.push(expr);
-                        } else {
-                            ret = ret.filter(expr);
-                        }
+                        ret = ret.filter(expr);
                     } else {
                         seen_variables.insert(u.binding.clone());
                         ret = ret.unify(u.binding.clone(), u.expr.clone(), u.one_many_unif, u.span);
@@ -376,7 +365,7 @@ impl SessionTx {
         #[error("Symbol '{0}' in rule head is unbound")]
         #[diagnostic(code(eval::unbound_symb_in_head))]
         #[diagnostic(help(
-        "Note that symbols occurring only in negated positions are not considered bound"
+            "Note that symbols occurring only in negated positions are not considered bound"
         ))]
         struct UnboundSymbolInRuleHead(String, #[label] SourceSpan);
 

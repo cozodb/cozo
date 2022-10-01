@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
-use log::{debug, Level, log_enabled, trace};
+use log::{debug, trace};
 use miette::Result;
 
 use crate::data::program::{MagicAlgoApply, MagicSymbol, NoEntryError};
@@ -9,7 +9,7 @@ use crate::data::symb::{PROG_ENTRY, Symbol};
 use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::db::Poison;
-use crate::runtime::stored::StoredRelation;
+use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct QueryLimiter {
@@ -32,10 +32,10 @@ impl SessionTx {
     pub(crate) fn stratified_magic_evaluate(
         &self,
         strata: &[CompiledProgram],
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
         num_to_take: Option<usize>,
         poison: Poison,
-    ) -> Result<StoredRelation> {
+    ) -> Result<InMemRelation> {
         let ret_area = stores
             .get(&MagicSymbol::Muggle {
                 inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
@@ -52,25 +52,10 @@ impl SessionTx {
     fn semi_naive_magic_evaluate(
         &self,
         prog: &CompiledProgram,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
         num_to_take: Option<usize>,
         poison: Poison,
     ) -> Result<()> {
-        if log_enabled!(Level::Debug) {
-            for (k, vs) in prog.iter() {
-                match vs {
-                    CompiledRuleSet::Rules(vs) => {
-                        for (i, compiled) in vs.iter().enumerate() {
-                            debug!("{:?}.{} {:#?}", k, i, compiled)
-                        }
-                    }
-                    CompiledRuleSet::Algo(algo_apply) => {
-                        debug!("{:?} {:?}", k, algo_apply)
-                    }
-                }
-            }
-        }
-
         let mut changed: BTreeMap<_, _> = prog.keys().map(|k| (k, false)).collect();
         let mut prev_changed = changed.clone();
         let mut limiter = QueryLimiter {
@@ -141,7 +126,7 @@ impl SessionTx {
         &self,
         rule_symb: &MagicSymbol,
         algo_apply: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
         poison: Poison,
     ) -> Result<()> {
         let mut algo_impl = algo_apply.algo.get_impl()?;
@@ -153,7 +138,7 @@ impl SessionTx {
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         aggr_kind: AggrKind,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
@@ -230,7 +215,7 @@ impl SessionTx {
         ruleset: &[CompiledRule],
         epoch: u32,
         is_meet_aggr: bool,
-        stores: &BTreeMap<MagicSymbol, StoredRelation>,
+        stores: &BTreeMap<MagicSymbol, InMemRelation>,
         prev_changed: &BTreeMap<&MagicSymbol, bool>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,

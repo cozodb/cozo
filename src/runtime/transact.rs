@@ -10,7 +10,7 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
-use crate::runtime::stored::{StoredRelation, StoredRelationId};
+use crate::runtime::in_mem::{InMemRelation, StoredRelationId};
 use crate::runtime::relation::RelationId;
 
 pub struct SessionTx {
@@ -20,16 +20,16 @@ pub struct SessionTx {
 }
 
 impl SessionTx {
-    pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> StoredRelation {
+    pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> InMemRelation {
         let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        StoredRelation::new(StoredRelationId(old_count), rule_name, arity)
+        InMemRelation::new(StoredRelationId(old_count), rule_name, arity)
     }
 
-    pub(crate) fn new_temp_store(&self, span: SourceSpan) -> StoredRelation {
+    pub(crate) fn new_temp_store(&self, span: SourceSpan) -> InMemRelation {
         let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        StoredRelation::new(
+        InMemRelation::new(
             StoredRelationId(old_count),
             MagicSymbol::Muggle {
                 inner: Symbol::new("", span),

@@ -9,7 +9,6 @@ use std::{fs, thread};
 
 use either::{Left, Right};
 use itertools::Itertools;
-use log::debug;
 use miette::{bail, ensure, Diagnostic, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
@@ -26,6 +25,11 @@ use crate::data::tuple::{
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
+use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
+use crate::query::relation::{
+    FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, RelationRA, ReorderRA,
+    UnificationRA,
+};
 use crate::runtime::relation::{RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
 use crate::utils::swap_option_result;
@@ -230,8 +234,194 @@ impl Db {
             CozoScript::Sys(op) => self.run_sys_op(op),
         }
     }
+    fn explain_compiled(&self, strata: &[CompiledProgram]) -> Result<JsonValue> {
+        let mut ret: Vec<JsonValue> = vec![];
+        const STRATUM: &str = "stratum";
+        const ATOM_IDX: &str = "atom_idx";
+        const OP: &str = "op";
+        const RULE_IDX: &str = "rule_idx";
+        const RULE_NAME: &str = "rule";
+        const REF_NAME: &str = "ref";
+        const OUT_BINDINGS: &str = "out_relation";
+        const JOINS_ON: &str = "joins_on";
+        const FILTERS: &str = "filters/expr";
+
+        let headers = [
+            STRATUM,
+            RULE_IDX,
+            RULE_NAME,
+            ATOM_IDX,
+            OP,
+            REF_NAME,
+            JOINS_ON,
+            FILTERS,
+            OUT_BINDINGS,
+        ];
+
+        for (stratum, p) in strata.iter().enumerate() {
+            let mut clause_idx = -1;
+            for (rule_name, v) in p {
+                match v {
+                    CompiledRuleSet::Rules(rules) => {
+                        for CompiledRule { aggr, relation, .. } in rules.iter() {
+                            clause_idx += 1;
+                            let mut ret_for_relation = vec![];
+                            let mut rel_stack = vec![relation];
+                            let mut idx = 0;
+                            let mut atom_type = "out";
+                            for (a, _) in aggr.iter().flatten() {
+                                if a.is_meet {
+                                    if atom_type == "out" {
+                                        atom_type = "meet_aggr_out";
+                                    }
+                                } else {
+                                    atom_type = "aggr_out";
+                                }
+                            }
+
+                            ret_for_relation.push(json!({
+                                STRATUM: stratum,
+                                ATOM_IDX: idx,
+                                OP: atom_type,
+                                RULE_IDX: clause_idx,
+                                RULE_NAME: rule_name.to_string(),
+                                OUT_BINDINGS: relation.bindings_after_eliminate().into_iter().map(|v| v.to_string()).collect_vec()
+                            }));
+                            idx += 1;
+
+                            while let Some(rel) = rel_stack.pop() {
+                                let (atom_type, ref_name, joins_on, filters) = match rel {
+                                    r @ RelAlgebra::Fixed(..) => {
+                                        if r.is_unit() {
+                                            continue;
+                                        }
+                                        ("fixed", json!(null), json!(null), json!(null))
+                                    }
+                                    RelAlgebra::InMem(InMemRelationRA {
+                                        storage, filters, ..
+                                    }) => (
+                                        "load_mem",
+                                        json!(storage.rule_name.to_string()),
+                                        json!(null),
+                                        json!(filters.iter().map(|f| f.to_string()).collect_vec()),
+                                    ),
+                                    RelAlgebra::Relation(RelationRA {
+                                        storage, filters, ..
+                                    }) => (
+                                        "load_stored",
+                                        json!(format!(":{}", storage.name)),
+                                        json!(null),
+                                        json!(filters.iter().map(|f| f.to_string()).collect_vec()),
+                                    ),
+                                    RelAlgebra::Join(inner) => {
+                                        if inner.left.is_unit() {
+                                            rel_stack.push(&inner.right);
+                                            continue;
+                                        }
+                                        let t = inner.join_type();
+                                        let InnerJoin {
+                                            left,
+                                            right,
+                                            joiner,
+                                            ..
+                                        } = inner.as_ref();
+                                        rel_stack.push(left);
+                                        rel_stack.push(right);
+                                        (t, json!(null), json!(joiner.as_map()), json!(null))
+                                    }
+                                    RelAlgebra::NegJoin(inner) => {
+                                        let t = inner.join_type();
+                                        let NegJoin {
+                                            left,
+                                            right,
+                                            joiner,
+                                            ..
+                                        } = inner.as_ref();
+                                        rel_stack.push(left);
+                                        rel_stack.push(right);
+                                        (t, json!(null), json!(joiner.as_map()), json!(null))
+                                    }
+                                    RelAlgebra::Reorder(ReorderRA { relation, .. }) => {
+                                        rel_stack.push(relation);
+                                        ("reorder", json!(null), json!(null), json!(null))
+                                    }
+                                    RelAlgebra::Filter(FilteredRA { parent, pred, .. }) => {
+                                        rel_stack.push(parent);
+                                        (
+                                            "filter",
+                                            json!(null),
+                                            json!(null),
+                                            json!(pred.iter().map(|f| f.to_string()).collect_vec()),
+                                        )
+                                    }
+                                    RelAlgebra::Unification(UnificationRA {
+                                        parent,
+                                        binding,
+                                        expr,
+                                        is_multi,
+                                        ..
+                                    }) => {
+                                        rel_stack.push(parent);
+                                        (
+                                            if *is_multi { "multi-unify" } else { "unify" },
+                                            json!(binding.name),
+                                            json!(null),
+                                            json!(expr.to_string()),
+                                        )
+                                    }
+                                };
+                                ret_for_relation.push(json!({
+                                    STRATUM: stratum,
+                                    ATOM_IDX: idx,
+                                    OP: atom_type,
+                                    RULE_IDX: clause_idx,
+                                    RULE_NAME: rule_name.to_string(),
+                                    REF_NAME: ref_name,
+                                    OUT_BINDINGS: rel.bindings_after_eliminate().into_iter().map(|v| v.to_string()).collect_vec(),
+                                    JOINS_ON: joins_on,
+                                    FILTERS: filters,
+                                }));
+                                idx += 1;
+                            }
+                            ret_for_relation.reverse();
+                            ret.extend(ret_for_relation)
+                        }
+                    }
+                    CompiledRuleSet::Algo(_) => ret.push(json!({
+                        STRATUM: stratum,
+                        ATOM_IDX: 0,
+                        OP: "algo",
+                        RULE_IDX: 0,
+                        RULE_NAME: rule_name.to_string(),
+                    })),
+                }
+            }
+        }
+
+        let ret = ret
+            .into_iter()
+            .map(|m| {
+                headers
+                    .iter()
+                    .map(|i| m.get(*i).unwrap_or(&JsonValue::Null).clone())
+                    .collect_vec()
+            })
+            .collect_vec();
+
+        Ok(json!({"headers": headers, "rows": ret}))
+    }
     fn run_sys_op(&self, op: SysOp) -> Result<JsonValue> {
         match op {
+            SysOp::Explain(prog) => {
+                let mut tx = self.transact()?;
+                let program = prog
+                    .to_normalized_program(&tx)?
+                    .stratify()?
+                    .magic_sets_rewrite(&tx)?;
+                let (compiled, _) = tx.stratified_magic_compile(&program, &prog.const_rules)?;
+
+                self.explain_compiled(&compiled)
+            }
             SysOp::Compact => {
                 self.compact_relation()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
@@ -295,7 +485,6 @@ impl Db {
         tx: &mut SessionTx,
         input_program: InputProgram,
     ) -> Result<(JsonValue, Vec<(Vec<u8>, Vec<u8>)>)> {
-        debug!("{}", input_program);
         let mut clean_ups = vec![];
         if let Some((meta, op)) = &input_program.out_opts.store_relation {
             if *op == RelationOp::Create {
@@ -328,7 +517,6 @@ impl Db {
             .to_normalized_program(tx)?
             .stratify()?
             .magic_sets_rewrite(tx)?;
-        debug!("{:#?}", program);
         let (compiled, stores) =
             tx.stratified_magic_compile(&program, &input_program.const_rules)?;
 
