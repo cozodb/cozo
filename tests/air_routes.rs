@@ -1749,7 +1749,7 @@ fn great_circle_distance() {
 #[test]
 fn aus_to_edi() {
     check_relations();
-    let great_circle_distance = Instant::now();
+    let aus_to_edi = Instant::now();
 
     let res = TEST_DB
         .run_script(
@@ -1772,7 +1772,7 @@ fn aus_to_edi() {
         serde_json::Value::from_str(r#"[[["AUS", "BOS", "EDI"]]]"#)
             .unwrap()
     );
-    dbg!(great_circle_distance.elapsed());
+    dbg!(aus_to_edi.elapsed());
 }
 
 #[test]
