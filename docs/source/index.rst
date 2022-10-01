@@ -12,9 +12,8 @@ The Cozo Database Manual
 
    intro
    setup
-   script
    queries
-   triples
+   stored
    sysops
    datatypes
    functions

@@ -23,5 +23,5 @@ Algorithm application
 ----------------------------------
 
 -----------------------
-Global query options
+Query options
 -----------------------

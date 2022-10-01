@@ -1,5 +1,5 @@
 ==============================
-Algorithms
+Utilities and algorithms
 ==============================
 
 The purpose of the native, built-in algorithms in Cozo is to enable easy computation of results that would require either queries too awkward to express in pure Datalog, or time or space requirements that are unreasonable if implemented in the interpreted queries framework.
@@ -8,9 +8,51 @@ More algorithms will be added as Cozo is further developed.
 .. module:: Algo
     :noindex:
 
-------------------
-Connectedness
-------------------
+
+-------------------
+Utilities
+-------------------
+
+
+.. function:: ReorderSort(rel[...], out: [...], sort_by: [...], descending: false, break_ties: false, skip: 0, take: 0)
+
+    Sort and then extract new columns of the passed in relation ``rel``.
+
+    :param required out: A list of expressions which will be used to produce the output relation. Any bindings in the expressions will be bound to the named positions in ``rel``.
+    :param sort_by: A list of expressions which will be used to produce the sort keys. Any bindings in the expressions  will be bound to the named positions in ``rel``.
+    :param descending: Whether the sorting process should be done in descending order. Defaults to ``false``.
+    :param break_ties: Whether ties should be broken, e.g. whether the first two rows with *identical sort keys* should be given ordering numbers ``1`` and ``2`` instead of ``1`` and ``1``. Defaults to false.
+    :param skip: How many rows to skip before producing rows. Defaults to zero.
+    :param take: How many rows at most to produce. Zero means no limit. Defaults to zero.
+    :return: The returned relation, in addition to the rows specified in the parameter ``out``, will have the ordering prepended. The ordering starts at ``1``.
+
+.. TIP::
+
+    This algorithm serves a similar purpose to the global ``:order``, ``:limit`` and ``:offset`` options, but can be applied to intermediate results. Prefer the global options if it is applied to the final output.
+
+.. function:: CsvReader(url: ..., types: [...], delimiter: ',', prepend_index: false, has_headers: true)
+
+    Read a CSV file from disk or an HTTP GET request and convert the result to a relation.
+
+    :param required url: URL for the CSV file. For local file, use ``file://<PATH_TO_FILE>``.
+    :param required types: A list of strings interpreted as types for the columns of the output relation. If any type is specified as nullable and conversion to the specified type fails, ``null`` will be the result. This is more lenient than other functions since CSVs tend to contain lots of bad values.
+    :param delimiter: The delimiter to use when parsing the CSV file.
+    :param prepend_index: If ``true``, row index will be prepended to the columns.
+    :param has_headers: Whether the CSV file has headers. The reader will not interpret the header in any way but will instead simply ignore it.
+
+.. function:: JsonReader(url: ..., fields: [...], json_lines: true, null_if_absent: false, prepend_index: false)
+
+    Read a JSON file for disk or an HTTP GET request and convert the result to a relation.
+
+    :param required url: URL for the JSON file. For local file, use ``file://<PATH_TO_FILE>``.
+    :param required fields: A list of field names, for extracting fields from JSON arrays into the relation.
+    :param json_lines: If ``true``, parse the file as lines of JSON objects, each line containing a single object; if false, parse the file as a JSON array containing many objects.
+    :param null_if_absent: If a ``true`` and a requested field is absent, will output ``null`` in its place. If ``false`` and the requested field is absent, will throw an error.
+    :param prepend_index: If ``true``, row index will be prepended to the columns.
+
+------------------------------------
+Connectedness algorithms
+------------------------------------
 
 .. function:: ConnectedComponents(edges[from, to])
 
@@ -47,9 +89,9 @@ Connectedness
 
     :return: Pairs containing the sort order and the node index.
 
-------------------
-Pathfinding
-------------------
+------------------------------------
+Pathfinding algorithms
+------------------------------------
 
 .. function:: ShortestPathDijkstra(edges[from, to, weight?], starting[idx], goals[idx], undirected: false, keep_ties: false)
 
@@ -114,9 +156,9 @@ Pathfinding
 
     Providing a heuristic that is not guaranteed to be a lower-bound *might* be acceptable if you are fine with inaccuracies. The errors in the answers are bound by the sum of the margins of your over-estimates.
 
--------------------
-Community detection
--------------------
+-------------------------------------
+Community detection algorithms
+-------------------------------------
 
 .. function:: ClusteringCoefficients(edges[from, to, weight?])
 
@@ -142,9 +184,9 @@ Community detection
     :param max_iter: The maximum number of iterations to run. Defaults to 10.
     :return: Pairs containing the integer label for a community, and a node index belonging to the community.
 
--------------------
+-------------------------------------
 Centrality measures
--------------------
+-------------------------------------
 
 .. function:: DegreeCentrality(edges[from, to])
 
@@ -193,19 +235,3 @@ Miscellaneous
     :param weight: An expression evaluated against bindings of ``nodes`` and bindings of ``edges``, at a time when the walk is at a node and choosing between multiple edges to follow. It should evaluate to a non-negative number indicating the weight of the given choice of edge to follow. If omitted, which edge to follow is chosen uniformly.
     :param iterations: How many times walking is repeated for each starting node.
     :return: Triples containing a numerical index for the walk, the starting node, and the path followed.
-
-.. function:: ReorderSort(rel[...], out: [...], sort_by: [...], descending: false, break_ties: false, skip: 0, take: 0)
-
-    Sort and then extract new columns of the passed in relation ``rel``.
-
-    :param required out: A list of expressions which will be used to produce the output relation. Any bindings in the expressions will be bound to the named positions in ``rel``.
-    :param sort_by: A list of expressions which will be used to produce the sort keys. Any bindings in the expressions  will be bound to the named positions in ``rel``.
-    :param descending: Whether the sorting process should be done in descending order. Defaults to ``false``.
-    :param break_ties: Whether ties should be broken, e.g. whether the first two rows with *identical sort keys* should be given ordering numbers ``1`` and ``2`` instead of ``1`` and ``1``. Defaults to false.
-    :param skip: How many rows to skip before producing rows. Defaults to zero.
-    :param take: How many rows at most to produce. Zero means no limit. Defaults to zero.
-    :return: The returned relation, in addition to the rows specified in the parameter ``out``, will have the ordering prepended. The ordering starts at ``1``.
-
-.. TIP::
-
-    This algorithm serves a similar purpose to the global ``:order``, ``:limit`` and ``:offset`` options, but can be applied to intermediate results. Prefer the global options if it is applied to the final output.
