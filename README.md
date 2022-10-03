@@ -2,6 +2,41 @@
 
 Cozo is an experimental, relational database that has a focus on graph data, with support for ACID transactions. It aims to implement a Purer, Better relational algebra without the historical baggage of SQL.
 
+## Teasers
+
+We have stored in our database a relation containing air travel routes. The following uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
+
+```
+?[destination] := :route{src: 'FRA', dst: stop}, 
+                  :route{src: stop, dst: destination}
+```
+
+Using recursion and inline rules, we can find _all_ airports reachable from Frankfurt:
+
+```
+reachable[airport] := :route{src: 'FRA', dst: airport}
+reachable[airport] := reachable[stop], :route{src: stop, dst: airport}
+?[airport] := reachable[airport]
+```
+
+With aggregation and unification, we can compute the shortest path between Frankfurt all airports in the world:
+
+```
+shortest_paths[dst, shortest(path)] := :route{src: 'FRA', dst},
+                                       path = ['FRA', dst]
+shortest_paths[dst, shortest(path)] := shortest_paths[stop, prev_path], 
+                                       :route{src: stop, dst},
+                                       path = append(prev_path, dst)
+?[dst, path] := shortest_paths[dst, path]
+```
+
+The above computation is asymptotically optimal. For common operations on graphs like the shortest path, using built-in stock algorithms is both simpler and can further boost performance:
+
+```
+starting[airport] := airport = 'FRA'
+?[src, dst, cost, path] <~ ShortestPathDijkstra(:route[], starting[])
+```
+
 ## Motivations
 
 The so-called "NoSQL" movement in recent years brought forth a plethora of databases that try to introduce new data paradigms and revolutionize the industry. However, almost all the so-called "new" paradigms, in particular, the document paradigm, the (entity-relationship) graph model paradigm, and the key-value paradigm, actually predate the invention of the relational model. There is nothing wrong _per se_ with recycling old ideas, as changing circumstances can make previously infeasible solutions viable. However, since the historical development is deliberately obscured (with understandable business motivations), many users and even implementers fail to understand why relational databases became the standard in the first place, and do not have a clear picture of the strengths and weaknesses of the new databases. Suboptimal systems result. It is inevitable but still mildly amusing that even the name "NoSQL" was later reinterpreted to become "Not Only SQL".
