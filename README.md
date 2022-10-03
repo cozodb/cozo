@@ -4,7 +4,7 @@ Cozo is an experimental, relational database that has a focus on graph data, wit
 
 ## Teasers
 
-We have stored in our database a relation containing air travel routes. The following uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
+We have stored in our database a relation containing air travel routes. The following query uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
 
 ```
 ?[destination] := :route{src: 'FRA', dst: stop}, 
@@ -19,7 +19,7 @@ reachable[airport] := reachable[stop], :route{src: stop, dst: airport}
 ?[airport] := reachable[airport]
 ```
 
-With aggregation and unification, we can compute the shortest path between Frankfurt all airports in the world:
+With aggregation and unification, we can compute the shortest path between Frankfurt and all airports in the world:
 
 ```
 shortest_paths[dst, shortest(path)] := :route{src: 'FRA', dst},
@@ -36,6 +36,8 @@ The above computation is asymptotically optimal. For common operations on graphs
 starting[airport] := airport = 'FRA'
 ?[src, dst, cost, path] <~ ShortestPathDijkstra(:route[], starting[])
 ```
+
+Cozo is capable of much more. Follow the Tutorial to get started.
 
 ## Motivations
 
