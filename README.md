@@ -1,10 +1,10 @@
 # The Cozo Database
 
-Cozo is an experimental relational database that has a focus on graph data, with support for ACID transactions. It aims to implement a Purer, Better relational algebra without the historical baggage of SQL.
+Cozo is a general-purpose, experimental relational database that has a focus on graph data, with support for ACID transactions. It aims to implement a Purer, Better relational algebra without the historical baggage of SQL.
 
 ## Teasers
 
-We have stored in our database a relation containing air travel routes. The following query uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
+We have stored in our database a relation containing air travel routes with two columns `src` and `dst`. The following query uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
 
 ```
 ?[destination] := :route{src: 'FRA', dst: stop}, 
