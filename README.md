@@ -6,14 +6,14 @@ Cozo is an experimental, relational database that has a focus on graph data, wit
 
 We have stored in our database a relation containing air travel routes. The following query uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
 
-```python
+```
 ?[destination] := :route{src: 'FRA', dst: stop}, 
                   :route{src: stop, dst: destination}
 ```
 
 Using recursion and inline rules, we can find _all_ airports reachable from Frankfurt (the transitive closure):
 
-```python
+```
 reachable[airport] := :route{src: 'FRA', dst: airport}
 reachable[airport] := reachable[stop], :route{src: stop, dst: airport}
 ?[airport] := reachable[airport]
@@ -21,7 +21,7 @@ reachable[airport] := reachable[stop], :route{src: stop, dst: airport}
 
 With aggregation and unification, we can compute the shortest path between Frankfurt and all airports in the world:
 
-```python
+```
 shortest_paths[dst, shortest(path)] := :route{src: 'FRA', dst},
                                        path = ['FRA', dst]
 shortest_paths[dst, shortest(path)] := shortest_paths[stop, prev_path], 
@@ -32,14 +32,19 @@ shortest_paths[dst, shortest(path)] := shortest_paths[stop, prev_path],
 
 The above computation is asymptotically optimal. For common operations on graphs like the shortest path, using built-in stock algorithms is both simpler and can further boost performance:
 
-```python
+```
 starting[airport] := airport = 'FRA'
 ?[src, dst, cost, path] <~ ShortestPathDijkstra(:route[], starting[])
 ```
 
 Cozo is capable of much more. Follow the Tutorial to get started.
 
-## Motivations
+## Learning
+
+* The Tutorial will get you started with running Cozo and learning the query language CozoScript.
+* The Manual tries to document everything Cozo currently has to offer. It goes into greater depths for some topics that are glossed over in the Tutorial.
+
+## Motivation
 
 The so-called "NoSQL" movement in recent years brought forth a plethora of databases that try to introduce new data paradigms and revolutionize the industry. However, almost all the so-called "new" paradigms, in particular, the document paradigm, the (entity-relationship) graph model paradigm, and the key-value paradigm, actually predate the invention of the relational model. There is nothing wrong _per se_ with recycling old ideas, as changing circumstances can make previously infeasible solutions viable. However, since the historical development is deliberately obscured (with understandable business motivations), many users and even implementers fail to understand why relational databases became the standard in the first place, and do not have a clear picture of the strengths and weaknesses of the new databases. Suboptimal systems result. It is inevitable but still mildly amusing that even the name "NoSQL" was later reinterpreted to become "Not Only SQL".
 
