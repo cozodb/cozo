@@ -6,14 +6,14 @@ Cozo is an experimental, relational database that has a focus on graph data, wit
 
 We have stored in our database a relation containing air travel routes. The following query uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
 
-```
+```python
 ?[destination] := :route{src: 'FRA', dst: stop}, 
                   :route{src: stop, dst: destination}
 ```
 
-Using recursion and inline rules, we can find _all_ airports reachable from Frankfurt:
+Using recursion and inline rules, we can find _all_ airports reachable from Frankfurt (the transitive closure):
 
-```
+```python
 reachable[airport] := :route{src: 'FRA', dst: airport}
 reachable[airport] := reachable[stop], :route{src: stop, dst: airport}
 ?[airport] := reachable[airport]
@@ -21,7 +21,7 @@ reachable[airport] := reachable[stop], :route{src: stop, dst: airport}
 
 With aggregation and unification, we can compute the shortest path between Frankfurt and all airports in the world:
 
-```
+```python
 shortest_paths[dst, shortest(path)] := :route{src: 'FRA', dst},
                                        path = ['FRA', dst]
 shortest_paths[dst, shortest(path)] := shortest_paths[stop, prev_path], 
@@ -32,7 +32,7 @@ shortest_paths[dst, shortest(path)] := shortest_paths[stop, prev_path],
 
 The above computation is asymptotically optimal. For common operations on graphs like the shortest path, using built-in stock algorithms is both simpler and can further boost performance:
 
-```
+```python
 starting[airport] := airport = 'FRA'
 ?[src, dst, cost, path] <~ ShortestPathDijkstra(:route[], starting[])
 ```
