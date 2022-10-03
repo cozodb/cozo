@@ -4,7 +4,7 @@ Cozo is a general-purpose, experimental relational database that has a focus on 
 
 ## Teasers
 
-We have stored in our database a relation containing air travel routes with two columns `src` and `dst`. The following query uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
+We have stored in our database a relation containing air travel routes with two columns `src` and `dst`. The following CozoScript query uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
 
 ```
 ?[destination] := :route{src: 'FRA', dst: stop}, 
@@ -39,7 +39,7 @@ starting[airport] := airport = 'FRA'
 
 Cozo is capable of much more. Follow the Tutorial to get started.
 
-## Learning
+## Learning Cozo
 
 * The Tutorial will get you started with running Cozo and learning the query language CozoScript.
 * The Manual tries to document everything Cozo currently has to offer. It goes into greater depths for some topics that are glossed over in the Tutorial.
@@ -58,15 +58,15 @@ In fact, another much simpler query language has existed for quite some time (si
 
 This is where Cozo comes in. We want to prove, through a real database implementation, that relational model can be made much simpler and much more pleasant to use if we are prepared to ditch the SQL syntax. Furthermore, by combining the core relational algebra with recursion and aggregation (in a somewhat different way than usually done in SQL), we want to show that relational databases are perfectly capable of dealing with graphs efficiently, with a syntax that is both easy to write and easy to read and understand. How much we have succeeded is up to you, the user, to judge.
 
-## Non-goals
+## Non-goals (for the moment)
 
 * As Cozo is currently considered an experiment, it is probably not going to have distributed functions for quite some time, if ever.
 * A feature in traditional RDBMS is the query optimizer. Cozo is not going to have one in the traditional sense for the moment, for two reasons. The first one is that building a good query optimizer takes enormous time, and at the moment we do not want to put our time in implementing one. The second, more fundamental reason is that, even with good query optimizers, like those in PostgreSQL, their usefulness in actually optimizing (instead of de-optimizing) queries decreases exponentially with the number of joins present. And graph queries tend to contain many more joins than non-graph queries. For complex queries, "debugging" the query plan is actually much harder than specifying the plan explicitly (which you cannot do in RDBMS, for some reason). In Cozo the execution order can be determined explicitly from how the query is written: there is no guesswork, and you do not play hide-and-seek with the query planner. We believe that the end user must understand the data sufficiently to efficiently use it, and even a superficial understanding allows one to write a reasonably efficient query. In our experience, the approach taken by traditional RDBMS is akin to a strongly typed programming language disallowing (or heavily discouraging) the programmer to write _any_ type declarations and insisting that all types must be inferred, thus giving its implementers an impossible task. When Cozo becomes more mature, we _may_ introduce query optimizers for limited situations in which they can have large benefits, but explicit specification will always remain an option.
 * Cozo is not mature enough to benefit from elaborate account and security subsystems. Currently, Cozo has a required password authentication scheme with no defaults, but it is not considered sufficient for any purpose on the Internet. You should only run Cozo within your trusted network. The current security scheme is only meant to be a last counter-measure to the sorry situations of inadvertently exposing large swathes of data to the Internet.
 
-## Implementation
+## Some implementation details
 
 * Cozo is written in Rust.
 * The storage layer of Cozo is RocksDB. We manually wrote the C++/Rust bindings for RocksDB since we found the existing ones to be insufficient for our purpose. Outside the storage layer, Cozo is 100% safe rust. It is not too hard to swap out the storage layer, and we are open to other options.
 * Query rules are compiled into trees of relations (the relational algebra) before execution. Each rule is executed deterministically (no query planner).
-* The execution of the whole query follows the least fixed point semantics of Datalog with negation and aggregation, and is done by the bottom-up semi-naive algorithm (instead of the query/subquery top-down algorithms used by many recent datalog implementations, especially in the Clojure world). To prevent calculating unnecessary results that are only thrown away at the last stage, the magic-set rewriting technique is employed as a pre-processing step before compiling the query. This step is completely deterministic.
+* The execution of the whole query follows the least fixed point semantics of stratified Datalog with negation and aggregation, and is done by the bottom-up semi-naive algorithm (instead of the query/subquery top-down algorithms used by many recent datalog implementations, especially in the Clojure world). To prevent calculating unnecessary results that are only thrown away at the last stage, the magic-set rewriting technique is employed as a pre-processing step before compiling the query. This step is completely deterministic.
