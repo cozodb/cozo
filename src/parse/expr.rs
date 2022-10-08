@@ -34,6 +34,8 @@ lazy_static! {
                 | Op::infix(Rule::op_concat, Left))
             .op(Op::infix(Rule::op_mul, Left) | Op::infix(Rule::op_div, Left))
             .op(Op::infix(Rule::op_pow, Right))
+            .op(Op::prefix(Rule::minus))
+            .op(Op::prefix(Rule::negate))
     };
 }
 
@@ -49,8 +51,25 @@ pub(crate) fn build_expr(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue
     );
 
     PRATT_PARSER
-        .map_primary(|v| build_unary(v, param_pool))
+        .map_primary(|v| build_term(v, param_pool))
         .map_infix(build_expr_infix)
+        .map_prefix(|op, rhs| {
+            let rhs = rhs?;
+            let rhs_span = rhs.span();
+            Ok(match op.as_rule() {
+                Rule::minus => Expr::Apply {
+                    op: &OP_MINUS,
+                    args: [rhs].into(),
+                    span: op.extract_span().merge(rhs_span),
+                },
+                Rule::negate => Expr::Apply {
+                    op: &OP_NEGATE,
+                    args: [rhs].into(),
+                    span: op.extract_span().merge(rhs_span),
+                },
+                _ => unreachable!(),
+            })
+        })
         .parse(pair.into_inner())
 }
 
@@ -84,16 +103,12 @@ fn build_expr_infix(lhs: Result<Expr>, op: Pair<'_>, rhs: Result<Expr>) -> Resul
     })
 }
 
-fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<Expr> {
+fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<Expr> {
     let span = pair.extract_span();
-    let s = pair.as_str();
-    let mut inner = pair.into_inner();
-    let p = inner.next().unwrap();
-    let op = p.as_rule();
+    let op = pair.as_rule();
     Ok(match op {
-        Rule::term => build_unary(p, param_pool)?,
         Rule::var => Expr::Binding {
-            var: Symbol::new(s, p.extract_span()),
+            var: Symbol::new(pair.as_str(), pair.extract_span()),
             tuple_pos: None,
         },
         Rule::param => {
@@ -102,28 +117,12 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             #[diagnostic(code(parser::param_not_found))]
             struct ParamNotFoundError(String, #[label] SourceSpan);
 
-            let param_str = s.strip_prefix('$').unwrap();
+            let param_str = pair.as_str().strip_prefix('$').unwrap();
             Expr::Const {
                 val: param_pool
                     .get(param_str)
                     .ok_or_else(|| ParamNotFoundError(param_str.to_string(), span))?
                     .clone(),
-                span,
-            }
-        }
-        Rule::minus => {
-            let inner = build_unary(inner.next().unwrap(), param_pool)?;
-            Expr::Apply {
-                op: &OP_MINUS,
-                args: [inner].into(),
-                span,
-            }
-        }
-        Rule::negate => {
-            let inner = build_unary(inner.next().unwrap(), param_pool)?;
-            Expr::Apply {
-                op: &OP_NEGATE,
-                args: [inner].into(),
                 span,
             }
         }
@@ -133,7 +132,8 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             #[diagnostic(code(parser::bad_pos_int))]
             struct BadIntError(#[label] SourceSpan);
 
-            let i = s
+            let i = pair
+                .as_str()
                 .replace('_', "")
                 .parse::<i64>()
                 .map_err(|_| BadIntError(span))?;
@@ -143,21 +143,21 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             }
         }
         Rule::hex_pos_int => {
-            let i = parse_int(s, 16);
+            let i = parse_int(pair.as_str(), 16);
             Expr::Const {
                 val: DataValue::from(i),
                 span,
             }
         }
         Rule::octo_pos_int => {
-            let i = parse_int(s, 8);
+            let i = parse_int(pair.as_str(), 8);
             Expr::Const {
                 val: DataValue::from(i),
                 span,
             }
         }
         Rule::bin_pos_int => {
-            let i = parse_int(s, 2);
+            let i = parse_int(pair.as_str(), 2);
             Expr::Const {
                 val: DataValue::from(i),
                 span,
@@ -169,7 +169,8 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             #[diagnostic(code(parser::bad_float))]
             struct BadFloatError(#[label] SourceSpan);
 
-            let f = s
+            let f = pair
+                .as_str()
                 .replace('_', "")
                 .parse::<f64>()
                 .map_err(|_| BadFloatError(span))?;
@@ -183,11 +184,11 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             span,
         },
         Rule::boolean => Expr::Const {
-            val: DataValue::Bool(s == "true"),
+            val: DataValue::Bool(pair.as_str() == "true"),
             span,
         },
         Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
-            let s = parse_string(p)?;
+            let s = parse_string(pair)?;
             Expr::Const {
                 val: DataValue::Str(s),
                 span,
@@ -195,7 +196,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
         }
         Rule::list => {
             let mut collected = vec![];
-            for p in p.into_inner() {
+            for p in pair.into_inner() {
                 collected.push(build_expr(p, param_pool)?)
             }
             Expr::Apply {
@@ -205,7 +206,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
             }
         }
         Rule::apply => {
-            let mut p = p.into_inner();
+            let mut p = pair.into_inner();
             let ident_p = p.next().unwrap();
             let ident = ident_p.as_str();
             let mut args: Vec<_> = p
@@ -302,7 +303,7 @@ fn build_unary(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resu
                 }
             }
         }
-        Rule::grouping => build_expr(p.into_inner().next().unwrap(), param_pool)?,
+        Rule::grouping => build_expr(pair.into_inner().next().unwrap(), param_pool)?,
         r => unreachable!("Encountered unknown op {:?}", r),
     })
 }
