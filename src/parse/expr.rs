@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use miette::{bail, ensure, Diagnostic, Result};
-use pest::prec_climber::{Operator, PrecClimber};
+use pest::pratt_parser::{Op, PrattParser};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -17,24 +17,23 @@ use crate::data::value::DataValue;
 use crate::parse::{ExtractSpan, Pair, Rule, SourceSpan};
 
 lazy_static! {
-    static ref PREC_CLIMBER: PrecClimber<Rule> = {
-        use pest::prec_climber::Assoc::*;
+    static ref PRATT_PARSER: PrattParser<Rule> = {
+        use pest::pratt_parser::Assoc::*;
 
-        PrecClimber::new(vec![
-            Operator::new(Rule::op_or, Left),
-            Operator::new(Rule::op_and, Left),
-            Operator::new(Rule::op_gt, Left)
-                | Operator::new(Rule::op_lt, Left)
-                | Operator::new(Rule::op_ge, Left)
-                | Operator::new(Rule::op_le, Left),
-            Operator::new(Rule::op_mod, Left),
-            Operator::new(Rule::op_eq, Left) | Operator::new(Rule::op_ne, Left),
-            Operator::new(Rule::op_add, Left)
-                | Operator::new(Rule::op_sub, Left)
-                | Operator::new(Rule::op_concat, Left),
-            Operator::new(Rule::op_mul, Left) | Operator::new(Rule::op_div, Left),
-            Operator::new(Rule::op_pow, Right),
-        ])
+        PrattParser::new()
+            .op(Op::infix(Rule::op_or, Left))
+            .op(Op::infix(Rule::op_and, Left))
+            .op(Op::infix(Rule::op_gt, Left)
+                | Op::infix(Rule::op_lt, Left)
+                | Op::infix(Rule::op_ge, Left)
+                | Op::infix(Rule::op_le, Left))
+            .op(Op::infix(Rule::op_mod, Left))
+            .op(Op::infix(Rule::op_eq, Left) | Op::infix(Rule::op_ne, Left))
+            .op(Op::infix(Rule::op_add, Left)
+                | Op::infix(Rule::op_sub, Left)
+                | Op::infix(Rule::op_concat, Left))
+            .op(Op::infix(Rule::op_mul, Left) | Op::infix(Rule::op_div, Left))
+            .op(Op::infix(Rule::op_pow, Right))
     };
 }
 
@@ -49,11 +48,10 @@ pub(crate) fn build_expr(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue
         InvalidExpression(pair.extract_span())
     );
 
-    PREC_CLIMBER.climb(
-        pair.into_inner(),
-        |v| build_unary(v, param_pool),
-        build_expr_infix,
-    )
+    PRATT_PARSER
+        .map_primary(|v| build_unary(v, param_pool))
+        .map_infix(build_expr_infix)
+        .parse(pair.into_inner())
 }
 
 fn build_expr_infix(lhs: Result<Expr>, op: Pair<'_>, rhs: Result<Expr>) -> Result<Expr> {
