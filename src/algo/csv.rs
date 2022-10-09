@@ -118,16 +118,16 @@ impl AlgoImpl for CsvReader {
                                 }
                             }),
                             ColType::Int => {
-                                let f =  op_to_float(&[dv]).unwrap_or(DataValue::Null);
+                                let f = op_to_float(&[dv]).unwrap_or(DataValue::Null);
                                 match f.get_int() {
-                                    None => {if typ.nullable {
-                                        out_tuple.0.push(DataValue::Null)
-                                    } else {
-                                        bail!("cannot convert {} to type {}", s, typ)
-                                    }}
-                                    Some(i) => {
-                                        out_tuple.0.push(DataValue::from(i))
+                                    None => {
+                                        if typ.nullable {
+                                            out_tuple.0.push(DataValue::Null)
+                                        } else {
+                                            bail!("cannot convert {} to type {}", s, typ)
+                                        }
                                     }
+                                    Some(i) => out_tuple.0.push(DataValue::from(i)),
                                 };
                             }
                             _ => bail!("cannot convert {} to type {}", s, typ),
@@ -149,9 +149,8 @@ impl AlgoImpl for CsvReader {
                 }
             }
             None => {
-                let content = reqwest::blocking::get(&url as &str)
-                    .into_diagnostic()?
-                    .text()
+                let content = minreq::get(&url as &str)
+                    .send()
                     .into_diagnostic()?;
                 let mut rdr = rdr_builder.from_reader(content.as_bytes());
                 for record in rdr.records() {

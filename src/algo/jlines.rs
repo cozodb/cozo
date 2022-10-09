@@ -98,10 +98,8 @@ impl AlgoImpl for JsonReader {
                 }
             }
             None => {
-                let content = reqwest::blocking::get(&url as &str)
-                    .into_diagnostic()?
-                    .text()
-                    .into_diagnostic()?;
+                let content = minreq::get(&url as &str).send().into_diagnostic()?;
+                let content = content.as_str().into_diagnostic()?;
                 if json_lines {
                     for line in content.lines() {
                         let line = line.trim();

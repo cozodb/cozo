@@ -1,57 +1,13 @@
-use std::collections::{BTreeMap, HashMap};
-use std::env;
-use std::fmt::{Debug, Display, Formatter};
-use std::io::{stdin, stdout, Write};
-use std::str::from_utf8;
-use std::sync::{Arc, RwLock};
+use std::collections::BTreeMap;
+use std::fmt::Debug;
 use std::time::Instant;
 
-use actix_cors::Cors;
-use actix_web::{App, HttpRequest, HttpResponse, HttpServer, post, Responder, ResponseError, web};
-use actix_web::body::BoxBody;
-use actix_web::http::header::HeaderName;
-use actix_web::middleware::Logger;
-use actix_web::rt::task::spawn_blocking;
 use clap::Parser;
 use env_logger::Env;
-use log::debug;
-use miette::{bail, IntoDiagnostic, miette};
-use rand::Rng;
+use rouille::{router, try_or_400, Response};
 use serde_json::json;
-use sha3::Digest;
 
 use cozo::{Db, DbBuilder};
-
-type Result<T> = std::result::Result<T, RespError>;
-
-struct RespError {
-    err: miette::Error,
-}
-
-impl Debug for RespError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.err)
-    }
-}
-
-impl Display for RespError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.err)
-    }
-}
-
-impl From<cozo::Error> for RespError {
-    fn from(err: cozo::Error) -> RespError {
-        RespError { err }
-    }
-}
-
-impl ResponseError for RespError {
-    fn error_response(&self) -> HttpResponse<BoxBody> {
-        let formatted = format!("{:?}", self.err);
-        HttpResponse::BadRequest().body(formatted)
-    }
-}
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
@@ -69,180 +25,7 @@ struct Args {
     port: u16,
 }
 
-struct AppStateWithDb {
-    db: Db,
-    pass_cache: Arc<RwLock<HashMap<String, Box<[u8]>>>>,
-    seed: Box<[u8]>,
-}
-
-const PASSWORD_KEY: &str = "WEB_USER_PASSWORD";
-
-impl AppStateWithDb {
-    async fn verify_password(&self, req: &HttpRequest) -> miette::Result<()> {
-        let username = req
-            .headers()
-            .get(&HeaderName::from_static("x-cozo-username"))
-            .ok_or_else(|| miette!("not authenticated"))?
-            .to_str()
-            .into_diagnostic()?;
-        let password = req
-            .headers()
-            .get(&HeaderName::from_static("x-cozo-password"))
-            .ok_or_else(|| miette!("not authenticated"))?
-            .to_str()
-            .into_diagnostic()?;
-        let existing = self.pass_cache.try_read().map_err(|e| miette!(e.to_string()))?.get(username).cloned();
-        if let Some(stored) = existing {
-            let mut seed = self.seed.to_vec();
-            seed.extend_from_slice(password.as_bytes());
-            let digest: &[u8] = &sha3::Sha3_256::digest(&seed);
-            if *stored == *digest {
-                return Ok(());
-            } else {
-                self.pass_cache.try_write().map_err(|e| miette!(e.to_string()))?.remove(username);
-                bail!("invalid password")
-            }
-        }
-        let pass_cache = self.pass_cache.clone();
-        let mut seed = self.seed.to_vec();
-        let db = self.db.new_session()?;
-        let password = password.to_string();
-        let username = username.to_string();
-        spawn_blocking(move || -> miette::Result<()> {
-            if let Some(hashed) = db.get_meta_kv(&[PASSWORD_KEY, &username])? {
-                let hashed = from_utf8(&hashed).into_diagnostic()?;
-                if argon2::verify_encoded(&hashed, password.as_bytes()).into_diagnostic()? {
-                    seed.extend_from_slice(password.as_bytes());
-                    let easy_digest: &[u8] = &sha3::Sha3_256::digest(&seed);
-                    pass_cache
-                        .try_write().map_err(|e| miette!(e.to_string()))?
-                        .insert(username, easy_digest.into());
-                    return Ok(());
-                }
-            }
-            bail!("invalid password")
-        })
-            .await
-            .into_diagnostic()?
-    }
-
-    async fn reset_password(&self, user: &str, new_pass: &str) -> miette::Result<()> {
-        let pass_cache = self.pass_cache.clone();
-        let db = self.db.new_session()?;
-        let username = user.to_string();
-        let new_pass = new_pass.to_string();
-        spawn_blocking(move || -> miette::Result<()> {
-            pass_cache.try_write().map_err(|e| miette!(e.to_string()))?.remove(&username);
-            let salt = rand::thread_rng().gen::<[u8; 32]>();
-            let config = argon2config();
-            let hash =
-                argon2::hash_encoded(new_pass.as_bytes(), &salt, &config).into_diagnostic()?;
-            db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())?;
-            Ok(())
-        })
-            .await
-            .into_diagnostic()?
-    }
-
-    async fn remove_user(&self, user: &str) -> miette::Result<()> {
-        self.pass_cache.try_write().map_err(|e| miette!(e.to_string()))?.remove(user);
-        self.db.remove_meta_kv(&[PASSWORD_KEY, &user])?;
-        Ok(())
-    }
-}
-
-fn argon2config() -> argon2::Config<'static> {
-    argon2::Config {
-        variant: argon2::Variant::Argon2id,
-        mem_cost: 65536,
-        time_cost: 10,
-        ..argon2::Config::default()
-    }
-}
-
-#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
-struct QueryPayload {
-    script: String,
-    params: BTreeMap<String, serde_json::Value>,
-}
-
-#[post("/text-query")]
-async fn query(
-    body: web::Json<QueryPayload>,
-    data: web::Data<AppStateWithDb>,
-    req: HttpRequest,
-) -> Result<impl Responder> {
-    data.verify_password(&req).await?;
-    let db = data.db.new_session()?;
-    let start = Instant::now();
-    let task = spawn_blocking(move || db.run_script(&body.script, &body.params));
-    let mut result = task.await.map_err(|e| miette!(e))??;
-    if let Some(obj) = result.as_object_mut() {
-        obj.insert(
-            "time_taken".to_string(),
-            json!(start.elapsed().as_millis() as u64),
-        );
-    }
-    Ok(HttpResponse::Ok().json(result))
-}
-
-#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
-struct ChangePassPayload {
-    new_pass: String,
-}
-
-#[post("/change-password")]
-async fn change_password(
-    body: web::Json<ChangePassPayload>,
-    data: web::Data<AppStateWithDb>,
-    req: HttpRequest,
-) -> Result<impl Responder> {
-    data.verify_password(&req).await?;
-    let username = req
-        .headers()
-        .get(&HeaderName::from_static("x-cozo-username"))
-        .ok_or_else(|| miette!("not authenticated"))?
-        .to_str()
-        .map_err(|e| miette!(e))?;
-    data.reset_password(username, &body.new_pass).await?;
-    Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
-}
-
-#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
-struct AssertUserPayload {
-    username: String,
-    new_pass: String,
-}
-
-#[post("/assert-user")]
-async fn assert_user(
-    body: web::Json<AssertUserPayload>,
-    data: web::Data<AppStateWithDb>,
-    req: HttpRequest,
-) -> Result<impl Responder> {
-    data.verify_password(&req).await?;
-    data.reset_password(&body.username, &body.new_pass).await?;
-    Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
-}
-
-#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
-struct RemoveUserPayload {
-    username: String,
-}
-
-#[post("/remove-user")]
-async fn remove_user(
-    body: web::Json<RemoveUserPayload>,
-    data: web::Data<AppStateWithDb>,
-    req: HttpRequest,
-) -> Result<impl Responder> {
-    data.verify_password(&req).await?;
-    data.remove_user(&body.username).await?;
-    Ok(HttpResponse::Ok().json(json!({"status": "OK"})))
-}
-
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
+fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
 
@@ -251,78 +34,34 @@ async fn main() -> std::io::Result<()> {
         .create_if_missing(true);
     let db = Db::build(builder).unwrap();
 
-
-    match db.meta_range_scan(&[PASSWORD_KEY]).next() {
-        None => {
-            let (username, password) = match (
-                env::var("COZO_INITIAL_WEB_USERNAME"),
-                env::var("COZO_INITIAL_WEB_PASSWORD"),
-            ) {
-                (Ok(username), Ok(password)) => (username, password),
-                _ => {
-                    println!("Welcome to Cozo!");
-                    println!();
-                    println!(
-                        "This is the first time you are running this database at {},",
-                        args.path
-                    );
-                    println!("so let's create a username and password.");
-
-                    loop {
-                        println!();
-                        print!("Enter a username: ");
-
-                        let _ = stdout().flush();
-                        let mut username = String::new();
-                        stdin().read_line(&mut username).unwrap();
-                        let username = username.trim().to_string();
-                        if username.is_empty() {
-                            continue;
-                        }
-                        let password = rpassword::prompt_password("Enter your password: ").unwrap();
-                        let confpass = rpassword::prompt_password("Again to confirm it: ").unwrap();
-
-                        if password.trim() != confpass.trim() {
-                            println!("Password mismatch. Try again.");
-                            continue;
-                        }
-                        break (username, password.trim().to_string());
-                    }
+    let addr = format!("{}:{}", args.bind, args.port);
+    println!("Service running at http://{}", addr);
+    rouille::start_server(addr, move |request| {
+        router!(request,
+            (POST) (/text-query) => {
+                #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+                struct QueryPayload {
+                    script: String,
+                    params: BTreeMap<String, serde_json::Value>,
                 }
-            };
 
-            let salt = rand::thread_rng().gen::<[u8; 32]>();
-            let config = argon2config();
-            let hash = argon2::hash_encoded(password.trim().as_bytes(), &salt, &config).unwrap();
-            db.put_meta_kv(&[PASSWORD_KEY, &username], hash.as_bytes())
-                .unwrap();
-        }
-        Some(Err(err)) => panic!("{}", err),
-        Some(Ok((user, _))) => {
-            debug!("User {:?}", user[1]);
-        }
-    }
+                let payload: QueryPayload = try_or_400!(rouille::input::json_input(request));
+                let start = Instant::now();
 
-    let app_state = web::Data::new(AppStateWithDb {
-        db,
-        pass_cache: Arc::new(Default::default()),
-        seed: Box::new(rand::thread_rng().gen::<[u8; 32]>()),
+                match db.run_script(&payload.script, &payload.params) {
+                    Ok(mut result) => {
+                        if let Some(obj) = result.as_object_mut() {
+                            obj.insert(
+                                "time_taken".to_string(),
+                                json!(start.elapsed().as_millis() as u64),
+                            );
+                        }
+                        Response::json(&result)
+                    }
+                    Err(e) => Response::text(format!("{:?}", e)).with_status_code(400),
+                }
+            },
+            _ => Response::empty_404()
+        )
     });
-
-    let addr = (&args.bind as &str, args.port);
-    println!("Service running at http://{}:{}", addr.0, addr.1);
-
-    HttpServer::new(move || {
-        App::new()
-            .app_data(app_state.clone())
-            .wrap(Cors::permissive())
-            .wrap(Logger::default())
-            .service(query)
-            .service(change_password)
-            .service(assert_user)
-            .service(remove_user)
-    })
-        .bind(addr)?
-        .run()
-        .await
 }

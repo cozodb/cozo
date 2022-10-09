@@ -14,13 +14,13 @@ use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
 
-use cozorocks::{DbBuilder, DbIter, RocksDb};
+use cozorocks::{DbBuilder, RocksDb};
 
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{
-    compare_tuple_keys, rusty_scratch_cmp, EncodedTuple, Tuple, SCRATCH_DB_KEY_PREFIX_LEN,
+    compare_tuple_keys, rusty_scratch_cmp, Tuple, SCRATCH_DB_KEY_PREFIX_LEN,
 };
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::sys::SysOp;
@@ -32,7 +32,6 @@ use crate::query::relation::{
 };
 use crate::runtime::relation::{RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
-use crate::utils::swap_option_result;
 
 struct RunningQueryHandle {
     started_at: f64,
@@ -667,113 +666,6 @@ impl Db {
             .map(|(k, v)| json!([k, format!("{:?}", v.started_at)]))
             .collect_vec();
         Ok(json!({"rows": res, "headers": ["id", "started_at"]}))
-    }
-    pub fn put_meta_kv(&self, k: &[&str], v: &[u8]) -> Result<()> {
-        let mut ks = vec![DataValue::Guard];
-        for el in k {
-            ks.push(DataValue::Str(SmartString::from(*el)));
-        }
-        let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
-        let mut vtx = self.db.transact().start();
-        vtx.put(&key, v)?;
-        vtx.commit()?;
-        Ok(())
-    }
-    pub fn remove_meta_kv(&self, k: &[&str]) -> Result<()> {
-        let mut ks = vec![DataValue::Guard];
-        for el in k {
-            ks.push(DataValue::Str(SmartString::from(*el)));
-        }
-        let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
-        let mut vtx = self.db.transact().start();
-        vtx.del(&key)?;
-        vtx.commit()?;
-        Ok(())
-    }
-    pub fn get_meta_kv(&self, k: &[&str]) -> Result<Option<Vec<u8>>> {
-        let mut ks = vec![DataValue::Guard];
-        for el in k {
-            ks.push(DataValue::Str(SmartString::from(*el)));
-        }
-        let key = Tuple(ks).encode_as_key(RelationId::SYSTEM);
-        let vtx = self.db.transact().start();
-        Ok(vtx.get(&key, false)?.map(|slice| slice.to_vec()))
-    }
-    pub fn meta_range_scan(
-        &self,
-        prefix: &[&str],
-    ) -> impl Iterator<Item = Result<(Vec<String>, Vec<u8>)>> {
-        let mut lower_bound = Tuple(vec![DataValue::Guard]);
-        for p in prefix {
-            lower_bound.0.push(DataValue::Str(SmartString::from(*p)));
-        }
-        let upper_data_bound = Tuple(vec![DataValue::Bot]);
-        let upper_bound = upper_data_bound.encode_as_key(RelationId::SYSTEM);
-        let mut it = self
-            .db
-            .transact()
-            .start()
-            .iterator()
-            .upper_bound(&upper_bound)
-            .start();
-        it.seek(&lower_bound.encode_as_key(RelationId::SYSTEM));
-
-        struct CustomIter {
-            it: DbIter,
-            started: bool,
-            upper_bound: Vec<u8>,
-        }
-
-        impl CustomIter {
-            fn next_inner(&mut self) -> Result<Option<(Vec<String>, Vec<u8>)>> {
-                if self.started {
-                    self.it.next()
-                } else {
-                    self.started = true;
-                }
-                match self.it.pair()? {
-                    None => Ok(None),
-                    Some((k_slice, v_slice)) => {
-                        if compare_tuple_keys(&self.upper_bound, k_slice) != Greater {
-                            return Ok(None);
-                        }
-
-                        #[derive(Debug, Error, Diagnostic)]
-                        #[error("Encountered corrupt key in meta store")]
-                        #[diagnostic(code(db::corrupt_meta_key))]
-                        #[diagnostic(help("This is an internal error. Please file a bug."))]
-                        struct CorruptKeyInMetaStoreError;
-
-                        let encoded = EncodedTuple(k_slice).decode();
-                        let ks: Vec<_> = encoded
-                            .0
-                            .into_iter()
-                            .skip(1)
-                            .map(|v| {
-                                v.get_string()
-                                    .map(|s| s.to_string())
-                                    .ok_or(CorruptKeyInMetaStoreError)
-                            })
-                            .try_collect()?;
-                        Ok(Some((ks, v_slice.to_vec())))
-                    }
-                }
-            }
-        }
-
-        impl Iterator for CustomIter {
-            type Item = Result<(Vec<String>, Vec<u8>)>;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                swap_option_result(self.next_inner())
-            }
-        }
-
-        CustomIter {
-            it,
-            started: false,
-            upper_bound,
-        }
     }
     pub fn list_relation(&self, name: &str) -> Result<JsonValue> {
         let tx = self.transact()?;
