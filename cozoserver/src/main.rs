@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::fmt::Debug;
+use std::process::exit;
 use std::time::Instant;
 
 use clap::Parser;
@@ -28,6 +30,17 @@ struct Args {
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
+    let auth_str = env::var("COZO_AUTH").ok();
+    if args.bind != "127.0.0.1" && auth_str.is_none() {
+        eprintln!(
+            r#"You instructed Cozo to bind to address {}, which can potentially be accessed from
+external networks. Please note that Cozo is designed to be accessed by trusted clients inside
+trusted environments only. If you are absolutely sure that exposing Cozo to the address is OK,
+set the environment variable COZO_AUTH and configure clients appropriately."#,
+            args.bind
+        );
+        exit(1);
+    }
 
     let builder = DbBuilder::default()
         .path(&args.path)
@@ -37,6 +50,17 @@ fn main() {
     let addr = format!("{}:{}", args.bind, args.port);
     println!("Service running at http://{}", addr);
     rouille::start_server(addr, move |request| {
+        if let Some(auth) = &auth_str {
+            match request.header("x-cozo-auth") {
+                None => return Response::text("Unauthorized").with_status_code(401),
+                Some(code) => {
+                    if auth != code {
+                        return Response::text("Unauthorized").with_status_code(401);
+                    }
+                }
+            }
+        }
+
         router!(request,
             (POST) (/text-query) => {
                 #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
