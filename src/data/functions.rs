@@ -1466,7 +1466,11 @@ pub(crate) fn op_uuid_timestamp(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Uuid(UuidWrapper(id)) => match id.get_timestamp() {
             None => DataValue::Null,
-            Some(t) => (t.to_unix_nanos() as f64 / 1_000_000_000.).into(),
+            Some(t) => {
+                let (s, subs) = t.to_unix();
+                let s = (s as f64) + (subs as f64 / 10_000_000.);
+                s.into()
+            }
         },
         _ => bail!("not an UUID"),
     })
