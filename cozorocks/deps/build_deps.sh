@@ -13,6 +13,8 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
   if [ ! -f ${LD} ]; then echo "${LD} not found"; exit; fi
 fi
 
+N_CORES=$(getconf _NPROCESSORS_ONLN)
+
 export CFLAGS=-fPIE
 export CXXFLAGS=-fPIE
 
@@ -22,27 +24,27 @@ cd gflags
 rm -fr cmake_build
 mkdir cmake_build && cd cmake_build
 cmake ..
-make -j 8
+make -j $N_CORES
 cd ../..
 
 # lz4
 
 cd lz4
 make clean
-make -j 8
+make -j $N_CORES
 cd ..
 
 # zstd
 
 cd zstd
 make clean
-make -j 8
+make -j $N_CORES
 cd ..
 
 # jemalloc
 cd jemalloc
 ./autogen.sh --disable-debug --with-jemalloc-prefix=''
-make -j 8
+make -j $N_CORES
 cd ..
 
 # rocksdb
@@ -63,6 +65,6 @@ cmake -DCMAKE_BUILD_TYPE=Release \
   -DJeMalloc_INCLUDE_DIRS=${PWD}/../../jemalloc/include \
   -DJeMalloc_LIBRARIES=${PWD}/../../jemalloc/lib \
   -DCMAKE_CXX_STANDARD=20 -DWITH_GFLAGS=1 -DWITH_LZ4=1 -DWITH_ZSTD=1 -DUSE_RTTI=1 -DWITH_TESTS=0 \
-  -DWITH_JEMALLOC=1 -DWITH_BENCHMARK_TOOLS=0 -DWITH_CORE_TOOLS=0 -DWITH_TOOLS=0 ..
-make -j 8
+  -DWITH_JEMALLOC=1 -DWITH_BENCHMARK_TOOLS=0 -DWITH_CORE_TOOLS=0 -DWITH_TOOLS=0 -DWITH_TRACE_TOOLS=0 ..
+make -j $N_CORES
 cd ..
