@@ -35,7 +35,7 @@ pub(crate) enum QueryAssertion {
     AssertSome(SourceSpan),
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Default)]
 pub(crate) struct QueryOutOptions {
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
@@ -54,20 +54,20 @@ impl Debug for QueryOutOptions {
 impl Display for QueryOutOptions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(l) = self.limit {
-            write!(f, ":limit {};\n", l)?;
+            writeln!(f, ":limit {};", l)?;
         }
         if let Some(l) = self.offset {
-            write!(f, ":offset {};\n", l)?;
+            writeln!(f, ":offset {};", l)?;
         }
         if let Some(l) = self.timeout {
-            write!(f, ":timeout {};\n", l)?;
+            writeln!(f, ":timeout {};", l)?;
         }
         for (symb, dir) in &self.sorters {
             write!(f, ":order ")?;
             if *dir == SortDir::Dsc {
                 write!(f, "-")?;
             }
-            write!(f, "{};\n", symb)?;
+            writeln!(f, "{};", symb)?;
         }
         if let Some((
             InputRelationHandle {
@@ -124,34 +124,21 @@ impl Display for QueryOutOptions {
                     write!(f, " = {}", bind)?;
                 }
             }
-            write!(f, "}};\n")?;
+            writeln!(f, "}};")?;
         }
 
         if let Some(a) = &self.assertion {
             match a {
                 QueryAssertion::AssertNone(_) => {
-                    write!(f, ":assert none;\n")?;
+                    writeln!(f, ":assert none;")?;
                 }
                 QueryAssertion::AssertSome(_) => {
-                    write!(f, ":assert some;\n")?;
+                    writeln!(f, ":assert some;")?;
                 }
             }
         }
 
         Ok(())
-    }
-}
-
-impl Default for QueryOutOptions {
-    fn default() -> Self {
-        Self {
-            limit: None,
-            offset: None,
-            timeout: None,
-            sorters: vec![],
-            store_relation: None,
-            assertion: None,
-        }
     }
 }
 
@@ -607,7 +594,7 @@ impl Display for InputProgram {
             f.debug_list().entries(&rule.bindings).finish()?;
             write!(f, " <- ")?;
             f.debug_list().entries(&rule.data).finish()?;
-            write!(f, ";\n")?;
+            writeln!(f, ";")?;
         }
         for (name, rules) in &self.prog {
             match rules {
@@ -639,7 +626,7 @@ impl Display for InputProgram {
                             }
                             write!(f, "{}", atom)?;
                         }
-                        write!(f, ";\n")?;
+                        writeln!(f, ";")?;
                     }
                 }
                 InputRulesOrAlgo::Algo {
@@ -673,7 +660,7 @@ impl Display for InputProgram {
                         }
                         write!(f, "{}: {}", k, v)?;
                     }
-                    write!(f, ");\n")?;
+                    writeln!(f, ");")?;
                 }
             }
         }

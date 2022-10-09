@@ -16,7 +16,7 @@ pub(crate) enum SysOp {
     ListRelations,
     ListRunning,
     KillRunning(u64),
-    Explain(InputProgram),
+    Explain(Box<InputProgram>),
     RemoveRelation(Vec<Symbol>),
     RenameRelation(Vec<(Symbol, Symbol)>),
     ShowTrigger(Symbol),
@@ -44,7 +44,7 @@ pub(crate) fn parse_sys(
         }
         Rule::explain_op => {
             let prog = parse_query(inner.into_inner().next().unwrap().into_inner(), param_pool)?;
-            SysOp::Explain(prog)
+            SysOp::Explain(Box::new(prog))
         }
         Rule::list_relations_op => SysOp::ListRelations,
         Rule::remove_relations_op => {

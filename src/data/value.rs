@@ -25,7 +25,7 @@ impl Ord for UuidWrapper {
         s_h.cmp(&o_h)
             .then_with(|| s_m.cmp(&o_m))
             .then_with(|| s_l.cmp(&o_l))
-            .then_with(|| s_rest.cmp(&o_rest))
+            .then_with(|| s_rest.cmp(o_rest))
     }
 }
 

@@ -332,7 +332,7 @@ impl NormalFormProgram {
                                                 bindings,
                                                 span,
                                             } => {
-                                                let relation = tx.get_relation(&name, false)?;
+                                                let relation = tx.get_relation(name, false)?;
                                                 let fields: BTreeSet<_> = relation
                                                     .metadata
                                                     .keys

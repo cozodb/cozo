@@ -1,17 +1,19 @@
 use std::collections::BTreeSet;
 
 use itertools::Itertools;
-use miette::{bail, Diagnostic, ensure, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::SmartString;
 use thiserror::Error;
 
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
-use crate::parse::{ExtractSpan, Pair, Rule, SourceSpan};
 use crate::parse::expr::build_expr;
+use crate::parse::{ExtractSpan, Pair, Rule, SourceSpan};
 
-pub(crate) fn parse_schema(pair: Pair<'_>) -> Result<(StoredRelationMetadata, Vec<Symbol>, Vec<Symbol>)> {
+pub(crate) fn parse_schema(
+    pair: Pair<'_>,
+) -> Result<(StoredRelationMetadata, Vec<Symbol>, Vec<Symbol>)> {
     // assert_eq!(pair.as_rule(), Rule::table_schema);
     let span = pair.extract_span();
 
@@ -55,10 +57,14 @@ pub(crate) fn parse_schema(pair: Pair<'_>) -> Result<(StoredRelationMetadata, Ve
         bail!(EmptySchema(span))
     }
 
-    Ok((StoredRelationMetadata {
-        keys,
-        non_keys: dependents,
-    }, key_bindings, dep_bindings))
+    Ok((
+        StoredRelationMetadata {
+            keys,
+            non_keys: dependents,
+        },
+        key_bindings,
+        dep_bindings,
+    ))
 }
 
 fn parse_col(pair: Pair<'_>) -> Result<(ColumnDef, Symbol)> {
@@ -75,26 +81,28 @@ fn parse_col(pair: Pair<'_>) -> Result<(ColumnDef, Symbol)> {
         match nxt.as_rule() {
             Rule::col_type => typing = parse_nullable_type(nxt)?,
             Rule::expr => default_gen = Some(build_expr(nxt, &Default::default())?),
-            Rule::out_arg => binding_candidate = Some(Symbol::new(nxt.as_str(), nxt.extract_span())),
-            r => unreachable!("{:?}", r)
+            Rule::out_arg => {
+                binding_candidate = Some(Symbol::new(nxt.as_str(), nxt.extract_span()))
+            }
+            r => unreachable!("{:?}", r),
         }
     }
-    let binding = binding_candidate.unwrap_or_else(||
-        Symbol::new(&name as &str, name_p.extract_span()));
-    Ok((ColumnDef {
-        name,
-        typing,
-        default_gen,
-    }, binding))
+    let binding =
+        binding_candidate.unwrap_or_else(|| Symbol::new(&name as &str, name_p.extract_span()));
+    Ok((
+        ColumnDef {
+            name,
+            typing,
+            default_gen,
+        },
+        binding,
+    ))
 }
 
 pub(crate) fn parse_nullable_type(pair: Pair<'_>) -> Result<NullableColType> {
     let nullable = pair.as_str().ends_with('?');
     let coltype = parse_type_inner(pair.into_inner().next().unwrap())?;
-    Ok(NullableColType {
-        coltype,
-        nullable,
-    })
+    Ok(NullableColType { coltype, nullable })
 }
 
 fn parse_type_inner(pair: Pair<'_>) -> Result<ColType> {
@@ -120,17 +128,19 @@ fn parse_type_inner(pair: Pair<'_>) -> Result<ColType> {
                     #[diagnostic(code(parser::bad_list_len_in_type))]
                     struct BadListLenSpec(DataValue, #[label] SourceSpan);
 
-                    let n = dv.get_int()
-                        .ok_or_else(|| BadListLenSpec(dv, span))?;
+                    let n = dv.get_int().ok_or(BadListLenSpec(dv, span))?;
                     ensure!(n >= 0, BadListLenSpec(DataValue::from(n), span));
                     Some(n as usize)
                 }
             };
-            ColType::List { eltype: eltype.into(), len }
+            ColType::List {
+                eltype: eltype.into(),
+                len,
+            }
         }
         Rule::tuple_type => {
-            ColType::Tuple(pair.into_inner().map(|p| parse_nullable_type(p)).try_collect()?)
+            ColType::Tuple(pair.into_inner().map(parse_nullable_type).try_collect()?)
         }
-        _ => unreachable!()
+        _ => unreachable!(),
     })
 }

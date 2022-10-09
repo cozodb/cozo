@@ -790,8 +790,7 @@ impl RelationRA {
                                     ret.extend(found.0);
                                     Ok(Some(Tuple(ret)))
                                 })
-                                .map(swap_option_result)
-                                .flatten(),
+                                .filter_map(swap_option_result),
                         );
                     }
                 }
@@ -810,8 +809,7 @@ impl RelationRA {
                             ret.extend(found.0);
                             Ok(Some(Tuple(ret)))
                         })
-                        .map(swap_option_result)
-                        .flatten(),
+                        .filter_map(swap_option_result),
                 )
             })
             .flatten_ok()
@@ -1169,8 +1167,7 @@ impl InMemRelationRA {
                                     ret.extend(found.0);
                                     Ok(Some(Tuple(ret)))
                                 })
-                                .map(swap_option_result)
-                                .flatten(),
+                                .filter_map(swap_option_result),
                         );
                     }
                 }
@@ -1189,8 +1186,7 @@ impl InMemRelationRA {
                             ret.extend(found.0);
                             Ok(Some(Tuple(ret)))
                         })
-                        .map(swap_option_result)
-                        .flatten(),
+                        .filter_map(swap_option_result),
                 )
             })
             .flatten_ok()

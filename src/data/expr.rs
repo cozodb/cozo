@@ -343,7 +343,7 @@ impl Expr {
                         return val.eval(bindings);
                     }
                 }
-                return Ok(DataValue::Null);
+                Ok(DataValue::Null)
             }
             Expr::Try { clauses, .. } => {
                 if clauses.is_empty() {
@@ -564,8 +564,7 @@ impl<'de> Visitor<'de> for OpVisitor {
         E: Error,
     {
         let name = v.strip_prefix("OP_").unwrap().to_ascii_lowercase();
-        Ok(get_op(&name)
-            .ok_or_else(|| E::custom(format!("op not found in serialized data: {}", v)))?)
+        get_op(&name).ok_or_else(|| E::custom(format!("op not found in serialized data: {}", v)))
     }
 }
 
@@ -703,7 +702,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
 }
 
 impl Op {
-    pub(crate) fn post_process_args(&self, args: &mut Vec<Expr>) {
+    pub(crate) fn post_process_args(&self, args: &mut [Expr]) {
         if self.name.starts_with("OP_REGEX_") {
             args[1] = Expr::Apply {
                 op: &OP_REGEX,

@@ -320,7 +320,7 @@ impl SessionTx {
         let metadata = input_meta.metadata.clone();
         let last_id = self.relation_store_id.fetch_add(1, Ordering::SeqCst);
         let meta = RelationHandle {
-            name: input_meta.name.name.clone(),
+            name: input_meta.name.name,
             id: RelationId::new(last_id + 1),
             metadata,
             put_triggers: vec![],

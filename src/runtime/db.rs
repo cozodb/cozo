@@ -603,7 +603,7 @@ impl Db {
                         self,
                         sorted_iter,
                         *relation_op,
-                        &meta,
+                        meta,
                         &input_program.get_entry_out_head_or_default()?,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
@@ -635,7 +635,7 @@ impl Db {
                         self,
                         scan,
                         *relation_op,
-                        &meta,
+                        meta,
                         &input_program.get_entry_out_head_or_default()?,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;

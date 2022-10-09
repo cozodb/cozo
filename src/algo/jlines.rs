@@ -82,7 +82,7 @@ impl AlgoImpl for JsonReader {
                         let line = line.into_diagnostic()?;
                         let line = line.trim();
                         if !line.is_empty() {
-                            let row = serde_json::from_str(&line).into_diagnostic()?;
+                            let row = serde_json::from_str(line).into_diagnostic()?;
                             process_row(&row)?;
                         }
                     }
@@ -104,12 +104,12 @@ impl AlgoImpl for JsonReader {
                     for line in content.lines() {
                         let line = line.trim();
                         if !line.is_empty() {
-                            let row = serde_json::from_str(&line).into_diagnostic()?;
+                            let row = serde_json::from_str(line).into_diagnostic()?;
                             process_row(&row)?;
                         }
                     }
                 } else {
-                    let data: JsonValue = serde_json::from_str(&content).into_diagnostic()?;
+                    let data: JsonValue = serde_json::from_str(content).into_diagnostic()?;
                     let rows = data
                         .as_array()
                         .ok_or_else(|| miette!("JSON file is not an array"))?;

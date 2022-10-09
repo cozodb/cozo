@@ -154,7 +154,7 @@ impl NullableColType {
 
         let make_err = || DataCoercionFailed(self.clone(), data.clone());
 
-        return Ok(match &self.coltype {
+        Ok(match &self.coltype {
             ColType::Any => data,
             ColType::Int => DataValue::from(data.get_int().ok_or_else(make_err)?),
             ColType::Float => DataValue::from(data.get_float().ok_or_else(make_err)?),
@@ -201,6 +201,6 @@ impl NullableColType {
                     bail!(make_err())
                 }
             }
-        });
+        })
     }
 }
