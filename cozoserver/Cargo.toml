@@ -14,7 +14,6 @@ env_logger = "0.9.0"
 serde = "1.0.144"
 serde_json = "1.0.81"
 serde_derive = "1.0.144"
-rpassword = "7.0.0"
 rouille = "3.5.0"
 cozo = { path = ".." }
 
