@@ -938,9 +938,9 @@ dependencies = [
 
 [[package]]
 name = "nalgebra"
-version = "0.31.1"
+version = "0.31.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9e0a04ce089f9401aac565c740ed30c46291260f27d4911fdbaa6ca65fa3044"
+checksum = "da388c517f7c8540918d00f7aed9864c1ead01a14a0cc21513b171857119de12"
 dependencies = [
  "approx",
  "matrixmultiply",
@@ -1567,9 +1567,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.85"
+version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e55a28e3aaef9d5ce0506d0a14dbba8054ddc7e499ef522dd8b26859ec9d4a44"
+checksum = "41feea4228a6f1cd09ec7a3593a682276702cd67b5273544757dae23c096f074"
 dependencies = [
  "itoa 1.0.4",
  "ryu",
