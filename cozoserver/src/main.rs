@@ -50,19 +50,19 @@ set the environment variable COZO_AUTH and configure clients appropriately."#,
     let addr = format!("{}:{}", args.bind, args.port);
     println!("Service running at http://{}", addr);
     rouille::start_server(addr, move |request| {
-        if let Some(auth) = &auth_str {
-            match request.header("x-cozo-auth") {
-                None => return Response::text("Unauthorized").with_status_code(401),
-                Some(code) => {
-                    if auth != code {
-                        return Response::text("Unauthorized").with_status_code(401);
-                    }
-                }
-            }
-        }
-
         router!(request,
             (POST) (/text-query) => {
+                if let Some(auth) = &auth_str {
+                    match request.header("x-cozo-auth") {
+                        None => return Response::text("Unauthorized").with_status_code(401),
+                        Some(code) => {
+                            if auth != code {
+                                return Response::text("Unauthorized").with_status_code(401);
+                            }
+                        }
+                    }
+                }
+
                 #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
                 struct QueryPayload {
                     script: String,
