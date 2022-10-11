@@ -77,6 +77,8 @@ The above sets up the notebook in the Direct Cozo mode, where cells are default 
 
 In this mode, only cells with the first line content ``%%cozo`` are interpreted as CozoScript. Other cells are interpreted in the normal way (by default, python code). Which mode you use depends on your workflow. We recommend the Indirect mode if you have lots of post-processing and visualizations.
 
+When a query is successfully executed, the result will be bound to the python variable ``_`` as a Pandas dataframe (this is a feature of Jupyter notebooks: the Cozo extension didn't do anything extra).
+
 There are a few other useful magic commands:
 
 * ``%cozo_run_file <PATH_TO_FILE>`` runs a local file as CozoScript.
