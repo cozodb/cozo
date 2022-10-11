@@ -14,6 +14,7 @@ The Cozo Database Manual
    setup
    queries
    stored
+   execution
    sysops
    datatypes
    functions
