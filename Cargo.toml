@@ -45,6 +45,9 @@ uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
 csv = "1.1.6"
 cozorocks = { path = "cozorocks" }
 
+clap = { version = "3.2.8", features = ["derive"] }
+rouille = "3.5.0"
+
 #[target.'cfg(not(target_env = "msvc"))'.dependencies]
 #tikv-jemallocator = { version = "0.5", features = ["disable_initial_exec_tls"] }
 
@@ -55,4 +58,4 @@ cozorocks = { path = "cozorocks" }
 #debug = true
 
 [workspace]
-members = ["cozorocks", "cozoserver"]
+members = ["cozorocks"]
