@@ -5,21 +5,21 @@ Queries
 The Cozo database system is queried using the CozoScript language.
 At its core, CozoScript is a `Datalog <https://en.wikipedia.org/wiki/Datalog>`_ dialect
 supporting stratified negation and stratified recursive meet-aggregations.
-The built-in native algorithms (mainly graph algorithms) further empowers
+The built-in native algorithms (mainly graph algorithms) further empower
 CozoScript for much greater ease of use and much wider applicability.
 
 A query consists of one or many named rules.
-Each named rule conceptually represents a relation, or a table with rows and columns.
+Each named rule conceptually represents a relation or a table with rows and columns.
 The rule named ``?`` is called the entry to the query,
 and its associated relation is returned as the result of the query.
 Each named rule has associated with it a rule head, which names the columns of the relation,
 and a rule body, which specifies the content of the relation, or how the content should be computed.
 
-In CozoScript, relations (stored relations or relations defined by rules) abide by the *set semantics*, 
+In CozoScript, relations (stored relations or relations defined by rules) abide by the *set semantics*,
 meaning that even if a rule may compute a row multiple times, it will occur only once in the output.
 This is in contradistinction to SQL.
 
-There are three types of named rules in CozoScript: constant rules, Horn-clause rules and algorithm application.
+There are three types of named rules in CozoScript: constant rules, Horn-clause rules and algorithm applications.
 
 -----------------
 Constant rules
@@ -31,7 +31,7 @@ The following is an example of a constant rule::
 
 Constant rules are distinguished by the symbol ``<-`` separating the rule head and rule body.
 The rule body should be an expression evaluating to a list of lists:
-every subslist of the the rule body should be of the same length (the *arity* of the rule), 
+every subslist of the rule body should be of the same length (the *arity* of the rule),
 and must match the number of arguments in the rule head.
 In general, if you are passing data into the query,
 you should take advantage of named parameters::
@@ -44,17 +44,17 @@ The rule head may be omitted if the rule body is not the empty list::
 
     const_rule[] <- [[1, 2, 3], [4, 5, 6]]
 
-in which case the system will deduce that the arity of the rule from the data.
+in which case the system will deduce the arity of the rule from the data.
 
 -----------------
 Horn-clause rules
 -----------------
 
-An example of Horn-clause rule is::
+An example of a Horn-clause rule is::
 
     hc_rule[a, e] := rule_a['constant_string', b], rule_b[b, d, a, e]
 
-As can be seen, Horn-clause rule is distinguished by the symbol ``:=`` separating the rule head and rule body.
+As can be seen, Horn-clause rules are distinguished by the symbol ``:=`` separating the rule head and rule body.
 The rule body of a Horn-clause rule consists of multiple *atoms* joined by commas,
 and is interpreted as representing the *conjunction* of these atoms.
 
@@ -62,42 +62,42 @@ and is interpreted as representing the *conjunction* of these atoms.
 Atoms
 ^^^^^^^^^^^^^^
 
-Atoms comes in various flavours.
+Atoms come in various flavours.
 In the example above::
 
     rule_a['constant_string', b]
 
-is an atom representing a *rule application*: a rule named ``rule_a`` must exists in the same query 
+is an atom representing a *rule application*: a rule named ``rule_a`` must exist in the same query
 and have the correct arity (2 here).
 Each row in the named rule is then *unified* with the bindings given as parameters in the square bracket:
 here the first column is unified with a constant string, and unification succeeds only when the string
-completely matches what is given; 
-the second column is unified with the *variable* ``b``, 
-and as the variable is fresh at this point (meaning that it first appears here), 
+completely matches what is given;
+the second column is unified with the *variable* ``b``,
+and as the variable is fresh at this point (meaning that it first appears here),
 the unification will always succeed and the variable will become *bound*:
-from this point take on value of whatever it was
+from this point take on the value of whatever it was
 unified with in the named relation.
 
 When a bound variable is used again later, for example in ``rule_b[b, d, a, e]``, the variable ``b`` was bound
 at this point, this unification will only succeed when the unified value is the same as the previously unified value.
 In other words, repeated use of the same variable in named rules corresponds to inner joins in relational algebra.
 
-Another flavour of atoms is the *stored relation*. It may be written similarly to a rule application:
+Another flavour of atoms is the *stored relation*. It may be written similarly to a rule application::
 
     :stored_relation[bind1, bind2]
 
-with the colon in front of the stored relation name to distinguish it from rule application. 
-Written in this way, you must give as many bindings to the stored relation as its arity, 
-and the bindings proceed by arguments positions, which may be cumbersome and error-prone.
-So alternatively, you may use the fact that columns of a stored relation are always named and bind by name:
+with the colon in front of the stored relation name to distinguish it from rule application.
+Written in this way, you must give as many bindings to the stored relation as its arity,
+and the bindings proceed by argument positions, which may be cumbersome and error-prone.
+So alternatively, you may use the fact that columns of a stored relation are always named and bind by name::
 
     :stored_relation{col1: bind1, col2: bind2}
 
-In this case, you only need to bind as many variables as you use. 
+In this case, you only need to bind as many variables as you use.
 If the name you want to give the binding is the same as the name of the column, you may use the shorthand notation:
 ``:stored_relation{col1}`` is the same as ``:stored_relation{col1: col1}``.
 
-*Expressions* are also atoms, such as
+*Expressions* are also atoms, such as::
 
     a > b + 1
 
@@ -107,18 +107,18 @@ You can also use *unification atoms* to unify explicitly::
 
     a = b + c + d
 
-for such atoms, whatever appears on the left hand side must be a single variable, and is unified with the right hand side.
-This is different from the equality operator ``==``, 
+for such atoms, whatever appears on the left-hand side must be a single variable and is unified with the right-hand side.
+This is different from the equality operator ``==``,
 where both sides are merely required to be expressions.
-When the left hand side is a single *bound* variable, 
+When the left-hand side is a single *bound* variable,
 it may be shown that the equality and the unification operators are semantically equivalent.
 
 Another form of *unification atom* is the explicit multi-unification::
 
     a in [x, y, z]
 
-here the variable on the left hand side of ``in`` is unified with each item in the right hand side in turn, 
-which in turn implies that the right hand side must evaluate to a list 
+here the variable on the left-hand side of ``in`` is unified with each item on the right-hand side in turn,
+which in turn implies that the right-hand side must evaluate to a list
 (but may be represented by a single variable or a function call).
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -126,7 +126,7 @@ Head and returned relation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Atoms, as explained above, corresponds to either relations (or their projections) or filters in relational algebra.
-Linked by commas, they therefore represent a joined relation, with named columns.
+Linked by commas, they, therefore, represent a joined relation, with named columns.
 The *head* of the rule, which in the simplest case is just a list of variables,
 then defines whichever columns to keep, and their order in the output relation.
 
@@ -136,11 +136,11 @@ Each variable in the head must be bound in the body, this is one of the *safety 
 Multiple definitions and disjunction
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For Horn-clause rules only, multiple rule definitions may share the same name, 
+For Horn-clause rules only, multiple rule definitions may share the same name,
 with the requirement that the arity of the head in each definition must match.
 The returned relation is then the *disjunction* of the multiple definitions,
 which correspond to *union* in SQL.
-*Intersect* in SQL can be written in CozoScript into a single rule, since commas denote conjunction.
+*Intersect* in SQL can be written in CozoScript into a single rule since commas denote conjunction.
 In complicated situations, you may instead write disjunctions in a single rule with the explicit ``or`` operator::
 
     rule1[a, b] := rule2[a] or rule3[a], rule4[a, b]
@@ -148,10 +148,10 @@ In complicated situations, you may instead write disjunctions in a single rule w
 For completeness, there is also an explicit ``and`` operator, but it is semantically identical to the comma, except that
 it has higher operator precedence than ``or``, which in turn has higher operator precedence than the comma.
 
-During evaluation, each rule is canonicalized into disjunction normal form 
+During evaluation, each rule is canonicalized into disjunction normal form
 and each clause of the outmost disjunction is treated as a separate rule.
-The consequence is that the safety rule may be violated 
-even though textually every variable in the head occurs textually in the body.
+The consequence is that the safety rule may be violated
+even though textually every variable in the head occurs in the body.
 As an example::
 
     rule[a, b] := rule1[a] or rule2[b]
@@ -162,37 +162,37 @@ is a violation of the safety rule since it is rewritten into two rules, each of 
 Negation
 ^^^^^^^^^^^^^^^^
 
-Atoms in Horn clause may be *negated* by putting ``not`` in front of them, as in::
+Atoms in Horn clauses may be *negated* by putting ``not`` in front of them, as in::
 
     not rule1[a, b]
 
-When negating rule applications and stored relations, 
-at least one binding must be bound somewhere else in the rule in a non-negated context: 
-this is another safety rule of Datalog, and it ensures that the output of rules are always finite.
+When negating rule applications and stored relations,
+at least one binding must be bound somewhere else in the rule in a non-negated context:
+this is another safety rule of Datalog, and it ensures that the outputs of rules are always finite.
 The unbound bindings in negated rules remain unbound: negation cannot introduce bound bindings to be used in the head.
 
-Negated expressions act as negative filters, 
+Negated expressions act as negative filters,
 which is semantically equivalent to putting ``!`` in front of the expression.
-Since negation does not introduce new bindings, 
-unifications and multi-unifications are are converted to the equivalent expressions and then negated.
+Since negation does not introduce new bindings,
+unifications and multi-unifications are converted to equivalent expressions and then negated.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Recursion and stratification
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The body of a Horn-clause rule may contain rule applications of itself, 
+The body of a Horn-clause rule may contain rule applications of itself,
 and multiple Horn-clause rules may apply each other recursively.
 The only exception is the entry rule ``?``, which cannot be referred to by other rules.
 
-Self and mutual references allows recursion to be defined easily. To guard against semantically pathological cases,
+Self and mutual references allow recursion to be defined easily. To guard against semantically pathological cases,
 recursion cannot occur in negated positions: the Russell-style rule ``r[a] := not r[a]`` is not allowed.
 This requirement creates an ordering of the rules, since
-negated rules must evaluate to completion before rules that apply then can start evaluation:
+negated rules must evaluate to completion before rules that apply them can start evaluation:
 this is called *stratification* of the rules.
-In cases where an total ordering cannot be defined since there exists a loop in the ordering
+In cases where a total ordering cannot be defined since there exists a loop in the ordering
 required by negation, the query is then deemed unstratifiable and Cozo will refuse to execute it.
 
-Note that since CozoScript allows unifying fresh variables, you can still easily write program that produce
+Note that since CozoScript allows unifying fresh variables, you can still easily write programs that produce
 infinite relations and hence cannot complete through recursion, but that are still accepted by the database.
 One of the simplest examples is::
 
@@ -200,9 +200,9 @@ One of the simplest examples is::
     r[a] := r[b], a = b + 1
     ?[a] := r[a]
 
-It is up to the user to ensure that such programs are not submitted to the database, 
+It is up to the user to ensure that such programs are not submitted to the database,
 as it is not even in principle possible for the database to rule out such cases without wrongly rejecting valid queries.
-If you accidentally submitted one, you can refer to the system ops section for how to terminate long running queries.
+If you accidentally submitted one, you can refer to the system ops section for how to terminate long-running queries.
 Or you can give a timeout for the query when you submit.
 
 ----------------------------------
