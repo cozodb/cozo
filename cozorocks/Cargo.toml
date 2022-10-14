@@ -9,7 +9,11 @@ license = "AGPL-3.0-or-later"
 [dependencies]
 cxx = "1.0.69"
 miette = "5.3.0"
-librocksdb-sys = { version = "=0.8.0", features = ["static", "jemalloc", "lz4", "zstd", "rtti"] }
+librocksdb-sys = { version = "=0.8.0", features = ["lz4", "zstd"] }
+
+[features]
+jemalloc = ["librocksdb-sys/jemalloc"]
+io-uring = ["librocksdb-sys/io-uring"]
 
 [build-dependencies]
 cxx-build = "1.0.69"

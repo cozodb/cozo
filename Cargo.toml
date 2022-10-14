@@ -8,6 +8,10 @@ license = "AGPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+jemalloc = ["tikv-jemallocator-global", "cozorocks/jemalloc"]
+io-uring = ["cozorocks/io-uring"]
+
 [dependencies]
 casey = "0.3.3"
 either = "1.7.0"
@@ -43,7 +47,7 @@ unicode-normalization = "0.1.21"
 thiserror = "1.0.34"
 uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
 csv = "1.1.6"
-tikv-jemallocator-global = "0.5.0"
+tikv-jemallocator-global = { version = "0.5.0", optional = true }
 cozorocks = { path = "cozorocks" }
 
 clap = { version = "3.2.8", features = ["derive"] }
