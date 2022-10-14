@@ -30,3 +30,4 @@ _test*
 flamegraph.svg
 release.zip
 .idea
+.fleet

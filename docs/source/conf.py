@@ -29,3 +29,4 @@ latex_show_urls = 'footnote'
 html_theme = 'furo'
 html_static_path = ['_static']
 html_title = "Cozo Manual"
+html_baseurl = '/manual/'
