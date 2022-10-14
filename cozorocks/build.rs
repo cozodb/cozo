@@ -24,6 +24,14 @@ fn main() {
         builder.flag("-Wno-strict-aliasing");
         builder.flag("-Wno-invalid-offsetof");
     };
+
+    #[cfg(feature = "io-uring")]
+    if target.contains("linux") {
+        pkg_config::probe_library("liburing")
+            .expect("The io-uring feature was requested but the library is not available");
+        config.define("ROCKSDB_IOURING_PRESENT", Some("1"));
+    }
+
     builder.compile("cozorocks");
     println!("cargo:rustc-link-lib=static=rocksdb");
     println!("cargo:rustc-link-lib=static=zstd");

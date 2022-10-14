@@ -13,7 +13,7 @@ librocksdb-sys = { version = "=0.8.0", features = ["lz4", "zstd"] }
 
 [features]
 jemalloc = ["librocksdb-sys/jemalloc"]
-io-uring = ["librocksdb-sys/io-uring"]
+io-uring = ["librocksdb-sys/io-uring", "pkg-config"]
 
 [build-dependencies]
 cxx-build = "1.0.69"
