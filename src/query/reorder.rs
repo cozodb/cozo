@@ -17,6 +17,11 @@ You may also encounter this error if your rule can never produce any rows."
 ))]
 pub(crate) struct UnsafeNegation(#[label] pub(crate) SourceSpan);
 
+#[derive(Diagnostic, Debug, Error)]
+#[error("Atom contains unbound variable")]
+#[diagnostic(code(eval::unbound_variable))]
+pub(crate) struct UnboundVariable(#[label] pub(crate) SourceSpan);
+
 impl NormalFormRule {
     pub(crate) fn convert_to_well_ordered_rule(self) -> Result<Self> {
         let mut seen_variables = BTreeSet::default();
@@ -88,8 +93,7 @@ impl NormalFormRule {
             }
             for atom in last_pending.iter() {
                 match atom {
-                    NormalFormAtom::Rule(_)
-                    | NormalFormAtom::Relation(_) => unreachable!(),
+                    NormalFormAtom::Rule(_) | NormalFormAtom::Relation(_) => unreachable!(),
                     NormalFormAtom::NegatedRule(r) => {
                         if r.args.iter().all(|a| seen_variables.contains(a)) {
                             collected.push(NormalFormAtom::NegatedRule(r.clone()));
@@ -125,8 +129,7 @@ impl NormalFormRule {
         if !pending.is_empty() {
             for atom in pending {
                 match atom {
-                    NormalFormAtom::Rule(_)
-                    | NormalFormAtom::Relation(_) => unreachable!(),
+                    NormalFormAtom::Rule(_) | NormalFormAtom::Relation(_) => unreachable!(),
                     NormalFormAtom::NegatedRule(r) => {
                         if r.args.iter().any(|a| seen_variables.contains(a)) {
                             collected.push(NormalFormAtom::NegatedRule(r.clone()));
@@ -142,10 +145,10 @@ impl NormalFormRule {
                         }
                     }
                     NormalFormAtom::Predicate(p) => {
-                        bail!(UnsafeNegation(p.span()))
+                        bail!(UnboundVariable(p.span()))
                     }
                     NormalFormAtom::Unification(u) => {
-                        bail!(UnsafeNegation(u.span))
+                        bail!(UnboundVariable(u.span))
                     }
                 }
             }
