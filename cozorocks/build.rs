@@ -84,7 +84,6 @@ fn cxx_standard() -> String {
 }
 
 fn link(name: &str, bundled: bool) {
-    use std::env::var;
     let target = var("TARGET").unwrap();
     let target: Vec<_> = target.split('-').collect();
     if target.get(2) == Some(&"windows") {
