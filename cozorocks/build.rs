@@ -35,19 +35,19 @@ fn main() {
     if target.contains("windows") {
         link("rpcrt4", false);
         link("shlwapi", false);
-        config.define("DWIN32", None);
-        config.define("OS_WIN", None);
-        config.define("_MBCS", None);
-        config.define("WIN64", None);
-        config.define("NOMINMAX", None);
-        config.define("ROCKSDB_WINDOWS_UTF8_FILENAMES", None);
+        builder.define("DWIN32", None);
+        builder.define("OS_WIN", None);
+        builder.define("_MBCS", None);
+        builder.define("WIN64", None);
+        builder.define("NOMINMAX", None);
+        builder.define("ROCKSDB_WINDOWS_UTF8_FILENAMES", None);
 
         if &target == "x86_64-pc-windows-gnu" {
             // Tell MinGW to create localtime_r wrapper of localtime_s function.
-            config.define("_POSIX_C_SOURCE", Some("1"));
+            builder.define("_POSIX_C_SOURCE", Some("1"));
             // Tell MinGW to use at least Windows Vista headers instead of the ones of Windows XP.
             // (This is minimum supported version of rocksdb)
-            config.define("_WIN32_WINNT", Some("_WIN32_WINNT_VISTA"));
+            builder.define("_WIN32_WINNT", Some("_WIN32_WINNT_VISTA"));
         }
     }
 
@@ -55,7 +55,7 @@ fn main() {
     println!("cargo:rustc-link-lib=static=rocksdb");
     println!("cargo:rustc-link-lib=static=zstd");
     println!("cargo:rustc-link-lib=static=lz4");
-    if cfg!(feature = "snappy") {
+    if cfg!(feature = "lib-uring") {
         println!("cargo:rustc-link-lib=static=uring");
     }
 
@@ -81,4 +81,17 @@ fn cxx_standard() -> String {
             cxx_std
         }
     })
+}
+
+fn link(name: &str, bundled: bool) {
+    use std::env::var;
+    let target = var("TARGET").unwrap();
+    let target: Vec<_> = target.split('-').collect();
+    if target.get(2) == Some(&"windows") {
+        println!("cargo:rustc-link-lib=dylib={}", name);
+        if bundled && target.get(3) == Some(&"gnu") {
+            let dir = var("CARGO_MANIFEST_DIR").unwrap();
+            println!("cargo:rustc-link-search=native={}/{}", dir, target[0]);
+        }
+    }
 }
