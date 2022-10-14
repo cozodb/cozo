@@ -435,6 +435,7 @@ dependencies = [
  "cxx-build",
  "librocksdb-sys",
  "miette",
+ "pkg-config",
 ]
 
 [[package]]
