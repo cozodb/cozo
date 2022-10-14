@@ -29,7 +29,7 @@ fn main() {
     if target.contains("linux") {
         pkg_config::probe_library("liburing")
             .expect("The io-uring feature was requested but the library is not available");
-        config.define("ROCKSDB_IOURING_PRESENT", Some("1"));
+        builder.define("ROCKSDB_IOURING_PRESENT", Some("1"));
     }
 
     builder.compile("cozorocks");
