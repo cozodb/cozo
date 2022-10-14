@@ -43,6 +43,7 @@ unicode-normalization = "0.1.21"
 thiserror = "1.0.34"
 uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
 csv = "1.1.6"
+tikv-jemallocator-global = "0.5.0"
 cozorocks = { path = "cozorocks" }
 
 clap = { version = "3.2.8", features = ["derive"] }
