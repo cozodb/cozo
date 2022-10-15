@@ -205,10 +205,143 @@ as it is not even in principle possible for the database to rule out such cases 
 If you accidentally submitted one, you can refer to the system ops section for how to terminate long-running queries.
 Or you can give a timeout for the query when you submit.
 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Aggregation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+CozoScript supports aggregations, as does SQL, which provides a very useful extension to pure relational algebra.
+In CozoScript, aggregations are specified for Horn-clause rules by applying aggregation operators to variables 
+in the rule head, as in::
+
+    ?[department, count(employee)] := :personnel{department, employee}
+
+here we have use the ``count`` operator familiar to all SQL users. 
+The sementics is that any variables in the head without aggregation operators are treated as *grouping variables*,
+similar to what appears in a ``GROUP BY`` clause in SQL, and the aggregation is applied using the grouping variables
+as keys. If you do not specify any grouping variables, then you get at most one row as the return value.
+
+As we now understand, CozoScript follows relational algebra with set semantics. 
+With the introduction of aggregations, the situation is a little bit more complicated, 
+as aggregations are applied to the relation resulting from the body of the rule using bag semantics,
+and the resulting relation of the rule, after aggregations are applied, follow set semantics.
+The reason for this complication is that if aggregations are applied with set semantics, then the following query::
+
+    ?[count(employee)] := :personnel{employee}
+
+does not do what you expect: it either returns a row with a single value ``1`` if there are any matching rows, 
+or it returns nothing at all if the stored relation ``:personnel`` is empty. 
+Though semantically sound, this behaviour is not useful at all.
+So for aggregations we opt for bag semantics, and the query does what one expects.
+
+If a rule has several definitions, they must have identical aggregations applied in the same positions,
+otherwise the query will be rejected. 
+The reason is that in complicated situations the sementics is ambiguous and counter-intuitive if we do allow it.
+
+Existing database systems do not usually allow aggregations through recursion, 
+since in many cases it is difficult to give a useful semantics to such queries.
+In CozoScript we allow aggregations for self-recursion for a limited subset of aggregation operators, 
+the so-called *meet aggregations*, such as the following example shows::
+
+    shortest_distance[destination, min(distance)] := route{source: 'A', destination, distance}
+    shortest_distance[destination, min(distance)] := 
+        shortest_distance[existing_node, prev_distance], # recursion
+        route{source: existing_node, distance: route_distance},
+        distance = prev_distance + route_distance
+    ?[destination, min_distance] := shortest_distance[destination, min_distance]
+
+this query computes the shortest distances from a node to all nodes using the ``min`` aggregation operator.
+
+With respect to stratification, if a rule has aggregations in its head, 
+then any rule that contains it in an atom must be in a higher stratum, 
+unless that rule is the same rule (self-recursion) and all aggregations in its head are meet aggregations.
+
+For the aggregation operators available and more details of what "meet" aggregations mean, see the dedicated chapter.
+
 ----------------------------------
 Algorithm application
 ----------------------------------
 
+The final type of named rule, algorithm applications, is specified by the algorithm name, 
+take a specified number of named or stored relations as inputs relations, and have specific options that you provide.
+The following query is a calculation of PageRank::
+
+    ?[] <~ PageRank(:route[], theta: 0.5)
+
+Algorithm applications are distinguished by the curly arrow ``<~``.
+In the above example, the relation ``:route`` is the single input relation expected.
+Algorithms do not care if an input relation is stored or results from a rule.
+Each algorithm expects specific shapes of input relations, 
+for example, PageRank expects the first two columns of the relation to denote the source and destination
+of links in a graph. You must consult the documentation for each algorithm to understand its API.
+In algorithm applications, bindings for input relations are usually omitted, but sometimes if they are provided
+they are interpreted and used in algorithm-specific ways, for example in the DFS algorithm bindings
+can be used to construct a expression for testing the termination condition.
+In the example, ``theta`` is a parameter of the algorithm, which is an expression evaluating to a constant.
+Each algorithm expects specific types for parameters, and some parameters have default values and may be omitted.
+
+Each algorithm has a determinate output arity. Usually you omit the bindings in the rule head, as we do above,
+but if you do provide bindings, the arities must match.
+
+In terms of stratification, each algorithm application lives in its own stratum: 
+it is evaluated after all rules it depends on are completely evaluated, 
+and all rules depending on the output relation of an algorithm starts evaluation only after complete evaluation
+of the algorithm. In particular, unlike Horn-clause rules, there is no early termination even if the output relation
+is for the entry rule.
+
 -----------------------
 Query options
 -----------------------
+
+Each query can have query options associated with it::
+
+    ?[name] := :personnel{name}
+
+    :limit 10
+    :offset 20
+
+In the example, ``:limit`` and ``:offset`` are query options, with familiar meaning from SQL. 
+All query options starts with a single colon ``:``. 
+Queries options can appear before or after rules, or even sandwiched between rules.
+Use this freedom for best readability.
+
+There are a number of query options that deal with transactions for the database. 
+Those will be discussed in the chapter on stored relations and transactions. 
+Here we explain query options that exclusively affects the query itself.
+
+.. module:: QueryOp
+    :noindex:
+
+.. function:: :limit <N>
+
+    Limit output relation to at most ``<N>`` rows. 
+    If possible, execution will stop as soon as this number of output rows are collected.
+
+.. function:: :offset <N>
+
+    Skip the first ``<N>`` rows of the returned relation.
+
+.. function:: :timeout <N>
+
+    If the query does not complete within ``<N>`` seconds, abort.
+
+.. function:: :sort SORT_ARG (, SORT_ARG)*
+
+    Sort the output relation before applying other options or returnining. 
+    Specify ``SORT_ARG`` as they appear in the rule head of the entry, separated by commas. 
+    You can optionally specify the sort direction of each argument by prefixing them with ``+`` or ``-``,
+    with minus denoting descending sort. As an example, ``:sort -count(employee), dept_name`` 
+    sorts by employee count descendingly first, then break ties with department name in ascending alphabetical order.
+    Note that your entry rule head must contain both ``dept_name`` and ``count(employee)``: 
+    aggregations must be done in Horn-rules, not in output sorting.  ``:order`` is an alias for ``:sort``.
+
+.. function:: :assert none
+
+    With this option, the query returns nothing if the output relation is empty, otherwise execution aborts with an error.
+    Essential for transactions and triggers.
+
+.. function:: :assert some
+
+    With this option, the query returns nothing if the output relation contains at least one row, 
+    otherwise execution aborts with an error. 
+    Execution of the query stops as soon as the first row is produced if possible.
+    Essential for transactions and triggers.
