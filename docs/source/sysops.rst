@@ -5,11 +5,20 @@ System ops
 .. module:: SysOp
     :noindex:
 
+System ops start with a double-colon ``::`` and must appear alone in a script. 
+In the following we explain what each system op does, and the arguments they expect.
+
 --------------
 Explain
 --------------
 
 .. function:: ::explain { <query> }
+
+    A single query is enclosed in curly braces. Query options are allowed but ignored. 
+    The query is not executed, but its query plan is returned instead. 
+    Currently there is no specification for the return format, 
+    but if you are familiar with semi-naive evaluation of stratified Datalog programs
+    subject to magic-set rewrites, the returned data is pretty self-explanatory.
 
 ----------------------------------
 Ops on stored relations
@@ -17,15 +26,27 @@ Ops on stored relations
 
 .. function:: ::relations
 
-.. function:: ::relation columns <rel_name>
+    List all stored relations currently in the database
 
-.. function:: ::relation remove <rel_name> (, <rel_name>)*
+.. function:: ::relation columns <REL_NAME>
 
-.. function:: ::relation rename <old_name> -> <new_name> (, <old_name> -> <new_name>)*
+    List all columns for the stored relation ``<REL_NAME>``.
 
-.. function:: ::relation set_triggers <ident> <triggers>
+.. function:: ::relation remove <REL_NAME> (, <REL_NAME>)*
 
-.. function:: ::relation show_triggers <ident>
+    Remove stored relations. Several can be specified, joined by commas.
+
+.. function:: ::relation rename <OLD_NAME> -> <NEW_NAME> (, <OLD_NAME> -> <NEW_NAME>)*
+
+    Rename stored relation ``<OLD_NAME>`` into ``<NEW_NAME>``. Several may be specified, joined by commas.
+
+.. function:: ::relation show_triggers <REL_NAME>
+
+    Display triggers associated with the stored relation ``<REL_NAME>``.
+
+.. function:: ::relation set_triggers <REL_NAME> <TRIGGERS>
+
+    Set triggers for the stored relation ``<REL_NAME>``. This is explained in more details in the transactions chapter.
 
 ------------------------------------
 Monitor and kill
@@ -33,10 +54,17 @@ Monitor and kill
 
 .. function:: ::running
 
-.. function:: ::kill <pid>
+    Display currently running queries and their IDs.
+
+.. function:: ::kill <ID>
+
+    Kill a running query specified by ``<ID>``. The ID may be obtained by ``::running``.
 
 ------------------------------------
 Maintenance
 ------------------------------------
 
 .. function:: ::compact
+
+    Run compaction on the database. Running this may make the database smaller on disk and faster for queries, 
+    but running the op itself may take some time in the background.
