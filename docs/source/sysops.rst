@@ -6,7 +6,7 @@ System ops
     :noindex:
 
 System ops start with a double-colon ``::`` and must appear alone in a script. 
-In the following we explain what each system op does, and the arguments they expect.
+In the following, we explain what each system op does, and the arguments they expect.
 
 --------------
 Explain
@@ -14,10 +14,10 @@ Explain
 
 .. function:: ::explain { <query> }
 
-    A single query is enclosed in curly braces. Query options are allowed but ignored. 
-    The query is not executed, but its query plan is returned instead. 
-    Currently there is no specification for the return format, 
-    but if you are familiar with semi-naive evaluation of stratified Datalog programs
+    A single query is enclosed in curly braces. Query options are allowed but ignored.
+    The query is not executed, but its query plan is returned instead.
+    Currently, there is no specification for the return format,
+    but if you are familiar with the semi-naïve evaluation of stratified Datalog programs
     subject to magic-set rewrites, the returned data is pretty self-explanatory.
 
 ----------------------------------
@@ -46,7 +46,7 @@ Ops on stored relations
 
 .. function:: ::relation set_triggers <REL_NAME> <TRIGGERS>
 
-    Set triggers for the stored relation ``<REL_NAME>``. This is explained in more details in the transactions chapter.
+    Set triggers for the stored relation ``<REL_NAME>``. This is explained in more detail in the transactions chapter.
 
 ------------------------------------
 Monitor and kill
