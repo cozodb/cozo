@@ -58,7 +58,7 @@ relation_named_apply = {relation_ident ~ "{" ~ named_apply_args ~ "}"}
 relation_apply = {relation_ident ~ "[" ~ apply_args ~ "]"}
 
 disjunction = {(atom ~ "or" )* ~ atom}
-atom = _{grouped | negation | relation_named_apply | relation_apply | rule_apply | unify_multi | unify | expr }
+atom = _{ negation | relation_named_apply | relation_apply | rule_apply | unify_multi | unify | expr | grouped}
 unify = {var ~ "=" ~ expr}
 unify_multi = {var ~ "in" ~ expr}
 negation = {"not" ~ atom}
@@ -79,7 +79,7 @@ op_sub = { "-" }
 op_mul = { "*" }
 op_div = { "/" }
 op_mod = { "%" }
-op_eq = { "=="| "=" }
+op_eq = { "==" }
 op_ne = { "!=" }
 op_gt = { ">" }
 op_lt = { "<" }

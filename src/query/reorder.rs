@@ -18,7 +18,7 @@ You may also encounter this error if your rule can never produce any rows."
 pub(crate) struct UnsafeNegation(#[label] pub(crate) SourceSpan);
 
 #[derive(Diagnostic, Debug, Error)]
-#[error("Atom contains unbound variable")]
+#[error("Atom contains unbound variable, or rule contains no variable at all")]
 #[diagnostic(code(eval::unbound_variable))]
 pub(crate) struct UnboundVariable(#[label] pub(crate) SourceSpan);
 
