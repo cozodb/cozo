@@ -11,9 +11,9 @@ The power of meet aggregations derive from the additional properties they satisf
 
     idempotency
         the aggregate of a single value ``a`` is ``a`` itself,
-    commutivity
+    commutativity
         the aggregate of ``a`` then ``b`` is equal to the aggregate of ``b`` then ``a``,
-    commutivity
+    associativity
         it is immaterial where we put the parentheses in an aggregate application.
 
 Meet aggregations can be used as ordinary ones, but the reverse is impossible.
