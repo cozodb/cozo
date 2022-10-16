@@ -12,21 +12,11 @@ use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::{Symbol, PROG_ENTRY};
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::transact::SessionTx;
-
-pub(crate) type ConstRules = BTreeMap<MagicSymbol, ConstRule>;
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct ConstRule {
-    pub(crate) bindings: Vec<Symbol>,
-    pub(crate) data: Vec<Tuple>,
-    pub(crate) span: SourceSpan,
-}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) enum QueryAssertion {
@@ -595,19 +585,11 @@ impl MagicAlgoRuleArg {
 #[derive(Debug, Clone)]
 pub(crate) struct InputProgram {
     pub(crate) prog: BTreeMap<Symbol, InputRulesOrAlgo>,
-    pub(crate) const_rules: ConstRules,
     pub(crate) out_opts: QueryOutOptions,
 }
 
 impl Display for InputProgram {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for (name, rule) in &self.const_rules {
-            write!(f, "{}", name.symbol())?;
-            f.debug_list().entries(&rule.bindings).finish()?;
-            write!(f, " <- ")?;
-            f.debug_list().entries(&rule.data).finish()?;
-            writeln!(f, ";")?;
-        }
         for (name, rules) in &self.prog {
             match rules {
                 InputRulesOrAlgo::Rules { rules, .. } => {
@@ -702,16 +684,6 @@ impl InputProgram {
             };
         }
 
-        if let Some(ConstRule { bindings, data, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
-            inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
-        }) {
-            if bindings.is_empty() {
-                return Ok(data.get(0).map(|row| row.0.len()).unwrap_or(0));
-            } else {
-                return Ok(bindings.len());
-            }
-        }
-
         Err(NoEntryError.into())
     }
     pub(crate) fn get_entry_out_head_or_default(&self) -> Result<Vec<Symbol>> {
@@ -758,16 +730,6 @@ impl InputProgram {
                         Ok(algo_apply.head.to_vec())
                     }
                 }
-            };
-        }
-
-        if let Some(ConstRule { bindings, span, .. }) = self.const_rules.get(&MagicSymbol::Muggle {
-            inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
-        }) {
-            return if bindings.is_empty() {
-                Err(EntryHeadNotExplicitlyDefinedError(*span).into())
-            } else {
-                Ok(bindings.to_vec())
             };
         }
 

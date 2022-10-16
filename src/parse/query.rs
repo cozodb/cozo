@@ -9,17 +9,17 @@ use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
+use crate::algo::constant::Constant;
 use crate::algo::AlgoHandle;
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::program::{
-    AlgoApply, AlgoRuleArg, ConstRule, ConstRules, InputAtom, InputNamedFieldRelationApplyAtom,
-    InputProgram, InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo,
-    MagicSymbol, QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
+    AlgoApply, AlgoRuleArg, InputAtom, InputNamedFieldRelationApplyAtom, InputProgram,
+    InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, QueryAssertion,
+    QueryOutOptions, RelationOp, SortDir, Unification,
 };
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::expr::build_expr;
 use crate::parse::schema::parse_schema;
@@ -85,23 +85,13 @@ pub(crate) fn parse_query(
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputRulesOrAlgo> = Default::default();
-    let mut const_rules: ConstRules = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
     let mut stored_relation = None;
 
     for pair in src {
         match pair.as_rule() {
             Rule::rule => {
-                let rule_span = pair.extract_span();
                 let (name, rule) = parse_rule(pair, param_pool)?;
-                if let Some(found) = const_rules.get(&MagicSymbol::Muggle {
-                    inner: name.clone(),
-                }) {
-                    bail!(MultipleRuleDefinitionError(
-                        name.name.to_string(),
-                        vec![rule_span, found.span]
-                    ));
-                }
 
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
@@ -146,14 +136,7 @@ pub(crate) fn parse_query(
             Rule::algo_rule => {
                 let rule_span = pair.extract_span();
                 let (name, apply) = parse_algo_rule(pair, param_pool)?;
-                if let Some(found) = const_rules.get(&MagicSymbol::Muggle {
-                    inner: name.clone(),
-                }) {
-                    bail!(MultipleRuleDefinitionError(
-                        name.name.to_string(),
-                        vec![rule_span, found.span]
-                    ));
-                }
+
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
                         e.insert(InputRulesOrAlgo::Algo { algo: apply });
@@ -201,101 +184,29 @@ pub(crate) fn parse_query(
                     ensure!(a.is_none(), AggrInConstRuleError(v.span));
                 }
 
-                let data = build_expr(src.next().unwrap(), param_pool)?.eval_to_const()?;
-                let data = match data {
-                    DataValue::List(l) => l,
-                    d => {
-                        #[derive(Error, Debug, Diagnostic)]
-                        #[error("Bad body for constant rule: {0:?}")]
-                        #[diagnostic(code(parser::bad_body_for_const))]
-                        #[diagnostic(help(
-                            "The body of a constant rule should evaluate to a list of lists"
-                        ))]
-                        struct ConstRuleBodyNotList(DataValue);
-
-                        bail!(ConstRuleBodyNotList(d))
-                    }
+                let data = build_expr(src.next().unwrap(), param_pool)?;
+                let mut options = BTreeMap::new();
+                options.insert(SmartString::from("data"), data);
+                let handle = AlgoHandle {
+                    name: Symbol::new("Constant", span),
                 };
-
-                #[derive(Error, Debug, Diagnostic)]
-                #[error("Constant rule {0} does not have data")]
-                #[diagnostic(code(parser::empty_const_rule))]
-                #[diagnostic(help(
-                    "If you insist on using this empty rule, explicitly give its head"
-                ))]
-                struct EmptyConstRuleError(String, #[label] SourceSpan);
-
-                ensure!(
-                    !head.is_empty() || !data.is_empty(),
-                    EmptyConstRuleError(name.to_string(), span)
-                );
-
-                match const_rules.entry(MagicSymbol::Muggle { inner: name }) {
-                    Entry::Vacant(e) => {
-                        let mut tuples = vec![];
-                        let mut last_len = None;
-                        for row in data {
-                            match row {
-                                DataValue::List(tuple) => {
-                                    if let Some(l) = &last_len {
-                                        #[derive(Error, Debug, Diagnostic)]
-                                        #[error("Constant head must have the same arity as the data given")]
-                                        #[diagnostic(code(parser::const_data_arity_mismatch))]
-                                        #[diagnostic(help(
-                                            "First row length: {0}; the mismatch: {1:?}"
-                                        ))]
-                                        struct ConstRuleRowArityMismatch(
-                                            usize,
-                                            Vec<DataValue>,
-                                            #[label] SourceSpan,
-                                        );
-
-                                        ensure!(
-                                            *l == tuple.len(),
-                                            ConstRuleRowArityMismatch(*l, tuple, span)
-                                        );
-                                    };
-                                    last_len = Some(tuple.len());
-                                    tuples.push(Tuple(tuple));
-                                }
-                                row => {
-                                    #[derive(Error, Debug, Diagnostic)]
-                                    #[error("Bad row for constant rule: {0:?}")]
-                                    #[diagnostic(code(parser::bad_row_for_const))]
-                                    #[diagnostic(help("The body of a constant rule should evaluate to a list of lists"))]
-                                    struct ConstRuleRowNotList(DataValue);
-
-                                    bail!(ConstRuleRowNotList(row))
-                                }
-                            }
-                        }
-                        if let Some(l) = &last_len {
-                            #[derive(Error, Debug, Diagnostic)]
-                            #[error("Constant head must have the same arity as the data given")]
-                            #[diagnostic(code(parser::const_head_data_arity_mismatch))]
-                            #[diagnostic(help("Arity by head: {0}; arity by data: {1}"))]
-                            struct ConstRuleRowHeadArityMismatch(usize, usize, #[label] SourceSpan);
-
-                            ensure!(
-                                head.is_empty() || *l == head.len(),
-                                ConstRuleRowHeadArityMismatch(head.len(), *l, merge_spans(&head),)
-                            );
-                        }
-                        e.insert(ConstRule {
-                            data: tuples,
-                            bindings: head,
+                let algo_impl = handle.get_impl()?;
+                algo_impl.process_options(&mut options, span)?;
+                let arity = algo_impl.arity(&options, &head, span)?;
+                progs.insert(
+                    name,
+                    InputRulesOrAlgo::Algo {
+                        algo: AlgoApply {
+                            algo: handle,
+                            rule_args: vec![],
+                            options,
+                            head,
+                            arity,
                             span,
-                        });
-                    }
-                    Entry::Occupied(e) => {
-                        #[derive(Debug, Error, Diagnostic)]
-                        #[error("Duplicate definition for constant rule")]
-                        #[diagnostic(code(parser::dup_const_rule))]
-                        struct DupConstRuleDefError(#[label] SourceSpan, #[label] SourceSpan);
-
-                        bail!(DupConstRuleDefError(e.key().symbol().span, span))
-                    }
-                }
+                            algo_impl,
+                        },
+                    },
+                );
             }
             Rule::timeout_option => {
                 let pair = pair.into_inner().next().unwrap();
@@ -398,11 +309,10 @@ pub(crate) fn parse_query(
 
     let mut prog = InputProgram {
         prog: progs,
-        const_rules,
         out_opts,
     };
 
-    if prog.prog.is_empty() && prog.const_rules.is_empty() {
+    if prog.prog.is_empty() {
         if let Some((
             InputRelationHandle {
                 key_bindings,
@@ -414,16 +324,7 @@ pub(crate) fn parse_query(
         {
             let mut bindings = key_bindings.clone();
             bindings.extend_from_slice(dep_bindings);
-            prog.const_rules.insert(
-                MagicSymbol::Muggle {
-                    inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
-                },
-                ConstRule {
-                    bindings,
-                    data: vec![],
-                    span: SourceSpan(0, 0),
-                },
-            );
+            make_empty_const_rule(&mut prog, &bindings);
         }
     }
 
@@ -464,20 +365,11 @@ pub(crate) fn parse_query(
         Some(Right(r)) => prog.out_opts.store_relation = Some(r),
     }
 
-    if prog.prog.is_empty() && prog.const_rules.is_empty() {
+    if prog.prog.is_empty() {
         if let Some((handle, RelationOp::Create)) = &prog.out_opts.store_relation {
             let mut bindings = handle.dep_bindings.clone();
             bindings.extend_from_slice(&handle.key_bindings);
-            prog.const_rules.insert(
-                MagicSymbol::Muggle {
-                    inner: Symbol::new(PROG_ENTRY, Default::default()),
-                },
-                ConstRule {
-                    bindings,
-                    data: vec![],
-                    span: Default::default(),
-                },
-            );
+            make_empty_const_rule(&mut prog, &bindings);
         }
     }
 
@@ -828,7 +720,8 @@ fn parse_algo_rule(
     struct AlgoRuleHeadArityMismatch(usize, usize, #[label] SourceSpan);
 
     let algo_impl = algo.get_impl()?;
-    let arity = algo_impl.arity(&options, &head, args_list_span)?;
+    algo_impl.process_options(&mut options, args_list_span)?;
+    let arity = algo_impl.arity(&options, &head, name_pair.extract_span())?;
 
     ensure!(
         head.is_empty() || arity == head.len(),
@@ -847,4 +740,32 @@ fn parse_algo_rule(
             algo_impl,
         },
     ))
+}
+
+fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
+    let entry_symbol = Symbol::new(PROG_ENTRY, Default::default());
+    let mut options = BTreeMap::new();
+    options.insert(
+        SmartString::from("data"),
+        Expr::Const {
+            val: DataValue::List(vec![]),
+            span: Default::default(),
+        },
+    );
+    prog.prog.insert(
+        entry_symbol.clone(),
+        InputRulesOrAlgo::Algo {
+            algo: AlgoApply {
+                algo: AlgoHandle {
+                    name: entry_symbol.clone(),
+                },
+                rule_args: vec![],
+                options,
+                head: bindings.to_vec(),
+                arity: bindings.len(),
+                span: Default::default(),
+                algo_impl: Box::new(Constant),
+            },
+        },
+    );
 }

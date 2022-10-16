@@ -417,7 +417,7 @@ impl Db {
                     .to_normalized_program(&tx)?
                     .stratify()?
                     .magic_sets_rewrite(&tx)?;
-                let (compiled, _) = tx.stratified_magic_compile(&program, &prog.const_rules)?;
+                let (compiled, _) = tx.stratified_magic_compile(&program)?;
 
                 self.explain_compiled(&compiled)
             }
@@ -517,7 +517,7 @@ impl Db {
             .stratify()?
             .magic_sets_rewrite(tx)?;
         let (compiled, stores) =
-            tx.stratified_magic_compile(&program, &input_program.const_rules)?;
+            tx.stratified_magic_compile(&program)?;
 
         let poison = Poison::default();
         if let Some(secs) = input_program.out_opts.timeout {

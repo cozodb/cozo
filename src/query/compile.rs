@@ -7,8 +7,7 @@ use thiserror::Error;
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{
-    ConstRule, ConstRules, MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol,
-    StratifiedMagicProgram,
+    MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram,
 };
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -84,22 +83,8 @@ impl SessionTx {
     pub(crate) fn stratified_magic_compile(
         &mut self,
         prog: &StratifiedMagicProgram,
-        const_rules: &ConstRules,
     ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, InMemRelation>)> {
         let mut stores: BTreeMap<MagicSymbol, InMemRelation> = Default::default();
-
-        for (name, ConstRule { data, bindings, .. }) in const_rules {
-            let arity = if bindings.is_empty() {
-                data[0].0.len()
-            } else {
-                bindings.len()
-            };
-            let store = self.new_rule_store(name.clone(), arity);
-            for tuple in data {
-                store.put(tuple.clone(), 0);
-            }
-            stores.insert(name.clone(), store);
-        }
 
         for stratum in prog.0.iter() {
             for (name, ruleset) in &stratum.prog {

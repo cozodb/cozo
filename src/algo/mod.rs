@@ -7,6 +7,7 @@ use thiserror::Error;
 use crate::algo::all_pairs_shortest_path::{BetweennessCentrality, ClosenessCentrality};
 use crate::algo::astar::ShortestPathAStar;
 use crate::algo::bfs::Bfs;
+use crate::algo::constant::Constant;
 use crate::algo::csv::CsvReader;
 use crate::algo::degree_centrality::DegreeCentrality;
 use crate::algo::dfs::Dfs;
@@ -36,6 +37,7 @@ use crate::runtime::transact::SessionTx;
 pub(crate) mod all_pairs_shortest_path;
 pub(crate) mod astar;
 pub(crate) mod bfs;
+pub(crate) mod constant;
 pub(crate) mod csv;
 pub(crate) mod degree_centrality;
 pub(crate) mod dfs;
@@ -68,6 +70,13 @@ pub(crate) trait AlgoImpl {
         _rule_head: &[Symbol],
         _span: SourceSpan,
     ) -> Result<usize>;
+    fn process_options(
+        &self,
+        _options: &mut BTreeMap<SmartString<LazyCompact>, Expr>,
+        _span: SourceSpan,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -116,6 +125,7 @@ impl AlgoHandle {
             "ReorderSort" => Box::new(ReorderSort),
             "JsonReader" => Box::new(JsonReader),
             "CsvReader" => Box::new(CsvReader),
+            "Constant" => Box::new(Constant),
             name => bail!(AlgoNotFoundError(name.to_string(), self.name.span)),
         })
     }

@@ -1,10 +1,14 @@
+use std::collections::BTreeMap;
+
 use itertools::Itertools;
 use miette::{Diagnostic, Result};
 use smartstring::SmartString;
 use thiserror::Error;
 
+use crate::algo::constant::Constant;
+use crate::algo::AlgoHandle;
 use crate::data::expr::Expr;
-use crate::data::program::{ConstRule, MagicSymbol, RelationOp};
+use crate::data::program::{AlgoApply, InputProgram, InputRulesOrAlgo, RelationOp};
 use crate::data::relation::{ColumnDef, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
@@ -78,8 +82,8 @@ impl SessionTx {
             )?;
 
             let has_triggers = !relation_store.rm_triggers.is_empty();
-            let mut new_tuples = vec![];
-            let mut old_tuples = vec![];
+            let mut new_tuples: Vec<DataValue> = vec![];
+            let mut old_tuples: Vec<DataValue> = vec![];
 
             for tuple in res_iter {
                 let tuple = tuple?;
@@ -99,9 +103,9 @@ impl SessionTx {
                                 tup.0.extend(v_tup.decode().0);
                             }
                         }
-                        old_tuples.push(tup);
+                        old_tuples.push(DataValue::List(tup.0));
                     }
-                    new_tuples.push(extracted.clone());
+                    new_tuples.push(DataValue::List(extracted.0.clone()));
                 }
                 self.tx.del(&key)?;
             }
@@ -118,16 +122,7 @@ impl SessionTx {
                         .map(|k| Symbol::new(k.name.clone(), Default::default()))
                         .collect_vec();
 
-                    program.const_rules.insert(
-                        MagicSymbol::Muggle {
-                            inner: Symbol::new(SmartString::from("_new"), Default::default()),
-                        },
-                        ConstRule {
-                            bindings: bindings.clone(),
-                            data: new_tuples.clone(),
-                            span: Default::default(),
-                        },
-                    );
+                    make_const_rule(&mut program, "_new", bindings.clone(), new_tuples.clone());
 
                     let v_bindings = relation_store
                         .metadata
@@ -136,16 +131,7 @@ impl SessionTx {
                         .map(|k| Symbol::new(k.name.clone(), Default::default()));
                     bindings.extend(v_bindings);
 
-                    program.const_rules.insert(
-                        MagicSymbol::Muggle {
-                            inner: Symbol::new(SmartString::from("_old"), Default::default()),
-                        },
-                        ConstRule {
-                            bindings,
-                            data: old_tuples.clone(),
-                            span: Default::default(),
-                        },
-                    );
+                    make_const_rule(&mut program, "_old", bindings, old_tuples.clone());
 
                     let (_, cleanups) = db.run_query(self, program).map_err(|err| {
                         if err.source_code().is_some() {
@@ -166,8 +152,8 @@ impl SessionTx {
             )?;
 
             let has_triggers = !relation_store.put_triggers.is_empty();
-            let mut new_tuples = vec![];
-            let mut old_tuples = vec![];
+            let mut new_tuples: Vec<DataValue> = vec![];
+            let mut old_tuples: Vec<DataValue> = vec![];
 
             let val_extractors = make_extractors(
                 &relation_store.metadata.non_keys,
@@ -199,10 +185,10 @@ impl SessionTx {
                                 tup.0.extend(v_tup.decode().0);
                             }
                         }
-                        old_tuples.push(tup);
+                        old_tuples.push(DataValue::List(tup.0));
                     }
 
-                    new_tuples.push(extracted.clone());
+                    new_tuples.push(DataValue::List(extracted.0));
                 }
 
                 self.tx.put(&key, &val)?;
@@ -226,27 +212,8 @@ impl SessionTx {
                         .map(|k| Symbol::new(k.name.clone(), Default::default()));
                     bindings.extend(v_bindings);
 
-                    program.const_rules.insert(
-                        MagicSymbol::Muggle {
-                            inner: Symbol::new(SmartString::from("_new"), Default::default()),
-                        },
-                        ConstRule {
-                            bindings: bindings.clone(),
-                            data: new_tuples.clone(),
-                            span: Default::default(),
-                        },
-                    );
-
-                    program.const_rules.insert(
-                        MagicSymbol::Muggle {
-                            inner: Symbol::new(SmartString::from("_old"), Default::default()),
-                        },
-                        ConstRule {
-                            bindings,
-                            data: old_tuples.clone(),
-                            span: Default::default(),
-                        },
-                    );
+                    make_const_rule(&mut program, "_new", bindings.clone(), new_tuples.clone());
+                    make_const_rule(&mut program, "_old", bindings, old_tuples.clone());
 
                     let (_, cleanups) = db.run_query(self, program).map_err(|err| {
                         if err.source_code().is_some() {
@@ -319,4 +286,38 @@ fn make_extractor(
         struct UnableToMakeExtractor(String);
         Err(UnableToMakeExtractor(stored.name.to_string()).into())
     }
+}
+
+fn make_const_rule(
+    program: &mut InputProgram,
+    rule_name: &str,
+    bindings: Vec<Symbol>,
+    data: Vec<DataValue>,
+) {
+    let rule_symbol = Symbol::new(SmartString::from(rule_name), Default::default());
+    let mut options = BTreeMap::new();
+    options.insert(
+        SmartString::from("data"),
+        Expr::Const {
+            val: DataValue::List(data),
+            span: Default::default(),
+        },
+    );
+    let bindings_arity = bindings.len();
+    program.prog.insert(
+        rule_symbol.clone(),
+        InputRulesOrAlgo::Algo {
+            algo: AlgoApply {
+                algo: AlgoHandle {
+                    name: rule_symbol.clone(),
+                },
+                rule_args: vec![],
+                options,
+                head: bindings,
+                arity: bindings_arity,
+                span: Default::default(),
+                algo_impl: Box::new(Constant),
+            },
+        },
+    );
 }
