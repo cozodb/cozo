@@ -19,32 +19,12 @@ In CozoScript, relations (stored relations or relations defined by rules) abide 
 meaning that even if a rule may compute a row multiple times, it will occur only once in the output.
 This is in contradistinction to SQL.
 
-There are three types of named rules in CozoScript: constant rules, Horn-clause rules and algorithm applications.
-
------------------
-Constant rules
------------------
-
-The following is an example of a constant rule::
+There are two types of named rules in CozoScript: Horn-clause rules and algorithm applications.
+You may think that there is a third type: constant rule, written as::
 
     const_rule[a, b, c] <- [[1, 2, 3], [4, 5, 6]]
 
-Constant rules are distinguished by the symbol ``<-`` separating the rule head and rule body.
-The rule body should be an expression evaluating to a list of lists:
-every subslist of the rule body should be of the same length (the *arity* of the rule),
-and must match the number of arguments in the rule head.
-In general, if you are passing data into the query,
-you should take advantage of named parameters::
-
-    const_rule[a, b, c] <- $data_passed_in
-
-and pass a map containing a key of ``"data_passed_in"`` with a value of a list of lists.
-
-The rule head may be omitted if the rule body is not the empty list::
-
-    const_rule[] <- [[1, 2, 3], [4, 5, 6]]
-
-in which case the system will deduce the arity of the rule from the data.
+but this is actually a syntax sugar for the algorithm application of the ``Constant`` algorithm.
 
 -----------------
 Horn-clause rules

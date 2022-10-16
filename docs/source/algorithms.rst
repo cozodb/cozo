@@ -13,6 +13,12 @@ More algorithms will be added as Cozo is further developed.
 Utilities
 -------------------
 
+.. function:: Constant(data: [...])
+
+    Returns a constant relation containing the data passed in. The constant rule ``?[] <- ...`` is actually
+    syntax sugar for ``?[] <~ Constant(data: ...)``.
+
+    :param data: A list of lists, representing the rows of the returned relation.
 
 .. function:: ReorderSort(rel[...], out: [...], sort_by: [...], descending: false, break_ties: false, skip: 0, take: 0)
 
