@@ -10,7 +10,6 @@ The Cozo Database Manual
    :maxdepth: 2
    :caption: Contents
 
-   intro
    setup
    queries
    stored
