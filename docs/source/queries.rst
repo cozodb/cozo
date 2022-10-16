@@ -24,7 +24,7 @@ You may think that there is a third type: constant rule, written as::
 
     const_rule[a, b, c] <- [[1, 2, 3], [4, 5, 6]]
 
-but this is actually a syntax sugar for the algorithm application of the ``Constant`` algorithm.
+but this is actually syntax sugar for the algorithm application of the ``Constant`` algorithm.
 
 -----------------
 Horn-clause rules
