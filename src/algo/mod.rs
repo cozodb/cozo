@@ -133,13 +133,13 @@ impl AlgoHandle {
                 let with_row_num = match opts.get("prepend_index") {
                     None => 0,
                     Some(Expr::Const {
-                             val: DataValue::Bool(true),
-                             ..
-                         }) => 1,
+                        val: DataValue::Bool(true),
+                        ..
+                    }) => 1,
                     Some(Expr::Const {
-                             val: DataValue::Bool(false),
-                             ..
-                         }) => 0,
+                        val: DataValue::Bool(false),
+                        ..
+                    }) => 0,
                     _ => bail!(CannotDetermineArity(
                         n.to_string(),
                         "invalid option 'prepend_index' given, expect a boolean".to_string(),

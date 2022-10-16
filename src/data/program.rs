@@ -16,8 +16,8 @@ use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
-use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type ConstRules = BTreeMap<MagicSymbol, ConstRule>;
