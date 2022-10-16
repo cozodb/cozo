@@ -44,33 +44,59 @@ Within each type values are *compared* according to logic custom to each type:
 Value literals
 ----------------
 
-``null`` for the type ``Null``, ``false`` and ``true`` for the type ``Bool`` are standard.
+The standard notations ``null`` for the type ``Null``, ``false`` and ``true`` for the type ``Bool`` are followed.
 
-Numbers ...
+Besides the usual decimal notation for signed integers,
+you can prefix a number with ``0x`` or ``-0x`` for hexadecimal notation,
+with ``0o`` or ``-0o`` for octal notation,
+or with ``0b`` or ``-0b`` for binary notation.
+Floating point numbers include the decimal dot, which may be trailing,
+and may be in scientific notation.
+All numbers may include underscores ``_`` in their representation for clarity.
+For example, ``299_792_458`` is the speed of light in meters per second.
 
-Strings ...
+Strings can be typed in exactly the same way as they do in JSON between double quotes ``""``,
+with the same escape rules.
+You can also use single quotes ``''`` in which case the roles of the double quote and single quote are switched.
+In addition, there is a raw string notation::
 
-There is no literal representation for ``Bytes`` due to restrictions placed by JSON. But ...
+    r___"I'm a raw string with "quotes"!"___
 
-Lists ...
+A raw string starts with the letter ``r`` followed by an arbitrary number of underscores, and then a double quote.
+It terminates when followed by a double quote and the same number of underscores.
+Everything in between is interpreted exactly as typed, including any newlines.
 
-----------------
-Schema types
-----------------
+There is no literal representation for ``Bytes`` or ``Uuid`` due to restrictions placed by JSON.
+You must pass in its Base64 encoding for bytes, or hyphened strings for UUIDs,
+and use the appropriate functions to decode it.
+If you are just inserting data into a stored relation with a column specified to contain bytes or UUIDs,
+auto-coercion will kick in.
 
-In schema definition, the required type for a value can be specified by any of the following *schema-types*
+Lists are items enclosed between square brackets ``[]``, separated by commas.
+A trailing comma is allowed after the last item.
 
-* ``Ref``
+------------------------------------------------
+Schema types for stored relations
+------------------------------------------------
+
+The following *atomic types* can be specified for columns in stored relations:
+
 * ``Int``
 * ``Float``
 * ``Bool``
 * ``String``
 * ``Bytes``
-* ``List``
 * ``Uuid``
 
-When retrieving triples' values, the schema-type ``Ref``, is represented by the type ``Uuid``. The entity (the subject of the triple) is always a ``Ref``, always represented by a ``Uuid``.
+There is no ``Null`` type. Instead, if you put a question mark after a type, it is treated as *nullable*,
+meaning that it either takes value in the type, or is null.
 
-Note the absence of the ``Null`` type in schema-types.
+Two composite types are available. A *homogeneous list* is specified by square brackets,
+with the inner type in between, like this: ``[Int]``.
+You may optionally specify how many elements are expected, like this: ``[Int; 10]``.
+A *heterogeneous list*, or a *tuple*, is specified by round brackets, with the element types listed by position,
+like this: ``(Int, Float, String)``. Tuples always have fixed length.
 
-When asserting (inserting or updating) triples, if a value given is not of the correct schema-type, Cozo will first try to coerce the value and will only error out if no known coercion methods exist.
+A special type ``Any`` can be specified, allowing all values except null.
+If you want to allow null as well, use ``Any?``.
+Composite types may contain other composite types or ``Any`` types as their inner types.

@@ -2,9 +2,17 @@
 Getting started
 ======================
 
-Cozo is distributed as a single executable. To get started, download the executable for your platform and uncompress it. After decompression, you may also need to give it executable permission by ``chmod +x ./cozo`` on Unix-based systems.
+Cozo is distributed as a single executable.
+To get started, download the executable for your platform and uncompress it.
+After decompression, you may also need to give it executable permission by ``chmod +x ./cozo`` on Unix-based systems.
 
-The pre-compiled distributions of Cozo support Linux, Mac and Windows. As building on Windows is very different from building on UNIX-based systems, the Windows build hasn't received as much attention as the other builds and may suffer from inferior performance and Windows-specific bugs. For Windows users, we recommend running Cozo under `WSL <https://learn.microsoft.com/en-us/windows/wsl/install>`_ if possible, especially if your workload is heavy.
+The pre-compiled distributions of Cozo support Linux, Mac and Windows.
+As the toolchain on Windows is very different from UNIX-based systems,
+the Windows build hasn't received as much attention as the other builds,
+and may suffer from inferior performance and Windows-specific bugs.
+For Windows users,
+we recommend running Cozo under `WSL <https://learn.microsoft.com/en-us/windows/wsl/install>`_ if possible,
+especially if your workload is heavy.
 
 ---------------
 Running Cozo
