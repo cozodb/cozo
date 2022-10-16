@@ -112,6 +112,13 @@ Ordinary aggregations
 
     The argument should be a list of two elements and this aggregation returns the ``data`` of the maximum ``cost``. This is very similar to ``min_cost``, the differences being that maximum instead of minimum is used, only the data itself is returned, and the aggregation is deliberately note a meet aggregation. Intended to be used in timestamped audit trails.
 
+.. function:: choice_rand(var)
+
+    Non-deterministically chooses one of the values of ``var`` as the aggregate.
+    Each value the aggregation encounters has the same probability of being chosen.
+    This version of ``choice`` is not a meet aggregation
+    since it is impossible to satisfy the uniform sampling requirement while maintaining no state,
+    which is an implementation restriction unlikely to be lifted.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 Statistical aggregations

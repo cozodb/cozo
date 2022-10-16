@@ -329,7 +329,6 @@ fn test_min() {
     assert_eq!(v, DataValue::from(1));
 }
 
-
 #[test]
 fn test_max() {
     let mut aggr = parse_aggr("max").unwrap().clone();
@@ -353,7 +352,6 @@ fn test_max() {
     m_max_aggr.update(&mut v, &DataValue::from(3)).unwrap();
     assert_eq!(v, DataValue::from(10));
 }
-
 
 #[test]
 fn test_choice() {
@@ -396,22 +394,63 @@ fn test_choice_last() {
 }
 
 #[test]
+fn test_choice_rand() {
+    let mut aggr = parse_aggr("choice_rand").unwrap().clone();
+    aggr.normal_init(&[]).unwrap();
+
+    let mut choice_aggr = aggr.normal_op.unwrap();
+    choice_aggr.set(&DataValue::from(1)).unwrap();
+    choice_aggr.set(&DataValue::from(2)).unwrap();
+    choice_aggr.set(&DataValue::from(3)).unwrap();
+    let v = choice_aggr.get().unwrap().get_int().unwrap();
+    assert!(v == 1 || v == 2 || v == 3);
+}
+
+#[test]
 fn test_min_cost() {
     let mut aggr = parse_aggr("min_cost").unwrap().clone();
     aggr.normal_init(&[]).unwrap();
     aggr.meet_init(&[]).unwrap();
 
     let mut min_cost_aggr = aggr.normal_op.unwrap();
-    min_cost_aggr.set(&DataValue::List(vec![DataValue::Null, DataValue::from(3)])).unwrap();
-    min_cost_aggr.set(&DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)])).unwrap();
-    min_cost_aggr.set(&DataValue::List(vec![DataValue::Bool(false), DataValue::from(2)])).unwrap();
-    assert_eq!(min_cost_aggr.get().unwrap(), DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)]));
+    min_cost_aggr
+        .set(&DataValue::List(vec![DataValue::Null, DataValue::from(3)]))
+        .unwrap();
+    min_cost_aggr
+        .set(&DataValue::List(vec![
+            DataValue::Bool(true),
+            DataValue::from(1),
+        ]))
+        .unwrap();
+    min_cost_aggr
+        .set(&DataValue::List(vec![
+            DataValue::Bool(false),
+            DataValue::from(2),
+        ]))
+        .unwrap();
+    assert_eq!(
+        min_cost_aggr.get().unwrap(),
+        DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)])
+    );
 
     let m_min_cost_aggr = aggr.meet_op.unwrap();
     let mut v = DataValue::List(vec![DataValue::Null, DataValue::from(3)]);
-    m_min_cost_aggr.update(&mut v, &DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)])).unwrap();
-    m_min_cost_aggr.update(&mut v, &DataValue::List(vec![DataValue::Bool(false), DataValue::from(2)])).unwrap();
-    assert_eq!(v, DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)]));
+    m_min_cost_aggr
+        .update(
+            &mut v,
+            &DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)]),
+        )
+        .unwrap();
+    m_min_cost_aggr
+        .update(
+            &mut v,
+            &DataValue::List(vec![DataValue::Bool(false), DataValue::from(2)]),
+        )
+        .unwrap();
+    assert_eq!(
+        v,
+        DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)])
+    );
 }
 
 #[test]
@@ -420,9 +459,21 @@ fn test_latest_by() {
     aggr.normal_init(&[]).unwrap();
 
     let mut latest_by_aggr = aggr.normal_op.unwrap();
-    latest_by_aggr.set(&DataValue::List(vec![DataValue::Null, DataValue::from(3)])).unwrap();
-    latest_by_aggr.set(&DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)])).unwrap();
-    latest_by_aggr.set(&DataValue::List(vec![DataValue::Bool(false), DataValue::from(2)])).unwrap();
+    latest_by_aggr
+        .set(&DataValue::List(vec![DataValue::Null, DataValue::from(3)]))
+        .unwrap();
+    latest_by_aggr
+        .set(&DataValue::List(vec![
+            DataValue::Bool(true),
+            DataValue::from(1),
+        ]))
+        .unwrap();
+    latest_by_aggr
+        .set(&DataValue::List(vec![
+            DataValue::Bool(false),
+            DataValue::from(2),
+        ]))
+        .unwrap();
     assert_eq!(latest_by_aggr.get().unwrap(), DataValue::Null);
 }
 
@@ -433,16 +484,44 @@ fn test_shortest() {
     aggr.meet_init(&[]).unwrap();
 
     let mut shortest_aggr = aggr.normal_op.unwrap();
-    shortest_aggr.set(&DataValue::List([1, 2, 3].into_iter().map(DataValue::from).collect())).unwrap();
-    shortest_aggr.set(&DataValue::List([2].into_iter().map(DataValue::from).collect())).unwrap();
-    shortest_aggr.set(&DataValue::List([2, 3].into_iter().map(DataValue::from).collect())).unwrap();
-    assert_eq!(shortest_aggr.get().unwrap(), DataValue::List([2].into_iter().map(DataValue::from).collect()));
+    shortest_aggr
+        .set(&DataValue::List(
+            [1, 2, 3].into_iter().map(DataValue::from).collect(),
+        ))
+        .unwrap();
+    shortest_aggr
+        .set(&DataValue::List(
+            [2].into_iter().map(DataValue::from).collect(),
+        ))
+        .unwrap();
+    shortest_aggr
+        .set(&DataValue::List(
+            [2, 3].into_iter().map(DataValue::from).collect(),
+        ))
+        .unwrap();
+    assert_eq!(
+        shortest_aggr.get().unwrap(),
+        DataValue::List([2].into_iter().map(DataValue::from).collect())
+    );
 
     let m_shortest_aggr = aggr.meet_op.unwrap();
     let mut v = DataValue::List([1, 2, 3].into_iter().map(DataValue::from).collect());
-    m_shortest_aggr.update(&mut v, &DataValue::List([2].into_iter().map(DataValue::from).collect())).unwrap();
-    m_shortest_aggr.update(&mut v, &DataValue::List([2, 3].into_iter().map(DataValue::from).collect())).unwrap();
-    assert_eq!(v, DataValue::List([2].into_iter().map(DataValue::from).collect()));
+    m_shortest_aggr
+        .update(
+            &mut v,
+            &DataValue::List([2].into_iter().map(DataValue::from).collect()),
+        )
+        .unwrap();
+    m_shortest_aggr
+        .update(
+            &mut v,
+            &DataValue::List([2, 3].into_iter().map(DataValue::from).collect()),
+        )
+        .unwrap();
+    assert_eq!(
+        v,
+        DataValue::List([2].into_iter().map(DataValue::from).collect())
+    );
 }
 
 #[test]
@@ -459,9 +538,22 @@ fn test_coalesce() {
 
     let m_coalesce_aggr = aggr.meet_op.unwrap();
     let mut v = DataValue::Null;
-    m_coalesce_aggr.update(&mut v, &DataValue::List([2].into_iter().map(DataValue::from).collect())).unwrap();
-    m_coalesce_aggr.update(&mut v, &DataValue::List([2, 3].into_iter().map(DataValue::from).collect())).unwrap();
-    assert_eq!(v, DataValue::List([2].into_iter().map(DataValue::from).collect()));
+    m_coalesce_aggr
+        .update(
+            &mut v,
+            &DataValue::List([2].into_iter().map(DataValue::from).collect()),
+        )
+        .unwrap();
+    m_coalesce_aggr
+        .update(
+            &mut v,
+            &DataValue::List([2, 3].into_iter().map(DataValue::from).collect()),
+        )
+        .unwrap();
+    assert_eq!(
+        v,
+        DataValue::List([2].into_iter().map(DataValue::from).collect())
+    );
 }
 
 #[test]
@@ -477,10 +569,11 @@ fn test_bit_and() {
 
     let m_bit_and_aggr = aggr.meet_op.unwrap();
     let mut v = DataValue::Bytes(vec![0b11100]);
-    m_bit_and_aggr.update(&mut v, &DataValue::Bytes(vec![0b01011])).unwrap();
+    m_bit_and_aggr
+        .update(&mut v, &DataValue::Bytes(vec![0b01011]))
+        .unwrap();
     assert_eq!(v, DataValue::Bytes(vec![0b01000]));
 }
-
 
 #[test]
 fn test_bit_or() {
@@ -495,10 +588,11 @@ fn test_bit_or() {
 
     let m_bit_or_aggr = aggr.meet_op.unwrap();
     let mut v = DataValue::Bytes(vec![0b11100]);
-    m_bit_or_aggr.update(&mut v, &DataValue::Bytes(vec![0b01011])).unwrap();
+    m_bit_or_aggr
+        .update(&mut v, &DataValue::Bytes(vec![0b01011]))
+        .unwrap();
     assert_eq!(v, DataValue::Bytes(vec![0b11111]));
 }
-
 
 #[test]
 fn test_bit_xor() {

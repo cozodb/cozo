@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 
 use miette::{bail, ensure, miette, Result};
+use rand::prelude::*;
 
 use crate::data::value::DataValue;
 
@@ -353,6 +354,38 @@ impl NormalAggrObj for AggrCollect {
     }
 }
 
+define_aggr!(AGGR_CHOICE_RAND, false);
+
+pub(crate) struct AggrChoiceRand {
+    count: usize,
+    value: DataValue,
+}
+
+impl Default for AggrChoiceRand {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            value: DataValue::Null,
+        }
+    }
+}
+
+impl NormalAggrObj for AggrChoiceRand {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        self.count += 1;
+        let prob = 1. / (self.count as f64);
+        let rd = thread_rng().gen::<f64>();
+        if rd < prob {
+            self.value = value.clone();
+        }
+        Ok(())
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(self.value.clone())
+    }
+}
+
 define_aggr!(AGGR_COUNT, false);
 
 #[derive(Default)]
@@ -661,7 +694,6 @@ pub(crate) struct AggrLatestBy {
     cost: DataValue,
 }
 
-
 impl Default for AggrLatestBy {
     fn default() -> Self {
         Self {
@@ -670,7 +702,6 @@ impl Default for AggrLatestBy {
         }
     }
 }
-
 
 impl NormalAggrObj for AggrLatestBy {
     fn set(&mut self, value: &DataValue) -> Result<()> {
@@ -695,7 +726,6 @@ impl NormalAggrObj for AggrLatestBy {
         Ok(self.found.clone())
     }
 }
-
 
 define_aggr!(AGGR_MIN_COST, true);
 
@@ -1037,6 +1067,7 @@ pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
         "bit_or" => &AGGR_BIT_OR,
         "bit_xor" => &AGGR_BIT_XOR,
         "latest_by" => &AGGR_LATEST_BY,
+        "choice_rand" => &AGGR_CHOICE_RAND,
         _ => return None,
     })
 }
@@ -1087,6 +1118,7 @@ impl Aggregation {
             name if name == AGGR_MIN_COST.name => Box::new(AggrMinCost::default()),
             name if name == AGGR_LATEST_BY.name => Box::new(AggrLatestBy::default()),
             name if name == AGGR_COALESCE.name => Box::new(AggrCoalesce::default()),
+            name if name == AGGR_CHOICE_RAND.name => Box::new(AggrChoiceRand::default()),
             name if name == AGGR_COLLECT.name => Box::new({
                 if args.is_empty() {
                     AggrCollect::default()
