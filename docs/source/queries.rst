@@ -304,10 +304,10 @@ Here we explain query options that exclusively affect the query itself.
 
     If the query does not complete within ``<N>`` seconds, abort.
 
-.. function:: :sort SORT_ARG (, SORT_ARG)*
+.. function:: :sort <SORT_ARG> (, <SORT_ARG>)*
 
     Sort the output relation before applying other options or returning.
-    Specify ``SORT_ARG`` as they appear in the rule head of the entry, separated by commas.
+    Specify ``<SORT_ARG>`` as they appear in the rule head of the entry, separated by commas.
     You can optionally specify the sort direction of each argument by prefixing them with ``+`` or ``-``,
     with minus denoting descending sort. As an example, ``:sort -count(employee), dept_name``
     sorts by employee count descendingly first, then break ties with department name in ascending alphabetical order.
