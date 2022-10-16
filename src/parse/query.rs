@@ -820,7 +820,6 @@ fn parse_algo_rule(
     }
 
     let algo = AlgoHandle::new(algo_name, name_pair.extract_span());
-    let algo_arity = algo.arity(Left(&rule_args), &options)?;
 
     #[derive(Debug, Error, Diagnostic)]
     #[error("Algorithm rule head arity mismatch")]
@@ -828,9 +827,12 @@ fn parse_algo_rule(
     #[diagnostic(help("Expected arity: {0}, number of arguments given: {1}"))]
     struct AlgoRuleHeadArityMismatch(usize, usize, #[label] SourceSpan);
 
+    let algo_impl = algo.get_impl()?;
+    let arity = algo_impl.arity(&options, &head, args_list_span)?;
+
     ensure!(
-        head.is_empty() || algo_arity == head.len(),
-        AlgoRuleHeadArityMismatch(algo_arity, head.len(), args_list_span)
+        head.is_empty() || arity == head.len(),
+        AlgoRuleHeadArityMismatch(arity, head.len(), args_list_span)
     );
 
     Ok((
@@ -840,7 +842,9 @@ fn parse_algo_rule(
             rule_args,
             options,
             head,
+            arity,
             span: args_list_span,
+            algo_impl,
         },
     ))
 }

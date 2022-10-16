@@ -374,6 +374,7 @@ impl NormalFormProgram {
                                     })
                                     .try_collect()?,
                                 options: algo_apply.options.clone(),
+                                arity: algo_apply.arity
                             },
                         },
                     );

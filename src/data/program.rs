@@ -2,13 +2,12 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
 
-use either::{Left, Right};
 use miette::{ensure, Diagnostic, Result};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::AlgoHandle;
+use crate::algo::{AlgoHandle, AlgoImpl};
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::relation::StoredRelationMetadata;
@@ -193,18 +192,33 @@ impl InputRulesOrAlgo {
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct AlgoApply {
     pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<AlgoRuleArg>,
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
     pub(crate) head: Vec<Symbol>,
+    pub(crate) arity: usize,
     pub(crate) span: SourceSpan,
+    pub(crate) algo_impl: Box<dyn AlgoImpl>,
+}
+
+impl Clone for AlgoApply {
+    fn clone(&self) -> Self {
+        Self {
+            algo: self.algo.clone(),
+            rule_args: self.rule_args.clone(),
+            options: self.options.clone(),
+            head: self.head.clone(),
+            arity: self.arity,
+            span: self.span.clone(),
+            algo_impl: self.algo.get_impl().unwrap(),
+        }
+    }
 }
 
 impl AlgoApply {
     pub(crate) fn arity(&self) -> Result<usize> {
-        self.algo.arity(Left(&self.rule_args), &self.options)
+        self.algo_impl.arity(&self.options, &self.head, self.span)
     }
 }
 
@@ -224,6 +238,7 @@ pub(crate) struct MagicAlgoApply {
     pub(crate) rule_args: Vec<MagicAlgoRuleArg>,
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
     pub(crate) span: SourceSpan,
+    pub(crate) arity: usize,
 }
 
 #[derive(Error, Diagnostic, Debug)]
@@ -249,9 +264,6 @@ pub(crate) struct WrongAlgoOptionError {
 }
 
 impl MagicAlgoApply {
-    pub(crate) fn arity(&self) -> Result<usize> {
-        self.algo.arity(Right(&self.rule_args), &self.options)
-    }
     pub(crate) fn relation_with_min_len(
         &self,
         idx: usize,
@@ -879,7 +891,7 @@ impl MagicRulesOrAlgo {
     pub(crate) fn arity(&self) -> Result<usize> {
         Ok(match self {
             MagicRulesOrAlgo::Rules { rules } => rules.first().unwrap().head.len(),
-            MagicRulesOrAlgo::Algo { algo } => algo.arity()?,
+            MagicRulesOrAlgo::Algo { algo } => algo.arity,
         })
     }
     pub(crate) fn mut_rules(&mut self) -> Option<&mut Vec<MagicRule>> {

@@ -4,11 +4,15 @@ use std::mem;
 use approx::AbsDiffEq;
 use miette::Result;
 use nalgebra::{Dynamic, OMatrix, U1};
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
+use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
+use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
@@ -38,6 +42,15 @@ impl AlgoImpl for PageRank {
             );
         }
         Ok(())
+    }
+
+    fn arity(
+        &self,
+        _options: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        _rule_head: &[Symbol],
+        _span: SourceSpan,
+    ) -> Result<usize> {
+        Ok(2)
     }
 }
 

@@ -5,10 +5,13 @@ use miette::Diagnostic;
 use miette::Result;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
+use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::algo::AlgoImpl;
+use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
+use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
@@ -67,6 +70,15 @@ impl AlgoImpl for MinimumSpanningTreePrim {
             );
         }
         Ok(())
+    }
+
+    fn arity(
+        &self,
+        _options: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        _rule_head: &[Symbol],
+        _span: SourceSpan,
+    ) -> Result<usize> {
+        Ok(3)
     }
 }
 

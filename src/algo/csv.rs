@@ -2,15 +2,19 @@ use std::collections::BTreeMap;
 
 use csv::StringRecord;
 use miette::{bail, ensure, IntoDiagnostic, Result};
-use smartstring::SmartString;
+use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, CannotDetermineArity};
+use crate::data::expr::Expr;
 use crate::data::functions::{op_to_float, op_to_uuid};
-use crate::data::program::{MagicAlgoApply, MagicSymbol, WrongAlgoOptionError};
+use crate::data::program::{
+    AlgoOptionNotFoundError, MagicAlgoApply, MagicSymbol, WrongAlgoOptionError,
+};
 use crate::data::relation::{ColType, NullableColType};
+use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::parse_type;
+use crate::parse::{parse_type, SourceSpan};
 use crate::runtime::db::Poison;
 use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
@@ -149,9 +153,7 @@ impl AlgoImpl for CsvReader {
                 }
             }
             None => {
-                let content = minreq::get(&url as &str)
-                    .send()
-                    .into_diagnostic()?;
+                let content = minreq::get(&url as &str).send().into_diagnostic()?;
                 let mut rdr = rdr_builder.from_reader(content.as_bytes());
                 for record in rdr.records() {
                     let record = record.into_diagnostic()?;
@@ -160,5 +162,45 @@ impl AlgoImpl for CsvReader {
             }
         }
         Ok(())
+    }
+
+    fn arity(
+        &self,
+        options: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        _rule_head: &[Symbol],
+        span: SourceSpan,
+    ) -> Result<usize> {
+        let with_row_num = match options.get("prepend_index") {
+            None => 0,
+            Some(Expr::Const {
+                val: DataValue::Bool(true),
+                ..
+            }) => 1,
+            Some(Expr::Const {
+                val: DataValue::Bool(false),
+                ..
+            }) => 0,
+            _ => bail!(CannotDetermineArity(
+                "CsvReader".to_string(),
+                "invalid option 'prepend_index' given, expect a boolean".to_string(),
+                span
+            )),
+        };
+        let columns = options
+            .get("types")
+            .ok_or_else(|| AlgoOptionNotFoundError {
+                name: "types".to_string(),
+                span,
+                algo_name: "CsvReader".to_string(),
+            })?;
+        let columns = columns.clone().eval_to_const()?;
+        if let Some(l) = columns.get_list() {
+            return Ok(l.len() + with_row_num);
+        }
+        bail!(CannotDetermineArity(
+            "CsvReader".to_string(),
+            "invalid option 'types' given, expect positive number or list".to_string(),
+            span
+        ))
     }
 }

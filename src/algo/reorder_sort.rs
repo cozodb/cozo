@@ -2,11 +2,13 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use miette::{bail, Result};
+use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, CannotDetermineArity};
 use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
 use crate::data::program::{MagicAlgoApply, MagicSymbol, WrongAlgoOptionError};
+use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
@@ -111,5 +113,32 @@ impl AlgoImpl for ReorderSort {
             poison.check()?;
         }
         Ok(())
+    }
+
+    fn arity(
+        &self,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        _rule_head: &[Symbol],
+        span: SourceSpan,
+    ) -> Result<usize> {
+        let out_opts = opts.get("out").ok_or_else(|| {
+            CannotDetermineArity(
+                "ReorderSort".to_string(),
+                "option 'out' not provided".to_string(),
+                span,
+            )
+        })?;
+        Ok(match out_opts {
+            Expr::Const {
+                val: DataValue::List(l),
+                ..
+            } => l.len() + 1,
+            Expr::Apply { op, args, .. } if **op == OP_LIST => args.len() + 1,
+            _ => bail!(CannotDetermineArity(
+                "ReorderSort".to_string(),
+                "invalid option 'out' given, expect a list".to_string(),
+                span
+            )),
+        })
     }
 }

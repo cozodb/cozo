@@ -1,11 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use miette::Result;
+use miette::{Result};
+use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::{AlgoImpl, NodeNotFoundError};
+use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
+use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
@@ -95,5 +99,14 @@ impl AlgoImpl for Bfs {
             out.put(tuple, 0);
         }
         Ok(())
+    }
+
+    fn arity(
+        &self,
+        _options: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        _rule_head: &[Symbol],
+        _span: SourceSpan,
+    ) -> Result<usize> {
+        Ok(1)
     }
 }

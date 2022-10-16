@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use either::Either;
 use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -25,10 +24,7 @@ use crate::algo::top_sort::TopSort;
 use crate::algo::triangles::ClusteringCoefficients;
 use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
-use crate::data::functions::OP_LIST;
-use crate::data::program::{
-    AlgoOptionNotFoundError, AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol,
-};
+use crate::data::program::{MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
@@ -66,7 +62,22 @@ pub(crate) trait AlgoImpl {
         out: &InMemRelation,
         poison: Poison,
     ) -> Result<()>;
+    fn arity(
+        &self,
+        _options: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        _rule_head: &[Symbol],
+        _span: SourceSpan,
+    ) -> Result<usize>;
 }
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Cannot determine arity for algo {0} since {1}")]
+#[diagnostic(code(parser::no_algo_arity))]
+pub(crate) struct CannotDetermineArity(
+    pub(crate) String,
+    pub(crate) String,
+    #[label] pub(crate) SourceSpan,
+);
 
 #[derive(Clone, Debug)]
 pub(crate) struct AlgoHandle {
@@ -78,124 +89,6 @@ impl AlgoHandle {
         AlgoHandle {
             name: Symbol::new(name, span),
         }
-    }
-    pub(crate) fn arity(
-        &self,
-        _args: Either<&[AlgoRuleArg], &[MagicAlgoRuleArg]>,
-        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
-    ) -> Result<usize> {
-        #[derive(Debug, Error, Diagnostic)]
-        #[error("Cannot determine arity for algo {0} since {1}")]
-        #[diagnostic(code(parser::no_algo_arity))]
-        struct CannotDetermineArity(String, String, #[label] SourceSpan);
-
-        Ok(match &self.name.name as &str {
-            "ClusteringCoefficients" => 4,
-            "DegreeCentrality" => 4,
-            "ClosenessCentrality" => 2,
-            "BetweennessCentrality" => 2,
-            "DepthFirstSearch" | "DFS" => 1,
-            "BreadthFirstSearch" | "BFS" => 1,
-            "ShortestPathDijkstra" => 4,
-            "ShortestPathAStar" => 4,
-            "KShortestPathYen" => 4,
-            "MinimumSpanningTreePrim" => 3,
-            "MinimumSpanningTreeKruskal" => 3,
-            "TopSort" => 2,
-            "ConnectedComponents" => 2,
-            "StronglyConnectedComponents" | "SCC" => 2,
-            "PageRank" => 2,
-            "CommunityDetectionLouvain" => 2,
-            "LabelPropagation" => 2,
-            "RandomWalk" => 3,
-            n @ "ReorderSort" => {
-                let out_opts = opts.get("out").ok_or_else(|| {
-                    CannotDetermineArity(
-                        n.to_string(),
-                        "option 'out' not provided".to_string(),
-                        self.name.span,
-                    )
-                })?;
-                match out_opts {
-                    Expr::Const {
-                        val: DataValue::List(l),
-                        ..
-                    } => l.len() + 1,
-                    Expr::Apply { op, args, .. } if **op == OP_LIST => args.len() + 1,
-                    _ => bail!(CannotDetermineArity(
-                        n.to_string(),
-                        "invalid option 'out' given, expect a list".to_string(),
-                        self.name.span
-                    )),
-                }
-            }
-            n @ "CsvReader" => {
-                let with_row_num = match opts.get("prepend_index") {
-                    None => 0,
-                    Some(Expr::Const {
-                        val: DataValue::Bool(true),
-                        ..
-                    }) => 1,
-                    Some(Expr::Const {
-                        val: DataValue::Bool(false),
-                        ..
-                    }) => 0,
-                    _ => bail!(CannotDetermineArity(
-                        n.to_string(),
-                        "invalid option 'prepend_index' given, expect a boolean".to_string(),
-                        self.name.span
-                    )),
-                };
-                let columns = opts.get("types").ok_or_else(|| AlgoOptionNotFoundError {
-                    name: "types".to_string(),
-                    span: self.name.span,
-                    algo_name: n.to_string(),
-                })?;
-                let columns = columns.clone().eval_to_const()?;
-                if let Some(l) = columns.get_list() {
-                    return Ok(l.len() + with_row_num);
-                }
-                bail!(CannotDetermineArity(
-                    n.to_string(),
-                    "invalid option 'types' given, expect positive number or list".to_string(),
-                    self.name.span
-                ))
-            }
-            n @ "JsonReader" => {
-                let with_row_num = match opts.get("prepend_index") {
-                    None => 0,
-                    Some(Expr::Const {
-                        val: DataValue::Bool(true),
-                        ..
-                    }) => 1,
-                    Some(Expr::Const {
-                        val: DataValue::Bool(false),
-                        ..
-                    }) => 0,
-                    _ => bail!(CannotDetermineArity(
-                        n.to_string(),
-                        "invalid option 'prepend_index' given, expect a boolean".to_string(),
-                        self.name.span
-                    )),
-                };
-                let fields = opts.get("fields").ok_or_else(|| {
-                    CannotDetermineArity(
-                        n.to_string(),
-                        "option 'fields' not provided".to_string(),
-                        self.name.span,
-                    )
-                })?;
-                match fields.clone().eval_to_const()? {
-                    DataValue::List(l) => l.len() + with_row_num,
-                    _ => bail!(CannotDetermineArity(
-                        n.to_string(),
-                        "invalid option 'fields' given, expect a list".to_string(),
-                        self.name.span
-                    )),
-                }
-            }
-            n => bail!(AlgoNotFoundError(n.to_string(), self.name.span)),
-        })
     }
 
     pub(crate) fn get_impl(&self) -> Result<Box<dyn AlgoImpl>> {

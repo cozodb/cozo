@@ -5,11 +5,14 @@ use std::{fs, io};
 
 use itertools::Itertools;
 use miette::{bail, miette, Diagnostic, IntoDiagnostic, Result};
+use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, CannotDetermineArity};
+use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
+use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
@@ -120,5 +123,44 @@ impl AlgoImpl for JsonReader {
             }
         }
         Ok(())
+    }
+
+    fn arity(
+        &self,
+        opts: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        _rule_head: &[Symbol],
+        span: SourceSpan,
+    ) -> Result<usize> {
+        let with_row_num = match opts.get("prepend_index") {
+            None => 0,
+            Some(Expr::Const {
+                val: DataValue::Bool(true),
+                ..
+            }) => 1,
+            Some(Expr::Const {
+                val: DataValue::Bool(false),
+                ..
+            }) => 0,
+            _ => bail!(CannotDetermineArity(
+                "JsonReader".to_string(),
+                "invalid option 'prepend_index' given, expect a boolean".to_string(),
+                span
+            )),
+        };
+        let fields = opts.get("fields").ok_or_else(|| {
+            CannotDetermineArity(
+                "JsonReader".to_string(),
+                "option 'fields' not provided".to_string(),
+                span,
+            )
+        })?;
+        Ok(match fields.clone().eval_to_const()? {
+            DataValue::List(l) => l.len() + with_row_num,
+            _ => bail!(CannotDetermineArity(
+                "JsonReader".to_string(),
+                "invalid option 'fields' given, expect a list".to_string(),
+                span
+            )),
+        })
     }
 }
