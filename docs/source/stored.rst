@@ -34,12 +34,24 @@ To manipulate stored relations, use one of the following query options:
     Put data from the resulting relation into the named stored relation.
     If keys from the data exist beforehand, the rows are simply replaced with new ones.
 
+.. function:: :ensure <NAME> <SPEC>
+
+    Ensures that rows specified by the output relation and spec already exist in the database,
+    and that no other process has written to these rows at commit since the transaction starts.
+    Useful for ensuring read-write consistency.
+
 .. function:: :rm <NAME> <SPEC>
 
     Remove data from the resulting relation from the named stored relation.
     Only keys are used.
     If a row from the resulting relation does not match any keys, nothing happens for that row,
     and no error is raised.
+
+.. function:: :ensure_not <NAME> <SPEC>
+
+    Ensures that rows specified by the output relation and spec do not exist in the database,
+    and that no other process has written to these rows at commit since the transaction starts.
+    Useful for ensuring read-write consistency.
 
 You can rename and remove stored relations with the system ops ``::relation rename`` and ``::relation remove``,
 described in the system op chapter.
@@ -102,10 +114,10 @@ The expression is evaluated once for each row, so for example if you specified o
 you will get a different UUID for each row.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Put and remove
+Put, remove, ensure and ensure-not
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For ``:put`` and ``:remove``,
+For ``:put``, ``:remove``, ``:ensure`` and ``:ensure_not``,
 you do not need to specify all existing columns in the spec if the omitted columns have a default generator,
 in which case the generator will be used to generate a value,
 or the type of the column is nullable, in which case the value is ``null``.
@@ -113,8 +125,8 @@ Also, the order of the columns does not matter, and neither does whether a colum
 The spec specified when the relation was created will be consulted to know how to store data correctly.
 Specifying default values does not have any effect and will not replace existing ones.
 
-For ``:put``, the spec needs to contain enough bindings to generate all keys and values.
-For ``:rm``, it only needs to generate all keys.
+For ``:put`` and ``:ensure``, the spec needs to contain enough bindings to generate all keys and values.
+For ``:rm`` and ``:ensure_not``, it only needs to generate all keys.
 
 ------------------------------------------------------
 Chaining queries into a single transaction

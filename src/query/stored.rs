@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use miette::{Diagnostic, Result};
+use miette::{bail, Diagnostic, Result};
 use smartstring::SmartString;
 use thiserror::Error;
 
@@ -145,13 +145,85 @@ impl SessionTx {
                         to_clear.extend(cleanups);
                     }
                 }
-            },
+            }
             RelationOp::Ensure => {
-                todo!()
-            },
+                let mut key_extractors = make_extractors(
+                    &relation_store.metadata.keys,
+                    &metadata.keys,
+                    key_bindings,
+                    headers,
+                )?;
+
+                let val_extractors = make_extractors(
+                    &relation_store.metadata.non_keys,
+                    &metadata.non_keys,
+                    dep_bindings,
+                    headers,
+                )?;
+                key_extractors.extend(val_extractors);
+
+                for tuple in res_iter {
+                    let tuple = tuple?;
+
+                    let extracted = Tuple(
+                        key_extractors
+                            .iter()
+                            .map(|ex| ex.extract_data(&tuple))
+                            .try_collect()?,
+                    );
+
+                    let key = relation_store.adhoc_encode_key(&extracted, *span)?;
+                    let val = relation_store.adhoc_encode_val(&extracted, *span)?;
+
+                    let existing = self.tx.get(&key, true)?;
+                    match existing {
+                        None => {
+                            bail!(TransactAssertionFailure {
+                                relation: relation_store.name.to_string(),
+                                key: extracted.0.clone(),
+                                notice: "key does not exist in database".to_string()
+                            })
+                        }
+                        Some(v) => {
+                            if &v as &[u8] != &val as &[u8] {
+                                bail!(TransactAssertionFailure {
+                                    relation: relation_store.name.to_string(),
+                                    key: extracted.0.clone(),
+                                    notice: "key exists in database, but value does not match"
+                                        .to_string()
+                                })
+                            }
+                        }
+                    }
+                }
+            }
             RelationOp::EnsureNot => {
-                todo!()
-            },
+                let key_extractors = make_extractors(
+                    &relation_store.metadata.keys,
+                    &metadata.keys,
+                    key_bindings,
+                    headers,
+                )?;
+
+                for tuple in res_iter {
+                    let tuple = tuple?;
+                    let extracted = Tuple(
+                        key_extractors
+                            .iter()
+                            .map(|ex| ex.extract_data(&tuple))
+                            .try_collect()?,
+                    );
+                    let key = relation_store.adhoc_encode_key(&extracted, *span)?;
+                    let existing = self.tx.get(&key, true)?;
+                    if existing.is_some() {
+                        bail!(TransactAssertionFailure {
+                            relation: relation_store.name.to_string(),
+                            key: extracted.0.clone(),
+                            notice: "key exists in database".to_string()
+                        })
+                    }
+                }
+            }
             RelationOp::Create | RelationOp::Replace | RelationOp::Put => {
                 let mut key_extractors = make_extractors(
                     &relation_store.metadata.keys,
@@ -239,6 +311,14 @@ impl SessionTx {
 
         Ok(to_clear)
     }
+}
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Assertion failure for {key:?} of {relation}: {notice}")]
+struct TransactAssertionFailure {
+    relation: String,
+    key: Vec<DataValue>,
+    notice: String,
 }
 
 enum DataExtractor {
