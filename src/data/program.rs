@@ -82,6 +82,12 @@ impl Display for QueryOutOptions {
                 RelationOp::Rm => {
                     write!(f, ":rm ")?;
                 }
+                RelationOp::Ensure => {
+                    write!(f, ":ensure")?;
+                },
+                RelationOp::EnsureNot => {
+                    write!(f, ":ensure_not")?;
+                },
             }
             write!(f, "{} {{", name)?;
             let mut is_first = true;
@@ -153,6 +159,8 @@ pub(crate) enum RelationOp {
     Replace,
     Put,
     Rm,
+    Ensure,
+    EnsureNot,
 }
 
 #[derive(Default)]

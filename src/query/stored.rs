@@ -73,159 +73,169 @@ impl SessionTx {
             span,
             ..
         } = meta;
-        if op == RelationOp::Rm {
-            let key_extractors = make_extractors(
-                &relation_store.metadata.keys,
-                &metadata.keys,
-                key_bindings,
-                headers,
-            )?;
 
-            let has_triggers = !relation_store.rm_triggers.is_empty();
-            let mut new_tuples: Vec<DataValue> = vec![];
-            let mut old_tuples: Vec<DataValue> = vec![];
+        match op {
+            RelationOp::Rm => {
+                let key_extractors = make_extractors(
+                    &relation_store.metadata.keys,
+                    &metadata.keys,
+                    key_bindings,
+                    headers,
+                )?;
 
-            for tuple in res_iter {
-                let tuple = tuple?;
-                let extracted = Tuple(
-                    key_extractors
-                        .iter()
-                        .map(|ex| ex.extract_data(&tuple))
-                        .try_collect()?,
-                );
-                let key = relation_store.adhoc_encode_key(&extracted, *span)?;
-                if has_triggers {
-                    if let Some(existing) = self.tx.get(&key, false)? {
-                        let mut tup = extracted.clone();
-                        if !existing.is_empty() {
-                            let v_tup = EncodedTuple(&existing);
-                            if v_tup.arity() > 0 {
-                                tup.0.extend(v_tup.decode().0);
+                let has_triggers = !relation_store.rm_triggers.is_empty();
+                let mut new_tuples: Vec<DataValue> = vec![];
+                let mut old_tuples: Vec<DataValue> = vec![];
+
+                for tuple in res_iter {
+                    let tuple = tuple?;
+                    let extracted = Tuple(
+                        key_extractors
+                            .iter()
+                            .map(|ex| ex.extract_data(&tuple))
+                            .try_collect()?,
+                    );
+                    let key = relation_store.adhoc_encode_key(&extracted, *span)?;
+                    if has_triggers {
+                        if let Some(existing) = self.tx.get(&key, false)? {
+                            let mut tup = extracted.clone();
+                            if !existing.is_empty() {
+                                let v_tup = EncodedTuple(&existing);
+                                if v_tup.arity() > 0 {
+                                    tup.0.extend(v_tup.decode().0);
+                                }
                             }
+                            old_tuples.push(DataValue::List(tup.0));
                         }
-                        old_tuples.push(DataValue::List(tup.0));
+                        new_tuples.push(DataValue::List(extracted.0.clone()));
                     }
-                    new_tuples.push(DataValue::List(extracted.0.clone()));
+                    self.tx.del(&key)?;
                 }
-                self.tx.del(&key)?;
-            }
 
-            if has_triggers && !new_tuples.is_empty() {
-                for trigger in &relation_store.rm_triggers {
-                    let mut program =
-                        parse_script(trigger, &Default::default())?.get_single_program()?;
+                if has_triggers && !new_tuples.is_empty() {
+                    for trigger in &relation_store.rm_triggers {
+                        let mut program =
+                            parse_script(trigger, &Default::default())?.get_single_program()?;
 
-                    let mut bindings = relation_store
-                        .metadata
-                        .keys
-                        .iter()
-                        .map(|k| Symbol::new(k.name.clone(), Default::default()))
-                        .collect_vec();
+                        let mut bindings = relation_store
+                            .metadata
+                            .keys
+                            .iter()
+                            .map(|k| Symbol::new(k.name.clone(), Default::default()))
+                            .collect_vec();
 
-                    make_const_rule(&mut program, "_new", bindings.clone(), new_tuples.clone());
+                        make_const_rule(&mut program, "_new", bindings.clone(), new_tuples.clone());
 
-                    let v_bindings = relation_store
-                        .metadata
-                        .non_keys
-                        .iter()
-                        .map(|k| Symbol::new(k.name.clone(), Default::default()));
-                    bindings.extend(v_bindings);
+                        let v_bindings = relation_store
+                            .metadata
+                            .non_keys
+                            .iter()
+                            .map(|k| Symbol::new(k.name.clone(), Default::default()));
+                        bindings.extend(v_bindings);
 
-                    make_const_rule(&mut program, "_old", bindings, old_tuples.clone());
+                        make_const_rule(&mut program, "_old", bindings, old_tuples.clone());
 
-                    let (_, cleanups) = db.run_query(self, program).map_err(|err| {
-                        if err.source_code().is_some() {
-                            err
-                        } else {
-                            err.with_source_code(trigger.to_string())
-                        }
-                    })?;
-                    to_clear.extend(cleanups);
-                }
-            }
-        } else {
-            let mut key_extractors = make_extractors(
-                &relation_store.metadata.keys,
-                &metadata.keys,
-                key_bindings,
-                headers,
-            )?;
-
-            let has_triggers = !relation_store.put_triggers.is_empty();
-            let mut new_tuples: Vec<DataValue> = vec![];
-            let mut old_tuples: Vec<DataValue> = vec![];
-
-            let val_extractors = make_extractors(
-                &relation_store.metadata.non_keys,
-                &metadata.non_keys,
-                dep_bindings,
-                headers,
-            )?;
-            key_extractors.extend(val_extractors);
-
-            for tuple in res_iter {
-                let tuple = tuple?;
-
-                let extracted = Tuple(
-                    key_extractors
-                        .iter()
-                        .map(|ex| ex.extract_data(&tuple))
-                        .try_collect()?,
-                );
-
-                let key = relation_store.adhoc_encode_key(&extracted, *span)?;
-                let val = relation_store.adhoc_encode_val(&extracted, *span)?;
-
-                if has_triggers {
-                    if let Some(existing) = self.tx.get(&key, false)? {
-                        let mut tup = extracted.clone();
-                        if !existing.is_empty() {
-                            let v_tup = EncodedTuple(&existing);
-                            if v_tup.arity() > 0 {
-                                tup.0.extend(v_tup.decode().0);
+                        let (_, cleanups) = db.run_query(self, program).map_err(|err| {
+                            if err.source_code().is_some() {
+                                err
+                            } else {
+                                err.with_source_code(trigger.to_string())
                             }
+                        })?;
+                        to_clear.extend(cleanups);
+                    }
+                }
+            },
+            RelationOp::Ensure => {
+                todo!()
+            },
+            RelationOp::EnsureNot => {
+                todo!()
+            },
+            RelationOp::Create | RelationOp::Replace | RelationOp::Put => {
+                let mut key_extractors = make_extractors(
+                    &relation_store.metadata.keys,
+                    &metadata.keys,
+                    key_bindings,
+                    headers,
+                )?;
+
+                let has_triggers = !relation_store.put_triggers.is_empty();
+                let mut new_tuples: Vec<DataValue> = vec![];
+                let mut old_tuples: Vec<DataValue> = vec![];
+
+                let val_extractors = make_extractors(
+                    &relation_store.metadata.non_keys,
+                    &metadata.non_keys,
+                    dep_bindings,
+                    headers,
+                )?;
+                key_extractors.extend(val_extractors);
+
+                for tuple in res_iter {
+                    let tuple = tuple?;
+
+                    let extracted = Tuple(
+                        key_extractors
+                            .iter()
+                            .map(|ex| ex.extract_data(&tuple))
+                            .try_collect()?,
+                    );
+
+                    let key = relation_store.adhoc_encode_key(&extracted, *span)?;
+                    let val = relation_store.adhoc_encode_val(&extracted, *span)?;
+
+                    if has_triggers {
+                        if let Some(existing) = self.tx.get(&key, false)? {
+                            let mut tup = extracted.clone();
+                            if !existing.is_empty() {
+                                let v_tup = EncodedTuple(&existing);
+                                if v_tup.arity() > 0 {
+                                    tup.0.extend(v_tup.decode().0);
+                                }
+                            }
+                            old_tuples.push(DataValue::List(tup.0));
                         }
-                        old_tuples.push(DataValue::List(tup.0));
+
+                        new_tuples.push(DataValue::List(extracted.0));
                     }
 
-                    new_tuples.push(DataValue::List(extracted.0));
+                    self.tx.put(&key, &val)?;
                 }
 
-                self.tx.put(&key, &val)?;
-            }
+                if has_triggers && !new_tuples.is_empty() {
+                    for trigger in &relation_store.put_triggers {
+                        let mut program =
+                            parse_script(trigger, &Default::default())?.get_single_program()?;
 
-            if has_triggers && !new_tuples.is_empty() {
-                for trigger in &relation_store.put_triggers {
-                    let mut program =
-                        parse_script(trigger, &Default::default())?.get_single_program()?;
+                        let mut bindings = relation_store
+                            .metadata
+                            .keys
+                            .iter()
+                            .map(|k| Symbol::new(k.name.clone(), Default::default()))
+                            .collect_vec();
+                        let v_bindings = relation_store
+                            .metadata
+                            .non_keys
+                            .iter()
+                            .map(|k| Symbol::new(k.name.clone(), Default::default()));
+                        bindings.extend(v_bindings);
 
-                    let mut bindings = relation_store
-                        .metadata
-                        .keys
-                        .iter()
-                        .map(|k| Symbol::new(k.name.clone(), Default::default()))
-                        .collect_vec();
-                    let v_bindings = relation_store
-                        .metadata
-                        .non_keys
-                        .iter()
-                        .map(|k| Symbol::new(k.name.clone(), Default::default()));
-                    bindings.extend(v_bindings);
+                        make_const_rule(&mut program, "_new", bindings.clone(), new_tuples.clone());
+                        make_const_rule(&mut program, "_old", bindings, old_tuples.clone());
 
-                    make_const_rule(&mut program, "_new", bindings.clone(), new_tuples.clone());
-                    make_const_rule(&mut program, "_old", bindings, old_tuples.clone());
-
-                    let (_, cleanups) = db.run_query(self, program).map_err(|err| {
-                        if err.source_code().is_some() {
-                            err
-                        } else {
-                            err.with_source_code(trigger.to_string())
-                        }
-                    })?;
-                    to_clear.extend(cleanups);
+                        let (_, cleanups) = db.run_query(self, program).map_err(|err| {
+                            if err.source_code().is_some() {
+                                err
+                            } else {
+                                err.with_source_code(trigger.to_string())
+                            }
+                        })?;
+                        to_clear.extend(cleanups);
+                    }
                 }
             }
-        }
+        };
 
         Ok(to_clear)
     }
