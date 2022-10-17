@@ -83,10 +83,10 @@ impl Display for QueryOutOptions {
                     write!(f, ":rm ")?;
                 }
                 RelationOp::Ensure => {
-                    write!(f, ":ensure")?;
+                    write!(f, ":ensure ")?;
                 },
                 RelationOp::EnsureNot => {
-                    write!(f, ":ensure_not")?;
+                    write!(f, ":ensure_not ")?;
                 },
             }
             write!(f, "{} {{", name)?;
