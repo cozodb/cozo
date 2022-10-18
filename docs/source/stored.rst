@@ -6,7 +6,7 @@ Persistent databases store data on disk. As Cozo is a relational database,
 data are stored in *stored relations* on disk, which is analogous to tables in SQL databases.
 
 ---------------------------
-Using stored relations
+Stored relations
 ---------------------------
 
 We already know how to query stored relations: 
@@ -36,7 +36,7 @@ To manipulate stored relations, use one of the following query options:
 
 .. function:: :ensure <NAME> <SPEC>
 
-    Ensures that rows specified by the output relation and spec already exist in the database,
+    Ensures that rows specified by the output relation and spec already exist in the database
     and that no other process has written to these rows at commit since the transaction starts.
     Useful for ensuring read-write consistency.
 
@@ -49,7 +49,7 @@ To manipulate stored relations, use one of the following query options:
 
 .. function:: :ensure_not <NAME> <SPEC>
 
-    Ensures that rows specified by the output relation and spec do not exist in the database,
+    Ensures that rows specified by the output relation and spec do not exist in the database
     and that no other process has written to these rows at commit since the transaction starts.
     Useful for ensuring read-write consistency.
 
@@ -129,21 +129,73 @@ For ``:put`` and ``:ensure``, the spec needs to contain enough bindings to gener
 For ``:rm`` and ``:ensure_not``, it only needs to generate all keys.
 
 ------------------------------------------------------
-Chaining queries into a single transaction
+Chaining queries
 ------------------------------------------------------
 
-You can execute multiple queries in one go,
-by wrapping each query in curly braces ``{}``. Each query can have its independent query options.
+Each script you send to Cozo is executed in its own transaction.
+To ensure consistency of multiple operations on data,
+You can define multiple queries in a single script,
+by wrapping each query in curly braces ``{}``.
+Each query can have its independent query options.
 Execution proceeds for each query serially, and aborts at the first error encountered.
 The returned relation is that of the last query.
-
-Multiple queries passed in one go are executed in a single transaction. Within the transaction,
+Within a transaction,
 execution of queries adheres to multi-version concurrency control: only data that are already committed,
 or written within the same transaction, are read,
 and at the end of the transaction, any changes to stored relations are only committed if there are no conflicts
 and no errors are raised.
 
+The ``:assert``, ``:ensure`` and ``:ensure_not`` query options allow you to express complicated constraints
+that must be satisfied for your transaction to commit.
 
 ------------------------------------------------------
-Triggers and ad-hoc indices
+Triggers
 ------------------------------------------------------
+
+Cozo does not have traditional indices on stored relations.
+You must define your indices as separate stored relations yourself,
+for example by having a relation containing identical data but in different column order.
+More complicated and exotic "indices" are also possible and used in practice.
+At query time, you explicitly query the index instead of the original stored relation.
+
+You synchronize your indices and the original by ensuring that any mutations you do on the database
+write the correct data to the "canonical" relation and its indices in the same transaction.
+As doing this by hand for every mutation in your business logic leads to lots of repetitions,
+is error-prone and a maintenance nightmare,
+Cozo also supports *triggers* to do it automatically for you.
+
+You attach triggers to a stored relation by running the system op ``::relation set_triggers``::
+
+    ::relation set_triggers relation_name
+
+    on put { <QUERY> }
+    on put { <QUERY> } # you can specify as many triggers as you need
+    on rm { <QUERY> }
+    on replace { <QUERY> }
+
+You can have anything valid query for ``<QUERY>``.
+
+The ``on put`` queries will run when any data is inserted into the relation,
+which can be triggered by ``:put``, ``:create`` and ``:replace`` query options.
+The implicitly defined rules ``_new[]`` and ``_old[]`` can be used in the queries, and
+contain the added rows, and the replaced rows (if any).
+
+The ``on rm`` queries will run when deletion is triggered by the ``:rm`` query option.
+The implicitly defined rules ``_new[]`` and ``_old[]`` can be used in the queries,
+the first rule contains the keys of the rows for deletion, and the second rule contains the rows
+actually deleted, with both keys and non-keys.
+
+The ``on replace`` queries will run when ``:replace`` query options are run.
+They are run before any ``on put`` triggers are run for the same stored relation.
+
+All triggers for a relation must be specified together, in the same system op.
+In other words, ``::relation set_triggers`` simply replaces all the triggers associated with a stored relation.
+To remove all triggers from a stored relation, simply pass no queries for the system op.
+
+Besides indices, creative use of triggers abounds, but you must consider the maintenance burden they introduce.
+
+.. WARNING::
+
+    Do not introduce loops in your triggers.
+    A loop occurs when a relation has triggers which affect other relations,
+    which in turn have other triggers that ultimately affect the starting relation.

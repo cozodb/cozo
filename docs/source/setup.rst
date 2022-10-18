@@ -15,7 +15,7 @@ we recommend running Cozo under `WSL <https://learn.microsoft.com/en-us/windows/
 especially if your workload is heavy.
 
 ---------------
-Running Cozo
+Starting Cozo
 ---------------
 
 Run the ``cozo`` command in a terminal::
@@ -46,9 +46,9 @@ For example, if you have ``params`` set up to be ``{"num": 1}``,
 then ``$num`` can be used anywhere in your query string where an expression is expected.
 Always use ``params`` instead of constructing query strings yourself when you have parametrized queries.
 
----------------
+^^^^^^^^^^^^^^^^^
 Security
----------------
+^^^^^^^^^^^^^^^^^
 
 Cozo is currently designed to run in a trusted environment and be used by trusted clients,
 therefore it does not come with elaborate authentication and security features.
@@ -67,7 +67,7 @@ and is only a last defence
 when every other security measure that you are responsible for setting up fails.
 
 --------------------------------------------------
-Ways of running queries
+Running queries
 --------------------------------------------------
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
