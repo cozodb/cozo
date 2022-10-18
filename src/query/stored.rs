@@ -8,7 +8,7 @@ use thiserror::Error;
 use crate::algo::constant::Constant;
 use crate::algo::AlgoHandle;
 use crate::data::expr::Expr;
-use crate::data::program::{AlgoApply, InputProgram, InputRulesOrAlgo, RelationOp};
+use crate::data::program::{AlgoApply, InputProgram, InputInlineRulesOrAlgo, RelationOp};
 use crate::data::relation::{ColumnDef, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
@@ -396,7 +396,7 @@ fn make_const_rule(
     let bindings_arity = bindings.len();
     program.prog.insert(
         rule_symbol.clone(),
-        InputRulesOrAlgo::Algo {
+        InputInlineRulesOrAlgo::Algo {
             algo: AlgoApply {
                 algo: AlgoHandle {
                     name: rule_symbol.clone(),

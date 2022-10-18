@@ -177,16 +177,16 @@ impl TempSymbGen {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum InputRulesOrAlgo {
-    Rules { rules: Vec<InputRule> },
+pub(crate) enum InputInlineRulesOrAlgo {
+    Rules { rules: Vec<InputInlineRule> },
     Algo { algo: AlgoApply },
 }
 
-impl InputRulesOrAlgo {
+impl InputInlineRulesOrAlgo {
     pub(crate) fn first_span(&self) -> SourceSpan {
         match self {
-            InputRulesOrAlgo::Rules { rules, .. } => rules[0].span,
-            InputRulesOrAlgo::Algo { algo, .. } => algo.span,
+            InputInlineRulesOrAlgo::Rules { rules, .. } => rules[0].span,
+            InputInlineRulesOrAlgo::Algo { algo, .. } => algo.span,
         }
     }
 }
@@ -593,7 +593,7 @@ impl MagicAlgoRuleArg {
 
 #[derive(Debug, Clone)]
 pub(crate) struct InputProgram {
-    pub(crate) prog: BTreeMap<Symbol, InputRulesOrAlgo>,
+    pub(crate) prog: BTreeMap<Symbol, InputInlineRulesOrAlgo>,
     pub(crate) out_opts: QueryOutOptions,
 }
 
@@ -601,8 +601,8 @@ impl Display for InputProgram {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for (name, rules) in &self.prog {
             match rules {
-                InputRulesOrAlgo::Rules { rules, .. } => {
-                    for InputRule {
+                InputInlineRulesOrAlgo::Rules { rules, .. } => {
+                    for InputInlineRule {
                         head, aggr, body, ..
                     } in rules
                     {
@@ -632,7 +632,7 @@ impl Display for InputProgram {
                         writeln!(f, ";")?;
                     }
                 }
-                InputRulesOrAlgo::Algo {
+                InputInlineRulesOrAlgo::Algo {
                     algo:
                         AlgoApply {
                             algo,
@@ -688,8 +688,8 @@ impl InputProgram {
     pub(crate) fn get_entry_arity(&self) -> Result<usize> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
-                InputRulesOrAlgo::Rules { rules } => Ok(rules.last().unwrap().head.len()),
-                InputRulesOrAlgo::Algo { algo: algo_apply } => algo_apply.arity(),
+                InputInlineRulesOrAlgo::Rules { rules } => Ok(rules.last().unwrap().head.len()),
+                InputInlineRulesOrAlgo::Algo { algo: algo_apply } => algo_apply.arity(),
             };
         }
 
@@ -709,7 +709,7 @@ impl InputProgram {
     pub(crate) fn get_entry_out_head(&self) -> Result<Vec<Symbol>> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
-                InputRulesOrAlgo::Rules { rules } => {
+                InputInlineRulesOrAlgo::Rules { rules } => {
                     let head = &rules.last().unwrap().head;
                     let mut ret = Vec::with_capacity(head.len());
                     let aggrs = &rules.last().unwrap().aggr;
@@ -732,7 +732,7 @@ impl InputProgram {
                     }
                     Ok(ret)
                 }
-                InputRulesOrAlgo::Algo { algo: algo_apply } => {
+                InputInlineRulesOrAlgo::Algo { algo: algo_apply } => {
                     if algo_apply.head.is_empty() {
                         Err(EntryHeadNotExplicitlyDefinedError(entry.first_span()).into())
                     } else {
@@ -748,7 +748,7 @@ impl InputProgram {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
         for (k, rules_or_algo) in &self.prog {
             match rules_or_algo {
-                InputRulesOrAlgo::Rules { rules } => {
+                InputInlineRulesOrAlgo::Rules { rules } => {
                     let mut collected_rules = vec![];
                     for rule in rules {
                         let mut counter = -1;
@@ -791,7 +791,7 @@ impl InputProgram {
                                     }))
                                 }
                             }
-                            let normalized_rule = NormalFormRule {
+                            let normalized_rule = NormalFormInlineRule {
                                 head: new_head.clone(),
                                 aggr: rule.aggr.clone(),
                                 body,
@@ -806,7 +806,7 @@ impl InputProgram {
                         },
                     );
                 }
-                InputRulesOrAlgo::Algo { algo: algo_apply } => {
+                InputInlineRulesOrAlgo::Algo { algo: algo_apply } => {
                     prog.insert(
                         k.clone(),
                         NormalFormAlgoOrRules::Algo {
@@ -825,12 +825,12 @@ pub(crate) struct StratifiedNormalFormProgram(pub(crate) Vec<NormalFormProgram>)
 
 #[derive(Debug, Clone)]
 pub(crate) enum NormalFormAlgoOrRules {
-    Rules { rules: Vec<NormalFormRule> },
+    Rules { rules: Vec<NormalFormInlineRule> },
     Algo { algo: AlgoApply },
 }
 
 impl NormalFormAlgoOrRules {
-    pub(crate) fn rules(&self) -> Option<&[NormalFormRule]> {
+    pub(crate) fn rules(&self) -> Option<&[NormalFormInlineRule]> {
         match self {
             NormalFormAlgoOrRules::Rules { rules: r } => Some(r),
             NormalFormAlgoOrRules::Algo { algo: _ } => None,
@@ -848,7 +848,7 @@ pub(crate) struct StratifiedMagicProgram(pub(crate) Vec<MagicProgram>);
 
 #[derive(Debug, Clone)]
 pub(crate) enum MagicRulesOrAlgo {
-    Rules { rules: Vec<MagicRule> },
+    Rules { rules: Vec<MagicInlineRule> },
     Algo { algo: MagicAlgoApply },
 }
 
@@ -865,7 +865,7 @@ impl MagicRulesOrAlgo {
             MagicRulesOrAlgo::Algo { algo } => algo.arity,
         })
     }
-    pub(crate) fn mut_rules(&mut self) -> Option<&mut Vec<MagicRule>> {
+    pub(crate) fn mut_rules(&mut self) -> Option<&mut Vec<MagicInlineRule>> {
         match self {
             MagicRulesOrAlgo::Rules { rules } => Some(rules),
             MagicRulesOrAlgo::Algo { algo: _ } => None,
@@ -992,7 +992,7 @@ impl MagicSymbol {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct InputRule {
+pub(crate) struct InputInlineRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<InputAtom>,
@@ -1000,20 +1000,20 @@ pub(crate) struct InputRule {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct NormalFormRule {
+pub(crate) struct NormalFormInlineRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<NormalFormAtom>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MagicRule {
+pub(crate) struct MagicInlineRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<MagicAtom>,
 }
 
-impl MagicRule {
+impl MagicInlineRule {
     pub(crate) fn contained_rules(&self) -> BTreeSet<MagicSymbol> {
         let mut coll = BTreeSet::new();
         for atom in self.body.iter() {

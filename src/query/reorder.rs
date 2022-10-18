@@ -4,7 +4,7 @@ use std::mem;
 use miette::{bail, Diagnostic, Result};
 use thiserror::Error;
 
-use crate::data::program::{NormalFormAtom, NormalFormRule};
+use crate::data::program::{NormalFormAtom, NormalFormInlineRule};
 use crate::parse::SourceSpan;
 
 #[derive(Diagnostic, Debug, Error)]
@@ -22,7 +22,7 @@ pub(crate) struct UnsafeNegation(#[label] pub(crate) SourceSpan);
 #[diagnostic(code(eval::unbound_variable))]
 pub(crate) struct UnboundVariable(#[label] pub(crate) SourceSpan);
 
-impl NormalFormRule {
+impl NormalFormInlineRule {
     pub(crate) fn convert_to_well_ordered_rule(self) -> Result<Self> {
         let mut seen_variables = BTreeSet::default();
         let mut round_1_collected = vec![];
@@ -154,7 +154,7 @@ impl NormalFormRule {
             }
         }
 
-        Ok(NormalFormRule {
+        Ok(NormalFormInlineRule {
             head: self.head,
             aggr: self.aggr,
             body: collected,

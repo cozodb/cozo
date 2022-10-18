@@ -8,8 +8,8 @@ use smartstring::SmartString;
 
 use crate::data::program::{
     AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicProgram, MagicRelationApplyAtom,
-    MagicRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol, NormalFormAlgoOrRules,
-    NormalFormAtom, NormalFormProgram, NormalFormRule, StratifiedMagicProgram,
+    MagicInlineRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol, NormalFormAlgoOrRules,
+    NormalFormAtom, NormalFormProgram, NormalFormInlineRule, StratifiedMagicProgram,
     StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -74,7 +74,7 @@ impl MagicProgram {
 
 fn magic_rewrite_ruleset(
     rule_head: MagicSymbol,
-    ruleset: Vec<MagicRule>,
+    ruleset: Vec<MagicInlineRule>,
     ret_prog: &mut MagicProgram,
 ) {
     // at this point, rule_head must be Muggle or Magic, the remaining options are impossible
@@ -130,7 +130,7 @@ fn magic_rewrite_ruleset(
             ret_prog.prog.insert(
                 sup_kw.clone(),
                 MagicRulesOrAlgo::Rules {
-                    rules: vec![MagicRule {
+                    rules: vec![MagicInlineRule {
                         head: sup_args.clone(),
                         aggr: sup_aggr,
                         body: sup_body,
@@ -176,7 +176,7 @@ fn magic_rewrite_ruleset(
                         mem::swap(&mut sup_rule_atoms, &mut collected_atoms);
 
                         // add the sup rule to the program, this clears all collected atoms
-                        sup_rule_entry.push(MagicRule {
+                        sup_rule_entry.push(MagicInlineRule {
                             head: args.clone(),
                             aggr: vec![None; args.len()],
                             body: sup_rule_atoms,
@@ -216,7 +216,7 @@ fn magic_rewrite_ruleset(
                             )
                             .collect_vec();
                         let inp_aggr = vec![None; inp_args.len()];
-                        inp_entry.push(MagicRule {
+                        inp_entry.push(MagicInlineRule {
                             head: inp_args,
                             aggr: inp_aggr,
                             body: vec![sup_rule_app],
@@ -234,7 +234,7 @@ fn magic_rewrite_ruleset(
             .or_default()
             .mut_rules()
             .unwrap();
-        entry.push(MagicRule {
+        entry.push(MagicInlineRule {
             head: rule.head,
             aggr: rule.aggr,
             body: collected_atoms,
@@ -512,20 +512,20 @@ impl NormalFormAtom {
     }
 }
 
-impl NormalFormRule {
+impl NormalFormInlineRule {
     fn adorn(
         &self,
         pending: &mut Vec<MagicSymbol>,
         rules_to_rewrite: &BTreeSet<Symbol>,
         mut seen_bindings: BTreeSet<Symbol>,
-    ) -> MagicRule {
+    ) -> MagicInlineRule {
         let mut ret_body = Vec::with_capacity(self.body.len());
 
         for atom in &self.body {
             let new_atom = atom.adorn(pending, &mut seen_bindings, rules_to_rewrite);
             ret_body.push(new_atom);
         }
-        MagicRule {
+        MagicInlineRule {
             head: self.head.clone(),
             aggr: self.aggr.clone(),
             body: ret_body,

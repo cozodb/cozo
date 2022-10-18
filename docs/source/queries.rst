@@ -5,7 +5,7 @@ Queries
 The Cozo database system is queried using the CozoScript language.
 At its core, CozoScript is a `Datalog <https://en.wikipedia.org/wiki/Datalog>`_ dialect
 supporting stratified negation and stratified recursive meet-aggregations.
-The built-in native algorithms (mainly graph algorithms) further empower
+The built-in utilities and algorithms (mainly graph algorithms) further empower
 CozoScript for much greater ease of use and much wider applicability.
 
 A query consists of one or many named rules.
@@ -19,23 +19,26 @@ In CozoScript, relations (stored relations or relations defined by rules) abide 
 meaning that even if a rule may compute a row multiple times, it will occur only once in the output.
 This is in contradistinction to SQL.
 
-There are two types of named rules in CozoScript: Horn-clause rules and algorithm applications.
-You may think that there is a third type: constant rule, written as::
+There are two types of named rules in CozoScript:
+*inline rules* distinguished by using ``:=`` to connect the head and the body,
+and *fixed rules* distinguished by using ``<~`` to connect the head and the body.
+You may think that *constant rules* with ``<-`` constitute a third type, written as::
 
     const_rule[a, b, c] <- [[1, 2, 3], [4, 5, 6]]
 
-but this is actually syntax sugar for the algorithm application of the ``Constant`` algorithm.
+but this is merely syntax sugar for the fixed rule of the ``Constant`` utility::
+
+    const_rule[a, b, c] <~ Constant(data: [[1, 2, 3], [4, 5, 6]])
 
 -----------------
-Horn-clause rules
+Inline rules
 -----------------
 
-An example of a Horn-clause rule is::
+An example of an inline rule is::
 
     hc_rule[a, e] := rule_a['constant_string', b], rule_b[b, d, a, e]
 
-As can be seen, Horn-clause rules are distinguished by the symbol ``:=`` separating the rule head and rule body.
-The rule body of a Horn-clause rule consists of multiple *atoms* joined by commas,
+The rule body of an inline rule consists of multiple *atoms* joined by commas,
 and is interpreted as representing the *conjunction* of these atoms.
 
 ^^^^^^^^^^^^^^
@@ -81,13 +84,15 @@ If the name you want to give the binding is the same as the name of the column, 
 
     a > b + 1
 
-Here ``a`` and ``b`` must be bound somewhere else in the rule, and the expression must evaluate to a boolean, and act as a *filter*: only rows where the expression evaluates to true are kept.
+Here ``a`` and ``b`` must be bound somewhere else in the rule, and the expression must evaluate to a boolean,
+and act as a *filter*: only rows where the expression evaluates to true are kept.
 
 You can also use *unification atoms* to unify explicitly::
 
     a = b + c + d
 
-for such atoms, whatever appears on the left-hand side must be a single variable and is unified with the right-hand side.
+for such atoms,
+whatever appears on the left-hand side must be a single variable and is unified with the right-hand side.
 This is different from the equality operator ``==``,
 where both sides are merely required to be expressions.
 When the left-hand side is a single *bound* variable,
@@ -111,12 +116,13 @@ The *head* of the rule, which in the simplest case is just a list of variables,
 then defines whichever columns to keep, and their order in the output relation.
 
 Each variable in the head must be bound in the body, this is one of the *safety rules* of Datalog.
+Not all variables appearing in the body need to appear in the head.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 Multiple definitions and disjunction
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For Horn-clause rules only, multiple rule definitions may share the same name,
+For inline rules only, multiple rule definitions may share the same name,
 with the requirement that the arity of the head in each definition must match.
 The returned relation is then the *disjunction* of the multiple definitions,
 which correspond to *union* in SQL.
@@ -125,10 +131,12 @@ In complicated situations, you may instead write disjunctions in a single rule w
 
     rule1[a, b] := rule2[a] or rule3[a], rule4[a, b]
 
-For completeness, there is also an explicit ``and`` operator, but it is semantically identical to the comma, except that
+For completeness, there is also an explicit ``and`` operator, but it is semantically identical to the comma,
+except that
 it has higher operator precedence than ``or``, which in turn has higher operator precedence than the comma.
 
-During evaluation, each rule is canonicalized into disjunction normal form
+During evaluation, each rule is canonicalized into
+`disjunction normal form <https://en.wikipedia.org/wiki/Disjunctive_normal_form>`_
 and each clause of the outmost disjunction is treated as a separate rule.
 The consequence is that the safety rule may be violated
 even though textually every variable in the head occurs in the body.
@@ -142,7 +150,7 @@ is a violation of the safety rule since it is rewritten into two rules, each of 
 Negation
 ^^^^^^^^^^^^^^^^
 
-Atoms in Horn clauses may be *negated* by putting ``not`` in front of them, as in::
+Atoms in inline rules may be *negated* by putting ``not`` in front of them, as in::
 
     not rule1[a, b]
 
@@ -160,8 +168,8 @@ unifications and multi-unifications are converted to equivalent expressions and 
 Recursion and stratification
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The body of a Horn-clause rule may contain rule applications of itself,
-and multiple Horn-clause rules may apply each other recursively.
+The body of an inline rule may contain rule applications of itself,
+and multiple inline rules may apply each other recursively.
 The only exception is the entry rule ``?``, which cannot be referred to by other rules.
 
 Self and mutual references allow recursion to be defined easily. To guard against semantically pathological cases,
@@ -190,7 +198,7 @@ Aggregation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 CozoScript supports aggregations, as does SQL, which provides a very useful extension to pure relational algebra.
-In CozoScript, aggregations are specified for Horn-clause rules by applying aggregation operators to variables 
+In CozoScript, aggregations are specified for inline rules by applying aggregation operators to variables
 in the rule head, as in::
 
     ?[department, count(employee)] := :personnel{department, employee}
@@ -220,7 +228,7 @@ The reason is that in complicated situations the semantics is ambiguous and coun
 Existing database systems do not usually allow aggregations through recursion,
 since in many cases, it is difficult to give useful semantics to such queries.
 In CozoScript we allow aggregations for self-recursion for a limited subset of aggregation operators,
-the so-called *meet aggregations*, such as the following example shows::
+the so-called *semi-lattice aggregations*, such as the following example shows::
 
     shortest_distance[destination, min(distance)] := route{source: 'A', destination, distance}
     shortest_distance[destination, min(distance)] :=
@@ -233,39 +241,44 @@ this query computes the shortest distances from a node to all nodes using the ``
 
 Concerning stratification, if a rule has aggregations in its head,
 then any rule that contains it in an atom must be in a higher stratum,
-unless that rule is the same rule (self-recursion) and all aggregations in its head are meet aggregations.
+unless that rule is the same rule (self-recursion) and all aggregations in its head are semi-lattice aggregations.
 
-See the dedicated chapter for the aggregation operators available and more details of what "meet" aggregations mean.
+Consult the dedicated chapter for the aggregation operators available.
 
 ----------------------------------
-Algorithm application
+Fixed rules
 ----------------------------------
 
-The final type of named rule, algorithm applications, is specified by the algorithm name,
-take a specified number of named or stored relations as input relations, and have specific options that you provide.
+The body of a fixed rule starts with the name of the utility or algorithm being applied,
+then takes a specified number of named or stored relations as its *input relations*,
+followed by *options* that you provide.
 The following query is a calculation of PageRank::
 
     ?[] <~ PageRank(:route[], theta: 0.5)
 
-Algorithm applications are distinguished by the curly arrow ``<~``.
 In the above example, the relation ``:route`` is the single input relation expected.
-Algorithms do not care if an input relation is stored or results from a rule.
-Each algorithm expects specific shapes of input relations,
+Input relations may be stored relations or relations resulting from rules.
+Each utility/algorithm expects specific shapes of input relations,
 for example, PageRank expects the first two columns of the relation to denote the source and destination
-of links in a graph. You must consult the documentation for each algorithm to understand its API.
-In algorithm applications, bindings for input relations are usually omitted, but sometimes if they are provided
-they are interpreted and used in algorithm-specific ways, for example in the DFS algorithm bindings
+of links in a graph. You must consult the documentation for each utility/algorithm to understand its API.
+In fixed rules, bindings for input relations are usually omitted, but sometimes if they are provided
+they are interpreted and used in case-specific ways, for example in the DFS algorithm bindings
 can be used to construct an expression for testing the termination condition.
-In the example, ``theta`` is a parameter of the algorithm, which is an expression evaluating to a constant.
-Each algorithm expects specific parameter types; some parameters have default values and may be omitted.
+In the example given above, ``theta`` is an option of the algorithm,
+which is required by the API to be an expression evaluating to a constant.
+Each utility/algorithm expects specific types for the options;
+some options have default values and may be omitted.
 
-Each algorithm has a determinate output arity. Usually, you omit the bindings in the rule head, as we do above,
+Each fixed rule has a determinate output arity,
+deduced from the specific utility/algorithm being applied and the options given.
+Usually, you omit the bindings in the rule head, as we do above,
 but if you do provide bindings, the arities must match.
 
-In terms of stratification, each algorithm application lives in its own stratum:
+In terms of stratification, each fixed rule lives in its own stratum:
 it is evaluated after all rules it depends on are completely evaluated,
-and all rules depending on the output relation of an algorithm start evaluation only after complete evaluation
-of the algorithm. In particular, unlike Horn-clause rules, there is no early termination even if the output relation
+and all rules depending on the output relation of a fiex rule start evaluation only after complete evaluation
+of the fixed rule.
+In particular, unlike inline rules, there is no early termination even if the output relation
 is for the entry rule.
 
 -----------------------
@@ -320,7 +333,7 @@ Here we explain query options that exclusively affect the query itself.
     with minus denoting descending sort. As an example, ``:sort -count(employee), dept_name``
     sorts by employee count descendingly first, then break ties with department name in ascending alphabetical order.
     Note that your entry rule head must contain both ``dept_name`` and ``count(employee)``:
-    aggregations must be done in Horn-clause rules, not in output sorting.  ``:order`` is an alias for ``:sort``.
+    aggregations must be done in inline rules, not in output sorting.  ``:order`` is an alias for ``:sort``.
 
 .. function:: :assert none
 

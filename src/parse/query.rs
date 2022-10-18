@@ -15,7 +15,7 @@ use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::program::{
     AlgoApply, AlgoRuleArg, InputAtom, InputNamedFieldRelationApplyAtom, InputProgram,
-    InputRelationApplyAtom, InputRule, InputRuleApplyAtom, InputRulesOrAlgo, QueryAssertion,
+    InputRelationApplyAtom, InputInlineRule, InputRuleApplyAtom, InputInlineRulesOrAlgo, QueryAssertion,
     QueryOutOptions, RelationOp, SortDir, Unification,
 };
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
@@ -84,7 +84,7 @@ pub(crate) fn parse_query(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
 ) -> Result<InputProgram> {
-    let mut progs: BTreeMap<Symbol, InputRulesOrAlgo> = Default::default();
+    let mut progs: BTreeMap<Symbol, InputInlineRulesOrAlgo> = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
     let mut stored_relation = None;
 
@@ -95,12 +95,12 @@ pub(crate) fn parse_query(
 
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
-                        e.insert(InputRulesOrAlgo::Rules { rules: vec![rule] });
+                        e.insert(InputInlineRulesOrAlgo::Rules { rules: vec![rule] });
                     }
                     Entry::Occupied(mut e) => {
                         let key = e.key().to_string();
                         match e.get_mut() {
-                            InputRulesOrAlgo::Rules { rules: rs } => {
+                            InputInlineRulesOrAlgo::Rules { rules: rs } => {
                                 #[derive(Debug, Error, Diagnostic)]
                                 #[error("Rule {0} has multiple definitions with conflicting heads")]
                                 #[diagnostic(code(parser::head_aggr_mismatch))]
@@ -122,7 +122,7 @@ pub(crate) fn parse_query(
 
                                 rs.push(rule);
                             }
-                            InputRulesOrAlgo::Algo { algo } => {
+                            InputInlineRulesOrAlgo::Algo { algo } => {
                                 let algo_span = algo.span;
                                 bail!(MultipleRuleDefinitionError(
                                     e.key().name.to_string(),
@@ -139,15 +139,15 @@ pub(crate) fn parse_query(
 
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
-                        e.insert(InputRulesOrAlgo::Algo { algo: apply });
+                        e.insert(InputInlineRulesOrAlgo::Algo { algo: apply });
                     }
                     Entry::Occupied(e) => {
                         let found_name = e.key().name.to_string();
                         let mut found_span = match e.get() {
-                            InputRulesOrAlgo::Rules { rules } => {
+                            InputInlineRulesOrAlgo::Rules { rules } => {
                                 rules.iter().map(|r| r.span).collect_vec()
                             }
-                            InputRulesOrAlgo::Algo { algo } => vec![algo.span],
+                            InputInlineRulesOrAlgo::Algo { algo } => vec![algo.span],
                         };
                         found_span.push(rule_span);
                         bail!(MultipleRuleDefinitionError(found_name, found_span));
@@ -161,10 +161,10 @@ pub(crate) fn parse_query(
 
                 if let Some(found) = progs.get(&name) {
                     let mut found_span = match found {
-                        InputRulesOrAlgo::Rules { rules } => {
+                        InputInlineRulesOrAlgo::Rules { rules } => {
                             rules.iter().map(|r| r.span).collect_vec()
                         }
-                        InputRulesOrAlgo::Algo { algo } => {
+                        InputInlineRulesOrAlgo::Algo { algo } => {
                             vec![algo.span]
                         }
                     };
@@ -195,7 +195,7 @@ pub(crate) fn parse_query(
                 let arity = algo_impl.arity(&options, &head, span)?;
                 progs.insert(
                     name,
-                    InputRulesOrAlgo::Algo {
+                    InputInlineRulesOrAlgo::Algo {
                         algo: AlgoApply {
                             algo: handle,
                             rule_args: vec![],
@@ -408,7 +408,7 @@ pub(crate) fn parse_query(
 fn parse_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-) -> Result<(Symbol, InputRule)> {
+) -> Result<(Symbol, InputInlineRule)> {
     let span = src.extract_span();
     let mut src = src.into_inner();
     let head = src.next().unwrap();
@@ -429,7 +429,7 @@ fn parse_rule(
 
     Ok((
         name,
-        InputRule {
+        InputInlineRule {
             head,
             aggr,
             body: body_clauses,
@@ -767,7 +767,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
     );
     prog.prog.insert(
         entry_symbol.clone(),
-        InputRulesOrAlgo::Algo {
+        InputInlineRulesOrAlgo::Algo {
             algo: AlgoApply {
                 algo: AlgoHandle {
                     name: entry_symbol.clone(),

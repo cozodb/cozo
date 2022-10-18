@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{
-    MagicAlgoApply, MagicAtom, MagicRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram,
+    MagicAlgoApply, MagicAtom, MagicInlineRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram,
 };
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -138,7 +138,7 @@ impl SessionTx {
     }
     pub(crate) fn compile_magic_rule_body(
         &mut self,
-        rule: &MagicRule,
+        rule: &MagicInlineRule,
         rule_name: &MagicSymbol,
         stores: &BTreeMap<MagicSymbol, InMemRelation>,
         ret_vars: &[Symbol],
