@@ -1,11 +1,14 @@
 use std::collections::BTreeMap;
-use std::env;
 use std::fmt::Debug;
-use std::process::exit;
+use std::fs;
+use std::net::Ipv6Addr;
+use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Instant;
 
 use clap::Parser;
 use env_logger::Env;
+use rand::Rng;
 use rouille::{router, try_or_400, Response};
 use serde_json::json;
 
@@ -30,16 +33,23 @@ struct Args {
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
-    let auth_str = env::var("COZO_AUTH").ok();
-    if args.bind != "127.0.0.1" && auth_str.is_none() {
+    if args.bind != "127.0.0.1" {
         eprintln!(
-            r#"You instructed Cozo to bind to address {}, which can potentially be accessed from
-external networks. Please note that Cozo is designed to be accessed by trusted clients inside
-trusted environments only. If you are absolutely sure that exposing Cozo to the address is OK,
-set the environment variable COZO_AUTH and configure clients appropriately."#,
+            r#"
+====================================================================================
+                      !! SECURITY NOTICE, PLEASE READ !!
+====================================================================================
+You instructed Cozo to bind to the non-default address `{}`.
+Cozo is designed to be accessed by trusted clients in a trusted network.
+As a last defense against unauthorized access when everything else fails,
+any requests from non-loopback addresses require the HTTP request header
+`x-cozo-auth` to be set to the content of auth.txt in your database directory.
+This is not a sufficient protection against attacks, and you must set up
+proper authentication schemes, encryptions, etc. by firewalls and/or proxies.
+====================================================================================
+"#,
             args.bind
         );
-        exit(1);
     }
 
     let builder = DbBuilder::default()
@@ -47,16 +57,35 @@ set the environment variable COZO_AUTH and configure clients appropriately."#,
         .create_if_missing(true);
     let db = Db::build(builder).unwrap();
 
-    let addr = format!("{}:{}", args.bind, args.port);
-    println!("Service running at http://{}", addr);
+    let mut path_buf = PathBuf::from(&args.path);
+    path_buf.push("auth.txt");
+    let auth_guard = match fs::read_to_string(&path_buf) {
+        Ok(s) => s.trim().to_string(),
+        Err(_) => {
+            let s = rand::thread_rng()
+                .sample_iter(&rand::distributions::Alphanumeric)
+                .take(64)
+                .map(char::from)
+                .collect();
+            fs::write(&path_buf, &s).unwrap();
+            s
+        }
+    };
+
+    let addr = if Ipv6Addr::from_str(&args.bind).is_ok() {
+        format!("[{}]:{}", args.bind, args.port)
+    } else {
+        format!("{}:{}", args.bind, args.port)
+    };
+    println!("Database web API running at http://{}", addr);
     rouille::start_server(addr, move |request| {
         router!(request,
             (POST) (/text-query) => {
-                if let Some(auth) = &auth_str {
+                if !request.remote_addr().ip().is_loopback() {
                     match request.header("x-cozo-auth") {
                         None => return Response::text("Unauthorized").with_status_code(401),
                         Some(code) => {
-                            if auth != code {
+                            if auth_guard != code {
                                 return Response::text("Unauthorized").with_status_code(401);
                             }
                         }
