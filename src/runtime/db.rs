@@ -19,9 +19,7 @@ use cozorocks::{DbBuilder, RocksDb};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{
-    compare_tuple_keys, rusty_scratch_cmp, Tuple, SCRATCH_DB_KEY_PREFIX_LEN,
-};
+use crate::data::tuple::{compare_tuple_keys, rusty_scratch_cmp, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
@@ -216,9 +214,13 @@ impl Db {
                 let mut res = json!(null);
                 let mut cleanups = vec![];
                 for p in ps {
+                    let sleep_opt = p.out_opts.sleep;
                     let (q_res, q_cleanups) = self.run_query(&mut tx, p)?;
                     res = q_res;
                     cleanups.extend(q_cleanups);
+                    if let Some(secs) = sleep_opt {
+                        thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
+                    }
                 }
                 if is_write {
                     tx.commit_tx()?;
@@ -516,8 +518,7 @@ impl Db {
             .to_normalized_program(tx)?
             .stratify()?
             .magic_sets_rewrite(tx)?;
-        let (compiled, stores) =
-            tx.stratified_magic_compile(&program)?;
+        let (compiled, stores) = tx.stratified_magic_compile(&program)?;
 
         let poison = Poison::default();
         if let Some(secs) = input_program.out_opts.timeout {
@@ -752,10 +753,10 @@ impl Poison {
         }
         Ok(())
     }
-    pub(crate) fn set_timeout(&self, secs: u64) {
+    pub(crate) fn set_timeout(&self, secs: f64) {
         let pill = self.0.clone();
         thread::spawn(move || {
-            thread::sleep(Duration::from_secs(secs));
+            thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
             pill.store(true, Ordering::Relaxed);
         });
     }

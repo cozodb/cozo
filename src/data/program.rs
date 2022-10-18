@@ -24,11 +24,12 @@ pub(crate) enum QueryAssertion {
     AssertSome(SourceSpan),
 }
 
-#[derive(Clone, Eq, PartialEq, Default)]
+#[derive(Clone, PartialEq, Default)]
 pub(crate) struct QueryOutOptions {
     pub(crate) limit: Option<usize>,
     pub(crate) offset: Option<usize>,
-    pub(crate) timeout: Option<u64>,
+    pub(crate) timeout: Option<f64>,
+    pub(crate) sleep: Option<f64>,
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
     pub(crate) store_relation: Option<(InputRelationHandle, RelationOp)>,
     pub(crate) assertion: Option<QueryAssertion>,

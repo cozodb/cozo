@@ -214,10 +214,21 @@ pub(crate) fn parse_query(
                 let timeout = build_expr(pair, param_pool)?
                     .eval_to_const()
                     .map_err(|err| OptionNotConstantError("timeout", span, [err]))?
-                    .get_non_neg_int()
+                    .get_float()
                     .ok_or(OptionNotNonNegIntError("timeout", span))?;
-                ensure!(timeout > 0, OptionNotPosIntError("timeout", span));
-                out_opts.timeout = Some(timeout as u64);
+                ensure!(timeout > 0., OptionNotPosIntError("timeout", span));
+                out_opts.timeout = Some(timeout);
+            }
+            Rule::sleep_option => {
+                let pair = pair.into_inner().next().unwrap();
+                let span = pair.extract_span();
+                let sleep = build_expr(pair, param_pool)?
+                    .eval_to_const()
+                    .map_err(|err| OptionNotConstantError("sleep", span, [err]))?
+                    .get_float()
+                    .ok_or(OptionNotNonNegIntError("sleep", span))?;
+                ensure!(sleep > 0., OptionNotPosIntError("sleep", span));
+                out_opts.sleep = Some(sleep);
             }
             Rule::limit_option => {
                 let pair = pair.into_inner().next().unwrap();

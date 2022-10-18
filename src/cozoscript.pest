@@ -94,7 +94,7 @@ term = _{ literal | param | grouping | apply | var | list }
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = _{(limit_option|offset_option|sort_option|relation_option|timeout_option|
+option = _{(limit_option|offset_option|sort_option|relation_option|timeout_option|sleep_option|
             assert_none_option|assert_some_option) ~ ";"?}
 out_arg = @{var ~ ("(" ~ var ~ ")")?}
 limit_option = {":limit"  ~ expr}
@@ -109,6 +109,7 @@ relation_rm = {":rm"}
 relation_ensure = {":ensure"}
 relation_ensure_not = {":ensure_not"}
 timeout_option = {":timeout" ~ expr }
+sleep_option = {":sleep" ~ expr }
 sort_arg = { sort_dir? ~ out_arg }
 sort_dir = _{ sort_asc | sort_desc }
 sort_asc = {"+"}

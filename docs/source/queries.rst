@@ -302,7 +302,15 @@ Here we explain query options that exclusively affect the query itself.
 
 .. function:: :timeout <N>
 
-    If the query does not complete within ``<N>`` seconds, abort.
+    Abort if the query does not complete within ``<N>`` seconds.
+    Seconds may be specified as an expression so that random timeouts are possible.
+
+.. function:: :sleep <N>
+
+    If specified, the query will wait for ``<N>`` seconds after completion,
+    before committing or proceeding to the next query.
+    Seconds may be specified as an expression so that random timeouts are possible.
+    This is useful for deliberately interleaving concurrent queries to test for complex logic.
 
 .. function:: :sort <SORT_ARG> (, <SORT_ARG>)*
 
