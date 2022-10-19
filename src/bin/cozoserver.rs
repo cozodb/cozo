@@ -8,8 +8,9 @@ use std::time::Instant;
 
 use clap::Parser;
 use env_logger::Env;
+use log::{error, info};
 use rand::Rng;
-use rouille::{router, try_or_400, Response};
+use rouille::{router, try_or_400, Request, Response};
 use serde_json::json;
 
 use cozo::{Db, DbBuilder};
@@ -79,43 +80,57 @@ proper authentication schemes, encryptions, etc. by firewalls and/or proxies.
     };
     println!("Database web API running at http://{}", addr);
     rouille::start_server(addr, move |request| {
-        router!(request,
-            (POST) (/text-query) => {
-                if !request.remote_addr().ip().is_loopback() {
-                    match request.header("x-cozo-auth") {
-                        None => return Response::text("Unauthorized").with_status_code(401),
-                        Some(code) => {
-                            if auth_guard != code {
-                                return Response::text("Unauthorized").with_status_code(401);
+        let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f");
+        let log_ok = |req: &Request, _resp: &Response, elap: std::time::Duration| {
+            info!("{} {} {} {:?}", now, req.method(), req.raw_url(), elap);
+        };
+        let log_err = |req: &Request, elap: std::time::Duration| {
+            error!(
+                "{} Handler panicked: {} {} {:?}",
+                now,
+                req.method(),
+                req.raw_url(),
+                elap
+            );
+        };
+        rouille::log_custom(request, log_ok, log_err, || {
+            router!(request,
+                (POST) (/text-query) => {
+                    if !request.remote_addr().ip().is_loopback() {
+                        match request.header("x-cozo-auth") {
+                            None => return Response::text("Unauthorized").with_status_code(401),
+                            Some(code) => {
+                                if auth_guard != code {
+                                    return Response::text("Unauthorized").with_status_code(401);
+                                }
                             }
                         }
                     }
-                }
 
-                #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
-                struct QueryPayload {
-                    script: String,
-                    params: BTreeMap<String, serde_json::Value>,
-                }
-
-                let payload: QueryPayload = try_or_400!(rouille::input::json_input(request));
-                let start = Instant::now();
-
-                match db.run_script(&payload.script, &payload.params) {
-                    Ok(mut result) => {
-                        if let Some(obj) = result.as_object_mut() {
-                            obj.insert(
-                                "time_taken".to_string(),
-                                json!(start.elapsed().as_millis() as u64),
-                            );
-                        }
-                        Response::json(&result)
+                    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+                    struct QueryPayload {
+                        script: String,
+                        params: BTreeMap<String, serde_json::Value>,
                     }
-                    Err(e) => Response::text(format!("{:?}", e)).with_status_code(400),
-                }
-            },
-            (GET) (/) => {
-                Response::html(r##"
+
+                    let payload: QueryPayload = try_or_400!(rouille::input::json_input(request));
+                    let start = Instant::now();
+
+                    match db.run_script(&payload.script, &payload.params) {
+                        Ok(mut result) => {
+                            if let Some(obj) = result.as_object_mut() {
+                                obj.insert(
+                                    "time_taken".to_string(),
+                                    json!(start.elapsed().as_millis() as u64),
+                                );
+                            }
+                            Response::json(&result)
+                        }
+                        Err(e) => Response::text(format!("{:?}", e)).with_status_code(400),
+                    }
+                },
+                (GET) (/) => {
+                    Response::html(r##"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -168,8 +183,9 @@ The global variables 'COZO_AUTH' and 'LAST_RESP' are available.`);
 </body>
 </html>
                 "##)
-            },
-            _ => Response::empty_404()
-        )
+                },
+                _ => Response::empty_404()
+            )
+        })
     });
 }
