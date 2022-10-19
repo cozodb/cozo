@@ -2,10 +2,38 @@
 Query execution
 ====================================
 
-How queries are executed in a particular database
-is usually considered an implementation detail hidden behind an abstraction layer,
-which normal users should not care about.
-As everyone who has used databases knows, however,
-it is at best a leaky abstraction, since bad query execution plans entail
-unacceptable performance characteristics,
-and fighting, or "optimizing" the query optimizers is a difficult but necessary task.
+Usually, in a database,
+how queries are executed is usually considered an implementation detail
+hidden behind an abstraction layer, which normal users need not care about.
+As everyone knows, however, this abstraction layer is leaky,
+since bad query execution plans invariably occur and hurt performance,
+and developers routinely "go under" the abstraction layer to solve such problems.
+
+Therefore, in Cozo we take the pragmatic approach and make certain guarantees
+about query execution, which we will explain in the following.
+It is essential to at least have a rough idea of these guarantees to write
+efficient queries and to debug performance.
+
+--------------------------------------
+Stratification
+--------------------------------------
+
+--------------------------------------
+Semi-naïve evaluation
+--------------------------------------
+
+--------------------------------------
+Magic set rewrites
+--------------------------------------
+
+---------------------------------------
+Relations as indices
+---------------------------------------
+
+---------------------------------------
+Ordering of atoms
+---------------------------------------
+
+---------------------------------------
+Early stopping
+---------------------------------------

@@ -76,7 +76,7 @@ Lists are items enclosed between square brackets ``[]``, separated by commas.
 A trailing comma is allowed after the last item.
 
 ------------------------------------------------
-Schema types for stored relations
+Column types
 ------------------------------------------------
 
 The following *atomic types* can be specified for columns in stored relations:
