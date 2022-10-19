@@ -35,22 +35,7 @@ fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
     if args.bind != "127.0.0.1" {
-        eprintln!(
-            r#"
-====================================================================================
-                      !! SECURITY NOTICE, PLEASE READ !!
-====================================================================================
-You instructed Cozo to bind to the non-default address `{}`.
-Cozo is designed to be accessed by trusted clients in a trusted network.
-As a last defense against unauthorized access when everything else fails,
-any requests from non-loopback addresses require the HTTP request header
-`x-cozo-auth` to be set to the content of auth.txt in your database directory.
-This is not a sufficient protection against attacks, and you must set up
-proper authentication schemes, encryptions, etc. by firewalls and/or proxies.
-====================================================================================
-"#,
-            args.bind
-        );
+        eprintln!("{}", SECURITY_WARNING);
     }
 
     let builder = DbBuilder::default()
@@ -130,7 +115,15 @@ proper authentication schemes, encryptions, etc. by firewalls and/or proxies.
                     }
                 },
                 (GET) (/) => {
-                    Response::html(r##"
+                    Response::html(HTML_CONTENT)
+                },
+                _ => Response::empty_404()
+            )
+        })
+    });
+}
+
+const HTML_CONTENT: &str = r##"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -182,10 +175,18 @@ The global variables 'COZO_AUTH' and 'LAST_RESP' are available.`);
 </script>
 </body>
 </html>
-                "##)
-                },
-                _ => Response::empty_404()
-            )
-        })
-    });
-}
+"##;
+
+const SECURITY_WARNING: &str = r#"
+====================================================================================
+                      !! SECURITY NOTICE, PLEASE READ !!
+====================================================================================
+You instructed Cozo to bind to a non-default address.
+Cozo is designed to be accessed by trusted clients in a trusted network.
+As a last defense against unauthorized access when everything else fails,
+any requests from non-loopback addresses require the HTTP request header
+`x-cozo-auth` to be set to the content of auth.txt in your database directory.
+This is not a sufficient protection against attacks, and you must set up
+proper authentication schemes, encryptions, etc. by firewalls and/or proxies.
+====================================================================================
+"#;
