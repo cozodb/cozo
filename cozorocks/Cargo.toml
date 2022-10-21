@@ -2,19 +2,23 @@
 name = "cozorocks"
 version = "0.1.0"
 edition = "2021"
-license = "AGPL-3.0-or-later"
+license = "MIT/Apache-2.0/BSD-3-Clause"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 cxx = "1.0.69"
 miette = "5.3.0"
-librocksdb-sys = { version = "=0.8.0", features = ["lz4", "zstd"] }
+libc = "0.2"
+tikv-jemalloc-sys = { version = "0.5", features = ["unprefixed_malloc_on_supported_platforms"], optional = true }
+lz4-sys = { version = "1.9" }
+zstd-sys = { version = "2.0", features = ["zdict_builder"] }
 
 [features]
-jemalloc = ["librocksdb-sys/jemalloc"]
-io-uring = ["librocksdb-sys/io-uring", "pkg-config"]
+jemalloc = ["tikv-jemalloc-sys"]
+io-uring = ["pkg-config"]
 
 [build-dependencies]
 cxx-build = "1.0.69"
 pkg-config = { version = "0.3.25", optional = true }
+cc = { version = "1.0", features = ["parallel"] }
