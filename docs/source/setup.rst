@@ -167,3 +167,18 @@ If you need to set an auth string, modify the global variable ``COZO_AUTH``.
 The JavaScript Console is not as nice to use as Jupyter notebooks,
 but we think that it provides a much better experience than hand-rolled CLI consoles,
 since you can use JavaScript to manipulate the results.
+
+--------------
+Building
+--------------
+
+If for some reason the binary distribution does not work for you,
+you can build Cozo from source, which is straightforward.
+First, clone the Cozo git repo (you need to pass the ``--recursive`` flag so that submodules are also cloned),
+then you need to install the `Rust toolchain <https://www.rust-lang.org/tools/install>`_ for your system.
+You also need a C++17 compiler.
+After these preparations, run ``cargo build --release`` in the root of the cloned repo,
+wait for potentially a long time, and you will find the compiled binary in ``target/release``
+if everything goes well. You can pass ``-F jemalloc`` to the ``cargo build`` command
+to indicate that you want to compile and use jemalloc as the memory allocator for the RocksDB storage backend,
+which, depending on your workload, can make a difference in performance.
