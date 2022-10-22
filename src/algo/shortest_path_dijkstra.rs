@@ -74,12 +74,10 @@ impl AlgoImpl for ShortestPathDijkstra {
                         } else {
                             dijkstra(&graph, start, &single, &(), &())
                         }
+                    } else if keep_ties {
+                        dijkstra_keep_ties(&graph, start, tn, &(), &(), poison.clone())?
                     } else {
-                        if keep_ties {
-                            dijkstra_keep_ties(&graph, start, tn, &(), &(), poison.clone())?
-                        } else {
-                            dijkstra(&graph, start, tn, &(), &())
-                        }
+                        dijkstra(&graph, start, tn, &(), &())
                     }
                 } else {
                     dijkstra(&graph, start, &(), &(), &())
@@ -115,12 +113,10 @@ impl AlgoImpl for ShortestPathDijkstra {
                                 } else {
                                     dijkstra(&graph, start, &single, &(), &())
                                 }
+                            } else if keep_ties {
+                                dijkstra_keep_ties(&graph, start, tn, &(), &(), poison.clone())?
                             } else {
-                                if keep_ties {
-                                    dijkstra_keep_ties(&graph, start, tn, &(), &(), poison.clone())?
-                                } else {
-                                    dijkstra(&graph, start, tn, &(), &())
-                                }
+                                dijkstra(&graph, start, tn, &(), &())
                             }
                         } else {
                             dijkstra(&graph, start, &(), &(), &())

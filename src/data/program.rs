@@ -85,10 +85,10 @@ impl Display for QueryOutOptions {
                 }
                 RelationOp::Ensure => {
                     write!(f, ":ensure ")?;
-                },
+                }
                 RelationOp::EnsureNot => {
                     write!(f, ":ensure_not ")?;
-                },
+                }
             }
             write!(f, "{} {{", name)?;
             let mut is_first = true;
@@ -209,7 +209,7 @@ impl Clone for AlgoApply {
             options: self.options.clone(),
             head: self.head.clone(),
             arity: self.arity,
-            span: self.span.clone(),
+            span: self.span,
             algo_impl: self.algo.get_impl().unwrap(),
         }
     }
@@ -439,7 +439,7 @@ impl MagicAlgoApply {
                 Ok(DataValue::Num(n)) => {
                     let f = n.get_float();
                     ensure!(
-                        f >= 0. && f <= 1.,
+                        (0. ..=1.).contains(&f),
                         WrongAlgoOptionError {
                             name: name.to_string(),
                             span: v.span(),

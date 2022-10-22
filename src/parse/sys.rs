@@ -38,7 +38,9 @@ pub(crate) fn parse_sys(
         Rule::running_op => SysOp::ListRunning,
         Rule::kill_op => {
             let i_str = inner.into_inner().next().unwrap();
-            let i = u64::from_str_radix(i_str.as_str(), 10)
+            let i = i_str
+                .as_str()
+                .parse::<u64>()
                 .map_err(|_| ProcessIdError(i_str.as_str().to_string(), i_str.extract_span()))?;
             SysOp::KillRunning(i)
         }

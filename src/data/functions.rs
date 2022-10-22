@@ -615,7 +615,7 @@ pub(crate) fn op_unpack_bits(args: &[DataValue]) -> Result<DataValue> {
     if let DataValue::Bytes(bs) = &args[0] {
         let mut ret = vec![false; bs.len() * 8];
         for (chunk, byte) in bs.iter().enumerate() {
-            ret[chunk * 8 + 0] = (*byte & 0b10000000) != 0;
+            ret[chunk * 8] = (*byte & 0b10000000) != 0;
             ret[chunk * 8 + 1] = (*byte & 0b01000000) != 0;
             ret[chunk * 8 + 2] = (*byte & 0b00100000) != 0;
             ret[chunk * 8 + 3] = (*byte & 0b00010000) != 0;
@@ -1272,7 +1272,7 @@ pub(crate) fn op_rand_bernoulli(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(n) => {
             let f = n.get_float();
             ensure!(
-                f >= 0. && f <= 1.,
+                (0. ..=1.).contains(&f),
                 "'rand_bernoulli' requires number between 0. and 1."
             );
             f

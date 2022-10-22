@@ -349,8 +349,8 @@ impl Expr {
                 if clauses.is_empty() {
                     Ok(DataValue::Null)
                 } else {
-                    for i in 0..clauses.len() - 1 {
-                        let res = clauses[i].eval(bindings);
+                    for item in clauses.iter().take(clauses.len() - 1) {
+                        let res = item.eval(bindings);
                         if res.is_ok() {
                             return res;
                         }

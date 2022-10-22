@@ -180,7 +180,7 @@ impl SessionTx {
                         None => {
                             bail!(TransactAssertionFailure {
                                 relation: relation_store.name.to_string(),
-                                key: extracted.0.clone(),
+                                key: extracted.0,
                                 notice: "key does not exist in database".to_string()
                             })
                         }
@@ -188,7 +188,7 @@ impl SessionTx {
                             if &v as &[u8] != &val as &[u8] {
                                 bail!(TransactAssertionFailure {
                                     relation: relation_store.name.to_string(),
-                                    key: extracted.0.clone(),
+                                    key: extracted.0,
                                     notice: "key exists in database, but value does not match"
                                         .to_string()
                                 })
@@ -218,7 +218,7 @@ impl SessionTx {
                     if existing.is_some() {
                         bail!(TransactAssertionFailure {
                             relation: relation_store.name.to_string(),
-                            key: extracted.0.clone(),
+                            key: extracted.0,
                             notice: "key exists in database".to_string()
                         })
                     }
@@ -399,7 +399,7 @@ fn make_const_rule(
         InputInlineRulesOrAlgo::Algo {
             algo: AlgoApply {
                 algo: AlgoHandle {
-                    name: rule_symbol.clone(),
+                    name: rule_symbol,
                 },
                 rule_args: vec![],
                 options,

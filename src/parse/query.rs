@@ -770,7 +770,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
         InputInlineRulesOrAlgo::Algo {
             algo: AlgoApply {
                 algo: AlgoHandle {
-                    name: entry_symbol.clone(),
+                    name: entry_symbol,
                 },
                 rule_args: vec![],
                 options,
