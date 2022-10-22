@@ -70,3 +70,10 @@ This is where Cozo comes in. We want to prove, through a real database implement
 * The storage layer of Cozo is RocksDB. We manually wrote the C++/Rust bindings for RocksDB since we found the existing ones to be insufficient for our purpose. Outside the storage layer, Cozo is 100% safe rust. It is not too hard to swap out the storage layer, and we are open to other options.
 * Query rules are compiled into trees of relations (the relational algebra) before execution. Each rule is executed deterministically (no query planner).
 * The execution of the whole query follows the least fixed point semantics of stratified Datalog with negation and aggregation and is done by the bottom-up semi-naive algorithm (instead of the query/subquery top-down algorithms used by many recent datalog implementations, especially in the Clojure world). To prevent calculating unnecessary results that are only thrown away at the last stage, the magic-set rewriting technique is employed as a pre-processing step before compiling the query. This step is completely deterministic.
+
+## Licensing
+
+The original contents of this project are licensed under AGPL-3.0 or later, with the following exceptions:
+
+* Original contents in the `cozorocks` directory are licensed under MIT, or Apache-2.0, or BSD-3-Clause;
+* Original contents in the `docs` directory are licensed under CC BY-SA 4.0.
