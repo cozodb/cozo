@@ -7,7 +7,7 @@ and has support for ACID transactions.
 
 ## Teasers
 
-In the following, `:route` refers is a relation with two columns named `src` and `dst`, 
+In the following, `:route` refers to a relation with two columns named `src` and `dst`, 
 representing routes between airports.
 
 Find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
