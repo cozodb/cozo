@@ -71,6 +71,16 @@ This is where Cozo comes in. We want to prove, through a real database implement
 * Query rules are compiled into trees of relations (the relational algebra) before execution. Each rule is executed deterministically (no query planner).
 * The execution of the whole query follows the least fixed point semantics of stratified Datalog with negation and aggregation and is done by the bottom-up semi-naive algorithm (instead of the query/subquery top-down algorithms used by many recent datalog implementations, especially in the Clojure world). To prevent calculating unnecessary results that are only thrown away at the last stage, the magic-set rewriting technique is employed as a pre-processing step before compiling the query. This step is completely deterministic.
 
+## Status and contributions
+
+Cozo is currently a personal project and there is no plan for commercialization.
+We plan to keep it free forever under copyleft licenses.
+
+We intend to evolve Cozo slowly but steadily, 
+over timescale of tens of years.
+We can do this because we are not under any pressure, 
+financial or managerial, to rush things up.
+
 ## Licensing
 
 The original contents of this project are licensed under AGPL-3.0 or later, with the following exceptions:

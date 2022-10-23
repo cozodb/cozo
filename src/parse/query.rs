@@ -14,9 +14,9 @@ use crate::algo::AlgoHandle;
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::program::{
-    AlgoApply, AlgoRuleArg, InputAtom, InputNamedFieldRelationApplyAtom, InputProgram,
-    InputRelationApplyAtom, InputInlineRule, InputRuleApplyAtom, InputInlineRulesOrAlgo, QueryAssertion,
-    QueryOutOptions, RelationOp, SortDir, Unification,
+    AlgoApply, AlgoRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrAlgo,
+    InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
+    QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
 };
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -193,6 +193,11 @@ pub(crate) fn parse_query(
                 let algo_impl = handle.get_impl()?;
                 algo_impl.process_options(&mut options, span)?;
                 let arity = algo_impl.arity(&options, &head, span)?;
+
+                ensure!(
+                    arity == 0 || head.len() == 0 || arity == head.len(),
+                    FixedRuleHeadArityMismatch(arity, head.len(), span)
+                );
                 progs.insert(
                     name,
                     InputInlineRulesOrAlgo::Algo {
@@ -726,19 +731,13 @@ fn parse_algo_rule(
 
     let algo = AlgoHandle::new(algo_name, name_pair.extract_span());
 
-    #[derive(Debug, Error, Diagnostic)]
-    #[error("Algorithm rule head arity mismatch")]
-    #[diagnostic(code(parser::algo_rule_head_arity_mismatch))]
-    #[diagnostic(help("Expected arity: {0}, number of arguments given: {1}"))]
-    struct AlgoRuleHeadArityMismatch(usize, usize, #[label] SourceSpan);
-
     let algo_impl = algo.get_impl()?;
     algo_impl.process_options(&mut options, args_list_span)?;
     let arity = algo_impl.arity(&options, &head, name_pair.extract_span())?;
 
     ensure!(
         head.is_empty() || arity == head.len(),
-        AlgoRuleHeadArityMismatch(arity, head.len(), args_list_span)
+        FixedRuleHeadArityMismatch(arity, head.len(), args_list_span)
     );
 
     Ok((
@@ -755,6 +754,12 @@ fn parse_algo_rule(
     ))
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Fixed rule head arity mismatch")]
+#[diagnostic(code(parser::fixed_rule_head_arity_mismatch))]
+#[diagnostic(help("Expected arity: {0}, number of arguments given: {1}"))]
+struct FixedRuleHeadArityMismatch(usize, usize, #[label] SourceSpan);
+
 fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
     let entry_symbol = Symbol::new(PROG_ENTRY, Default::default());
     let mut options = BTreeMap::new();
@@ -769,9 +774,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
         entry_symbol.clone(),
         InputInlineRulesOrAlgo::Algo {
             algo: AlgoApply {
-                algo: AlgoHandle {
-                    name: entry_symbol,
-                },
+                algo: AlgoHandle { name: entry_symbol },
                 rule_args: vec![],
                 options,
                 head: bindings.to_vec(),

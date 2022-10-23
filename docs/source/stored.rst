@@ -121,7 +121,6 @@ For ``:put``, ``:remove``, ``:ensure`` and ``:ensure_not``,
 you do not need to specify all existing columns in the spec if the omitted columns have a default generator,
 in which case the generator will be used to generate a value,
 or the type of the column is nullable, in which case the value is ``null``.
-Also, the order of the columns does not matter, and neither does whether a column occurs in the key or value position.
 The spec specified when the relation was created will be consulted to know how to store data correctly.
 Specifying default values does not have any effect and will not replace existing ones.
 
