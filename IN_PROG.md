@@ -1,17 +1,23 @@
 # `cozo`
 
-Cozo is a general-purpose, experimental relational database that has a focus on graph data, with support for ACID transactions. It aims to implement a Purer, Better relational algebra without the historical baggage of SQL.
+Cozo is a general-purpose relational database
+that uses Datalog for queries,
+has a focus on graph data, 
+and has support for ACID transactions.
 
 ## Teasers
 
-We have stored in our database a relation containing air travel routes with two columns `src` and `dst`. The following CozoScript query uses joins to find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
+In the following, `:route` refers is a relation with two columns named `src` and `dst`, 
+representing routes between airports.
+
+Find airports reachable by one stop from Frankfurt Airport (FRA), the busiest airport in the world:
 
 ```
 ?[destination] := :route{src: 'FRA', dst: stop}, 
                   :route{src: stop, dst: destination}
 ```
 
-Using recursion and inline rules, we can find _all_ airports reachable from Frankfurt (the transitive closure):
+Find _all_ airports reachable from Frankfurt (i.e., the transitive closure):
 
 ```
 reachable[airport] := :route{src: 'FRA', dst: airport}
@@ -19,7 +25,7 @@ reachable[airport] := reachable[stop], :route{src: stop, dst: airport}
 ?[airport] := reachable[airport]
 ```
 
-With aggregation and unification, we can compute the shortest path between Frankfurt and all airports in the world:
+Compute the shortest path between Frankfurt and all airports in the world with Datalog:
 
 ```
 shortest_paths[dst, shortest(path)] := :route{src: 'FRA', dst},
@@ -30,19 +36,17 @@ shortest_paths[dst, shortest(path)] := shortest_paths[stop, prev_path],
 ?[dst, path] := shortest_paths[dst, path]
 ```
 
-The above computation is asymptotically optimal. For common operations on graphs like the shortest path, using built-in stock algorithms is both simpler and can further boost performance:
+Use built-in algorithms to compute the shortest path:
 
 ```
 starting[airport] := airport = 'FRA'
 ?[src, dst, cost, path] <~ ShortestPathDijkstra(:route[], starting[])
 ```
 
-Cozo is capable of much more. Follow the Tutorial to get started.
-
 ## Learning Cozo
 
-* The Tutorial will get you started with running Cozo and learning the query language CozoScript.
-* The Manual tries to document everything Cozo currently has to offer. It goes into greater depth for some topics that are glossed over in the Tutorial.
+* Start with the [Tutorial](https://cozodb.github.io/current/tutorial.html) to learn the basics.
+* Continue with the [Manual](https://cozodb.github.io/current/manual/) to understand the fine points.
 
 ## Motivation
 
