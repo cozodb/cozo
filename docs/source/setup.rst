@@ -2,12 +2,24 @@
 Getting started
 ======================
 
-Cozo is distributed as a single executable.
-To get started, download the executable for your platform and uncompress it.
-After decompression, you may also need to give it executable permission by ``chmod +x ./cozo`` on Unix-based systems.
+Welcome to the Cozo Manual. The latest version of this manual can be read at https://cozodb.github.io/current/manual.
+Alternatively, you can download a PDF version for offline viewing at https://cozodb.github.io/current/manual.pdf.
 
-The pre-compiled distributions of Cozo support Linux, Mac and Windows.
-As the toolchain on Windows is very different from UNIX-based systems,
+We aim to make sure that this manual at least touches upon all features currently implemented in Cozo,
+though the coverage of some topics may be sketchy at this stage.
+
+This manual assumes that you already know the basics of the Cozo database,
+at the level of the `Tutorial <https://cozodb.github.io/current/tutorial.html>`_.
+
+------------------------
+Downloading Cozo
+------------------------
+
+Cozo is distributed as a single executable.
+Precompiled binaries can be downloaded from the `release page <https://github.com/cozodb/cozo/releases>`_ on the GitHub repo,
+which are currently available for Linux (Intel x64), Mac (Intel x64 and Apple ARM) and Windows (Intel x64).
+
+As the build process on Windows is internally very different from UNIX-based systems,
 the Windows build hasn't received as much attention as the other builds,
 and may suffer from inferior performance and Windows-specific bugs.
 For Windows users,
@@ -18,11 +30,11 @@ especially if your workload is heavy.
 Starting Cozo
 ---------------
 
-Run the ``cozo`` command in a terminal::
+Run the ``cozoserver`` command in a terminal::
 
-    ./cozo PATH_TO_DATA_DIRECTORY
+    ./cozoserver <PATH_TO_DATA_DIRECTORY>
 
-If ``PATH_TO_DATA_DIRECTORY`` does not exist, it will be created.
+If ``<PATH_TO_DATA_DIRECTORY>`` does not exist, it will be created.
 Cozo will then start a web server and bind to address ``127.0.0.1`` and port ``9070``.
 These two can be customized: run the executable with the ``-h`` option to learn how.
 
@@ -46,25 +58,30 @@ For example, if you have ``params`` set up to be ``{"num": 1}``,
 then ``$num`` can be used anywhere in your query string where an expression is expected.
 Always use ``params`` instead of constructing query strings yourself when you have parametrized queries.
 
-^^^^^^^^^^^^^^^^^
-Security
-^^^^^^^^^^^^^^^^^
+As an example, the following runs a system op with the ``curl`` command line tool::
 
-Cozo is currently designed to run in a trusted environment and be used by trusted clients,
-therefore it does not come with elaborate authentication and security features.
-If you must access Cozo remotely,
-you are responsible for setting up firewalls, encryptions and proxies yourself.
+    curl -X POST localhost:9070/text-query \
+         -H 'content-type: application/json' \
+         -d '{"script": "::running", "params": {}}'
 
-As a guard against users carelessly binding Cozo to any address other than ``127.0.0.1``
-and potentially exposing content to everyone on the Internet,
-in this case,
-Cozo will refuse to start unless you also set up the environment variable ``COZO_AUTH``.
-With the variable set,
-Cozo will then require all queries to provide the content of the set variable
-in the HTTP header field ``x-cozo-auth`` for verification.
-Please note that this "security measure" is not considered sufficient for any purpose
-and is only a last defence
-when every other security measure that you are responsible for setting up fails.
+.. WARNING::
+
+    Cozo is designed to run in a trusted environment and be used by trusted clients,
+    therefore it does not come with elaborate authentication and security features.
+    If you must access Cozo remotely,
+    you are responsible for setting up firewalls, encryptions and proxies yourself.
+
+    As a guard against users carelessly binding Cozo to any address other than ``127.0.0.1``
+    and potentially exposing content to everyone on the Internet,
+    in this case,
+    Cozo will generate a token string and require all queries
+    from non-loopback addresses to provide the token string
+    in the HTTP header field ``x-cozo-auth``.
+    The warning printed when you start Cozo with a non-default binding will tell you how to find the token string.
+
+    Please note that this "security measure" is not considered sufficient for any purpose
+    and is only a last defence
+    when every other security measure that you are responsible for setting up fails.
 
 --------------------------------------------------
 Running queries
@@ -168,17 +185,29 @@ The JavaScript Console is not as nice to use as Jupyter notebooks,
 but we think that it provides a much better experience than hand-rolled CLI consoles,
 since you can use JavaScript to manipulate the results.
 
---------------
-Building
---------------
+----------------------------
+Building Cozo from source
+----------------------------
 
 If for some reason the binary distribution does not work for you,
 you can build Cozo from source, which is straightforward.
-First, clone the Cozo git repo (you need to pass the ``--recursive`` flag so that submodules are also cloned),
-then you need to install the `Rust toolchain <https://www.rust-lang.org/tools/install>`_ for your system.
+
+First, clone the Cozo git repo::
+
+    git clone https://github.com/cozodb/cozo.git --recursive
+
+You need to pass the ``--recursive`` flag so that submodules are also cloned.
+Then you need to install the `Rust toolchain <https://www.rust-lang.org/tools/install>`_ for your system.
 You also need a C++17 compiler.
-After these preparations, run ``cargo build --release`` in the root of the cloned repo,
+
+After these preparations, run::
+
+    cargo build --release
+
+in the root of the cloned repo,
 wait for potentially a long time, and you will find the compiled binary in ``target/release``
-if everything goes well. You can pass ``-F jemalloc`` to the ``cargo build`` command
+if everything goes well.
+
+You can run ``cargo build --release -F jemalloc`` instead
 to indicate that you want to compile and use jemalloc as the memory allocator for the RocksDB storage backend,
 which, depending on your workload, can make a difference in performance.
