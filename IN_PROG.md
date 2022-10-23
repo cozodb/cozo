@@ -1,4 +1,4 @@
-# The Cozo Database
+# `cozo`
 
 Cozo is a general-purpose, experimental relational database that has a focus on graph data, with support for ACID transactions. It aims to implement a Purer, Better relational algebra without the historical baggage of SQL.
 
