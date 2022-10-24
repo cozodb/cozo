@@ -64,6 +64,15 @@ pub(crate) struct RelationHandle {
     pub(crate) put_triggers: Vec<String>,
     pub(crate) rm_triggers: Vec<String>,
     pub(crate) replace_triggers: Vec<String>,
+    pub(crate) state: RelationState,
+}
+
+#[derive(Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
+pub(crate) enum RelationState {
+    Normal,
+    Protected,
+    ReadOnly,
+    Hidden
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -326,6 +335,7 @@ impl SessionTx {
             put_triggers: vec![],
             rm_triggers: vec![],
             replace_triggers: vec![],
+            state: RelationState::Normal
         };
 
         self.tx.put(&encoded, &meta.id.raw_encode())?;
