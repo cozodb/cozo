@@ -54,7 +54,7 @@ Use a fixed rule to compute the shortest path:
 
 ```js
 starting[airport] := airport = 'FRA'
-?[src, dst, cost, path] <~ ShortestPathDijkstra(:route[], starting[])
+?[src, dst, cost, path] <~ ShortestPathDijkstra(@route[], starting[])
 ```
 
 ## Learning Cozo
