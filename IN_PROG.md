@@ -88,6 +88,7 @@ In the near term, before we reach version 1.0:
 Further down the road:
 
 * More tuning options
+* Streaming/reactive data
 * Extension system
   * The core of Cozo should be kept small at all times. Additional functionalities should be in extensions for the user to choose from. 
   * What can be extended: datatypes, functions, aggregations, and fixed algorithms.
