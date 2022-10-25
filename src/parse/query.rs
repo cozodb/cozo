@@ -683,7 +683,7 @@ fn parse_algo_rule(
                             .collect_vec();
                         rule_args.push(AlgoRuleArg::Stored {
                             name: Symbol::new(
-                                name.as_str().strip_prefix('@').unwrap(),
+                                name.as_str().strip_prefix('*').unwrap(),
                                 name.extract_span(),
                             ),
                             bindings,

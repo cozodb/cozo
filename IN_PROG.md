@@ -20,32 +20,32 @@ that uses Datalog for query and focuses on graph data.
 
 ## Teasers
 
-In the following, `@route` refers to a relation with two columns named `src` and `dst`, 
+In the following, `*route` refers to a relation with two columns named `src` and `dst`, 
 representing routes between airports.
 
 Find airports reachable by one stop from Frankfurt Airport (code `FRA`, the busiest airport in the world):
 
 ```js
-?[dst] := @route{src: 'FRA', dst: stop}, 
-          @route{src: stop, dst}
+?[dst] := *route{src: 'FRA', dst: stop}, 
+          *route{src: stop, dst}
 ```
 
 Find _all_ airports reachable from Frankfurt (i.e., the transitive closure) 
 with code starting with the letter `A`:
 
 ```js
-reachable[dst] := @route{src: 'FRA', dst}
-reachable[dst] := reachable[src], @route{src, dst}
+reachable[dst] := *route{src: 'FRA', dst}
+reachable[dst] := reachable[src], *route{src, dst}
 ?[airport] := reachable[airport], starts_with(airport, 'A')
 ```
 
 Compute the shortest path between Frankfurt and all airports in the world with recursion through aggregation:
 
 ```js
-shortest_paths[dst, shortest(path)] := @route{src: 'FRA', dst},
+shortest_paths[dst, shortest(path)] := *route{src: 'FRA', dst},
                                        path = ['FRA', dst]
 shortest_paths[dst, shortest(path)] := shortest_paths[stop, prev_path], 
-                                       @route{src: stop, dst},
+                                       *route{src: stop, dst},
                                        path = append(prev_path, dst)
 ?[dst, path] := shortest_paths[dst, path]
 ```
@@ -54,7 +54,7 @@ Use a fixed rule to compute the shortest path:
 
 ```js
 starting[airport] := airport = 'FRA'
-?[src, dst, cost, path] <~ ShortestPathDijkstra(@route[], starting[])
+?[src, dst, cost, path] <~ ShortestPathDijkstra(*route[], starting[])
 ```
 
 ## Learning Cozo
