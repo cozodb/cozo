@@ -10,7 +10,7 @@ Stored relations
 ---------------------------
 
 We already know how to query stored relations: 
-use the ``:relation[...]`` or ``:relation{...}`` atoms in inline or fixed rules.
+use the ``@relation[...]`` or ``@relation{...}`` atoms in inline or fixed rules.
 To manipulate stored relations, use one of the following query options:
 
 .. module:: QueryOp

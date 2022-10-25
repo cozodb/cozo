@@ -92,8 +92,8 @@ lazy_static! {
     ?[fr, to, dist] :=
         res[idx, fr_i, to_i, typ, dist],
         typ == 'route',
-        :idx2code[fr_i, fr],
-        :idx2code[to_i, to]
+        @idx2code[fr_i, fr],
+        @idx2code[to_i, to]
 
     :replace route { fr: String, to: String => dist: Float }
 }
@@ -105,8 +105,8 @@ lazy_static! {
     ?[entity, contained] :=
         res[idx, fr_i, to_i, typ],
         typ == 'contains',
-        :idx2code[fr_i, entity],
-        :idx2code[to_i, contained]
+        @idx2code[fr_i, entity],
+        @idx2code[to_i, contained]
 
 
     :replace contain { entity: String, contained: String }
@@ -143,7 +143,7 @@ fn dfs() {
         .run_script(
             r#"
         starting[] <- [['PEK']]
-        ?[] <~ DFS(:route[], :airport[code], starting[], condition: (code == 'LHR'))
+        ?[] <~ DFS(@route[], @airport[code], starting[], condition: (code == 'LHR'))
     "#,
             &Default::default(),
         )
@@ -167,7 +167,7 @@ fn bfs() {
         .run_script(
             r#"
         starting[] <- [['PEK']]
-        ?[] <~ BFS(:route[], :airport[code], starting[], condition: (code == 'LHR'))
+        ?[] <~ BFS(@route[], @airport[code], starting[], condition: (code == 'LHR'))
     "#,
             &Default::default(),
         )
@@ -190,7 +190,7 @@ fn scc() {
     let _ = TEST_DB
         .run_script(
             r#"
-        res[] <~ StronglyConnectedComponents(:route[], :airport[code]);
+        res[] <~ StronglyConnectedComponents(@route[], @airport[code]);
         ?[grp, code] := res[code, grp], grp != 0;
     "#,
             &Default::default(),
@@ -206,7 +206,7 @@ fn cc() {
     let _ = TEST_DB
         .run_script(
             r#"
-        res[] <~ ConnectedComponents(:route[], :airport[code]);
+        res[] <~ ConnectedComponents(@route[], @airport[code]);
         ?[grp, code] := res[code, grp], grp != 0;
     "#,
             &Default::default(),
@@ -220,10 +220,10 @@ fn astar() {
     check_relations();
     let astar = Instant::now();
     let _ = TEST_DB.run_script(r#"
-        code_lat_lon[code, lat, lon] := :airport{code, lat, lon}
-        starting[code, lat, lon] := code = 'HFE', :airport{code, lat, lon};
-        goal[code, lat, lon] := code = 'LHR', :airport{code, lat, lon};
-        ?[] <~ ShortestPathAStar(:route[], code_lat_lon[node, lat1, lon1], starting[], goal[goal, lat2, lon2], heuristic: haversine_deg_input(lat1, lon1, lat2, lon2) * 3963);
+        code_lat_lon[code, lat, lon] := @airport{code, lat, lon}
+        starting[code, lat, lon] := code = 'HFE', @airport{code, lat, lon};
+        goal[code, lat, lon] := code = 'LHR', @airport{code, lat, lon};
+        ?[] <~ ShortestPathAStar(@route[], code_lat_lon[node, lat1, lon1], starting[], goal[goal, lat2, lon2], heuristic: haversine_deg_input(lat1, lon1, lat2, lon2) * 3963);
     "#, &Default::default()).unwrap();
     dbg!(astar.elapsed());
 }
@@ -235,7 +235,7 @@ fn deg_centrality() {
     TEST_DB
         .run_script(
             r#"
-        deg_centrality[] <~ DegreeCentrality(:route[a, b]);
+        deg_centrality[] <~ DegreeCentrality(@route[a, b]);
         ?[total, out, in] := deg_centrality[node, total, out, in];
         :order -total;
         :limit 10;
@@ -256,7 +256,7 @@ fn dijkstra() {
             r#"
         starting[] <- [['JFK']];
         ending[] <- [['KUL']];
-        res[] <~ ShortestPathDijkstra(:route[], starting[], ending[]);
+        res[] <~ ShortestPathDijkstra(@route[], starting[], ending[]);
         ?[path] := res[src, dst, cost, path];
     "#,
             &Default::default(),
@@ -276,7 +276,7 @@ fn yen() {
             r#"
         starting[] <- [['PEK']];
         ending[] <- [['SIN']];
-        ?[] <~ KShortestPathYen(:route[], starting[], ending[], k: 5);
+        ?[] <~ KShortestPathYen(@route[], starting[], ending[], k: 5);
     "#,
             &Default::default(),
         )
@@ -292,7 +292,7 @@ fn starts_with() {
     let res = TEST_DB
         .run_script(
             r#"
-         ?[code] := :airport{code}, starts_with(code, 'US');
+         ?[code] := @airport{code}, starts_with(code, 'US');
     "#,
             &Default::default(),
         )
@@ -324,7 +324,7 @@ fn range_check() {
     let res = TEST_DB
         .run_script(
             r#"
-        r[code, dist] := :airport{code}, :route{fr: code, dist};
+        r[code, dist] := @airport{code}, @route{fr: code, dist};
         ?[dist] := r['PEK', dist], dist > 7000, dist <= 7722;
     "#,
             &Default::default(),
@@ -343,7 +343,7 @@ fn no_airports() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[desc] := :country{code, desc}, not :airport{country: code};
+        ?[desc] := @country{code, desc}, not @airport{country: code};
     "#,
             &Default::default(),
         )
@@ -370,7 +370,7 @@ fn no_routes_airport() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[code] := :airport{code}, not :route{fr: code}, not :route{to: code}
+        ?[code] := @airport{code}, not @route{fr: code}, not @route{to: code}
     "#,
             &Default::default(),
         )
@@ -398,7 +398,7 @@ fn runway_distribution() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[runways, count(code)] := :airport{code, runways}
+        ?[runways, count(code)] := @airport{code, runways}
     "#,
             &Default::default(),
         )
@@ -427,7 +427,7 @@ fn most_out_routes() {
     let res = TEST_DB
         .run_script(
             r#"
-        route_count[fr, count(fr)] := :route{fr};
+        route_count[fr, count(fr)] := @route{fr};
         ?[code, n] := route_count[code, n], n > 180;
         :sort -n;
     "#,
@@ -459,7 +459,7 @@ fn most_out_routes_again() {
     let res = TEST_DB
         .run_script(
             r#"
-        route_count[count(fr), fr] := :route{fr};
+        route_count[count(fr), fr] := @route{fr};
         ?[code, n] := route_count[n, code], n > 180;
         :sort -n;
     "#,
@@ -491,8 +491,8 @@ fn most_routes() {
     let res = TEST_DB
         .run_script(
             r#"
-        route_count[a, count(a)] := :route{fr: a}
-        route_count[a, count(a)] := :route{to: a}
+        route_count[a, count(a)] := @route{fr: a}
+        route_count[a, count(a)] := @route{to: a}
         ?[code, n] := route_count[code, n], n > 400
         :sort -n;
     "#,
@@ -522,7 +522,7 @@ fn airport_with_one_route() {
     let res = TEST_DB
         .run_script(
             r#"
-        route_count[fr, count(fr)] := :route{fr}
+        route_count[fr, count(fr)] := @route{fr}
         ?[count(a)] := route_count[a, n], n == 1;
     "#,
             &Default::default(),
@@ -542,9 +542,9 @@ fn single_runway_with_most_routes() {
         .run_script(
             r#"
         single_or_lgw[code] := code = 'LGW'
-        single_or_lgw[code] := :airport{code, runways}, runways == 1
-        out_counts[a, count(a)] := single_or_lgw[a], :route{fr: a}
-        ?[code, city, out_n] := out_counts[code, out_n], :airport{code, city}
+        single_or_lgw[code] := @airport{code, runways}, runways == 1
+        out_counts[a, count(a)] := single_or_lgw[a], @route{fr: a}
+        ?[code, city, out_n] := out_counts[code, out_n], @airport{code, city}
 
         :order -out_n;
         :limit 10;
@@ -574,8 +574,8 @@ fn most_routes_in_canada() {
     let res = TEST_DB
         .run_script(
             r#"
-        ca_airports[code, count(code)] := :airport{code, country: 'CA'}, :route{fr: code}
-        ?[code, city, n_routes] := ca_airports[code, n_routes], :airport{code, city}
+        ca_airports[code, count(code)] := @airport{code, country: 'CA'}, @route{fr: code}
+        ?[code, city, n_routes] := ca_airports[code, n_routes], @airport{code, city}
 
         :order -n_routes;
         :limit 10;
@@ -610,7 +610,7 @@ fn uk_count() {
     let res = TEST_DB
         .run_script(
             r#"
-       ?[region, count(region)] := :airport{country: 'UK', region}
+       ?[region, count(region)] := @airport{country: 'UK', region}
     "#,
             &Default::default(),
         )
@@ -631,9 +631,9 @@ fn airports_by_country() {
     let res = TEST_DB
         .run_script(
             r#"
-        airports_by_country[country, count(code)] := :airport{code, country}
+        airports_by_country[country, count(code)] := @airport{code, country}
         ?[country, count] := airports_by_country[country, count];
-        ?[country, count] := :country{code: country}, not airports_by_country[country, _], count = 0
+        ?[country, count] := @country{code: country}, not airports_by_country[country, _], count = 0
 
         :order count
     "#,
@@ -684,9 +684,9 @@ fn n_airports_by_continent() {
     let res = TEST_DB
         .run_script(
             r#"
-        airports_by_continent[cont, count(code)] := :airport{code}, :contain[cont, code]
-        ?[cont, max(count)] := :continent{code: cont}, airports_by_continent[cont, count]
-        ?[cont, max(count)] := :continent{code: cont}, count = 0
+        airports_by_continent[cont, count(code)] := @airport{code}, @contain[cont, code]
+        ?[cont, max(count)] := @continent{code: cont}, airports_by_continent[cont, count]
+        ?[cont, max(count)] := @continent{code: cont}, count = 0
     "#,
             &Default::default(),
         )
@@ -711,7 +711,7 @@ fn routes_per_airport() {
         .run_script(
             r#"
         given[] <- [['A' ++ 'U' ++ 'S'],['AMS'],['JFK'],['DUB'],['MEX']]
-        ?[code, count(code)] := given[code], :route{fr: code}
+        ?[code, count(code)] := given[code], @route{fr: code}
     "#,
             &Default::default(),
         )
@@ -735,7 +735,7 @@ fn airports_by_route_number() {
     let res = TEST_DB
         .run_script(
             r#"
-        route_count[fr, count(fr)] := :route{fr}
+        route_count[fr, count(fr)] := @route{fr}
         ?[n, collect(code)] := route_count[code, n], n = 106;
     "#,
             &Default::default(),
@@ -754,8 +754,8 @@ fn out_from_aus() {
     let res = TEST_DB
         .run_script(
             r#"
-        out_by_runways[runways, count(code)] := :route{fr: 'AUS', to: code}, :airport{code, runways}
-        two_hops[count(a)] := :route{fr: 'AUS', to: a}, :route{fr: a}
+        out_by_runways[runways, count(code)] := @route{fr: 'AUS', to: code}, @airport{code, runways}
+        two_hops[count(a)] := @route{fr: 'AUS', to: a}, @route{fr: a}
         ?[max(total), collect(coll)] := two_hops[total], out_by_runways[n, ct], coll = [n, ct];
     "#,
             &Default::default(),
@@ -778,7 +778,7 @@ fn const_return() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[name, count(code)] := :airport{code, region: 'US-OK'}, name = 'OK';
+        ?[name, count(code)] := @airport{code, region: 'US-OK'}, name = 'OK';
     "#,
             &Default::default(),
         )
@@ -796,11 +796,11 @@ fn multi_res() {
     let res = TEST_DB
         .run_script(
             r#"
-        total[count(code)] := :airport{code}
-        high[count(code)] := :airport{code, runways}, runways >= 6
-        low[count(code)] := :airport{code, runways}, runways <= 2
-        four[count(code)] := :airport{code, runways}, runways == 4
-        france[count(code)] := :airport{code, country: 'FR'}
+        total[count(code)] := @airport{code}
+        high[count(code)] := @airport{code, runways}, runways >= 6
+        low[count(code)] := @airport{code, runways}, runways <= 2
+        four[count(code)] := @airport{code, runways}, runways == 4
+        france[count(code)] := @airport{code, country: 'FR'}
 
         ?[total, high, low, four, france] := total[total], high[high], low[low],
                                                   four[four], france[france];
@@ -824,8 +824,8 @@ fn multi_unification() {
     let res = TEST_DB
         .run_script(
             r#"
-        target_airports[collect(code, 5)] := :airport{code}
-        ?[a, count(a)] := target_airports[targets], a in targets, :route{fr: a}
+        target_airports[collect(code, 5)] := @airport{code}
+        ?[a, count(a)] := target_airports[targets], a in targets, @route{fr: a}
     "#,
             &Default::default(),
         )
@@ -847,9 +847,9 @@ fn num_routes_from_eu_to_us() {
     let res = TEST_DB
         .run_script(
             r#"
-        routes[unique(r)] := :contain['EU', fr],
-                             :route{fr, to},
-                             :airport{code: to, country: 'US'},
+        routes[unique(r)] := @contain['EU', fr],
+                             @route{fr, to},
+                             @airport{code: to, country: 'US'},
                              r = [fr, to]
         ?[n] := routes[rs], n = length(rs);
     "#,
@@ -869,9 +869,9 @@ fn num_airports_in_us_with_routes_from_eu() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[count_unique(to)] := :contain['EU', fr],
-                               :route{fr, to},
-                               :airport{code: to, country: 'US'}
+        ?[count_unique(to)] := @contain['EU', fr],
+                               @route{fr, to},
+                               @airport{code: to, country: 'US'}
     "#,
             &Default::default(),
         )
@@ -889,7 +889,7 @@ fn num_routes_in_us_airports_from_eu() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[to, count(to)] := :contain['EU', fr], :route{fr, to}, :airport{code: to, country: 'US'}
+        ?[to, count(to)] := @contain['EU', fr], @route{fr, to}, @airport{code: to, country: 'US'}
         :order count(to);
     "#,
             &Default::default(),
@@ -920,10 +920,10 @@ fn routes_from_eu_to_us_starting_with_l() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[eu_code, us_code] := :contain['EU', eu_code],
+        ?[eu_code, us_code] := @contain['EU', eu_code],
                                starts_with(eu_code, 'L'),
-                               :route{fr: eu_code, to: us_code},
-                               :airport{code: us_code, country: 'US'}
+                               @route{fr: eu_code, to: us_code},
+                               @airport{code: us_code, country: 'US'}
     "#,
             &Default::default(),
         )
@@ -957,8 +957,8 @@ fn len_of_names_count() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[sum(n)] := :route{fr: 'AUS', to},
-                     :airport{code: to, city},
+        ?[sum(n)] := @route{fr: 'AUS', to},
+                     @airport{code: to, city},
                      n = length(city)
     "#,
             &Default::default(),
@@ -977,9 +977,9 @@ fn group_count_by_out() {
     let res = TEST_DB
         .run_script(
             r#"
-        route_count[count(fr), fr] := :route{fr}
+        route_count[count(fr), fr] := @route{fr}
         rc[max(n), a] := route_count[n, a]
-        rc[max(n), a] := :airport{code: a}, n = 0
+        rc[max(n), a] := @airport{code: a}, n = 0
         ?[n, count(a)] := rc[n, a]
         :order n;
         :limit 10;
@@ -1006,8 +1006,8 @@ fn mean_group_count() {
     let res = TEST_DB
         .run_script(
             r#"
-        route_count[count(fr), fr] := :route{fr};
-        rc[max(n), a] := route_count[n, a] or (:airport{code: a}, n = 0);
+        route_count[count(fr), fr] := @route{fr};
+        rc[max(n), a] := route_count[n, a] or (@airport{code: a}, n = 0);
         ?[mean(n)] := rc[n, _];
     "#,
             &Default::default(),
@@ -1028,7 +1028,7 @@ fn n_routes_from_london_uk() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[code, count(code)] := :airport{code, city: 'London', region: 'GB-ENG'}, :route{fr: code}
+        ?[code, count(code)] := @airport{code, city: 'London', region: 'GB-ENG'}, @route{fr: code}
     "#,
             &Default::default(),
         )
@@ -1052,9 +1052,9 @@ fn reachable_from_london_uk_in_two_hops() {
     let res = TEST_DB
         .run_script(
             r#"
-        lon_uk_airports[code] := :airport{code, city: 'London', region: 'GB-ENG'}
-        one_hop[to] := lon_uk_airports[fr], :route{fr, to}, not lon_uk_airports[to];
-        ?[count_unique(a3)] := one_hop[a2], :route{fr: a2, to: a3}, not lon_uk_airports[a3];
+        lon_uk_airports[code] := @airport{code, city: 'London', region: 'GB-ENG'}
+        one_hop[to] := lon_uk_airports[fr], @route{fr, to}, not lon_uk_airports[to];
+        ?[count_unique(a3)] := one_hop[a2], @route{fr: a2, to: a3}, not lon_uk_airports[a3];
     "#,
             &Default::default(),
         )
@@ -1072,8 +1072,8 @@ fn routes_within_england() {
     let res = TEST_DB
         .run_script(
             r#"
-        eng_aps[code] := :airport{code, region: 'GB-ENG'}
-        ?[fr, to] := eng_aps[fr], :route{fr, to}, eng_aps[to],
+        eng_aps[code] := @airport{code, region: 'GB-ENG'}
+        ?[fr, to] := eng_aps[fr], @route{fr, to}, eng_aps[to],
     "#,
             &Default::default(),
         )
@@ -1106,8 +1106,8 @@ fn routes_within_england_time_no_dup() {
     let res = TEST_DB
         .run_script(
             r#"
-        eng_aps[code] := :airport{code, region: 'GB-ENG'}
-        ?[pair] := eng_aps[fr], :route{fr, to}, eng_aps[to], pair = sorted([fr, to]);
+        eng_aps[code] := @airport{code, region: 'GB-ENG'}
+        ?[pair] := eng_aps[fr], @route{fr, to}, eng_aps[to], pair = sorted([fr, to]);
     "#,
             &Default::default(),
         )
@@ -1137,8 +1137,8 @@ fn hard_route_finding() {
     let res = TEST_DB
         .run_script(
             r#"
-        reachable[to, choice(p)] := :route{fr: 'AUS', to}, to != 'YYZ', p = ['AUS', to];
-        reachable[to, choice(p)] := reachable[b, prev], :route{fr: b, to},
+        reachable[to, choice(p)] := @route{fr: 'AUS', to}, to != 'YYZ', p = ['AUS', to];
+        reachable[to, choice(p)] := reachable[b, prev], @route{fr: b, to},
                                     to != 'YYZ', p = append(prev, to)
         ?[p] := reachable['YPO', p]
 
@@ -1166,9 +1166,9 @@ fn na_from_india() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[ind_a, na_a] := :airport{code: ind_a, country: 'IN'},
-                          :route{fr: ind_a, to: na_a},
-                          :airport{code: na_a, country},
+        ?[ind_a, na_a] := @airport{code: ind_a, country: 'IN'},
+                          @route{fr: ind_a, to: na_a},
+                          @airport{code: na_a, country},
                           country in ['US', 'CA']
     "#,
             &Default::default(),
@@ -1196,7 +1196,7 @@ fn eu_cities_reachable_from_fll() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[city] := :route{fr: 'FLL', to}, :contain['EU', to], :airport{code: to, city}
+        ?[city] := @route{fr: 'FLL', to}, @contain['EU', to], @airport{code: to, city}
     "#,
             &Default::default(),
         )
@@ -1222,7 +1222,7 @@ fn clt_to_eu_or_sa() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[to] := :route{fr: 'CLT', to}, c_name in ['EU', 'SA'], :contain[c_name, to]
+        ?[to] := @route{fr: 'CLT', to}, c_name in ['EU', 'SA'], @contain[c_name, to]
     "#,
             &Default::default(),
         )
@@ -1249,7 +1249,7 @@ fn london_to_us() {
         .run_script(
             r#"
         ?[fr, to] := fr in ['LHR', 'LCY', 'LGW', 'LTN', 'STN'],
-                     :route{fr, to}, :airport{code: to, country: 'US'}
+                     @route{fr, to}, @airport{code: to, country: 'US'}
     "#,
             &Default::default(),
         )
@@ -1282,8 +1282,8 @@ fn tx_to_ny() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[fr, to] := :airport{code: fr, region: 'US-TX'},
-                     :route{fr, to}, :airport{code: to, region: 'US-NY'}
+        ?[fr, to] := @airport{code: fr, region: 'US-TX'},
+                     @route{fr, to}, @airport{code: to, region: 'US-NY'}
     "#,
             &Default::default(),
         )
@@ -1311,7 +1311,7 @@ fn denver_to_mexico() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[city] := :route{fr: 'DEN', to}, :airport{code: to, country: 'MX', city}
+        ?[city] := @route{fr: 'DEN', to}, @airport{code: to, country: 'MX', city}
     "#,
             &Default::default(),
         )
@@ -1338,8 +1338,8 @@ fn three_cities() {
     let res = TEST_DB
         .run_script(
             r#"
-        three[code] := city in ['London', 'Munich', 'Paris'], :airport{code, city}
-        ?[s, d] := three[s], :route{fr: s, to: d}, three[d]
+        three[code] := city in ['London', 'Munich', 'Paris'], @airport{code, city}
+        ?[s, d] := three[s], @route{fr: s, to: d}, three[d]
     "#,
             &Default::default(),
         )
@@ -1369,8 +1369,8 @@ fn long_distance_from_lgw() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[city, dist] := :route{fr: 'LGW', to, dist},
-                         dist > 4000, :airport{code: to, city}
+        ?[city, dist] := @route{fr: 'LGW', to, dist},
+                         dist > 4000, @airport{code: to, city}
     "#,
             &Default::default(),
         )
@@ -1404,7 +1404,7 @@ fn long_routes_one_dir() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[fr, dist, to] := :route{fr, to, dist}, dist > 8000, fr < to;
+        ?[fr, dist, to] := @route{fr, to, dist}, dist > 8000, fr < to;
     "#,
             &Default::default(),
         )
@@ -1436,7 +1436,7 @@ fn longest_routes() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[fr, dist, to] := :route{fr, to, dist}, dist > 4000, fr < to;
+        ?[fr, dist, to] := @route{fr, to, dist}, dist > 4000, fr < to;
         :sort -dist;
         :limit 20;
     "#,
@@ -1467,7 +1467,7 @@ fn longest_routes_from_each_airports() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[fr, max(dist), choice(to)] := :route{fr, dist, to}
+        ?[fr, max(dist), choice(to)] := @route{fr, dist, to}
         :limit 10;
     "#,
             &Default::default(),
@@ -1495,8 +1495,8 @@ fn total_distance_from_three_cities() {
     let res = TEST_DB
         .run_script(
             r#"
-        three[code] := city in ['London', 'Munich', 'Paris'], :airport{code, city}
-        ?[sum(dist)] := three[a], :route{fr: a, dist}
+        three[code] := city in ['London', 'Munich', 'Paris'], @airport{code, city}
+        ?[sum(dist)] := three[a], @route{fr: a, dist}
     "#,
             &Default::default(),
         )
@@ -1517,8 +1517,8 @@ fn total_distance_within_three_cities() {
     let res = TEST_DB
         .run_script(
             r#"
-        three[code] := city in ['London', 'Munich', 'Paris'], :airport{code, city}
-        ?[sum(dist)] := three[a], :route{fr: a, dist, to}, three[to]
+        three[code] := city in ['London', 'Munich', 'Paris'], @airport{code, city}
+        ?[sum(dist)] := three[a], @route{fr: a, dist, to}, three[to]
     "#,
             &Default::default(),
         )
@@ -1539,7 +1539,7 @@ fn specific_distance() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[dist] := :route{fr: 'AUS', to: 'MEX', dist}
+        ?[dist] := @route{fr: 'AUS', to: 'MEX', dist}
     "#,
             &Default::default(),
         )
@@ -1557,8 +1557,8 @@ fn n_routes_between() {
     let res = TEST_DB
         .run_script(
             r#"
-        us_a[a] := :contain['US', a]
-        ?[count(fr)] := :route{fr, to, dist}, dist >= 100, dist <= 200,
+        us_a[a] := @contain['US', a]
+        ?[count(fr)] := @route{fr, to, dist}, dist >= 100, dist <= 200,
                         us_a[fr], us_a[to]
     "#,
             &Default::default(),
@@ -1577,8 +1577,8 @@ fn one_stop_distance() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[code, dist] := :route{fr: 'AUS', to: code, dist: dis1},
-                         :route{fr: code, to: 'LHR', dist: dis2},
+        ?[code, dist] := @route{fr: 'AUS', to: code, dist: dis1},
+                         @route{fr: code, to: 'LHR', dist: dis2},
                          dist = dis1 + dis2
         :order dist;
         :limit 10;
@@ -1607,7 +1607,7 @@ fn airport_most_routes() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[fr, count(fr)] := :route{fr}
+        ?[fr, count(fr)] := @route{fr}
         :order -count(fr);
         :limit 10;
     "#,
@@ -1635,7 +1635,7 @@ fn north_of_77() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[city, latitude] := :airport{lat, city}, lat > 77, latitude = round(lat)
+        ?[city, latitude] := @airport{lat, city}, lat > 77, latitude = round(lat)
     "#,
             &Default::default(),
         )
@@ -1656,7 +1656,7 @@ fn greenwich_meridian() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[code] := :airport{lon, code}, lon > -0.1, lon < 0.1
+        ?[code] := @airport{lon, code}, lon > -0.1, lon < 0.1
     "#,
             &Default::default(),
         )
@@ -1677,8 +1677,8 @@ fn box_around_heathrow() {
     let res = TEST_DB
         .run_script(
             r#"
-        h_box[lon, lat] := :airport{code: 'LHR', lon, lat}
-        ?[code] := h_box[lhr_lon, lhr_lat], :airport{code, lon, lat},
+        h_box[lon, lat] := @airport{code: 'LHR', lon, lat}
+        ?[code] := h_box[lhr_lon, lhr_lat], @airport{code, lon, lat},
                     abs(lhr_lon - lon) < 1, abs(lhr_lat - lat) < 1
     "#,
             &Default::default(),
@@ -1701,8 +1701,8 @@ fn dfw_by_region() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[region, collect(to)] := :route{fr: 'DFW', to},
-                                  :airport{code: to, country: 'US', region},
+        ?[region, collect(to)] := @route{fr: 'DFW', to},
+                                  @airport{code: to, country: 'US', region},
                                   region in ['US-CA', 'US-TX', 'US-FL', 'US-CO', 'US-IL']
     "#,
             &Default::default(),
@@ -1732,8 +1732,8 @@ fn great_circle_distance() {
     let res = TEST_DB
         .run_script(
             r#"
-        ?[deg_diff] := :airport{code: 'SFO', lat: a_lat, lon: a_lon},
-                       :airport{code: 'NRT', lat: b_lat, lon: b_lon},
+        ?[deg_diff] := @airport{code: 'SFO', lat: a_lat, lon: a_lon},
+                       @airport{code: 'NRT', lat: b_lat, lon: b_lon},
                         deg_diff = round(haversine_deg_input(a_lat, a_lon, b_lat, b_lon));
     "#,
             &Default::default(),
@@ -1756,11 +1756,11 @@ fn aus_to_edi() {
     let res = TEST_DB
         .run_script(
             r#"
-        us_uk_airports[code] := :airport{code, country: 'UK'}
-        us_uk_airports[code] := :airport{code, country: 'US'}
-        routes[to, shortest(path)] := :route{fr: 'AUS', to}, us_uk_airports[to],
+        us_uk_airports[code] := @airport{code, country: 'UK'}
+        us_uk_airports[code] := @airport{code, country: 'US'}
+        routes[to, shortest(path)] := @route{fr: 'AUS', to}, us_uk_airports[to],
                                         path = ['AUS', to];
-        routes[to, shortest(path)] := routes[a, prev], :route{fr: a, to},
+        routes[to, shortest(path)] := routes[a, prev], @route{fr: a, to},
                                         us_uk_airports[to],
                                         path = append(prev, to);
         ?[path] := routes['EDI', path];
@@ -1785,9 +1785,9 @@ fn reachable_from_lhr() {
     let res = TEST_DB
         .run_script(
             r#"
-        routes[to, shortest(path)] := :route{fr: 'LHR', to},
+        routes[to, shortest(path)] := @route{fr: 'LHR', to},
                                       path = ['LHR', to];
-        routes[to, shortest(path)] := routes[a, prev], :route{fr: a, to},
+        routes[to, shortest(path)] := routes[a, prev], @route{fr: a, to},
                                       path = append(prev, to);
         ?[len, path] := routes[_, path], len = length(path);
 
@@ -1826,10 +1826,10 @@ fn furthest_from_lhr() {
     let res = TEST_DB
         .run_script(
             r#"
-        routes[to, min_cost(cost_pair)] := :route{fr: 'LHR', to, dist},
+        routes[to, min_cost(cost_pair)] := @route{fr: 'LHR', to, dist},
                                              path = ['LHR', to],
                                              cost_pair = [path, dist];
-        routes[to, min_cost(cost_pair)] := routes[a, prev], :route{fr: a, to, dist},
+        routes[to, min_cost(cost_pair)] := routes[a, prev], @route{fr: a, to, dist},
                                            path = append(first(prev), to),
                                            cost_pair = [path, last(prev) + dist];
         ?[cost, path] := routes[dst, cost_pair], cost = last(cost_pair), path = first(cost_pair);
