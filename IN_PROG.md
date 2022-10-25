@@ -1,7 +1,11 @@
+![GitHub](https://img.shields.io/github/license/cozodb/cozo)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/cozodb/cozo/Build)
+![Discord](https://img.shields.io/discord/1034464550927478886)
+
 # `cozo`
 
 A general-purpose, transactional, relational database
-that uses Datalog for queries and has a focus on graph data.
+that uses Datalog for query and focuses on graph data.
 
 ## Features
 
@@ -107,6 +111,17 @@ Ideas and discussions are welcome.
 Cozo is written in Rust, with [RocksDB](http://rocksdb.org/) as the storage engine.
 We manually wrote the C++/Rust bindings for RocksDB with [cxx](https://cxx.rs/). 
 Outside the storage layer, Cozo is 100% safe rust.
+
+## Contributing
+
+General discussions should go [here](https://github.com/cozodb/cozo/discussions). 
+We also have a [Discord channel](https://discord.gg/GFpjQ9m866).
+
+If you find a bug, first search for [past issues](https://github.com/cozodb/cozo/issues) to see
+if it has already been reported. If not, open a new issue.
+
+Contributions to code or other materials should be done via [pull requests](https://github.com/cozodb/cozo/pulls).
+You will be guided to sign a CLA the first time you contribute.
 
 ## Licensing
 
