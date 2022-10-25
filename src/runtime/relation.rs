@@ -1,6 +1,6 @@
 use std::cmp::max;
 use std::cmp::Ordering::Greater;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::sync::atomic::Ordering;
 
 use log::error;
@@ -64,15 +64,38 @@ pub(crate) struct RelationHandle {
     pub(crate) put_triggers: Vec<String>,
     pub(crate) rm_triggers: Vec<String>,
     pub(crate) replace_triggers: Vec<String>,
-    pub(crate) state: RelationState,
+    pub(crate) access_level: AccessLevel,
 }
 
-#[derive(Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) enum RelationState {
-    Normal,
-    Protected,
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    Eq,
+    PartialEq,
+    serde_derive::Serialize,
+    serde_derive::Deserialize,
+    Default,
+    Ord,
+    PartialOrd,
+)]
+pub(crate) enum AccessLevel {
+    Hidden,
     ReadOnly,
-    Hidden
+    Protected,
+    #[default]
+    Normal,
+}
+
+impl Display for AccessLevel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AccessLevel::Normal => f.write_str("normal"),
+            AccessLevel::Protected => f.write_str("protected"),
+            AccessLevel::ReadOnly => f.write_str("read_only"),
+            AccessLevel::Hidden => f.write_str("hidden"),
+        }
+    }
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -300,6 +323,13 @@ impl SessionTx {
         replaces: Vec<String>,
     ) -> Result<()> {
         let mut original = self.get_relation(&name, true)?;
+        if original.access_level < AccessLevel::Protected {
+            bail!(InsufficientAccessLevel(
+                original.name.to_string(),
+                "set triggers".to_string(),
+                original.access_level
+            ))
+        }
         original.put_triggers = puts;
         original.rm_triggers = rms;
         original.replace_triggers = replaces;
@@ -335,7 +365,7 @@ impl SessionTx {
             put_triggers: vec![],
             rm_triggers: vec![],
             replace_triggers: vec![],
-            state: RelationState::Normal
+            access_level: AccessLevel::Normal,
         };
 
         self.tx.put(&encoded, &meta.id.raw_encode())?;
@@ -370,12 +400,33 @@ impl SessionTx {
     }
     pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<(Vec<u8>, Vec<u8>)> {
         let store = self.get_relation(name, true)?;
+        if store.access_level < AccessLevel::Normal {
+            bail!(InsufficientAccessLevel(
+                store.name.to_string(),
+                "relation removal".to_string(),
+                store.access_level
+            ))
+        }
         let key = DataValue::Str(SmartString::from(name as &str));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
         self.tx.del(&encoded)?;
         let lower_bound = Tuple::default().encode_as_key(store.id);
         let upper_bound = Tuple::default().encode_as_key(store.id.next());
         Ok((lower_bound, upper_bound))
+    }
+    pub(crate) fn set_access_level(&mut self, rel: Symbol, level: AccessLevel) -> Result<()> {
+        let mut meta = self.get_relation(&rel, true)?;
+        meta.access_level = level;
+
+        let name_key =
+            Tuple(vec![DataValue::Str(meta.name.clone())]).encode_as_key(RelationId::SYSTEM);
+
+        let mut meta_val = vec![];
+        meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
+            .unwrap();
+        self.tx.put(&name_key, &meta_val)?;
+
+        Ok(())
     }
     pub(crate) fn rename_relation(&mut self, old: Symbol, new: Symbol) -> Result<()> {
         let new_key = DataValue::Str(new.name.clone());
@@ -389,6 +440,13 @@ impl SessionTx {
         let old_encoded = Tuple(vec![old_key]).encode_as_key(RelationId::SYSTEM);
 
         let mut rel = self.get_relation(&old, true)?;
+        if rel.access_level < AccessLevel::Normal {
+            bail!(InsufficientAccessLevel(
+                rel.name.to_string(),
+                "renaming relation".to_string(),
+                rel.access_level
+            ));
+        }
         rel.name = new.name;
 
         let mut meta_val = vec![];
@@ -399,3 +457,11 @@ impl SessionTx {
         Ok(())
     }
 }
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Insufficient access level {2} for {1} on stored relation '{0}'")]
+pub(crate) struct InsufficientAccessLevel(
+    pub(crate) String,
+    pub(crate) String,
+    pub(crate) AccessLevel,
+);

@@ -9,6 +9,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
+use crate::runtime::relation::AccessLevel;
 
 pub(crate) enum SysOp {
     Compact,
@@ -21,6 +22,7 @@ pub(crate) enum SysOp {
     RenameRelation(Vec<(Symbol, Symbol)>),
     ShowTrigger(Symbol),
     SetTriggers(Symbol, Vec<String>, Vec<String>, Vec<String>),
+    SetAccessLevel(Symbol, AccessLevel),
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -75,6 +77,19 @@ pub(crate) fn parse_sys(
                 })
                 .collect_vec();
             SysOp::RenameRelation(rename_pairs)
+        }
+        Rule::access_level_op => {
+            let mut ps = inner.into_inner();
+            let access_level = match ps.next().unwrap().as_str() {
+                "normal" => AccessLevel::Normal,
+                "protected" => AccessLevel::Protected,
+                "read_only" => AccessLevel::ReadOnly,
+                "hidden" => AccessLevel::Hidden,
+                _ => unreachable!()
+            };
+            let rel_p = ps.next().unwrap();
+            let rel = Symbol::new(rel_p.as_str(), rel_p.extract_span());
+            SysOp::SetAccessLevel(rel, access_level)
         }
         Rule::trigger_relation_show_op => {
             let rels_p = inner.into_inner().next().unwrap();

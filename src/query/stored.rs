@@ -8,13 +8,13 @@ use thiserror::Error;
 use crate::algo::constant::Constant;
 use crate::algo::AlgoHandle;
 use crate::data::expr::Expr;
-use crate::data::program::{AlgoApply, InputProgram, InputInlineRulesOrAlgo, RelationOp};
+use crate::data::program::{AlgoApply, InputInlineRulesOrAlgo, InputProgram, RelationOp};
 use crate::data::relation::{ColumnDef, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{EncodedTuple, Tuple};
 use crate::data::value::DataValue;
 use crate::parse::parse_script;
-use crate::runtime::relation::InputRelationHandle;
+use crate::runtime::relation::{AccessLevel, InputRelationHandle, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
 use crate::Db;
 
@@ -36,6 +36,13 @@ impl SessionTx {
         let mut replaced_old_triggers = None;
         if op == RelationOp::Replace {
             if let Ok(old_handle) = self.get_relation(&meta.name, true) {
+                if old_handle.access_level < AccessLevel::Normal {
+                    bail!(InsufficientAccessLevel(
+                        old_handle.name.to_string(),
+                        "relation replacement".to_string(),
+                        old_handle.access_level
+                    ));
+                }
                 if old_handle.has_triggers() {
                     replaced_old_triggers = Some((old_handle.put_triggers, old_handle.rm_triggers))
                 }
@@ -76,6 +83,13 @@ impl SessionTx {
 
         match op {
             RelationOp::Rm => {
+                if relation_store.access_level < AccessLevel::Protected {
+                    bail!(InsufficientAccessLevel(
+                        relation_store.name.to_string(),
+                        "row removal".to_string(),
+                        relation_store.access_level
+                    ));
+                }
                 let key_extractors = make_extractors(
                     &relation_store.metadata.keys,
                     &metadata.keys,
@@ -147,6 +161,14 @@ impl SessionTx {
                 }
             }
             RelationOp::Ensure => {
+                if relation_store.access_level < AccessLevel::ReadOnly {
+                    bail!(InsufficientAccessLevel(
+                        relation_store.name.to_string(),
+                        "row check".to_string(),
+                        relation_store.access_level
+                    ));
+                }
+
                 let mut key_extractors = make_extractors(
                     &relation_store.metadata.keys,
                     &metadata.keys,
@@ -198,6 +220,14 @@ impl SessionTx {
                 }
             }
             RelationOp::EnsureNot => {
+                if relation_store.access_level < AccessLevel::ReadOnly {
+                    bail!(InsufficientAccessLevel(
+                        relation_store.name.to_string(),
+                        "row check".to_string(),
+                        relation_store.access_level
+                    ));
+                }
+
                 let key_extractors = make_extractors(
                     &relation_store.metadata.keys,
                     &metadata.keys,
@@ -225,6 +255,14 @@ impl SessionTx {
                 }
             }
             RelationOp::Create | RelationOp::Replace | RelationOp::Put => {
+                if relation_store.access_level < AccessLevel::Protected {
+                    bail!(InsufficientAccessLevel(
+                        relation_store.name.to_string(),
+                        "row insertion".to_string(),
+                        relation_store.access_level
+                    ));
+                }
+
                 let mut key_extractors = make_extractors(
                     &relation_store.metadata.keys,
                     &metadata.keys,
@@ -398,9 +436,7 @@ fn make_const_rule(
         rule_symbol.clone(),
         InputInlineRulesOrAlgo::Algo {
             algo: AlgoApply {
-                algo: AlgoHandle {
-                    name: rule_symbol,
-                },
+                algo: AlgoHandle { name: rule_symbol },
                 rule_args: vec![],
                 options,
                 head: bindings,

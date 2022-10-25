@@ -21,7 +21,7 @@ use crate::utils::swap_option_result;
 pub(crate) enum RelAlgebra {
     Fixed(InlineFixedRA),
     InMem(InMemRelationRA),
-    Relation(RelationRA),
+    Stored(StoredRA),
     Join(Box<InnerJoin>),
     NegJoin(Box<NegJoin>),
     Reorder(ReorderRA),
@@ -34,7 +34,7 @@ impl RelAlgebra {
         match self {
             RelAlgebra::Fixed(i) => i.span,
             RelAlgebra::InMem(i) => i.span,
-            RelAlgebra::Relation(i) => i.span,
+            RelAlgebra::Stored(i) => i.span,
             RelAlgebra::Join(i) => i.span,
             RelAlgebra::NegJoin(i) => i.span,
             RelAlgebra::Reorder(i) => i.relation.span(),
@@ -253,7 +253,7 @@ impl Debug for RelAlgebra {
                 .field(&r.storage.rule_name)
                 .field(&r.filters)
                 .finish(),
-            RelAlgebra::Relation(r) => f
+            RelAlgebra::Stored(r) => f
                 .debug_tuple("Derived")
                 .field(&bindings)
                 .field(&r.storage.name)
@@ -307,7 +307,7 @@ impl RelAlgebra {
             RelAlgebra::InMem(d) => {
                 d.fill_binding_indices()?;
             }
-            RelAlgebra::Relation(v) => {
+            RelAlgebra::Stored(v) => {
                 v.fill_binding_indices()?;
             }
             RelAlgebra::Reorder(r) => {
@@ -357,7 +357,7 @@ impl RelAlgebra {
         storage: RelationHandle,
         span: SourceSpan,
     ) -> Self {
-        Self::Relation(RelationRA {
+        Self::Stored(StoredRA {
             bindings,
             storage,
             filters: vec![],
@@ -412,14 +412,14 @@ impl RelAlgebra {
                     span,
                 })
             }
-            RelAlgebra::Relation(RelationRA {
+            RelAlgebra::Stored(StoredRA {
                 bindings,
                 storage,
                 mut filters,
                 span,
             }) => {
                 filters.push(filter);
-                RelAlgebra::Relation(RelationRA {
+                RelAlgebra::Stored(StoredRA {
                     bindings,
                     storage,
                     filters,
@@ -720,14 +720,14 @@ fn get_eliminate_indices(bindings: &[Symbol], eliminate: &BTreeSet<Symbol>) -> B
 }
 
 #[derive(Debug)]
-pub(crate) struct RelationRA {
+pub(crate) struct StoredRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: RelationHandle,
     pub(crate) filters: Vec<Expr>,
     pub(crate) span: SourceSpan,
 }
 
-impl RelationRA {
+impl StoredRA {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
@@ -1253,7 +1253,7 @@ impl RelAlgebra {
         match self {
             RelAlgebra::Fixed(r) => r.do_eliminate_temp_vars(used),
             RelAlgebra::InMem(_r) => Ok(()),
-            RelAlgebra::Relation(_v) => Ok(()),
+            RelAlgebra::Stored(_v) => Ok(()),
             RelAlgebra::Join(r) => r.do_eliminate_temp_vars(used),
             RelAlgebra::Reorder(r) => r.relation.eliminate_temp_vars(used),
             RelAlgebra::Filter(r) => r.do_eliminate_temp_vars(used),
@@ -1266,7 +1266,7 @@ impl RelAlgebra {
         match self {
             RelAlgebra::Fixed(r) => Some(&r.to_eliminate),
             RelAlgebra::InMem(_) => None,
-            RelAlgebra::Relation(_) => None,
+            RelAlgebra::Stored(_) => None,
             RelAlgebra::Join(r) => Some(&r.to_eliminate),
             RelAlgebra::Reorder(_) => None,
             RelAlgebra::Filter(r) => Some(&r.to_eliminate),
@@ -1290,7 +1290,7 @@ impl RelAlgebra {
         match self {
             RelAlgebra::Fixed(f) => f.bindings.clone(),
             RelAlgebra::InMem(d) => d.bindings.clone(),
-            RelAlgebra::Relation(v) => v.bindings.clone(),
+            RelAlgebra::Stored(v) => v.bindings.clone(),
             RelAlgebra::Join(j) => j.bindings(),
             RelAlgebra::Reorder(r) => r.bindings(),
             RelAlgebra::Filter(r) => r.parent.bindings_after_eliminate(),
@@ -1311,7 +1311,7 @@ impl RelAlgebra {
         match self {
             RelAlgebra::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone()))))),
             RelAlgebra::InMem(r) => r.iter(epoch, use_delta),
-            RelAlgebra::Relation(v) => v.iter(tx),
+            RelAlgebra::Stored(v) => v.iter(tx),
             RelAlgebra::Join(j) => j.iter(tx, epoch, use_delta),
             RelAlgebra::Reorder(r) => r.iter(tx, epoch, use_delta),
             RelAlgebra::Filter(r) => r.iter(tx, epoch, use_delta),
@@ -1360,7 +1360,7 @@ impl NegJoin {
                     "mem_neg_mat_join"
                 }
             }
-            RelAlgebra::Relation(_) => {
+            RelAlgebra::Stored(_) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1403,7 +1403,7 @@ impl NegJoin {
                     eliminate_indices,
                 )
             }
-            RelAlgebra::Relation(v) => {
+            RelAlgebra::Stored(v) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1481,7 +1481,7 @@ impl InnerJoin {
                     "mem_mat_join"
                 }
             }
-            RelAlgebra::Relation(_) => {
+            RelAlgebra::Stored(_) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1549,7 +1549,7 @@ impl InnerJoin {
                     self.materialized_join(tx, eliminate_indices, epoch, use_delta)
                 }
             }
-            RelAlgebra::Relation(r) => {
+            RelAlgebra::Stored(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(

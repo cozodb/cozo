@@ -1,19 +1,21 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
-use miette::{ensure, Context, Diagnostic, Result};
+use miette::{bail, ensure, Context, Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{
-    MagicAlgoApply, MagicAtom, MagicInlineRule, MagicRulesOrAlgo, MagicSymbol, StratifiedMagicProgram,
+    MagicAlgoApply, MagicAtom, MagicInlineRule, MagicRulesOrAlgo, MagicSymbol,
+    StratifiedMagicProgram,
 };
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::query::relation::RelAlgebra;
 use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) type CompiledProgram = BTreeMap<MagicSymbol, CompiledRuleSet>;
@@ -195,6 +197,13 @@ impl SessionTx {
                 }
                 MagicAtom::Relation(rel_app) => {
                     let store = self.get_relation(&rel_app.name, false)?;
+                    if store.access_level < AccessLevel::ReadOnly {
+                        bail!(InsufficientAccessLevel(
+                            store.name.to_string(),
+                            "reading rows".to_string(),
+                            store.access_level
+                        ));
+                    }
                     ensure!(
                         store.arity() == rel_app.args.len(),
                         ArityMismatch(

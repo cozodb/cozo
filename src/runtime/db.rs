@@ -25,7 +25,7 @@ use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::relation::{
-    FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, RelationRA, ReorderRA,
+    FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, StoredRA, ReorderRA,
     UnificationRA,
 };
 use crate::runtime::relation::{RelationHandle, RelationId};
@@ -306,7 +306,7 @@ impl Db {
                                         json!(null),
                                         json!(filters.iter().map(|f| f.to_string()).collect_vec()),
                                     ),
-                                    RelAlgebra::Relation(RelationRA {
+                                    RelAlgebra::Stored(StoredRA {
                                         storage, filters, ..
                                     }) => (
                                         "load_stored",
@@ -476,6 +476,12 @@ impl Db {
             SysOp::SetTriggers(name, puts, rms, replaces) => {
                 let mut tx = self.transact_write()?;
                 tx.set_relation_triggers(name, puts, rms, replaces)?;
+                tx.commit_tx()?;
+                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
+            }
+            SysOp::SetAccessLevel(name, level) => {
+                let mut tx = self.transact_write()?;
+                tx.set_access_level(name, level)?;
                 tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
@@ -720,9 +726,11 @@ impl Db {
             let n_dependents = meta.metadata.non_keys.len();
             let arity = n_keys + n_dependents;
             let name = meta.name;
+            let access_level = meta.access_level.to_string();
             collected.push(json!([
                 name,
                 arity,
+                access_level,
                 n_keys,
                 n_dependents,
                 meta.put_triggers.len(),
@@ -732,7 +740,7 @@ impl Db {
             it.next();
         }
         Ok(json!({"rows": collected, "headers":
-                ["name", "arity", "n_keys", "n_non_keys", "n_put_triggers", "n_rm_triggers", "n_replace_triggers"]}))
+                ["name", "arity", "access_level", "n_keys", "n_non_keys", "n_put_triggers", "n_rm_triggers", "n_replace_triggers"]}))
     }
 }
 

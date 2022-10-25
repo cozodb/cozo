@@ -28,25 +28,36 @@ Ops on stored relations
 
     List all stored relations currently in the database
 
-.. function:: ::relation columns <REL_NAME>
+.. function:: ::columns <REL_NAME>
 
     List all columns for the stored relation ``<REL_NAME>``.
 
-.. function:: ::relation remove <REL_NAME> (, <REL_NAME>)*
+.. function:: ::remove <REL_NAME> (, <REL_NAME>)*
 
     Remove stored relations. Several can be specified, joined by commas.
 
-.. function:: ::relation rename <OLD_NAME> -> <NEW_NAME> (, <OLD_NAME> -> <NEW_NAME>)*
+.. function:: ::rename <OLD_NAME> -> <NEW_NAME> (, <OLD_NAME> -> <NEW_NAME>)*
 
     Rename stored relation ``<OLD_NAME>`` into ``<NEW_NAME>``. Several may be specified, joined by commas.
 
-.. function:: ::relation show_triggers <REL_NAME>
+.. function:: ::show_triggers <REL_NAME>
 
     Display triggers associated with the stored relation ``<REL_NAME>``.
 
-.. function:: ::relation set_triggers <REL_NAME> <TRIGGERS>
+.. function:: ::set_triggers <REL_NAME> <TRIGGERS>
 
     Set triggers for the stored relation ``<REL_NAME>``. This is explained in more detail in the transactions chapter.
+
+.. function:: ::access_level <REL_NAME> <ACCESS_LEVEL>
+
+    Sets the access level of ``<REL_NAME>`` to the given level. The levels are:
+
+    * ``normal`` allows everything,
+    * ``protected`` disallows ``::remove`` and ``:replace``,
+    * ``read_only`` additionally disallows any mutations and setting triggers,
+    * ``hidden`` additionally disallows any data access (metadata access via ``::relations``, etc., are still allowed).
+
+    It is recommended to give the appropriate access levels to tables to prevent data loss from programming mistakes.
 
 ------------------------------------
 Monitor and kill
