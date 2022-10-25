@@ -110,7 +110,7 @@ Outside the storage layer, Cozo is 100% safe rust.
 
 ## Licensing
 
-The original contents of this project are licensed under AGPL-3.0 or later, with the following exceptions:
+The contents of this project are licensed under AGPL-3.0 or later, with the following exceptions:
 
-* Original contents in the `cozorocks` directory are licensed under MIT, or Apache-2.0, or BSD-3-Clause;
-* Original contents in the `docs` directory are licensed under CC BY-SA 4.0.
+* Contents in the `cozorocks` directory are licensed under MIT, or Apache-2.0, or BSD-3-Clause;
+* Contents in the `docs` directory are licensed under CC BY-SA 4.0.
