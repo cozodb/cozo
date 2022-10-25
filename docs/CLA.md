@@ -1,4 +1,4 @@
-## Entity Contributor Agreement
+## Contributor Agreement
 
 Thank you for your interest in contributing to Ziyang Hu's Cozo ("We" or "Us").
 
