@@ -113,7 +113,7 @@ lazy_static! {
 }
         "##, &Default::default()).unwrap();
 
-        db.run_script("::relation remove idx2code", &Default::default())
+        db.run_script("::remove idx2code", &Default::default())
             .unwrap();
 
         dbg!(init.elapsed());
