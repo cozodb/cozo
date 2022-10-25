@@ -23,19 +23,20 @@ that uses Datalog for query and focuses on graph data.
 In the following, `:route` refers to a relation with two columns named `src` and `dst`, 
 representing routes between airports.
 
-Find airports reachable by one stop from Frankfurt Airport (`FRA`), the busiest airport in the world:
+Find airports reachable by one stop from Frankfurt Airport (code `FRA`, the busiest airport in the world):
 
 ```js
 ?[dst] := :route{src: 'FRA', dst: stop}, 
           :route{src: stop, dst}
 ```
 
-Find _all_ airports reachable from Frankfurt (i.e., the transitive closure):
+Find _all_ airports reachable from Frankfurt (i.e., the transitive closure) 
+with code starting with the letter `A`:
 
 ```js
 reachable[dst] := :route{src: 'FRA', dst}
 reachable[dst] := reachable[src], :route{src, dst}
-?[airport] := reachable[airport]
+?[airport] := reachable[airport], starts_with(airport, 'A')
 ```
 
 Compute the shortest path between Frankfurt and all airports in the world with recursion through aggregation:
