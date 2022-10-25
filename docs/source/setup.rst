@@ -211,3 +211,18 @@ if everything goes well.
 You can run ``cargo build --release -F jemalloc`` instead
 to indicate that you want to compile and use jemalloc as the memory allocator for the RocksDB storage backend,
 which, depending on your workload, can make a difference in performance.
+
+--------------------------------
+Embedded use
+--------------------------------
+
+Here "embedded" means running in the same process as your program.
+As ``cozoserver`` is just a very thin wrapper around the Cozo rust library,
+you can use the library directly in your program.
+
+For languages other than Rust, you will need to provide custom bindings,
+but again for `Python <https://pyo3.rs/>`_ and `NodeJS <https://neon-bindings.com/>`_ this is trivial.
+
+As Cozo uses RocksDB as its storage engine, it probably makes a lot less sense to use embedded Cozo than SQLite,
+since RocksDB always uses multiple threads and always has background threads running,
+unlike SQLite for which a connection uses only a single thread.
