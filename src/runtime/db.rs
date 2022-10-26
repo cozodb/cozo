@@ -1,15 +1,15 @@
+use std::{fs, thread};
 use std::cmp::Ordering::Greater;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::{fs, thread};
 
 use either::{Left, Right};
 use itertools::Itertools;
-use miette::{bail, ensure, Diagnostic, Result, WrapErr};
+use miette::{bail, Diagnostic, ensure, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
@@ -19,13 +19,13 @@ use cozorocks::{DbBuilder, RocksDb};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{compare_tuple_keys, rusty_scratch_cmp, Tuple, SCRATCH_DB_KEY_PREFIX_LEN};
+use crate::data::tuple::{compare_tuple_keys, rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::SysOp;
-use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::relation::{
-    FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, StoredRA, ReorderRA,
+    FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA,
     UnificationRA,
 };
 use crate::runtime::relation::{RelationHandle, RelationId};
@@ -137,6 +137,10 @@ impl Db {
         };
         ret.load_last_ids()?;
         Ok(ret)
+    }
+
+    pub fn get_session_id(&self) -> usize {
+        self.session_id
     }
 
     pub fn compact_relation(&self) -> Result<()> {

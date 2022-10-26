@@ -121,23 +121,13 @@ lazy_static! {
     };
 }
 
-fn check_relations() {
-    assert_eq!(
-        5,
-        TEST_DB
-            .list_relations()
-            .unwrap()
-            .get("rows")
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .len()
-    );
+fn check_db() {
+    TEST_DB.get_session_id();
 }
 
 #[test]
 fn dfs() {
-    check_relations();
+    check_db();
     let dfs = Instant::now();
     let res = TEST_DB
         .run_script(
@@ -161,7 +151,7 @@ fn dfs() {
 
 #[test]
 fn bfs() {
-    check_relations();
+    check_db();
     let bfs = Instant::now();
     let res = TEST_DB
         .run_script(
@@ -185,7 +175,7 @@ fn bfs() {
 
 #[test]
 fn scc() {
-    check_relations();
+    check_db();
     let scc = Instant::now();
     let _ = TEST_DB
         .run_script(
@@ -201,7 +191,7 @@ fn scc() {
 
 #[test]
 fn cc() {
-    check_relations();
+    check_db();
     let cc = Instant::now();
     let _ = TEST_DB
         .run_script(
@@ -217,7 +207,7 @@ fn cc() {
 
 #[test]
 fn astar() {
-    check_relations();
+    check_db();
     let astar = Instant::now();
     let _ = TEST_DB.run_script(r#"
         code_lat_lon[code, lat, lon] := *airport{code, lat, lon}
@@ -230,7 +220,7 @@ fn astar() {
 
 #[test]
 fn deg_centrality() {
-    check_relations();
+    check_db();
     let deg_centrality = Instant::now();
     TEST_DB
         .run_script(
@@ -248,7 +238,7 @@ fn deg_centrality() {
 
 #[test]
 fn dijkstra() {
-    check_relations();
+    check_db();
     let dijkstra = Instant::now();
 
     TEST_DB
@@ -268,7 +258,7 @@ fn dijkstra() {
 
 #[test]
 fn yen() {
-    check_relations();
+    check_db();
     let yen = Instant::now();
 
     TEST_DB
@@ -287,7 +277,7 @@ fn yen() {
 
 #[test]
 fn starts_with() {
-    check_relations();
+    check_db();
     let starts_with = Instant::now();
     let res = TEST_DB
         .run_script(
@@ -318,7 +308,7 @@ fn starts_with() {
 
 #[test]
 fn range_check() {
-    check_relations();
+    check_db();
     let range_check = Instant::now();
 
     let res = TEST_DB
@@ -337,7 +327,7 @@ fn range_check() {
 
 #[test]
 fn no_airports() {
-    check_relations();
+    check_db();
     let no_airports = Instant::now();
 
     let res = TEST_DB
@@ -364,7 +354,7 @@ fn no_airports() {
 
 #[test]
 fn no_routes_airport() {
-    check_relations();
+    check_db();
     let no_routes_airports = Instant::now();
 
     let res = TEST_DB
@@ -392,7 +382,7 @@ fn no_routes_airport() {
 
 #[test]
 fn runway_distribution() {
-    check_relations();
+    check_db();
     let no_routes_airports = Instant::now();
 
     let res = TEST_DB
@@ -421,7 +411,7 @@ fn runway_distribution() {
 
 #[test]
 fn most_out_routes() {
-    check_relations();
+    check_db();
     let most_out_routes = Instant::now();
 
     let res = TEST_DB
@@ -453,7 +443,7 @@ fn most_out_routes() {
 
 #[test]
 fn most_out_routes_again() {
-    check_relations();
+    check_db();
     let most_out_routes_again = Instant::now();
 
     let res = TEST_DB
@@ -485,7 +475,7 @@ fn most_out_routes_again() {
 
 #[test]
 fn most_routes() {
-    check_relations();
+    check_db();
     let most_routes = Instant::now();
 
     let res = TEST_DB
@@ -516,7 +506,7 @@ fn most_routes() {
 
 #[test]
 fn airport_with_one_route() {
-    check_relations();
+    check_db();
     let airport_with_one_route = Instant::now();
 
     let res = TEST_DB
@@ -535,7 +525,7 @@ fn airport_with_one_route() {
 
 #[test]
 fn single_runway_with_most_routes() {
-    check_relations();
+    check_db();
     let single_runway_with_most_routes = Instant::now();
 
     let res = TEST_DB
@@ -568,7 +558,7 @@ fn single_runway_with_most_routes() {
 
 #[test]
 fn most_routes_in_canada() {
-    check_relations();
+    check_db();
     let most_routes_in_canada = Instant::now();
 
     let res = TEST_DB
@@ -604,7 +594,7 @@ fn most_routes_in_canada() {
 
 #[test]
 fn uk_count() {
-    check_relations();
+    check_db();
     let uk_count = Instant::now();
 
     let res = TEST_DB
@@ -625,7 +615,7 @@ fn uk_count() {
 
 #[test]
 fn airports_by_country() {
-    check_relations();
+    check_db();
     let airports_by_country = Instant::now();
 
     let res = TEST_DB
@@ -678,7 +668,7 @@ fn airports_by_country() {
 
 #[test]
 fn n_airports_by_continent() {
-    check_relations();
+    check_db();
     let n_airports_by_continent = Instant::now();
 
     let res = TEST_DB
@@ -704,7 +694,7 @@ fn n_airports_by_continent() {
 
 #[test]
 fn routes_per_airport() {
-    check_relations();
+    check_db();
     let routes_per_airport = Instant::now();
 
     let res = TEST_DB
@@ -729,7 +719,7 @@ fn routes_per_airport() {
 
 #[test]
 fn airports_by_route_number() {
-    check_relations();
+    check_db();
     let airports_by_route_number = Instant::now();
 
     let res = TEST_DB
@@ -748,7 +738,7 @@ fn airports_by_route_number() {
 
 #[test]
 fn out_from_aus() {
-    check_relations();
+    check_db();
     let out_from_aus = Instant::now();
 
     let res = TEST_DB
@@ -772,7 +762,7 @@ fn out_from_aus() {
 
 #[test]
 fn const_return() {
-    check_relations();
+    check_db();
     let const_return = Instant::now();
 
     let res = TEST_DB
@@ -790,7 +780,7 @@ fn const_return() {
 
 #[test]
 fn multi_res() {
-    check_relations();
+    check_db();
     let multi_res = Instant::now();
 
     let res = TEST_DB
@@ -818,7 +808,7 @@ fn multi_res() {
 
 #[test]
 fn multi_unification() {
-    check_relations();
+    check_db();
     let multi_unification = Instant::now();
 
     let res = TEST_DB
@@ -841,7 +831,7 @@ fn multi_unification() {
 
 #[test]
 fn num_routes_from_eu_to_us() {
-    check_relations();
+    check_db();
     let num_routes_from_eu_to_us = Instant::now();
 
     let res = TEST_DB
@@ -863,7 +853,7 @@ fn num_routes_from_eu_to_us() {
 
 #[test]
 fn num_airports_in_us_with_routes_from_eu() {
-    check_relations();
+    check_db();
     let num_airports_in_us_with_routes_from_eu = Instant::now();
 
     let res = TEST_DB
@@ -883,7 +873,7 @@ fn num_airports_in_us_with_routes_from_eu() {
 
 #[test]
 fn num_routes_in_us_airports_from_eu() {
-    check_relations();
+    check_db();
     let num_routes_in_us_airports_from_eu = Instant::now();
 
     let res = TEST_DB
@@ -914,7 +904,7 @@ fn num_routes_in_us_airports_from_eu() {
 
 #[test]
 fn routes_from_eu_to_us_starting_with_l() {
-    check_relations();
+    check_db();
     let routes_from_eu_to_us_starting_with_l = Instant::now();
 
     let res = TEST_DB
@@ -951,7 +941,7 @@ fn routes_from_eu_to_us_starting_with_l() {
 
 #[test]
 fn len_of_names_count() {
-    check_relations();
+    check_db();
     let len_of_names_count = Instant::now();
 
     let res = TEST_DB
@@ -971,7 +961,7 @@ fn len_of_names_count() {
 
 #[test]
 fn group_count_by_out() {
-    check_relations();
+    check_db();
     let group_count_by_out = Instant::now();
 
     let res = TEST_DB
@@ -1000,7 +990,7 @@ fn group_count_by_out() {
 
 #[test]
 fn mean_group_count() {
-    check_relations();
+    check_db();
     let mean_group_count = Instant::now();
 
     let res = TEST_DB
@@ -1022,7 +1012,7 @@ fn mean_group_count() {
 
 #[test]
 fn n_routes_from_london_uk() {
-    check_relations();
+    check_db();
     let n_routes_from_london_uk = Instant::now();
 
     let res = TEST_DB
@@ -1046,7 +1036,7 @@ fn n_routes_from_london_uk() {
 
 #[test]
 fn reachable_from_london_uk_in_two_hops() {
-    check_relations();
+    check_db();
     let reachable_from_london_uk_in_two_hops = Instant::now();
 
     let res = TEST_DB
@@ -1066,7 +1056,7 @@ fn reachable_from_london_uk_in_two_hops() {
 
 #[test]
 fn routes_within_england() {
-    check_relations();
+    check_db();
     let routes_within_england = Instant::now();
 
     let res = TEST_DB
@@ -1100,7 +1090,7 @@ fn routes_within_england() {
 
 #[test]
 fn routes_within_england_time_no_dup() {
-    check_relations();
+    check_db();
     let routes_within_england_time_no_dup = Instant::now();
 
     let res = TEST_DB
@@ -1131,7 +1121,7 @@ fn routes_within_england_time_no_dup() {
 
 #[test]
 fn hard_route_finding() {
-    check_relations();
+    check_db();
     let hard_route_finding = Instant::now();
 
     let res = TEST_DB
@@ -1160,7 +1150,7 @@ fn hard_route_finding() {
 
 #[test]
 fn na_from_india() {
-    check_relations();
+    check_db();
     let na_from_india = Instant::now();
 
     let res = TEST_DB
@@ -1190,7 +1180,7 @@ fn na_from_india() {
 
 #[test]
 fn eu_cities_reachable_from_fll() {
-    check_relations();
+    check_db();
     let eu_cities_reachable_from_fll = Instant::now();
 
     let res = TEST_DB
@@ -1216,7 +1206,7 @@ fn eu_cities_reachable_from_fll() {
 
 #[test]
 fn clt_to_eu_or_sa() {
-    check_relations();
+    check_db();
     let clt_to_eu_or_sa = Instant::now();
 
     let res = TEST_DB
@@ -1242,7 +1232,7 @@ fn clt_to_eu_or_sa() {
 
 #[test]
 fn london_to_us() {
-    check_relations();
+    check_db();
     let london_to_us = Instant::now();
 
     let res = TEST_DB
@@ -1276,7 +1266,7 @@ fn london_to_us() {
 
 #[test]
 fn tx_to_ny() {
-    check_relations();
+    check_db();
     let tx_to_ny = Instant::now();
 
     let res = TEST_DB
@@ -1305,7 +1295,7 @@ fn tx_to_ny() {
 
 #[test]
 fn denver_to_mexico() {
-    check_relations();
+    check_db();
     let denver_to_mexico = Instant::now();
 
     let res = TEST_DB
@@ -1332,7 +1322,7 @@ fn denver_to_mexico() {
 
 #[test]
 fn three_cities() {
-    check_relations();
+    check_db();
     let three_cities = Instant::now();
 
     let res = TEST_DB
@@ -1363,7 +1353,7 @@ fn three_cities() {
 
 #[test]
 fn long_distance_from_lgw() {
-    check_relations();
+    check_db();
     let long_distance_from_lgw = Instant::now();
 
     let res = TEST_DB
@@ -1398,7 +1388,7 @@ fn long_distance_from_lgw() {
 
 #[test]
 fn long_routes_one_dir() {
-    check_relations();
+    check_db();
     let long_routes_one_dir = Instant::now();
 
     let res = TEST_DB
@@ -1430,7 +1420,7 @@ fn long_routes_one_dir() {
 
 #[test]
 fn longest_routes() {
-    check_relations();
+    check_db();
     let longest_routes = Instant::now();
 
     let res = TEST_DB
@@ -1461,7 +1451,7 @@ fn longest_routes() {
 
 #[test]
 fn longest_routes_from_each_airports() {
-    check_relations();
+    check_db();
     let longest_routes_from_each_airports = Instant::now();
 
     let res = TEST_DB
@@ -1489,7 +1479,7 @@ fn longest_routes_from_each_airports() {
 
 #[test]
 fn total_distance_from_three_cities() {
-    check_relations();
+    check_db();
     let total_distance_from_three_cities = Instant::now();
 
     let res = TEST_DB
@@ -1511,7 +1501,7 @@ fn total_distance_from_three_cities() {
 
 #[test]
 fn total_distance_within_three_cities() {
-    check_relations();
+    check_db();
     let total_distance_within_three_cities = Instant::now();
 
     let res = TEST_DB
@@ -1533,7 +1523,7 @@ fn total_distance_within_three_cities() {
 
 #[test]
 fn specific_distance() {
-    check_relations();
+    check_db();
     let specific_distance = Instant::now();
 
     let res = TEST_DB
@@ -1551,7 +1541,7 @@ fn specific_distance() {
 
 #[test]
 fn n_routes_between() {
-    check_relations();
+    check_db();
     let n_routes_between = Instant::now();
 
     let res = TEST_DB
@@ -1571,7 +1561,7 @@ fn n_routes_between() {
 
 #[test]
 fn one_stop_distance() {
-    check_relations();
+    check_db();
     let one_stop_distance = Instant::now();
 
     let res = TEST_DB
@@ -1601,7 +1591,7 @@ fn one_stop_distance() {
 
 #[test]
 fn airport_most_routes() {
-    check_relations();
+    check_db();
     let airport_most_routes = Instant::now();
 
     let res = TEST_DB
@@ -1629,7 +1619,7 @@ fn airport_most_routes() {
 
 #[test]
 fn north_of_77() {
-    check_relations();
+    check_db();
     let north_of_77 = Instant::now();
 
     let res = TEST_DB
@@ -1650,7 +1640,7 @@ fn north_of_77() {
 
 #[test]
 fn greenwich_meridian() {
-    check_relations();
+    check_db();
     let greenwich_meridian = Instant::now();
 
     let res = TEST_DB
@@ -1671,7 +1661,7 @@ fn greenwich_meridian() {
 
 #[test]
 fn box_around_heathrow() {
-    check_relations();
+    check_db();
     let box_around_heathrow = Instant::now();
 
     let res = TEST_DB
@@ -1695,7 +1685,7 @@ fn box_around_heathrow() {
 
 #[test]
 fn dfw_by_region() {
-    check_relations();
+    check_db();
     let dfw_by_region = Instant::now();
 
     let res = TEST_DB
@@ -1726,7 +1716,7 @@ fn dfw_by_region() {
 
 #[test]
 fn great_circle_distance() {
-    check_relations();
+    check_db();
     let great_circle_distance = Instant::now();
 
     let res = TEST_DB
@@ -1750,7 +1740,7 @@ fn great_circle_distance() {
 
 #[test]
 fn aus_to_edi() {
-    check_relations();
+    check_db();
     let aus_to_edi = Instant::now();
 
     let res = TEST_DB
@@ -1779,7 +1769,7 @@ fn aus_to_edi() {
 
 #[test]
 fn reachable_from_lhr() {
-    check_relations();
+    check_db();
     let reachable_from_lhr = Instant::now();
 
     let res = TEST_DB
@@ -1820,7 +1810,7 @@ fn reachable_from_lhr() {
 
 #[test]
 fn furthest_from_lhr() {
-    check_relations();
+    check_db();
     let furthest_from_lhr = Instant::now();
 
     let res = TEST_DB
