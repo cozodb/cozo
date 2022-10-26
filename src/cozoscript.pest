@@ -1,3 +1,7 @@
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
+ */
+
 script = _{sys_script | multi_script | query_script}
 query_script = {SOI ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
 query_script_inner = {"{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}

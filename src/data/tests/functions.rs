@@ -1,3 +1,7 @@
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
+ */
+
 use approx::AbsDiffEq;
 use num_traits::FloatConst;
 use regex::Regex;

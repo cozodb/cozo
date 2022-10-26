@@ -1,3 +1,7 @@
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
+ */
+
 use serde_json::json;
 pub(crate) use serde_json::Value as JsonValue;
 use smartstring::SmartString;

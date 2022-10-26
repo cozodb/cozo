@@ -1,3 +1,7 @@
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under MIT/Apache-2.0/BSD-3-Clause.
+ */
+
 use std::borrow::Cow;
 
 use cxx::*;

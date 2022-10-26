@@ -1,3 +1,9 @@
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under MIT/Apache-2.0/BSD-3-Clause.
+ * Much of the build script is built upon:
+ * https://github.com/rust-rocksdb/rust-rocksdb/tree/master/librocksdb-sys.
+ */
+
 use std::path::Path;
 use std::{env, fs, process::Command};
 

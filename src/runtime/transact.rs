@@ -1,3 +1,7 @@
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
+ */
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 

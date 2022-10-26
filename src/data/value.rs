@@ -1,3 +1,7 @@
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
+ */
+
 use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};

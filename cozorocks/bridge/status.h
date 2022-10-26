@@ -1,6 +1,6 @@
-//
-// Created by Ziyang Hu on 2022/7/3.
-//
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under MIT/Apache-2.0/BSD-3-Clause.
+ */
 
 #ifndef COZOROCKS_STATUS_H
 #define COZOROCKS_STATUS_H

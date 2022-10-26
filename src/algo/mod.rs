@@ -1,3 +1,7 @@
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
+ */
+
 use std::collections::BTreeMap;
 
 use miette::{bail, ensure, Diagnostic, Result};

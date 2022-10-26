@@ -1,3 +1,7 @@
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under MIT/Apache-2.0/BSD-3-Clause.
+ */
+
 pub use bridge::db::DbBuilder;
 pub use bridge::db::RocksDb;
 pub use bridge::ffi::RocksDbStatus;
