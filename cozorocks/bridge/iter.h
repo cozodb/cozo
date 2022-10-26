@@ -103,13 +103,11 @@ struct IterBridge {
     }
 
     inline void seek(RustBytes key) {
-        string k = convert_slice_to_string(key);
-        iter->Seek(Slice(k));
+        iter->Seek(convert_slice(key));
     }
 
     inline void seek_backward(RustBytes key) {
-        string k = convert_slice_to_string(key);
-        iter->SeekForPrev(Slice(k));
+        iter->SeekForPrev(convert_slice(key));
     }
 
     inline bool is_valid() const {
