@@ -10,7 +10,7 @@ use crate::data::memcmp::MemCmpEncoder;
 use crate::data::value::DataValue;
 use crate::runtime::relation::RelationId;
 
-pub(crate) const SCRATCH_DB_KEY_PREFIX_LEN: usize = 6;
+pub(crate) const KEY_PREFIX_LEN: usize = 9;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub(crate) struct Tuple(pub(crate) Vec<DataValue>);

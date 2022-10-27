@@ -2,17 +2,17 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
  */
 
-use std::{fs, thread};
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{fs, thread};
 
 use either::{Left, Right};
 use itertools::Itertools;
-use miette::{bail, Diagnostic, ensure, Result, WrapErr};
+use miette::{bail, ensure, Diagnostic, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
@@ -22,14 +22,13 @@ use cozorocks::{DbBuilder, RocksDb};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
+use crate::data::tuple::{Tuple, KEY_PREFIX_LEN};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::SysOp;
+use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::relation::{
-    FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA,
-    UnificationRA,
+    FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, UnificationRA,
 };
 use crate::runtime::relation::{RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
@@ -123,8 +122,7 @@ impl Db {
         store_path.push("data");
         let db_builder = builder
             .create_if_missing(is_new)
-            .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
-            // .use_custom_comparator("cozo_rusty_cmp", rusty_scratch_cmp, false)
+            .use_capped_prefix_extractor(true, KEY_PREFIX_LEN)
             .use_bloom_filter(true, 9.9, true)
             .path(store_path.to_str().unwrap());
 
