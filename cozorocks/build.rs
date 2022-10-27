@@ -4,8 +4,9 @@
  * https://github.com/rust-rocksdb/rust-rocksdb/tree/master/librocksdb-sys.
  */
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{env, fs, process::Command};
+use std::env::var;
 
 fn main() {
     let target = env::var("TARGET").unwrap();
@@ -110,7 +111,6 @@ fn main() {
 }
 
 fn link(name: &str, bundled: bool) {
-    use std::env::var;
     let target = var("TARGET").unwrap();
     let target: Vec<_> = target.split('-').collect();
     if target.get(2) == Some(&"windows") {
@@ -141,6 +141,13 @@ fn rocksdb_include_dir() -> String {
 }
 
 fn build_rocksdb() {
+    let base = env::var_os("OUT_DIR").unwrap();
+    let mut out_lib_path = PathBuf::from(base);
+    out_lib_path.push("librocksdb.a");
+    if out_lib_path.exists() {
+        return;
+    }
+
     let target = env::var("TARGET").unwrap();
 
     let mut config = cc::Build::new();
