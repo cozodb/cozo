@@ -23,98 +23,103 @@ lazy_static! {
 
         let init = Instant::now();
         db.run_script(r##"
-{
-    res[idx, label, typ, code, icao, desc, region, runways, longest, elev, country, city, lat, lon] <~
-        CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any', 'Any', 'Int?', 'Float?', 'Float?', 'Any', 'Any', 'Float?', 'Float?'],
-                  url: 'file://./tests/air-routes-latest-nodes.csv',
-                  has_headers: true)
+            res[idx, label, typ, code, icao, desc, region, runways, longest, elev, country, city, lat, lon] <~
+                CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any', 'Any', 'Int?', 'Float?', 'Float?', 'Any', 'Any', 'Float?', 'Float?'],
+                          url: 'file://./tests/air-routes-latest-nodes.csv',
+                          has_headers: true)
 
-    ?[code, icao, desc, region, runways, longest, elev, country, city, lat, lon] :=
-        res[idx, label, typ, code, icao, desc, region, runways, longest, elev, country, city, lat, lon],
-        label == 'airport'
+            ?[code, icao, desc, region, runways, longest, elev, country, city, lat, lon] :=
+                res[idx, label, typ, code, icao, desc, region, runways, longest, elev, country, city, lat, lon],
+                label == 'airport'
 
-    :replace airport {
-        code: String
-        =>
-        icao: String,
-        desc: String,
-        region: String,
-        runways: Int,
-        longest: Float,
-        elev: Float,
-        country: String,
-        city: String,
-        lat: Float,
-        lon: Float
-    }
-}
-{
-    res[idx, label, typ, code, icao, desc] <~
-        CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any'],
-                  url: 'file://./tests/air-routes-latest-nodes.csv',
-                  has_headers: true)
-    ?[code, desc] :=
-        res[idx, label, typ, code, icao, desc],
-        label == 'country'
+            :replace airport {
+                code: String
+                =>
+                icao: String,
+                desc: String,
+                region: String,
+                runways: Int,
+                longest: Float,
+                elev: Float,
+                country: String,
+                city: String,
+                lat: Float,
+                lon: Float
+            }
+        "##, &Default::default()).unwrap();
 
-    :replace country {
-        code: String
-        =>
-        desc: String
-    }
-}
-{
-    res[idx, label, typ, code, icao, desc] <~
-        CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any'],
-                  url: 'file://./tests/air-routes-latest-nodes.csv',
-                  has_headers: true)
-    ?[idx, code, desc] :=
-        res[idx, label, typ, code, icao, desc],
-        label == 'continent'
+         db.run_script(r##"
+            res[idx, label, typ, code, icao, desc] <~
+                CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any'],
+                          url: 'file://./tests/air-routes-latest-nodes.csv',
+                          has_headers: true)
+            ?[code, desc] :=
+                res[idx, label, typ, code, icao, desc],
+                label == 'country'
 
-    :replace continent {
-        code: String
-        =>
-        desc: String
-    }
-}
-{
-    res[idx, label, typ, code] <~
-        CsvReader(types: ['Int', 'Any', 'Any', 'Any'],
-                  url: 'file://./tests/air-routes-latest-nodes.csv',
-                  has_headers: true)
-    ?[idx, code] :=
-        res[idx, label, typ, code],
+            :replace country {
+                code: String
+                =>
+                desc: String
+            }
+        "##, &Default::default()).unwrap();
 
-    :replace idx2code { idx => code }
-}
-{
-    res[] <~
-        CsvReader(types: ['Int', 'Int', 'Int', 'String', 'Float?'],
-                  url: 'file://./tests/air-routes-latest-edges.csv',
-                  has_headers: true)
-    ?[fr, to, dist] :=
-        res[idx, fr_i, to_i, typ, dist],
-        typ == 'route',
-        *idx2code[fr_i, fr],
-        *idx2code[to_i, to]
+         db.run_script(r##"
+            res[idx, label, typ, code, icao, desc] <~
+                CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any'],
+                          url: 'file://./tests/air-routes-latest-nodes.csv',
+                          has_headers: true)
+            ?[idx, code, desc] :=
+                res[idx, label, typ, code, icao, desc],
+                label == 'continent'
 
-    :replace route { fr: String, to: String => dist: Float }
-}
-{
-    res[] <~
-        CsvReader(types: ['Int', 'Int', 'Int', 'String'],
-                  url: 'file://./tests/air-routes-latest-edges.csv',
-                  has_headers: true)
-    ?[entity, contained] :=
-        res[idx, fr_i, to_i, typ],
-        typ == 'contains',
-        *idx2code[fr_i, entity],
-        *idx2code[to_i, contained]
+            :replace continent {
+                code: String
+                =>
+                desc: String
+            }
+        "##, &Default::default()).unwrap();
+
+        db.run_script(r##"
+            res[idx, label, typ, code] <~
+                CsvReader(types: ['Int', 'Any', 'Any', 'Any'],
+                          url: 'file://./tests/air-routes-latest-nodes.csv',
+                          has_headers: true)
+            ?[idx, code] :=
+                res[idx, label, typ, code],
+
+            :replace idx2code { idx: Int => code: String }
+        "##, &Default::default()).unwrap();
+
+        // println!("{}", db.run_script("?[idx, code] := *idx2code[idx, code]", &Default::default()).unwrap());
+
+        db.run_script(r##"
+            res[] <~
+                CsvReader(types: ['Int', 'Int', 'Int', 'String', 'Float?'],
+                          url: 'file://./tests/air-routes-latest-edges.csv',
+                          has_headers: true)
+            ?[fr, to, dist] :=
+                res[idx, fr_i, to_i, typ, dist],
+                typ == 'route',
+                *idx2code[fr_i, fr],
+                *idx2code[to_i, to]
+
+            :replace route { fr: String, to: String => dist: Float }
+        "##, &Default::default()).unwrap();
+
+        db.run_script(r##"
+            res[] <~
+                CsvReader(types: ['Int', 'Int', 'Int', 'String'],
+                          url: 'file://./tests/air-routes-latest-edges.csv',
+                          has_headers: true)
+            ?[entity, contained] :=
+                res[idx, fr_i, to_i, typ],
+                typ == 'contains',
+                *idx2code[fr_i, entity],
+                *idx2code[to_i, contained]
 
 
-    :replace contain { entity: String, contained: String }
-}
+            :replace contain { entity: String, contained: String }
         "##, &Default::default()).unwrap();
 
         db.run_script("::remove idx2code", &Default::default())

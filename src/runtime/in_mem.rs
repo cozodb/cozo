@@ -14,11 +14,9 @@ use either::{Left, Right};
 use itertools::Itertools;
 use miette::Result;
 
-use cozorocks::DbIter;
-
 use crate::data::aggr::Aggregation;
 use crate::data::program::MagicSymbol;
-use crate::data::tuple::{EncodedTuple, Tuple};
+use crate::data::tuple::{Tuple};
 use crate::data::value::DataValue;
 use crate::query::eval::QueryLimiter;
 use crate::runtime::db::Poison;
@@ -367,24 +365,24 @@ impl InMemRelation {
         res.into_iter()
     }
 }
-
-struct SortedIter {
-    it: DbIter,
-    started: bool,
-}
-
-impl Iterator for SortedIter {
-    type Item = Result<Tuple>;
-    fn next(&mut self) -> Option<Self::Item> {
-        if !self.started {
-            self.started = true;
-        } else {
-            self.it.next();
-        }
-        match self.it.pair() {
-            Err(e) => Some(Err(e.into())),
-            Ok(None) => None,
-            Ok(Some((_, v_slice))) => Some(Ok(EncodedTuple(v_slice).decode())),
-        }
-    }
-}
+//
+// struct SortedIter {
+//     it: DbIter,
+//     started: bool,
+// }
+//
+// impl Iterator for SortedIter {
+//     type Item = Result<Tuple>;
+//     fn next(&mut self) -> Option<Self::Item> {
+//         if !self.started {
+//             self.started = true;
+//         } else {
+//             self.it.next();
+//         }
+//         match self.it.pair() {
+//             Err(e) => Some(Err(e.into())),
+//             Ok(None) => None,
+//             Ok(Some((_, v_slice))) => Some(Ok(EncodedTuple(v_slice).decode())),
+//         }
+//     }
+// }

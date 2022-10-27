@@ -80,9 +80,9 @@ pub(crate) trait MemCmpEncoder: Write {
         self.write_u64::<BigEndian>(u).unwrap();
         match v {
             Num::I(i) => {
+                self.write_u8(0b0).unwrap();
                 let i_lsb = order_encode_i64(i) as u16;
-                let i_enc = i_lsb & 0x7fff;
-                self.write_u16::<BigEndian>(i_enc).unwrap();
+                self.write_u16::<BigEndian>(i_lsb).unwrap();
             }
             Num::F(_) => {
                 self.write_u8(0b1000).unwrap();
@@ -138,17 +138,9 @@ pub fn decode_bytes(data: &[u8]) -> (Vec<u8>, &[u8]) {
 }
 
 const SIGN_MARK: u64 = 0x8000000000000000;
-const U64_SIZE: usize = 8;
-const I64_SIZE: usize = 8;
-const F64_SIZE: usize = 8;
-const MIN_NUM_SIZE: usize = 9;
 
 fn order_encode_i64(v: i64) -> u64 {
     v as u64 ^ SIGN_MARK
-}
-
-fn order_decode_i64(u: u64) -> i64 {
-    (u ^ SIGN_MARK) as i64
 }
 
 fn order_encode_f64(v: f64) -> u64 {
@@ -182,11 +174,11 @@ impl Num {
         if *tag == 0b1000 {
             return (Num::F(f), remaining);
         }
-        let (subtag, remaining) = remaining.split_first().unwrap();
+        let (subtag, remaining) = remaining.split_at(2);
         let n = f as i64;
         let mut n_bytes = n.to_be_bytes();
-        n_bytes[7] = *subtag;
-        n_bytes[6] |= *tag;
+        n_bytes[6] = subtag[0];
+        n_bytes[7] = subtag[1];
         let n = BigEndian::read_i64(&n_bytes);
         return (Num::I(n), remaining);
     }
@@ -252,7 +244,7 @@ impl DataValue {
             }
             GUARD_TAG => (DataValue::Guard, remaining),
             BOT_TAG => (DataValue::Bot, remaining),
-            _ => unreachable!(),
+            _ => unreachable!("{:?}", bs),
         }
     }
 }
@@ -261,6 +253,7 @@ impl<T: Write> MemCmpEncoder for T {}
 
 #[cfg(test)]
 mod tests {
+    use smartstring::SmartString;
     use crate::data::memcmp::{decode_bytes, MemCmpEncoder};
     use crate::data::value::DataValue;
 
@@ -294,6 +287,21 @@ mod tests {
             assert_eq!(&target[..], decoded);
             assert!(remaining.is_empty());
         }
+    }
+
+    #[test]
+    fn specific_encode() {
+        let mut encoder = vec![];
+        encoder.encode_datavalue(&DataValue::from(2095));
+        println!("e1 {:?}", encoder);
+        encoder.encode_datavalue(&DataValue::Str(SmartString::from("MSS")));
+        println!("e2 {:?}", encoder);
+        let (a, remaining) = DataValue::decode_from_key(&encoder);
+        println!("r  {:?}", remaining);
+        let (b, remaining) = DataValue::decode_from_key(remaining);
+        assert!(remaining.is_empty());
+        assert_eq!(a, DataValue::from(2095));
+        assert_eq!(b, DataValue::Str(SmartString::from("MSS")));
     }
 
     #[test]

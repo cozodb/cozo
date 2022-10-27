@@ -2,8 +2,6 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
  */
 
-use std::cmp::max;
-use std::cmp::Ordering::Greater;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::atomic::Ordering;
 
@@ -16,9 +14,10 @@ use thiserror::Error;
 
 use cozorocks::DbIter;
 
+use crate::data::memcmp::MemCmpEncoder;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::Symbol;
-use crate::data::tuple::{compare_tuple_keys, EncodedTuple, Tuple};
+use crate::data::tuple::{ENCODED_KEY_MIN_LEN, Tuple};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
@@ -120,28 +119,18 @@ impl RelationHandle {
     fn encode_key_prefix(&self, len: usize) -> Vec<u8> {
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
         let prefix_bytes = self.id.0.to_be_bytes();
-        ret.extend([
-            prefix_bytes[2],
-            prefix_bytes[3],
-            prefix_bytes[4],
-            prefix_bytes[5],
-            prefix_bytes[6],
-            prefix_bytes[7],
-        ]);
-        ret.extend((len as u16).to_be_bytes());
-        ret.resize(max(6, 4 * (len + 1)), 0);
-
+        ret.extend(prefix_bytes);
         ret
     }
-    fn encode_key_element(&self, ret: &mut Vec<u8>, idx: usize, val: &DataValue) {
-        if idx > 0 {
-            let pos = (ret.len() as u32).to_be_bytes();
-            for (i, u) in pos.iter().enumerate() {
-                ret[4 * (1 + idx) + i] = *u;
-            }
-        }
-        val.serialize(&mut Serializer::new(ret)).unwrap();
-    }
+    // fn encode_key_element(&self, ret: &mut Vec<u8>, idx: usize, val: &DataValue) {
+    //     if idx > 0 {
+    //         let pos = (ret.len() as u32).to_be_bytes();
+    //         for (i, u) in pos.iter().enumerate() {
+    //             ret[4 * (1 + idx) + i] = *u;
+    //         }
+    //     }
+    //     val.serialize(&mut Serializer::new(ret)).unwrap();
+    // }
     pub(crate) fn adhoc_encode_key(&self, tuple: &Tuple, span: SourceSpan) -> Result<Vec<u8>> {
         let len = self.metadata.keys.len();
         ensure!(
@@ -154,18 +143,24 @@ impl RelationHandle {
             }
         );
         let mut ret = self.encode_key_prefix(len);
-        for i in 0..len {
-            self.encode_key_element(&mut ret, i, &tuple.0[i])
+        for val in &tuple.0[0..len] {
+            ret.encode_datavalue(val);
         }
+        // for i in 0..len {
+        //     self.encode_key_element(&mut ret, i, &tuple.0[i])
+        // }
         Ok(ret)
     }
     pub(crate) fn adhoc_encode_val(&self, tuple: &Tuple, _span: SourceSpan) -> Result<Vec<u8>> {
         let start = self.metadata.keys.len();
         let len = self.metadata.non_keys.len();
         let mut ret = self.encode_key_prefix(len);
-        for i in 0..len {
-            self.encode_key_element(&mut ret, i, &tuple.0[i + start])
-        }
+        // for i in 0..len {
+        //     self.encode_key_element(&mut ret, i, &tuple.0[i + start])
+        // }
+        tuple.0[start..]
+            .serialize(&mut Serializer::new(&mut ret))
+            .unwrap();
         Ok(ret)
     }
     pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle) -> Result<()> {
@@ -284,16 +279,23 @@ impl RelationIterator {
         Ok(match self.inner.pair()? {
             None => None,
             Some((k_slice, v_slice)) => {
-                if compare_tuple_keys(&self.upper_bound, k_slice) != Greater {
+                if self.upper_bound.as_slice() <= k_slice {
+                    //
+                    // }
+                    // if compare_tuple_keys(&self.upper_bound, k_slice) != Greater {
                     None
                 } else {
-                    let mut tup = EncodedTuple(k_slice).decode();
+                    let mut tup = Tuple::decode_from_key(k_slice);
                     if !v_slice.is_empty() {
-                        let v_tup = EncodedTuple(v_slice);
-                        if v_tup.arity() > 0 {
-                            tup.0.extend(v_tup.decode().0);
-                        }
+                        let vals: Vec<DataValue> = rmp_serde::from_slice(&v_slice[ENCODED_KEY_MIN_LEN..]).unwrap();
+                        tup.0.extend(vals);
                     }
+                    // if !v_slice.is_empty() {
+                    //     let v_tup = EncodedTuple(v_slice);
+                    //     if v_tup.arity() > 0 {
+                    //         tup.0.extend(v_tup.decode().0);
+                    //     }
+                    // }
                     Some(tup)
                 }
             }
