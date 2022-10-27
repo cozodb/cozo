@@ -246,7 +246,6 @@ impl InMemRelation {
                     let val = &tuple.0[invert_indices[idx]];
                     if let Some((aggr_op, _aggr_args)) = aggr {
                         let op = aggr_op.normal_op.as_mut().unwrap();
-                        // (aggr_op.meet_combine)(&mut aggr_res[idx], val, aggr_args)?;
                         op.set(val)?;
                     }
                 }
@@ -365,24 +364,3 @@ impl InMemRelation {
         res.into_iter()
     }
 }
-//
-// struct SortedIter {
-//     it: DbIter,
-//     started: bool,
-// }
-//
-// impl Iterator for SortedIter {
-//     type Item = Result<Tuple>;
-//     fn next(&mut self) -> Option<Self::Item> {
-//         if !self.started {
-//             self.started = true;
-//         } else {
-//             self.it.next();
-//         }
-//         match self.it.pair() {
-//             Err(e) => Some(Err(e.into())),
-//             Ok(None) => None,
-//             Ok(Some((_, v_slice))) => Some(Ok(EncodedTuple(v_slice).decode())),
-//         }
-//     }
-// }
