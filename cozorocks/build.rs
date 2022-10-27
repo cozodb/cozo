@@ -8,35 +8,6 @@ use std::path::Path;
 use std::{env, fs, process::Command};
 
 fn main() {
-    if !Path::new("rocksdb/AUTHORS").exists() {
-        update_submodules();
-    }
-
-    if !try_to_find_and_link_lib("ROCKSDB") {
-        println!("cargo:rerun-if-changed=rocksdb/");
-        fail_on_empty_directory("rocksdb");
-        build_rocksdb();
-    } else {
-        let target = env::var("TARGET").unwrap();
-        // according to https://github.com/alexcrichton/cc-rs/blob/master/src/lib.rs#L2189
-        if target.contains("apple") || target.contains("freebsd") || target.contains("openbsd") {
-            println!("cargo:rustc-link-lib=dylib=c++");
-        } else if target.contains("linux") {
-            println!("cargo:rustc-link-lib=dylib=stdc++");
-        }
-    }
-
-    // Allow dependent crates to locate the sources and output directory of
-    // this crate. Notably, this allows a dependent crate to locate the RocksDB
-    // sources and built archive artifacts provided by this crate.
-    println!(
-        "cargo:cargo_manifest_dir={}",
-        env::var("CARGO_MANIFEST_DIR").unwrap()
-    );
-    println!("cargo:out_dir={}", env::var("OUT_DIR").unwrap());
-
-
-
     let target = env::var("TARGET").unwrap();
 
     let mut builder = cxx_build::bridge("src/bridge/mod.rs");
@@ -107,6 +78,35 @@ fn main() {
     println!("cargo:rerun-if-changed=bridge/iter.h");
     println!("cargo:rerun-if-changed=bridge/tx.h");
     println!("cargo:rerun-if-changed=bridge/tx.cpp");
+
+
+
+    if !Path::new("rocksdb/AUTHORS").exists() {
+        update_submodules();
+    }
+
+    if !try_to_find_and_link_lib("ROCKSDB") {
+        println!("cargo:rerun-if-changed=rocksdb/");
+        fail_on_empty_directory("rocksdb");
+        build_rocksdb();
+    } else {
+        let target = env::var("TARGET").unwrap();
+        // according to https://github.com/alexcrichton/cc-rs/blob/master/src/lib.rs#L2189
+        if target.contains("apple") || target.contains("freebsd") || target.contains("openbsd") {
+            println!("cargo:rustc-link-lib=dylib=c++");
+        } else if target.contains("linux") {
+            println!("cargo:rustc-link-lib=dylib=stdc++");
+        }
+    }
+
+    // Allow dependent crates to locate the sources and output directory of
+    // this crate. Notably, this allows a dependent crate to locate the RocksDB
+    // sources and built archive artifacts provided by this crate.
+    println!(
+        "cargo:cargo_manifest_dir={}",
+        env::var("CARGO_MANIFEST_DIR").unwrap()
+    );
+    println!("cargo:out_dir={}", env::var("OUT_DIR").unwrap());
 }
 
 fn link(name: &str, bundled: bool) {

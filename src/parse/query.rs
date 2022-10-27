@@ -199,7 +199,7 @@ pub(crate) fn parse_query(
                 let arity = algo_impl.arity(&options, &head, span)?;
 
                 ensure!(
-                    arity == 0 || head.len() == 0 || arity == head.len(),
+                    arity == 0 || head.is_empty() || arity == head.len(),
                     FixedRuleHeadArityMismatch(arity, head.len(), span)
                 );
                 progs.insert(
@@ -775,7 +775,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
         },
     );
     prog.prog.insert(
-        entry_symbol.clone(),
+        entry_symbol,
         InputInlineRulesOrAlgo::Algo {
             algo: AlgoApply {
                 algo: AlgoHandle {

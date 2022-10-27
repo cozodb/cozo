@@ -124,10 +124,6 @@ impl SessionTx {
                                     tup.0.push(val);
                                     remaining = nxt;
                                 }
-                                // let v_tup = EncodedTuple(&existing);
-                                // if v_tup.arity() > 0 {
-                                //     tup.0.extend(v_tup.decode().0);
-                                // }
                             }
                             old_tuples.push(DataValue::List(tup.0));
                         }
@@ -305,9 +301,6 @@ impl SessionTx {
                     let key = relation_store.adhoc_encode_key(&extracted, *span)?;
                     let val = relation_store.adhoc_encode_val(&extracted, *span)?;
 
-                    // println!("adhoc encoded key {:?}, {:?}", key, extracted);
-                    // println!("adhoc encoded val {:?}", val);
-
                     if has_triggers {
                         if let Some(existing) = self.tx.get(&key, false)? {
                             let mut tup = extracted.clone();
@@ -317,12 +310,6 @@ impl SessionTx {
                                 tup.0.push(val);
                                 remaining = nxt;
                             }
-                            // if !existing.is_empty() {
-                            //     let v_tup = EncodedTuple(&existing);
-                            //     if v_tup.arity() > 0 {
-                            //         tup.0.extend(v_tup.decode().0);
-                            //     }
-                            // }
                             old_tuples.push(DataValue::List(tup.0));
                         }
 

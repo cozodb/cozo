@@ -34,8 +34,6 @@ pub(crate) mod ffi {
         pub capped_prefix_extractor_len: usize,
         pub use_fixed_prefix_extractor: bool,
         pub fixed_prefix_extractor_len: usize,
-        pub comparator_name: &'a str,
-        pub comparator_different_bytes_can_be_equal: bool,
         pub destroy_on_exit: bool,
     }
 
@@ -121,8 +119,6 @@ pub(crate) mod ffi {
         fn open_db(
             builder: &DbOpts,
             status: &mut RocksDbStatus,
-            use_cmp: bool,
-            cmp_impl: fn(&[u8], &[u8]) -> i8,
         ) -> SharedPtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
         fn del_range(

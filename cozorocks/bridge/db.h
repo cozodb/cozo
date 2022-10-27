@@ -41,7 +41,6 @@ struct SstFileWriterBridge {
 };
 
 struct RocksDbBridge {
-    unique_ptr<Comparator> pri_comparator;
     unique_ptr<TransactionDB> db;
 
     bool destroy_on_exit;
@@ -108,39 +107,7 @@ struct RocksDbBridge {
     ~RocksDbBridge();
 };
 
-//typedef int8_t (*CmpFn)(RustBytes a, RustBytes b);
-typedef rust::Fn<std::int8_t(rust::Slice<const std::uint8_t>, rust::Slice<const std::uint8_t>)> RustComparatorFn;
-
-class RustComparator : public Comparator {
-public:
-    inline RustComparator(string name_, bool can_different_bytes_be_equal_, RustComparatorFn f) :
-            name(std::move(name_)),
-            ext_cmp(f),
-            can_different_bytes_be_equal(can_different_bytes_be_equal_) {
-    }
-
-    [[nodiscard]] inline int Compare(const Slice &a, const Slice &b) const override {
-        return ext_cmp(convert_slice_back(a), convert_slice_back(b));
-    }
-
-    [[nodiscard]] inline const char *Name() const override {
-        return name.c_str();
-    }
-
-    [[nodiscard]] inline bool CanKeysWithDifferentByteContentsBeEqual() const override {
-        return can_different_bytes_be_equal;
-    }
-
-    inline void FindShortestSeparator(string *, const Slice &) const override {}
-
-    inline void FindShortSuccessor(string *) const override {}
-
-    string name;
-    RustComparatorFn ext_cmp;
-    bool can_different_bytes_be_equal;
-};
-
 shared_ptr<RocksDbBridge>
-open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp, RustComparatorFn cmp_impl);
+open_db(const DbOpts &opts, RocksDbStatus &status);
 
 #endif //COZOROCKS_DB_H
