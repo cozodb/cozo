@@ -14,11 +14,9 @@ use either::{Left, Right};
 use itertools::Itertools;
 use miette::Result;
 
-use cozorocks::DbIter;
-
 use crate::data::aggr::Aggregation;
 use crate::data::program::MagicSymbol;
-use crate::data::tuple::{EncodedTuple, Tuple};
+use crate::data::tuple::{Tuple};
 use crate::data::value::DataValue;
 use crate::query::eval::QueryLimiter;
 use crate::runtime::db::Poison;
@@ -140,12 +138,6 @@ impl InMemRelation {
         let db = self.mem_db.try_read().unwrap();
         let mut target = db.get(epoch as usize).unwrap().try_write().unwrap();
         target.insert(tuple, Tuple::default());
-    }
-    pub(crate) fn put_kv(&self, tuple: Tuple, val: Tuple, epoch: u32) {
-        self.ensure_mem_db_for_epoch(epoch);
-        let db = self.mem_db.try_read().unwrap();
-        let mut target = db.get(epoch as usize).unwrap().try_write().unwrap();
-        target.insert(tuple, val);
     }
     pub(crate) fn normal_aggr_put(
         &self,
@@ -315,12 +307,6 @@ impl InMemRelation {
     pub(crate) fn scan_all(&self) -> impl Iterator<Item=Result<Tuple>> {
         self.scan_all_for_epoch(0)
     }
-    pub(crate) fn scan_sorted(&self) -> impl Iterator<Item=Result<Tuple>> {
-        self.ensure_mem_db_for_epoch(0);
-        let target = self.mem_db.try_read().unwrap();
-        let target = target.get(0).unwrap().try_read().unwrap();
-        target.clone().into_iter().map(|(_k, v)| Ok(v))
-    }
     pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item=Result<Tuple>> {
         self.scan_prefix_for_epoch(prefix, 0)
     }
@@ -379,24 +365,24 @@ impl InMemRelation {
         res.into_iter()
     }
 }
-
-struct SortedIter {
-    it: DbIter,
-    started: bool,
-}
-
-impl Iterator for SortedIter {
-    type Item = Result<Tuple>;
-    fn next(&mut self) -> Option<Self::Item> {
-        if !self.started {
-            self.started = true;
-        } else {
-            self.it.next();
-        }
-        match self.it.pair() {
-            Err(e) => Some(Err(e.into())),
-            Ok(None) => None,
-            Ok(Some((_, v_slice))) => Some(Ok(EncodedTuple(v_slice).decode())),
-        }
-    }
-}
+//
+// struct SortedIter {
+//     it: DbIter,
+//     started: bool,
+// }
+//
+// impl Iterator for SortedIter {
+//     type Item = Result<Tuple>;
+//     fn next(&mut self) -> Option<Self::Item> {
+//         if !self.started {
+//             self.started = true;
+//         } else {
+//             self.it.next();
+//         }
+//         match self.it.pair() {
+//             Err(e) => Some(Err(e.into())),
+//             Ok(None) => None,
+//             Ok(Some((_, v_slice))) => Some(Ok(EncodedTuple(v_slice).decode())),
+//         }
+//     }
+// }

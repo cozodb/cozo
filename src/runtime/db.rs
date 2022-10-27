@@ -3,7 +3,6 @@
  */
 
 use std::{fs, thread};
-use std::cmp::Ordering::Greater;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
@@ -23,7 +22,7 @@ use cozorocks::{DbBuilder, RocksDb};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{compare_tuple_keys, rusty_scratch_cmp, SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
+use crate::data::tuple::{SCRATCH_DB_KEY_PREFIX_LEN, Tuple};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::SysOp;
@@ -125,7 +124,7 @@ impl Db {
         let db_builder = builder
             .create_if_missing(is_new)
             .use_capped_prefix_extractor(true, SCRATCH_DB_KEY_PREFIX_LEN)
-            .use_custom_comparator("cozo_rusty_cmp", rusty_scratch_cmp, false)
+            // .use_custom_comparator("cozo_rusty_cmp", rusty_scratch_cmp, false)
             .use_bloom_filter(true, 9.9, true)
             .path(store_path.to_str().unwrap());
 
@@ -603,15 +602,16 @@ impl Db {
             let sorted_result =
                 tx.sort_and_collect(result, &input_program.out_opts.sorters, &entry_head)?;
             let sorted_iter = if let Some(offset) = input_program.out_opts.offset {
-                Left(sorted_result.scan_sorted().skip(offset))
+                Left(sorted_result.into_iter().skip(offset))
             } else {
-                Right(sorted_result.scan_sorted())
+                Right(sorted_result.into_iter())
             };
             let sorted_iter = if let Some(limit) = input_program.out_opts.limit {
                 Left(sorted_iter.take(limit))
             } else {
                 Right(sorted_iter)
             };
+            let sorted_iter = sorted_iter.map(|t| Ok(t));
             if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(
@@ -726,9 +726,12 @@ impl Db {
         it.seek(&lower);
         let mut collected = vec![];
         while let Some((k_slice, v_slice)) = it.pair()? {
-            if compare_tuple_keys(&upper, k_slice) != Greater {
+            if upper.as_slice() <= k_slice {
                 break;
             }
+            // if compare_tuple_keys(&upper, k_slice) != Greater {
+            //     break;
+            // }
             let meta = RelationHandle::decode(v_slice)?;
             let n_keys = meta.metadata.keys.len();
             let n_dependents = meta.metadata.non_keys.len();

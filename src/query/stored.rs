@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use itertools::Itertools;
-use miette::{bail, Diagnostic, Result};
+use miette::{bail, Diagnostic, Result, WrapErr};
 use smartstring::SmartString;
 use thiserror::Error;
 
@@ -15,7 +15,7 @@ use crate::data::expr::Expr;
 use crate::data::program::{AlgoApply, InputInlineRulesOrAlgo, InputProgram, RelationOp};
 use crate::data::relation::{ColumnDef, NullableColType};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{EncodedTuple, Tuple};
+use crate::data::tuple::{Tuple, ENCODED_KEY_MIN_LEN};
 use crate::data::value::DataValue;
 use crate::parse::parse_script;
 use crate::runtime::relation::{AccessLevel, InputRelationHandle, InsufficientAccessLevel};
@@ -118,10 +118,16 @@ impl SessionTx {
                         if let Some(existing) = self.tx.get(&key, false)? {
                             let mut tup = extracted.clone();
                             if !existing.is_empty() {
-                                let v_tup = EncodedTuple(&existing);
-                                if v_tup.arity() > 0 {
-                                    tup.0.extend(v_tup.decode().0);
+                                let mut remaining = &existing[ENCODED_KEY_MIN_LEN..];
+                                while !remaining.is_empty() {
+                                    let (val, nxt) = DataValue::decode_from_key(remaining);
+                                    tup.0.push(val);
+                                    remaining = nxt;
                                 }
+                                // let v_tup = EncodedTuple(&existing);
+                                // if v_tup.arity() > 0 {
+                                //     tup.0.extend(v_tup.decode().0);
+                                // }
                             }
                             old_tuples.push(DataValue::List(tup.0));
                         }
@@ -299,15 +305,24 @@ impl SessionTx {
                     let key = relation_store.adhoc_encode_key(&extracted, *span)?;
                     let val = relation_store.adhoc_encode_val(&extracted, *span)?;
 
+                    // println!("adhoc encoded key {:?}, {:?}", key, extracted);
+                    // println!("adhoc encoded val {:?}", val);
+
                     if has_triggers {
                         if let Some(existing) = self.tx.get(&key, false)? {
                             let mut tup = extracted.clone();
-                            if !existing.is_empty() {
-                                let v_tup = EncodedTuple(&existing);
-                                if v_tup.arity() > 0 {
-                                    tup.0.extend(v_tup.decode().0);
-                                }
+                            let mut remaining = &existing[ENCODED_KEY_MIN_LEN..];
+                            while !remaining.is_empty() {
+                                let (val, nxt) = DataValue::decode_from_key(remaining);
+                                tup.0.push(val);
+                                remaining = nxt;
                             }
+                            // if !existing.is_empty() {
+                            //     let v_tup = EncodedTuple(&existing);
+                            //     if v_tup.arity() > 0 {
+                            //         tup.0.extend(v_tup.decode().0);
+                            //     }
+                            // }
                             old_tuples.push(DataValue::List(tup.0));
                         }
 
@@ -371,10 +386,12 @@ enum DataExtractor {
 impl DataExtractor {
     fn extract_data(&self, tuple: &Tuple) -> Result<DataValue> {
         Ok(match self {
-            DataExtractor::DefaultExtractor(expr, typ) => {
-                typ.coerce(expr.clone().eval_to_const()?)?
-            }
-            DataExtractor::IndexExtractor(i, typ) => typ.coerce(tuple.0[*i].clone())?,
+            DataExtractor::DefaultExtractor(expr, typ) => typ
+                .coerce(expr.clone().eval_to_const()?)
+                .wrap_err_with(|| format!("when processing tuple {:?}", tuple.0))?,
+            DataExtractor::IndexExtractor(i, typ) => typ
+                .coerce(tuple.0[*i].clone())
+                .wrap_err_with(|| format!("when processing tuple {:?}", tuple.0))?,
         })
     }
 }

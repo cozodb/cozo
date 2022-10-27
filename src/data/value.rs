@@ -2,7 +2,7 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
  */
 
-use std::cmp::{Ordering, Reverse};
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -102,8 +102,6 @@ pub(crate) enum DataValue {
     List(Vec<DataValue>),
     #[serde(rename = "H", alias = "Set")]
     Set(BTreeSet<DataValue>),
-    #[serde(rename = "R", alias = "Rev")]
-    Rev(Reverse<Box<DataValue>>),
     #[serde(rename = "G", alias = "Guard")]
     Guard,
     #[serde(rename = "_", alias = "Bot")]
@@ -181,11 +179,10 @@ impl Display for Num {
                     } else {
                         write!(f, r#"to_float("INF")"#)
                     }
-                }
-                else {
+                } else {
                     write!(f, "{}", n)
                 }
-            },
+            }
         }
     }
 }
@@ -256,9 +253,6 @@ impl Display for DataValue {
             }
             DataValue::List(ls) => f.debug_list().entries(ls).finish(),
             DataValue::Set(s) => f.debug_list().entries(s).finish(),
-            DataValue::Rev(rev) => {
-                write!(f, "{}", rev.0)
-            }
             DataValue::Guard => {
                 write!(f, "null")
             }
@@ -354,7 +348,6 @@ mod tests {
         );
         dbg!(s);
     }
-
 
     #[test]
     fn display_datavalues() {

@@ -84,7 +84,6 @@ impl From<DataValue> for JsonValue {
             DataValue::List(l) => {
                 JsonValue::Array(l.iter().map(|v| JsonValue::from(v.clone())).collect())
             }
-            DataValue::Rev(v) => JsonValue::from(*v.0),
             DataValue::Bot => panic!("found bottom"),
             DataValue::Guard => panic!("found guard"),
             DataValue::Set(l) => {

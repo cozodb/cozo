@@ -43,7 +43,6 @@ fn ensure_same_value_type(a: &DataValue, b: &DataValue) -> Result<()> {
             | (Regex(_), Regex(_))
             | (List(_), List(_))
             | (Set(_), Set(_))
-            | (Rev(_), Rev(_))
             | (Guard, Guard)
             | (Bot, Bot)
     ) {
