@@ -80,12 +80,12 @@ pub(crate) trait MemCmpEncoder: Write {
         self.write_u64::<BigEndian>(u).unwrap();
         match v {
             Num::I(i) => {
-                self.write_u8(0b0).unwrap();
-                let i_lsb = order_encode_i64(i) as u16;
+                // self.write_u8(0b0).unwrap();
+                let i_lsb = (order_encode_i64(i) as u16) & 0x7fff;
                 self.write_u16::<BigEndian>(i_lsb).unwrap();
             }
             Num::F(_) => {
-                self.write_u8(0b1000).unwrap();
+                self.write_u8(0x80).unwrap();
             }
         }
     }
@@ -171,14 +171,15 @@ impl Num {
         let fu = BigEndian::read_u64(float_part);
         let f = order_decode_f64(fu);
         let (tag, remaining) = remaining.split_first().unwrap();
-        if *tag == 0b1000 {
+        if *tag == 0x80 {
             return (Num::F(f), remaining);
         }
-        let (subtag, remaining) = remaining.split_at(2);
+        let (subtag, remaining) = remaining.split_first().unwrap();
         let n = f as i64;
         let mut n_bytes = n.to_be_bytes();
-        n_bytes[6] = subtag[0];
-        n_bytes[7] = subtag[1];
+        n_bytes[6] &= 0x80;
+        n_bytes[6] |= tag;
+        n_bytes[7] = *subtag;
         let n = BigEndian::read_i64(&n_bytes);
         (Num::I(n), remaining)
     }
@@ -254,6 +255,7 @@ impl<T: Write> MemCmpEncoder for T {}
 #[cfg(test)]
 mod tests {
     use smartstring::SmartString;
+
     use crate::data::memcmp::{decode_bytes, MemCmpEncoder};
     use crate::data::value::DataValue;
 
@@ -293,11 +295,11 @@ mod tests {
     fn specific_encode() {
         let mut encoder = vec![];
         encoder.encode_datavalue(&DataValue::from(2095));
-        println!("e1 {:?}", encoder);
+        // println!("e1 {:?}", encoder);
         encoder.encode_datavalue(&DataValue::Str(SmartString::from("MSS")));
-        println!("e2 {:?}", encoder);
+        // println!("e2 {:?}", encoder);
         let (a, remaining) = DataValue::decode_from_key(&encoder);
-        println!("r  {:?}", remaining);
+        // println!("r  {:?}", remaining);
         let (b, remaining) = DataValue::decode_from_key(remaining);
         assert!(remaining.is_empty());
         assert_eq!(a, DataValue::from(2095));
@@ -320,7 +322,7 @@ mod tests {
             DataValue::from(i64::MIN + 2),
             DataValue::from(f64::INFINITY),
             DataValue::from(f64::NEG_INFINITY),
-            DataValue::List(vec![])
+            DataValue::List(vec![]),
         ];
         dv.push(DataValue::List(dv.clone()));
         dv.push(DataValue::List(dv.clone()));
