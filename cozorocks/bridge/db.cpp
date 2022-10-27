@@ -46,8 +46,7 @@ ColumnFamilyOptions default_cf_options() {
     return options;
 }
 
-shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, bool use_cmp,
-                                  RustComparatorFn cmp_impl) {
+shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     auto options = default_db_options();
 
     if (opts.prepare_for_bulk_load) {
@@ -82,20 +81,11 @@ shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status, boo
     if (opts.use_fixed_prefix_extractor) {
         options.prefix_extractor.reset(NewFixedPrefixTransform(opts.fixed_prefix_extractor_len));
     }
-    RustComparator *pri_cmp = nullptr;
-    if (use_cmp) {
-        pri_cmp = new RustComparator(
-                string(opts.comparator_name),
-                opts.comparator_different_bytes_can_be_equal,
-                cmp_impl);
-        options.comparator = pri_cmp;
-    }
     options.create_missing_column_families = true;
 
     shared_ptr<RocksDbBridge> db = make_shared<RocksDbBridge>();
 
     db->db_path = string(opts.db_path);
-    db->pri_comparator.reset(pri_cmp);
 
     TransactionDB *txn_db = nullptr;
     write_status(

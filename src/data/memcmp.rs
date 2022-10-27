@@ -180,7 +180,7 @@ impl Num {
         n_bytes[6] = subtag[0];
         n_bytes[7] = subtag[1];
         let n = BigEndian::read_i64(&n_bytes);
-        return (Num::I(n), remaining);
+        (Num::I(n), remaining)
     }
 }
 

@@ -609,7 +609,7 @@ impl Db {
             } else {
                 Right(sorted_iter)
             };
-            let sorted_iter = sorted_iter.map(|t| Ok(t));
+            let sorted_iter = sorted_iter.map(Ok);
             if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(

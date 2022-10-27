@@ -35,8 +35,6 @@ impl<'a> Default for DbOpts<'a> {
             capped_prefix_extractor_len: 0,
             use_fixed_prefix_extractor: false,
             fixed_prefix_extractor_len: 0,
-            comparator_name: "",
-            comparator_different_bytes_can_be_equal: false,
             destroy_on_exit: false,
         }
     }
@@ -101,29 +99,12 @@ impl<'a> DbBuilder<'a> {
         self.opts.fixed_prefix_extractor_len = len;
         self
     }
-    pub fn use_custom_comparator(
-        mut self,
-        name: &'a str,
-        cmp: fn(&[u8], &[u8]) -> i8,
-        different_bytes_can_be_equal: bool,
-    ) -> Self {
-        self.cmp_fn = Some(cmp);
-        self.opts.comparator_name = name;
-        self.opts.comparator_different_bytes_can_be_equal = different_bytes_can_be_equal;
-        self
-    }
     pub fn build(self) -> Result<RocksDb, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-
-        fn dummy(_a: &[u8], _b: &[u8]) -> i8 {
-            0
-        }
 
         let result = open_db(
             &self.opts,
             &mut status,
-            self.cmp_fn.is_some(),
-            self.cmp_fn.unwrap_or(dummy),
         );
         if status.is_ok() {
             Ok(RocksDb { inner: result })
