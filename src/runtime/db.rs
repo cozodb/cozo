@@ -603,15 +603,16 @@ impl Db {
             let sorted_result =
                 tx.sort_and_collect(result, &input_program.out_opts.sorters, &entry_head)?;
             let sorted_iter = if let Some(offset) = input_program.out_opts.offset {
-                Left(sorted_result.scan_sorted().skip(offset))
+                Left(sorted_result.into_iter().skip(offset))
             } else {
-                Right(sorted_result.scan_sorted())
+                Right(sorted_result.into_iter())
             };
             let sorted_iter = if let Some(limit) = input_program.out_opts.limit {
                 Left(sorted_iter.take(limit))
             } else {
                 Right(sorted_iter)
             };
+            let sorted_iter = sorted_iter.map(|t| Ok(t));
             if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(

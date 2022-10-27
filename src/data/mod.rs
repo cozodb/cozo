@@ -11,6 +11,7 @@ pub(crate) mod program;
 pub(crate) mod aggr;
 pub(crate) mod functions;
 pub(crate) mod relation;
+pub(crate) mod memcmp;
 
 #[cfg(test)]
 mod tests;
