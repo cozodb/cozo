@@ -105,10 +105,11 @@ You can also explicitly specify the correspondence::
         department_name = b,
         =>
         head_count = count(c),
-        address = b
+        address: String = b
     }
 
 You *must* use explicit correspondence if the entry head contains aggregation.
+The ``address`` field shows how to specify both a type and a correspondence.
 
 Instead of specifying bindings, you can specify an expression to generate values::
 
