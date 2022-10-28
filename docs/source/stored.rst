@@ -100,7 +100,13 @@ You can also explicitly specify the correspondence::
 
     ?[a, b, count(c)] <- $input_data
 
-    :create dept_info { company_name = a, department_name = b, => head_count = count(c), address = b }
+    :create dept_info {
+        company_name = a,
+        department_name = b,
+        =>
+        head_count = count(c),
+        address = b
+    }
 
 You *must* use explicit correspondence if the entry head contains aggregation.
 
@@ -108,7 +114,13 @@ Instead of specifying bindings, you can specify an expression to generate values
 
     ?[a, b] <- $input_data
 
-    :create dept_info { company_name = a, department_name = b, => head_count default 0, address default '' }
+    :create dept_info {
+        company_name = a,
+        department_name = b,
+        =>
+        head_count default 0,
+        address default ''
+    }
 
 The expression is evaluated once for each row, so for example if you specified one of the UUID-generating functions,
 you will get a different UUID for each row.

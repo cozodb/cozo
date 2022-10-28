@@ -201,7 +201,7 @@ CozoScript supports aggregations, as does SQL, which provides a very useful exte
 In CozoScript, aggregations are specified for inline rules by applying aggregation operators to variables
 in the rule head, as in::
 
-    ?[department, count(employee)] := :personnel{department, employee}
+    ?[department, count(employee)] := *personnel{department, employee}
 
 here we have used the ``count`` operator familiar to all SQL users.
 The semantics is that any variables in the head without aggregation operators are treated as *grouping variables*,
@@ -214,10 +214,10 @@ as aggregations are applied to the relation resulting from the body of the rule 
 and the resulting relation of the rule, after aggregations are applied, follows set semantics.
 The reason for this complication is that if aggregations are applied with set semantics, then the following query::
 
-    ?[count(employee)] := :personnel{employee}
+    ?[count(employee)] := *personnel{employee}
 
 does not do what you expect: it either returns a row with a single value ``1`` if there are any matching rows,
-or it returns nothing at all if the stored relation ``:personnel`` is empty.
+or it returns nothing at all if the stored relation ``*personnel`` is empty.
 Though semantically sound, this behaviour is not useful at all.
 So for aggregations, we opt for bag semantics, and the query does what one expects.
 
@@ -254,9 +254,9 @@ then takes a specified number of named or stored relations as its *input relatio
 followed by *options* that you provide.
 The following query is a calculation of PageRank::
 
-    ?[] <~ PageRank(:route[], theta: 0.5)
+    ?[] <~ PageRank(*route[], theta: 0.5)
 
-In the above example, the relation ``:route`` is the single input relation expected.
+In the above example, the relation ``*route`` is the single input relation expected.
 Input relations may be stored relations or relations resulting from rules.
 Each utility/algorithm expects specific shapes of input relations,
 for example, PageRank expects the first two columns of the relation to denote the source and destination
@@ -287,7 +287,7 @@ Query options
 
 Each query can have query options associated with it::
 
-    ?[name] := :personnel{name}
+    ?[name] := *personnel{name}
 
     :limit 10
     :offset 20
