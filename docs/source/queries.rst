@@ -67,18 +67,18 @@ In other words, repeated use of the same variable in named rules corresponds to 
 
 Another flavour of atoms is the *stored relation*. It may be written similarly to a rule application::
 
-    :stored_relation[bind1, bind2]
+    *stored_relation[bind1, bind2]
 
 with the colon in front of the stored relation name to distinguish it from rule application.
 Written in this way, you must give as many bindings to the stored relation as its arity,
 and the bindings proceed by argument positions, which may be cumbersome and error-prone.
 So alternatively, you may use the fact that columns of a stored relation are always named and bind by name::
 
-    :stored_relation{col1: bind1, col2: bind2}
+    *stored_relation{col1: bind1, col2: bind2}
 
 In this case, you only need to bind as many variables as you use.
 If the name you want to give the binding is the same as the name of the column, you may use the shorthand notation:
-``:stored_relation{col1}`` is the same as ``:stored_relation{col1: col1}``.
+``*stored_relation{col1}`` is the same as ``*stored_relation{col1: col1}``.
 
 *Expressions* are also atoms, such as::
 
