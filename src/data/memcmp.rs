@@ -25,6 +25,11 @@ const SET_TAG: u8 = 0x0B;
 const GUARD_TAG: u8 = 0xFE;
 const BOT_TAG: u8 = 0xFF;
 
+const IS_FLOAT: u8 = 0b00010000;
+const IS_APPROX_INT: u8 = 0b00000100;
+const IS_EXACT_INT: u8 = 0b00000000;
+const EXACT_INT_BOUND: i64 = 0x20_0000_0000_0000;
+
 pub(crate) trait MemCmpEncoder: Write {
     fn encode_datavalue(&mut self, v: &DataValue) {
         match v {
@@ -80,12 +85,16 @@ pub(crate) trait MemCmpEncoder: Write {
         self.write_u64::<BigEndian>(u).unwrap();
         match v {
             Num::I(i) => {
-                // self.write_u8(0b0).unwrap();
-                let i_lsb = (order_encode_i64(i) as u16) & 0x7fff;
-                self.write_u16::<BigEndian>(i_lsb).unwrap();
+                if i > -EXACT_INT_BOUND && i < EXACT_INT_BOUND {
+                    self.write_u8(IS_EXACT_INT).unwrap();
+                } else {
+                    self.write_u8(IS_APPROX_INT).unwrap();
+                    let en = order_encode_i64(i);
+                    self.write_u64::<BigEndian>(en).unwrap();
+                }
             }
             Num::F(_) => {
-                self.write_u8(0x80).unwrap();
+                self.write_u8(IS_FLOAT).unwrap();
             }
         }
     }
@@ -143,6 +152,10 @@ fn order_encode_i64(v: i64) -> u64 {
     v as u64 ^ SIGN_MARK
 }
 
+fn order_decode_i64(u: u64) -> i64 {
+    (u ^ SIGN_MARK) as i64
+}
+
 fn order_encode_f64(v: f64) -> u64 {
     let u = v.to_bits();
     if v.is_sign_positive() {
@@ -171,17 +184,28 @@ impl Num {
         let fu = BigEndian::read_u64(float_part);
         let f = order_decode_f64(fu);
         let (tag, remaining) = remaining.split_first().unwrap();
-        if *tag == 0x80 {
-            return (Num::F(f), remaining);
+        match *tag {
+            IS_FLOAT => (Num::F(f), remaining),
+            IS_EXACT_INT => (Num::I(f as i64), remaining),
+            IS_APPROX_INT => {
+                let (int_part, remaining) = remaining.split_at(8);
+                let iu = BigEndian::read_u64(int_part);
+                let i = order_decode_i64(iu);
+                (Num::I(i), remaining)
+            }
+            _ => unreachable!(),
         }
-        let (subtag, remaining) = remaining.split_first().unwrap();
-        let n = f as i64;
-        let mut n_bytes = n.to_be_bytes();
-        n_bytes[6] &= 0x80;
-        n_bytes[6] |= tag;
-        n_bytes[7] = *subtag;
-        let n = BigEndian::read_i64(&n_bytes);
-        (Num::I(n), remaining)
+        // if *tag == 0x80 {
+        //     return (Num::F(f), remaining);
+        // }
+        // let (subtag, remaining) = remaining.split_first().unwrap();
+        // let n = f as i64;
+        // let mut n_bytes = n.to_be_bytes();
+        // n_bytes[6] &= 0x80;
+        // n_bytes[6] |= tag;
+        // n_bytes[7] = *subtag;
+        // let n = BigEndian::read_i64(&n_bytes);
+        // (Num::I(n), remaining)
     }
 }
 
@@ -257,7 +281,32 @@ mod tests {
     use smartstring::SmartString;
 
     use crate::data::memcmp::{decode_bytes, MemCmpEncoder};
-    use crate::data::value::DataValue;
+    use crate::data::value::{DataValue, Num};
+
+    #[test]
+    fn encode_decode_int() {
+        let n = i64::MAX;
+        let mut collected = vec![];
+        for i in 0..54 {
+            for j in 0..1000 {
+                let vb = (n >> i) - j;
+                for v in [vb, -vb - 1] {
+                    let mut encoder = vec![];
+                    encoder.encode_num(Num::I(v));
+                    let (decoded, rest) = Num::decode_from_key(&encoder);
+                    assert_eq!(decoded, Num::I(v));
+                    assert!(rest.is_empty());
+                    collected.push(encoder);
+                }
+            }
+        }
+        let mut collected_copy = collected.clone();
+        collected.sort();
+        collected_copy.sort_by_key(|c|
+            Num::decode_from_key(c).0
+        );
+        assert_eq!(collected, collected_copy);
+    }
 
     #[test]
     fn encode_decode_bytes() {
