@@ -161,7 +161,7 @@ The ``:assert``, ``:ensure`` and ``:ensure_not`` query options allow you to expr
 that must be satisfied for your transaction to commit.
 
 ------------------------------------------------------
-Triggers
+Triggers and indices
 ------------------------------------------------------
 
 Cozo does not have traditional indices on stored relations.
@@ -229,6 +229,13 @@ To manage the index automatically, simply do::
 
         :rm rel.rev{ b, a }
     }
+
+With the index set up, you can use ``*rel.rev{..}`` in place of ``*rel{..}`` in your queries.
+
+Indices in Cozo are manual, but extremely flexible, since you need not conform to any predetermined patterns
+in your use of ``_old[]`` and ``_new[]``. You also need to explicitly use the indices in your query:
+there is no "query optimization" for them. For simple queries, this can seem cumbersome, but for complex ones,
+the deterministic evaluation entailed can be a huge blessing.
 
 Besides indices, creative use of triggers abounds, but you must consider the maintenance burden they introduce.
 
