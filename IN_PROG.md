@@ -10,27 +10,27 @@ that uses Datalog for query and focuses on graph data.
 ## Features
 
 * Relational database with [Datalog](https://en.wikipedia.org/wiki/Datalog) as the query language
-* Supports recursion, including recursion through (safe) aggregation, capable of expressing complex graph operations and algorithms
+* Recursive queries, especially recursion through (safe) aggregation, capable of expressing complex graph operations and algorithms
 * Fixed rules providing efficient whole-graph algorithms which integrate seamlessly with Datalog
 * Rich set of built-in functions and aggregations
 * Only a single executable, trivial to deploy and run
 * Easy to use from any programming language
-* Special support for [Jupyter](https://jupyter.org/) notebooks, integrate nicely with the Python DataScience ecosystem 
-* Modern, clean, flexible syntax, nice error messages
+* Special support for [Jupyter](https://jupyter.org/) notebooks for integration with the Python DataScience ecosystem 
+* Modern, clean, flexible syntax, informative error messages
 
 ## Teasers
 
-In the following, `*route` refers to a relation with two columns named `src` and `dst`, 
-representing routes between airports.
+Here `*route` is a relation with two columns `src` and `dst`, 
+representing a route between those airports.
 
-Find airports reachable by one stop from Frankfurt Airport (code `FRA`, the busiest airport in the world):
+Find airports reachable by one stop from Frankfurt Airport (code `FRA`):
 
 ```js
 ?[dst] := *route{src: 'FRA', dst: stop}, 
           *route{src: stop, dst}
 ```
 
-Find _all_ airports reachable from Frankfurt (i.e., the transitive closure) 
+Find airports reachable from Frankfurt with any number of stops 
 with code starting with the letter `A`:
 
 ```js
@@ -39,7 +39,7 @@ reachable[dst] := reachable[src], *route{src, dst}
 ?[airport] := reachable[airport], starts_with(airport, 'A')
 ```
 
-Compute the shortest path between Frankfurt and all airports in the world with recursion through aggregation:
+Compute the shortest path between Frankfurt and all airports in the world:
 
 ```js
 shortest_paths[dst, shortest(path)] := *route{src: 'FRA', dst},
@@ -50,7 +50,7 @@ shortest_paths[dst, shortest(path)] := shortest_paths[stop, prev_path],
 ?[dst, path] := shortest_paths[dst, path]
 ```
 
-Use a fixed rule to compute the shortest path:
+Compute the shortest path again, but with built-in algorithm:
 
 ```js
 starting[airport] := airport = 'FRA'
@@ -59,7 +59,7 @@ starting[airport] := airport = 'FRA'
 
 ## Learning Cozo
 
-* Start with the [Tutorial](https://cozodb.github.io/current/tutorial.html) to learn the basics.
+* Start with the [Tutorial](https://cozodb.github.io/current/tutorial.html) to learn the basics;
 * Continue with the [Manual](https://cozodb.github.io/current/manual/) to understand the fine points.
 
 ## Bug reports, discussions
@@ -179,17 +179,22 @@ Ideas and discussions are welcome.
 
 ## Storage engine
 
-Cozo is written in Rust, with [RocksDB](http://rocksdb.org/) as the storage engine.
+Cozo is written in Rust, with [RocksDB](http://rocksdb.org/) as the storage engine 
+(this may change in the future).
 We manually wrote the C++/Rust bindings for RocksDB with [cxx](https://cxx.rs/). 
 
 ## Contributing
 
-Contributions to code or other materials should be done via [pull requests](https://github.com/cozodb/cozo/pulls).
-You will be guided to sign a CLA the first time you contribute.
+Contributions to code or other materials 
+should be done via [pull requests](https://github.com/cozodb/cozo/pulls).
+
+For code contributions other than simple bug fixes, please
+[discuss](https://github.com/cozodb/cozo/discussions) it
+with the maintainer first before opening a pull request,
+otherwise it is unlikely to be accepted.
 
 ## Licensing
 
-The contents of this project are licensed under AGPL-3.0 or later, with the following exceptions:
-
-* Contents in the `cozorocks` directory are licensed under MIT, or Apache-2.0, or BSD-3-Clause;
-* Contents in the `docs` directory are licensed under CC BY-SA 4.0.
+The contents of this project are licensed under AGPL-3.0 or later, except:
+* Files under `cozorocks/` are licensed under MIT, or Apache-2.0, or BSD-3-Clause;
+* Files under `docs/` are licensed under CC BY-SA 4.0.
