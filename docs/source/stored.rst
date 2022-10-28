@@ -204,6 +204,32 @@ All triggers for a relation must be specified together, in the same system op.
 In other words, ``::relation set_triggers`` simply replaces all the triggers associated with a stored relation.
 To remove all triggers from a stored relation, simply pass no queries for the system op.
 
+As a very simple example of using triggers to make index, let's say we have the following relation::
+
+    :create rel {a => b}
+
+However, we often want to use ``*rel[a, b]`` with ``b`` bound but ``a`` unbound. This will cause a full scan,
+which can be expensive. So we really need an index::
+
+    :create rel.rev {b, a}
+
+In the generate case, we cannot assume a functional dependency ``b => a``, so here both fields appear as keys.
+
+To manage the index automatically, simply do::
+
+    ::relation set_triggers rel
+
+    on put {
+        ?[a, b] := _new[a, b]
+
+        :put rel.rev{ b, a }
+    }
+    on rm {
+        ?[a, b] := _old[a, b]
+
+        :rm rel.rev{ b, a }
+    }
+
 Besides indices, creative use of triggers abounds, but you must consider the maintenance burden they introduce.
 
 .. WARNING::
