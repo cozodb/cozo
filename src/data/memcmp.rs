@@ -84,7 +84,7 @@ pub(crate) trait MemCmpEncoder: Write {
         let u = order_encode_f64(f);
         self.write_u64::<BigEndian>(u).unwrap();
         match v {
-            Num::I(i) => {
+            Num::Int(i) => {
                 if i > -EXACT_INT_BOUND && i < EXACT_INT_BOUND {
                     self.write_u8(IS_EXACT_INT).unwrap();
                 } else {
@@ -93,7 +93,7 @@ pub(crate) trait MemCmpEncoder: Write {
                     self.write_u64::<BigEndian>(en).unwrap();
                 }
             }
-            Num::F(_) => {
+            Num::Float(_) => {
                 self.write_u8(IS_FLOAT).unwrap();
             }
         }
@@ -185,13 +185,13 @@ impl Num {
         let f = order_decode_f64(fu);
         let (tag, remaining) = remaining.split_first().unwrap();
         match *tag {
-            IS_FLOAT => (Num::F(f), remaining),
-            IS_EXACT_INT => (Num::I(f as i64), remaining),
+            IS_FLOAT => (Num::Float(f), remaining),
+            IS_EXACT_INT => (Num::Int(f as i64), remaining),
             IS_APPROX_INT => {
                 let (int_part, remaining) = remaining.split_at(8);
                 let iu = BigEndian::read_u64(int_part);
                 let i = order_decode_i64(iu);
-                (Num::I(i), remaining)
+                (Num::Int(i), remaining)
             }
             _ => unreachable!(),
         }
@@ -292,9 +292,9 @@ mod tests {
                 let vb = (n >> i) - j;
                 for v in [vb, -vb - 1] {
                     let mut encoder = vec![];
-                    encoder.encode_num(Num::I(v));
+                    encoder.encode_num(Num::Int(v));
                     let (decoded, rest) = Num::decode_from_key(&encoder);
-                    assert_eq!(decoded, Num::I(v));
+                    assert_eq!(decoded, Num::Int(v));
                     assert!(rest.is_empty());
                     collected.push(encoder);
                 }

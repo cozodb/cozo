@@ -63,8 +63,8 @@ pub(crate) fn op_list(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_EQ, 2, false);
 pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::F(f)), DataValue::Num(Num::I(i)))
-        | (DataValue::Num(Num::I(i)), DataValue::Num(Num::F(f))) => *i as f64 == *f,
+        (DataValue::Num(Num::Float(f)), DataValue::Num(Num::Int(i)))
+        | (DataValue::Num(Num::Int(i)), DataValue::Num(Num::Float(f))) => *i as f64 == *f,
         (a, b) => a == b,
     }))
 }
@@ -86,8 +86,8 @@ pub(crate) fn op_is_in(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_NEQ, 2, false);
 pub(crate) fn op_neq(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::F(f)), DataValue::Num(Num::I(i)))
-        | (DataValue::Num(Num::I(i)), DataValue::Num(Num::F(f))) => *i as f64 != *f,
+        (DataValue::Num(Num::Float(f)), DataValue::Num(Num::Int(i)))
+        | (DataValue::Num(Num::Int(i)), DataValue::Num(Num::Float(f))) => *i as f64 != *f,
         (a, b) => a != b,
     }))
 }
@@ -96,8 +96,8 @@ define_op!(OP_GT, 2, false);
 pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => *l as f64 > *r as f64,
-        (DataValue::Num(Num::I(l)), DataValue::Num(Num::F(r))) => *l as f64 > *r as f64,
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l as f64 > *r as f64,
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 > *r as f64,
         (a, b) => a > b,
     }))
 }
@@ -106,8 +106,8 @@ define_op!(OP_GE, 2, false);
 pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => *l as f64 >= *r as f64,
-        (DataValue::Num(Num::I(l)), DataValue::Num(Num::F(r))) => *l as f64 >= *r as f64,
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l as f64 >= *r as f64,
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 >= *r as f64,
         (a, b) => a >= b,
     }))
 }
@@ -116,8 +116,8 @@ define_op!(OP_LT, 2, false);
 pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => (*l as f64) < (*r as f64),
-        (DataValue::Num(Num::I(l)), DataValue::Num(Num::F(r))) => (*l as f64) < (*r as f64),
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => (*l as f64) < (*r as f64),
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) < (*r as f64),
         (a, b) => a < b,
     }))
 }
@@ -126,8 +126,8 @@ define_op!(OP_LE, 2, false);
 pub(crate) fn op_le(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::F(l)), DataValue::Num(Num::I(r))) => (*l as f64) <= (*r as f64),
-        (DataValue::Num(Num::I(l)), DataValue::Num(Num::F(r))) => (*l as f64) <= (*r as f64),
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => (*l as f64) <= (*r as f64),
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) <= (*r as f64),
         (a, b) => a <= b,
     }))
 }
@@ -138,15 +138,15 @@ pub(crate) fn op_add(args: &[DataValue]) -> Result<DataValue> {
     let mut f_accum = 0.0f64;
     for arg in args {
         match arg {
-            DataValue::Num(Num::I(i)) => i_accum += i,
-            DataValue::Num(Num::F(f)) => f_accum += f,
+            DataValue::Num(Num::Int(i)) => i_accum += i,
+            DataValue::Num(Num::Float(f)) => f_accum += f,
             _ => bail!("addition requires numbers"),
         }
     }
     if f_accum == 0.0f64 {
-        Ok(DataValue::Num(Num::I(i_accum)))
+        Ok(DataValue::Num(Num::Int(i_accum)))
     } else {
-        Ok(DataValue::Num(Num::F(i_accum as f64 + f_accum)))
+        Ok(DataValue::Num(Num::Float(i_accum as f64 + f_accum)))
     }
 }
 
@@ -160,7 +160,7 @@ pub(crate) fn op_max(args: &[DataValue]) -> Result<DataValue> {
             _ => bail!("'max can only be applied to numbers'"),
         })?;
     match res {
-        None => Ok(DataValue::Num(Num::F(f64::NEG_INFINITY))),
+        None => Ok(DataValue::Num(Num::Float(f64::NEG_INFINITY))),
         Some(v) => Ok(v),
     }
 }
@@ -175,7 +175,7 @@ pub(crate) fn op_min(args: &[DataValue]) -> Result<DataValue> {
             _ => bail!("'min' can only be applied to numbers"),
         })?;
     match res {
-        None => Ok(DataValue::Num(Num::F(f64::INFINITY))),
+        None => Ok(DataValue::Num(Num::Float(f64::INFINITY))),
         Some(v) => Ok(v),
     }
 }
@@ -183,13 +183,13 @@ pub(crate) fn op_min(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_SUB, 2, false);
 pub(crate) fn op_sub(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::I(a)), DataValue::Num(Num::I(b))) => DataValue::Num(Num::I(*a - *b)),
-        (DataValue::Num(Num::F(a)), DataValue::Num(Num::F(b))) => DataValue::Num(Num::F(*a - *b)),
-        (DataValue::Num(Num::I(a)), DataValue::Num(Num::F(b))) => {
-            DataValue::Num(Num::F((*a as f64) - b))
+        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Int(b))) => DataValue::Num(Num::Int(*a - *b)),
+        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => DataValue::Num(Num::Float(*a - *b)),
+        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Float(b))) => {
+            DataValue::Num(Num::Float((*a as f64) - b))
         }
-        (DataValue::Num(Num::F(a)), DataValue::Num(Num::I(b))) => {
-            DataValue::Num(Num::F(a - (*b as f64)))
+        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Int(b))) => {
+            DataValue::Num(Num::Float(a - (*b as f64)))
         }
         _ => bail!("subtraction requires numbers"),
     })
@@ -201,30 +201,30 @@ pub(crate) fn op_mul(args: &[DataValue]) -> Result<DataValue> {
     let mut f_accum = 1.0f64;
     for arg in args {
         match arg {
-            DataValue::Num(Num::I(i)) => i_accum *= i,
-            DataValue::Num(Num::F(f)) => f_accum *= f,
+            DataValue::Num(Num::Int(i)) => i_accum *= i,
+            DataValue::Num(Num::Float(f)) => f_accum *= f,
             _ => bail!("multiplication requires numbers"),
         }
     }
     if f_accum == 1.0f64 {
-        Ok(DataValue::Num(Num::I(i_accum)))
+        Ok(DataValue::Num(Num::Int(i_accum)))
     } else {
-        Ok(DataValue::Num(Num::F(i_accum as f64 * f_accum)))
+        Ok(DataValue::Num(Num::Float(i_accum as f64 * f_accum)))
     }
 }
 
 define_op!(OP_DIV, 2, false);
 pub(crate) fn op_div(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::I(a)), DataValue::Num(Num::I(b))) => {
-            DataValue::Num(Num::F((*a as f64) / (*b as f64)))
+        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Int(b))) => {
+            DataValue::Num(Num::Float((*a as f64) / (*b as f64)))
         }
-        (DataValue::Num(Num::F(a)), DataValue::Num(Num::F(b))) => DataValue::Num(Num::F(*a / *b)),
-        (DataValue::Num(Num::I(a)), DataValue::Num(Num::F(b))) => {
-            DataValue::Num(Num::F((*a as f64) / b))
+        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => DataValue::Num(Num::Float(*a / *b)),
+        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Float(b))) => {
+            DataValue::Num(Num::Float((*a as f64) / b))
         }
-        (DataValue::Num(Num::F(a)), DataValue::Num(Num::I(b))) => {
-            DataValue::Num(Num::F(a / (*b as f64)))
+        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Int(b))) => {
+            DataValue::Num(Num::Float(a / (*b as f64)))
         }
         _ => bail!("division requires numbers"),
     })
@@ -233,8 +233,8 @@ pub(crate) fn op_div(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_MINUS, 1, false);
 pub(crate) fn op_minus(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
-        DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(-(*i))),
-        DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(-(*f))),
+        DataValue::Num(Num::Int(i)) => DataValue::Num(Num::Int(-(*i))),
+        DataValue::Num(Num::Float(f)) => DataValue::Num(Num::Float(-(*f))),
         _ => bail!("minus can only be applied to numbers"),
     })
 }
@@ -242,8 +242,8 @@ pub(crate) fn op_minus(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_ABS, 1, false);
 pub(crate) fn op_abs(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
-        DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(i.abs())),
-        DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(f.abs())),
+        DataValue::Num(Num::Int(i)) => DataValue::Num(Num::Int(i.abs())),
+        DataValue::Num(Num::Float(f)) => DataValue::Num(Num::Float(f.abs())),
         _ => bail!("'abs' requires numbers"),
     })
 }
@@ -251,8 +251,8 @@ pub(crate) fn op_abs(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_SIGNUM, 1, false);
 pub(crate) fn op_signum(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
-        DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(i.signum())),
-        DataValue::Num(Num::F(f)) => {
+        DataValue::Num(Num::Int(i)) => DataValue::Num(Num::Int(i.signum())),
+        DataValue::Num(Num::Float(f)) => {
             if f.signum() < 0. {
                 DataValue::from(-1)
             } else if *f == 0. {
@@ -270,8 +270,8 @@ pub(crate) fn op_signum(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_FLOOR, 1, false);
 pub(crate) fn op_floor(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
-        DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(*i)),
-        DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(f.floor())),
+        DataValue::Num(Num::Int(i)) => DataValue::Num(Num::Int(*i)),
+        DataValue::Num(Num::Float(f)) => DataValue::Num(Num::Float(f.floor())),
         _ => bail!("'floor' requires numbers"),
     })
 }
@@ -279,8 +279,8 @@ pub(crate) fn op_floor(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_CEIL, 1, false);
 pub(crate) fn op_ceil(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
-        DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(*i)),
-        DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(f.ceil())),
+        DataValue::Num(Num::Int(i)) => DataValue::Num(Num::Int(*i)),
+        DataValue::Num(Num::Float(f)) => DataValue::Num(Num::Float(f.ceil())),
         _ => bail!("'ceil' requires numbers"),
     })
 }
@@ -288,8 +288,8 @@ pub(crate) fn op_ceil(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_ROUND, 1, false);
 pub(crate) fn op_round(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
-        DataValue::Num(Num::I(i)) => DataValue::Num(Num::I(*i)),
-        DataValue::Num(Num::F(f)) => DataValue::Num(Num::F(f.round())),
+        DataValue::Num(Num::Int(i)) => DataValue::Num(Num::Int(*i)),
+        DataValue::Num(Num::Float(f)) => DataValue::Num(Num::Float(f.round())),
         _ => bail!("'round' requires numbers"),
     })
 }
@@ -297,214 +297,214 @@ pub(crate) fn op_round(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_EXP, 1, false);
 pub(crate) fn op_exp(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'exp' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.exp())))
+    Ok(DataValue::Num(Num::Float(a.exp())))
 }
 
 define_op!(OP_EXP2, 1, false);
 pub(crate) fn op_exp2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'exp2' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.exp2())))
+    Ok(DataValue::Num(Num::Float(a.exp2())))
 }
 
 define_op!(OP_LN, 1, false);
 pub(crate) fn op_ln(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'ln' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.ln())))
+    Ok(DataValue::Num(Num::Float(a.ln())))
 }
 
 define_op!(OP_LOG2, 1, false);
 pub(crate) fn op_log2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'log2' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.log2())))
+    Ok(DataValue::Num(Num::Float(a.log2())))
 }
 
 define_op!(OP_LOG10, 1, false);
 pub(crate) fn op_log10(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'log10' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.log10())))
+    Ok(DataValue::Num(Num::Float(a.log10())))
 }
 
 define_op!(OP_SIN, 1, false);
 pub(crate) fn op_sin(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'sin' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.sin())))
+    Ok(DataValue::Num(Num::Float(a.sin())))
 }
 
 define_op!(OP_COS, 1, false);
 pub(crate) fn op_cos(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'cos' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.cos())))
+    Ok(DataValue::Num(Num::Float(a.cos())))
 }
 
 define_op!(OP_TAN, 1, false);
 pub(crate) fn op_tan(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'tan' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.tan())))
+    Ok(DataValue::Num(Num::Float(a.tan())))
 }
 
 define_op!(OP_ASIN, 1, false);
 pub(crate) fn op_asin(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'asin' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.asin())))
+    Ok(DataValue::Num(Num::Float(a.asin())))
 }
 
 define_op!(OP_ACOS, 1, false);
 pub(crate) fn op_acos(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'acos' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.acos())))
+    Ok(DataValue::Num(Num::Float(a.acos())))
 }
 
 define_op!(OP_ATAN, 1, false);
 pub(crate) fn op_atan(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'atan' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.atan())))
+    Ok(DataValue::Num(Num::Float(a.atan())))
 }
 
 define_op!(OP_ATAN2, 2, false);
 pub(crate) fn op_atan2(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'atan2' requires numbers"),
     };
     let b = match &args[1] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'atan2' requires numbers"),
     };
 
-    Ok(DataValue::Num(Num::F(a.atan2(b))))
+    Ok(DataValue::Num(Num::Float(a.atan2(b))))
 }
 
 define_op!(OP_SINH, 1, false);
 pub(crate) fn op_sinh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'sinh' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.sinh())))
+    Ok(DataValue::Num(Num::Float(a.sinh())))
 }
 
 define_op!(OP_COSH, 1, false);
 pub(crate) fn op_cosh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'cosh' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.cosh())))
+    Ok(DataValue::Num(Num::Float(a.cosh())))
 }
 
 define_op!(OP_TANH, 1, false);
 pub(crate) fn op_tanh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'tanh' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.tanh())))
+    Ok(DataValue::Num(Num::Float(a.tanh())))
 }
 
 define_op!(OP_ASINH, 1, false);
 pub(crate) fn op_asinh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'asinh' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.asinh())))
+    Ok(DataValue::Num(Num::Float(a.asinh())))
 }
 
 define_op!(OP_ACOSH, 1, false);
 pub(crate) fn op_acosh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'acosh' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.acosh())))
+    Ok(DataValue::Num(Num::Float(a.acosh())))
 }
 
 define_op!(OP_ATANH, 1, false);
 pub(crate) fn op_atanh(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'atanh' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.atanh())))
+    Ok(DataValue::Num(Num::Float(a.atanh())))
 }
 
 define_op!(OP_POW, 2, false);
 pub(crate) fn op_pow(args: &[DataValue]) -> Result<DataValue> {
     let a = match &args[0] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'pow' requires numbers"),
     };
     let b = match &args[1] {
-        DataValue::Num(Num::I(i)) => *i as f64,
-        DataValue::Num(Num::F(f)) => *f,
+        DataValue::Num(Num::Int(i)) => *i as f64,
+        DataValue::Num(Num::Float(f)) => *f,
         _ => bail!("'pow' requires numbers"),
     };
-    Ok(DataValue::Num(Num::F(a.powf(b))))
+    Ok(DataValue::Num(Num::Float(a.powf(b))))
 }
 
 define_op!(OP_MOD, 2, false);
 pub(crate) fn op_mod(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::I(a)), DataValue::Num(Num::I(b))) => DataValue::Num(Num::I(a.rem(b))),
-        (DataValue::Num(Num::F(a)), DataValue::Num(Num::F(b))) => DataValue::Num(Num::F(a.rem(*b))),
-        (DataValue::Num(Num::I(a)), DataValue::Num(Num::F(b))) => {
-            DataValue::Num(Num::F((*a as f64).rem(b)))
+        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Int(b))) => DataValue::Num(Num::Int(a.rem(b))),
+        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => DataValue::Num(Num::Float(a.rem(*b))),
+        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Float(b))) => {
+            DataValue::Num(Num::Float((*a as f64).rem(b)))
         }
-        (DataValue::Num(Num::F(a)), DataValue::Num(Num::I(b))) => {
-            DataValue::Num(Num::F(a.rem(*b as f64)))
+        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Int(b))) => {
+            DataValue::Num(Num::Float(a.rem(*b as f64)))
         }
         _ => bail!("'mod' requires numbers"),
     })
@@ -854,7 +854,7 @@ define_op!(OP_IS_INT, 1, false);
 pub(crate) fn op_is_int(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(
         args[0],
-        DataValue::Num(Num::I(_))
+        DataValue::Num(Num::Int(_))
     )))
 }
 
@@ -862,7 +862,7 @@ define_op!(OP_IS_FLOAT, 1, false);
 pub(crate) fn op_is_float(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(
         args[0],
-        DataValue::Num(Num::F(_))
+        DataValue::Num(Num::Float(_))
     )))
 }
 
@@ -870,15 +870,15 @@ define_op!(OP_IS_NUM, 1, false);
 pub(crate) fn op_is_num(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(matches!(
         args[0],
-        DataValue::Num(Num::I(_)) | DataValue::Num(Num::F(_))
+        DataValue::Num(Num::Int(_)) | DataValue::Num(Num::Float(_))
     )))
 }
 
 define_op!(OP_IS_FINITE, 1, false);
 pub(crate) fn op_is_finite(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match &args[0] {
-        DataValue::Num(Num::I(_)) => true,
-        DataValue::Num(Num::F(f)) => f.is_finite(),
+        DataValue::Num(Num::Int(_)) => true,
+        DataValue::Num(Num::Float(f)) => f.is_finite(),
         _ => false,
     }))
 }
@@ -886,7 +886,7 @@ pub(crate) fn op_is_finite(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_IS_INFINITE, 1, false);
 pub(crate) fn op_is_infinite(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match &args[0] {
-        DataValue::Num(Num::F(f)) => f.is_infinite(),
+        DataValue::Num(Num::Float(f)) => f.is_infinite(),
         _ => false,
     }))
 }
@@ -894,7 +894,7 @@ pub(crate) fn op_is_infinite(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_IS_NAN, 1, false);
 pub(crate) fn op_is_nan(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match &args[0] {
-        DataValue::Num(Num::F(f)) => f.is_nan(),
+        DataValue::Num(Num::Float(f)) => f.is_nan(),
         _ => false,
     }))
 }

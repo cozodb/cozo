@@ -84,55 +84,43 @@ impl PartialOrd for RegexWrapper {
     Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
 pub(crate) enum DataValue {
-    #[serde(rename = "0", alias = "Null")]
     Null,
-    #[serde(rename = "B", alias = "Bool")]
     Bool(bool),
-    #[serde(rename = "N", alias = "Num")]
     Num(Num),
-    #[serde(rename = "S", alias = "Str")]
     Str(SmartString<LazyCompact>),
-    #[serde(rename = "X", alias = "Bytes", with = "serde_bytes")]
+    #[serde(with = "serde_bytes")]
     Bytes(Vec<u8>),
-    #[serde(rename = "U", alias = "Uuid")]
     Uuid(UuidWrapper),
-    #[serde(rename = "R", alias = "Regex")]
     Regex(RegexWrapper),
-    #[serde(rename = "L", alias = "List")]
     List(Vec<DataValue>),
-    #[serde(rename = "H", alias = "Set")]
     Set(BTreeSet<DataValue>),
-    #[serde(rename = "G", alias = "Guard")]
     Guard,
-    #[serde(rename = "_", alias = "Bot")]
     Bot,
 }
 
 impl From<i64> for DataValue {
     fn from(v: i64) -> Self {
-        DataValue::Num(Num::I(v))
+        DataValue::Num(Num::Int(v))
     }
 }
 
 impl From<f64> for DataValue {
     fn from(v: f64) -> Self {
-        DataValue::Num(Num::F(v))
+        DataValue::Num(Num::Float(v))
     }
 }
 
 #[derive(Copy, Clone, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) enum Num {
-    #[serde(alias = "Int")]
-    I(i64),
-    #[serde(alias = "Float")]
-    F(f64),
+    Int(i64),
+    Float(f64),
 }
 
 impl Hash for Num {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Num::I(i) => i.hash(state),
-            Num::F(f) => OrderedFloat(*f).hash(state),
+            Num::Int(i) => i.hash(state),
+            Num::Float(f) => OrderedFloat(*f).hash(state),
         }
     }
 }
@@ -140,8 +128,8 @@ impl Hash for Num {
 impl Num {
     pub(crate) fn get_int(&self) -> Option<i64> {
         match self {
-            Num::I(i) => Some(*i),
-            Num::F(f) => {
+            Num::Int(i) => Some(*i),
+            Num::Float(f) => {
                 if f.round() == *f {
                     Some(*f as i64)
                 } else {
@@ -152,8 +140,8 @@ impl Num {
     }
     pub(crate) fn get_float(&self) -> f64 {
         match self {
-            Num::I(i) => *i as f64,
-            Num::F(f) => *f,
+            Num::Int(i) => *i as f64,
+            Num::Float(f) => *f,
         }
     }
 }
@@ -169,8 +157,8 @@ impl Eq for Num {}
 impl Display for Num {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Num::I(i) => write!(f, "{}", i),
-            Num::F(n) => {
+            Num::Int(i) => write!(f, "{}", i),
+            Num::Float(n) => {
                 if n.is_nan() {
                     write!(f, r#"to_float("NAN")"#)
                 } else if n.is_infinite() {
@@ -190,8 +178,8 @@ impl Display for Num {
 impl Debug for Num {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Num::I(i) => write!(f, "{}", i),
-            Num::F(n) => write!(f, "{}", n),
+            Num::Int(i) => write!(f, "{}", i),
+            Num::Float(n) => write!(f, "{}", n),
         }
     }
 }
@@ -205,7 +193,7 @@ impl PartialOrd for Num {
 impl Ord for Num {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Num::I(i), Num::F(r)) => {
+            (Num::Int(i), Num::Float(r)) => {
                 let l = *i as f64;
                 match l.total_cmp(r) {
                     Ordering::Less => Ordering::Less,
@@ -213,7 +201,7 @@ impl Ord for Num {
                     Ordering::Greater => Ordering::Greater,
                 }
             }
-            (Num::F(l), Num::I(i)) => {
+            (Num::Float(l), Num::Int(i)) => {
                 let r = *i as f64;
                 match l.total_cmp(&r) {
                     Ordering::Less => Ordering::Less,
@@ -221,8 +209,8 @@ impl Ord for Num {
                     Ordering::Greater => Ordering::Greater,
                 }
             }
-            (Num::I(l), Num::I(r)) => l.cmp(r),
-            (Num::F(l), Num::F(r)) => l.total_cmp(r),
+            (Num::Int(l), Num::Int(r)) => l.cmp(r),
+            (Num::Float(l), Num::Float(r)) => l.total_cmp(r),
         }
     }
 }

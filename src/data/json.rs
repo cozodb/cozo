@@ -63,8 +63,8 @@ impl From<DataValue> for JsonValue {
         match v {
             DataValue::Null => JsonValue::Null,
             DataValue::Bool(b) => JsonValue::Bool(b),
-            DataValue::Num(Num::I(i)) => JsonValue::Number(i.into()),
-            DataValue::Num(Num::F(f)) => {
+            DataValue::Num(Num::Int(i)) => JsonValue::Number(i.into()),
+            DataValue::Num(Num::Float(f)) => {
                 if f.is_finite() {
                     json!(f)
                 } else if f.is_nan() {
