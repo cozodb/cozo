@@ -65,12 +65,73 @@ starting[airport] := airport = 'FRA'
 
 ## Use cases
 
-Even though Cozo is a general purpose database and 
-in principle can replace established, well-tested solutions such as PostgreSQL and SQLite,
-that's not our intention when we wrote Cozo, 
-nor do we recommend it if the established solutions already solve all your problems well.
-Instead, we have specific use cases that the traditional databases do not provide
-a sufficient solution.
+As Cozo is a general-purpose database,
+it can be used in situations
+where traditional databases such as PostgreSQL and SQLite
+are used.
+However, Cozo is designed to overcome several shortcomings
+of traditional databases, and hence fares especially well
+in specific situations:
+
+* You have a lot of interconnected relations
+  and the usual queries need to relate many relations together.
+  In other words, you need to query a complex graph.
+  * An example is a system granting permissions to users for specific tasks.
+    In this case, users may have roles,
+    belong to an organization hierarchy, and tasks similarly have organizations
+    and special provisions associated with them.
+    The granting process itself may also be a complicated rule encoded as data
+    within the database.
+  * With a traditional database,
+    the corresponding SQL tend to become
+    an entangled web of nested queries, with many tables joined together,
+    and maybe even with some recursive CTE thrown in. This is hard to maintain,
+    and worse, the performance is unpredictable since query optimizers in general
+    fail when you have over twenty tables joined together.
+  * With Cozo, on the other hand, Horn-clause rules make it easy to break
+    the logic into smaller pieces and write clear, easily testable queries.
+    Furthermore, the deterministic evaluation order makes identifying and solving
+    performance problems easier.
+* Your data may be simple, even a single table, but it is inherently a graph.
+  * We have seen an example in the [Tutorial](https://cozodb.github.io/current/tutorial.html):
+    the air route dataset, where the key relation contains the routes connecting airports.
+  * In traditional databases, when you are given a new relation,
+    you try to understand it by running aggregations on it to collect statistics:
+    what is the distribution of values, how are the columns correlated, etc.
+  * In Cozo you can do the same exploratory analysis,
+    except now you also have graph algorithms that you can
+    easily apply to understand things such as: what is the most _connected_ entity,
+    how are the nodes connected, and what are the _communities_ structure within the nodes.
+* Your data contains hidden structures that only become apparent when you
+  identify the _scales_ of the relevant structures.
+  * Examples are most real networks, such as social networks,
+    which have a very rich hierarchy of structures
+  * In a traditional database, you are limited to doing nested aggregations and filtering,
+    i.e. a form of multifaceted data analysis. For example, you can analyze by gender, geography,
+    job or combinations of them. For structures hidden in other ways,
+    or if such categorizing tags are not already present in your data,
+    you are out of luck.
+  * With Cozo, you can now deal with emergent and fuzzy structures by using e.g.
+    community detection algorithms, and collapse the original graph into a coarse-grained
+    graph consisting of super-nodes and super-edges.
+    The process can be iterated to gain insights into even higher-order emergent structures.
+    This is possible in a social network with only edges and _no_ categorizing tags
+    associated with nodes at all,
+    and the discovered structures almost always have meanings correlated to real-world events and
+    organizations, for example, forms of collusion and crime rings.
+    Also, from a performance perspective,
+    coarse-graining is a required step in analyzing the so-called big data,
+    since many graph algorithms have high complexity and are only applicable to
+    the coarse-grained small or medium networks.
+* You want to understand your live business data better by augmenting it into a _knowledge graph_.
+  * For example, your sales database contains product, buyer, inventory, and invoice tables.
+    The augmentation is external data about the entities in your data in the form of _taxonomies_
+    and _ontologies_ in layers.
+  * This is inherently a graph-theoretic undertaking and traditional databases are not suitable.
+    Usually, a dedicated graph processing engine is used, separate from the main database.
+  * With Cozo, it is possible to keep your live data and knowledge graph analysis together,
+    and importing new external data and doing analysis is just a few lines of code away.
+    This ease of use means that you will do the analysis much more often, with a perhaps much wider scope.
 
 ## Status of the project
 
@@ -111,7 +172,6 @@ Ideas and discussions are welcome.
 
 Cozo is written in Rust, with [RocksDB](http://rocksdb.org/) as the storage engine.
 We manually wrote the C++/Rust bindings for RocksDB with [cxx](https://cxx.rs/). 
-Outside the storage layer, Cozo is 100% safe rust.
 
 ## Contributing
 
