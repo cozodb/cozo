@@ -62,6 +62,14 @@ starting[airport] := airport = 'FRA'
 * Start with the [Tutorial](https://cozodb.github.io/current/tutorial.html) to learn the basics.
 * Continue with the [Manual](https://cozodb.github.io/current/manual/) to understand the fine points.
 
+## Bug reports, discussions
+
+If you encounter a bug, first search for [past issues](https://github.com/cozodb/cozo/issues) to see
+if it has already been reported. If not, open a new issue. 
+Please provide sufficient information so that we can diagnose the problem faster.
+
+Other discussions about Cozo should be in [GitHub discussions](https://github.com/cozodb/cozo/discussions).
+We also have a [Discord channel](https://discord.gg/GFpjQ9m866).
 
 ## Use cases
 
@@ -88,7 +96,8 @@ in specific situations:
     and maybe even with some recursive CTE thrown in. This is hard to maintain,
     and worse, the performance is unpredictable since query optimizers in general
     fail when you have over twenty tables joined together.
-  * With Cozo, on the other hand, Horn-clause rules make it easy to break
+  * With Cozo, on the other hand, [Horn clauses](https://en.wikipedia.org/wiki/Horn_clause) 
+    make it easy to break
     the logic into smaller pieces and write clear, easily testable queries.
     Furthermore, the deterministic evaluation order makes identifying and solving
     performance problems easier.
@@ -168,18 +177,12 @@ Further down the road:
 
 Ideas and discussions are welcome.
 
-## Cozo's storage engine
+## Storage engine
 
 Cozo is written in Rust, with [RocksDB](http://rocksdb.org/) as the storage engine.
 We manually wrote the C++/Rust bindings for RocksDB with [cxx](https://cxx.rs/). 
 
 ## Contributing
-
-General discussions should go [here](https://github.com/cozodb/cozo/discussions). 
-We also have a [Discord channel](https://discord.gg/GFpjQ9m866).
-
-If you find a bug, first search for [past issues](https://github.com/cozodb/cozo/issues) to see
-if it has already been reported. If not, open a new issue.
 
 Contributions to code or other materials should be done via [pull requests](https://github.com/cozodb/cozo/pulls).
 You will be guided to sign a CLA the first time you contribute.
