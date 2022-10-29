@@ -2,9 +2,9 @@
 Functions
 =========
 
-Functions can be used in expressions in Cozo. All function arguments in Cozo are immutable. All functions except those having names starting with ``rand_`` are deterministic.
+Functions can be used to build expressions.
 
-Internally, all function arguments are partially evaluated before binding variables to input tuples. For example, the regular expression in ``regex_matches(var, '[a-zA-Z]+')`` will only be compiled once during the execution of the query, instead of being repeatedly compiled for every input tuple.
+In the following, all functions except those having names starting with ``rand_`` are deterministic.
 
 ------------------------
 Equality and Comparisons
@@ -15,7 +15,7 @@ Equality and Comparisons
     
 .. function:: eq(x, y)
 
-    Equality comparison. The operator form is ``x == y`` or ``x = y``. The two arguments of the equality can be of different types, in which case the result is ``false``.
+    Equality comparison. The operator form is ``x == y``. The two arguments of the equality can be of different types, in which case the result is ``false``.
 
 .. function:: neq(x, y)
 
@@ -37,10 +37,9 @@ Equality and Comparisons
 
     Equivalent to ``x <= y``
 
-
 .. NOTE::
 
-    The four comparison operators can only compare values of the same value type. Integers and floats are of the same type ``Number``.
+    The four comparison operators can only compare values of the same runtime type. Integers and floats are of the same type ``Number``.
 
 .. function:: max(x, ...)
 
@@ -150,15 +149,15 @@ Mathematics
 
 .. function:: sin(x)
 
-    The sine trigonometric Func.
+    The sine trigonometric function.
 
 .. function:: cos(x)
 
-    The cosine trigonometric Func.
+    The cosine trigonometric function.
 
 .. function:: tan(x)
 
-    The tangent trigonometric Func.
+    The tangent trigonometric function.
 
 .. function:: asin(x)
 
@@ -210,15 +209,24 @@ Mathematics
 
 .. function:: haversine(a_lat, a_lon, b_lat, b_lon)
 
-    Computes with the `haversine formula <https://en.wikipedia.org/wiki/Haversine_formula>`_ the angle measured in radians between two points ``a`` and ``b`` on a sphere specified by their latitudes and longitudes. The inputs are in radians. You probably want the next function since most maps measure angles in radians.
+    Computes with the `haversine formula <https://en.wikipedia.org/wiki/Haversine_formula>`_
+    the angle measured in radians between two points ``a`` and ``b`` on a sphere
+    specified by their latitudes and longitudes. The inputs are in radians.
+    You probably want the next function when you are dealing with maps,
+    since most maps measure angles in degrees instead of radians.
 
 .. function:: haversine_deg_input(a_lat, a_lon, b_lat, b_lon)
 
-    Same as the previous function, but the inputs are in degrees instead of radians. The return value is still in radians. If you want the approximate distance measured on the surface of the earth instead of the angle between two points, multiply the result by the radius of the earth, which is about ``6371`` kilometres, ``3959`` miles, or ``3440`` nautical miles.
+    Same as the previous function, but the inputs are in degrees instead of radians.
+    The return value is still in radians.
 
-.. WARNING::
+    If you want the approximate distance measured on the surface of the earth instead of the angle between two points,
+    multiply the result by the radius of the earth,
+    which is about ``6371`` kilometres, ``3959`` miles, or ``3440`` nautical miles.
 
-    The haversine formula, when applied to the surface of the earth, which is not a perfect sphere, can result in an error of less than one percent.
+    .. NOTE::
+
+        The haversine formula, when applied to the surface of the earth, which is not a perfect sphere, can result in an error of less than one percent.
 
 ------------------------
 String functions
@@ -234,9 +242,11 @@ String functions
     Can also be applied to a list or a byte array.
 
 
-.. WARNING::
+    .. WARNING::
 
-    ``length(str)`` does not return the number of bytes of the string representation. Also, what is returned depends on the normalization of the string. So if such details are important, apply ``unicode_normalize`` before ``length``.
+        ``length(str)`` does not return the number of bytes of the string representation.
+        Also, what is returned depends on the normalization of the string.
+        So if such details are important, apply ``unicode_normalize`` before ``length``.
 
 
 .. function:: concat(x, ...)
@@ -273,9 +283,10 @@ String functions
 
     Tests if ``x`` starts with ``y``.
 
-.. TIP::
+    .. TIP::
 
-    ``starts_with(var, str)`` is prefered over equivalent (e.g. regex) conditions, since the compiler may more easily compile the clause into a range scan.
+        ``starts_with(var, str)`` is preferred over equivalent (e.g. regex) conditions,
+        since the compiler may more easily compile the clause into a range scan.
 
 .. function:: ends_with(x, y)
 
@@ -283,7 +294,8 @@ String functions
 
 .. function:: unicode_normalize(str, norm)
 
-    Converts ``str`` to the `normalization <https://en.wikipedia.org/wiki/Unicode_equivalence>`_ specified by ``norm``. The valid values of ``norm`` are ``'nfc'``, ``'nfd'``, ``'nfkc'`` and ``'nfkd'``.
+    Converts ``str`` to the `normalization <https://en.wikipedia.org/wiki/Unicode_equivalence>`_ specified by ``norm``.
+    The valid values of ``norm`` are ``'nfc'``, ``'nfd'``, ``'nfkc'`` and ``'nfkd'``.
 
 .. function:: chars(str)
 
@@ -293,10 +305,10 @@ String functions
 
     Combines the strings in ``list`` into a big string. In a sense, it is the inverse function of ``chars``.
 
-.. WARNING::
+    .. WARNING::
 
-    If you want substring slices, indexing strings, etc., first convert the string to a list with ``chars``, do the manipulation on the list, and then recombine with ``from_substring``. Hopefully, the omission of functions doing such things directly can make people more aware of the complexities involved in manipulating strings (and getting the *correct* result).
-
+        If you want substring slices, indexing strings, etc., first convert the string to a list with ``chars``,
+        do the manipulation on the list, and then recombine with ``from_substring``.
 
 --------------------------
 List functions
@@ -323,11 +335,11 @@ List functions
 
 .. function:: get(l, n)
 
-    Returns the element at index ``n`` in the list ``l``. This function will raise an error if the access is out of bounds. Indices start with 0.
+    Returns the element at index ``n`` in the list ``l``. Raises an error if the access is out of bounds. Indices start with 0.
 
 .. function:: maybe_get(l, n)
 
-    Returns the element at index ``n`` in the list ``l``. This function will return ``null`` if the access is out of bounds. Indices start with 0.
+    Returns the element at index ``n`` in the list ``l``. Returns ``null`` if the access is out of bounds. Indices start with 0.
 
 .. function:: length(list)
 
@@ -337,7 +349,9 @@ List functions
 
 .. function:: slice(l, start, end)
 
-    Returns the slice of list between the index ``start`` (inclusive) and ``end`` (exclusive). Negative numbers may be used, which is interpreted as counting from the end of the list. E.g. ``slice([1, 2, 3, 4], 1, 3) == [2, 3]``, ``slice([1, 2, 3, 4], 1, -1) == [2, 3]``.
+    Returns the slice of list between the index ``start`` (inclusive) and ``end`` (exclusive).
+    Negative numbers may be used, which is interpreted as counting from the end of the list.
+    E.g. ``slice([1, 2, 3, 4], 1, 3) == [2, 3]``, ``slice([1, 2, 3, 4], 1, -1) == [2, 3]``.
 
 .. function:: concat(x, ...)
 
@@ -428,8 +442,8 @@ Binary functions
 
     Encodes the byte array ``b`` into the `Base64 <https://en.wikipedia.org/wiki/Base64>`_-encoded string.
 
-.. NOTE::
-    ``encode_base64`` is automatically applied when output to JSON since JSON cannot represent bytes natively.
+    .. NOTE::
+        ``encode_base64`` is automatically applied when output to JSON since JSON cannot represent bytes natively.
 
 .. function:: decode_base64(str)
 

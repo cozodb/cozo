@@ -12,21 +12,21 @@ In the following, we explain what each system op does, and the arguments they ex
 Explain
 --------------
 
-.. function:: ::explain { <query> }
+.. function:: ::explain { <QUERY> }
 
     A single query is enclosed in curly braces. Query options are allowed but ignored.
     The query is not executed, but its query plan is returned instead.
     Currently, there is no specification for the return format,
     but if you are familiar with the semi-naïve evaluation of stratified Datalog programs
-    subject to magic-set rewrites, the returned data is pretty self-explanatory.
+    subject to magic-set rewrites, you can decipher the result.
 
 ----------------------------------
-Ops on stored relations
+Ops for stored relations
 ----------------------------------
 
 .. function:: ::relations
 
-    List all stored relations currently in the database
+    List all stored relations in the database
 
 .. function:: ::columns <REL_NAME>
 
@@ -44,9 +44,9 @@ Ops on stored relations
 
     Display triggers associated with the stored relation ``<REL_NAME>``.
 
-.. function:: ::set_triggers <REL_NAME> <TRIGGERS>
+.. function:: ::set_triggers <REL_NAME> ...
 
-    Set triggers for the stored relation ``<REL_NAME>``. This is explained in more detail in the transactions chapter.
+    Set triggers for the stored relation ``<REL_NAME>``. This is explained in more detail in the transaction chapter.
 
 .. function:: ::access_level <REL_NAME> <ACCESS_LEVEL>
 
@@ -57,7 +57,8 @@ Ops on stored relations
     * ``read_only`` additionally disallows any mutations and setting triggers,
     * ``hidden`` additionally disallows any data access (metadata access via ``::relations``, etc., are still allowed).
 
-    It is recommended to give the appropriate access levels to tables to prevent data loss from programming mistakes.
+    The access level functionality is to protect data from mistakes of the programmer,
+    not from attacks by malicious parties.
 
 ------------------------------------
 Monitor and kill
@@ -65,7 +66,7 @@ Monitor and kill
 
 .. function:: ::running
 
-    Display currently running queries and their IDs.
+    Display running queries and their IDs.
 
 .. function:: ::kill <ID>
 
@@ -77,5 +78,5 @@ Maintenance
 
 .. function:: ::compact
 
-    Run compaction on the database. Running this may make the database smaller on disk and faster for queries, 
-    but running the op itself may take some time in the background.
+    Instructs Cozo to run a compaction job.
+    Compaction makes the database smaller on disk and faster for read queries.

@@ -2,15 +2,15 @@
 Stored relations and transactions
 ====================================
 
-Persistent databases store data on disk. As Cozo is a relational database,
-data are stored in *stored relations* on disk, which is analogous to tables in SQL databases.
+In Cozo, data are stored in *stored relations* on disk.
 
 ---------------------------
 Stored relations
 ---------------------------
 
-We already know how to query stored relations: 
-use the ``*relation[...]`` or ``*relation{...}`` atoms in inline or fixed rules.
+To query stored relations,
+use the ``*relation[...]`` or ``*relation{...}`` atoms in inline or fixed rules,
+as explained in the last chapter.
 To manipulate stored relations, use one of the following query options:
 
 .. module:: QueryOp
@@ -18,39 +18,39 @@ To manipulate stored relations, use one of the following query options:
 
 .. function:: :create <NAME> <SPEC>
 
-    Creates a stored relation with the given name and the given spec. 
-    The named stored relation must not exist before.
-    If a query is specified, data from the resulting relation is put into the created stored relation.
+    Create a stored relation with the given name and spec.
+    No stored relation with the same name can exist beforehand.
+    If a query is specified, data from the resulting relation is put into the newly created stored relation.
     This is the only stored relation-related query option in which a query may be omitted.
 
 .. function:: :replace <NAME> <SPEC>
 
-    This is similar to ``:create``, except that if the named stored relation exists beforehand, 
+    Similar to ``:create``, except that if the named stored relation exists beforehand,
     it is completely replaced. The schema of the replaced relation need not match the new one.
     You cannot omit the query for ``:replace``.
+    If there are any triggers associated, they will be preserved. Note that this may lead to errors if ``:replace``
+    leads to schema change.
 
 .. function:: :put <NAME> <SPEC>
 
-    Put data from the resulting relation into the named stored relation.
-    If keys from the data exist beforehand, the rows are simply replaced with new ones.
+    Put rows from the resulting relation into the named stored relation.
+    If keys from the data exist beforehand, the corresponding rows are replaced with new ones.
 
 .. function:: :ensure <NAME> <SPEC>
 
-    Ensures that rows specified by the output relation and spec already exist in the database
-    and that no other process has written to these rows at commit since the transaction starts.
+    Ensure that rows specified by the output relation and spec exist in the database,
+    and that no other process has written to these rows when the enclosing transaction commits.
     Useful for ensuring read-write consistency.
 
 .. function:: :rm <NAME> <SPEC>
 
-    Remove data from the resulting relation from the named stored relation.
-    Only keys are used.
-    If a row from the resulting relation does not match any keys, nothing happens for that row,
-    and no error is raised.
+    Remove rows from the named stored relation. Only keys should be specified in ``<SPEC>``.
+    Removing a non-existent key is not an error and does nothing.
 
 .. function:: :ensure_not <NAME> <SPEC>
 
-    Ensures that rows specified by the output relation and spec do not exist in the database
-    and that no other process has written to these rows at commit since the transaction starts.
+    Ensure that rows specified by the output relation and spec do not exist in the database
+    and that no other process has written to these rows when the enclosing transaction commits.
     Useful for ensuring read-write consistency.
 
 You can rename and remove stored relations with the system ops ``::relation rename`` and ``::relation remove``,
@@ -60,10 +60,10 @@ described in the system op chapter.
 Create and replace
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The format of ``<SPEC>`` is identical for all four ops, whereas the semantics is a bit different.
-
+The format of ``<SPEC>`` is identical for all four ops, but the semantics is a bit different.
 We first describe the format and semantics for ``:create`` and ``:replace``.
-A spec is a specification for columns, enclosed in curly braces ``{}`` and separated by commas::
+
+A spec, or a specification for columns, is enclosed in curly braces ``{}`` and separated by commas::
 
     ?[address, company_name, department_name, head_count] <- $input_data
 
@@ -75,21 +75,18 @@ A spec is a specification for columns, enclosed in curly braces ``{}`` and separ
         address: String,
     }
 
-Columns before the symbol ``=>`` form the *keys* (actually, a composite key) for the stored relation,
+Columns before the symbol ``=>`` form the *keys* (actually a composite key) for the stored relation,
 and those after it form the *values*.
-If all columns are keys, the symbol ``=>`` may be omitted altogether.
-The order of columns matters in the specification,
-especially for keys, as data is stored in lexicographically sorted order in trees,
-which has implications for data access in queries.
-Each key corresponds to a single value.
+If all columns are keys, the symbol ``=>`` may be omitted.
+The order of columns matters.
+Rows are stored in lexicographically sorted order in trees according to their keys.
 
 In the above example, we explicitly specified the types for all columns.
-Type specification is described in its own chapter.
-If the types of the rows do not match the specified types,
-the system will first try to coerce the values, and if that fails, the query is aborted.
-You can selectively omit types for columns, and columns with types omitted will have the type ``Any?``,
-which is valid for any value.
-As an example, if you do not care about type validation, the above query can be written as::
+In case of type mismatch,
+the system will first try to coerce the values given, and if that fails, the query is aborted with an error.
+You can omit types for columns, in which case their types default to ``Any?``,
+i.e. all values are acceptable.
+For example, the above query with all types omitted is::
 
     ?[address, company_name, department_name, head_count] <- $input_data
 
@@ -108,10 +105,11 @@ You can also explicitly specify the correspondence::
         address: String = b
     }
 
-You *must* use explicit correspondence if the entry head contains aggregation.
-The ``address`` field shows how to specify both a type and a correspondence.
+You *must* use explicit correspondence if the entry head contains aggregation,
+since names such as ``count(c)`` are not valid column names.
+The ``address`` field above shows how to specify both a type and a correspondence.
 
-Instead of specifying bindings, you can specify an expression to generate values::
+Instead of specifying bindings, you can specify an expression that generates default values by using ``default``::
 
     ?[a, b] <- $input_data
 
@@ -123,7 +121,7 @@ Instead of specifying bindings, you can specify an expression to generate values
         address default ''
     }
 
-The expression is evaluated once for each row, so for example if you specified one of the UUID-generating functions,
+The expression is evaluated anew for each row, so if you specified a UUID-generating functions,
 you will get a different UUID for each row.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -132,10 +130,8 @@ Put, remove, ensure and ensure-not
 
 For ``:put``, ``:remove``, ``:ensure`` and ``:ensure_not``,
 you do not need to specify all existing columns in the spec if the omitted columns have a default generator,
-in which case the generator will be used to generate a value,
-or the type of the column is nullable, in which case the value is ``null``.
-The spec specified when the relation was created will be consulted to know how to store data correctly.
-Specifying default values does not have any effect and will not replace existing ones.
+or if the type of the column is nullable, in which case the value defaults to ``null``.
+For these operations, specifying default values does not have any effect and will not replace existing ones.
 
 For ``:put`` and ``:ensure``, the spec needs to contain enough bindings to generate all keys and values.
 For ``:rm`` and ``:ensure_not``, it only needs to generate all keys.
@@ -151,71 +147,88 @@ by wrapping each query in curly braces ``{}``.
 Each query can have its independent query options.
 Execution proceeds for each query serially, and aborts at the first error encountered.
 The returned relation is that of the last query.
-Within a transaction,
-execution of queries adheres to multi-version concurrency control: only data that are already committed,
-or written within the same transaction, are read,
-and at the end of the transaction, any changes to stored relations are only committed if there are no conflicts
-and no errors are raised.
 
-The ``:assert``, ``:ensure`` and ``:ensure_not`` query options allow you to express complicated constraints
+The ``:assert (some|none)``, ``:ensure`` and ``:ensure_not`` query options allow you to express complicated constraints
 that must be satisfied for your transaction to commit.
+
+This example uses three queries to put and remove rows atomically
+(either all succeed or all fail), and ensure that at the end of the transaction
+an untouched row exists::
+
+    {
+        ?[a, b] <- [[1, 'one'], [3, 'three']]
+        :put rel {a => b}
+    }
+    {
+        ?[a] <- [[2]]
+        :rm rel {a}
+    }
+    {
+        ?[a, b] <- [[4, 'four']]
+        :ensure rel {a => b}
+    }
+
+When a transaction starts, a snapshot is used,
+so that only already committed data,
+or data written within the same transaction, are visible to queries.
+At the end of the transaction, changes are only committed if there are no conflicts
+and no errors are raised.
+If any mutation activate triggers, those triggers execute in the same transaction.
 
 ------------------------------------------------------
 Triggers and indices
 ------------------------------------------------------
 
 Cozo does not have traditional indices on stored relations.
-You must define your indices as separate stored relations yourself,
-for example by having a relation containing identical data but in different column order.
-More complicated and exotic "indices" are also possible and used in practice.
+Instead, you define regular stored relations that are used as indices.
 At query time, you explicitly query the index instead of the original stored relation.
 
 You synchronize your indices and the original by ensuring that any mutations you do on the database
 write the correct data to the "canonical" relation and its indices in the same transaction.
-As doing this by hand for every mutation in your business logic leads to lots of repetitions,
-is error-prone and a maintenance nightmare,
-Cozo also supports *triggers* to do it automatically for you.
+As doing this by hand for every mutation leads to lots of repetitions
+and is error-prone,
+Cozo supports *triggers* to do it automatically for you.
 
-You attach triggers to a stored relation by running the system op ``::relation set_triggers``::
+You attach triggers to a stored relation by running the system op ``::set_triggers``::
 
-    ::relation set_triggers relation_name
+    ::set_triggers <REL_NAME>
 
     on put { <QUERY> }
-    on put { <QUERY> } # you can specify as many triggers as you need
     on rm { <QUERY> }
     on replace { <QUERY> }
+    on put { <QUERY> } # you can specify as many triggers as you need
 
-You can have anything valid query for ``<QUERY>``.
+``<QUERY>`` can be any valid query.
 
-The ``on put`` queries will run when any data is inserted into the relation,
-which can be triggered by ``:put``, ``:create`` and ``:replace`` query options.
-The implicitly defined rules ``_new[]`` and ``_old[]`` can be used in the queries, and
-contain the added rows, and the replaced rows (if any).
+The ``on put`` triggers will run when new data is inserted or upserted,
+which can be activated by ``:put``, ``:create`` and ``:replace`` query options.
+The implicitly defined rules ``_new[]`` and ``_old[]`` can be used in the triggers, and
+contain the added rows and the replaced rows respectively.
 
-The ``on rm`` queries will run when deletion is triggered by the ``:rm`` query option.
-The implicitly defined rules ``_new[]`` and ``_old[]`` can be used in the queries,
-the first rule contains the keys of the rows for deletion, and the second rule contains the rows
-actually deleted, with both keys and non-keys.
+The ``on rm`` triggers will run when data is deleted, which can be activated by a ``:rm`` query option.
+The implicitly defined rules ``_new[]`` and ``_old[]`` can be used in the triggers,
+and contain the keys of the rows for deleted rows (even if no row with the key actually exist) and the rows
+actually deleted (with both keys and non-keys).
 
-The ``on replace`` queries will run when ``:replace`` query options are run.
-They are run before any ``on put`` triggers are run for the same stored relation.
+The ``on replace`` triggers will be activated by a ``:replace`` query option.
+They are run before any ``on put`` triggers.
 
-All triggers for a relation must be specified together, in the same system op.
-In other words, ``::relation set_triggers`` simply replaces all the triggers associated with a stored relation.
-To remove all triggers from a stored relation, simply pass no queries for the system op.
+All triggers for a relation must be specified together, in the same ``::set_triggers`` system op.
+If used again, all the triggers associated with the stored relation are replaced.
+To remove all triggers from a stored relation, use ``::set_triggers <REL_NAME>`` followed by nothing.
 
-As a very simple example of using triggers to maintain an index, let's say we have the following relation::
+As an example of using triggers to maintain an index, suppose we have the following relation::
 
     :create rel {a => b}
 
-However, we often want to use ``*rel[a, b]`` with ``b`` bound but ``a`` unbound. This will cause a full scan,
+We often want to query ``*rel[a, b]`` with ``b`` bound but ``a`` unbound. This will cause a full scan,
 which can be expensive. So we need an index::
 
     :create rel.rev {b, a}
 
-In the generate case, we cannot assume a functional dependency ``b => a``, so here both fields appear as keys.
+In the general case, we cannot assume a functional dependency ``b => a``, so in the index both fields appear as keys.
 
-To manage the index automatically, simply do::
+To manage the index automatically::
 
     ::relation set_triggers rel
 
@@ -233,14 +246,14 @@ To manage the index automatically, simply do::
 With the index set up, you can use ``*rel.rev{..}`` in place of ``*rel{..}`` in your queries.
 
 Indices in Cozo are manual, but extremely flexible, since you need not conform to any predetermined patterns
-in your use of ``_old[]`` and ``_new[]``. You also need to explicitly use the indices in your query:
-there is no "query optimization" for them. For simple queries, this can seem cumbersome, but for complex ones,
-the deterministic evaluation entailed can be a huge blessing.
+in your use of ``_old[]`` and ``_new[]``.
+For simple queries, the need to explicitly elect to use an index can seem cumbersome,
+but for complex ones, the deterministic evaluation entailed can be a huge blessing.
 
-Besides indices, creative use of triggers abounds, but you must consider the maintenance burden they introduce.
+Triggers can be creatively used for other purposes as well.
 
 .. WARNING::
 
-    Do not introduce loops in your triggers.
+    Loops in your triggers can cause non-termination.
     A loop occurs when a relation has triggers which affect other relations,
     which in turn have other triggers that ultimately affect the starting relation.

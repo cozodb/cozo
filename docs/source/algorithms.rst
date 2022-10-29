@@ -2,10 +2,7 @@
 Utilities and algorithms
 ==============================
 
-Fixed rules in CozoScript apply utilities and/or algorithms.
-The purpose of the native, built-in utilities and algorithms in Cozo is to
-enable easy computation of results that would require either queries too awkward to express in pure Datalog,
-or time or space requirements that are unreasonable if implemented in the interpreted queries framework.
+Fixed rules in CozoScript apply utilities or algorithms.
 
 .. module:: Algo
     :noindex:
@@ -17,7 +14,7 @@ Utilities
 
 .. function:: Constant(data: [...])
 
-    Returns a constant relation containing the data passed in. The constant rule ``?[] <- ...`` is actually
+    Returns a constant relation containing the data passed in. The constant rule ``?[] <- ...`` is
     syntax sugar for ``?[] <~ Constant(data: ...)``.
 
     :param data: A list of lists, representing the rows of the returned relation.

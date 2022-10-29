@@ -3,11 +3,14 @@ Aggregations
 ==============
 
 
-Aggregations in Cozo can be thought of as a function that acts on a string of values and produces a single value (the aggregate). Due to Datalog semantics, the stream is never empty.
+Aggregations in Cozo can be thought of as a function that acts on a stream of values
+and produces a single value (the aggregate).
 
-There are two kinds of aggregations in Cozo, *ordinary aggregations* and *meet aggregations*. They are implemented differently in Cozo, with meet aggregations generally faster and more powerful (e.g. only meet aggregations can be recursive).
+There are two kinds of aggregations in Cozo, *ordinary aggregations* and *semi-lattice aggregations*.
+They are implemented differently in Cozo, with semi-lattice aggregations generally faster and more powerful
+(only the latter can be used recursively).
 
-The power of meet aggregations derive from the additional properties they satisfy by forming a `semilattice <https://en.wikipedia.org/wiki/Semilattice>`_:
+The power of semi-lattice aggregations derive from the additional properties they satisfy: a `semilattice <https://en.wikipedia.org/wiki/Semilattice>`_:
 
     idempotency
         the aggregate of a single value ``a`` is ``a`` itself,
@@ -16,13 +19,11 @@ The power of meet aggregations derive from the additional properties they satisf
     associativity
         it is immaterial where we put the parentheses in an aggregate application.
 
-Meet aggregations can be used as ordinary ones, but the reverse is impossible.
+------------------------------------
+Semi-lattice aggregations
+------------------------------------
 
-------------------
-Meet aggregations
-------------------
-
-.. module:: Aggr.Meet
+.. module:: Aggr.SemiLattice
     :noindex:
 
 .. function:: min(x)
@@ -51,11 +52,13 @@ Meet aggregations
 
 .. function:: choice(var)
 
-    Non-deterministically chooses one of the values of ``var`` as the aggregate. It simply chooses the first value it meets (the order that it meets values should be considered non-deterministic).
+    Non-deterministically chooses one of the values of ``var`` as the aggregate.
+    It simply chooses the first value it meets (the order that it meets values is non-deterministic).
 
 .. function:: choice_last(var)
 
-    Non-deterministically chooses one of the values of ``var`` as the aggregate. It simply chooses the last value it meets.
+    Non-deterministically chooses one of the values of ``var`` as the aggregate.
+    It simply chooses the last value it meets.
 
 .. function:: min_cost([data, cost])
 
@@ -102,7 +105,8 @@ Ordinary aggregations
 
 .. function:: group_count(var)
 
-    Count the occurrence of unique values of ``var``, putting the result into a list of lists, e.g. when applied to ``'a'``, ``'b'``, ``'c'``, ``'c'``, ``'a'``, ``'c'``, the results is ``[['a', 2], ['b', 1], ['c', 3]]``.
+    Count the occurrence of unique values of ``var``, putting the result into a list of lists,
+    e.g. when applied to ``'a'``, ``'b'``, ``'c'``, ``'c'``, ``'a'``, ``'c'``, the results is ``[['a', 2], ['b', 1], ['c', 3]]``.
 
 .. function:: bit_xor(var)
 
@@ -110,15 +114,19 @@ Ordinary aggregations
 
 .. function:: latest_by([data, time])
 
-    The argument should be a list of two elements and this aggregation returns the ``data`` of the maximum ``cost``. This is very similar to ``min_cost``, the differences being that maximum instead of minimum is used, only the data itself is returned, and the aggregation is deliberately note a meet aggregation. Intended to be used in timestamped audit trails.
+    The argument should be a list of two elements and this aggregation returns the ``data`` of the maximum ``cost``.
+    This is very similar to ``min_cost``, the differences being that maximum instead of minimum is used,
+    only the data itself is returned, and the aggregation is deliberately not a semi-lattice aggregation. Intended to be used in timestamped audit trails.
 
 .. function:: choice_rand(var)
 
     Non-deterministically chooses one of the values of ``var`` as the aggregate.
     Each value the aggregation encounters has the same probability of being chosen.
-    This version of ``choice`` is not a meet aggregation
-    since it is impossible to satisfy the uniform sampling requirement while maintaining no state,
-    which is an implementation restriction unlikely to be lifted.
+
+    .. NOTE::
+        This version of ``choice`` is not a semi-lattice aggregation
+        since it is impossible to satisfy the uniform sampling requirement while maintaining no state,
+        which is an implementation restriction unlikely to be lifted.
 
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 Statistical aggregations
