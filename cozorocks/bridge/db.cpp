@@ -12,8 +12,7 @@ Options default_db_options() {
     options.bottommost_compression = kZSTD;
     options.compression = kLZ4Compression;
     options.level_compaction_dynamic_level_bytes = true;
-    options.max_background_compactions = 4;
-    options.max_background_flushes = 2;
+    options.max_background_jobs = 6;
     options.bytes_per_sync = 1048576;
     options.compaction_pri = kMinOverlappingRatio;
     BlockBasedTableOptions table_options;
