@@ -140,7 +140,7 @@ s_char = {
     | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
 }
 raw_string = {
-    "r" ~ PUSH("_"*) ~ "\""    // push the number signs onto the stack
+    PUSH("_"*) ~ "\""    // push the number signs onto the stack
     ~ raw_string_inner
     ~ "\"" ~ POP               // match a quotation mark and the number signs
 }
