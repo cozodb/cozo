@@ -284,27 +284,39 @@ mod tests {
     use crate::data::value::{DataValue, Num};
 
     #[test]
-    fn encode_decode_int() {
+    fn encode_decode_num() {
+        use rand::prelude::*;
+
         let n = i64::MAX;
         let mut collected = vec![];
+
+        let mut test_num = |n: Num| {
+            let mut encoder = vec![];
+            encoder.encode_num(n);
+            let (decoded, rest) = Num::decode_from_key(&encoder);
+            assert_eq!(decoded, n);
+            assert!(rest.is_empty());
+            collected.push(encoder);
+        };
         for i in 0..54 {
             for j in 0..1000 {
                 let vb = (n >> i) - j;
                 for v in [vb, -vb - 1] {
-                    let mut encoder = vec![];
-                    encoder.encode_num(Num::Int(v));
-                    let (decoded, rest) = Num::decode_from_key(&encoder);
-                    assert_eq!(decoded, Num::Int(v));
-                    assert!(rest.is_empty());
-                    collected.push(encoder);
+                    test_num(Num::Int(v));
                 }
             }
         }
+        test_num(Num::Float(f64::INFINITY));
+        test_num(Num::Float(f64::NEG_INFINITY));
+        test_num(Num::Float(f64::NAN));
+        for _ in 0..100000 {
+            let f = (thread_rng().gen::<f64>() - 0.5) * 2.0;
+            test_num(Num::Float(f));
+            test_num(Num::Float(1. / f));
+        }
         let mut collected_copy = collected.clone();
         collected.sort();
-        collected_copy.sort_by_key(|c|
-            Num::decode_from_key(c).0
-        );
+        collected_copy.sort_by_key(|c| Num::decode_from_key(c).0);
         assert_eq!(collected, collected_copy);
     }
 
