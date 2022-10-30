@@ -146,8 +146,26 @@ A few other magic commands are available:
 * ``%cozo_clear`` clears all set parameters.
 * ``%cozo_params`` returns the parameters currently set.
 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Python
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can also use the Python client without JupyterLab. First::
+
+    pip install pycozo
+
+Next, in your Python code, do something like the following::
+
+    from pycozo.client import Client
+
+    client = Client(host='http://127.0.0.1:9070', auth=None, dataframe=False)
+    print(client.run('::relations'))
+
+If ``dataframe=True``, the client will transform the returned relation into Pandas dataframes, which must be separately installed.
+The ``client.run`` method also takes an optional second argument ``params``.
+
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-The Makeshift JavaScript Console
+Web Browser
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you are reluctant to install python and Jupyter, you may consider the Makeshift JavaScript Console.

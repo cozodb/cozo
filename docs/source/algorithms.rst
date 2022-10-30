@@ -14,7 +14,7 @@ Utilities
 
 .. function:: Constant(data: [...])
 
-    Returns a constant relation containing the data passed in. The constant rule ``?[] <- ...`` is
+    Returns a relation containing the data passed in. The constant rule ``?[] <- ...`` is
     syntax sugar for ``?[] <~ Constant(data: ...)``.
 
     :param data: A list of lists, representing the rows of the returned relation.
@@ -31,9 +31,9 @@ Utilities
     :param take: How many rows at most to produce. Zero means no limit. Defaults to zero.
     :return: The returned relation, in addition to the rows specified in the parameter ``out``, will have the ordering prepended. The ordering starts at ``1``.
 
-.. TIP::
+    .. TIP::
 
-    This algorithm serves a similar purpose to the global ``:order``, ``:limit`` and ``:offset`` options, but can be applied to intermediate results. Prefer the global options if it is applied to the final output.
+        This algorithm serves a similar purpose to the global ``:order``, ``:limit`` and ``:offset`` options, but can be applied to intermediate results. Prefer the global options if it is applied to the final output.
 
 .. function:: CsvReader(url: ..., types: [...], delimiter: ',', prepend_index: false, has_headers: true)
 
@@ -135,10 +135,6 @@ Pathfinding algorithms
     :param limit: How many answers to produce for each starting nodes. Defaults to 1.
     :return: Triples containing the starting node, the answer node, and the found path connecting them.
 
-.. TIP::
-
-    You probably don't want to use depth first search for path finding unless you have a really niche use case.
-
 .. function:: DFS(...)
 
     See :func:`Algo.DepthFirstSearch`.
@@ -153,13 +149,13 @@ Pathfinding algorithms
 
     :return: 4-tuples containing the starting node index, the goal node index, the lowest cost, and a path with the lowest cost.
 
-.. TIP::
+    .. TIP::
 
-    The performance of A\* star algorithm heavily depends on how good your heuristic function is. Passing in ``0`` as the estimate is always valid, but then you really should be using Dijkstra's algorithm.
+        The performance of A\* star algorithm heavily depends on how good your heuristic function is. Passing in ``0`` as the estimate is always valid, but then you really should be using Dijkstra's algorithm.
 
-    Good heuristics usually come about from a metric in the ambient space in which your data live, e.g. spherical distance on the surface of a sphere, or Manhattan distance on a grid. :func:`Func.Math.haversine_deg_input` could be helpful for the spherical case. Note that you must use the correct units for the distance.
+        Good heuristics usually come about from a metric in the ambient space in which your data live, e.g. spherical distance on the surface of a sphere, or Manhattan distance on a grid. :func:`Func.Math.haversine_deg_input` could be helpful for the spherical case. Note that you must use the correct units for the distance.
 
-    Providing a heuristic that is not guaranteed to be a lower-bound *might* be acceptable if you are fine with inaccuracies. The errors in the answers are bound by the sum of the margins of your over-estimates.
+        Providing a heuristic that is not guaranteed to be a lower-bound *might* be acceptable if you are fine with inaccuracies. The errors in the answers are bound by the sum of the margins of your over-estimates.
 
 -------------------------------------
 Community detection algorithms
@@ -224,9 +220,9 @@ Centrality measures
     :param undirected: Whether the edges should be interpreted as undirected. Defaults to ``false``.
     :return: Node index together with its centrality.
 
-.. WARNING::
+    .. WARNING::
 
-    ``BetweennessCentrality`` is very expensive to compute for medium to large graphs. Plan resources accordingly.
+        ``BetweennessCentrality`` is very expensive for medium to large graphs. If possible, collapse large graphs into supergraphs by running a community detection algorithm first.
 
 ------------------
 Miscellaneous

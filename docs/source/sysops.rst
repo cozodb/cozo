@@ -48,7 +48,7 @@ Ops for stored relations
 
     Set triggers for the stored relation ``<REL_NAME>``. This is explained in more detail in the transaction chapter.
 
-.. function:: ::access_level <REL_NAME> <ACCESS_LEVEL>
+.. function:: ::access_level <ACCESS_LEVEL> <REL_NAME> (, <REL_NAME>)*
 
     Sets the access level of ``<REL_NAME>`` to the given level. The levels are:
 
