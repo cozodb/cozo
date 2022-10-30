@@ -42,7 +42,7 @@ pest = "2.2.1"
 pest_derive = "2.2.1"
 rayon = "1.5.3"
 nalgebra = "0.31.1"
-minreq = { version = "2.6.0", features = ["https-native"] }
+minreq = { version = "2.6.0", features = ["https-rustls"] }
 approx = "0.5.1"
 unicode-normalization = "0.1.21"
 thiserror = "1.0.34"
