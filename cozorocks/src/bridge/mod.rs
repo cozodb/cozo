@@ -116,8 +116,8 @@ pub(crate) mod ffi {
 
         type RocksDbBridge;
         fn get_db_path(self: &RocksDbBridge) -> &CxxString;
-        fn open_db(
-            builder: &DbOpts,
+        fn open_db<'a>(
+            builder: &'a DbOpts<'a>,
             status: &mut RocksDbStatus,
         ) -> SharedPtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;

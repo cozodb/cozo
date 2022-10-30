@@ -2,8 +2,6 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under MIT/Apache-2.0/BSD-3-Clause.
  */
 
-use std::borrow::Cow;
-
 use cxx::*;
 
 use crate::bridge::ffi::*;
@@ -11,7 +9,6 @@ use crate::bridge::tx::TxBuilder;
 
 #[derive(Default, Clone)]
 pub struct DbBuilder<'a> {
-    pub cmp_fn: Option<fn(&[u8], &[u8]) -> i8>,
     pub opts: DbOpts<'a>,
 }
 
@@ -120,8 +117,8 @@ pub struct RocksDb {
 }
 
 impl RocksDb {
-    pub fn db_path(&self) -> Cow<str> {
-        self.inner.get_db_path().to_string_lossy()
+    pub fn db_path(&self) -> std::string::String {
+        self.inner.get_db_path().to_string_lossy().to_string()
     }
     pub fn transact(&self) -> TxBuilder {
         TxBuilder {

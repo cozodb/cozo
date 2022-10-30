@@ -5,6 +5,10 @@ edition = "2021"
 description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data"
 authors = ["Ziyang Hu"]
 license = "AGPL-3.0-or-later"
+exclude = [
+    "docs/*",
+    "tests/*",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

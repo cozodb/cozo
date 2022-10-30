@@ -3,6 +3,9 @@
  */
 
 #![warn(rust_2018_idioms, future_incompatible)]
+#![warn(missing_docs)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::too_many_arguments)]
 
 pub use miette::Error;
 
@@ -16,9 +19,9 @@ pub use runtime::db::Db;
 // #[global_allocator]
 // static GLOBAL: Jemalloc = Jemalloc;
 
+pub(crate) mod algo;
 pub(crate) mod data;
 pub(crate) mod parse;
 pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod utils;
-pub(crate) mod algo;

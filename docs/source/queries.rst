@@ -309,5 +309,5 @@ The rest of the query options are explained in the following.
 
     The query returns nothing if the output relation contains at least one row,
     otherwise, execution aborts with an error.
-    Execution of the query stops as soon as the first row is produced if possible.
+    Implies ``:limit 1`` to ensure early termination if possible.
     Useful for transactions and triggers.

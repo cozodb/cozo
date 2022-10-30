@@ -172,7 +172,7 @@ impl AlgoImpl for JsonReader {
 }
 
 pub(crate) fn get_file_content_from_url(url: &str) -> Result<Response> {
-    minreq::get(&url as &str)
+    minreq::get(url as &str)
         .send()
         .map_err(|e| {
             error!("{:?}", e);
