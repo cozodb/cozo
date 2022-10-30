@@ -3,7 +3,7 @@
 set -e
 
 VERSION=$(cat ./Cargo.toml | grep -E "^version" | grep -Eo '[0-9.]+')
-ARCH=$(arch)
+ARCH=$(uname -m)
 
 rm -fr release
 mkdir release
