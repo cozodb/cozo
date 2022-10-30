@@ -9,6 +9,7 @@ use miette::{bail, ensure, IntoDiagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::{AlgoImpl, CannotDetermineArity};
+use crate::algo::jlines::get_file_content_from_url;
 use crate::data::expr::Expr;
 use crate::data::functions::{op_to_float, op_to_uuid};
 use crate::data::program::{
@@ -157,7 +158,7 @@ impl AlgoImpl for CsvReader {
                 }
             }
             None => {
-                let content = minreq::get(&url as &str).send().into_diagnostic()?;
+                let content = get_file_content_from_url(&url)?;
                 let mut rdr = rdr_builder.from_reader(content.as_bytes());
                 for record in rdr.records() {
                     let record = record.into_diagnostic()?;

@@ -26,7 +26,7 @@ pub(crate) enum SysOp {
     RenameRelation(Vec<(Symbol, Symbol)>),
     ShowTrigger(Symbol),
     SetTriggers(Symbol, Vec<String>, Vec<String>, Vec<String>),
-    SetAccessLevel(Symbol, AccessLevel),
+    SetAccessLevel(Vec<Symbol>, AccessLevel),
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -91,9 +91,12 @@ pub(crate) fn parse_sys(
                 "hidden" => AccessLevel::Hidden,
                 _ => unreachable!()
             };
-            let rel_p = ps.next().unwrap();
-            let rel = Symbol::new(rel_p.as_str(), rel_p.extract_span());
-            SysOp::SetAccessLevel(rel, access_level)
+            let mut rels = vec![];
+            for rel_p in ps {
+                let rel = Symbol::new(rel_p.as_str(), rel_p.extract_span());
+                rels.push(rel)
+            }
+            SysOp::SetAccessLevel(rels, access_level)
         }
         Rule::trigger_relation_show_op => {
             let rels_p = inner.into_inner().next().unwrap();

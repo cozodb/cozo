@@ -484,9 +484,11 @@ impl Db {
                 tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
-            SysOp::SetAccessLevel(name, level) => {
+            SysOp::SetAccessLevel(names, level) => {
                 let mut tx = self.transact_write()?;
-                tx.set_access_level(name, level)?;
+                for name in names {
+                    tx.set_access_level(name, level)?;
+                }
                 tx.commit_tx()?;
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }

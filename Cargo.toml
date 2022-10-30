@@ -2,7 +2,7 @@
 name = "cozo"
 version = "0.1.0"
 edition = "2021"
-description = "A database in development"
+description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data"
 authors = ["Ziyang Hu"]
 license = "AGPL-3.0-or-later"
 
@@ -16,7 +16,7 @@ io-uring = ["cozorocks/io-uring"]
 casey = "0.3.3"
 either = "1.7.0"
 rand = "0.8.5"
-miette = { version = "5.3.0", features = ["fancy"] }
+miette = { version = "=5.3.0", features = ["fancy"] }
 lazy_static = "1.4.0"
 log = "0.4.16"
 env_logger = "0.9.0"
@@ -42,7 +42,7 @@ pest = "2.2.1"
 pest_derive = "2.2.1"
 rayon = "1.5.3"
 nalgebra = "0.31.1"
-minreq = { version = "2.6.0", features = ["https-rustls"] }
+minreq = { version = "2.6.0", features = ["https-native"] }
 approx = "0.5.1"
 unicode-normalization = "0.1.21"
 thiserror = "1.0.34"
@@ -53,9 +53,6 @@ cozorocks = { path = "cozorocks" }
 
 clap = { version = "3.2.8", features = ["derive"] }
 rouille = "3.5.0"
-
-#[target.'cfg(not(target_env = "msvc"))'.dependencies]
-#tikv-jemallocator = { version = "0.5", features = ["disable_initial_exec_tls"] }
 
 #[profile.release]
 #lto = true

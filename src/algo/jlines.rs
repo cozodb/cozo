@@ -8,7 +8,9 @@ use std::io::BufRead;
 use std::{fs, io};
 
 use itertools::Itertools;
-use miette::{bail, miette, Diagnostic, IntoDiagnostic, Result};
+use log::error;
+use miette::{bail, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
+use minreq::Response;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -105,7 +107,7 @@ impl AlgoImpl for JsonReader {
                 }
             }
             None => {
-                let content = minreq::get(&url as &str).send().into_diagnostic()?;
+                let content = get_file_content_from_url(&url)?;
                 let content = content.as_str().into_diagnostic()?;
                 if json_lines {
                     for line in content.lines() {
@@ -167,4 +169,14 @@ impl AlgoImpl for JsonReader {
             )),
         })
     }
+}
+
+pub(crate) fn get_file_content_from_url(url: &str) -> Result<Response> {
+    minreq::get(&url as &str)
+        .send()
+        .map_err(|e| {
+            error!("{:?}", e);
+            miette!(e)
+        })
+        .wrap_err_with(|| format!("when requesting URL {}", url))
 }
