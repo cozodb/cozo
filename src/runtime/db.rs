@@ -619,8 +619,7 @@ impl Db {
             }
         } else {
             let scan = if early_return {
-                let limit = input_program.out_opts.limit.unwrap_or(usize::MAX);
-                Right(Left(result.scan_early_returned().take(limit)))
+                Right(Left(result.scan_early_returned()))
             } else if input_program.out_opts.limit.is_some()
                 || input_program.out_opts.offset.is_some()
             {

@@ -23,9 +23,6 @@ pub(crate) struct QueryLimiter {
 }
 
 impl QueryLimiter {
-    pub(crate) fn is_used(&self) -> bool {
-        self.total.is_some() || self.skip.is_some()
-    }
     pub(crate) fn incr_and_should_stop(&mut self) -> bool {
         if let Some(limit) = self.total {
             self.counter += 1;
@@ -86,6 +83,8 @@ impl SessionTx {
             counter: 0,
         };
 
+        let mut used_limiter = false;
+
         for epoch in 0u32.. {
             debug!("epoch {}", epoch);
             if epoch == 0 {
@@ -93,7 +92,7 @@ impl SessionTx {
                     match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => {
                             let aggr_kind = compiled_ruleset.aggr_kind();
-                            if self.initial_rule_eval(
+                            used_limiter = self.initial_rule_eval(
                                 k,
                                 ruleset,
                                 aggr_kind,
@@ -101,9 +100,7 @@ impl SessionTx {
                                 &mut changed,
                                 &mut limiter,
                                 poison.clone(),
-                            )? {
-                                return Ok(true);
-                            };
+                            )? || used_limiter;
                         }
                         CompiledRuleSet::Algo(algo_apply) => {
                             self.algo_application_eval(k, algo_apply, stores, poison.clone())?;
@@ -124,7 +121,7 @@ impl SessionTx {
                                 AggrKind::Normal => false,
                                 AggrKind::Meet => true,
                             };
-                            if self.incremental_rule_eval(
+                            used_limiter = self.incremental_rule_eval(
                                 k,
                                 ruleset,
                                 epoch,
@@ -134,9 +131,7 @@ impl SessionTx {
                                 &mut changed,
                                 &mut limiter,
                                 poison.clone(),
-                            )? {
-                                return Ok(true);
-                            };
+                            )? || used_limiter;
                         }
 
                         CompiledRuleSet::Algo(_) => unreachable!(),
@@ -147,7 +142,7 @@ impl SessionTx {
                 break;
             }
         }
-        Ok(limiter.is_used())
+        Ok(used_limiter)
     }
     fn algo_application_eval(
         &self,
@@ -172,7 +167,8 @@ impl SessionTx {
     ) -> Result<bool> {
         let store = stores.get(rule_symb).unwrap();
         let use_delta = BTreeSet::default();
-        let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
+        let should_check_limit =
+            limiter.total.is_some() && rule_symb.is_prog_entry() && aggr_kind != AggrKind::Meet;
         match aggr_kind {
             AggrKind::None | AggrKind::Meet => {
                 let is_meet = aggr_kind == AggrKind::Meet;
@@ -234,7 +230,7 @@ impl SessionTx {
                 }
             }
         }
-        Ok(false)
+        Ok(should_check_limit)
     }
     fn incremental_rule_eval(
         &self,
@@ -249,7 +245,8 @@ impl SessionTx {
         poison: Poison,
     ) -> Result<bool> {
         let store = stores.get(rule_symb).unwrap();
-        let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
+        let should_check_limit =
+            limiter.total.is_some() && rule_symb.is_prog_entry() && !is_meet_aggr;
         for (rule_n, rule) in ruleset.iter().enumerate() {
             let mut should_do_calculation = false;
             for d_rule in &rule.contained_rules {
@@ -314,6 +311,6 @@ impl SessionTx {
                 }
             }
         }
-        Ok(false)
+        Ok(should_check_limit)
     }
 }
