@@ -14,6 +14,7 @@ that uses Datalog for query and focuses on graph data and algorithms.
 * Fixed rules providing efficient whole-graph algorithms which integrate seamlessly with Datalog
 * Rich set of built-in functions and aggregations
 * Only a single executable, trivial to deploy and run
+* [Embeddable](https://cozodb.github.io/current/manual/setup.html#embedding-cozo), can run in the same process as the application
 * Easy to use from any programming language
 * Special support for [Jupyter](https://jupyter.org/) notebooks for integration with the Python DataScience ecosystem 
 * Modern, clean, flexible syntax, informative error messages

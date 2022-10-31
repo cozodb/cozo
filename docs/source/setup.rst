@@ -224,4 +224,3 @@ you can use the library directly.
 
 For languages other than Rust, you will need to provide custom bindings,
 but again for `Python <https://pyo3.rs/>`_ and `NodeJS <https://neon-bindings.com/>`_ this is trivial.
-Cozo will always use multiple threads, embedded or not.
