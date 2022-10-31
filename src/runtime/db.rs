@@ -534,11 +534,16 @@ impl Db {
             running_queries: self.running_queries.clone(),
         };
 
-        let result = tx.stratified_magic_evaluate(
+        let (result, early_return) = tx.stratified_magic_evaluate(
             &compiled,
             &stores,
             if input_program.out_opts.sorters.is_empty() {
                 input_program.out_opts.num_to_take()
+            } else {
+                None
+            },
+            if input_program.out_opts.sorters.is_empty() {
+                input_program.out_opts.offset
             } else {
                 None
             },
@@ -613,12 +618,15 @@ impl Db {
                 Ok((json!({ "rows": ret, "headers": json_headers }), clean_ups))
             }
         } else {
-            let scan = if input_program.out_opts.limit.is_some()
+            let scan = if early_return {
+                let limit = input_program.out_opts.limit.unwrap_or(usize::MAX);
+                Right(Left(result.scan_early_returned().take(limit)))
+            } else if input_program.out_opts.limit.is_some()
                 || input_program.out_opts.offset.is_some()
             {
                 let limit = input_program.out_opts.limit.unwrap_or(usize::MAX);
                 let offset = input_program.out_opts.offset.unwrap_or(0);
-                Right(result.scan_all().skip(offset).take(limit))
+                Right(Right(result.scan_all().skip(offset).take(limit)))
             } else {
                 Left(result.scan_all())
             };

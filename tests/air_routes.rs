@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::time::Instant;
 
 use approx::AbsDiffEq;
+use env_logger::Env;
 use lazy_static::lazy_static;
 use serde_json::json;
 
@@ -1460,6 +1461,7 @@ fn longest_routes() {
 
 #[test]
 fn longest_routes_from_each_airports() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     check_db();
     let longest_routes_from_each_airports = Instant::now();
 
@@ -1850,4 +1852,68 @@ fn furthest_from_lhr() {
         .unwrap()
     );
     dbg!(furthest_from_lhr.elapsed());
+}
+
+#[test]
+fn skip_limit() {
+    check_db();
+    let res = TEST_DB
+        .run_script(
+            r#"
+        ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
+    "#,
+            &Default::default(),
+        )
+        .unwrap();
+    let rows = res.get("rows").unwrap();
+    assert_eq!(*rows, json!([[3], [4], [5], [6], [7], [8], [9]]));
+
+    let res = TEST_DB
+        .run_script(
+            r#"
+        ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
+    "#,
+            &Default::default(),
+        )
+        .unwrap();
+    let rows = res.get("rows").unwrap();
+    assert_eq!(*rows, json!([[3], [4], [5], [6], [7], [8], [9]]));
+
+    let res = TEST_DB
+        .run_script(
+            r#"
+        ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
+        :limit 2
+    "#,
+            &Default::default(),
+        )
+        .unwrap();
+    let rows = res.get("rows").unwrap();
+    assert_eq!(*rows, json!([[8], [9]]));
+
+    let res = TEST_DB
+        .run_script(
+            r#"
+        ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
+        :limit 2
+        :offset 1
+    "#,
+            &Default::default(),
+        )
+        .unwrap();
+    let rows = res.get("rows").unwrap();
+    assert_eq!(*rows, json!([[7], [8]]));
+
+    let res = TEST_DB
+        .run_script(
+            r#"
+        ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
+        :limit 100
+        :offset 1
+    "#,
+            &Default::default(),
+        )
+        .unwrap();
+    let rows = res.get("rows").unwrap();
+    assert_eq!(*rows, json!([[3], [4], [5], [6], [7], [8]]));
 }

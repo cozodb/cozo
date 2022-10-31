@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
 use std::iter;
 use std::ops::Bound::Included;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, RwLock};
 
 use either::{Left, Right};
 use itertools::Itertools;
@@ -16,7 +16,7 @@ use miette::Result;
 
 use crate::data::aggr::Aggregation;
 use crate::data::program::MagicSymbol;
-use crate::data::tuple::{Tuple};
+use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::query::eval::QueryLimiter;
 use crate::runtime::db::Poison;
@@ -46,11 +46,7 @@ impl Debug for InMemRelation {
 }
 
 impl InMemRelation {
-    pub(crate) fn new(
-        id: StoredRelationId,
-        rule_name: MagicSymbol,
-        arity: usize,
-    ) -> InMemRelation {
+    pub(crate) fn new(id: StoredRelationId, rule_name: MagicSymbol, arity: usize) -> InMemRelation {
         Self {
             epoch_size: Default::default(),
             mem_db: Default::default(),
@@ -139,6 +135,16 @@ impl InMemRelation {
         let mut target = db.get(epoch as usize).unwrap().try_write().unwrap();
         target.insert(tuple, Tuple::default());
     }
+    pub(crate) fn put_with_skip(&self, tuple: Tuple, should_skip: bool) {
+        self.ensure_mem_db_for_epoch(0);
+        let db = self.mem_db.try_read().unwrap();
+        let mut target = db.get(0).unwrap().try_write().unwrap();
+        if should_skip {
+            target.insert(tuple, Tuple(vec![DataValue::Guard]));
+        } else {
+            target.insert(tuple, Tuple::default());
+        }
+    }
     pub(crate) fn normal_aggr_put(
         &self,
         tuple: &Tuple,
@@ -180,9 +186,7 @@ impl InMemRelation {
         let db_target = self.mem_db.try_read().unwrap();
         let target = db_target.get(0);
         let it = match target {
-            None => {
-                Left(iter::empty())
-            }
+            None => Left(iter::empty()),
             Some(target) => {
                 let target = target.try_read().unwrap();
                 Right(target.clone().into_iter().map(|(k, v)| {
@@ -260,8 +264,8 @@ impl InMemRelation {
             let res_tpl = Tuple(aggr_res);
             if let Some(lmt) = limiter.borrow_mut() {
                 if !store.exists(&res_tpl, 0) {
-                    store.put(res_tpl, 0);
-                    if lmt.incr() {
+                    store.put_with_skip(res_tpl, lmt.should_skip_next());
+                    if lmt.incr_and_should_stop() {
                         return Ok(true);
                     }
                 }
@@ -272,7 +276,7 @@ impl InMemRelation {
         Ok(false)
     }
 
-    pub(crate) fn scan_all_for_epoch(&self, epoch: u32) -> impl Iterator<Item=Result<Tuple>> {
+    pub(crate) fn scan_all_for_epoch(&self, epoch: u32) -> impl Iterator<Item = Result<Tuple>> {
         self.ensure_mem_db_for_epoch(epoch);
         let db = self
             .mem_db
@@ -303,17 +307,50 @@ impl InMemRelation {
             }
         })
     }
-    pub(crate) fn scan_all(&self) -> impl Iterator<Item=Result<Tuple>> {
+    pub(crate) fn scan_all(&self) -> impl Iterator<Item = Result<Tuple>> {
         self.scan_all_for_epoch(0)
     }
-    pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item=Result<Tuple>> {
+    pub(crate) fn scan_early_returned(&self) -> impl Iterator<Item = Result<Tuple>> {
+        self.ensure_mem_db_for_epoch(0);
+        let db = self
+            .mem_db
+            .try_read()
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .clone()
+            .try_read()
+            .unwrap()
+            .clone();
+        db.into_iter().filter_map(|(k, v)| {
+            if v.0.is_empty() {
+                Some(Ok(k))
+            } else if v.0.last() == Some(&DataValue::Guard) {
+                None
+            } else {
+                let combined =
+                    k.0.iter()
+                        .zip(v.0.iter())
+                        .map(|(kel, vel)| {
+                            if matches!(kel, DataValue::Guard) {
+                                vel.clone()
+                            } else {
+                                kel.clone()
+                            }
+                        })
+                        .collect_vec();
+                Some(Ok(Tuple(combined)))
+            }
+        })
+    }
+    pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item = Result<Tuple>> {
         self.scan_prefix_for_epoch(prefix, 0)
     }
     pub(crate) fn scan_prefix_for_epoch(
         &self,
         prefix: &Tuple,
         epoch: u32,
-    ) -> impl Iterator<Item=Result<Tuple>> {
+    ) -> impl Iterator<Item = Result<Tuple>> {
         let mut upper = prefix.0.clone();
         upper.push(DataValue::Bot);
         let upper = Tuple(upper);
@@ -349,7 +386,7 @@ impl InMemRelation {
         lower: &[DataValue],
         upper: &[DataValue],
         epoch: u32,
-    ) -> impl Iterator<Item=Result<Tuple>> {
+    ) -> impl Iterator<Item = Result<Tuple>> {
         self.ensure_mem_db_for_epoch(epoch);
         let mut prefix_bound = prefix.clone();
         prefix_bound.0.extend_from_slice(lower);

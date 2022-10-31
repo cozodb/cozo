@@ -9,7 +9,7 @@ use log::{debug, trace};
 use miette::Result;
 
 use crate::data::program::{MagicAlgoApply, MagicSymbol, NoEntryError};
-use crate::data::symb::{PROG_ENTRY, Symbol};
+use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::db::Poison;
@@ -17,17 +17,27 @@ use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct QueryLimiter {
-    limit: Option<usize>,
+    total: Option<usize>,
+    skip: Option<usize>,
     counter: usize,
 }
 
 impl QueryLimiter {
-    pub(crate) fn incr(&mut self) -> bool {
-        if let Some(limit) = self.limit {
+    pub(crate) fn is_used(&self) -> bool {
+        self.total.is_some() || self.skip.is_some()
+    }
+    pub(crate) fn incr_and_should_stop(&mut self) -> bool {
+        if let Some(limit) = self.total {
             self.counter += 1;
             self.counter >= limit
         } else {
             false
+        }
+    }
+    pub(crate) fn should_skip_next(&self) -> bool {
+        match self.skip {
+            None => false,
+            Some(i) => i > self.counter,
         }
     }
 }
@@ -37,33 +47,42 @@ impl SessionTx {
         &self,
         strata: &[CompiledProgram],
         stores: &BTreeMap<MagicSymbol, InMemRelation>,
-        num_to_take: Option<usize>,
+        total_num_to_take: Option<usize>,
+        num_to_skip: Option<usize>,
         poison: Poison,
-    ) -> Result<InMemRelation> {
+    ) -> Result<(InMemRelation, bool)> {
         let ret_area = stores
             .get(&MagicSymbol::Muggle {
                 inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
             })
             .ok_or(NoEntryError)?
             .clone();
-
+        let mut early_return = false;
         for (idx, cur_prog) in strata.iter().enumerate() {
             debug!("stratum {}", idx);
-            self.semi_naive_magic_evaluate(cur_prog, stores, num_to_take, poison.clone())?;
+            early_return = self.semi_naive_magic_evaluate(
+                cur_prog,
+                stores,
+                total_num_to_take,
+                num_to_skip,
+                poison.clone(),
+            )?;
         }
-        Ok(ret_area)
+        Ok((ret_area, early_return))
     }
     fn semi_naive_magic_evaluate(
         &self,
         prog: &CompiledProgram,
         stores: &BTreeMap<MagicSymbol, InMemRelation>,
-        num_to_take: Option<usize>,
+        total_num_to_take: Option<usize>,
+        num_to_skip: Option<usize>,
         poison: Poison,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let mut changed: BTreeMap<_, _> = prog.keys().map(|k| (k, false)).collect();
         let mut prev_changed = changed.clone();
         let mut limiter = QueryLimiter {
-            limit: num_to_take,
+            total: total_num_to_take,
+            skip: num_to_skip,
             counter: 0,
         };
 
@@ -74,7 +93,7 @@ impl SessionTx {
                     match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => {
                             let aggr_kind = compiled_ruleset.aggr_kind();
-                            self.initial_rule_eval(
+                            if self.initial_rule_eval(
                                 k,
                                 ruleset,
                                 aggr_kind,
@@ -82,7 +101,9 @@ impl SessionTx {
                                 &mut changed,
                                 &mut limiter,
                                 poison.clone(),
-                            )?;
+                            )? {
+                                return Ok(true);
+                            };
                         }
                         CompiledRuleSet::Algo(algo_apply) => {
                             self.algo_application_eval(k, algo_apply, stores, poison.clone())?;
@@ -103,7 +124,7 @@ impl SessionTx {
                                 AggrKind::Normal => false,
                                 AggrKind::Meet => true,
                             };
-                            self.incremental_rule_eval(
+                            if self.incremental_rule_eval(
                                 k,
                                 ruleset,
                                 epoch,
@@ -113,7 +134,9 @@ impl SessionTx {
                                 &mut changed,
                                 &mut limiter,
                                 poison.clone(),
-                            )?;
+                            )? {
+                                return Ok(true);
+                            };
                         }
 
                         CompiledRuleSet::Algo(_) => unreachable!(),
@@ -124,7 +147,7 @@ impl SessionTx {
                 break;
             }
         }
-        Ok(())
+        Ok(limiter.is_used())
     }
     fn algo_application_eval(
         &self,
@@ -146,10 +169,10 @@ impl SessionTx {
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let store = stores.get(rule_symb).unwrap();
         let use_delta = BTreeSet::default();
-        let should_check_limit = limiter.limit.is_some() && rule_symb.is_prog_entry();
+        let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
         match aggr_kind {
             AggrKind::None | AggrKind::Meet => {
                 let is_meet = aggr_kind == AggrKind::Meet;
@@ -166,10 +189,10 @@ impl SessionTx {
                             store.aggr_meet_put(&item, &mut aggr, 0)?;
                         } else if should_check_limit {
                             if !store.exists(&item, 0) {
-                                store.put(item, 0);
-                                if limiter.incr() {
+                                store.put_with_skip(item, limiter.should_skip_next());
+                                if limiter.incr_and_should_stop() {
                                     trace!("early stopping due to result count limit exceeded");
-                                    return Ok(());
+                                    return Ok(true);
                                 }
                             }
                         } else {
@@ -188,7 +211,7 @@ impl SessionTx {
                         rule_symb, rule_n
                     );
                     for (serial, item_res) in
-                    rule.relation.iter(self, Some(0), &use_delta)?.enumerate()
+                        rule.relation.iter(self, Some(0), &use_delta)?.enumerate()
                     {
                         let item = item_res?;
                         trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
@@ -207,11 +230,11 @@ impl SessionTx {
                     },
                     poison,
                 )? {
-                    return Ok(());
+                    return Ok(true);
                 }
             }
         }
-        Ok(())
+        Ok(false)
     }
     fn incremental_rule_eval(
         &self,
@@ -224,9 +247,9 @@ impl SessionTx {
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let store = stores.get(rule_symb).unwrap();
-        let should_check_limit = limiter.limit.is_some() && rule_symb.is_prog_entry();
+        let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
         for (rule_n, rule) in ruleset.iter().enumerate() {
             let mut should_do_calculation = false;
             for d_rule in &rule.contained_rules {
@@ -281,16 +304,16 @@ impl SessionTx {
                         );
                         *changed.get_mut(rule_symb).unwrap() = true;
                         store.put(item.clone(), epoch);
-                        store.put(item, 0);
-                        if should_check_limit && limiter.incr() {
+                        store.put_with_skip(item, limiter.should_skip_next());
+                        if should_check_limit && limiter.incr_and_should_stop() {
                             trace!("early stopping due to result count limit exceeded");
-                            return Ok(());
+                            return Ok(true);
                         }
                     }
                     poison.check()?;
                 }
             }
         }
-        Ok(())
+        Ok(false)
     }
 }

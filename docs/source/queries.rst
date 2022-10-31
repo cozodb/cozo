@@ -309,5 +309,6 @@ The rest of the query options are explained in the following.
 
     The query returns nothing if the output relation contains at least one row,
     otherwise, execution aborts with an error.
-    Implies ``:limit 1`` to ensure early termination if possible.
     Useful for transactions and triggers.
+    You should consider adding ``:limit 1`` to the query to ensure early termination
+    if you do not need to check all return tuples.
