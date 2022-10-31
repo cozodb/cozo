@@ -10,15 +10,13 @@ use lazy_static::lazy_static;
 use serde_json::json;
 
 use cozo::Db;
-use cozorocks::DbBuilder;
 
 lazy_static! {
     static ref TEST_DB: Db = {
         let creation = Instant::now();
         let path = "_test_air_routes";
         _ = std::fs::remove_dir_all(path);
-        let builder = DbBuilder::default().path(path).create_if_missing(true);
-        let db = Db::build(builder).unwrap();
+        let db = Db::new(path).unwrap();
         dbg!(creation.elapsed());
 
         let init = Instant::now();
@@ -131,7 +129,9 @@ lazy_static! {
 }
 
 fn check_db() {
-    TEST_DB.get_session_id();
+    let _ = TEST_DB
+        .run_script("?[a] <- [[1]]", &Default::default())
+        .unwrap();
 }
 
 #[test]
@@ -1739,11 +1739,7 @@ fn great_circle_distance() {
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
-    assert_eq!(
-        *rows,
-        serde_json::Value::from_str(r#"[[1.0]]"#)
-            .unwrap()
-    );
+    assert_eq!(*rows, serde_json::Value::from_str(r#"[[1.0]]"#).unwrap());
     dbg!(great_circle_distance.elapsed());
 }
 
@@ -1770,8 +1766,7 @@ fn aus_to_edi() {
     let rows = res.get("rows").unwrap();
     assert_eq!(
         *rows,
-        serde_json::Value::from_str(r#"[[["AUS", "BOS", "EDI"]]]"#)
-            .unwrap()
+        serde_json::Value::from_str(r#"[[["AUS", "BOS", "EDI"]]]"#).unwrap()
     );
     dbg!(aus_to_edi.elapsed());
 }
@@ -1799,7 +1794,8 @@ fn reachable_from_lhr() {
     let rows = res.get("rows").unwrap();
     assert_eq!(
         *rows,
-        serde_json::Value::from_str(r#"[
+        serde_json::Value::from_str(
+            r#"[
             [8,["LHR","YYZ","YTS","YMO","YFA","ZKE","YAT","YPO"]],
             [7,["LHR","AUH","BNE","ISA","BQL","BEU","BVI"]],
             [7,["LHR","AUH","BNE","WTB","SGO","CMA","XTG"]],
@@ -1810,12 +1806,12 @@ fn reachable_from_lhr() {
             [7,["LHR","DEN","ANC","BET","NME","TNK","WWT"]],
             [7,["LHR","KEF","GOH","JAV","JUV","NAQ","THU"]],
             [7,["LHR","YUL","YGL","YPX","AKV","YIK","YZG"]]]
-        "#)
-            .unwrap()
+        "#
+        )
+        .unwrap()
     );
     dbg!(reachable_from_lhr.elapsed());
 }
-
 
 #[test]
 fn furthest_from_lhr() {
@@ -1842,14 +1838,16 @@ fn furthest_from_lhr() {
     let rows = res.get("rows").unwrap();
     assert_eq!(
         *rows,
-        serde_json::Value::from_str(r#"[
+        serde_json::Value::from_str(
+            r#"[
         [12922.0,["LHR","JNB","HLE","ASI","BZZ"]],[12093.0,["LHR","PVG","CHC","IVC"]],
         [12015.0,["LHR","NRT","AKL","WLG","TIU"]],[12009.0,["LHR","PVG","CHC","DUD"]],
         [11910.0,["LHR","NRT","AKL","WLG","WSZ"]],[11900.0,["LHR","PVG","CHC","HKK"]],
         [11805.0,["LHR","PVG","CHC"]],[11766.0,["LHR","PVG","BNE","ZQN"]],
         [11758.0,["LHR","NRT","AKL","BHE"]],[11751.0,["LHR","NRT","AKL","NSN"]]]
-        "#)
-            .unwrap()
+        "#
+        )
+        .unwrap()
     );
     dbg!(furthest_from_lhr.elapsed());
 }

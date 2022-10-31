@@ -2,6 +2,9 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
  */
 
+//! This crate provides the core functionalities of [CozoDB](https://github.com/cozodb/cozo).
+//! It may be used directly for embedding CozoDB in other applications.
+
 #![warn(rust_2018_idioms, future_incompatible)]
 #![warn(missing_docs)]
 #![allow(clippy::type_complexity)]
@@ -9,7 +12,6 @@
 
 pub use miette::Error;
 
-pub use cozorocks::DbBuilder;
 pub use runtime::db::Db;
 
 // #[cfg(not(target_env = "msvc"))]

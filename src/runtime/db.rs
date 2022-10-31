@@ -59,6 +59,7 @@ pub(crate) struct DbManifest {
 
 const CURRENT_STORAGE_VERSION: u64 = 1;
 
+/// The database object of Cozo.
 pub struct Db {
     db: RocksDb,
     relation_store_id: Arc<AtomicU64>,
@@ -78,7 +79,9 @@ impl Debug for Db {
 struct BadDbInit(#[help] String);
 
 impl Db {
-    pub fn build(builder: DbBuilder<'_>) -> Result<Self> {
+    /// Creates a database object.
+    pub fn new(path: impl AsRef<str>) -> Result<Self> {
+        let builder = DbBuilder::default().path(path.as_ref());
         let path = builder.opts.db_path;
         fs::create_dir_all(path)
             .map_err(|err| BadDbInit(format!("cannot create directory {}: {}", path, err)))?;
@@ -161,6 +164,7 @@ impl Db {
         };
         Ok(ret)
     }
+    /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     pub fn run_script(
         &self,
         payload: &str,

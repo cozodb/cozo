@@ -17,7 +17,7 @@ use rand::Rng;
 use rouille::{router, try_or_400, Request, Response};
 use serde_json::json;
 
-use cozo::{Db, DbBuilder};
+use cozo::Db;
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
@@ -42,10 +42,7 @@ fn main() {
         eprintln!("{}", SECURITY_WARNING);
     }
 
-    let builder = DbBuilder::default()
-        .path(&args.path)
-        .create_if_missing(true);
-    let db = Db::build(builder).unwrap();
+    let db = Db::new(args.path.as_str()).unwrap();
 
     let mut path_buf = PathBuf::from(&args.path);
     path_buf.push("auth.txt");
