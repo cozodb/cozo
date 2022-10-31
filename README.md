@@ -184,16 +184,6 @@ Cozo is written in Rust, with [RocksDB](http://rocksdb.org/) as the storage engi
 (this may change in the future).
 We manually wrote the C++/Rust bindings for RocksDB with [cxx](https://cxx.rs/). 
 
-## Contributing
-
-Contributions to code or other materials 
-should be done via [pull requests](https://github.com/cozodb/cozo/pulls).
-
-For code contributions other than simple bug fixes, please
-[discuss](https://github.com/cozodb/cozo/discussions) it
-with the maintainer first before opening a pull request,
-otherwise it is unlikely to be accepted.
-
 ## Licensing
 
 The contents of this project are licensed under AGPL-3.0 or later, except:
