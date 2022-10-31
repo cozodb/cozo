@@ -5,6 +5,9 @@ edition = "2021"
 description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data"
 authors = ["Ziyang Hu"]
 license = "AGPL-3.0-or-later"
+homepage = "https://github.com/cozodb/cozo"
+repository = "https://github.com/cozodb/cozo"
+documentation = "https://cozodb.github.io/current/manual"
 exclude = [
     "docs/*",
     "tests/*",
