@@ -14,13 +14,6 @@ pub use miette::Error;
 
 pub use runtime::db::Db;
 
-// #[cfg(not(target_env = "msvc"))]
-// use tikv_jemallocator::Jemalloc;
-
-// #[cfg(not(target_env = "msvc"))]
-// #[global_allocator]
-// static GLOBAL: Jemalloc = Jemalloc;
-
 pub(crate) mod algo;
 pub(crate) mod data;
 pub(crate) mod parse;

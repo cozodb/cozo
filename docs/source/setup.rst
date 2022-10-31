@@ -9,7 +9,7 @@ This manual touches upon all features currently implemented in Cozo,
 though the coverage of some topics may be sketchy at this stage.
 
 This manual assumes that you already know the basics of the Cozo database,
-at the level of the `Tutorial <https://cozodb.github.io/current/tutorial.html>`_.
+at the level of the `Tutorial <https://nbviewer.org/github/cozodb/cozo/blob/main/docs/tutorial/tutorial.ipynb>`_.
 
 ------------------------
 Downloading Cozo
