@@ -1,6 +1,7 @@
-[![GitHub](https://img.shields.io/github/license/cozodb/cozo)](https://github.com/cozodb/cozo/blob/main/LICENSE.txt)
 [![GitHub Workflow Status](https://img.shields.io/github/workflow/status/cozodb/cozo/Build)](https://github.com/cozodb/cozo/actions/workflows/build.yml)
 [![Discord](https://img.shields.io/discord/1034464550927478886)](https://discord.gg/GFpjQ9m866)
+[![Crates.io](https://img.shields.io/crates/v/cozo)](https://crates.io/crates/cozo)
+[![GitHub](https://img.shields.io/github/license/cozodb/cozo)](https://github.com/cozodb/cozo/blob/main/LICENSE.txt)
 
 # `cozo`
 
