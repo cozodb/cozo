@@ -23,6 +23,14 @@ lazy_static! {
     static ref HANDLES: Handles = Handles::default();
 }
 
+/// Open a database.
+///
+/// `path`:  should contain the UTF-8 encoded path name as a null-terminated C-string.
+/// `db_id`: will contain the id of the database opened.
+///
+/// When the function is successful, null pointer is returned,
+/// otherwise a pointer to a C-string containing the error message will be returned.
+/// The returned C-string must be freed with `cozo_free_str`.
 #[no_mangle]
 pub unsafe extern "C" fn cozo_open_db(path: *const i8, db_id: &mut i32) -> *mut i8 {
     let path = match CStr::from_ptr(path).to_str() {
@@ -42,6 +50,12 @@ pub unsafe extern "C" fn cozo_open_db(path: *const i8, db_id: &mut i32) -> *mut 
     }
 }
 
+/// Close a database.
+///
+/// `id`: the ID representing the database to close.
+///
+/// Returns `true` if the database is closed,
+/// `false` if it has already been closed, or does not exist.
 #[no_mangle]
 pub unsafe extern "C" fn cozo_close_db(id: i32) -> bool {
     let db = {
@@ -51,6 +65,20 @@ pub unsafe extern "C" fn cozo_close_db(id: i32) -> bool {
     db.is_some()
 }
 
+/// Run query against a database.
+///
+/// `db_id`: the ID representing the database to run the query.
+/// `script_raw`: a UTF-8 encoded C-string for the CozoScript to execute.
+/// `params_raw`: a UTF-8 encoded C-string for the params of the query,
+///               in JSON format. You must always pass in a valid JSON map,
+///               even if you do not use params in your query
+///               (pass "{}" in this case).
+/// `errored`:    will point to `false` if the query is successful,
+///               `true` if an error occurred.
+///
+/// Returns a UTF-8-encoded C-string that must be freed with `cozo_free_str`.
+/// If `*errored` is false, then the string contains the JSON return value of the query.
+/// If `*errored` is true, then the string contains the error message.
 #[no_mangle]
 pub unsafe extern "C" fn cozo_run_query(
     db_id: i32,
@@ -119,6 +147,10 @@ pub unsafe extern "C" fn cozo_run_query(
     }
 }
 
+/// Free any C-string returned from the Cozo C API.
+/// Must be called exactly once for each returned C-string.
+///
+/// `s`: the C-string to free.
 #[no_mangle]
 pub unsafe extern "C" fn cozo_free_str(s: *mut i8) {
     let _ = CString::from_raw(s);
