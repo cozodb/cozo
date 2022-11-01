@@ -2,7 +2,7 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under MIT/Apache-2.0/BSD-3-Clause.
  */
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
 
 use lazy_static::lazy_static;
@@ -12,7 +12,7 @@ use cozo::Db;
 
 #[derive(Default)]
 struct Handles {
-    current: AtomicU32,
+    current: AtomicI32,
     dbs: Mutex<BTreeMap<u32, Db>>,
 }
 
