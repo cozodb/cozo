@@ -1,0 +1,15 @@
+[package]
+name = "cozo_py_module"
+version = "0.1.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "cozo_py_module"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.17.1", features = ["extension-module"] }
+cozo = { version = "0.1.1", path = ".." }
+miette = { version = "=5.3.0", features = ["fancy"] }
+serde_json = "1.0.81"
