@@ -1,0 +1,24 @@
+[package]
+name = "cozo-nodejs"
+version = "0.1.1"
+description = "Cozo database for NodeJS"
+authors = ["Ziyang Hu"]
+license = "MIT/Apache-2.0/BSD-3-Clause"
+edition = "2021"
+exclude = ["index.node"]
+
+[lib]
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cozo = { version = "0.1.1", path = ".." }
+miette = { version = "=5.3.0", features = ["fancy"] }
+serde_json = "1.0.81"
+lazy_static = "1.4.0"
+
+[dependencies.neon]
+version = "0.10"
+default-features = false
+features = ["napi-6", "channel-api"]

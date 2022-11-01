@@ -1,0 +1,31 @@
+{
+  "name": "cozo-nodejs",
+  "version": "0.1.1",
+  "description": "Cozo database for NodeJS",
+  "main": "index.node",
+  "scripts": {
+    "build": "cargo-cp-artifact -nc index.node -- cargo build --message-format=json-render-diagnostics",
+    "build-debug": "npm run build --",
+    "build-release": "npm run build -- --release",
+    "install": "npm run build-release",
+    "test": "cargo test"
+  },
+  "author": "Ziyang Hu",
+  "license": "MIT",
+  "devDependencies": {
+    "cargo-cp-artifact": "^0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cozodb/cozo.git"
+  },
+  "keywords": [
+    "database",
+    "datalog",
+    "graph"
+  ],
+  "bugs": {
+    "url": "https://github.com/cozodb/cozo/issues"
+  },
+  "homepage": "https://github.com/cozodb/cozo#readme"
+}

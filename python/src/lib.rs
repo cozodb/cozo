@@ -37,11 +37,11 @@ impl CozoDbPy {
     }
     pub fn run_query(&self, py: Python<'_>, query: &str, params: &str) -> PyResult<String> {
         let params_map: serde_json::Value = serde_json::from_str(params)
-            .map_err(|_| miette!("the given params is not valid JSON"))
+            .map_err(|_| miette!("the given params argument is not valid JSON"))
             .into_py_res()?;
         let params_arg: BTreeMap<_, _> = match params_map {
             serde_json::Value::Object(m) => m.into_iter().collect(),
-            _ => Err(miette!("the given params is not a map")).into_py_res()?,
+            _ => Err(miette!("the given params argument is not a JSON map")).into_py_res()?,
         };
         let ret = py.allow_threads(|| self.db.run_script(query, &params_arg).into_py_res())?;
         Ok(ret.to_string())

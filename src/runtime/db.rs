@@ -12,7 +12,7 @@ use std::{fs, thread};
 
 use either::{Left, Right};
 use itertools::Itertools;
-use miette::{bail, ensure, Diagnostic, Result, WrapErr};
+use miette::{bail, ensure, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
@@ -60,6 +60,7 @@ pub(crate) struct DbManifest {
 const CURRENT_STORAGE_VERSION: u64 = 1;
 
 /// The database object of Cozo.
+#[derive(Clone)]
 pub struct Db {
     db: RocksDb,
     relation_store_id: Arc<AtomicU64>,
@@ -93,9 +94,12 @@ impl Db {
 
             if manifest_path.exists() {
                 let existing: DbManifest = rmp_serde::from_slice(
-                    &fs::read(manifest_path).expect("reading manifest failed"),
+                    &fs::read(manifest_path)
+                        .into_diagnostic()
+                        .wrap_err_with(|| "when reading manifest")?,
                 )
-                .expect("parsing manifest failed");
+                .into_diagnostic()
+                .wrap_err_with(|| "when reading manifest")?;
                 assert_eq!(
                     existing.storage_version, CURRENT_STORAGE_VERSION,
                     "Unknown storage version {}",
@@ -108,9 +112,11 @@ impl Db {
                     rmp_serde::to_vec_named(&DbManifest {
                         storage_version: CURRENT_STORAGE_VERSION,
                     })
-                    .expect("serializing manifest failed"),
+                    .into_diagnostic()
+                    .wrap_err_with(|| "when serializing manifest")?,
                 )
-                .expect("Writing to manifest failed");
+                .into_diagnostic()
+                .wrap_err_with(|| "when serializing manifest")?;
                 true
             }
         };
@@ -121,7 +127,11 @@ impl Db {
             .create_if_missing(is_new)
             .use_capped_prefix_extractor(true, KEY_PREFIX_LEN)
             .use_bloom_filter(true, 9.9, true)
-            .path(store_path.to_str().unwrap());
+            .path(
+                store_path
+                    .to_str()
+                    .ok_or_else(|| miette!("bad path name"))?,
+            );
 
         let db = db_builder.build()?;
 
@@ -521,7 +531,7 @@ impl Db {
         let now = SystemTime::now();
         let since_the_epoch = now
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
+            .into_diagnostic()?
             .as_secs_f64();
 
         let handle = RunningQueryHandle {
