@@ -335,7 +335,7 @@ checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
 name = "cozo"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "approx",
  "base64",
