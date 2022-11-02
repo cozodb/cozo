@@ -212,5 +212,5 @@ We manually wrote the C++/Rust bindings for RocksDB with [cxx](https://cxx.rs/).
 
 ## Licensing
 
-The contents of this project are licensed under AGPL-3.0 or later, with the exception
-of files under `cozorocks/`, which are licensed under MIT, or Apache-2.0, or BSD-3-Clause.
+The contents of this project are licensed under AGPL-3.0 or later, except 
+files under `cozorocks/` and `cozo-lib-c/`, which are licensed under MIT, or Apache-2.0, or BSD-3-Clause.
