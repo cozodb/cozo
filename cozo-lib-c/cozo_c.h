@@ -24,7 +24,7 @@ extern "C" {
  * otherwise a pointer to a C-string containing the error message will be returned.
  * The returned C-string must be freed with `cozo_free_str`.
  */
-int8_t *cozo_open_db(const int8_t *path, int32_t *db_id);
+char *cozo_open_db(const char *path, int32_t *db_id);
 
 /**
  * Close a database.
@@ -39,7 +39,7 @@ bool cozo_close_db(int32_t id);
 /**
  * Run query against a database.
  *
- * `db_id`:      the ID representing the database to run the query.
+ * `db_id`: the ID representing the database to run the query.
  * `script_raw`: a UTF-8 encoded C-string for the CozoScript to execute.
  * `params_raw`: a UTF-8 encoded C-string for the params of the query,
  *               in JSON format. You must always pass in a valid JSON map,
@@ -52,10 +52,7 @@ bool cozo_close_db(int32_t id);
  * If `*errored` is false, then the string contains the JSON return value of the query.
  * If `*errored` is true, then the string contains the error message.
  */
-int8_t *cozo_run_query(int32_t db_id,
-                       const int8_t *script_raw,
-                       const int8_t *params_raw,
-                       bool *errored);
+char *cozo_run_query(int32_t db_id, const char *script_raw, const char *params_raw, bool *errored);
 
 /**
  * Free any C-string returned from the Cozo C API.
@@ -63,7 +60,7 @@ int8_t *cozo_run_query(int32_t db_id,
  *
  * `s`: the C-string to free.
  */
-void cozo_free_str(int8_t *s);
+void cozo_free_str(char *s);
 
 #ifdef __cplusplus
 } // extern "C"

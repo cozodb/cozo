@@ -17,3 +17,4 @@ cp target/release/libcozo_c.dylib release/libcozo_c-${VERSION}-mac-${ARCH}.dylib
 strip release/cozoserver-${VERSION}-mac-${ARCH}
 
 gzip release/*
+cp cozo-lib-c/cozo_c.h release/cozo_c.h

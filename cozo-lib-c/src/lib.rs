@@ -4,7 +4,7 @@
 #![warn(rust_2018_idioms, future_incompatible)]
 
 use std::collections::BTreeMap;
-use std::ffi::{CStr, CString};
+use std::ffi::{c_char, CStr, CString};
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Mutex;
@@ -32,7 +32,7 @@ lazy_static! {
 /// otherwise a pointer to a C-string containing the error message will be returned.
 /// The returned C-string must be freed with `cozo_free_str`.
 #[no_mangle]
-pub unsafe extern "C" fn cozo_open_db(path: *const i8, db_id: &mut i32) -> *mut i8 {
+pub unsafe extern "C" fn cozo_open_db(path: *const c_char, db_id: &mut i32) -> *mut c_char {
     let path = match CStr::from_ptr(path).to_str() {
         Ok(p) => p,
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
@@ -82,10 +82,10 @@ pub unsafe extern "C" fn cozo_close_db(id: i32) -> bool {
 #[no_mangle]
 pub unsafe extern "C" fn cozo_run_query(
     db_id: i32,
-    script_raw: *const i8,
-    params_raw: *const i8,
+    script_raw: *const c_char,
+    params_raw: *const c_char,
     errored: &mut bool,
-) -> *mut i8 {
+) -> *mut c_char {
     let script = match CStr::from_ptr(script_raw).to_str() {
         Ok(p) => p,
         Err(err) => {
@@ -152,6 +152,6 @@ pub unsafe extern "C" fn cozo_run_query(
 ///
 /// `s`: the C-string to free.
 #[no_mangle]
-pub unsafe extern "C" fn cozo_free_str(s: *mut i8) {
+pub unsafe extern "C" fn cozo_free_str(s: *mut c_char) {
     let _ = CString::from_raw(s);
 }
