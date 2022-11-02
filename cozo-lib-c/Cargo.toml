@@ -1,0 +1,19 @@
+[package]
+name = "cozo_c"
+version = "0.1.1"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[features]
+jemalloc = ["cozo/jemalloc"]
+io-uring = ["cozo/io-uring"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cozo = { version = "0.1.2", path = ".." }
+miette = { version = "=5.3.0", features = ["fancy"] }
+serde_json = "1.0.81"
+lazy_static = "1.4.0"
