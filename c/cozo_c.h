@@ -39,7 +39,7 @@ bool cozo_close_db(int32_t id);
 /**
  * Run query against a database.
  *
- * `db_id`: the ID representing the database to run the query.
+ * `db_id`:      the ID representing the database to run the query.
  * `script_raw`: a UTF-8 encoded C-string for the CozoScript to execute.
  * `params_raw`: a UTF-8 encoded C-string for the params of the query,
  *               in JSON format. You must always pass in a valid JSON map,

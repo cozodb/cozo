@@ -10,8 +10,6 @@ use pyo3::prelude::*;
 
 use cozo::Db;
 
-#[pyclass(extends=PyException)]
-struct ErrorBridge(cozo::Error);
 trait PyResultExt<T> {
     fn into_py_res(self) -> PyResult<T>;
 }
@@ -50,6 +48,5 @@ impl CozoDbPy {
 #[pymodule]
 fn cozo_py_module(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<CozoDbPy>()?;
-    m.add_class::<ErrorBridge>()?;
     Ok(())
 }

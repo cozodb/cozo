@@ -8,8 +8,12 @@ edition = "2021"
 name = "cozo_py_module"
 crate-type = ["cdylib"]
 
+[features]
+jemalloc = ["cozo/jemalloc"]
+io-uring = ["cozo/io-uring"]
+
 [dependencies]
-pyo3 = { version = "0.17.1", features = ["extension-module"] }
+pyo3 = { version = "0.17.1", features = ["extension-module", "abi3", "abi3-py37"] }
 cozo = { version = "0.1.1", path = ".." }
 miette = { version = "=5.3.0", features = ["fancy"] }
 serde_json = "1.0.81"
