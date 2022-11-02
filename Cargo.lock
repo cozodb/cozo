@@ -379,6 +379,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cozo_c"
+version = "0.1.1"
+dependencies = [
+ "cozo",
+ "lazy_static",
+ "miette",
+ "serde_json",
+]
+
+[[package]]
 name = "cozorocks"
 version = "0.1.0"
 dependencies = [
