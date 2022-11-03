@@ -24,7 +24,7 @@ cp target/release/cozo_java.dll release/libcozo_java-${COZO_VERSION}-windows-x86
 Compress-Archive -Path release/cozoserver-${COZO_VERSION}-windows-x86_64.exe -DestinationPath release/cozoserver-${COZO_VERSION}-windows-x86_64.zip
 Compress-Archive -Path release/libcozo_c-${COZO_VERSION}-windows-x86_64.lib -DestinationPath release/libcozo_c-${COZO_VERSION}-windows-x86_64.lib.zip
 Compress-Archive -Path release/libcozo_c-${COZO_VERSION}-windows-x86_64.dll -DestinationPath release/libcozo_c-${COZO_VERSION}-windows-x86_64.dll.zip
-Compress-Archive -Path release/libcozo_c-${COZO_VERSION}-windows-x86_64.dll -DestinationPath release/libcozo_c-${COZO_VERSION}-windows-x86_64.dll.zip
+Compress-Archive -Path release/libcozo_java-${COZO_VERSION}-windows-x86_64.dll -DestinationPath release/libcozo_java-${COZO_VERSION}-windows-x86_64.dll.zip
 Remove-Item release/cozoserver-${COZO_VERSION}-windows-x86_64.exe
 Remove-Item release/libcozo_c-${COZO_VERSION}-windows-x86_64.lib
 Remove-Item release/libcozo_c-${COZO_VERSION}-windows-x86_64.dll
