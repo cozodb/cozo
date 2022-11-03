@@ -48,7 +48,7 @@ bool cozo_close_db(int32_t id);
  * `errored`:    will point to `false` if the query is successful,
  *               `true` if an error occurred.
  *
- * Returns a UTF-8-encoded C-string that must be freed with `cozo_free_str`.
+ * Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
  * If `*errored` is false, then the string contains the JSON return value of the query.
  * If `*errored` is true, then the string contains the error message.
  */

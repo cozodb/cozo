@@ -2,6 +2,11 @@
 name = "cozo_c"
 version = "0.1.1"
 edition = "2021"
+license = "AGPL-3.0-or-later"
+homepage = "https://github.com/cozodb/cozo"
+repository = "https://github.com/cozodb/cozo"
+documentation = "https://cozodb.github.io/current/manual"
+description = "C bindings for CozoDB"
 
 [lib]
 crate-type = ["cdylib", "staticlib"]

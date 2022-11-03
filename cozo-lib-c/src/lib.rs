@@ -76,7 +76,7 @@ pub unsafe extern "C" fn cozo_close_db(id: i32) -> bool {
 /// `errored`:    will point to `false` if the query is successful,
 ///               `true` if an error occurred.
 ///
-/// Returns a UTF-8-encoded C-string that must be freed with `cozo_free_str`.
+/// Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
 /// If `*errored` is false, then the string contains the JSON return value of the query.
 /// If `*errored` is true, then the string contains the error message.
 #[no_mangle]
@@ -136,6 +136,7 @@ pub unsafe extern "C" fn cozo_run_query(
     let result = db.run_script(script, &params_arg);
     match result {
         Ok(json) => {
+            *errored = false;
             let json_str = json.to_string();
             CString::new(json_str).unwrap().into_raw()
         }
