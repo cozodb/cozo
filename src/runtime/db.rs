@@ -7,13 +7,17 @@ use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{fs, thread};
 
 use either::{Left, Right};
 use itertools::Itertools;
-use miette::{bail, ensure, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
-use serde_json::json;
+use lazy_static::lazy_static;
+use miette::{
+    bail, ensure, miette, Diagnostic, GraphicalReportHandler, IntoDiagnostic, JSONReportHandler,
+    Result, WrapErr,
+};
+use serde_json::{json, Map};
 use smartstring::SmartString;
 use thiserror::Error;
 
@@ -78,6 +82,11 @@ impl Debug for Db {
 #[error("Initialization of database failed")]
 #[diagnostic(code(db::init))]
 struct BadDbInit(#[help] String);
+
+lazy_static! {
+    static ref TEXT_ERR_HANDLER: GraphicalReportHandler = miette::GraphicalReportHandler::new();
+    static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
+}
 
 impl Db {
     /// Creates a database object.
@@ -175,24 +184,65 @@ impl Db {
         Ok(ret)
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
-    pub fn run_script(
-        &self,
-        payload: &str,
-        params: &BTreeMap<String, JsonValue>,
-    ) -> Result<JsonValue> {
-        self.do_run_script(payload, params).map_err(|err| {
-            if err.source_code().is_some() {
-                err
-            } else {
-                err.with_source_code(payload.to_string())
+    pub fn run_script(&self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
+        let start = Instant::now();
+        match self.do_run_script(payload, params) {
+            Ok(mut json) => {
+                let took = start.elapsed().as_secs_f64();
+                let map = json.as_object_mut().unwrap();
+                map.insert("ok".to_string(), json!(true));
+                map.insert("took".to_string(), json!(took));
+                Ok(json)
             }
-        })
+            err => err,
+        }
     }
-    fn do_run_script(
-        &self,
-        payload: &str,
-        params: &BTreeMap<String, JsonValue>,
-    ) -> Result<JsonValue> {
+    /// Run the CozoScript passed in. The `params` argument is a map of parameters.
+    /// Fold any error into the return JSON itself.
+    pub fn run_script_fold_err(&self, payload: &str, params: &Map<String, JsonValue>) -> JsonValue {
+        match self.run_script(payload, params) {
+            Ok(json) => json,
+            Err(mut err) => {
+                if err.source_code().is_none() {
+                    err = err.with_source_code(payload.to_string());
+                }
+                let mut text_err = String::new();
+                let mut json_err = String::new();
+                TEXT_ERR_HANDLER
+                    .render_report(&mut text_err, err.as_ref())
+                    .expect("render text error failed");
+                JSON_ERR_HANDLER
+                    .render_report(&mut json_err, err.as_ref())
+                    .expect("render json error failed");
+                let mut json: serde_json::Value =
+                    serde_json::from_str(&json_err).expect("parse rendered json error failed");
+                let map = json.as_object_mut().unwrap();
+                map.insert("ok".to_string(), json!(false));
+                map.insert("display".to_string(), json!(text_err));
+                json
+            }
+        }
+    }
+    /// Run the CozoScript passed in. The `params` argument is a map of parameters formatted as JSON.
+    pub fn run_script_str(&self, payload: &str, params: &str) -> String {
+        let params_json = if params.is_empty() {
+            Map::default()
+        } else {
+            match serde_json::from_str::<serde_json::Value>(params) {
+                Ok(serde_json::Value::Object(map)) => map,
+                Ok(_) => {
+                    return json!({"ok": false, "message": "params argument is not valid JSON"})
+                        .to_string()
+                }
+                Err(_) => {
+                    return json!({"ok": false, "message": "params argument is not a JSON map"})
+                        .to_string()
+                }
+            }
+        };
+        self.run_script_fold_err(payload, &params_json).to_string()
+    }
+    fn do_run_script(&self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
         let param_pool = params
             .iter()
             .map(|(k, v)| (k.clone(), DataValue::from(v)))

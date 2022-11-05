@@ -2,20 +2,17 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
  */
 
-use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fs;
 use std::net::Ipv6Addr;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::Instant;
 
 use clap::Parser;
 use env_logger::Env;
 use log::{error, info};
 use rand::Rng;
 use rouille::{router, try_or_400, Request, Response};
-use serde_json::json;
 
 use cozo::Db;
 
@@ -96,24 +93,30 @@ fn main() {
                     #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
                     struct QueryPayload {
                         script: String,
-                        params: BTreeMap<String, serde_json::Value>,
+                        params: serde_json::Map<String, serde_json::Value>,
                     }
 
                     let payload: QueryPayload = try_or_400!(rouille::input::json_input(request));
-                    let start = Instant::now();
-
-                    match db.run_script(&payload.script, &payload.params) {
-                        Ok(mut result) => {
-                            if let Some(obj) = result.as_object_mut() {
-                                obj.insert(
-                                    "time_taken".to_string(),
-                                    json!(start.elapsed().as_millis() as u64),
-                                );
-                            }
-                            Response::json(&result)
-                        }
-                        Err(e) => Response::text(format!("{:?}", e)).with_status_code(400),
+                    let result = db.run_script_fold_err(&payload.script, &payload.params);
+                    let response = Response::json(&result);
+                    if let Some(serde_json::Value::Bool(true)) = result.get("ok") {
+                        response
+                    } else {
+                        response.with_status_code(400)
                     }
+                    // {
+                    //
+                    //     Ok(mut result) => {
+                    //         if let Some(obj) = result.as_object_mut() {
+                    //             obj.insert(
+                    //                 "time_taken".to_string(),
+                    //                 json!(start.elapsed().as_millis() as u64),
+                    //             );
+                    //         }
+                    //         Response::json(&result)
+                    //     }
+                    //     _ => Response::json(&result).with_status_code(400)
+                    // }
                 },
                 (GET) (/) => {
                     Response::html(HTML_CONTENT)
@@ -163,7 +166,7 @@ const HTML_CONTENT: &str = r##"
                 }))
             }
         } else {
-            console.error(await resp.text())
+            console.error((await resp.json()).display)
         }
     }
     console.log(

@@ -77,20 +77,19 @@ pub unsafe extern "C" fn cozo_close_db(id: i32) -> bool {
 ///               `true` if an error occurred.
 ///
 /// Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
-/// If `*errored` is false, then the string contains the JSON return value of the query.
-/// If `*errored` is true, then the string contains the error message.
+/// The string contains the JSON return value of the query.
 #[no_mangle]
 pub unsafe extern "C" fn cozo_run_query(
     db_id: i32,
     script_raw: *const c_char,
     params_raw: *const c_char,
-    errored: &mut bool,
 ) -> *mut c_char {
     let script = match CStr::from_ptr(script_raw).to_str() {
         Ok(p) => p,
-        Err(err) => {
-            *errored = true;
-            return CString::new(format!("{}", err)).unwrap().into_raw();
+        Err(_) => {
+            return CString::new(r##"{"ok":false,"message":"script is not UTF-8 encoded"}"##)
+                .unwrap()
+                .into_raw();
         }
     };
     let db = {
@@ -100,52 +99,26 @@ pub unsafe extern "C" fn cozo_run_query(
         };
         match db_ref {
             None => {
-                *errored = true;
-                return CString::new("database already closed").unwrap().into_raw();
+                return CString::new(r##"{"ok":false,"message":"database closed"}"##)
+                    .unwrap()
+                    .into_raw();
             }
             Some(db) => db,
         }
     };
     let params_str = match CStr::from_ptr(params_raw).to_str() {
         Ok(p) => p,
-        Err(err) => {
-            *errored = true;
-            return CString::new(format!("{}", err)).unwrap().into_raw();
-        }
-    };
-
-    let params_map: serde_json::Value = match serde_json::from_str(&params_str) {
-        Ok(m) => m,
         Err(_) => {
-            *errored = true;
-            return CString::new("the given params argument is not valid JSON")
-                .unwrap()
-                .into_raw();
+            return CString::new(
+                r##"{"ok":false,"message":"params argument is not UTF-8 encoded"}"##,
+            )
+            .unwrap()
+            .into_raw();
         }
     };
 
-    let params_arg: BTreeMap<_, _> = match params_map {
-        serde_json::Value::Object(m) => m.into_iter().collect(),
-        _ => {
-            *errored = true;
-            return CString::new("the given params argument is not a JSON map")
-                .unwrap()
-                .into_raw();
-        }
-    };
-    let result = db.run_script(script, &params_arg);
-    match result {
-        Ok(json) => {
-            *errored = false;
-            let json_str = json.to_string();
-            CString::new(json_str).unwrap().into_raw()
-        }
-        Err(err) => {
-            let err_str = format!("{:?}", err);
-            *errored = true;
-            CString::new(err_str).unwrap().into_raw()
-        }
-    }
+    let result = db.run_script_str(script, &params_str);
+    CString::new(result).unwrap().into_raw()
 }
 
 /// Free any C-string returned from the Cozo C API.

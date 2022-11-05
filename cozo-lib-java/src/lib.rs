@@ -22,7 +22,6 @@ lazy_static! {
 
 #[bridge]
 mod jni {
-    use std::collections::BTreeMap;
     use std::sync::atomic::Ordering;
 
     use robusta_jni::convert::{IntoJavaValue, Signature, TryFromJavaValue, TryIntoJavaValue};
@@ -73,22 +72,7 @@ mod jni {
                 let db = db_ref.ok_or_else(|| JniError::from("database already closed"))?;
                 db
             };
-            let params_map: serde_json::Value = serde_json::from_str(&params_str)
-                .map_err(|_| JniError::from("the given params argument is not valid JSON"))?;
-
-            let params_arg: BTreeMap<_, _> = match params_map {
-                serde_json::Value::Object(m) => m.into_iter().collect(),
-                _ => {
-                    return Err(JniError::from(
-                        "the given params argument is not a JSON map",
-                    ))
-                }
-            };
-            let result = db.run_script(&script, &params_arg);
-            match result {
-                Ok(json) => Ok(json.to_string()),
-                Err(err) => Err(JniError::from(format!("{:?}", err))),
-            }
+            Ok(db.run_script_str(&script, &params_str))
         }
     }
 }
