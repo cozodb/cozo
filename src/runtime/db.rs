@@ -14,8 +14,8 @@ use either::{Left, Right};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use miette::{
-    bail, ensure, miette, Diagnostic, GraphicalReportHandler, IntoDiagnostic, JSONReportHandler,
-    Result, WrapErr,
+    bail, ensure, miette, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
+    JSONReportHandler, Result, WrapErr,
 };
 use serde_json::{json, Map};
 use smartstring::SmartString;
@@ -84,7 +84,8 @@ impl Debug for Db {
 struct BadDbInit(#[help] String);
 
 lazy_static! {
-    static ref TEXT_ERR_HANDLER: GraphicalReportHandler = miette::GraphicalReportHandler::new();
+    static ref TEXT_ERR_HANDLER: GraphicalReportHandler =
+        miette::GraphicalReportHandler::new().with_theme(GraphicalTheme::unicode());
     static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
 }
 
