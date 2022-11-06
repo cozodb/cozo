@@ -296,7 +296,7 @@ you will be greeted with a very simple JS client:
 
 Now you know how to run queries in your chosen language, you can start learning CozoScript:
 
-* Start with the [Tutorial](https://nbviewer.org/github/cozodb/cozo/blob/main/docs/tutorial/tutorial.ipynb) to learn the
+* Start with the [Tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb) to learn the
   basics;
 * Continue with the [Manual](https://cozodb.github.io/current/manual/) for the fine points.
 
@@ -340,7 +340,7 @@ in specific situations:
       performance problems easier.
 * Your data may be simple, even a single table, but it is inherently a graph.
     * We have seen an example in
-      the [Tutorial](https://nbviewer.org/github/cozodb/cozo/blob/main/docs/tutorial/tutorial.ipynb):
+      the [Tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb):
       the air route dataset, where the key relation contains the routes connecting airports.
     * In traditional databases, when you are given a new relation,
       you try to understand it by running aggregations on it to collect statistics:
