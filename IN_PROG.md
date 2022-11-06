@@ -31,55 +31,125 @@ Find airports reachable by one stop from Frankfurt Airport (code `FRA`):
 TODO replace with images
 
 ```js
-?[dst] := *route{src: 'FRA', dst: stop}, 
-          *route{src: stop, dst}
+? [dst] : =
+*
+route
+{
+    src: 'FRA', dst
+:
+    stop
+}
+,
+*
+route
+{
+    src: stop, dst
+}
 ```
 
 Find airports reachable from Frankfurt with any number of stops
 with code starting with the letter `A`:
 
 ```js
-reachable[dst] := *route{src: 'FRA', dst}
-reachable[dst] := reachable[src], *route{src, dst}
-?[airport] := reachable[airport], starts_with(airport, 'A')
+reachable[dst]
+:
+=
+*
+route
+{
+    src: 'FRA', dst
+}
+reachable[dst]
+:
+= reachable[src],
+*
+route
+{
+    src, dst
+}
+    ? [airport] : = reachable[airport], starts_with(airport, 'A')
 ```
 
 Compute the shortest path between Frankfurt and all airports in the world:
 
 ```js
-shortest_paths[dst, shortest(path)] := *route{src: 'FRA', dst},
-                                       path = ['FRA', dst]
-shortest_paths[dst, shortest(path)] := shortest_paths[stop, prev_path], 
-                                       *route{src: stop, dst},
-                                       path = append(prev_path, dst)
-?[dst, path] := shortest_paths[dst, path]
+shortest_paths[dst, shortest(path)]
+:
+=
+*
+route
+{
+    src: 'FRA', dst
+}
+,
+path = ['FRA', dst]
+shortest_paths[dst, shortest(path)]
+:
+= shortest_paths[stop, prev_path],
+*
+route
+{
+    src: stop, dst
+}
+,
+path = append(prev_path, dst)
+    ? [dst, path] : = shortest_paths[dst, path]
 ```
 
 Compute the shortest path again, but with built-in algorithm:
 
 ```js
-starting[airport] := airport = 'FRA'
-?[src, dst, cost, path] <~ ShortestPathDijkstra(*route[], starting[])
+starting[airport]
+:
+= airport = 'FRA'
+    ? [src, dst, cost, path] < ~ShortestPathDijkstra( * route[], starting[]
+)
 ```
 
 Nice error messages when things go wrong:
 
 xxx
 
+## Install
+
+As Cozo is used as an embedded database,
+there are lots of options for installing it.
+We aim to provide binary distributions for the most popular systems.
+If a binary distribution is not available for you, you need to compile
+from source.
+
+The following table lists the supported systems and how to install.
+
+| Host                                                            | OS  | Install command                                                                                                                                                                                | Details                                                              |
+|-----------------------------------------------------------------|-----|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|
+| Python 3.7+                                                     | B*  | `pip install "pycozo[embedded,pandas]"`,<br/>or `pip install "pycozo[embedded]"` if you do not want Pandas support                                                                             | [pycozo](https://github.com/cozodb/pycozo)                           |
+| NodeJS 10+                                                      | B*  | `npm install --save cozo-node`                                                                                                                                                                 | [cozo-node](https://github.com/cozodb/cozo-lib-nodejs)               |
+| Clojure (with JDK 11+)                                          | B*  | Use the maven package `com.github.zh217:cozo-clj` (hosted in Clojars) in your package manager, [like this](https://clojars.org/com.github.zh217/cozo-clj)                                      | [cozo-clj](https://github.com/cozodb/cozo-clj)                       |
+| Java 11+                                                        | B*  | Use the maven package `com.github.zh217:cozo-lib-java` (hosted in Clojars) in your package manager, [like this](https://clojars.org/com.github.zh217/cozo-lib-java)                            | [cozo-lib-java](https://github.com/cozodb/cozo-lib-java)             |
+| Rust (compiler needs to support the 2021 edition)               | Any | Add `cozo = 0.1.4` to your Cargo.toml under `[dependencies]`                                                                                                                                   | [docs.rs](https://docs.rs/cozo)                                      |
+| C/C++ or language with C FFI (Go, Ruby, R, Swift, Haskell, ...) | A*  | Use the [header file](https://github.com/cozodb/cozo/blob/main/cozo-lib-c/cozo_c.h), and download the static/dynamic library from the [release page](https://github.com/cozodb/cozo/releases/) | [cozo-lib-c](https://github.com/cozodb/cozo/tree/main/cozo-lib-c)    |
+| Standalone (client/server with HTTP)                            | A*  | Download the executable (named `cozoserver-*`) for your system from the [release page](https://github.com/cozodb/cozo/releases/)                                                               | [cozoserver](https://github.com/cozodb/cozo/blob/main/standalone.md) |
+
+for the OS column:
+
+* **B** includes:
+    * Recent versions of Linux running on x86_64
+    * Recent versions of Mac running on x86_64 and Apple ARM
+    * Recent versions of Windows on x86_64
+* **A** includes all supported systems in **B**, and:
+    * Recent versions of Linux running on aarch64
+
+For embedded use, a single database directory can only be used by one process at any moment.
+The database can be used from multiple threads within the single process and everything is thread-safe.
+If you need multi-process access to a single database, use the standalone client/server option.
+
+Ease of installation is a priority for Cozo.
+If you feel that something should be done to improve the current user experience,
+please raise it [here](https://github.com/cozodb/cozo/discussions).
+
 ## Getting started
 
-First we need to get Cozo installed on the local machine. As Cozo is embeddable,
-there are lots of options for how we run Cozo. Follow one of the following guides that suits you best:
-
-* Embedded in Python with JupyterLab (best interactive experience, recommended if you are comfortable with the Python
-  ecosystem)
-* Embedded in Python
-* Embedded in NodeJS (Javascript)
-* Embedded in Java (or any JVM language)
-* Embedded in Rust
-* Client/server with HTTP API
-* Embedded in C/C++, or any language that has a C FFI 
-  (Golang, R, Haskell, CommonLisp, Julia, Fortran, C#, Swift, ...)
+## Learning CozoScript
 
 After you have it installed, you can start learning CozoScript:
 
@@ -212,5 +282,5 @@ We manually wrote the C++/Rust bindings for RocksDB with [cxx](https://cxx.rs/).
 
 ## Licensing
 
-The contents of this project are licensed under AGPL-3.0 or later, except 
+The contents of this project are licensed under AGPL-3.0 or later, except
 files under `cozorocks/`, which are licensed under MIT, or Apache-2.0, or BSD-3-Clause.
