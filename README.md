@@ -1,4 +1,4 @@
-<img src="logo_c.png" width="200" height="175">
+<img src="static/logo_c.png" width="200" height="175" alt="Logo">
 
 [![GitHub Workflow Status](https://img.shields.io/github/workflow/status/cozodb/cozo/Build)](https://github.com/cozodb/cozo/actions/workflows/build.yml)
 [![Crates.io](https://img.shields.io/crates/v/cozo)](https://crates.io/crates/cozo)
@@ -31,29 +31,29 @@ and `FRA` is the code for Frankfurt Airport.
 
 How many airports are directly connected to `FRA`?
 
-<img src="1_direct_reachable.png" width="664" height="95">
+<img src="static/1_direct_reachable.png" width="664" height="95" alt="directly connected">
 
 How many airports are reachable from `FRA` by one stop?
 
-<img src="2_one_hop_reachable.png" width="662" height="117">
+<img src="static/2_one_hop_reachable.png" width="662" height="117" alt="one stop">
 
 How many airports are reachable from `FRA` by any number of stops?
 
-<img src="3_all_rechable.png" width="664" height="132">
+<img src="static/3_all_rechable.png" width="664" height="132" alt="recursion">
 
 What are the two most difficult to reach airports
-by the mininum number of hops required,
+by the minimum number of hops required,
 starting from `FRA`?
 
-<img src="4_most_hops.png" width="662" height="268">
+<img src="static/4_most_hops.png" width="662" height="268" alt="shortest routes">
 
 What is the shortest path between `FRA` and `YPO`, by actual distance travelled?
 
-<img src="5_algo.png" width="665" height="141">
+<img src="static/5_algo.png" width="665" height="141" alt="algorithm">
 
 Cozo attempts to provide nice error messages when you make mistakes:
 
-<img src="6_err_msg.png" width="660" height="261">
+<img src="static/6_err_msg.png" width="660" height="261" alt="error message">
 
 ## Install
 
@@ -290,7 +290,7 @@ and the body
 In fact, if you use your browser to navigate to `http://127.0.0.1:9070` and open your developer tools,
 you will be greeted with a very simple JS client:
 
-<img src="7_js_client.png" width="528" height="544">
+<img src="static/7_js_client.png" width="528" height="544" alt="JS console">
 
 ## Learning CozoScript
 
