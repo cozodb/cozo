@@ -28,4 +28,4 @@ Compress-Archive -Path release/libcozo_java-${COZO_VERSION}-windows-x86_64.dll -
 Remove-Item release/cozoserver-${COZO_VERSION}-windows-x86_64.exe
 Remove-Item release/libcozo_c-${COZO_VERSION}-windows-x86_64.lib
 Remove-Item release/libcozo_c-${COZO_VERSION}-windows-x86_64.dll
-Remove-Item release/libcozo_java-${COZO_VERSION}-windows-x86_64.dll
+gzip release/libcozo_java-${COZO_VERSION}-windows-x86_64.dll
