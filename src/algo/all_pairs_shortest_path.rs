@@ -1,5 +1,5 @@
 /*
- * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
+ * Copyright 2022, The Cozo Project Authors. Licensed under MPL-2.0.
  */
 
 use std::cmp::Reverse;

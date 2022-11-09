@@ -2,7 +2,7 @@
 name = "cozo_java"
 version = "0.1.3"
 edition = "2021"
-license = "AGPL-3.0-or-later"
+license = "MPL-2.0"
 homepage = "https://github.com/cozodb/cozo"
 repository = "https://github.com/cozodb/cozo"
 documentation = "https://cozodb.github.io/current/manual"

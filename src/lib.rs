@@ -1,5 +1,5 @@
 /*
- * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
+ * Copyright 2022, The Cozo Project Authors. Licensed under MPL-2.0.
  */
 
 //! This crate provides the core functionalities of [CozoDB](https://github.com/cozodb/cozo).
