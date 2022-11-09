@@ -183,8 +183,12 @@ pub(crate) fn op_min(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_SUB, 2, false);
 pub(crate) fn op_sub(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Int(b))) => DataValue::Num(Num::Int(*a - *b)),
-        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => DataValue::Num(Num::Float(*a - *b)),
+        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Int(b))) => {
+            DataValue::Num(Num::Int(*a - *b))
+        }
+        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => {
+            DataValue::Num(Num::Float(*a - *b))
+        }
         (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Float(b))) => {
             DataValue::Num(Num::Float((*a as f64) - b))
         }
@@ -219,7 +223,9 @@ pub(crate) fn op_div(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Int(b))) => {
             DataValue::Num(Num::Float((*a as f64) / (*b as f64)))
         }
-        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => DataValue::Num(Num::Float(*a / *b)),
+        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => {
+            DataValue::Num(Num::Float(*a / *b))
+        }
         (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Float(b))) => {
             DataValue::Num(Num::Float((*a as f64) / b))
         }
@@ -498,8 +504,12 @@ pub(crate) fn op_pow(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_MOD, 2, false);
 pub(crate) fn op_mod(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Int(b))) => DataValue::Num(Num::Int(a.rem(b))),
-        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => DataValue::Num(Num::Float(a.rem(*b))),
+        (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Int(b))) => {
+            DataValue::Num(Num::Int(a.rem(b)))
+        }
+        (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => {
+            DataValue::Num(Num::Float(a.rem(*b)))
+        }
         (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Float(b))) => {
             DataValue::Num(Num::Float((*a as f64).rem(b)))
         }
@@ -1232,6 +1242,23 @@ pub(crate) fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
         }
         _ => bail!("'decode_base64' requires strings"),
     }
+}
+
+define_op!(OP_TO_BOOL, 1, false);
+pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Bool(match &args[0] {
+        DataValue::Null => false,
+        DataValue::Bool(b) => *b,
+        DataValue::Num(n) => n.get_int() != Some(0),
+        DataValue::Str(s) => !s.is_empty(),
+        DataValue::Bytes(b) => !b.is_empty(),
+        DataValue::Uuid(u) => !u.0.is_nil(),
+        DataValue::Regex(r) => !r.0.as_str().is_empty(),
+        DataValue::List(l) => !l.is_empty(),
+        DataValue::Set(s) => !s.is_empty(),
+        DataValue::Guard => false,
+        DataValue::Bot => false,
+    }))
 }
 
 define_op!(OP_TO_FLOAT, 1, false);

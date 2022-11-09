@@ -112,6 +112,7 @@ pub(crate) fn parse_nullable_type(pair: Pair<'_>) -> Result<NullableColType> {
 fn parse_type_inner(pair: Pair<'_>) -> Result<ColType> {
     Ok(match pair.as_rule() {
         Rule::any_type => ColType::Any,
+        Rule::bool_type => ColType::Bool,
         Rule::int_type => ColType::Int,
         Rule::float_type => ColType::Float,
         Rule::string_type => ColType::String,

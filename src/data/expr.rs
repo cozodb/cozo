@@ -695,6 +695,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "intersection" => &OP_INTERSECTION,
         "difference" => &OP_DIFFERENCE,
         "to_uuid" => &OP_TO_UUID,
+        "to_bool" => &OP_TO_BOOL,
         "rand_uuid_v1" => &OP_RAND_UUID_V1,
         "rand_uuid_v4" => &OP_RAND_UUID_V4,
         "uuid_timestamp" => &OP_UUID_TIMESTAMP,

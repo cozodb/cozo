@@ -22,6 +22,7 @@ impl Display for NullableColType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.coltype {
             ColType::Any => f.write_str("Any")?,
+            ColType::Bool => f.write_str("Bool")?,
             ColType::Int => f.write_str("Int")?,
             ColType::Float => f.write_str("Float")?,
             ColType::String => f.write_str("String")?,
@@ -57,6 +58,7 @@ impl Display for NullableColType {
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) enum ColType {
     Any,
+    Bool,
     Int,
     Float,
     String,
@@ -160,6 +162,7 @@ impl NullableColType {
 
         Ok(match &self.coltype {
             ColType::Any => data,
+            ColType::Bool => DataValue::Bool(data.get_bool().ok_or_else(make_err)?),
             ColType::Int => DataValue::from(data.get_int().ok_or_else(make_err)?),
             ColType::Float => DataValue::from(data.get_float().ok_or_else(make_err)?),
             ColType::String => {
