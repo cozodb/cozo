@@ -160,6 +160,18 @@ fn dfs() {
 }
 
 #[test]
+fn empty() {
+    check_db();
+    let res = TEST_DB.run_script(
+        r#"
+        ?[id, name] <- [[]]
+    "#,
+        &Default::default(),
+    );
+    assert!(res.is_err());
+}
+
+#[test]
 fn bfs() {
     check_db();
     let bfs = Instant::now();
