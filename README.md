@@ -23,10 +23,16 @@ that uses Datalog for query, is embeddable, and focuses on graph data and algori
     * [Jupyter](https://jupyter.org/) notebooks integration, plays well with the DataScience ecosystem
 * Modern, clean, flexible syntax, informative error messages
 
+## Documentations
+
+* [Installation and first queries](https://github.com/cozodb/cozo#install)
+* [Tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
+* [Manual for CozoScript](https://cozodb.github.io/current/manual/)
+
 ## Teasers
 
 Here `*route` is a relation with two columns `fr` and `to`,
-representing a route between those airports, 
+representing a route between those airports,
 and `FRA` is the code for Frankfurt Airport.
 
 How many airports are directly connected to `FRA`?
@@ -61,15 +67,15 @@ As Cozo is an embedded database,
 there are lots of options for installing it.
 We aim to provide packaged distributions (binary when applicable) for the most common language/OS/arch combinations:
 
-| Host language                                                                                                                                                            | OS  | Installation TL;DR                                                                                                                                                                                                                                                               | Details                                                              |
-|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|
-| Python 3.7+                                                                                                                                                              | B*  | `pip install "pycozo[embedded,pandas]"`,<br/>or `pip install "pycozo[embedded]"` if you don't want [Pandas dataframe](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html) support                                                                                | [pycozo](https://github.com/cozodb/pycozo)                           |
-| NodeJS 10+                                                                                                                                                               | B*  | `npm install --save cozo-node`                                                                                                                                                                                                                                                   | [cozo-node](https://github.com/cozodb/cozo-lib-nodejs)               |
-| Clojure (with JDK 11+)                                                                                                                                                   | B*  | Use `com.github.zh217:cozo-clj` (maven repo: https://clojars.org/repo) in your package manager, [like this](https://clojars.org/com.github.zh217/cozo-clj)                                                                                                                       | [cozo-clj](https://github.com/cozodb/cozo-clj)                       |
-| Java 11+                                                                                                                                                                 | B*  | Use `com.github.zh217:cozo-lib-java` (maven repo: https://clojars.org/repo) in your package manager, [like this](https://clojars.org/com.github.zh217/cozo-lib-java)                                                                                                             | [cozo-lib-java](https://github.com/cozodb/cozo-lib-java)             |
-| Rust                                                                                                                                                                     | Any | Add `cozo = 0.1.4` to your Cargo.toml under `[dependencies]`                                                                                                                                                                                                                     | [docs.rs](https://docs.rs/cozo)                                      |
-| C/C++ or language with C FFI ([Go](https://pkg.go.dev/cmd/cgo), [Ruby](https://github.com/ffi/ffi), [Haskell](https://wiki.haskell.org/Foreign_Function_Interface), ...) | A*  | Use the [C header file](https://github.com/cozodb/cozo/blob/main/cozo-lib-c/cozo_c.h), and download the static/dynamic library `libcozo_c-*` from the [release page](https://github.com/cozodb/cozo/releases/)                                                                   | [cozo-lib-c](https://github.com/cozodb/cozo/tree/main/cozo-lib-c)    |
-| Standalone (HTTP server)                                                                                                                                                 | A*  | Download `cozoserver-*` for your system from the [release page](https://github.com/cozodb/cozo/releases/), uncompress, and run in a terminal                                                                                                                                     | [cozoserver](https://github.com/cozodb/cozo/blob/main/standalone.md) |
+| Host language                                                                                                                                                            | OS  | Installation TL;DR                                                                                                                                                                                             | Details                                                              |
+|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|
+| Python 3.7+                                                                                                                                                              | B*  | `pip install "pycozo[embedded,pandas]"`,<br/>or `pip install "pycozo[embedded]"` if you don't want [Pandas dataframe](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html) support              | [pycozo](https://github.com/cozodb/pycozo)                           |
+| NodeJS 10+                                                                                                                                                               | B*  | `npm install --save cozo-node`                                                                                                                                                                                 | [cozo-node](https://github.com/cozodb/cozo-lib-nodejs)               |
+| Clojure (with JDK 11+)                                                                                                                                                   | B*  | Use `com.github.zh217:cozo-clj` (maven repo: https://clojars.org/repo) in your package manager, [like this](https://clojars.org/com.github.zh217/cozo-clj)                                                     | [cozo-clj](https://github.com/cozodb/cozo-clj)                       |
+| Java 11+                                                                                                                                                                 | B*  | Use `com.github.zh217:cozo-lib-java` (maven repo: https://clojars.org/repo) in your package manager, [like this](https://clojars.org/com.github.zh217/cozo-lib-java)                                           | [cozo-lib-java](https://github.com/cozodb/cozo-lib-java)             |
+| Rust                                                                                                                                                                     | Any | Add `cozo = <VERSION>` to your Cargo.toml under `[dependencies]`                                                                                                                                               | [docs.rs](https://docs.rs/cozo)                                      |
+| C/C++ or language with C FFI ([Go](https://pkg.go.dev/cmd/cgo), [Ruby](https://github.com/ffi/ffi), [Haskell](https://wiki.haskell.org/Foreign_Function_Interface), ...) | A*  | Use the [C header file](https://github.com/cozodb/cozo/blob/main/cozo-lib-c/cozo_c.h), and download the static/dynamic library `libcozo_c-*` from the [release page](https://github.com/cozodb/cozo/releases/) | [cozo-lib-c](https://github.com/cozodb/cozo/tree/main/cozo-lib-c)    |
+| Standalone (HTTP server)                                                                                                                                                 | A*  | Download `cozoserver-*` for your system from the [release page](https://github.com/cozodb/cozo/releases/), uncompress, and run in a terminal                                                                   | [cozoserver](https://github.com/cozodb/cozo/blob/main/standalone.md) |
 
 for the OS column:
 
@@ -93,7 +99,7 @@ please raise it [here](https://github.com/cozodb/cozo/discussions).
 
 ## Getting started
 
-In this section we will learn to run three queries to illustrate how to use Cozo in each of the 
+In this section we will learn to run three queries to illustrate how to use Cozo in each of the
 supported language. We will run the queries against a local database with the relative path `_test_db`.
 
 For all languages, the first query is a standard hello world:
@@ -121,13 +127,16 @@ You should already have JupyterLab installed, and have installed Cozo by `pip in
 Start your jupyter lab server, open the web UI, and start a Python 3 kernel.
 
 In a cell, run
+
 ```
 %load_ext pycozo.ipyext_direct
 %cozo_path _test_db
 ```
+
 this opens a local database with relative path `_test_db`.
 
 To set the parameter for the second query, run
+
 ```
 %cozo_set name 'Jupyter'
 ```
@@ -145,12 +154,13 @@ from pycozo import Client
 
 db = Client(path='_test_db', dataframe=False)
 
+
 def print_query(script, params=None):
     try:
         print(db.run(script, params))
     except Exception as e:
         print(repr(e))
-        
+
 
 print_query("?[] <- [['hello', 'world!']]")
 print_query("?[] <- [['hello', 'world', $name]]", {"name": "Python"})
@@ -178,11 +188,11 @@ printQuery("?[] <- [['hello', 'world', $name]]", {"name": "JavaScript"})
 printQuery("?[a] <- [[1, 2]]")
 ```
 
-
 ### Clojure
 
 You should already have the package `com.github.zh217/cozo-clj` installed.
 The following runs the three queries in turn (can be used in a repl):
+
 ```clojure
 (use 'cozo-clj.core)
 (in-ns 'cozo-clj.core)
@@ -198,21 +208,24 @@ Use `query` instead of `iquery` if you are not using REPL.
 
 ### Java
 
-You should already have the package `com.github.zh217:cozo-lib-java` in the maven repo `https://clojars.org/repo` installed.
+You should already have the package `com.github.zh217:cozo-lib-java` in the maven repo `https://clojars.org/repo`
+installed.
 The following runs the three queries in turn:
+
 ```java
 CozoDb db = new CozoDb("_test_db");
 System.out.println(db.query("?[] <- [['hello', 'world!']]", ""));
 System.out.println(db.query("?[] <- [['hello', 'world', $name]]", "{\"name\":\"Java\"}"));
 System.out.println(db.query("?[a] <- [[1, 2]]", ""));
 ```
+
 As Java does not have a standard JSON library, everything above uses strings.
 In particular, you need to use your preferred JSON library to manipulate
 the return values, or have the nice error message extracted, etc.
 
 ### Rust
 
-You should already have `cozo = 0.1.4` in your `Cargo.toml`.
+You should already have `cozo = <VERSION>` in your `Cargo.toml`.
 
 ```rust
 use cozo::Db;
@@ -225,6 +238,7 @@ fn main() -> Result<()> {
     println!("{}", db.run_script_str(r#"db.query("?[a] <- [[1, 2]]"#, "")?);
 }
 ```
+
 This uses string for everything. Alternatively, you can use `db.run_script` instead and deal with `serde_json::Value`.
 Refer to the [docs](http://docs.rs/cozo).
 
@@ -284,7 +298,12 @@ with the header `content-type: application/json`
 and the body
 
 ```json
-{"script": "?[] <- [['hello', 'world', $name]]", "params": {"name": "HTTP"}}
+{
+  "script": "?[] <- [['hello', 'world', $name]]",
+  "params": {
+    "name": "HTTP"
+  }
+}
 ```
 
 In fact, if you use your browser to navigate to `http://127.0.0.1:9070` and open your developer tools,
