@@ -1341,5 +1341,44 @@ fn test_now() {
 
 #[test]
 fn test_to_bool() {
-    todo!()
+    assert_eq!(
+        op_to_bool(&[DataValue::Null]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_to_bool(&[DataValue::Bool(true)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_to_bool(&[DataValue::Bool(false)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_to_bool(&[DataValue::from(0)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_to_bool(&[DataValue::from(0.0)]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_to_bool(&[DataValue::from(1)]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_to_bool(&[DataValue::Str(SmartString::from(""))]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_to_bool(&[DataValue::Str(SmartString::from("a"))]).unwrap(),
+        DataValue::Bool(true)
+    );
+    assert_eq!(
+        op_to_bool(&[DataValue::List(vec![])]).unwrap(),
+        DataValue::Bool(false)
+    );
+    assert_eq!(
+        op_to_bool(&[DataValue::List(vec![DataValue::from(0)])]).unwrap(),
+        DataValue::Bool(true)
+    );
 }
