@@ -198,8 +198,9 @@ pub(crate) fn parse_query(
                 algo_impl.process_options(&mut options, span)?;
                 let arity = algo_impl.arity(&options, &head, span)?;
 
+                ensure!(arity != 0, EmptyRowForConstRule(span));
                 ensure!(
-                    arity == 0 || head.is_empty() || arity == head.len(),
+                    head.is_empty() || arity == head.len(),
                     FixedRuleHeadArityMismatch(arity, head.len(), span)
                 );
                 progs.insert(
@@ -763,6 +764,11 @@ fn parse_algo_rule(
 #[diagnostic(code(parser::fixed_rule_head_arity_mismatch))]
 #[diagnostic(help("Expected arity: {0}, number of arguments given: {1}"))]
 struct FixedRuleHeadArityMismatch(usize, usize, #[label] SourceSpan);
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("Encountered empty row for constant rule")]
+#[diagnostic(code(parser::const_rule_empty_row))]
+struct EmptyRowForConstRule(#[label] SourceSpan);
 
 fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
     let entry_symbol = Symbol::new(PROG_ENTRY, Default::default());
