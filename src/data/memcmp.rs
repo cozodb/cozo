@@ -54,7 +54,7 @@ pub(crate) trait MemCmpEncoder: Write {
                 self.write_u16::<BigEndian>(s_h).unwrap();
                 self.write_u16::<BigEndian>(s_m).unwrap();
                 self.write_u32::<BigEndian>(s_l).unwrap();
-                self.encode_bytes(s_rest)
+                self.write_all(s_rest.as_ref()).unwrap();
             }
             DataValue::Regex(rx) => {
                 self.write_u8(REGEX_TAG).unwrap();
@@ -279,9 +279,10 @@ impl<T: Write> MemCmpEncoder for T {}
 #[cfg(test)]
 mod tests {
     use smartstring::SmartString;
+    use uuid::Uuid;
 
     use crate::data::memcmp::{decode_bytes, MemCmpEncoder};
-    use crate::data::value::{DataValue, Num};
+    use crate::data::value::{DataValue, Num, UuidWrapper};
 
     #[test]
     fn encode_decode_num() {
@@ -318,6 +319,18 @@ mod tests {
         collected.sort();
         collected_copy.sort_by_key(|c| Num::decode_from_key(c).0);
         assert_eq!(collected, collected_copy);
+    }
+
+    #[test]
+    fn test_encode_decode_uuid() {
+        let uuid = DataValue::Uuid(UuidWrapper(
+            Uuid::parse_str("dd85b19a-5fde-11ed-a88e-1774a7698039").unwrap(),
+        ));
+        let mut encoder = vec![];
+        encoder.encode_datavalue(&uuid);
+        let (decoded, remaining) = DataValue::decode_from_key(&encoder);
+        assert_eq!(decoded, uuid);
+        assert!(remaining.is_empty());
     }
 
     #[test]
