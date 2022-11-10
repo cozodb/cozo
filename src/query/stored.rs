@@ -21,6 +21,7 @@ use crate::parse::parse_script;
 use crate::runtime::relation::{AccessLevel, InputRelationHandle, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
 use crate::Db;
+use crate::storage::StoreTx;
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("attempting to write into relation {0} of arity {1} with data of arity {2}")]

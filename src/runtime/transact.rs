@@ -7,8 +7,6 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use miette::Result;
 
-use cozorocks::Tx;
-
 use crate::data::program::MagicSymbol;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
@@ -16,9 +14,11 @@ use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::in_mem::{InMemRelation, StoredRelationId};
 use crate::runtime::relation::RelationId;
+use crate::storage::rocks::RocksDbTx;
+use crate::storage::StoreTx;
 
 pub struct SessionTx {
-    pub(crate) tx: Tx,
+    pub(crate) tx: RocksDbTx,
     pub(crate) relation_store_id: Arc<AtomicU64>,
     pub(crate) mem_store_id: Arc<AtomicU32>,
 }

@@ -25,6 +25,12 @@ impl Deref for PinSlice {
     }
 }
 
+impl AsRef<[u8]> for PinSlice {
+    fn as_ref(&self) -> &[u8] {
+        self as &[u8]
+    }
+}
+
 impl Debug for PinSlice {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let to_d: &[u8] = self;
@@ -176,6 +182,6 @@ impl Tx {
         IterBuilder {
             inner: self.inner.iterator(),
         }
-            .auto_prefix_mode(true)
+        .auto_prefix_mode(true)
     }
 }

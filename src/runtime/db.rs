@@ -21,7 +21,7 @@ use serde_json::{json, Map};
 use smartstring::SmartString;
 use thiserror::Error;
 
-use cozorocks::{DbBuilder, RocksDb};
+use cozorocks::DbBuilder;
 
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
@@ -36,6 +36,8 @@ use crate::query::relation::{
 };
 use crate::runtime::relation::{RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
+use crate::storage::rocks::RocksDbStorage;
+use crate::storage::{Storage, StoreTx};
 
 struct RunningQueryHandle {
     started_at: f64,
@@ -66,7 +68,7 @@ const CURRENT_STORAGE_VERSION: u64 = 1;
 /// The database object of Cozo.
 #[derive(Clone)]
 pub struct Db {
-    db: RocksDb,
+    db: RocksDbStorage,
     relation_store_id: Arc<AtomicU64>,
     queries_count: Arc<AtomicU64>,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
@@ -146,7 +148,7 @@ impl Db {
         let db = db_builder.build()?;
 
         let ret = Self {
-            db,
+            db: RocksDbStorage::new(db),
             relation_store_id: Arc::new(Default::default()),
             queries_count: Arc::new(Default::default()),
             running_queries: Arc::new(Mutex::new(Default::default())),
@@ -170,7 +172,7 @@ impl Db {
     }
     fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
-            tx: self.db.transact().set_snapshot(true).start(),
+            tx: self.db.transact()?,
             mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
         };
@@ -178,7 +180,7 @@ impl Db {
     }
     fn transact_write(&self) -> Result<SessionTx> {
         let ret = SessionTx {
-            tx: self.db.transact().set_snapshot(true).start(),
+            tx: self.db.transact()?,
             mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
         };
@@ -273,7 +275,7 @@ impl Db {
                     assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
                 }
                 for (lower, upper) in cleanups {
-                    self.db.range_del(&lower, &upper)?;
+                    self.db.del_range(&lower, &upper)?;
                 }
                 Ok(res)
             }
@@ -716,7 +718,7 @@ impl Db {
     }
     pub(crate) fn remove_relation(&self, name: &Symbol, tx: &mut SessionTx) -> Result<()> {
         let (lower, upper) = tx.destroy_relation(name)?;
-        self.db.range_del(&lower, &upper)?;
+        self.db.del_range(&lower, &upper)?;
         Ok(())
     }
     pub(crate) fn list_running(&self) -> Result<JsonValue> {
@@ -763,23 +765,14 @@ impl Db {
             LARGEST_UTF_CHAR,
         )))])
         .encode_as_key(RelationId::SYSTEM);
-        let mut it = self
-            .db
-            .transact()
-            .start()
-            .iterator()
-            .upper_bound(&upper)
-            .start();
-        it.seek(&lower);
+        let tx = self.db.transact()?;
         let mut collected = vec![];
-        while let Some((k_slice, v_slice)) = it.pair()? {
-            if upper.as_slice() <= k_slice {
+        for kv_res in tx.range_scan_raw(&lower, &upper) {
+            let (k_slice, v_slice) = kv_res?;
+            if upper <= k_slice {
                 break;
             }
-            // if compare_tuple_keys(&upper, k_slice) != Greater {
-            //     break;
-            // }
-            let meta = RelationHandle::decode(v_slice)?;
+            let meta = RelationHandle::decode(&v_slice)?;
             let n_keys = meta.metadata.keys.len();
             let n_dependents = meta.metadata.non_keys.len();
             let arity = n_keys + n_dependents;
@@ -795,7 +788,6 @@ impl Db {
                 meta.rm_triggers.len(),
                 meta.replace_triggers.len(),
             ]));
-            it.next();
         }
         Ok(json!({"rows": collected, "headers":
                 ["name", "arity", "access_level", "n_keys", "n_non_keys", "n_put_triggers", "n_rm_triggers", "n_replace_triggers"]}))

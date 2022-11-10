@@ -12,16 +12,14 @@ use serde::Serialize;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use cozorocks::DbIter;
-
 use crate::data::memcmp::MemCmpEncoder;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::Symbol;
-use crate::data::tuple::{ENCODED_KEY_MIN_LEN, Tuple};
+use crate::data::tuple::{Tuple, ENCODED_KEY_MIN_LEN};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
-use crate::utils::swap_option_result;
+use crate::storage::StoreTx;
 
 #[derive(
     Copy,
@@ -220,7 +218,7 @@ impl RelationHandle {
     pub(crate) fn scan_all(&self, tx: &SessionTx) -> impl Iterator<Item = Result<Tuple>> {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
-        RelationIterator::new(tx, &lower, &upper)
+        tx.tx.range_scan(&lower, &upper)
     }
 
     pub(crate) fn scan_prefix(
@@ -234,7 +232,9 @@ impl RelationHandle {
         upper.push(DataValue::Bot);
         let prefix_encoded = Tuple(lower).encode_as_key(self.id);
         let upper_encoded = Tuple(upper).encode_as_key(self.id);
-        RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
+        // RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
+        tx.tx
+            .range_scan(&prefix_encoded, &upper_encoded)
     }
     pub(crate) fn scan_bounded_prefix(
         &self,
@@ -250,56 +250,67 @@ impl RelationHandle {
         upper_t.0.push(DataValue::Bot);
         let lower_encoded = lower_t.encode_as_key(self.id);
         let upper_encoded = upper_t.encode_as_key(self.id);
-        RelationIterator::new(tx, &lower_encoded, &upper_encoded)
+        tx.tx
+            .range_scan(&lower_encoded, &upper_encoded)
     }
 }
 
-struct RelationIterator {
-    inner: DbIter,
-    started: bool,
-    upper_bound: Vec<u8>,
+// struct RelationIterator {
+//     inner: DbIter,
+//     started: bool,
+//     upper_bound: Vec<u8>,
+// }
+
+#[inline]
+pub(crate) fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
+    let mut tup = Tuple::decode_from_key(key);
+    if !val.is_empty() {
+        let vals: Vec<DataValue> = rmp_serde::from_slice(&val[ENCODED_KEY_MIN_LEN..]).unwrap();
+        tup.0.extend(vals);
+    }
+    tup
 }
 
-impl RelationIterator {
-    fn new(sess: &SessionTx, lower: &[u8], upper: &[u8]) -> Self {
-        let mut inner = sess.tx.iterator().upper_bound(upper).start();
-        inner.seek(lower);
-        Self {
-            inner,
-            started: false,
-            upper_bound: upper.to_vec(),
-        }
-    }
-    fn next_inner(&mut self) -> Result<Option<Tuple>> {
-        if self.started {
-            self.inner.next()
-        } else {
-            self.started = true;
-        }
-        Ok(match self.inner.pair()? {
-            None => None,
-            Some((k_slice, v_slice)) => {
-                if self.upper_bound.as_slice() <= k_slice {
-                    None
-                } else {
-                    let mut tup = Tuple::decode_from_key(k_slice);
-                    if !v_slice.is_empty() {
-                        let vals: Vec<DataValue> = rmp_serde::from_slice(&v_slice[ENCODED_KEY_MIN_LEN..]).unwrap();
-                        tup.0.extend(vals);
-                    }
-                    Some(tup)
-                }
-            }
-        })
-    }
-}
-
-impl Iterator for RelationIterator {
-    type Item = Result<Tuple>;
-    fn next(&mut self) -> Option<Self::Item> {
-        swap_option_result(self.next_inner())
-    }
-}
+// impl RelationIterator {
+//     fn new(sess: &SessionTx, lower: &[u8], upper: &[u8]) -> Self {
+//         let mut inner = sess.tx.iterator().upper_bound(upper).start();
+//         inner.seek(lower);
+//         Self {
+//             inner,
+//             started: false,
+//             upper_bound: upper.to_vec(),
+//         }
+//     }
+//     fn next_inner(&mut self) -> Result<Option<Tuple>> {
+//         if self.started {
+//             self.inner.next()
+//         } else {
+//             self.started = true;
+//         }
+//         Ok(match self.inner.pair()? {
+//             None => None,
+//             Some((k_slice, v_slice)) => {
+//                 if self.upper_bound.as_slice() <= k_slice {
+//                     None
+//                 } else {
+//                     let mut tup = Tuple::decode_from_key(k_slice);
+//                     if !v_slice.is_empty() {
+//                         let vals: Vec<DataValue> = rmp_serde::from_slice(&v_slice[ENCODED_KEY_MIN_LEN..]).unwrap();
+//                         tup.0.extend(vals);
+//                     }
+//                     Some(tup)
+//                 }
+//             }
+//         })
+//     }
+// }
+//
+// impl Iterator for RelationIterator {
+//     type Item = Result<Tuple>;
+//     fn next(&mut self) -> Option<Self::Item> {
+//         swap_option_result(self.next_inner())
+//     }
+// }
 
 #[derive(Debug, Diagnostic, Error)]
 #[error("Cannot create relation {0} as one with the same name already exists")]
