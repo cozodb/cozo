@@ -1,6 +1,6 @@
 [package]
 name = "cozo"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data and algorithms"
 authors = ["Ziyang Hu"]

@@ -280,9 +280,6 @@ impl RelationIterator {
             None => None,
             Some((k_slice, v_slice)) => {
                 if self.upper_bound.as_slice() <= k_slice {
-                    //
-                    // }
-                    // if compare_tuple_keys(&self.upper_bound, k_slice) != Greater {
                     None
                 } else {
                     let mut tup = Tuple::decode_from_key(k_slice);
@@ -290,12 +287,6 @@ impl RelationIterator {
                         let vals: Vec<DataValue> = rmp_serde::from_slice(&v_slice[ENCODED_KEY_MIN_LEN..]).unwrap();
                         tup.0.extend(vals);
                     }
-                    // if !v_slice.is_empty() {
-                    //     let v_tup = EncodedTuple(v_slice);
-                    //     if v_tup.arity() > 0 {
-                    //         tup.0.extend(v_tup.decode().0);
-                    //     }
-                    // }
                     Some(tup)
                 }
             }
