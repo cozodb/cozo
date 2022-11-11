@@ -22,7 +22,7 @@ impl RocksDbStorage {
     }
 }
 
-impl Storage for RocksDbStorage {
+impl Storage<'_> for RocksDbStorage {
     type Tx = RocksDbTx;
 
     fn transact(&self) -> Result<Self::Tx> {
@@ -43,7 +43,7 @@ pub(crate) struct RocksDbTx {
     db_tx: Tx,
 }
 
-impl StoreTx for RocksDbTx {
+impl StoreTx<'_> for RocksDbTx {
     type ReadSlice = PinSlice;
     type KVIter = RocksDbIterator;
     type KVIterRaw = RocksDbIteratorRaw;
@@ -100,6 +100,7 @@ pub(crate) struct RocksDbIterator {
 }
 
 impl RocksDbIterator {
+    #[inline]
     fn next_inner(&mut self) -> Result<Option<Tuple>> {
         if self.started {
             self.inner.next()
@@ -112,6 +113,7 @@ impl RocksDbIterator {
                 if self.upper_bound.as_slice() <= k_slice {
                     None
                 } else {
+                    // upper bound is exclusive
                     Some(decode_tuple_from_kv(k_slice, v_slice))
                 }
             }
@@ -121,6 +123,7 @@ impl RocksDbIterator {
 
 impl Iterator for RocksDbIterator {
     type Item = Result<Tuple>;
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         swap_option_result(self.next_inner())
     }
@@ -133,6 +136,7 @@ pub(crate) struct RocksDbIteratorRaw {
 }
 
 impl RocksDbIteratorRaw {
+    #[inline]
     fn next_inner(&mut self) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         if self.started {
             self.inner.next()
@@ -143,6 +147,7 @@ impl RocksDbIteratorRaw {
             None => None,
             Some((k_slice, v_slice)) => {
                 if self.upper_bound.as_slice() <= k_slice {
+                    // upper bound is exclusive
                     None
                 } else {
                     Some((k_slice.to_vec(), v_slice.to_vec()))
@@ -154,6 +159,7 @@ impl RocksDbIteratorRaw {
 
 impl Iterator for RocksDbIteratorRaw {
     type Item = Result<(Vec<u8>, Vec<u8>)>;
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         swap_option_result(self.next_inner())
     }

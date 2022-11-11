@@ -10,19 +10,15 @@ pub(crate) mod rocks;
 pub(crate) mod sled;
 pub(crate) mod tikv;
 
-pub(crate) trait Storage {
-    type Tx: StoreTx;
+pub(crate) trait Storage<'a> {
+    type Tx: StoreTx<'a>;
 
-    fn transact(&self) -> Result<Self::Tx>;
+    fn transact(&'a self) -> Result<Self::Tx>;
     fn del_range(&self, lower: &[u8], upper: &[u8]) -> Result<()>;
-    fn range_compact(
-        &self,
-        lower: &[u8],
-        upper: &[u8],
-    ) -> Result<()>;
+    fn range_compact(&self, lower: &[u8], upper: &[u8]) -> Result<()>;
 }
 
-pub(crate) trait StoreTx {
+pub(crate) trait StoreTx<'a> {
     type ReadSlice: AsRef<[u8]>;
 
     type KVIter: Iterator<Item = Result<Tuple>>;
@@ -33,14 +29,6 @@ pub(crate) trait StoreTx {
     fn del(&mut self, key: &[u8]) -> Result<()>;
     fn exists(&self, key: &[u8], for_update: bool) -> Result<bool>;
     fn commit(&mut self) -> Result<()>;
-    fn range_scan(
-        &self,
-        lower: &[u8],
-        upper: &[u8],
-    ) -> Self::KVIter;
-    fn range_scan_raw(
-        &self,
-        lower: &[u8],
-        upper: &[u8],
-    ) -> Self::KVIterRaw;
+    fn range_scan(&'a self, lower: &[u8], upper: &[u8]) -> Self::KVIter;
+    fn range_scan_raw(&'a self, lower: &[u8], upper: &[u8]) -> Self::KVIterRaw;
 }
