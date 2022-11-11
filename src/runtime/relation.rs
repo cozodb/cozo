@@ -321,7 +321,7 @@ impl SessionTx {
     pub(crate) fn relation_exists(&self, name: &str) -> Result<bool> {
         let key = DataValue::Str(SmartString::from(name));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
-        Ok(self.tx.exists(&encoded, false)?)
+        self.tx.exists(&encoded, false)
     }
     pub(crate) fn set_relation_triggers(
         &mut self,

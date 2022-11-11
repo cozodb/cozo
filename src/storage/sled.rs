@@ -64,6 +64,7 @@ impl<'a> StoreTx<'a> for SledTx<'a> {
     type KVIter = SledIter<'a>;
     type KVIterRaw = SledIterRaw<'a>;
 
+    #[inline]
     fn get(&self, key: &[u8], _for_update: bool) -> Result<Option<Self::ReadSlice>> {
         Ok(match self.changes.get(key) {
             Some(Some(val)) => Some(IVec::from(val as &[u8])),
@@ -72,16 +73,19 @@ impl<'a> StoreTx<'a> for SledTx<'a> {
         })
     }
 
+    #[inline]
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
         self.changes.insert(key.into(), Some(val.into()));
         Ok(())
     }
 
+    #[inline]
     fn del(&mut self, key: &[u8]) -> Result<()> {
         self.changes.insert(key.into(), None);
         Ok(())
     }
 
+    #[inline]
     fn exists(&self, key: &[u8], _for_update: bool) -> Result<bool> {
         Ok(match self.changes.get(key) {
             Some(Some(_)) => true,
@@ -142,10 +146,11 @@ struct SledIter<'a> {
 }
 
 impl<'a> SledIter<'a> {
+    #[inline]
     fn fill_cache(&mut self) -> Result<()> {
         if self.change_cache.is_none() {
             if let Some((k, v)) = self.change_iter.next() {
-                self.change_cache = Some((k.to_vec(), v.clone().into()))
+                self.change_cache = Some((k.to_vec(), v.clone()))
             }
         }
 
@@ -158,6 +163,7 @@ impl<'a> SledIter<'a> {
         Ok(())
     }
 
+    #[inline]
     fn next_inner(&mut self) -> Result<Option<Tuple>> {
         loop {
             self.fill_cache()?;
@@ -179,10 +185,11 @@ impl<'a> SledIter<'a> {
                 (Some((ck, _)), Some((dk, _))) => match ck.as_slice().cmp(dk) {
                     Ordering::Less => {
                         let (k, sv) = self.change_cache.take().unwrap();
-                        if sv.is_none() {
-                            continue;
-                        } else {
-                            return Ok(Some(decode_tuple_from_kv(&k, &sv.unwrap())));
+                        match sv {
+                            None => continue,
+                            Some(v) => {
+                                return Ok(Some(decode_tuple_from_kv(&k, &v)));
+                            }
                         }
                     }
                     Ordering::Greater => {
@@ -202,6 +209,7 @@ impl<'a> SledIter<'a> {
 impl<'a> Iterator for SledIter<'a> {
     type Item = Result<Tuple>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         swap_option_result(self.next_inner())
     }
@@ -215,10 +223,11 @@ struct SledIterRaw<'a> {
 }
 
 impl<'a> SledIterRaw<'a> {
+    #[inline]
     fn fill_cache(&mut self) -> Result<()> {
         if self.change_cache.is_none() {
             if let Some((k, v)) = self.change_iter.next() {
-                self.change_cache = Some((k.to_vec(), v.clone().into()))
+                self.change_cache = Some((k.to_vec(), v.clone()))
             }
         }
 
@@ -231,6 +240,7 @@ impl<'a> SledIterRaw<'a> {
         Ok(())
     }
 
+    #[inline]
     fn next_inner(&mut self) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
         loop {
             self.fill_cache()?;
@@ -252,10 +262,9 @@ impl<'a> SledIterRaw<'a> {
                 (Some((ck, _)), Some((dk, _))) => match ck.as_slice().cmp(dk) {
                     Ordering::Less => {
                         let (k, sv) = self.change_cache.take().unwrap();
-                        if sv.is_none() {
-                            continue;
-                        } else {
-                            return Ok(Some((k, sv.unwrap())));
+                        match sv {
+                            None => continue,
+                            Some(v) => return Ok(Some((k, v))),
                         }
                     }
                     Ordering::Greater => {
@@ -275,6 +284,7 @@ impl<'a> SledIterRaw<'a> {
 impl<'a> Iterator for SledIterRaw<'a> {
     type Item = Result<(Vec<u8>, Vec<u8>)>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         swap_option_result(self.next_inner())
     }
