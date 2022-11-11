@@ -19,5 +19,5 @@ io-uring = ["cozo/io-uring"]
 
 [dependencies]
 robusta_jni = "0.2.0"
-cozo = { version = "0.1.3", path = ".." }
+cozo = { version = "0.1.3", path = "../cozo-core" }
 lazy_static = "1.4.0"
