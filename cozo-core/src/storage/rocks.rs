@@ -4,15 +4,16 @@
 
 use miette::{IntoDiagnostic, Result};
 
-use cozorocks::{DbIter, PinSlice, RocksDb, Tx};
+use cozorocks::{DbIter, RocksDb, Tx};
 
 use crate::data::tuple::Tuple;
 use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
 
+/// RocksDB storage engine
 #[derive(Clone)]
-pub(crate) struct RocksDbStorage {
+pub struct RocksDbStorage {
     db: RocksDb,
 }
 
@@ -22,7 +23,7 @@ impl RocksDbStorage {
     }
 }
 
-impl Storage<'_> for RocksDbStorage {
+impl Storage for RocksDbStorage {
     type Tx = RocksDbTx;
 
     fn transact(&self) -> Result<Self::Tx> {
@@ -39,18 +40,14 @@ impl Storage<'_> for RocksDbStorage {
     }
 }
 
-pub(crate) struct RocksDbTx {
+pub struct RocksDbTx {
     db_tx: Tx,
 }
 
-impl StoreTx<'_> for RocksDbTx {
-    type ReadSlice = PinSlice;
-    type KVIter = RocksDbIterator;
-    type KVIterRaw = RocksDbIteratorRaw;
-
+impl StoreTx for RocksDbTx {
     #[inline]
-    fn get(&self, key: &[u8], for_update: bool) -> Result<Option<Self::ReadSlice>> {
-        Ok(self.db_tx.get(key, for_update)?)
+    fn get(&self, key: &[u8], for_update: bool) -> Result<Option<Vec<u8>>> {
+        Ok(self.db_tx.get(key, for_update)?.map(|v| v.to_vec()))
     }
 
     #[inline]
@@ -72,24 +69,28 @@ impl StoreTx<'_> for RocksDbTx {
         Ok(self.db_tx.commit()?)
     }
 
-    fn range_scan(&self, lower: &[u8], upper: &[u8]) -> Self::KVIter {
+    fn range_scan(&self, lower: &[u8], upper: &[u8]) -> Box<dyn Iterator<Item = Result<Tuple>>> {
         let mut inner = self.db_tx.iterator().upper_bound(upper).start();
         inner.seek(lower);
-        RocksDbIterator {
+        Box::new(RocksDbIterator {
             inner,
             started: false,
             upper_bound: upper.to_vec(),
-        }
+        })
     }
 
-    fn range_scan_raw(&self, lower: &[u8], upper: &[u8]) -> Self::KVIterRaw {
+    fn range_scan_raw(
+        &self,
+        lower: &[u8],
+        upper: &[u8],
+    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>> {
         let mut inner = self.db_tx.iterator().upper_bound(upper).start();
         inner.seek(lower);
-        RocksDbIteratorRaw {
+        Box::new(RocksDbIteratorRaw {
             inner,
             started: false,
             upper_bound: upper.to_vec(),
-        }
+        })
     }
 }
 

@@ -27,12 +27,12 @@ use crate::runtime::transact::SessionTx;
 pub(crate) struct BetweennessCentrality;
 
 impl AlgoImpl for BetweennessCentrality {
-    fn run(
+    fn run<'a>(
         &mut self,
-        tx: &SessionTx,
-        algo: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
-        out: &InMemRelation,
+        tx: &'a SessionTx,
+        algo: &'a MagicAlgoApply,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+        out: &'a InMemRelation,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;
@@ -97,12 +97,12 @@ impl AlgoImpl for BetweennessCentrality {
 pub(crate) struct ClosenessCentrality;
 
 impl AlgoImpl for ClosenessCentrality {
-    fn run(
+    fn run<'a>(
         &mut self,
-        tx: &SessionTx,
-        algo: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
-        out: &InMemRelation,
+        tx: &'a SessionTx,
+        algo: &'a MagicAlgoApply,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+        out: &'a InMemRelation,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;

@@ -19,7 +19,6 @@ use crate::data::tuple::{Tuple, ENCODED_KEY_MIN_LEN};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
-use crate::storage::StoreTx;
 
 #[derive(
     Copy,
@@ -233,8 +232,7 @@ impl RelationHandle {
         let prefix_encoded = Tuple(lower).encode_as_key(self.id);
         let upper_encoded = Tuple(upper).encode_as_key(self.id);
         // RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
-        tx.tx
-            .range_scan(&prefix_encoded, &upper_encoded)
+        tx.tx.range_scan(&prefix_encoded, &upper_encoded)
     }
     pub(crate) fn scan_bounded_prefix(
         &self,
@@ -250,8 +248,7 @@ impl RelationHandle {
         upper_t.0.push(DataValue::Bot);
         let lower_encoded = lower_t.encode_as_key(self.id);
         let upper_encoded = upper_t.encode_as_key(self.id);
-        tx.tx
-            .range_scan(&lower_encoded, &upper_encoded)
+        tx.tx.range_scan(&lower_encoded, &upper_encoded)
     }
 }
 

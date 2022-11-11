@@ -67,14 +67,17 @@ const CURRENT_STORAGE_VERSION: u64 = 1;
 
 /// The database object of Cozo.
 #[derive(Clone)]
-pub struct Db {
-    db: RocksDbStorage,
+pub struct Db<S> {
+    db: S,
     relation_store_id: Arc<AtomicU64>,
     queries_count: Arc<AtomicU64>,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
 }
 
-impl Debug for Db {
+impl<S> Debug for Db<S>
+where
+    S: Storage,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Db")
     }
@@ -91,64 +94,73 @@ lazy_static! {
     static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
 }
 
-impl Db {
-    /// Creates a database object.
-    pub fn new(path: impl AsRef<str>) -> Result<Self> {
-        let builder = DbBuilder::default().path(path.as_ref());
-        let path = builder.opts.db_path;
-        fs::create_dir_all(path)
-            .map_err(|err| BadDbInit(format!("cannot create directory {}: {}", path, err)))?;
-        let path_buf = PathBuf::from(path);
+/// Creates a database object.
+pub fn new_cozo_rocksdb(path: impl AsRef<str>) -> Result<Db<RocksDbStorage>> {
+    let builder = DbBuilder::default().path(path.as_ref());
+    let path = builder.opts.db_path;
+    fs::create_dir_all(path)
+        .map_err(|err| BadDbInit(format!("cannot create directory {}: {}", path, err)))?;
+    let path_buf = PathBuf::from(path);
 
-        let is_new = {
-            let mut manifest_path = path_buf.clone();
-            manifest_path.push("manifest");
+    let is_new = {
+        let mut manifest_path = path_buf.clone();
+        manifest_path.push("manifest");
 
-            if manifest_path.exists() {
-                let existing: DbManifest = rmp_serde::from_slice(
-                    &fs::read(manifest_path)
-                        .into_diagnostic()
-                        .wrap_err_with(|| "when reading manifest")?,
-                )
-                .into_diagnostic()
-                .wrap_err_with(|| "when reading manifest")?;
-                assert_eq!(
-                    existing.storage_version, CURRENT_STORAGE_VERSION,
-                    "Unknown storage version {}",
-                    existing.storage_version
-                );
-                false
-            } else {
-                fs::write(
-                    manifest_path,
-                    rmp_serde::to_vec_named(&DbManifest {
-                        storage_version: CURRENT_STORAGE_VERSION,
-                    })
+        if manifest_path.exists() {
+            let existing: DbManifest = rmp_serde::from_slice(
+                &fs::read(manifest_path)
                     .into_diagnostic()
-                    .wrap_err_with(|| "when serializing manifest")?,
-                )
-                .into_diagnostic()
-                .wrap_err_with(|| "when serializing manifest")?;
-                true
-            }
-        };
-
-        let mut store_path = path_buf;
-        store_path.push("data");
-        let db_builder = builder
-            .create_if_missing(is_new)
-            .use_capped_prefix_extractor(true, KEY_PREFIX_LEN)
-            .use_bloom_filter(true, 9.9, true)
-            .path(
-                store_path
-                    .to_str()
-                    .ok_or_else(|| miette!("bad path name"))?,
+                    .wrap_err_with(|| "when reading manifest")?,
+            )
+            .into_diagnostic()
+            .wrap_err_with(|| "when reading manifest")?;
+            assert_eq!(
+                existing.storage_version, CURRENT_STORAGE_VERSION,
+                "Unknown storage version {}",
+                existing.storage_version
             );
+            false
+        } else {
+            fs::write(
+                manifest_path,
+                rmp_serde::to_vec_named(&DbManifest {
+                    storage_version: CURRENT_STORAGE_VERSION,
+                })
+                .into_diagnostic()
+                .wrap_err_with(|| "when serializing manifest")?,
+            )
+            .into_diagnostic()
+            .wrap_err_with(|| "when serializing manifest")?;
+            true
+        }
+    };
 
-        let db = db_builder.build()?;
+    let mut store_path = path_buf;
+    store_path.push("data");
+    let db_builder = builder
+        .create_if_missing(is_new)
+        .use_capped_prefix_extractor(true, KEY_PREFIX_LEN)
+        .use_bloom_filter(true, 9.9, true)
+        .path(
+            store_path
+                .to_str()
+                .ok_or_else(|| miette!("bad path name"))?,
+        );
 
+    let db = db_builder.build()?;
+
+    Db::new(RocksDbStorage::new(db))
+}
+
+impl<S> Db<S>
+where
+    S: Storage,
+    <S as Storage>::Tx: 'static,
+{
+    /// create a new database with the specified storage
+    pub fn new(storage: S) -> Result<Self> {
         let ret = Self {
-            db: RocksDbStorage::new(db),
+            db: storage,
             relation_store_id: Arc::new(Default::default()),
             queries_count: Arc::new(Default::default()),
             running_queries: Arc::new(Mutex::new(Default::default())),
@@ -156,7 +168,6 @@ impl Db {
         ret.load_last_ids()?;
         Ok(ret)
     }
-
     fn compact_relation(&self) -> Result<()> {
         let l = Tuple::default().encode_as_key(RelationId(0));
         let u = Tuple(vec![DataValue::Bot]).encode_as_key(RelationId(u64::MAX));
@@ -172,7 +183,7 @@ impl Db {
     }
     fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
-            tx: self.db.transact()?,
+            tx: Box::new(self.db.transact()?),
             mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
         };
@@ -180,7 +191,7 @@ impl Db {
     }
     fn transact_write(&self) -> Result<SessionTx> {
         let ret = SessionTx {
-            tx: self.db.transact()?,
+            tx: Box::new(self.db.transact()?),
             mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
         };

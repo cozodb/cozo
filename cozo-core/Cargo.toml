@@ -16,6 +16,9 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+storage-rocksdb = []
+storage-sled = []
+storage-tikv = []
 jemalloc = ["tikv-jemallocator-global", "cozorocks/jemalloc"]
 io-uring = ["cozorocks/io-uring"]
 

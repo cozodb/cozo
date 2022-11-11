@@ -20,8 +20,8 @@ use crate::data::value::DataValue;
 use crate::parse::parse_script;
 use crate::runtime::relation::{AccessLevel, InputRelationHandle, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
+use crate::storage::Storage;
 use crate::Db;
-use crate::storage::StoreTx;
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("attempting to write into relation {0} of arity {1} with data of arity {2}")]
@@ -29,14 +29,17 @@ use crate::storage::StoreTx;
 struct RelationArityMismatch(String, usize, usize);
 
 impl SessionTx {
-    pub(crate) fn execute_relation<'a>(
-        &'a mut self,
-        db: &Db,
-        res_iter: impl Iterator<Item = Result<Tuple>> + 'a,
+    pub(crate) fn execute_relation<S: Storage>(
+        &mut self,
+        db: &Db<S>,
+        res_iter: impl Iterator<Item = Result<Tuple>>,
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
-    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>>
+    where
+        <S as Storage>::Tx: 'static,
+    {
         let mut to_clear = vec![];
         let mut replaced_old_triggers = None;
         if op == RelationOp::Replace {

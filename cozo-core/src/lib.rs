@@ -19,6 +19,8 @@
 pub use miette::Error;
 
 pub use runtime::db::Db;
+pub use runtime::db::new_cozo_rocksdb;
+pub use storage::rocks::RocksDbStorage;
 
 pub(crate) mod algo;
 pub(crate) mod data;

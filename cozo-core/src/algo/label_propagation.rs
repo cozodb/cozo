@@ -23,12 +23,12 @@ use crate::runtime::transact::SessionTx;
 pub(crate) struct LabelPropagation;
 
 impl AlgoImpl for LabelPropagation {
-    fn run(
+    fn run<'a>(
         &mut self,
-        tx: &SessionTx,
-        algo: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
-        out: &InMemRelation,
+        tx: &'a SessionTx,
+        algo: &'a MagicAlgoApply,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+        out: &'a InMemRelation,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;

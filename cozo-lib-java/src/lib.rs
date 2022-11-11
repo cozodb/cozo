@@ -9,15 +9,19 @@ use lazy_static::lazy_static;
 use robusta_jni::bridge;
 
 use cozo::Db;
+use cozo::RocksDbStorage;
 
 #[derive(Default)]
-struct Handles {
+struct Handles<S> {
     current: AtomicI32,
-    dbs: Mutex<BTreeMap<i32, Db>>,
+    dbs: Mutex<BTreeMap<i32, Db<S>>>,
 }
 
 lazy_static! {
-    static ref HANDLES: Handles = Handles::default();
+    static ref HANDLES: Handles<RocksDbStorage> = Handles {
+        current: Default::default(),
+        dbs: Mutex::new(Default::default())
+    };
 }
 
 #[bridge]
@@ -29,7 +33,7 @@ mod jni {
     use robusta_jni::jni::errors::Result as JniResult;
     use robusta_jni::jni::objects::AutoLocal;
 
-    use cozo::Db;
+    use cozo::{new_cozo_rocksdb};
 
     use crate::HANDLES;
 
@@ -42,7 +46,7 @@ mod jni {
 
     impl<'env: 'borrow, 'borrow> CozoDb<'env, 'borrow> {
         pub extern "jni" fn openDb(path: String) -> JniResult<i32> {
-            match Db::new(path) {
+            match new_cozo_rocksdb(path) {
                 Ok(db) => {
                     let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
                     let mut dbs = HANDLES.dbs.lock().unwrap();

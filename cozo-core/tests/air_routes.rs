@@ -9,15 +9,16 @@ use approx::AbsDiffEq;
 use env_logger::Env;
 use lazy_static::lazy_static;
 use serde_json::json;
+use cozo::RocksDbStorage;
 
-use cozo::Db;
+use cozo::{new_cozo_rocksdb, Db};
 
 lazy_static! {
-    static ref TEST_DB: Db = {
+    static ref TEST_DB: Db<RocksDbStorage> = {
         let creation = Instant::now();
         let path = "_test_air_routes";
         _ = std::fs::remove_dir_all(path);
-        let db = Db::new(path).unwrap();
+        let db = new_cozo_rocksdb(path).unwrap();
         dbg!(creation.elapsed());
 
         let init = Instant::now();

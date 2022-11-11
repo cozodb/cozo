@@ -13,7 +13,7 @@ use crate::runtime::relation::RelationId;
 pub(crate) const KEY_PREFIX_LEN: usize = 9;
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
-pub(crate) struct Tuple(pub(crate) Vec<DataValue>);
+pub struct Tuple(pub(crate) Vec<DataValue>);
 
 impl Debug for Tuple {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

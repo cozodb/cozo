@@ -24,12 +24,12 @@ use crate::runtime::transact::SessionTx;
 pub(crate) struct ShortestPathAStar;
 
 impl AlgoImpl for ShortestPathAStar {
-    fn run(
+    fn run<'a>(
         &mut self,
-        tx: &SessionTx,
-        algo: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
-        out: &InMemRelation,
+        tx: &'a SessionTx,
+        algo: &'a MagicAlgoApply,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+        out: &'a InMemRelation,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation_with_min_len(0, 3, tx, stores)?;
@@ -81,14 +81,14 @@ impl AlgoImpl for ShortestPathAStar {
     }
 }
 
-fn astar(
+fn astar<'a>(
     starting: &Tuple,
     goal: &Tuple,
-    edges: &MagicAlgoRuleArg,
-    nodes: &MagicAlgoRuleArg,
+    edges: &'a MagicAlgoRuleArg,
+    nodes: &'a MagicAlgoRuleArg,
     heuristic: &Expr,
-    tx: &SessionTx,
-    stores: &BTreeMap<MagicSymbol, InMemRelation>,
+    tx: &'a SessionTx,
+    stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     poison: Poison,
 ) -> Result<(f64, Vec<DataValue>)> {
     let start_node = &starting.0[0];

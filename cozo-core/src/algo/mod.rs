@@ -60,12 +60,12 @@ pub(crate) mod triangles;
 pub(crate) mod yen;
 
 pub(crate) trait AlgoImpl {
-    fn run(
+    fn run<'a>(
         &mut self,
-        tx: &SessionTx,
-        algo: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
-        out: &InMemRelation,
+        tx: &'a SessionTx,
+        algo: &'a MagicAlgoApply,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+        out: &'a InMemRelation,
         poison: Poison,
     ) -> Result<()>;
     fn arity(
@@ -191,12 +191,12 @@ pub(crate) struct BadExprValueError(
 pub(crate) struct AlgoNotFoundError(pub(crate) String, #[label] pub(crate) SourceSpan);
 
 impl MagicAlgoRuleArg {
-    pub(crate) fn convert_edge_to_weighted_graph(
-        &self,
+    pub(crate) fn convert_edge_to_weighted_graph<'a>(
+        &'a self,
         undirected: bool,
         allow_negative_edges: bool,
-        tx: &SessionTx,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        tx: &'a SessionTx,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<(
         Vec<Vec<(usize, f64)>>,
         Vec<DataValue>,
@@ -276,11 +276,11 @@ impl MagicAlgoRuleArg {
         }
         Ok((graph, indices, inv_indices, has_neg_edge))
     }
-    pub(crate) fn convert_edge_to_graph(
-        &self,
+    pub(crate) fn convert_edge_to_graph<'a>(
+        &'a self,
         undirected: bool,
-        tx: &SessionTx,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        tx: &'a SessionTx,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
         let mut graph: Vec<Vec<usize>> = vec![];
         let mut indices: Vec<DataValue> = vec![];

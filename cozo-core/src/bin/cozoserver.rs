@@ -14,7 +14,7 @@ use log::{error, info};
 use rand::Rng;
 use rouille::{router, try_or_400, Request, Response};
 
-use cozo::Db;
+use cozo::new_cozo_rocksdb;
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
@@ -39,7 +39,7 @@ fn main() {
         eprintln!("{}", SECURITY_WARNING);
     }
 
-    let db = Db::new(args.path.as_str()).unwrap();
+    let db = new_cozo_rocksdb(args.path.as_str()).unwrap();
 
     let mut path_buf = PathBuf::from(&args.path);
     path_buf.push("auth.txt");

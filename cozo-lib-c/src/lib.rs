@@ -11,16 +11,19 @@ use std::sync::Mutex;
 
 use lazy_static::lazy_static;
 
-use cozo::Db;
+use cozo::RocksDbStorage;
+use cozo::{new_cozo_rocksdb, Db};
 
-#[derive(Default)]
-struct Handles {
+struct Handles<S> {
     current: AtomicI32,
-    dbs: Mutex<BTreeMap<i32, Db>>,
+    dbs: Mutex<BTreeMap<i32, Db<S>>>,
 }
 
 lazy_static! {
-    static ref HANDLES: Handles = Handles::default();
+    static ref HANDLES: Handles<RocksDbStorage> = Handles {
+        current: Default::default(),
+        dbs: Mutex::new(Default::default())
+    };
 }
 
 /// Open a database.
@@ -38,7 +41,7 @@ pub unsafe extern "C" fn cozo_open_db(path: *const c_char, db_id: &mut i32) -> *
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
     };
 
-    match Db::new(path) {
+    match new_cozo_rocksdb(path) {
         Ok(db) => {
             let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
             let mut dbs = HANDLES.dbs.lock().unwrap();
