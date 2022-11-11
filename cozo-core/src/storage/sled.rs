@@ -34,7 +34,7 @@ const DEL_MARKER: u8 = 0;
 impl Storage for SledStorage {
     type Tx = SledTx;
 
-    fn transact(&self) -> Result<Self::Tx> {
+    fn transact(&self, _write: bool) -> Result<Self::Tx> {
         Ok(SledTx {
             db: self.db.clone(),
             changes: Default::default(),

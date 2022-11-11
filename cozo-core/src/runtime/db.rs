@@ -122,7 +122,7 @@ where
     }
     fn transact(&self) -> Result<SessionTx> {
         let ret = SessionTx {
-            tx: Box::new(self.db.transact()?),
+            tx: Box::new(self.db.transact(false)?),
             mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
         };
@@ -130,7 +130,7 @@ where
     }
     fn transact_write(&self) -> Result<SessionTx> {
         let ret = SessionTx {
-            tx: Box::new(self.db.transact()?),
+            tx: Box::new(self.db.transact(true)?),
             mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
         };
@@ -716,7 +716,7 @@ where
             LARGEST_UTF_CHAR,
         )))])
         .encode_as_key(RelationId::SYSTEM);
-        let tx = self.db.transact()?;
+        let tx = self.db.transact(false)?;
         let mut collected = vec![];
         for kv_res in tx.range_scan_raw(&lower, &upper) {
             let (k_slice, v_slice) = kv_res?;

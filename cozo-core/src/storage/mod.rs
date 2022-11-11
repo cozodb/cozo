@@ -13,7 +13,7 @@ pub(crate) mod tikv;
 pub trait Storage {
     type Tx: StoreTx;
 
-    fn transact(&self) -> Result<Self::Tx>;
+    fn transact(&self, write: bool) -> Result<Self::Tx>;
     fn del_range(&self, lower: &[u8], upper: &[u8]) -> Result<()>;
     fn range_compact(&self, lower: &[u8], upper: &[u8]) -> Result<()>;
 }

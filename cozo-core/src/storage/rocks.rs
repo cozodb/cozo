@@ -90,7 +90,7 @@ impl RocksDbStorage {
 impl Storage for RocksDbStorage {
     type Tx = RocksDbTx;
 
-    fn transact(&self) -> Result<Self::Tx> {
+    fn transact(&self, _write: bool) -> Result<Self::Tx> {
         let db_tx = self.db.transact().set_snapshot(true).start();
         Ok(RocksDbTx { db_tx })
     }
