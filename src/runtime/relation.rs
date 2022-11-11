@@ -255,12 +255,6 @@ impl RelationHandle {
     }
 }
 
-// struct RelationIterator {
-//     inner: DbIter,
-//     started: bool,
-//     upper_bound: Vec<u8>,
-// }
-
 #[inline]
 pub(crate) fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
     let mut tup = Tuple::decode_from_key(key);
@@ -270,47 +264,6 @@ pub(crate) fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
     }
     tup
 }
-
-// impl RelationIterator {
-//     fn new(sess: &SessionTx, lower: &[u8], upper: &[u8]) -> Self {
-//         let mut inner = sess.tx.iterator().upper_bound(upper).start();
-//         inner.seek(lower);
-//         Self {
-//             inner,
-//             started: false,
-//             upper_bound: upper.to_vec(),
-//         }
-//     }
-//     fn next_inner(&mut self) -> Result<Option<Tuple>> {
-//         if self.started {
-//             self.inner.next()
-//         } else {
-//             self.started = true;
-//         }
-//         Ok(match self.inner.pair()? {
-//             None => None,
-//             Some((k_slice, v_slice)) => {
-//                 if self.upper_bound.as_slice() <= k_slice {
-//                     None
-//                 } else {
-//                     let mut tup = Tuple::decode_from_key(k_slice);
-//                     if !v_slice.is_empty() {
-//                         let vals: Vec<DataValue> = rmp_serde::from_slice(&v_slice[ENCODED_KEY_MIN_LEN..]).unwrap();
-//                         tup.0.extend(vals);
-//                     }
-//                     Some(tup)
-//                 }
-//             }
-//         })
-//     }
-// }
-//
-// impl Iterator for RelationIterator {
-//     type Item = Result<Tuple>;
-//     fn next(&mut self) -> Option<Self::Item> {
-//         swap_option_result(self.next_inner())
-//     }
-// }
 
 #[derive(Debug, Diagnostic, Error)]
 #[error("Cannot create relation {0} as one with the same name already exists")]
