@@ -4,29 +4,26 @@
 
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::{fs, thread};
 
 use either::{Left, Right};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use miette::{
-    bail, ensure, miette, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
+    bail, ensure, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
     JSONReportHandler, Result, WrapErr,
 };
 use serde_json::{json, Map};
 use smartstring::SmartString;
 use thiserror::Error;
 
-use cozorocks::DbBuilder;
-
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{Tuple, KEY_PREFIX_LEN};
+use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
@@ -36,7 +33,6 @@ use crate::query::relation::{
 };
 use crate::runtime::relation::{RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
-use crate::storage::rocks::RocksDbStorage;
 use crate::storage::{Storage, StoreTx};
 
 struct RunningQueryHandle {
@@ -59,11 +55,12 @@ impl Drop for RunningQueryCleanup {
 }
 
 #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) struct DbManifest {
-    storage_version: u64,
+pub struct DbManifest {
+    pub storage_version: u64,
 }
 
-const CURRENT_STORAGE_VERSION: u64 = 1;
+// FIXME this should be storage-specific
+pub(crate) const CURRENT_STORAGE_VERSION: u64 = 1;
 
 /// The database object of Cozo.
 #[derive(Clone)]
@@ -86,70 +83,12 @@ where
 #[derive(Debug, Diagnostic, Error)]
 #[error("Initialization of database failed")]
 #[diagnostic(code(db::init))]
-struct BadDbInit(#[help] String);
+pub(crate) struct BadDbInit(#[help] pub(crate) String);
 
 lazy_static! {
     static ref TEXT_ERR_HANDLER: GraphicalReportHandler =
         miette::GraphicalReportHandler::new().with_theme(GraphicalTheme::unicode());
     static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
-}
-
-/// Creates a database object.
-pub fn new_cozo_rocksdb(path: impl AsRef<str>) -> Result<Db<RocksDbStorage>> {
-    let builder = DbBuilder::default().path(path.as_ref());
-    let path = builder.opts.db_path;
-    fs::create_dir_all(path)
-        .map_err(|err| BadDbInit(format!("cannot create directory {}: {}", path, err)))?;
-    let path_buf = PathBuf::from(path);
-
-    let is_new = {
-        let mut manifest_path = path_buf.clone();
-        manifest_path.push("manifest");
-
-        if manifest_path.exists() {
-            let existing: DbManifest = rmp_serde::from_slice(
-                &fs::read(manifest_path)
-                    .into_diagnostic()
-                    .wrap_err_with(|| "when reading manifest")?,
-            )
-            .into_diagnostic()
-            .wrap_err_with(|| "when reading manifest")?;
-            assert_eq!(
-                existing.storage_version, CURRENT_STORAGE_VERSION,
-                "Unknown storage version {}",
-                existing.storage_version
-            );
-            false
-        } else {
-            fs::write(
-                manifest_path,
-                rmp_serde::to_vec_named(&DbManifest {
-                    storage_version: CURRENT_STORAGE_VERSION,
-                })
-                .into_diagnostic()
-                .wrap_err_with(|| "when serializing manifest")?,
-            )
-            .into_diagnostic()
-            .wrap_err_with(|| "when serializing manifest")?;
-            true
-        }
-    };
-
-    let mut store_path = path_buf;
-    store_path.push("data");
-    let db_builder = builder
-        .create_if_missing(is_new)
-        .use_capped_prefix_extractor(true, KEY_PREFIX_LEN)
-        .use_bloom_filter(true, 9.9, true)
-        .path(
-            store_path
-                .to_str()
-                .ok_or_else(|| miette!("bad path name"))?,
-        );
-
-    let db = db_builder.build()?;
-
-    Db::new(RocksDbStorage::new(db))
 }
 
 impl<S> Db<S>
@@ -271,6 +210,7 @@ where
                 };
                 let mut res = json!(null);
                 let mut cleanups = vec![];
+
                 for p in ps {
                     let sleep_opt = p.out_opts.sleep;
                     let (q_res, q_cleanups) = self.run_query(&mut tx, p)?;

@@ -19,13 +19,15 @@
 pub use miette::Error;
 
 pub use runtime::db::Db;
-pub use runtime::db::new_cozo_rocksdb;
+pub use storage::rocks::new_cozo_rocksdb;
 pub use storage::rocks::RocksDbStorage;
+pub use storage::sled::new_cozo_sled;
+pub use storage::sled::SledStorage;
 
 pub(crate) mod algo;
 pub(crate) mod data;
 pub(crate) mod parse;
 pub(crate) mod query;
 pub(crate) mod runtime;
-pub(crate) mod utils;
 pub(crate) mod storage;
+pub(crate) mod utils;

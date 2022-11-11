@@ -2,14 +2,78 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under MPL-2.0.
  */
 
-use miette::{IntoDiagnostic, Result};
+use std::fs;
+use std::path::PathBuf;
 
-use cozorocks::{DbIter, RocksDb, Tx};
+use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
-use crate::data::tuple::Tuple;
+use cozorocks::{DbBuilder, DbIter, RocksDb, Tx};
+
+use crate::data::tuple::{Tuple, KEY_PREFIX_LEN};
+use crate::runtime::db::{BadDbInit, DbManifest, CURRENT_STORAGE_VERSION};
 use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
+use crate::Db;
+
+/// Creates a RocksDB database object.
+pub fn new_cozo_rocksdb(path: impl AsRef<str>) -> Result<Db<RocksDbStorage>> {
+    let builder = DbBuilder::default().path(path.as_ref());
+    let path = builder.opts.db_path;
+    fs::create_dir_all(path)
+        .map_err(|err| BadDbInit(format!("cannot create directory {}: {}", path, err)))?;
+    let path_buf = PathBuf::from(path);
+
+    let is_new = {
+        let mut manifest_path = path_buf.clone();
+        manifest_path.push("manifest");
+
+        if manifest_path.exists() {
+            let existing: DbManifest = rmp_serde::from_slice(
+                &fs::read(manifest_path)
+                    .into_diagnostic()
+                    .wrap_err_with(|| "when reading manifest")?,
+            )
+            .into_diagnostic()
+            .wrap_err_with(|| "when reading manifest")?;
+            assert_eq!(
+                existing.storage_version, CURRENT_STORAGE_VERSION,
+                "Unknown storage version {}",
+                existing.storage_version
+            );
+
+            false
+        } else {
+            fs::write(
+                manifest_path,
+                rmp_serde::to_vec_named(&DbManifest {
+                    storage_version: CURRENT_STORAGE_VERSION,
+                })
+                .into_diagnostic()
+                .wrap_err_with(|| "when serializing manifest")?,
+            )
+            .into_diagnostic()
+            .wrap_err_with(|| "when serializing manifest")?;
+            true
+        }
+    };
+
+    let mut store_path = path_buf;
+    store_path.push("data");
+    let db_builder = builder
+        .create_if_missing(is_new)
+        .use_capped_prefix_extractor(true, KEY_PREFIX_LEN)
+        .use_bloom_filter(true, 9.9, true)
+        .path(
+            store_path
+                .to_str()
+                .ok_or_else(|| miette!("bad path name"))?,
+        );
+
+    let db = db_builder.build()?;
+
+    Db::new(RocksDbStorage::new(db))
+}
 
 /// RocksDB storage engine
 #[derive(Clone)]

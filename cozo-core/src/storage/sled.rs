@@ -1,291 +1,345 @@
-// /*
-//  * Copyright 2022, The Cozo Project Authors. Licensed under MPL-2.0.
-//  */
-//
-// use std::cmp::Ordering;
-// use std::collections::btree_map::Range;
-// use std::collections::BTreeMap;
-// use std::iter::Fuse;
-// use std::sync::{Arc, RwLock};
-// use std::thread;
-//
-// use miette::{IntoDiagnostic, Result};
-// use sled::transaction::{ConflictableTransactionError, TransactionalTree};
-// use sled::{Db, IVec, Iter};
-//
-// use crate::data::tuple::Tuple;
-// use crate::runtime::relation::decode_tuple_from_kv;
-// use crate::storage::{Storage, StoreTx};
-// use crate::utils::swap_option_result;
-//
-// #[derive(Clone)]
-// struct SledStorage {
-//     db: Db,
-// }
-//
-// impl Storage for SledStorage {
-//     type Tx = SledTx;
-//
-//     fn transact(&self) -> Result<Self::Tx> {
-//         Ok(SledTx {
-//             db: self.db.clone(),
-//             changes: Default::default(),
-//         })
-//     }
-//
-//     fn del_range(&self, lower: &[u8], upper: &[u8]) -> Result<()> {
-//         let db = self.db.clone();
-//         let lower_v = lower.to_vec();
-//         let upper_v = upper.to_vec();
-//         thread::spawn(move || -> Result<()> {
-//             for k_res in db.range(lower_v..upper_v).keys() {
-//                 db.remove(k_res.into_diagnostic()?).into_diagnostic()?;
-//             }
-//             Ok(())
-//         });
-//         Ok(())
-//     }
-//
-//     fn range_compact(&self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
-//         Ok(())
-//     }
-// }
-//
-// struct SledTx {
-//     db: Db,
-//     changes: Arc<RwLock<BTreeMap<Vec<u8>, Option<Vec<u8>>>>>,
-// }
-//
-// impl StoreTx for SledTx {
-//     #[inline]
-//     fn get(&self, key: &[u8], _for_update: bool) -> Result<Option<Vec<u8>>> {
-//         Ok(match self.changes.read().unwrap().get(key) {
-//             Some(Some(val)) => Some(val.clone()),
-//             Some(None) => None,
-//             None => {
-//                 let ret = self.db.get(key).into_diagnostic()?;
-//                 ret.map(|v| v.to_vec())
-//             }
-//         })
-//     }
-//
-//     #[inline]
-//     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
-//         self.changes.write().unwrap().insert(key.into(), Some(val.into()));
-//         Ok(())
-//     }
-//
-//     #[inline]
-//     fn del(&mut self, key: &[u8]) -> Result<()> {
-//         self.changes.write().unwrap().insert(key.into(), None);
-//         Ok(())
-//     }
-//
-//     #[inline]
-//     fn exists(&self, key: &[u8], _for_update: bool) -> Result<bool> {
-//         Ok(match self.changes.read().unwrap().get(key) {
-//             Some(Some(_)) => true,
-//             Some(None) => false,
-//             None => self.db.get(key).into_diagnostic()?.is_some(),
-//         })
-//     }
-//
-//     fn commit(&mut self) -> Result<()> {
-//         self.db
-//             .transaction(
-//                 |db: &TransactionalTree| -> Result<(), ConflictableTransactionError> {
-//                     for (k, v) in self.changes.read().unwrap().iter() {
-//                         match v {
-//                             None => {
-//                                 db.remove(k as &[u8])?;
-//                             }
-//                             Some(v) => {
-//                                 db.insert(k as &[u8], v as &[u8])?;
-//                             }
-//                         }
-//                     }
-//                     Ok(())
-//                 },
-//             )
-//             .into_diagnostic()?;
-//         Ok(())
-//     }
-//
-//     fn range_scan(&self, lower: &[u8], upper: &[u8]) -> Box<dyn Iterator<Item = Result<Tuple>>> {
-//         let change_iter = self.changes.read().unwrap().range(lower.to_vec()..upper.to_vec()).fuse();
-//         let db_iter = self.db.range(lower..upper).fuse();
-//         Box::new(SledIter {
-//             change_iter,
-//             db_iter,
-//             change_cache: None,
-//             db_cache: None,
-//         })
-//     }
-//
-//     fn range_scan_raw(
-//         &self,
-//         lower: &[u8],
-//         upper: &[u8],
-//     ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>> {
-//         let change_iter = self.changes.read().unwrap().range(lower.to_vec()..upper.to_vec()).fuse();
-//         let db_iter = self.db.range(lower..upper).fuse();
-//         Box::new(SledIterRaw {
-//             change_iter,
-//             db_iter,
-//             change_cache: None,
-//             db_cache: None,
-//         })
-//     }
-// }
-//
-// struct SledIter<'a> {
-//     change_iter: Fuse<Range<'a, Vec<u8>, Option<Vec<u8>>>>,
-//     db_iter: Fuse<Iter>,
-//     change_cache: Option<(Vec<u8>, Option<Vec<u8>>)>,
-//     db_cache: Option<(IVec, IVec)>,
-// }
-//
-// impl<'a> SledIter<'a> {
-//     #[inline]
-//     fn fill_cache(&mut self) -> Result<()> {
-//         if self.change_cache.is_none() {
-//             if let Some((k, v)) = self.change_iter.next() {
-//                 self.change_cache = Some((k.to_vec(), v.clone()))
-//             }
-//         }
-//
-//         if self.db_cache.is_none() {
-//             if let Some(res) = self.db_iter.next() {
-//                 self.db_cache = Some(res.into_diagnostic()?);
-//             }
-//         }
-//
-//         Ok(())
-//     }
-//
-//     #[inline]
-//     fn next_inner(&mut self) -> Result<Option<Tuple>> {
-//         loop {
-//             self.fill_cache()?;
-//             match (&self.change_cache, &self.db_cache) {
-//                 (None, None) => return Ok(None),
-//                 (Some((_, None)), None) => {
-//                     self.change_cache.take();
-//                     continue;
-//                 }
-//                 (Some((_, Some(_))), None) => {
-//                     let (k, sv) = self.change_cache.take().unwrap();
-//                     let v = sv.unwrap();
-//                     return Ok(Some(decode_tuple_from_kv(&k, &v)));
-//                 }
-//                 (None, Some(_)) => {
-//                     let (k, v) = self.db_cache.take().unwrap();
-//                     return Ok(Some(decode_tuple_from_kv(&k, &v)));
-//                 }
-//                 (Some((ck, _)), Some((dk, _))) => match ck.as_slice().cmp(dk) {
-//                     Ordering::Less => {
-//                         let (k, sv) = self.change_cache.take().unwrap();
-//                         match sv {
-//                             None => continue,
-//                             Some(v) => {
-//                                 return Ok(Some(decode_tuple_from_kv(&k, &v)));
-//                             }
-//                         }
-//                     }
-//                     Ordering::Greater => {
-//                         let (k, v) = self.db_cache.take().unwrap();
-//                         return Ok(Some(decode_tuple_from_kv(&k, &v)));
-//                     }
-//                     Ordering::Equal => {
-//                         self.db_cache.take();
-//                         continue;
-//                     }
-//                 },
-//             }
-//         }
-//     }
-// }
-//
-// impl<'a> Iterator for SledIter<'a> {
-//     type Item = Result<Tuple>;
-//
-//     #[inline]
-//     fn next(&mut self) -> Option<Self::Item> {
-//         swap_option_result(self.next_inner())
-//     }
-// }
-//
-// struct SledIterRaw<'a> {
-//     change_iter: Fuse<Range<'a, Vec<u8>, Option<Vec<u8>>>>,
-//     db_iter: Fuse<Iter>,
-//     change_cache: Option<(Vec<u8>, Option<Vec<u8>>)>,
-//     db_cache: Option<(IVec, IVec)>,
-// }
-//
-// impl<'a> SledIterRaw<'a> {
-//     #[inline]
-//     fn fill_cache(&mut self) -> Result<()> {
-//         if self.change_cache.is_none() {
-//             if let Some((k, v)) = self.change_iter.next() {
-//                 self.change_cache = Some((k.to_vec(), v.clone()))
-//             }
-//         }
-//
-//         if self.db_cache.is_none() {
-//             if let Some(res) = self.db_iter.next() {
-//                 self.db_cache = Some(res.into_diagnostic()?);
-//             }
-//         }
-//
-//         Ok(())
-//     }
-//
-//     #[inline]
-//     fn next_inner(&mut self) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
-//         loop {
-//             self.fill_cache()?;
-//             match (&self.change_cache, &self.db_cache) {
-//                 (None, None) => return Ok(None),
-//                 (Some((_, None)), None) => {
-//                     self.change_cache.take();
-//                     continue;
-//                 }
-//                 (Some((_, Some(_))), None) => {
-//                     let (k, sv) = self.change_cache.take().unwrap();
-//                     let v = sv.unwrap();
-//                     return Ok(Some((k, v)));
-//                 }
-//                 (None, Some(_)) => {
-//                     let (k, v) = self.db_cache.take().unwrap();
-//                     return Ok(Some((k.to_vec(), v.to_vec())));
-//                 }
-//                 (Some((ck, _)), Some((dk, _))) => match ck.as_slice().cmp(dk) {
-//                     Ordering::Less => {
-//                         let (k, sv) = self.change_cache.take().unwrap();
-//                         match sv {
-//                             None => continue,
-//                             Some(v) => return Ok(Some((k, v))),
-//                         }
-//                     }
-//                     Ordering::Greater => {
-//                         let (k, v) = self.db_cache.take().unwrap();
-//                         return Ok(Some((k.to_vec(), v.to_vec())));
-//                     }
-//                     Ordering::Equal => {
-//                         self.db_cache.take();
-//                         continue;
-//                     }
-//                 },
-//             }
-//         }
-//     }
-// }
-//
-// impl<'a> Iterator for SledIterRaw<'a> {
-//     type Item = Result<(Vec<u8>, Vec<u8>)>;
-//
-//     #[inline]
-//     fn next(&mut self) -> Option<Self::Item> {
-//         swap_option_result(self.next_inner())
-//     }
-// }
+/*
+ * Copyright 2022, The Cozo Project Authors. Licensed under MPL-2.0.
+ */
+
+use std::cmp::Ordering;
+use std::iter::Fuse;
+use std::path::Path;
+use std::thread;
+
+use itertools::Itertools;
+use miette::{IntoDiagnostic, Result};
+use sled::{Batch, Config, Db, IVec, Iter, Mode};
+
+use crate::data::tuple::Tuple;
+use crate::runtime::relation::decode_tuple_from_kv;
+use crate::storage::{Storage, StoreTx};
+use crate::utils::swap_option_result;
+
+/// Creates a Sled database object.
+pub fn new_cozo_sled(path: impl AsRef<Path>) -> Result<crate::Db<SledStorage>> {
+    let db = sled::open(path).into_diagnostic()?;
+    crate::Db::new(SledStorage { db })
+}
+
+/// Storage engine using Sled
+#[derive(Clone)]
+pub struct SledStorage {
+    db: Db,
+}
+
+const PUT_MARKER: u8 = 1;
+const DEL_MARKER: u8 = 0;
+
+impl Storage for SledStorage {
+    type Tx = SledTx;
+
+    fn transact(&self) -> Result<Self::Tx> {
+        Ok(SledTx {
+            db: self.db.clone(),
+            changes: Default::default(),
+        })
+    }
+
+    fn del_range(&self, lower: &[u8], upper: &[u8]) -> Result<()> {
+        let db = self.db.clone();
+        let lower_v = lower.to_vec();
+        let upper_v = upper.to_vec();
+        thread::spawn(move || -> Result<()> {
+            for k_res in db.range(lower_v..upper_v).keys() {
+                db.remove(k_res.into_diagnostic()?).into_diagnostic()?;
+            }
+            Ok(())
+        });
+        Ok(())
+    }
+
+    fn range_compact(&self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
+        Ok(())
+    }
+}
+
+pub struct SledTx {
+    db: Db,
+    changes: Option<Db>,
+}
+
+impl SledTx {
+    fn ensure_changes_db(&mut self) -> Result<()> {
+        if self.changes.is_none() {
+            let db = Config::new()
+                .temporary(true)
+                .mode(Mode::HighThroughput)
+                .use_compression(false)
+                .open()
+                .into_diagnostic()?;
+            self.changes = Some(db)
+        }
+        Ok(())
+    }
+}
+
+impl StoreTx for SledTx {
+    #[inline]
+    fn get(&self, key: &[u8], _for_update: bool) -> Result<Option<Vec<u8>>> {
+        if let Some(changes) = &self.changes {
+            if let Some(val) = changes.get(key).into_diagnostic()? {
+                return if val[0] == DEL_MARKER {
+                    Ok(None)
+                } else {
+                    let data = val[1..].to_vec();
+                    Ok(Some(data))
+                };
+            }
+        }
+        let ret = self.db.get(key).into_diagnostic()?;
+        Ok(ret.map(|v| v.to_vec()))
+    }
+
+    #[inline]
+    fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
+        self.ensure_changes_db()?;
+        let mut val_to_write = Vec::with_capacity(val.len() + 1);
+        val_to_write.push(PUT_MARKER);
+        val_to_write.extend_from_slice(val);
+        self.changes
+            .as_mut()
+            .unwrap()
+            .insert(key, val_to_write)
+            .into_diagnostic()?;
+        Ok(())
+    }
+
+    #[inline]
+    fn del(&mut self, key: &[u8]) -> Result<()> {
+        self.ensure_changes_db()?;
+        let val_to_write = [PUT_MARKER];
+        self.changes
+            .as_mut()
+            .unwrap()
+            .insert(key, &val_to_write)
+            .into_diagnostic()?;
+        Ok(())
+    }
+
+    #[inline]
+    fn exists(&self, key: &[u8], _for_update: bool) -> Result<bool> {
+        if let Some(changes) = &self.changes {
+            if let Some(val) = changes.get(key).into_diagnostic()? {
+                return Ok(val[0] != DEL_MARKER);
+            }
+        }
+        let ret = self.db.get(key).into_diagnostic()?;
+        Ok(ret.is_some())
+    }
+
+    fn commit(&mut self) -> Result<()> {
+        if let Some(changes) = &self.changes {
+            let mut batch = Batch::default();
+            for pair in changes.iter() {
+                let (k, v) = pair.into_diagnostic()?;
+                if v[0] == DEL_MARKER {
+                    batch.remove(&k);
+                } else {
+                    batch.insert(&k, &v[1..]);
+                }
+            }
+            self.db.apply_batch(batch).into_diagnostic()?;
+        }
+        Ok(())
+    }
+
+    fn range_scan(&self, lower: &[u8], upper: &[u8]) -> Box<dyn Iterator<Item = Result<Tuple>>> {
+        if let Some(changes) = &self.changes {
+            let change_iter = changes.range(lower.to_vec()..upper.to_vec()).fuse();
+            let db_iter = self.db.range(lower.to_vec()..upper.to_vec()).fuse();
+            Box::new(SledIter {
+                change_iter,
+                db_iter,
+                change_cache: None,
+                db_cache: None,
+            })
+        } else {
+            Box::new(
+                self.db
+                    .range(lower.to_vec()..upper.to_vec())
+                    .map(|d| d.into_diagnostic())
+                    .map_ok(|(k, v)| decode_tuple_from_kv(&k, &v)),
+            )
+        }
+    }
+
+    fn range_scan_raw(
+        &self,
+        lower: &[u8],
+        upper: &[u8],
+    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>> {
+        if let Some(changes) = &self.changes {
+            let change_iter = changes.range(lower.to_vec()..upper.to_vec()).fuse();
+            let db_iter = self.db.range(lower.to_vec()..upper.to_vec()).fuse();
+            Box::new(SledIterRaw {
+                change_iter,
+                db_iter,
+                change_cache: None,
+                db_cache: None,
+            })
+        } else {
+            Box::new(
+                self.db
+                    .range(lower.to_vec()..upper.to_vec())
+                    .map(|d| d.into_diagnostic())
+                    .map_ok(|(k, v)| (k.to_vec(), v.to_vec())),
+            )
+        }
+    }
+}
+
+struct SledIterRaw {
+    change_iter: Fuse<Iter>,
+    db_iter: Fuse<Iter>,
+    change_cache: Option<(IVec, IVec)>,
+    db_cache: Option<(IVec, IVec)>,
+}
+
+impl SledIterRaw {
+    #[inline]
+    fn fill_cache(&mut self) -> Result<()> {
+        if self.change_cache.is_none() {
+            if let Some(res) = self.change_iter.next() {
+                self.change_cache = Some(res.into_diagnostic()?)
+            }
+        }
+
+        if self.db_cache.is_none() {
+            if let Some(res) = self.db_iter.next() {
+                self.db_cache = Some(res.into_diagnostic()?);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn next_inner(&mut self) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
+        loop {
+            self.fill_cache()?;
+            match (&self.change_cache, &self.db_cache) {
+                (None, None) => return Ok(None),
+                (Some(_), None) => {
+                    let (k, cv) = self.change_cache.take().unwrap();
+                    if cv[0] == DEL_MARKER {
+                        continue;
+                    } else {
+                        return Ok(Some((k.to_vec(), cv[1..].to_vec())));
+                    }
+                }
+                (None, Some(_)) => {
+                    let (k, v) = self.db_cache.take().unwrap();
+                    return Ok(Some((k.to_vec(), v.to_vec())));
+                }
+                (Some((ck, _)), Some((dk, _))) => match ck.cmp(dk) {
+                    Ordering::Less => {
+                        let (k, sv) = self.change_cache.take().unwrap();
+                        if sv[0] == DEL_MARKER {
+                            continue;
+                        } else {
+                            return Ok(Some((k.to_vec(), sv[1..].to_vec())));
+                        }
+                    }
+                    Ordering::Greater => {
+                        let (k, v) = self.db_cache.take().unwrap();
+                        return Ok(Some((k.to_vec(), v.to_vec())));
+                    }
+                    Ordering::Equal => {
+                        self.db_cache.take();
+                        continue;
+                    }
+                },
+            }
+        }
+    }
+}
+
+impl Iterator for SledIterRaw {
+    type Item = Result<(Vec<u8>, Vec<u8>)>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
+    }
+}
+
+struct SledIter {
+    change_iter: Fuse<Iter>,
+    db_iter: Fuse<Iter>,
+    change_cache: Option<(IVec, IVec)>,
+    db_cache: Option<(IVec, IVec)>,
+}
+
+impl SledIter {
+    #[inline]
+    fn fill_cache(&mut self) -> Result<()> {
+        if self.change_cache.is_none() {
+            if let Some(res) = self.change_iter.next() {
+                self.change_cache = Some(res.into_diagnostic()?)
+            }
+        }
+
+        if self.db_cache.is_none() {
+            if let Some(res) = self.db_iter.next() {
+                self.db_cache = Some(res.into_diagnostic()?);
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn next_inner(&mut self) -> Result<Option<Tuple>> {
+        loop {
+            self.fill_cache()?;
+            match (&self.change_cache, &self.db_cache) {
+                (None, None) => return Ok(None),
+                (Some(_), None) => {
+                    let (k, cv) = self.change_cache.take().unwrap();
+                    if cv[0] == DEL_MARKER {
+                        continue;
+                    } else {
+                        return Ok(Some(decode_tuple_from_kv(&k, &cv[1..])));
+                    }
+                }
+                (None, Some(_)) => {
+                    let (k, v) = self.db_cache.take().unwrap();
+                    return Ok(Some(decode_tuple_from_kv(&k, &v)));
+                }
+                (Some((ck, _)), Some((dk, _))) => match ck.cmp(dk) {
+                    Ordering::Less => {
+                        let (k, sv) = self.change_cache.take().unwrap();
+                        if sv[0] == DEL_MARKER {
+                            continue;
+                        } else {
+                            return Ok(Some(decode_tuple_from_kv(&k, &sv[1..])));
+                        }
+                    }
+                    Ordering::Greater => {
+                        let (k, v) = self.db_cache.take().unwrap();
+                        return Ok(Some(decode_tuple_from_kv(&k, &v)));
+                    }
+                    Ordering::Equal => {
+                        self.db_cache.take();
+                        continue;
+                    }
+                },
+            }
+        }
+    }
+}
+
+impl Iterator for SledIter {
+    type Item = Result<Tuple>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
+    }
+}

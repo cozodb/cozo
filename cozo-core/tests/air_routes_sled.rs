@@ -6,20 +6,18 @@ use std::str::FromStr;
 use std::time::Instant;
 
 use approx::AbsDiffEq;
+use cozo::{new_cozo_sled, Db, SledStorage};
 use env_logger::Env;
 use lazy_static::lazy_static;
 use serde_json::json;
-use cozo::RocksDbStorage;
-
-use cozo::{new_cozo_rocksdb, Db};
 
 lazy_static! {
-    static ref TEST_DB: Db<RocksDbStorage> = {
+    static ref TEST_DB: Db<SledStorage> = {
         env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
         let creation = Instant::now();
-        let path = "_test_air_routes";
+        let path = "_test_air_routes_sled";
         _ = std::fs::remove_dir_all(path);
-        let db = new_cozo_rocksdb(path).unwrap();
+        let db = new_cozo_sled(path).unwrap();
         dbg!(creation.elapsed());
 
         let init = Instant::now();
@@ -49,7 +47,7 @@ lazy_static! {
             }
         "##, &Default::default()).unwrap();
 
-         db.run_script(r##"
+        db.run_script(r##"
             res[idx, label, typ, code, icao, desc] <~
                 CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any'],
                           url: 'file://./tests/air-routes-latest-nodes.csv',
@@ -91,8 +89,6 @@ lazy_static! {
 
             :replace idx2code { idx: Int => code: String }
         "##, &Default::default()).unwrap();
-
-        // println!("{}", db.run_script("?[idx, code] := *idx2code[idx, code]", &Default::default()).unwrap());
 
         db.run_script(r##"
             res[] <~
