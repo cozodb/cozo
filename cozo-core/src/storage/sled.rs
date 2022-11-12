@@ -65,6 +65,7 @@ pub struct SledTx {
 }
 
 impl SledTx {
+    #[inline]
     fn ensure_changes_db(&mut self) -> Result<()> {
         if self.changes.is_none() {
             let db = Config::new()
