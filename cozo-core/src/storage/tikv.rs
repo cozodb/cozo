@@ -24,7 +24,7 @@ pub fn new_cozo_tikv(pd_endpoints: Vec<String>, optimistic: bool) -> Result<Db<T
         .block_on(RawClient::new(pd_endpoints.clone()))
         .into_diagnostic()?;
     let client = RT
-        .block_on(TransactionClient::new(pd_endpoints.clone()))
+        .block_on(TransactionClient::new(pd_endpoints))
         .into_diagnostic()?;
     let ret = Db::new(TiKvStorage {
         client: Arc::new(client),
@@ -184,7 +184,7 @@ impl BatchScannerRaw {
                 );
                 let res = RT.block_on(fut).into_diagnostic()?;
                 let res_vec = res
-                    .map(|pair| -> (Vec<u8>, Vec<u8>) { (pair.0.into(), pair.1.into()) })
+                    .map(|pair| -> (Vec<u8>, Vec<u8>) { (pair.0.into(), pair.1) })
                     .collect_vec();
                 let has_content = !res_vec.is_empty();
                 if has_content {
@@ -204,7 +204,7 @@ impl BatchScannerRaw {
                     );
                     let res = RT.block_on(fut).into_diagnostic()?;
                     let res_vec = res
-                        .map(|pair| -> (Vec<u8>, Vec<u8>) { (pair.0.into(), pair.1.into()) })
+                        .map(|pair| -> (Vec<u8>, Vec<u8>) { (pair.0.into(), pair.1) })
                         .collect_vec();
                     let has_content = !res_vec.is_empty();
                     if has_content {

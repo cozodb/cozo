@@ -2,20 +2,26 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under MPL-2.0.
  */
 
+use std::borrow::Borrow;
+use std::cell::RefCell;
 use std::path::Path;
 use std::sync::Arc;
 use std::{iter, thread};
 
+use clap::builder::TypedValueParser;
 use itertools::Itertools;
-use miette::{miette, IntoDiagnostic, Result};
+use miette::{miette, IntoDiagnostic, Report, Result};
+use ouroboros::self_referencing;
 use redb::{
-    Builder, Database, ReadOnlyTable, ReadTransaction, ReadableTable, Table, TableDefinition,
-    WriteStrategy, WriteTransaction,
+    Builder, Database, RangeIter, ReadOnlyTable, ReadTransaction, ReadableTable, Table,
+    TableDefinition, WriteStrategy, WriteTransaction,
 };
 
 use crate::data::tuple::Tuple;
 use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
+
+/// This currently does not work even after pulling in ouroboros: ReDB's lifetimes are really maddening
 
 /// Creates a ReDB database object.
 pub fn new_cozo_redb(path: impl AsRef<Path>) -> Result<crate::Db<ReStorage>> {
@@ -55,14 +61,18 @@ impl ReStorage {
     }
 }
 
-impl Storage for ReStorage {
-    type Tx = ReTx;
+impl<'s> Storage<'s> for ReStorage {
+    type Tx = ReTx<'s>;
 
-    fn transact(&self, write: bool) -> Result<Self::Tx> {
+    fn transact(&'s self, write: bool) -> Result<Self::Tx> {
         Ok(if write {
-            ReTx::Write(ReTxWrite::new(self.db.clone()))
+            let tx = self.db.begin_write().into_diagnostic()?;
+            ReTx::Write(ReTxWrite {
+                tx: Some(RefCell::new(tx)),
+            })
         } else {
-            ReTx::Read(ReTxRead::new(self.db.clone()))
+            let tx = self.db.begin_read().into_diagnostic()?;
+            ReTx::Read(ReTxRead { tx })
         })
     }
 
@@ -93,155 +103,72 @@ impl Storage for ReStorage {
     }
 }
 
-pub enum ReTx {
-    Read(ReTxRead),
-    Write(ReTxWrite),
+pub enum ReTx<'s> {
+    Read(ReTxRead<'s>),
+    Write(ReTxWrite<'s>),
 }
 
-pub struct ReTxRead {
-    db_ptr: Option<*const Database>,
-    tx_ptr: Option<*mut ReadTransaction<'static>>,
-    tbl_ptr: Option<*mut ReadOnlyTable<'static, [u8], [u8]>>,
+pub struct ReTxRead<'s> {
+    tx: ReadTransaction<'s>,
 }
 
-impl ReTxRead {
-    fn new(db_arc: Arc<Database>) -> Self {
-        unsafe {
-            let db_ptr = Arc::into_raw(db_arc);
-            let tx_ptr = Box::into_raw(Box::new(
-                (&*db_ptr)
-                    .begin_read()
-                    .expect("fatal: open read transaction failed"),
-            ));
-            let tbl_ptr = Box::into_raw(Box::new(
-                (&*tx_ptr)
-                    .open_table(TABLE)
-                    .expect("fatal: open table failed"),
-            ));
-            ReTxRead {
-                db_ptr: Some(db_ptr),
-                tx_ptr: Some(tx_ptr),
-                tbl_ptr: Some(tbl_ptr),
-            }
-        }
-    }
+pub struct ReTxWrite<'s> {
+    tx: Option<RefCell<WriteTransaction<'s>>>,
 }
 
-impl Drop for ReTxRead {
-    fn drop(&mut self) {
-        unsafe {
-            let db_ptr = self.db_ptr.take();
-            let tx_ptr = self.tx_ptr.take();
-            let tbl_ptr = self.tbl_ptr.take();
-            let _db = Arc::from_raw(db_ptr.unwrap());
-            let _tx = Box::from_raw(tx_ptr.unwrap());
-            let _tbl = Box::from_raw(tbl_ptr.unwrap());
-        }
-    }
-}
-
-pub struct ReTxWrite {
-    db_ptr: Option<*const Database>,
-    tx_ptr: Option<*mut WriteTransaction<'static>>,
-    tbl_ptr: Option<*mut Table<'static, 'static, [u8], [u8]>>,
-}
-
-impl ReTxWrite {
-    fn new(db_arc: Arc<Database>) -> Self {
-        unsafe {
-            let db_ptr = Arc::into_raw(db_arc);
-            let tx_ptr = Box::into_raw(Box::new(
-                (&*db_ptr)
-                    .begin_write()
-                    .expect("fatal: open write transaction failed"),
-            ));
-            let tbl_ptr = Box::into_raw(Box::new(
-                (&*tx_ptr)
-                    .open_table(TABLE)
-                    .expect("fatal: open table failed"),
-            ));
-            ReTxWrite {
-                db_ptr: Some(db_ptr),
-                tx_ptr: Some(tx_ptr),
-                tbl_ptr: Some(tbl_ptr),
-            }
-        }
-    }
-}
-
-impl Drop for ReTxWrite {
-    fn drop(&mut self) {
-        unsafe {
-            let db_ptr = self.db_ptr.take();
-            let _db = Arc::from_raw(db_ptr.unwrap());
-            if self.tx_ptr.is_some() {
-                let tx_ptr = self.tx_ptr.take();
-                let tbl_ptr = self.tbl_ptr.take();
-
-                let _tx = Box::from_raw(tx_ptr.unwrap());
-                let _tbl = Box::from_raw(tbl_ptr.unwrap());
-            }
-        }
-    }
-}
-
-impl StoreTx for ReTx {
+impl<'s> StoreTx<'s> for ReTx<'s> {
     fn get(&self, key: &[u8], _for_update: bool) -> Result<Option<Vec<u8>>> {
-        unsafe {
-            match self {
-                ReTx::Read(inner) => {
-                    let tbl = &*inner.tbl_ptr.unwrap();
-                    tbl.get(key)
-                        .map(|op| op.map(|s| s.to_vec()))
-                        .into_diagnostic()
-                }
-                ReTx::Write(inner) => {
-                    let tbl = &*inner.tbl_ptr.unwrap();
-                    tbl.get(key)
-                        .map(|op| op.map(|s| s.to_vec()))
-                        .into_diagnostic()
-                }
+        match self {
+            ReTx::Read(inner) => {
+                let tbl = inner.tx.open_table(TABLE).into_diagnostic()?;
+                tbl.get(key)
+                    .map(|op| op.map(|s| s.to_vec()))
+                    .into_diagnostic()
+            }
+            ReTx::Write(inner) => {
+                let tx = inner.tx.as_ref().unwrap().borrow_mut();
+                let tbl = tx.open_table(TABLE).into_diagnostic()?;
+                tbl.get(key)
+                    .map(|op| op.map(|s| s.to_vec()))
+                    .into_diagnostic()
             }
         }
     }
 
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
-        unsafe {
-            match self {
-                ReTx::Read(_) => unreachable!(),
-                ReTx::Write(inner) => {
-                    let tbl = &mut *inner.tbl_ptr.unwrap();
-                    tbl.insert(key, val).into_diagnostic()?;
-                    Ok(())
-                }
+        match self {
+            ReTx::Read(_) => unreachable!(),
+            ReTx::Write(inner) => {
+                let tx = inner.tx.as_ref().unwrap().borrow_mut();
+                let mut tbl = tx.open_table(TABLE).into_diagnostic()?;
+                tbl.insert(key, val).into_diagnostic()?;
+                Ok(())
             }
         }
     }
 
     fn del(&mut self, key: &[u8]) -> Result<()> {
-        unsafe {
-            match self {
-                ReTx::Read(_) => unreachable!(),
-                ReTx::Write(inner) => {
-                    let tbl = &mut *inner.tbl_ptr.unwrap();
-                    tbl.remove(key).into_diagnostic()?;
-                    Ok(())
-                }
+        match self {
+            ReTx::Read(_) => unreachable!(),
+            ReTx::Write(inner) => {
+                let tx = inner.tx.as_ref().unwrap().borrow_mut();
+                let mut tbl = tx.open_table(TABLE).into_diagnostic()?;
+                tbl.remove(key).into_diagnostic()?;
+                Ok(())
             }
         }
     }
 
     fn exists(&self, key: &[u8], _for_update: bool) -> Result<bool> {
-        unsafe {
-            match self {
-                ReTx::Read(inner) => {
-                    let tbl = &*inner.tbl_ptr.unwrap();
-                    tbl.get(key).map(|op| op.is_some()).into_diagnostic()
-                }
-                ReTx::Write(inner) => {
-                    let tbl = &*inner.tbl_ptr.unwrap();
-                    tbl.get(key).map(|op| op.is_some()).into_diagnostic()
-                }
+        match self {
+            ReTx::Read(inner) => {
+                let tbl = inner.tx.open_table(TABLE).into_diagnostic()?;
+                tbl.get(key).map(|op| op.is_some()).into_diagnostic()
+            }
+            ReTx::Write(inner) => {
+                let tx = inner.tx.as_ref().unwrap().borrow_mut();
+                let tbl = tx.open_table(TABLE).into_diagnostic()?;
+                tbl.get(key).map(|op| op.is_some()).into_diagnostic()
             }
         }
     }
@@ -249,55 +176,106 @@ impl StoreTx for ReTx {
     fn commit(&mut self) -> Result<()> {
         match self {
             ReTx::Read(_) => Ok(()),
-            ReTx::Write(inner) => unsafe {
-                let tx_ptr = inner.tx_ptr.take();
-                let tbl_ptr = inner.tbl_ptr.take();
-                let _tbl = Box::from_raw(tbl_ptr.unwrap());
-                let tx = Box::from_raw(tx_ptr.unwrap());
-                tx.commit().into_diagnostic()
-            },
+            ReTx::Write(inner) => {
+                let tx_cell = inner.tx.take().unwrap();
+                let tx = tx_cell.into_inner();
+                tx.commit().into_diagnostic()?;
+                Ok(())
+            }
         }
     }
 
-    fn range_scan(&self, lower: &[u8], upper: &[u8]) -> Box<dyn Iterator<Item = Result<Tuple>>> {
-        match self {
-            ReTx::Read(inner) => unsafe {
-                let tbl = &*inner.tbl_ptr.unwrap();
-                match tbl.range(lower.to_vec()..upper.to_vec()) {
-                    Ok(it) => Box::new(it.map(|(k, v)| Ok(decode_tuple_from_kv(k, v)))),
-                    Err(err) => Box::new(iter::once(Err(miette!(err)))),
-                }
-            },
-            ReTx::Write(inner) => unsafe {
-                let tbl = &*inner.tbl_ptr.unwrap();
-                match tbl.range(lower.to_vec()..upper.to_vec()) {
-                    Ok(it) => Box::new(it.map(|(k, v)| Ok(decode_tuple_from_kv(k, v)))),
-                    Err(err) => Box::new(iter::once(Err(miette!(err)))),
-                }
-            },
-        }
-    }
-
-    fn range_scan_raw(
-        &self,
+    fn range_scan<'a>(
+        &'a self,
         lower: &[u8],
         upper: &[u8],
-    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>> {
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a>
+    where
+        's: 'a,
+    {
         match self {
-            ReTx::Read(inner) => unsafe {
-                let tbl = &*inner.tbl_ptr.unwrap();
-                match tbl.range(lower.to_vec()..upper.to_vec()) {
-                    Ok(it) => Box::new(it.map(|(k, v)| Ok((k.to_vec(), v.to_vec())))),
-                    Err(err) => Box::new(iter::once(Err(miette!(err)))),
+            ReTx::Read(inner) => {
+                let tbl = match inner.tx.open_table(TABLE).into_diagnostic() {
+                    Ok(tbl) => tbl,
+                    Err(err) => return Box::new(iter::once(Err(miette!(err)))),
+                };
+                let it = ReadTableIterBuilder {
+                    tbl,
+                    it_builder: |tbl| tbl.range(lower.to_vec()..upper.to_vec()).unwrap(),
                 }
-            },
-            ReTx::Write(inner) => unsafe {
-                let tbl = &*inner.tbl_ptr.unwrap();
-                match tbl.range(lower.to_vec()..upper.to_vec()) {
-                    Ok(it) => Box::new(it.map(|(k, v)| Ok((k.to_vec(), v.to_vec())))),
-                    Err(err) => Box::new(iter::once(Err(miette!(err)))),
+                .build();
+                todo!()
+                // match tbl.range(lower.to_vec()..upper.to_vec()) {
+                //     Ok(it) => Box::new(it.map(|(k, v)| Ok(decode_tuple_from_kv(k, v)))),
+                //     Err(err) => Box::new(iter::once(Err(miette!(err)))),
+                // }
+            }
+            ReTx::Write(inner) => {
+                let tx = inner.tx.as_ref().unwrap().borrow_mut();
+                let tbl = match tx.open_table(TABLE) {
+                    Ok(tbl) => tbl,
+                    Err(err) => return Box::new(iter::once(Err(miette!(err)))),
+                };
+
+                let it = WriteTableIterBuilder {
+                    tbl,
+                    it_builder: |tbl| tbl.range(lower.to_vec()..upper.to_vec()).unwrap(),
                 }
-            },
+                .build();
+                todo!()
+                // let tbl = &*inner.tbl_ptr.unwrap();
+                // match tbl.range(lower.to_vec()..upper.to_vec()) {
+                //     Ok(it) => Box::new(it.map(|(k, v)| Ok(decode_tuple_from_kv(k, v)))),
+                //     Err(err) => Box::new(iter::once(Err(miette!(err)))),
+                // }
+            }
         }
     }
+
+    fn range_scan_raw<'a>(
+        &'a self,
+        lower: &[u8],
+        upper: &[u8],
+    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
+    where
+        's: 'a,
+    {
+        todo!()
+        // match self {
+        //     ReTx::Read(inner) => unsafe {
+        //         let tbl = &*inner.tbl_ptr.unwrap();
+        //         match tbl.range(lower.to_vec()..upper.to_vec()) {
+        //             Ok(it) => Box::new(it.map(|(k, v)| Ok((k.to_vec(), v.to_vec())))),
+        //             Err(err) => Box::new(iter::once(Err(miette!(err)))),
+        //         }
+        //     },
+        //     ReTx::Write(inner) => unsafe {
+        //         todo!()
+        //         // let tbl = &*inner.tbl_ptr.unwrap();
+        //         // match tbl.range(lower.to_vec()..upper.to_vec()) {
+        //         //     Ok(it) => Box::new(it.map(|(k, v)| Ok((k.to_vec(), v.to_vec())))),
+        //         //     Err(err) => Box::new(iter::once(Err(miette!(err)))),
+        //         // }
+        //     },
+        // }
+    }
+}
+
+#[self_referencing]
+struct ReadTableIter<'txn> {
+    tbl: ReadOnlyTable<'txn, [u8], [u8]>,
+    #[borrows(tbl)]
+    #[not_covariant]
+    it: RangeIter<'this, [u8], [u8]>,
+}
+
+#[self_referencing]
+struct WriteTableIter<'db, 'txn>
+where
+    'txn: 'db,
+{
+    tbl: Table<'db, 'txn, [u8], [u8]>,
+    #[borrows(tbl)]
+    #[not_covariant]
+    it: RangeIter<'this, [u8], [u8]>,
 }

@@ -21,6 +21,7 @@ pub use miette::Error;
 pub use runtime::db::Db;
 pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
 pub use storage::sled::{new_cozo_sled, SledStorage};
+pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 
 // pub use storage::re::{new_cozo_redb, ReStorage};

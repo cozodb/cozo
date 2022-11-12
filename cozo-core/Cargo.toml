@@ -64,6 +64,7 @@ cozorocks = { path = "../cozorocks", version = "0.1.0" }
 sled = "0.34.7"
 tikv-client = "0.1.0"
 tokio = "1.21.2"
+sqlite = "0.30.1"
 #redb = "0.9.0"
 #ouroboros = "0.15.5"
 

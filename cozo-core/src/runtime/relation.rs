@@ -199,7 +199,10 @@ impl RelationHandle {
             RelationDeserError
         })?)
     }
-    pub(crate) fn scan_all<'a>(&self, tx: &'a SessionTx<'_>) -> impl Iterator<Item = Result<Tuple>> + 'a {
+    pub(crate) fn scan_all<'a>(
+        &self,
+        tx: &'a SessionTx<'_>,
+    ) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
         tx.tx.range_scan(&lower, &upper)

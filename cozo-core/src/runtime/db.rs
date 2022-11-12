@@ -100,6 +100,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         Ok(ret)
     }
 
+    /// should be called after creation of the database to initialize the runtime data.
     pub fn initialize(&'s self) -> Result<()> {
         self.load_last_ids()?;
         Ok(())

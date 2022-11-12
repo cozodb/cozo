@@ -120,7 +120,7 @@ pub unsafe extern "C" fn cozo_run_query(
         }
     };
 
-    let result = db.run_script_str(script, &params_str);
+    let result = db.run_script_str(script, params_str);
     CString::new(result).unwrap().into_raw()
 }
 
