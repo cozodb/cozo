@@ -106,7 +106,7 @@ impl UnificationRA {
 
     fn iter<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
@@ -196,7 +196,7 @@ impl FilteredRA {
     }
     fn iter<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
@@ -542,7 +542,7 @@ impl ReorderRA {
     }
     fn iter<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
@@ -748,7 +748,7 @@ impl StoredRA {
 
     fn prefix_join<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
@@ -827,7 +827,7 @@ impl StoredRA {
 
     fn neg_join<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
@@ -935,7 +935,7 @@ impl StoredRA {
         }
     }
 
-    fn iter<'a>(&'a self, tx: &'a SessionTx) -> Result<TupleIter<'a>> {
+    fn iter<'a>(&'a self, tx: &'a SessionTx<'_>) -> Result<TupleIter<'a>> {
         let it = self.storage.scan_all(tx);
         Ok(if self.filters.is_empty() {
             Box::new(it)
@@ -1308,7 +1308,7 @@ impl RelAlgebra {
     }
     pub(crate) fn iter<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
@@ -1386,7 +1386,7 @@ impl NegJoin {
 
     pub(crate) fn iter<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
@@ -1512,7 +1512,7 @@ impl InnerJoin {
     }
     pub(crate) fn iter<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
@@ -1585,7 +1585,7 @@ impl InnerJoin {
     }
     fn materialized_join<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         eliminate_indices: BTreeSet<usize>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,

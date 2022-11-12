@@ -29,7 +29,7 @@ pub(crate) struct BetweennessCentrality;
 impl AlgoImpl for BetweennessCentrality {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,
@@ -99,7 +99,7 @@ pub(crate) struct ClosenessCentrality;
 impl AlgoImpl for ClosenessCentrality {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,

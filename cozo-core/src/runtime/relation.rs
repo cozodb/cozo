@@ -214,7 +214,7 @@ impl RelationHandle {
             RelationDeserError
         })?)
     }
-    pub(crate) fn scan_all<'a>(&self, tx: &'a SessionTx) -> impl Iterator<Item = Result<Tuple>> + 'a {
+    pub(crate) fn scan_all<'a>(&self, tx: &'a SessionTx<'_>) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
         tx.tx.range_scan(&lower, &upper)
@@ -222,7 +222,7 @@ impl RelationHandle {
 
     pub(crate) fn scan_prefix<'a>(
         &self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         prefix: &Tuple,
     ) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let mut lower = prefix.0.clone();
@@ -236,7 +236,7 @@ impl RelationHandle {
     }
     pub(crate) fn scan_bounded_prefix<'a>(
         &self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         prefix: &Tuple,
         lower: &[DataValue],
         upper: &[DataValue],
@@ -267,7 +267,7 @@ pub(crate) fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
 #[diagnostic(code(eval::rel_name_conflict))]
 struct RelNameConflictError(String);
 
-impl SessionTx {
+impl<'a> SessionTx<'a> {
     pub(crate) fn relation_exists(&self, name: &str) -> Result<bool> {
         let key = DataValue::Str(SmartString::from(name));
         let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);

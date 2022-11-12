@@ -39,7 +39,7 @@ impl QueryLimiter {
     }
 }
 
-impl SessionTx {
+impl<'a> SessionTx<'a> {
     pub(crate) fn stratified_magic_evaluate(
         &self,
         strata: &[CompiledProgram],

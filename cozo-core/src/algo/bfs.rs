@@ -23,7 +23,7 @@ pub(crate) struct Bfs;
 impl AlgoImpl for Bfs {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,

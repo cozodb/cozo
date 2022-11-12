@@ -62,7 +62,7 @@ pub(crate) mod yen;
 pub(crate) trait AlgoImpl {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,
@@ -195,7 +195,7 @@ impl MagicAlgoRuleArg {
         &'a self,
         undirected: bool,
         allow_negative_edges: bool,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<(
         Vec<Vec<(usize, f64)>>,
@@ -279,7 +279,7 @@ impl MagicAlgoRuleArg {
     pub(crate) fn convert_edge_to_graph<'a>(
         &'a self,
         undirected: bool,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
         let mut graph: Vec<Vec<usize>> = vec![];
@@ -319,7 +319,7 @@ impl MagicAlgoRuleArg {
     pub(crate) fn prefix_iter<'a>(
         &'a self,
         prefix: &DataValue,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
@@ -339,7 +339,7 @@ impl MagicAlgoRuleArg {
     }
     pub(crate) fn arity(
         &self,
-        tx: &SessionTx,
+        tx: &SessionTx<'_>,
         stores: &BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<usize> {
         Ok(match self {
@@ -357,7 +357,7 @@ impl MagicAlgoRuleArg {
     }
     pub(crate) fn iter<'a>(
         &'a self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<TupleIter<'a>> {
         Ok(match self {

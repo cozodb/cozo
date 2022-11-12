@@ -29,7 +29,7 @@ pub(crate) struct CsvReader;
 impl AlgoImpl for CsvReader {
     fn run(
         &mut self,
-        _tx: &SessionTx,
+        _tx: &SessionTx<'_>,
         algo: &MagicAlgoApply,
         _stores: &BTreeMap<MagicSymbol, InMemRelation>,
         out: &InMemRelation,

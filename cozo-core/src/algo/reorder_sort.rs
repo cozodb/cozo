@@ -25,7 +25,7 @@ pub(crate) struct ReorderSort;
 impl AlgoImpl for ReorderSort {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,

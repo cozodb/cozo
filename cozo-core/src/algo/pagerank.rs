@@ -26,7 +26,7 @@ pub(crate) struct PageRank;
 impl AlgoImpl for PageRank {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,

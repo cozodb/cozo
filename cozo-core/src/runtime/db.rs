@@ -71,10 +71,7 @@ pub struct Db<S> {
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
 }
 
-impl<S> Debug for Db<S>
-where
-    S: Storage,
-{
+impl<S> Debug for Db<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Db")
     }
@@ -91,11 +88,7 @@ lazy_static! {
     static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
 }
 
-impl<S> Db<S>
-where
-    S: Storage,
-    <S as Storage>::Tx: 'static,
-{
+impl<S: Storage> Db<S> {
     /// create a new database with the specified storage
     pub fn new(storage: S) -> Result<Self> {
         let ret = Self {
@@ -121,7 +114,7 @@ where
         tx.commit_tx()?;
         Ok(())
     }
-    fn transact(&self) -> Result<SessionTx> {
+    fn transact(&self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             tx: Box::new(self.db.transact(false)?),
             mem_store_id: Default::default(),
@@ -129,7 +122,7 @@ where
         };
         Ok(ret)
     }
-    fn transact_write(&self) -> Result<SessionTx> {
+    fn transact_write(&self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             tx: Box::new(self.db.transact(true)?),
             mem_store_id: Default::default(),
@@ -492,7 +485,7 @@ where
     }
     pub(crate) fn run_query(
         &self,
-        tx: &mut SessionTx,
+        tx: &mut SessionTx<'_>,
         input_program: InputProgram,
     ) -> Result<(JsonValue, Vec<(Vec<u8>, Vec<u8>)>)> {
         let mut clean_ups = vec![];
@@ -670,7 +663,7 @@ where
             }
         }
     }
-    pub(crate) fn remove_relation(&self, name: &Symbol, tx: &mut SessionTx) -> Result<()> {
+    pub(crate) fn remove_relation(&self, name: &Symbol, tx: &mut SessionTx<'_>) -> Result<()> {
         let (lower, upper) = tx.destroy_relation(name)?;
         self.db.del_range(&lower, &upper)?;
         Ok(())

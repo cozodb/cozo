@@ -24,7 +24,7 @@ pub(crate) struct Constant;
 impl AlgoImpl for Constant {
     fn run(
         &mut self,
-        _tx: &SessionTx,
+        _tx: &SessionTx<'_>,
         algo: &MagicAlgoApply,
         _stores: &BTreeMap<MagicSymbol, InMemRelation>,
         out: &InMemRelation,

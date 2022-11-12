@@ -42,7 +42,7 @@ impl NormalFormProgram {
 }
 
 impl StratifiedNormalFormProgram {
-    pub(crate) fn magic_sets_rewrite(self, tx: &SessionTx) -> Result<StratifiedMagicProgram> {
+    pub(crate) fn magic_sets_rewrite(self, tx: &SessionTx<'_>) -> Result<StratifiedMagicProgram> {
         let mut exempt_rules = BTreeSet::from([Symbol::new(PROG_ENTRY, SourceSpan(0, 0))]);
         let mut collected = vec![];
         for prog in self.0 {
@@ -278,7 +278,7 @@ impl NormalFormProgram {
         }
         downstream_rules
     }
-    fn adorn(&self, upstream_rules: &BTreeSet<Symbol>, tx: &SessionTx) -> Result<MagicProgram> {
+    fn adorn(&self, upstream_rules: &BTreeSet<Symbol>, tx: &SessionTx<'_>) -> Result<MagicProgram> {
         let rules_to_rewrite: BTreeSet<_> = self
             .prog
             .keys()

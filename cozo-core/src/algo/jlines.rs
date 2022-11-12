@@ -31,7 +31,7 @@ pub(crate) struct JsonReader;
 impl AlgoImpl for JsonReader {
     fn run(
         &mut self,
-        _tx: &SessionTx,
+        _tx: &SessionTx<'_>,
         algo: &MagicAlgoApply,
         _stores: &BTreeMap<MagicSymbol, InMemRelation>,
         out: &InMemRelation,

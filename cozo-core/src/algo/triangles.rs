@@ -24,7 +24,7 @@ pub(crate) struct ClusteringCoefficients;
 impl AlgoImpl for ClusteringCoefficients {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,

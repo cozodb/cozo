@@ -14,7 +14,7 @@ use crate::data::tuple::Tuple;
 use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
-impl SessionTx {
+impl<'a> SessionTx<'a> {
     pub(crate) fn sort_and_collect(
         &mut self,
         original: InMemRelation,

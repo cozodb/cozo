@@ -30,7 +30,7 @@ pub(crate) struct ShortestPathDijkstra;
 impl AlgoImpl for ShortestPathDijkstra {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,

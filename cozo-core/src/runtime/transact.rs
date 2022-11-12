@@ -16,13 +16,13 @@ use crate::runtime::in_mem::{InMemRelation, StoredRelationId};
 use crate::runtime::relation::RelationId;
 use crate::storage::StoreTx;
 
-pub struct SessionTx {
-    pub(crate) tx: Box<dyn StoreTx>,
+pub struct SessionTx<'a> {
+    pub(crate) tx: Box<dyn StoreTx + 'a>,
     pub(crate) relation_store_id: Arc<AtomicU64>,
     pub(crate) mem_store_id: Arc<AtomicU32>,
 }
 
-impl SessionTx {
+impl<'a> SessionTx<'a> {
     pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> InMemRelation {
         let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;

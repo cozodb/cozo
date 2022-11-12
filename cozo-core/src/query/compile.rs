@@ -85,7 +85,7 @@ struct RuleNotFound(String, #[label] SourceSpan);
 #[diagnostic(help("Required arity: {1}, number of arguments given: {2}"))]
 struct ArityMismatch(String, usize, usize, #[label] SourceSpan);
 
-impl SessionTx {
+impl<'a> SessionTx<'a> {
     pub(crate) fn stratified_magic_compile(
         &mut self,
         prog: &StratifiedMagicProgram,

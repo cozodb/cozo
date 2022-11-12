@@ -26,7 +26,7 @@ pub(crate) struct RandomWalk;
 impl AlgoImpl for RandomWalk {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,

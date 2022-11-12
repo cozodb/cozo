@@ -271,7 +271,7 @@ impl MagicAlgoApply {
         &self,
         idx: usize,
         len: usize,
-        tx: &SessionTx,
+        tx: &SessionTx<'_>,
         stores: &BTreeMap<MagicSymbol, InMemRelation>,
     ) -> Result<&MagicAlgoRuleArg> {
         #[derive(Error, Diagnostic, Debug)]
@@ -748,7 +748,7 @@ impl InputProgram {
 
         Err(NoEntryError.into())
     }
-    pub(crate) fn to_normalized_program(&self, tx: &SessionTx) -> Result<NormalFormProgram> {
+    pub(crate) fn to_normalized_program(&self, tx: &SessionTx<'_>) -> Result<NormalFormProgram> {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
         for (k, rules_or_algo) in &self.prog {
             match rules_or_algo {

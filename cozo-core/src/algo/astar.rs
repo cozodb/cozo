@@ -26,7 +26,7 @@ pub(crate) struct ShortestPathAStar;
 impl AlgoImpl for ShortestPathAStar {
     fn run<'a>(
         &mut self,
-        tx: &'a SessionTx,
+        tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,
@@ -87,7 +87,7 @@ fn astar<'a>(
     edges: &'a MagicAlgoRuleArg,
     nodes: &'a MagicAlgoRuleArg,
     heuristic: &Expr,
-    tx: &'a SessionTx,
+    tx: &'a SessionTx<'_>,
     stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     poison: Poison,
 ) -> Result<(f64, Vec<DataValue>)> {

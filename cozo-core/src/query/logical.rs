@@ -121,7 +121,7 @@ impl InputAtom {
         })
     }
 
-    pub(crate) fn disjunctive_normal_form(self, tx: &SessionTx) -> Result<Disjunction> {
+    pub(crate) fn disjunctive_normal_form(self, tx: &SessionTx<'_>) -> Result<Disjunction> {
         let neg_form = self.negation_normal_form()?;
         let mut gen = TempSymbGen::default();
         neg_form.do_disjunctive_normal_form(&mut gen, tx)
@@ -134,7 +134,7 @@ impl InputAtom {
             span,
         }: InputNamedFieldRelationApplyAtom,
         gen: &mut TempSymbGen,
-        tx: &SessionTx,
+        tx: &SessionTx<'_>,
     ) -> Result<InputRelationApplyAtom> {
         let stored = tx.get_relation(&name, false)?;
         let fields: BTreeSet<_> = stored
@@ -173,7 +173,7 @@ impl InputAtom {
     fn do_disjunctive_normal_form(
         self,
         gen: &mut TempSymbGen,
-        tx: &SessionTx,
+        tx: &SessionTx<'_>,
     ) -> Result<Disjunction> {
         // invariants: the input is already in negation normal form
         // the return value is a disjunction of conjunctions, with no nesting

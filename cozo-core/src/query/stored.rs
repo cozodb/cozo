@@ -28,7 +28,7 @@ use crate::Db;
 #[diagnostic(code(eval::relation_arity_mismatch))]
 struct RelationArityMismatch(String, usize, usize);
 
-impl SessionTx {
+impl<'a> SessionTx<'a> {
     pub(crate) fn execute_relation<S: Storage>(
         &mut self,
         db: &Db<S>,
@@ -36,10 +36,7 @@ impl SessionTx {
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
-    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>>
-    where
-        <S as Storage>::Tx: 'static,
-    {
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = vec![];
         let mut replaced_old_triggers = None;
         if op == RelationOp::Replace {
