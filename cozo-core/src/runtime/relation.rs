@@ -119,15 +119,6 @@ impl RelationHandle {
         ret.extend(prefix_bytes);
         ret
     }
-    // fn encode_key_element(&self, ret: &mut Vec<u8>, idx: usize, val: &DataValue) {
-    //     if idx > 0 {
-    //         let pos = (ret.len() as u32).to_be_bytes();
-    //         for (i, u) in pos.iter().enumerate() {
-    //             ret[4 * (1 + idx) + i] = *u;
-    //         }
-    //     }
-    //     val.serialize(&mut Serializer::new(ret)).unwrap();
-    // }
     pub(crate) fn adhoc_encode_key(&self, tuple: &Tuple, span: SourceSpan) -> Result<Vec<u8>> {
         let len = self.metadata.keys.len();
         ensure!(
@@ -143,18 +134,12 @@ impl RelationHandle {
         for val in &tuple.0[0..len] {
             ret.encode_datavalue(val);
         }
-        // for i in 0..len {
-        //     self.encode_key_element(&mut ret, i, &tuple.0[i])
-        // }
         Ok(ret)
     }
     pub(crate) fn adhoc_encode_val(&self, tuple: &Tuple, _span: SourceSpan) -> Result<Vec<u8>> {
         let start = self.metadata.keys.len();
         let len = self.metadata.non_keys.len();
         let mut ret = self.encode_key_prefix(len);
-        // for i in 0..len {
-        //     self.encode_key_element(&mut ret, i, &tuple.0[i + start])
-        // }
         tuple.0[start..]
             .serialize(&mut Serializer::new(&mut ret))
             .unwrap();
