@@ -19,6 +19,7 @@ exclude = [
 storage-rocksdb = []
 storage-sled = []
 storage-tikv = []
+#storage-redb = []
 jemalloc = ["tikv-jemallocator-global", "cozorocks/jemalloc"]
 io-uring = ["cozorocks/io-uring"]
 
@@ -61,6 +62,10 @@ csv = "1.1.6"
 tikv-jemallocator-global = { version = "0.5.0", optional = true }
 cozorocks = { path = "../cozorocks", version = "0.1.0" }
 sled = "0.34.7"
+tikv-client = "0.1.0"
+tokio = "1.21.2"
+#redb = "0.9.0"
+#ouroboros = "0.15.5"
 
 clap = { version = "3.2.8", features = ["derive"] }
 rouille = "3.5.0"

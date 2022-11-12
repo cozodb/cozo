@@ -115,9 +115,10 @@ where
     }
 
     fn load_last_ids(&self) -> Result<()> {
-        let tx = self.transact()?;
+        let mut tx = self.transact()?;
         self.relation_store_id
             .store(tx.load_last_relation_store_id()?.0, Ordering::Release);
+        tx.commit_tx()?;
         Ok(())
     }
     fn transact(&self) -> Result<SessionTx> {
@@ -223,6 +224,7 @@ where
                 if is_write {
                     tx.commit_tx()?;
                 } else {
+                    tx.commit_tx()?;
                     assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
                 }
                 for (lower, upper) in cleanups {
@@ -418,7 +420,7 @@ where
                     .stratify()?
                     .magic_sets_rewrite(&tx)?;
                 let (compiled, _) = tx.stratified_magic_compile(&program)?;
-
+                tx.commit_tx()?;
                 self.explain_compiled(&compiled)
             }
             SysOp::Compact => {
@@ -457,7 +459,7 @@ where
                 })
             }
             SysOp::ShowTrigger(name) => {
-                let tx = self.transact()?;
+                let mut tx = self.transact()?;
                 let rel = tx.get_relation(&name, false)?;
                 let mut ret = vec![];
                 for (i, trigger) in rel.put_triggers.iter().enumerate() {
@@ -469,6 +471,7 @@ where
                 for (i, trigger) in rel.replace_triggers.iter().enumerate() {
                     ret.push(json!(["replace", i, trigger]))
                 }
+                tx.commit_tx()?;
                 Ok(json!({"headers": ["type", "idx", "trigger"], "rows": ret}))
             }
             SysOp::SetTriggers(name, puts, rms, replaces) => {
@@ -683,7 +686,7 @@ where
         Ok(json!({"rows": res, "headers": ["id", "started_at"]}))
     }
     fn list_relation(&self, name: &str) -> Result<JsonValue> {
-        let tx = self.transact()?;
+        let mut tx = self.transact()?;
         let handle = tx.get_relation(name, false)?;
         let mut ret = vec![];
         let mut idx = 0;
@@ -707,6 +710,7 @@ where
             ]));
             idx += 1;
         }
+        tx.commit_tx()?;
         Ok(json!({"rows": ret, "headers": ["column", "is_key", "index", "type", "has_default"]}))
     }
     fn list_relations(&self) -> Result<JsonValue> {
