@@ -25,14 +25,14 @@ pub trait StoreTx {
     fn del(&mut self, key: &[u8]) -> Result<()>;
     fn exists(&self, key: &[u8], for_update: bool) -> Result<bool>;
     fn commit(&mut self) -> Result<()>;
-    fn range_scan(
-        &self,
+    fn range_scan<'a>(
+        &'a self,
         lower: &[u8],
         upper: &[u8],
-    ) -> Box<dyn Iterator<Item = Result<Tuple>>>;
-    fn range_scan_raw(
-        &self,
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
+    fn range_scan_raw<'a>(
+        &'a self,
         lower: &[u8],
         upper: &[u8],
-    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>>;
+    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>;
 }

@@ -935,7 +935,7 @@ impl StoredRA {
         }
     }
 
-    fn iter(&self, tx: &SessionTx) -> Result<TupleIter<'_>> {
+    fn iter<'a>(&'a self, tx: &'a SessionTx) -> Result<TupleIter<'a>> {
         let it = self.storage.scan_all(tx);
         Ok(if self.filters.is_empty() {
             Box::new(it)

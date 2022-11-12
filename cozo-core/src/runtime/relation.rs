@@ -214,17 +214,17 @@ impl RelationHandle {
             RelationDeserError
         })?)
     }
-    pub(crate) fn scan_all(&self, tx: &SessionTx) -> impl Iterator<Item = Result<Tuple>> {
+    pub(crate) fn scan_all<'a>(&self, tx: &'a SessionTx) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
         tx.tx.range_scan(&lower, &upper)
     }
 
-    pub(crate) fn scan_prefix(
+    pub(crate) fn scan_prefix<'a>(
         &self,
-        tx: &SessionTx,
+        tx: &'a SessionTx,
         prefix: &Tuple,
-    ) -> impl Iterator<Item = Result<Tuple>> {
+    ) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let mut lower = prefix.0.clone();
         lower.truncate(self.metadata.keys.len());
         let mut upper = lower.clone();
@@ -234,13 +234,13 @@ impl RelationHandle {
         // RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
         tx.tx.range_scan(&prefix_encoded, &upper_encoded)
     }
-    pub(crate) fn scan_bounded_prefix(
+    pub(crate) fn scan_bounded_prefix<'a>(
         &self,
-        tx: &SessionTx,
+        tx: &'a SessionTx,
         prefix: &Tuple,
         lower: &[DataValue],
         upper: &[DataValue],
-    ) -> impl Iterator<Item = Result<Tuple>> {
+    ) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let mut lower_t = prefix.clone();
         lower_t.0.extend_from_slice(lower);
         let mut upper_t = prefix.clone();
