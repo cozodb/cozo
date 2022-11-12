@@ -19,7 +19,10 @@ use crate::utils::swap_option_result;
 /// Creates a Sled database object.
 pub fn new_cozo_sled(path: impl AsRef<Path>) -> Result<crate::Db<SledStorage>> {
     let db = sled::open(path).into_diagnostic()?;
-    crate::Db::new(SledStorage { db })
+    let ret = crate::Db::new(SledStorage { db })?;
+
+    ret.initialize()?;
+    Ok(ret)
 }
 
 /// Storage engine using Sled
@@ -31,7 +34,7 @@ pub struct SledStorage {
 const PUT_MARKER: u8 = 1;
 const DEL_MARKER: u8 = 0;
 
-impl Storage for SledStorage {
+impl Storage<'_> for SledStorage {
     type Tx = SledTx;
 
     fn transact(&self, _write: bool) -> Result<Self::Tx> {
@@ -80,7 +83,7 @@ impl SledTx {
     }
 }
 
-impl StoreTx for SledTx {
+impl<'s> StoreTx<'s> for SledTx {
     #[inline]
     fn get(&self, key: &[u8], _for_update: bool) -> Result<Option<Vec<u8>>> {
         if let Some(changes) = &self.changes {
@@ -150,7 +153,14 @@ impl StoreTx for SledTx {
         Ok(())
     }
 
-    fn range_scan(&self, lower: &[u8], upper: &[u8]) -> Box<dyn Iterator<Item = Result<Tuple>>> {
+    fn range_scan<'a>(
+        &'a self,
+        lower: &[u8],
+        upper: &[u8],
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a>
+    where
+        's: 'a,
+    {
         if let Some(changes) = &self.changes {
             let change_iter = changes.range(lower.to_vec()..upper.to_vec()).fuse();
             let db_iter = self.db.range(lower.to_vec()..upper.to_vec()).fuse();
@@ -170,11 +180,14 @@ impl StoreTx for SledTx {
         }
     }
 
-    fn range_scan_raw(
-        &self,
+    fn range_scan_raw<'a>(
+        &'a self,
         lower: &[u8],
         upper: &[u8],
-    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>> {
+    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
+    where
+        's: 'a,
+    {
         if let Some(changes) = &self.changes {
             let change_iter = changes.range(lower.to_vec()..upper.to_vec()).fuse();
             let db_iter = self.db.range(lower.to_vec()..upper.to_vec()).fuse();

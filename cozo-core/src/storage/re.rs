@@ -19,7 +19,9 @@ use crate::storage::{Storage, StoreTx};
 
 /// Creates a ReDB database object.
 pub fn new_cozo_redb(path: impl AsRef<Path>) -> Result<crate::Db<ReStorage>> {
-    crate::Db::new(ReStorage::new(path)?)
+    let ret = crate::Db::new(ReStorage::new(path)?)?;
+    ret.initialize()?;
+    Ok(ret)
 }
 
 const TABLE: TableDefinition<'_, [u8], [u8]> = TableDefinition::new("cozo");

@@ -17,7 +17,7 @@ use crate::runtime::relation::RelationId;
 use crate::storage::StoreTx;
 
 pub struct SessionTx<'a> {
-    pub(crate) tx: Box<dyn StoreTx + 'a>,
+    pub(crate) tx: Box<dyn StoreTx<'a> + 'a>,
     pub(crate) relation_store_id: Arc<AtomicU64>,
     pub(crate) mem_store_id: Arc<AtomicU32>,
 }

@@ -72,7 +72,9 @@ pub fn new_cozo_rocksdb(path: impl AsRef<str>) -> Result<Db<RocksDbStorage>> {
 
     let db = db_builder.build()?;
 
-    Db::new(RocksDbStorage::new(db))
+    let ret = Db::new(RocksDbStorage::new(db))?;
+    ret.initialize()?;
+    Ok(ret)
 }
 
 /// RocksDB storage engine
@@ -87,7 +89,7 @@ impl RocksDbStorage {
     }
 }
 
-impl Storage for RocksDbStorage {
+impl Storage<'_> for RocksDbStorage {
     type Tx = RocksDbTx;
 
     fn transact(&self, _write: bool) -> Result<Self::Tx> {
@@ -108,7 +110,7 @@ pub struct RocksDbTx {
     db_tx: Tx,
 }
 
-impl StoreTx for RocksDbTx {
+impl<'s> StoreTx<'s> for RocksDbTx {
     #[inline]
     fn get(&self, key: &[u8], for_update: bool) -> Result<Option<Vec<u8>>> {
         Ok(self.db_tx.get(key, for_update)?.map(|v| v.to_vec()))
@@ -133,7 +135,14 @@ impl StoreTx for RocksDbTx {
         Ok(self.db_tx.commit()?)
     }
 
-    fn range_scan(&self, lower: &[u8], upper: &[u8]) -> Box<dyn Iterator<Item = Result<Tuple>>> {
+    fn range_scan<'a>(
+        &'a self,
+        lower: &[u8],
+        upper: &[u8],
+    ) -> Box<dyn Iterator<Item = Result<Tuple>>>
+    where
+        's: 'a,
+    {
         let mut inner = self.db_tx.iterator().upper_bound(upper).start();
         inner.seek(lower);
         Box::new(RocksDbIterator {
@@ -143,11 +152,14 @@ impl StoreTx for RocksDbTx {
         })
     }
 
-    fn range_scan_raw(
-        &self,
+    fn range_scan_raw<'a>(
+        &'a self,
         lower: &[u8],
         upper: &[u8],
-    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>> {
+    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>>
+    where
+        's: 'a,
+    {
         let mut inner = self.db_tx.iterator().upper_bound(upper).start();
         inner.seek(lower);
         Box::new(RocksDbIteratorRaw {

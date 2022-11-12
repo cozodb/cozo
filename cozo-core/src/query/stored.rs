@@ -29,7 +29,7 @@ use crate::Db;
 struct RelationArityMismatch(String, usize, usize);
 
 impl<'a> SessionTx<'a> {
-    pub(crate) fn execute_relation<S: Storage>(
+    pub(crate) fn execute_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
         res_iter: impl Iterator<Item = Result<Tuple>>,

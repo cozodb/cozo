@@ -4,8 +4,8 @@
 
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -13,7 +13,7 @@ use either::{Left, Right};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use miette::{
-    bail, ensure, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
+    bail, Diagnostic, ensure, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
     JSONReportHandler, Result, WrapErr,
 };
 use serde_json::{json, Map};
@@ -25,8 +25,8 @@ use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::SysOp;
-use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::relation::{
     FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, UnificationRA,
@@ -88,7 +88,7 @@ lazy_static! {
     static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
 }
 
-impl<S: Storage> Db<S> {
+impl<'s, S: Storage<'s>> Db<S> {
     /// create a new database with the specified storage
     pub fn new(storage: S) -> Result<Self> {
         let ret = Self {
@@ -97,24 +97,29 @@ impl<S: Storage> Db<S> {
             queries_count: Arc::new(Default::default()),
             running_queries: Arc::new(Mutex::new(Default::default())),
         };
-        ret.load_last_ids()?;
         Ok(ret)
     }
-    fn compact_relation(&self) -> Result<()> {
+
+    pub fn initialize(&'s self) -> Result<()> {
+        self.load_last_ids()?;
+        Ok(())
+    }
+
+    fn compact_relation(&'s self) -> Result<()> {
         let l = Tuple::default().encode_as_key(RelationId(0));
         let u = Tuple(vec![DataValue::Bot]).encode_as_key(RelationId(u64::MAX));
         self.db.range_compact(&l, &u)?;
         Ok(())
     }
 
-    fn load_last_ids(&self) -> Result<()> {
+    fn load_last_ids(&'s self) -> Result<()> {
         let mut tx = self.transact()?;
         self.relation_store_id
             .store(tx.load_last_relation_store_id()?.0, Ordering::Release);
         tx.commit_tx()?;
         Ok(())
     }
-    fn transact(&self) -> Result<SessionTx<'_>> {
+    fn transact(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             tx: Box::new(self.db.transact(false)?),
             mem_store_id: Default::default(),
@@ -122,7 +127,7 @@ impl<S: Storage> Db<S> {
         };
         Ok(ret)
     }
-    fn transact_write(&self) -> Result<SessionTx<'_>> {
+    fn transact_write(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             tx: Box::new(self.db.transact(true)?),
             mem_store_id: Default::default(),
@@ -131,7 +136,7 @@ impl<S: Storage> Db<S> {
         Ok(ret)
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
-    pub fn run_script(&self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
+    pub fn run_script(&'s self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
         let start = Instant::now();
         match self.do_run_script(payload, params) {
             Ok(mut json) => {
@@ -146,7 +151,7 @@ impl<S: Storage> Db<S> {
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     /// Fold any error into the return JSON itself.
-    pub fn run_script_fold_err(&self, payload: &str, params: &Map<String, JsonValue>) -> JsonValue {
+    pub fn run_script_fold_err(&'s self, payload: &str, params: &Map<String, JsonValue>) -> JsonValue {
         match self.run_script(payload, params) {
             Ok(json) => json,
             Err(mut err) => {
@@ -171,7 +176,7 @@ impl<S: Storage> Db<S> {
         }
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters formatted as JSON.
-    pub fn run_script_str(&self, payload: &str, params: &str) -> String {
+    pub fn run_script_str(&'s self, payload: &str, params: &str) -> String {
         let params_json = if params.is_empty() {
             Map::default()
         } else {
@@ -189,7 +194,7 @@ impl<S: Storage> Db<S> {
         };
         self.run_script_fold_err(payload, &params_json).to_string()
     }
-    fn do_run_script(&self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
+    fn do_run_script(&'s self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
         let param_pool = params
             .iter()
             .map(|(k, v)| (k.clone(), DataValue::from(v)))
@@ -404,7 +409,7 @@ impl<S: Storage> Db<S> {
 
         Ok(json!({"headers": headers, "rows": ret}))
     }
-    fn run_sys_op(&self, op: SysOp) -> Result<JsonValue> {
+    fn run_sys_op(&'s self, op: SysOp) -> Result<JsonValue> {
         match op {
             SysOp::Explain(prog) => {
                 let mut tx = self.transact()?;
@@ -663,7 +668,7 @@ impl<S: Storage> Db<S> {
             }
         }
     }
-    pub(crate) fn remove_relation(&self, name: &Symbol, tx: &mut SessionTx<'_>) -> Result<()> {
+    pub(crate) fn remove_relation(&'s self, name: &Symbol, tx: &mut SessionTx<'_>) -> Result<()> {
         let (lower, upper) = tx.destroy_relation(name)?;
         self.db.del_range(&lower, &upper)?;
         Ok(())
@@ -678,7 +683,7 @@ impl<S: Storage> Db<S> {
             .collect_vec();
         Ok(json!({"rows": res, "headers": ["id", "started_at"]}))
     }
-    fn list_relation(&self, name: &str) -> Result<JsonValue> {
+    fn list_relation(&'s self, name: &str) -> Result<JsonValue> {
         let mut tx = self.transact()?;
         let handle = tx.get_relation(name, false)?;
         let mut ret = vec![];
@@ -706,7 +711,7 @@ impl<S: Storage> Db<S> {
         tx.commit_tx()?;
         Ok(json!({"rows": ret, "headers": ["column", "is_key", "index", "type", "has_default"]}))
     }
-    fn list_relations(&self) -> Result<JsonValue> {
+    fn list_relations(&'s self) -> Result<JsonValue> {
         let lower =
             Tuple(vec![DataValue::Str(SmartString::from(""))]).encode_as_key(RelationId::SYSTEM);
         let upper = Tuple(vec![DataValue::Str(SmartString::from(String::from(

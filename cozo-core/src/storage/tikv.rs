@@ -26,11 +26,13 @@ pub fn new_cozo_tikv(pd_endpoints: Vec<String>, optimistic: bool) -> Result<Db<T
     let client = RT
         .block_on(TransactionClient::new(pd_endpoints.clone()))
         .into_diagnostic()?;
-    Db::new(TiKvStorage {
+    let ret = Db::new(TiKvStorage {
         client: Arc::new(client),
         raw_client: Arc::new(raw_client),
         optimistic,
-    })
+    })?;
+    ret.initialize()?;
+    Ok(ret)
 }
 
 lazy_static! {
@@ -51,7 +53,7 @@ pub struct TiKvStorage {
     optimistic: bool,
 }
 
-impl Storage for TiKvStorage {
+impl Storage<'_> for TiKvStorage {
     type Tx = TiKvTx;
 
     fn transact(&self, _write: bool) -> Result<Self::Tx> {
@@ -87,7 +89,7 @@ pub struct TiKvTx {
     tx: Arc<Mutex<Transaction>>,
 }
 
-impl StoreTx for TiKvTx {
+impl<'s> StoreTx<'s> for TiKvTx {
     fn get(&self, key: &[u8], for_update: bool) -> Result<Option<Vec<u8>>> {
         if for_update {
             RT.block_on(self.tx.lock().unwrap().get_for_update(key.to_owned()))
@@ -125,15 +127,25 @@ impl StoreTx for TiKvTx {
         Ok(())
     }
 
-    fn range_scan(&self, lower: &[u8], upper: &[u8]) -> Box<dyn Iterator<Item = Result<Tuple>>> {
+    fn range_scan<'a>(
+        &'a self,
+        lower: &[u8],
+        upper: &[u8],
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a>
+    where
+        's: 'a,
+    {
         Box::new(BatchScanner::new(self.tx.clone(), lower, upper))
     }
 
-    fn range_scan_raw(
-        &self,
+    fn range_scan_raw<'a>(
+        &'a self,
         lower: &[u8],
         upper: &[u8],
-    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>> {
+    ) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
+    where
+        's: 'a,
+    {
         Box::new(BatchScannerRaw::new(self.tx.clone(), lower, upper))
     }
 }
