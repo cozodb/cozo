@@ -16,7 +16,9 @@ use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
 
-/// Creates a Sled database object.
+/// Creates a Sled database object. Experimental.
+/// You should use [`new_cozo_rocksdb`](crate::new_cozo_rocksdb) or
+/// [`new_cozo_sqlite`](crate::new_cozo_sqlite) instead.
 pub fn new_cozo_sled(path: impl AsRef<Path>) -> Result<crate::Db<SledStorage>> {
     let db = sled::open(path).into_diagnostic()?;
     let ret = crate::Db::new(SledStorage { db })?;

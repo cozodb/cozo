@@ -89,7 +89,9 @@ lazy_static! {
 }
 
 impl<'s, S: Storage<'s>> Db<S> {
-    /// create a new database with the specified storage
+    /// Create a new database object with the given storage.
+    /// You must call [`initialize`](Self::initialize) immediately after creation.
+    /// Due to lifetime restrictions we are not able to call that for you automatically.
     pub fn new(storage: S) -> Result<Self> {
         let ret = Self {
             db: storage,
@@ -100,7 +102,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         Ok(ret)
     }
 
-    /// should be called after creation of the database to initialize the runtime data.
+    /// Must be called after creation of the database to initialize the runtime state.
     pub fn initialize(&'s self) -> Result<()> {
         self.load_last_ids()?;
         Ok(())

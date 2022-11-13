@@ -18,7 +18,8 @@ use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
 use crate::Db;
 
-/// connect to a Storage engine backed by TiKV
+/// Connect to a Storage engine backed by TiKV.
+/// Experimental and very slow.
 pub fn new_cozo_tikv(pd_endpoints: Vec<String>, optimistic: bool) -> Result<Db<TiKvStorage>> {
     let raw_client = RT
         .block_on(RawClient::new(pd_endpoints.clone()))

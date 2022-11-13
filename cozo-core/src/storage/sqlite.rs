@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use ::sqlite::Connection;
 use either::{Either, Left, Right};
-use miette::{bail, miette, IntoDiagnostic, Result, WrapErr};
+use miette::{bail, miette, IntoDiagnostic, Result};
 use sqlite::{State, Statement};
 
 use crate::data::tuple::Tuple;
@@ -19,7 +19,14 @@ pub struct SqliteStorage {
     name: String,
 }
 
-/// create a sqlite backed database. `:memory:` is not OK.
+/// Create a sqlite backed database.
+/// This is slower than [`new_cozo_rocksdb`](crate::new_cozo_rocksdb)
+/// but uses way less resources and is much easier to compile for exotic
+/// environments.
+/// Supports concurrent readers but only a single writer.
+///
+/// You must provide a disk-based path: `:memory:` is not OK.
+/// If you want a pure memory storage, use [`new_cozo_mem`](crate::new_cozo_mem).
 pub fn new_cozo_sqlite(path: String) -> Result<crate::Db<SqliteStorage>> {
     let conn = sqlite::open(&path).into_diagnostic()?;
     let query = r#"
@@ -129,12 +136,7 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
         let mut statement = self.conn.prepare(query).unwrap();
         statement.bind((1, key)).unwrap();
         statement.bind((2, val)).unwrap();
-        while statement
-            .next()
-            .into_diagnostic()
-            .with_context(|| format!("{:x?} {:?} {:x?}", key, val, Tuple::decode_from_key(key)))?
-            != State::Done
-        {}
+        while statement.next().into_diagnostic()? != State::Done {}
         Ok(())
     }
 
@@ -209,6 +211,26 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
         statement.bind((1, lower)).unwrap();
         statement.bind((2, upper)).unwrap();
         Box::new(RawIter(statement))
+    }
+
+    fn batch_put(
+        &mut self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>>,
+    ) -> Result<()> {
+        let query = r#"
+                insert into cozo(k, v) values (?, ?)
+                on conflict(k) do update set v=excluded.v;
+            "#;
+
+        let mut statement = self.conn.prepare(query).unwrap();
+        for pair in data {
+            let (key, val) = pair?;
+            statement.bind((1, key.as_slice())).unwrap();
+            statement.bind((2, val.as_slice())).unwrap();
+            while statement.next().into_diagnostic()? != State::Done {}
+            statement.reset().into_diagnostic()?;
+        }
+        Ok(())
     }
 }
 

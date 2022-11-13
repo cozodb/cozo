@@ -18,7 +18,9 @@ use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
 
-/// create a database backed by memory
+/// Create a database backed by memory.
+/// This is the fastest storage, but non-persistent.
+/// Supports concurrent readers but only a single writer.
 pub fn new_cozo_mem() -> Result<crate::Db<MemStorage>> {
     let ret = crate::Db::new(MemStorage::default())?;
 
@@ -184,6 +186,24 @@ impl<'s> StoreTx<'s> for MemTx<'s> {
                 change_cache: None,
                 db_cache: None,
             }),
+        }
+    }
+
+    fn batch_put(
+        &mut self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>>,
+    ) -> Result<()> {
+        match self {
+            MemTx::Reader(_) => {
+                bail!("write in read transaction")
+            }
+            MemTx::Writer(_, cache) => {
+                for pair in data {
+                    let (k, v) = pair?;
+                    cache.insert(k, Some(v));
+                }
+                Ok(())
+            }
         }
     }
 }

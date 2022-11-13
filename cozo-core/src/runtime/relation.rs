@@ -240,8 +240,10 @@ impl RelationHandle {
     }
 }
 
+/// Decode tuple from key-value pairs. Used for customizing storage
+/// in traite [`StoreTx`](crate::StoreTx).
 #[inline]
-pub(crate) fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
+pub fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
     let mut tup = Tuple::decode_from_key(key);
     if !val.is_empty() {
         let vals: Vec<DataValue> = rmp_serde::from_slice(&val[ENCODED_KEY_MIN_LEN..]).unwrap();

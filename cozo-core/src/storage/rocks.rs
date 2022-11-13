@@ -17,6 +17,9 @@ use crate::utils::swap_option_result;
 use crate::Db;
 
 /// Creates a RocksDB database object.
+/// This is currently the fastest persistent storage and it can
+/// sustain huge concurrency.
+/// Supports concurrent readers and writers.
 pub fn new_cozo_rocksdb(path: impl AsRef<str>) -> Result<Db<RocksDbStorage>> {
     let builder = DbBuilder::default().path(path.as_ref());
     let path = builder.opts.db_path;
