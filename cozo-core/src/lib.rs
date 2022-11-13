@@ -23,7 +23,7 @@
 //! We created an in-memory database with [`new_cozo_mem`](crate::new_cozo_mem) above.
 //! Persistent options include [`new_cozo_rocksdb`](crate::new_cozo_rocksdb),
 //! [`new_cozo_sqlite`](crate::new_cozo_sqlite) and others.
-
+#![doc = document_features::document_features!()]
 #![warn(rust_2018_idioms, future_incompatible)]
 #![warn(missing_docs)]
 #![allow(clippy::type_complexity)]
@@ -34,9 +34,13 @@ pub use miette::Error;
 pub use runtime::db::Db;
 pub use runtime::relation::decode_tuple_from_kv;
 pub use storage::mem::{new_cozo_mem, MemStorage};
+#[cfg(feature = "storage-rocksdb")]
 pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
+#[cfg(feature = "storage-sled")]
 pub use storage::sled::{new_cozo_sled, SledStorage};
+#[cfg(feature = "storage-sqlite")]
 pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
+#[cfg(feature = "storage-tikv")]
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 

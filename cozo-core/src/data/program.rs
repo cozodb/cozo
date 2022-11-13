@@ -267,6 +267,7 @@ pub(crate) struct WrongAlgoOptionError {
 }
 
 impl MagicAlgoApply {
+    #[allow(dead_code)]
     pub(crate) fn relation_with_min_len(
         &self,
         idx: usize,
@@ -349,6 +350,7 @@ impl MagicAlgoApply {
             },
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn pos_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
         match self.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {
@@ -437,6 +439,7 @@ impl MagicAlgoApply {
             },
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn unit_interval_option(&self, name: &str, default: Option<f64>) -> Result<f64> {
         match self.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {
@@ -571,12 +574,14 @@ pub(crate) enum MagicAlgoRuleArg {
 }
 
 impl MagicAlgoRuleArg {
+    #[allow(dead_code)]
     pub(crate) fn bindings(&self) -> &[Symbol] {
         match self {
             MagicAlgoRuleArg::InMem { bindings, .. }
             | MagicAlgoRuleArg::Stored { bindings, .. } => bindings,
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             MagicAlgoRuleArg::InMem { span, .. } | MagicAlgoRuleArg::Stored { span, .. } => *span,

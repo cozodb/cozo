@@ -9,12 +9,15 @@ use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
 use cozorocks::{DbBuilder, DbIter, RocksDb, Tx};
 
-use crate::data::tuple::{Tuple, KEY_PREFIX_LEN};
-use crate::runtime::db::{BadDbInit, DbManifest, CURRENT_STORAGE_VERSION};
+use crate::data::tuple::Tuple;
+use crate::runtime::db::{BadDbInit, DbManifest};
 use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
 use crate::Db;
+
+const KEY_PREFIX_LEN: usize = 9;
+const CURRENT_STORAGE_VERSION: u64 = 1;
 
 /// Creates a RocksDB database object.
 /// This is currently the fastest persistent storage and it can

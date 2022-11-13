@@ -195,11 +195,13 @@ impl Expr {
         }
         Ok(())
     }
+    #[allow(dead_code)]
     pub(crate) fn binding_indices(&self) -> BTreeSet<usize> {
         let mut ret = BTreeSet::default();
         self.do_binding_indices(&mut ret);
         ret
     }
+    #[allow(dead_code)]
     fn do_binding_indices(&self, coll: &mut BTreeSet<usize>) {
         match self {
             Expr::Binding { tuple_pos, .. } => {

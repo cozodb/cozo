@@ -8,25 +8,41 @@ use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
+#[cfg(feature = "graph-algo")]
 use crate::algo::all_pairs_shortest_path::{BetweennessCentrality, ClosenessCentrality};
+#[cfg(feature = "graph-algo")]
 use crate::algo::astar::ShortestPathAStar;
+#[cfg(feature = "graph-algo")]
 use crate::algo::bfs::Bfs;
 use crate::algo::constant::Constant;
 use crate::algo::csv::CsvReader;
+#[cfg(feature = "graph-algo")]
 use crate::algo::degree_centrality::DegreeCentrality;
+#[cfg(feature = "graph-algo")]
 use crate::algo::dfs::Dfs;
 use crate::algo::jlines::JsonReader;
+#[cfg(feature = "graph-algo")]
 use crate::algo::kruskal::MinimumSpanningForestKruskal;
+#[cfg(feature = "graph-algo")]
 use crate::algo::label_propagation::LabelPropagation;
+#[cfg(feature = "graph-algo")]
 use crate::algo::louvain::CommunityDetectionLouvain;
+#[cfg(feature = "graph-algo")]
 use crate::algo::pagerank::PageRank;
+#[cfg(feature = "graph-algo")]
 use crate::algo::prim::MinimumSpanningTreePrim;
+#[cfg(feature = "graph-algo")]
 use crate::algo::random_walk::RandomWalk;
 use crate::algo::reorder_sort::ReorderSort;
+#[cfg(feature = "graph-algo")]
 use crate::algo::shortest_path_dijkstra::ShortestPathDijkstra;
+#[cfg(feature = "graph-algo")]
 use crate::algo::strongly_connected_components::StronglyConnectedComponent;
+#[cfg(feature = "graph-algo")]
 use crate::algo::top_sort::TopSort;
+#[cfg(feature = "graph-algo")]
 use crate::algo::triangles::ClusteringCoefficients;
+#[cfg(feature = "graph-algo")]
 use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol};
@@ -38,25 +54,40 @@ use crate::runtime::db::Poison;
 use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
+#[cfg(feature = "graph-algo")]
 pub(crate) mod all_pairs_shortest_path;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod astar;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod bfs;
 pub(crate) mod constant;
 pub(crate) mod csv;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod degree_centrality;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod dfs;
 pub(crate) mod jlines;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod kruskal;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod label_propagation;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod louvain;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod pagerank;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod prim;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod random_walk;
 pub(crate) mod reorder_sort;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod shortest_path_dijkstra;
 pub(crate) mod strongly_connected_components;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod top_sort;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod triangles;
+#[cfg(feature = "graph-algo")]
 pub(crate) mod yen;
 
 pub(crate) trait AlgoImpl {
@@ -106,25 +137,43 @@ impl AlgoHandle {
 
     pub(crate) fn get_impl(&self) -> Result<Box<dyn AlgoImpl>> {
         Ok(match &self.name.name as &str {
+            #[cfg(feature = "graph-algo")]
             "ClusteringCoefficients" => Box::new(ClusteringCoefficients),
+            #[cfg(feature = "graph-algo")]
             "DegreeCentrality" => Box::new(DegreeCentrality),
+            #[cfg(feature = "graph-algo")]
             "ClosenessCentrality" => Box::new(ClosenessCentrality),
+            #[cfg(feature = "graph-algo")]
             "BetweennessCentrality" => Box::new(BetweennessCentrality),
+            #[cfg(feature = "graph-algo")]
             "DepthFirstSearch" | "DFS" => Box::new(Dfs),
+            #[cfg(feature = "graph-algo")]
             "BreadthFirstSearch" | "BFS" => Box::new(Bfs),
+            #[cfg(feature = "graph-algo")]
             "ShortestPathDijkstra" => Box::new(ShortestPathDijkstra),
+            #[cfg(feature = "graph-algo")]
             "ShortestPathAStar" => Box::new(ShortestPathAStar),
+            #[cfg(feature = "graph-algo")]
             "KShortestPathYen" => Box::new(KShortestPathYen),
+            #[cfg(feature = "graph-algo")]
             "MinimumSpanningTreePrim" => Box::new(MinimumSpanningTreePrim),
+            #[cfg(feature = "graph-algo")]
             "MinimumSpanningForestKruskal" => Box::new(MinimumSpanningForestKruskal),
+            #[cfg(feature = "graph-algo")]
             "TopSort" => Box::new(TopSort),
+            #[cfg(feature = "graph-algo")]
             "ConnectedComponents" => Box::new(StronglyConnectedComponent::new(false)),
+            #[cfg(feature = "graph-algo")]
             "StronglyConnectedComponents" | "SCC" => {
                 Box::new(StronglyConnectedComponent::new(true))
             }
+            #[cfg(feature = "graph-algo")]
             "PageRank" => Box::new(PageRank),
+            #[cfg(feature = "graph-algo")]
             "CommunityDetectionLouvain" => Box::new(CommunityDetectionLouvain),
+            #[cfg(feature = "graph-algo")]
             "LabelPropagation" => Box::new(LabelPropagation),
+            #[cfg(feature = "graph-algo")]
             "RandomWalk" => Box::new(RandomWalk),
             "ReorderSort" => Box::new(ReorderSort),
             "JsonReader" => Box::new(JsonReader),
@@ -191,6 +240,7 @@ pub(crate) struct BadExprValueError(
 pub(crate) struct AlgoNotFoundError(pub(crate) String, #[label] pub(crate) SourceSpan);
 
 impl MagicAlgoRuleArg {
+    #[allow(dead_code)]
     pub(crate) fn convert_edge_to_weighted_graph<'a>(
         &'a self,
         undirected: bool,
@@ -276,6 +326,7 @@ impl MagicAlgoRuleArg {
         }
         Ok((graph, indices, inv_indices, has_neg_edge))
     }
+    #[allow(dead_code)]
     pub(crate) fn convert_edge_to_graph<'a>(
         &'a self,
         undirected: bool,
@@ -315,7 +366,7 @@ impl MagicAlgoRuleArg {
         }
         Ok((graph, indices, inv_indices))
     }
-
+    #[allow(dead_code)]
     pub(crate) fn prefix_iter<'a>(
         &'a self,
         prefix: &DataValue,

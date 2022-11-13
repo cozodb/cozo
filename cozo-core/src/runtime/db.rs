@@ -59,9 +59,6 @@ pub struct DbManifest {
     pub storage_version: u64,
 }
 
-// FIXME this should be storage-specific
-pub(crate) const CURRENT_STORAGE_VERSION: u64 = 1;
-
 /// The database object of Cozo.
 #[derive(Clone)]
 pub struct Db<S> {

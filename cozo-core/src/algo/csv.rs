@@ -9,6 +9,7 @@ use miette::{bail, ensure, IntoDiagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::{AlgoImpl, CannotDetermineArity};
+#[cfg(feature = "requests")]
 use crate::algo::jlines::get_file_content_from_url;
 use crate::data::expr::Expr;
 use crate::data::functions::{op_to_float, op_to_uuid};
@@ -158,12 +159,17 @@ impl AlgoImpl for CsvReader {
                 }
             }
             None => {
-                let content = get_file_content_from_url(&url)?;
-                let mut rdr = rdr_builder.from_reader(content.as_bytes());
-                for record in rdr.records() {
-                    let record = record.into_diagnostic()?;
-                    process_row(record)?;
+                #[cfg(feature = "requests")]
+                {
+                    let content = get_file_content_from_url(&url)?;
+                    let mut rdr = rdr_builder.from_reader(content.as_bytes());
+                    for record in rdr.records() {
+                        let record = record.into_diagnostic()?;
+                        process_row(record)?;
+                    }
                 }
+                #[cfg(not(feature = "requests"))]
+                bail!("the feature `requests` is not enabled for the build")
             }
         }
         Ok(())

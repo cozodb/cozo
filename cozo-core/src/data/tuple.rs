@@ -10,8 +10,6 @@ use crate::data::memcmp::MemCmpEncoder;
 use crate::data::value::DataValue;
 use crate::runtime::relation::RelationId;
 
-pub(crate) const KEY_PREFIX_LEN: usize = 9;
-
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
 pub struct Tuple(pub(crate) Vec<DataValue>);
 

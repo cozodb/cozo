@@ -1,0 +1,11 @@
+[package]
+name = "cozoserver"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cozo = { version = "0.1.2", path = "../cozo-core" }
+clap = { version = "3.2.8", features = ["derive"] }
+rouille = "3.5.0"

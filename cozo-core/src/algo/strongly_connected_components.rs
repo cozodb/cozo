@@ -1,6 +1,7 @@
 /*
  * Copyright 2022, The Cozo Project Authors. Licensed under MPL-2.0.
  */
+#![allow(unused_imports)]
 
 use std::cmp::min;
 use std::collections::BTreeMap;
@@ -20,16 +21,18 @@ use crate::runtime::db::Poison;
 use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::transact::SessionTx;
 
+#[cfg(feature = "graph-algo")]
 pub(crate) struct StronglyConnectedComponent {
     strong: bool,
 }
-
+#[cfg(feature = "graph-algo")]
 impl StronglyConnectedComponent {
     pub(crate) fn new(strong: bool) -> Self {
         Self { strong }
     }
 }
 
+#[cfg(feature = "graph-algo")]
 impl AlgoImpl for StronglyConnectedComponent {
     fn run<'a>(
         &mut self,

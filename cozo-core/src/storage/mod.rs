@@ -9,9 +9,13 @@ use crate::data::tuple::Tuple;
 use crate::decode_tuple_from_kv;
 
 pub(crate) mod mem;
+#[cfg(feature = "storage-rocksdb")]
 pub(crate) mod rocks;
+#[cfg(feature = "storage-sled")]
 pub(crate) mod sled;
+#[cfg(feature = "storage-sqlite")]
 pub(crate) mod sqlite;
+#[cfg(feature = "storage-tikv")]
 pub(crate) mod tikv;
 // pub(crate) mod re;
 
@@ -58,7 +62,7 @@ pub trait StoreTx<'s> {
     fn commit(&mut self) -> Result<()>;
 
     /// Scan on a range. `lower` is inclusive whereas `upper` is exclusive.
-    /// The default implementation calls [`range_scan_owned`](Self::range_scan_owned) and converts the results.
+    /// The default implementation calls [`range_scan_owned`](Self::range_scan) and converts the results.
     ///
     /// The implementation must call [`decode_tuple_from_kv`](crate::decode_tuple_from_kv) to obtain
     /// a decoded tuple in the loop of the iterator.

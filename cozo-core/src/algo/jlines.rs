@@ -9,7 +9,9 @@ use std::{fs, io};
 
 use itertools::Itertools;
 use log::error;
+#[allow(unused_imports)]
 use miette::{bail, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
+#[cfg(feature = "requests")]
 use minreq::Response;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -107,25 +109,30 @@ impl AlgoImpl for JsonReader {
                 }
             }
             None => {
-                let content = get_file_content_from_url(&url)?;
-                let content = content.as_str().into_diagnostic()?;
-                if json_lines {
-                    for line in content.lines() {
-                        let line = line.trim();
-                        if !line.is_empty() {
-                            let row = serde_json::from_str(line).into_diagnostic()?;
-                            process_row(&row)?;
+                #[cfg(feature = "requests")]
+                {
+                    let content = get_file_content_from_url(&url)?;
+                    let content = content.as_str().into_diagnostic()?;
+                    if json_lines {
+                        for line in content.lines() {
+                            let line = line.trim();
+                            if !line.is_empty() {
+                                let row = serde_json::from_str(line).into_diagnostic()?;
+                                process_row(&row)?;
+                            }
+                        }
+                    } else {
+                        let data: JsonValue = serde_json::from_str(content).into_diagnostic()?;
+                        let rows = data
+                            .as_array()
+                            .ok_or_else(|| miette!("JSON file is not an array"))?;
+                        for row in rows {
+                            process_row(row)?;
                         }
                     }
-                } else {
-                    let data: JsonValue = serde_json::from_str(content).into_diagnostic()?;
-                    let rows = data
-                        .as_array()
-                        .ok_or_else(|| miette!("JSON file is not an array"))?;
-                    for row in rows {
-                        process_row(row)?;
-                    }
                 }
+                #[cfg(not(feature = "requests"))]
+                bail!("the feature `requests` is not enabled for the build")
             }
         }
         Ok(())
@@ -171,6 +178,7 @@ impl AlgoImpl for JsonReader {
     }
 }
 
+#[cfg(feature = "requests")]
 pub(crate) fn get_file_content_from_url(url: &str) -> Result<Response> {
     minreq::get(url as &str)
         .send()

@@ -16,12 +16,32 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-storage-rocksdb = []
-storage-sled = []
-storage-tikv = []
-#storage-redb = []
-jemalloc = ["tikv-jemallocator-global", "cozorocks/jemalloc"]
-io-uring = ["cozorocks/io-uring"]
+#! # Features
+
+default = ["compact", "storage-rocksdb"]
+## Enables the `minimal`, `requests` and `graph-algo` features
+compact = ["minimal", "requests", "graph-algo"]
+## Enables the `storage-sqlite` feature
+minimal = ["storage-sqlite"]
+## Enables the [Sqlite](https://www.sqlite.org/index.html) backend, also allows backup and restore with Sqlite data files.
+storage-sqlite = ["dep:sqlite"]
+## Enables the [RocksDB](http://rocksdb.org/) backend
+storage-rocksdb = ["dep:cozorocks"]
+## Enables the graph algorithms
+graph-algo = ["dep:rayon", "dep:nalgebra"]
+## Allows the utilities to make web requests to fetch data
+requests = ["dep:minreq"]
+## Uses jemalloc as the global allocator, can make a difference in performance
+jemalloc = ["dep:tikv-jemallocator-global", "cozorocks?/jemalloc"]
+## Enables io-uring option for the RocksDB storage
+io-uring = ["cozorocks?/io-uring"]
+
+#! The following features are highly experimental:
+
+## Enables the [Sled](https://github.com/spacejam/sled) backend
+storage-sled = ["dep:sled"]
+## Enables the [TiKV](https://tikv.org/) client backend
+storage-tikv = ["dep:tikv-client", "dep:tokio"]
 
 [dependencies]
 casey = "0.3.3"
@@ -51,23 +71,20 @@ itertools = "0.10.3"
 regex = "1.6.0"
 pest = "2.2.1"
 pest_derive = "2.2.1"
-rayon = "1.5.3"
-nalgebra = "0.31.1"
-minreq = { version = "2.6.0", features = ["https-rustls"] }
 approx = "0.5.1"
 unicode-normalization = "0.1.21"
 thiserror = "1.0.34"
 uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
 csv = "1.1.6"
+document-features = "0.2.6"
+rayon = { version = "1.5.3", optional = true }
+nalgebra = { version = "0.31.1", optional = true }
+minreq = { version = "2.6.0", features = ["https-rustls"], optional = true }
 tikv-jemallocator-global = { version = "0.5.0", optional = true }
-cozorocks = { path = "../cozorocks", version = "0.1.0" }
-sled = "0.34.7"
-tikv-client = "0.1.0"
-tokio = "1.21.2"
-sqlite = "0.30.1"
+cozorocks = { path = "../cozorocks", version = "0.1.0", optional = true }
+sled = { version = "0.34.7", optional = true }
+tikv-client = { version = "0.1.0", optional = true }
+tokio = { version = "1.21.2", optional = true }
+sqlite = { version = "0.30.1", optional = true }
 #redb = "0.9.0"
 #ouroboros = "0.15.5"
-
-clap = { version = "3.2.8", features = ["derive"] }
-rouille = "3.5.0"
-

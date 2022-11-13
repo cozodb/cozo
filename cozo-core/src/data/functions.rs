@@ -1441,7 +1441,10 @@ pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
         .get_float()
         .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
     let millis = (f * 1000.) as i64;
-    let dt = Utc.timestamp_millis(millis);
+    let dt = Utc
+        .timestamp_millis_opt(millis)
+        .latest()
+        .ok_or_else(|| miette!("bad time: {}", f))?;
     match args.get(1) {
         Some(tz_v) => {
             let tz_s = tz_v.get_string().ok_or_else(|| {

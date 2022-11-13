@@ -1,15 +1,18 @@
 /*
  * Copyright 2022, The Cozo Project Authors. Licensed under AGPL-3 or later.
  */
+#![cfg(feature = "storage-tikv")]
+#![cfg(feature = "graph-algo")]
 
 use std::str::FromStr;
 use std::time::Instant;
 
 use approx::AbsDiffEq;
-use cozo::{new_cozo_tikv, Db, TiKvStorage};
 use env_logger::Env;
 use lazy_static::lazy_static;
 use serde_json::json;
+
+use cozo::{new_cozo_tikv, Db, TiKvStorage};
 
 lazy_static! {
     static ref TEST_DB: Db<TiKvStorage> = {
