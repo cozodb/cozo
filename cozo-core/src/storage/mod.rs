@@ -10,6 +10,7 @@ pub(crate) mod rocks;
 pub(crate) mod sled;
 pub(crate) mod tikv;
 pub(crate) mod sqlite;
+pub(crate) mod mem;
 // pub(crate) mod re;
 
 pub trait Storage<'s> {
