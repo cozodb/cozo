@@ -155,7 +155,7 @@ impl<'s> StoreTx<'s> for SledTx {
         Ok(())
     }
 
-    fn range_scan<'a>(
+    fn range_scan_tuple<'a>(
         &'a self,
         lower: &[u8],
         upper: &[u8],
@@ -182,7 +182,7 @@ impl<'s> StoreTx<'s> for SledTx {
         }
     }
 
-    fn range_scan_raw<'a>(
+    fn range_scan<'a>(
         &'a self,
         lower: &[u8],
         upper: &[u8],

@@ -205,7 +205,7 @@ impl RelationHandle {
     ) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
-        tx.tx.range_scan(&lower, &upper)
+        tx.tx.range_scan_tuple(&lower, &upper)
     }
 
     pub(crate) fn scan_prefix<'a>(
@@ -220,7 +220,7 @@ impl RelationHandle {
         let prefix_encoded = Tuple(lower).encode_as_key(self.id);
         let upper_encoded = Tuple(upper).encode_as_key(self.id);
         // RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
-        tx.tx.range_scan(&prefix_encoded, &upper_encoded)
+        tx.tx.range_scan_tuple(&prefix_encoded, &upper_encoded)
     }
     pub(crate) fn scan_bounded_prefix<'a>(
         &self,
@@ -236,7 +236,7 @@ impl RelationHandle {
         upper_t.0.push(DataValue::Bot);
         let lower_encoded = lower_t.encode_as_key(self.id);
         let upper_encoded = upper_t.encode_as_key(self.id);
-        tx.tx.range_scan(&lower_encoded, &upper_encoded)
+        tx.tx.range_scan_tuple(&lower_encoded, &upper_encoded)
     }
 }
 

@@ -128,7 +128,7 @@ impl<'s> StoreTx<'s> for TiKvTx {
         Ok(())
     }
 
-    fn range_scan<'a>(
+    fn range_scan_tuple<'a>(
         &'a self,
         lower: &[u8],
         upper: &[u8],
@@ -139,7 +139,7 @@ impl<'s> StoreTx<'s> for TiKvTx {
         Box::new(BatchScanner::new(self.tx.clone(), lower, upper))
     }
 
-    fn range_scan_raw<'a>(
+    fn range_scan<'a>(
         &'a self,
         lower: &[u8],
         upper: &[u8],

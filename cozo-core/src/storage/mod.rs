@@ -2,9 +2,11 @@
  * Copyright 2022, The Cozo Project Authors. Licensed under MPL-2.0.
  */
 
+use itertools::Itertools;
 use miette::Result;
 
 use crate::data::tuple::Tuple;
+use crate::decode_tuple_from_kv;
 
 pub(crate) mod mem;
 pub(crate) mod rocks;
@@ -56,19 +58,24 @@ pub trait StoreTx<'s> {
     fn commit(&mut self) -> Result<()>;
 
     /// Scan on a range. `lower` is inclusive whereas `upper` is exclusive.
+    /// The default implementation calls [`range_scan_owned`](Self::range_scan_owned) and converts the results.
+    ///
     /// The implementation must call [`decode_tuple_from_kv`](crate::decode_tuple_from_kv) to obtain
     /// a decoded tuple in the loop of the iterator.
-    fn range_scan<'a>(
+    fn range_scan_tuple<'a>(
         &'a self,
         lower: &[u8],
         upper: &[u8],
     ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a>
     where
-        's: 'a;
+        's: 'a {
+        let it = self.range_scan(lower, upper);
+        Box::new(it.map_ok(|(k, v)| decode_tuple_from_kv(&k, &v)))
+    }
 
     /// Scan on a range and return the raw results.
     /// `lower` is inclusive whereas `upper` is exclusive.
-    fn range_scan_raw<'a>(
+    fn range_scan<'a>(
         &'a self,
         lower: &[u8],
         upper: &[u8],

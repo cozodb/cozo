@@ -138,7 +138,7 @@ impl<'s> StoreTx<'s> for RocksDbTx {
         Ok(self.db_tx.commit()?)
     }
 
-    fn range_scan<'a>(
+    fn range_scan_tuple<'a>(
         &'a self,
         lower: &[u8],
         upper: &[u8],
@@ -155,7 +155,7 @@ impl<'s> StoreTx<'s> for RocksDbTx {
         })
     }
 
-    fn range_scan_raw<'a>(
+    fn range_scan<'a>(
         &'a self,
         lower: &[u8],
         upper: &[u8],

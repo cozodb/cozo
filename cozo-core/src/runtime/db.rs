@@ -723,7 +723,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         .encode_as_key(RelationId::SYSTEM);
         let tx = self.db.transact(false)?;
         let mut collected = vec![];
-        for kv_res in tx.range_scan_raw(&lower, &upper) {
+        for kv_res in tx.range_scan(&lower, &upper) {
             let (k_slice, v_slice) = kv_res?;
             if upper <= k_slice {
                 break;
