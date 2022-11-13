@@ -245,7 +245,7 @@ impl RelationHandle {
 }
 
 /// Decode tuple from key-value pairs. Used for customizing storage
-/// in traite [`StoreTx`](crate::StoreTx).
+/// in trait [`StoreTx`](crate::StoreTx).
 #[inline]
 pub fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
     let mut tup = Tuple::decode_from_key(key);
