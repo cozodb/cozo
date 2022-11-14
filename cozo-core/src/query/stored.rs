@@ -255,8 +255,7 @@ impl<'a> SessionTx<'a> {
                             .try_collect()?,
                     );
                     let key = relation_store.adhoc_encode_key(&extracted, *span)?;
-                    let existing = self.tx.get(&key, true)?;
-                    if existing.is_some() {
+                    if self.tx.exists(&key, true)? {
                         bail!(TransactAssertionFailure {
                             relation: relation_store.name.to_string(),
                             key: extracted.0,
