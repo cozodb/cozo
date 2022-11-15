@@ -9,6 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use miette::Result;
+#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
@@ -68,26 +69,29 @@ fn clustering_coefficients(
     graph: &[BTreeSet<usize>],
     poison: Poison,
 ) -> Result<Vec<(f64, usize, usize)>> {
-    graph
-        .par_iter()
-        .map(|edges| -> Result<(f64, usize, usize)> {
-            let degree = edges.len();
-            if degree < 2 {
-                Ok((0., 0, degree))
-            } else {
-                let n_triangles = edges
-                    .iter()
-                    .map(|e_src| {
-                        edges
-                            .iter()
-                            .filter(|e_dst| e_src > e_dst && graph[*e_src].contains(*e_dst))
-                            .count()
-                    })
-                    .sum();
-                let cc = 2. * n_triangles as f64 / ((degree as f64) * ((degree as f64) - 1.));
-                poison.check()?;
-                Ok((cc, n_triangles, degree))
-            }
-        })
-        .collect::<Result<_>>()
+    #[cfg(feature = "rayon")]
+    let it = graph.par_iter();
+    #[cfg(not(feature = "rayon"))]
+    let it = graph.iter();
+
+    it.map(|edges| -> Result<(f64, usize, usize)> {
+        let degree = edges.len();
+        if degree < 2 {
+            Ok((0., 0, degree))
+        } else {
+            let n_triangles = edges
+                .iter()
+                .map(|e_src| {
+                    edges
+                        .iter()
+                        .filter(|e_dst| e_src > e_dst && graph[*e_src].contains(*e_dst))
+                        .count()
+                })
+                .sum();
+            let cc = 2. * n_triangles as f64 / ((degree as f64) * ((degree as f64) - 1.));
+            poison.check()?;
+            Ok((cc, n_triangles, degree))
+        }
+    })
+    .collect::<Result<_>>()
 }

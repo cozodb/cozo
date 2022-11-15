@@ -13,6 +13,7 @@ use itertools::Itertools;
 use miette::Result;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
+#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
@@ -50,8 +51,12 @@ impl AlgoImpl for BetweennessCentrality {
             return Ok(());
         }
 
-        let centrality_segs: Vec<_> = (0..n)
-            .into_par_iter()
+        #[cfg(feature = "rayon")]
+        let it = (0..n).into_par_iter();
+        #[cfg(not(feature = "rayon"))]
+        let it = (0..n).into_iter();
+
+        let centrality_segs: Vec<_> = it
             .map(|start| -> Result<BTreeMap<usize, f64>> {
                 let res_for_start =
                     dijkstra_keep_ties(&graph, start, &(), &(), &(), poison.clone())?;
@@ -119,8 +124,12 @@ impl AlgoImpl for ClosenessCentrality {
         if n == 0 {
             return Ok(());
         }
-        let res: Vec<_> = (0..n)
-            .into_par_iter()
+        #[cfg(feature = "rayon")]
+        let it = (0..n).into_par_iter();
+        #[cfg(not(feature = "rayon"))]
+        let it = (0..n).into_iter();
+
+        let res: Vec<_> = it
             .map(|start| -> Result<f64> {
                 let distances = dijkstra_cost_only(&graph, start, poison.clone())?;
                 let total_dist: f64 = distances.iter().filter(|d| d.is_finite()).cloned().sum();

@@ -14,6 +14,7 @@ use itertools::Itertools;
 use miette::Result;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
+#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
@@ -101,8 +102,12 @@ impl AlgoImpl for ShortestPathDijkstra {
                 }
             }
         } else {
-            let all_res: Vec<_> = starting_nodes
-                .into_par_iter()
+            #[cfg(feature = "rayon")]
+            let it = starting_nodes.into_par_iter();
+            #[cfg(not(feature = "rayon"))]
+            let it = starting_nodes.into_iter();
+
+            let all_res: Vec<_> = it
                 .map(|start| -> Result<(usize, Vec<(usize, f64, Vec<usize>)>)> {
                     Ok((
                         start,

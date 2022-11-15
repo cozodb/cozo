@@ -20,7 +20,9 @@ exclude = [
 
 default = ["compact", "storage-rocksdb"]
 ## Enables the `minimal`, `requests` and `graph-algo` features
-compact = ["minimal", "requests", "graph-algo"]
+compact = ["minimal", "requests", "graph-algo", "rayon"]
+## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode
+compact-single-threaded = ["minimal", "requests", "graph-algo"]
 ## Enables the `storage-sqlite` feature
 minimal = ["storage-sqlite"]
 ## Enables the [Sqlite](https://www.sqlite.org/index.html) backend, also allows backup and restore with Sqlite data files.
@@ -28,7 +30,7 @@ storage-sqlite = ["dep:sqlite"]
 ## Enables the [RocksDB](http://rocksdb.org/) backend
 storage-rocksdb = ["dep:cozorocks"]
 ## Enables the graph algorithms
-graph-algo = ["dep:rayon", "dep:nalgebra"]
+graph-algo = ["dep:nalgebra"]
 ## Allows the utilities to make web requests to fetch data
 requests = ["dep:minreq"]
 ## Uses jemalloc as the global allocator, can make a difference in performance
@@ -37,6 +39,10 @@ jemalloc = ["dep:tikv-jemallocator-global", "cozorocks?/jemalloc"]
 io-uring = ["cozorocks?/io-uring"]
 ## Enables the WASM target
 wasm = ["uuid/js"]
+## Allows threading and enables the use of the `rayon` library for parallelizing algorithms
+rayon = ["dep:rayon"]
+## Disallows the use of threads
+nothread = []
 
 #! The following features are highly experimental:
 

@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
 use miette::Result;
+#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
@@ -80,10 +81,13 @@ impl AlgoImpl for KShortestPathYen {
                 }
             }
         } else {
-            let res_all: Vec<_> = starting_nodes
+            let first_it = starting_nodes
                 .iter()
-                .flat_map(|start| termination_nodes.iter().map(|goal| (*start, *goal)))
-                .par_bridge()
+                .flat_map(|start| termination_nodes.iter().map(|goal| (*start, *goal)));
+            #[cfg(feature = "rayon")]
+            let first_it = first_it.par_bridge();
+
+            let res_all: Vec<_> = first_it
                 .map(
                     |(start, goal)| -> Result<(usize, usize, Vec<(f64, Vec<usize>)>)> {
                         Ok((
@@ -94,6 +98,7 @@ impl AlgoImpl for KShortestPathYen {
                     },
                 )
                 .collect::<Result<_>>()?;
+
             for (start, goal, res) in res_all {
                 for (cost, path) in res {
                     let t = vec![

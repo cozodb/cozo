@@ -55,7 +55,7 @@ impl<'s> Storage<'s> for MemStorage {
         let store = self.store.clone();
         let lower_b = lower.to_vec();
         let upper_b = upper.to_vec();
-        thread::spawn(move || {
+        let closure = move || {
             let keys = {
                 let rdr = store.read().unwrap();
                 rdr.range(lower_b..upper_b)
@@ -66,7 +66,11 @@ impl<'s> Storage<'s> for MemStorage {
             for k in keys.iter() {
                 wtr.remove(k);
             }
-        });
+        };
+        #[cfg(feature = "nothread")]
+        closure();
+        #[cfg(not(feature = "nothread"))]
+        thread::spawn(closure);
         Ok(())
     }
 

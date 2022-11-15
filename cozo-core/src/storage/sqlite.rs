@@ -81,14 +81,18 @@ impl<'s> Storage<'s> for SqliteStorage {
             "#;
         let lock = self.lock.clone();
         let name = self.name.clone();
-        std::thread::spawn(move || {
+        let closure = move || {
             let _locked = lock.write().unwrap();
             let conn = sqlite::open(&name).unwrap();
             let mut statement = conn.prepare(query).unwrap();
             statement.bind((1, &lower_b as &[u8])).unwrap();
             statement.bind((2, &upper_b as &[u8])).unwrap();
             while statement.next().unwrap() != State::Done {}
-        });
+        };
+        #[cfg(feature = "nothread")]
+        closure();
+        #[cfg(not(feature = "nothread"))]
+        std::thread::spawn(closure);
         Ok(())
     }
 

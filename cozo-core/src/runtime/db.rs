@@ -8,8 +8,8 @@
 
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -17,7 +17,7 @@ use either::{Left, Right};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use miette::{
-    bail, Diagnostic, ensure, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
+    bail, ensure, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
     JSONReportHandler, Result, WrapErr,
 };
 use serde_json::{json, Map};
@@ -29,8 +29,8 @@ use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::SysOp;
+use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::relation::{
     FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, UnificationRA,
@@ -140,7 +140,11 @@ impl<'s, S: Storage<'s>> Db<S> {
         Ok(ret)
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
-    pub fn run_script(&'s self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
+    pub fn run_script(
+        &'s self,
+        payload: &str,
+        params: &Map<String, JsonValue>,
+    ) -> Result<JsonValue> {
         let start = Instant::now();
         match self.do_run_script(payload, params) {
             Ok(mut json) => {
@@ -155,7 +159,11 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     /// Fold any error into the return JSON itself.
-    pub fn run_script_fold_err(&'s self, payload: &str, params: &Map<String, JsonValue>) -> JsonValue {
+    pub fn run_script_fold_err(
+        &'s self,
+        payload: &str,
+        params: &Map<String, JsonValue>,
+    ) -> JsonValue {
         match self.run_script(payload, params) {
             Ok(json) => json,
             Err(mut err) => {
@@ -198,7 +206,11 @@ impl<'s, S: Storage<'s>> Db<S> {
         };
         self.run_script_fold_err(payload, &params_json).to_string()
     }
-    fn do_run_script(&'s self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
+    fn do_run_script(
+        &'s self,
+        payload: &str,
+        params: &Map<String, JsonValue>,
+    ) -> Result<JsonValue> {
         let param_pool = params
             .iter()
             .map(|(k, v)| (k.clone(), DataValue::from(v)))
@@ -206,29 +218,32 @@ impl<'s, S: Storage<'s>> Db<S> {
         match parse_script(payload, &param_pool)? {
             CozoScript::Multi(ps) => {
                 let is_write = ps.iter().any(|p| p.out_opts.store_relation.is_some());
-                let mut tx = if is_write {
-                    self.transact_write()?
-                } else {
-                    self.transact()?
-                };
-                let mut res = json!(null);
                 let mut cleanups = vec![];
+                let mut res = json!(null);
+                {
+                    let mut tx = if is_write {
+                        self.transact_write()?
+                    } else {
+                        self.transact()?
+                    };
 
-                for p in ps {
-                    let sleep_opt = p.out_opts.sleep;
-                    let (q_res, q_cleanups) = self.run_query(&mut tx, p)?;
-                    res = q_res;
-                    cleanups.extend(q_cleanups);
-                    if let Some(secs) = sleep_opt {
-                        thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
+                    for p in ps {
+                        let sleep_opt = p.out_opts.sleep;
+                        let (q_res, q_cleanups) = self.run_query(&mut tx, p)?;
+                        res = q_res;
+                        cleanups.extend(q_cleanups);
+                        if let Some(secs) = sleep_opt {
+                            thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
+                        }
+                    }
+                    if is_write {
+                        tx.commit_tx()?;
+                    } else {
+                        tx.commit_tx()?;
+                        assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
                     }
                 }
-                if is_write {
-                    tx.commit_tx()?;
-                } else {
-                    tx.commit_tx()?;
-                    assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
-                }
+
                 for (lower, upper) in cleanups {
                     self.db.del_range(&lower, &upper)?;
                 }
@@ -431,11 +446,18 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
             SysOp::ListRelations => self.list_relations(),
             SysOp::RemoveRelation(rel_names) => {
-                let mut tx = self.transact_write()?;
-                for rs in rel_names {
-                    self.remove_relation(&rs, &mut tx)?;
+                let mut bounds = vec![];
+                {
+                    let mut tx = self.transact_write()?;
+                    for rs in rel_names {
+                        let bound = tx.destroy_relation(&rs)?;
+                        bounds.push(bound);
+                    }
+                    tx.commit_tx()?;
                 }
-                tx.commit_tx()?;
+                for (lower, upper) in bounds {
+                    self.db.del_range(&lower, &upper)?;
+                }
                 Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
             }
             SysOp::ListRelation(rs) => self.list_relation(&rs),
@@ -533,7 +555,7 @@ impl<'s, S: Storage<'s>> Db<S> {
 
         let poison = Poison::default();
         if let Some(secs) = input_program.out_opts.timeout {
-            poison.set_timeout(secs);
+            poison.set_timeout(secs)?;
         }
         let id = self.queries_count.fetch_add(1, Ordering::AcqRel);
 
@@ -672,11 +694,6 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
         }
     }
-    pub(crate) fn remove_relation(&'s self, name: &Symbol, tx: &mut SessionTx<'_>) -> Result<()> {
-        let (lower, upper) = tx.destroy_relation(name)?;
-        self.db.del_range(&lower, &upper)?;
-        Ok(())
-    }
     pub(crate) fn list_running(&self) -> Result<JsonValue> {
         let res = self
             .running_queries
@@ -768,11 +785,15 @@ impl Poison {
         }
         Ok(())
     }
-    pub(crate) fn set_timeout(&self, secs: f64) {
+    pub(crate) fn set_timeout(&self, secs: f64) -> Result<()> {
+        #[cfg(feature = "nothread")]
+        bail!("Cannot set timeout when threading is disallowed");
+
         let pill = self.0.clone();
         thread::spawn(move || {
             thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
             pill.store(true, Ordering::Relaxed);
         });
+        Ok(())
     }
 }
