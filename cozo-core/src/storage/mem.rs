@@ -11,8 +11,8 @@ use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
 use std::default::Default;
 use std::iter::Fuse;
+use std::mem;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::{mem, thread};
 
 use itertools::Itertools;
 use miette::{bail, Result};
@@ -70,7 +70,7 @@ impl<'s> Storage<'s> for MemStorage {
         #[cfg(feature = "nothread")]
         closure();
         #[cfg(not(feature = "nothread"))]
-        thread::spawn(closure);
+        std::thread::spawn(closure);
         Ok(())
     }
 

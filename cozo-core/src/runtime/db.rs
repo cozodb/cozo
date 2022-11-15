@@ -26,7 +26,6 @@ use thiserror::Error;
 
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
-use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::sys::SysOp;
@@ -785,10 +784,12 @@ impl Poison {
         }
         Ok(())
     }
-    pub(crate) fn set_timeout(&self, secs: f64) -> Result<()> {
-        #[cfg(feature = "nothread")]
+    #[cfg(feature = "nothread")]
+    pub(crate) fn set_timeout(&self, _secs: f64) -> Result<()> {
         bail!("Cannot set timeout when threading is disallowed");
-
+    }
+    #[cfg(not(feature = "nothread"))]
+    pub(crate) fn set_timeout(&self, secs: f64) -> Result<()> {
         let pill = self.0.clone();
         thread::spawn(move || {
             thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
