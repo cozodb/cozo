@@ -35,6 +35,8 @@ requests = ["dep:minreq"]
 jemalloc = ["dep:tikv-jemallocator-global", "cozorocks?/jemalloc"]
 ## Enables io-uring option for the RocksDB storage
 io-uring = ["cozorocks?/io-uring"]
+## Enables the WASM target
+wasm = ["uuid/js"]
 
 #! The following features are highly experimental:
 
