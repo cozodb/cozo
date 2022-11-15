@@ -8,8 +8,8 @@
 
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -17,7 +17,7 @@ use either::{Left, Right};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use miette::{
-    bail, ensure, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
+    bail, Diagnostic, ensure, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
     JSONReportHandler, Result, WrapErr,
 };
 use serde_json::{json, Map};
@@ -28,8 +28,8 @@ use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::SysOp;
-use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::relation::{
     FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, UnificationRA,
@@ -144,13 +144,18 @@ impl<'s, S: Storage<'s>> Db<S> {
         payload: &str,
         params: &Map<String, JsonValue>,
     ) -> Result<JsonValue> {
+        #[cfg(not(feature = "wasm"))]
         let start = Instant::now();
         match self.do_run_script(payload, params) {
             Ok(mut json) => {
-                let took = start.elapsed().as_secs_f64();
-                let map = json.as_object_mut().unwrap();
-                map.insert("ok".to_string(), json!(true));
-                map.insert("took".to_string(), json!(took));
+                {
+                    #[cfg(not(feature = "wasm"))]
+                    let took = start.elapsed().as_secs_f64();
+                    let map = json.as_object_mut().unwrap();
+                    map.insert("ok".to_string(), json!(true));
+                    #[cfg(not(feature = "wasm"))]
+                    map.insert("took".to_string(), json!(took));
+                }
                 Ok(json)
             }
             err => err,
@@ -231,6 +236,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         let (q_res, q_cleanups) = self.run_query(&mut tx, p)?;
                         res = q_res;
                         cleanups.extend(q_cleanups);
+                        #[cfg(not(feature = "wasm"))]
                         if let Some(secs) = sleep_opt {
                             thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
                         }
@@ -558,11 +564,16 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         let id = self.queries_count.fetch_add(1, Ordering::AcqRel);
 
+        #[cfg(not(feature = "wasm"))]
         let now = SystemTime::now();
+        #[cfg(not(feature = "wasm"))]
         let since_the_epoch = now
             .duration_since(UNIX_EPOCH)
             .into_diagnostic()?
             .as_secs_f64();
+
+        #[cfg(feature = "wasm")]
+        let since_the_epoch = 0.;
 
         let handle = RunningQueryHandle {
             started_at: since_the_epoch,

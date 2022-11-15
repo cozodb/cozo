@@ -234,15 +234,19 @@ pub(crate) fn parse_query(
                 out_opts.timeout = Some(timeout);
             }
             Rule::sleep_option => {
-                let pair = pair.into_inner().next().unwrap();
-                let span = pair.extract_span();
-                let sleep = build_expr(pair, param_pool)?
-                    .eval_to_const()
-                    .map_err(|err| OptionNotConstantError("sleep", span, [err]))?
-                    .get_float()
-                    .ok_or(OptionNotNonNegIntError("sleep", span))?;
-                ensure!(sleep > 0., OptionNotPosIntError("sleep", span));
-                out_opts.sleep = Some(sleep);
+                #[cfg(feature = "wasm")]
+                bail!(":sleep is not supported under WASM");
+                #[cfg(not(feature = "wasm"))] {
+                    let pair = pair.into_inner().next().unwrap();
+                    let span = pair.extract_span();
+                    let sleep = build_expr(pair, param_pool)?
+                        .eval_to_const()
+                        .map_err(|err| OptionNotConstantError("sleep", span, [err]))?
+                        .get_float()
+                        .ok_or(OptionNotNonNegIntError("sleep", span))?;
+                    ensure!(sleep > 0., OptionNotPosIntError("sleep", span));
+                    out_opts.sleep = Some(sleep);
+                }
             }
             Rule::limit_option => {
                 let pair = pair.into_inner().next().unwrap();

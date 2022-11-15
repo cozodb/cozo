@@ -1432,6 +1432,11 @@ pub(crate) fn op_to_uuid(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_NOW, 0, false);
+#[cfg(feature = "wasm")]
+pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
+    bail!("`op_now` is not supported under WASM runtime")
+}
+#[cfg(not(feature = "wasm"))]
 pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
     let now = SystemTime::now();
     Ok(DataValue::from(
@@ -1440,6 +1445,11 @@ pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_FORMAT_TIMESTAMP, 1, true);
+#[cfg(feature = "wasm")]
+pub(crate) fn op_format_timestamp(_args: &[DataValue]) -> Result<DataValue> {
+    bail!("`format_timestamp` is not supported under WASM")
+}
+#[cfg(not(feature = "wasm"))]
 pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
     let f = args[0]
         .get_float()
@@ -1468,6 +1478,11 @@ pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_PARSE_TIMESTAMP, 1, false);
+#[cfg(feature = "wasm")]
+pub(crate) fn op_parse_timestamp(_args: &[DataValue]) -> Result<DataValue> {
+    bail!("`parse_timestamp` is not supported under WASM")
+}
+#[cfg(not(feature = "wasm"))]
 pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
     let s = args[0]
         .get_string()
@@ -1480,6 +1495,11 @@ pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_RAND_UUID_V1, 0, false);
+#[cfg(feature = "wasm")]
+pub(crate) fn op_rand_uuid_v1(_args: &[DataValue]) -> Result<DataValue> {
+    bail!("`rand_uuid_v1` is not supported under WASM")
+}
+#[cfg(not(feature = "wasm"))]
 pub(crate) fn op_rand_uuid_v1(_args: &[DataValue]) -> Result<DataValue> {
     let mut rng = rand::thread_rng();
     let uuid_ctx = uuid::v1::Context::new(rng.gen());
