@@ -228,14 +228,15 @@ the return values, or have the nice error message extracted, etc.
 You should already have `cozo = <VERSION>` in your `Cargo.toml`.
 
 ```rust
-use cozo::Db;
 use miette::Result;
 
 fn main() -> Result<()> {
     let db = Db::new("_test_db")?;
-    println!("{}", db.run_script_str(r#"db.query("?[] <- [['hello', 'world!']]"#, "")?);
-    println!("{}", db.run_script_str(r#"db.query("?[] <- [['hello', 'world', $name]]"#, r#"{"name":"Rust"}"#)?);
-    println!("{}", db.run_script_str(r#"db.query("?[a] <- [[1, 2]]"#, "")?);
+    println!("{}", db.run_script_str(r#"?[] <- [['hello', 'world!']]"#, ""));
+    println!("{}", db.run_script_str(r#"?[] <- [['hello', 'world', $name]]"#, r#"{"name":"Rust"}"#));
+    println!("{}", db.run_script_str(r#"?[a] <- [[1, 2]]"#, ""));
+
+    Ok(())
 }
 ```
 
