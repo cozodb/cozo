@@ -131,7 +131,7 @@ function App() {
                 </div>
                 <div/>
                 <div style={{paddingTop: 10, display: 'flex', flexDirection: 'row'}}>
-                    <Button text={db ? "Run script" : "Loading Cozo library, please wait ..."}
+                    <Button text={db ? "Run script" : "Loading WASM ..."}
                             onClick={() => handleQuery()}
                             disabled={!db || inProgress}
                             intent={Intent.PRIMARY}
@@ -173,7 +173,7 @@ function App() {
             {!(queryResults || errorMessage.length) && <div id="welcome">
                 <p>
                     This is the demo page for Cozo running in your browser as
-                    an <a href="https://webassembly.org/">Web assembly</a> module.
+                    a <a href="https://webassembly.org/">Web assembly</a> module.
                 </p>
                 <p>
                     All computation is done within your browser. There is no backend, nor any outgoing requests.
