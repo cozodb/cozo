@@ -551,7 +551,7 @@ impl Display for AlgoRuleArg {
                 f.debug_list().entries(bindings).finish()?;
             }
             AlgoRuleArg::NamedStored { name, bindings, .. } => {
-                write!(f, ":")?;
+                write!(f, "*")?;
                 let mut sf = f.debug_struct(name);
                 for (k, v) in bindings {
                     sf.field(k, v);
@@ -1090,7 +1090,7 @@ impl Display for InputAtom {
             InputAtom::NamedFieldRelation {
                 inner: InputNamedFieldRelationApplyAtom { name, args, .. },
             } => {
-                f.write_str(":")?;
+                f.write_str("*")?;
                 let mut sf = f.debug_struct(name);
                 for (k, v) in args {
                     sf.field(k, v);
