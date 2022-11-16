@@ -1,5 +1,5 @@
-[profile.release]
-lto = true
+#[profile.release]
+#lto = true
 
 [workspace]
 members = ["cozorocks", "cozo-lib-c", "cozo-lib-java", "cozo-core", "cozoserver", "cozo-lib-wasm"]

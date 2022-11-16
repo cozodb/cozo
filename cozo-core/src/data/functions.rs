@@ -13,6 +13,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, TimeZone, Utc};
 use itertools::Itertools;
+#[cfg(feature = "wasm")]
+use js_sys::Date;
 use miette::{bail, ensure, miette, Result};
 use num_traits::FloatConst;
 use rand::prelude::*;
@@ -1434,7 +1436,8 @@ pub(crate) fn op_to_uuid(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_NOW, 0, false);
 #[cfg(feature = "wasm")]
 pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
-    bail!("`op_now` is not supported under WASM runtime")
+    let d: f64 = Date::now() / 1000.;
+    Ok(DataValue::from(d))
 }
 #[cfg(not(feature = "wasm"))]
 pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
@@ -1445,20 +1448,22 @@ pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_FORMAT_TIMESTAMP, 1, true);
-#[cfg(feature = "wasm")]
-pub(crate) fn op_format_timestamp(_args: &[DataValue]) -> Result<DataValue> {
-    bail!("`format_timestamp` is not supported under WASM")
-}
-#[cfg(not(feature = "wasm"))]
 pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
-    let f = args[0]
-        .get_float()
-        .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
-    let millis = (f * 1000.) as i64;
+    #[cfg(feature = "wasm")]
     let dt = Utc
-        .timestamp_millis_opt(millis)
+        .timestamp_millis_opt(Date::now() as i64)
         .latest()
-        .ok_or_else(|| miette!("bad time: {}", f))?;
+        .ok_or_else(|| miette!("bad time input"))?;
+    #[cfg(not(feature = "wasm"))]
+    let dt = {
+        let f = args[0]
+            .get_float()
+            .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
+        let millis = (f * 1000.) as i64;
+        Utc.timestamp_millis_opt(millis)
+            .latest()
+            .ok_or_else(|| miette!("bad time: {}", f))?
+    };
     match args.get(1) {
         Some(tz_v) => {
             let tz_s = tz_v.get_string().ok_or_else(|| {
@@ -1478,11 +1483,6 @@ pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_PARSE_TIMESTAMP, 1, false);
-#[cfg(feature = "wasm")]
-pub(crate) fn op_parse_timestamp(_args: &[DataValue]) -> Result<DataValue> {
-    bail!("`parse_timestamp` is not supported under WASM")
-}
-#[cfg(not(feature = "wasm"))]
 pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
     let s = args[0]
         .get_string()
@@ -1495,17 +1495,22 @@ pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_RAND_UUID_V1, 0, false);
-#[cfg(feature = "wasm")]
-pub(crate) fn op_rand_uuid_v1(_args: &[DataValue]) -> Result<DataValue> {
-    bail!("`rand_uuid_v1` is not supported under WASM")
-}
-#[cfg(not(feature = "wasm"))]
 pub(crate) fn op_rand_uuid_v1(_args: &[DataValue]) -> Result<DataValue> {
     let mut rng = rand::thread_rng();
     let uuid_ctx = uuid::v1::Context::new(rng.gen());
-    let now = SystemTime::now();
-    let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
-    let ts = Timestamp::from_unix(uuid_ctx, since_epoch.as_secs(), since_epoch.subsec_nanos());
+    #[cfg(feature = "wasm")]
+    let ts = {
+        let since_epoch: f64 = Date::now();
+        let seconds = since_epoch.floor();
+        let fractional = (since_epoch - seconds) * 1.0e9;
+        Timestamp::from_unix(uuid_ctx, seconds as u64, fractional as u32)
+    };
+    #[cfg(not(feature = "wasm"))]
+    let ts = {
+        let now = SystemTime::now();
+        let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
+        Timestamp::from_unix(uuid_ctx, since_epoch.as_secs(), since_epoch.subsec_nanos())
+    };
     let mut rand_vals = [0u8; 6];
     rng.fill(&mut rand_vals);
     let id = uuid::Uuid::new_v1(ts, &rand_vals);

@@ -494,6 +494,7 @@ dependencies = [
  "either",
  "env_logger",
  "itertools 0.10.5",
+ "js-sys",
  "lazy_static",
  "log",
  "miette",

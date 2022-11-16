@@ -8,8 +8,8 @@
 
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -17,7 +17,7 @@ use either::{Left, Right};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use miette::{
-    bail, Diagnostic, ensure, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
+    bail, ensure, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
     JSONReportHandler, Result, WrapErr,
 };
 use serde_json::{json, Map};
@@ -28,8 +28,8 @@ use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::SysOp;
+use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::relation::{
     FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, UnificationRA,
@@ -573,7 +573,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             .as_secs_f64();
 
         #[cfg(feature = "wasm")]
-        let since_the_epoch = 0.;
+        let since_the_epoch = js_sys::Date::now();
 
         let handle = RunningQueryHandle {
             started_at: since_the_epoch,

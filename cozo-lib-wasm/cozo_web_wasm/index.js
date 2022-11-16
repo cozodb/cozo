@@ -62,5 +62,9 @@ query(`
 `);
 
 query(`
+?[] <- [[parse_timestamp(format_timestamp(now(), 'Asia/Shanghai')),]]
+`);
+
+query(`
 ?[] <- [[rand_uuid_v1()]]
 `);

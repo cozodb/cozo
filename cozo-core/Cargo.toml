@@ -38,7 +38,7 @@ jemalloc = ["dep:tikv-jemallocator-global", "cozorocks?/jemalloc"]
 ## Enables io-uring option for the RocksDB storage
 io-uring = ["cozorocks?/io-uring"]
 ## Enables the WASM target
-wasm = ["uuid/js"]
+wasm = ["uuid/js", "dep:js-sys"]
 ## Allows threading and enables the use of the `rayon` library for parallelizing algorithms
 rayon = ["dep:rayon"]
 ## Disallows the use of threads
@@ -94,5 +94,6 @@ sled = { version = "0.34.7", optional = true }
 tikv-client = { version = "0.1.0", optional = true }
 tokio = { version = "1.21.2", optional = true }
 sqlite = { version = "0.30.1", optional = true }
+js-sys = { version = "0.3.60", optional = true }
 #redb = "0.9.0"
 #ouroboros = "0.15.5"
