@@ -328,7 +328,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             Ok(())
         }
         #[cfg(not(feature = "storage-sqlite"))]
-        bail!("backup requires the 'storeage-sqlite' feature to be enabled")
+        bail!("backup requires the 'storage-sqlite' feature to be enabled")
     }
     /// Restore from an Sqlite backup
     pub fn restore_backup(&'s self, in_file: String) -> Result<()> {
@@ -342,7 +342,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             Ok(())
         }
         #[cfg(not(feature = "storage-sqlite"))]
-        bail!("backup requires the 'storeage-sqlite' feature to be enabled")
+        bail!("backup requires the 'storage-sqlite' feature to be enabled")
     }
 
     fn compact_relation(&'s self) -> Result<()> {
