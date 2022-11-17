@@ -197,10 +197,13 @@ impl<'s> StoreTx<'s> for MemTx<'s> {
         }
     }
 
-    fn batch_put(
-        &mut self,
-        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>>,
-    ) -> Result<()> {
+    fn batch_put<'a>(
+        &'a mut self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
+    ) -> Result<()>
+    where
+        's: 'a,
+    {
         match self {
             MemTx::Reader(_) => {
                 bail!("write in read transaction")

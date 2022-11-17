@@ -76,7 +76,8 @@ pub trait StoreTx<'s> {
         upper: &[u8],
     ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a>
     where
-        's: 'a {
+        's: 'a,
+    {
         let it = self.range_scan(lower, upper);
         Box::new(it.map_ok(|(k, v)| decode_tuple_from_kv(&k, &v)))
     }
@@ -94,10 +95,13 @@ pub trait StoreTx<'s> {
     /// Put multiple key-value pairs into the database.
     /// The default implementation just calls `put` repeatedly.
     /// Implement if there is a more efficient way.
-    fn batch_put(
-        &mut self,
-        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>>>,
-    ) -> Result<()> {
+    fn batch_put<'a>(
+        &'a mut self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
+    ) -> Result<()>
+    where
+        's: 'a,
+    {
         for pair in data {
             let (k, v) = pair?;
             self.put(&k, &v)?;

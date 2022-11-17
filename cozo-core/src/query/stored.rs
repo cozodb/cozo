@@ -118,7 +118,7 @@ impl<'a> SessionTx<'a> {
                             .map(|ex| ex.extract_data(&tuple))
                             .try_collect()?,
                     );
-                    let key = relation_store.adhoc_encode_key(&extracted, *span)?;
+                    let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     if has_triggers {
                         if let Some(existing) = self.tx.get(&key, false)? {
                             let mut tup = extracted.clone();
@@ -205,8 +205,8 @@ impl<'a> SessionTx<'a> {
                             .try_collect()?,
                     );
 
-                    let key = relation_store.adhoc_encode_key(&extracted, *span)?;
-                    let val = relation_store.adhoc_encode_val(&extracted, *span)?;
+                    let key = relation_store.encode_key_for_store(&extracted, *span)?;
+                    let val = relation_store.encode_val_for_store(&extracted, *span)?;
 
                     let existing = self.tx.get(&key, true)?;
                     match existing {
@@ -254,7 +254,7 @@ impl<'a> SessionTx<'a> {
                             .map(|ex| ex.extract_data(&tuple))
                             .try_collect()?,
                     );
-                    let key = relation_store.adhoc_encode_key(&extracted, *span)?;
+                    let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     if self.tx.exists(&key, true)? {
                         bail!(TransactAssertionFailure {
                             relation: relation_store.name.to_string(),
@@ -302,8 +302,8 @@ impl<'a> SessionTx<'a> {
                             .try_collect()?,
                     );
 
-                    let key = relation_store.adhoc_encode_key(&extracted, *span)?;
-                    let val = relation_store.adhoc_encode_val(&extracted, *span)?;
+                    let key = relation_store.encode_key_for_store(&extracted, *span)?;
+                    let val = relation_store.encode_val_for_store(&extracted, *span)?;
 
                     if has_triggers {
                         if let Some(existing) = self.tx.get(&key, false)? {

@@ -7,6 +7,7 @@
  */
 
 use std::collections::BTreeMap;
+use std::default::Default;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -17,7 +18,7 @@ use either::{Left, Right};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use miette::{
-    bail, ensure, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
+    bail, ensure, miette, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
     JSONReportHandler, Result, WrapErr,
 };
 use serde_json::{json, Map};
@@ -26,8 +27,10 @@ use thiserror::Error;
 
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
+use crate::data::relation::ColumnDef;
 use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::decode_tuple_from_kv;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
@@ -108,36 +111,6 @@ impl<'s, S: Storage<'s>> Db<S> {
         Ok(())
     }
 
-    fn compact_relation(&'s self) -> Result<()> {
-        let l = Tuple::default().encode_as_key(RelationId(0));
-        let u = Tuple(vec![DataValue::Bot]).encode_as_key(RelationId(u64::MAX));
-        self.db.range_compact(&l, &u)?;
-        Ok(())
-    }
-
-    fn load_last_ids(&'s self) -> Result<()> {
-        let mut tx = self.transact()?;
-        self.relation_store_id
-            .store(tx.load_last_relation_store_id()?.0, Ordering::Release);
-        tx.commit_tx()?;
-        Ok(())
-    }
-    fn transact(&'s self) -> Result<SessionTx<'_>> {
-        let ret = SessionTx {
-            tx: Box::new(self.db.transact(false)?),
-            mem_store_id: Default::default(),
-            relation_store_id: self.relation_store_id.clone(),
-        };
-        Ok(ret)
-    }
-    fn transact_write(&'s self) -> Result<SessionTx<'_>> {
-        let ret = SessionTx {
-            tx: Box::new(self.db.transact(true)?),
-            mem_store_id: Default::default(),
-            relation_store_id: self.relation_store_id.clone(),
-        };
-        Ok(ret)
-    }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     pub fn run_script(
         &'s self,
@@ -209,6 +182,198 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
         };
         self.run_script_fold_err(payload, &params_json).to_string()
+    }
+    /// Export relations to JSON data.
+    pub fn export_relations<'a>(
+        &'s self,
+        relations: impl Iterator<Item = &'a str>,
+    ) -> Result<JsonValue> {
+        let tx = self.transact()?;
+        let mut ret = serde_json::Map::default();
+        for rel in relations {
+            let mut coll = vec![];
+            let handle = tx.get_relation(rel, false)?;
+            let mut cols = handle
+                .metadata
+                .keys
+                .iter()
+                .map(|col| col.name.clone())
+                .collect_vec();
+            cols.extend(
+                handle
+                    .metadata
+                    .non_keys
+                    .iter()
+                    .map(|col| col.name.clone())
+                    .collect_vec(),
+            );
+
+            let start = handle.encode_key_for_store(&Tuple(vec![]), Default::default())?;
+            let end =
+                handle.encode_key_for_store(&Tuple(vec![DataValue::Bot]), Default::default())?;
+            for data in tx.tx.range_scan(&start, &end) {
+                let (k, v) = data?;
+                let tuple = decode_tuple_from_kv(&k, &v);
+                let mut j_map = serde_json::Map::default();
+                for (k, v) in cols.iter().zip(tuple.0) {
+                    let j_v = JsonValue::from(v);
+                    j_map.insert(k.to_string(), j_v);
+                }
+                coll.push(JsonValue::Object(j_map));
+            }
+            ret.insert(rel.to_string(), JsonValue::Array(coll));
+        }
+        Ok(JsonValue::Object(ret))
+    }
+    /// Export relations to JSON-encoded string
+    pub fn export_relations_str(&'s self, relations_str: &str) -> String {
+        match self.export_relations_str_inner(relations_str) {
+            Ok(s) => {
+                let ret = json!({"ok": true, "data": s});
+                format!("{}", ret)
+            }
+            Err(err) => {
+                let ret = json!({"ok": false, "message": err.to_string()});
+                format!("{}", ret)
+            }
+        }
+    }
+    fn export_relations_str_inner(&'s self, relations_str: &str) -> Result<JsonValue> {
+        let j_val: JsonValue = serde_json::from_str(relations_str).into_diagnostic()?;
+        let v = j_val
+            .as_array()
+            .ok_or_else(|| miette!("expects an array"))?;
+        let relations: Vec<_> = v
+            .iter()
+            .map(|name| {
+                name.as_str()
+                    .ok_or_else(|| miette!("expects an array of string names"))
+            })
+            .try_collect()?;
+        let results = self.export_relations(relations.into_iter())?;
+        Ok(results)
+    }
+    /// Import a relation
+    pub fn import_relation(&'s self, relation: &str, in_data: &[JsonValue]) -> Result<()> {
+        #[derive(Debug, Diagnostic, Error)]
+        #[error("cannot import data for relation '{0}': {1}")]
+        #[diagnostic(code(import::bad_data))]
+        struct BadDataForRelation(String, JsonValue);
+
+        let mut tx = self.transact_write()?;
+        let handle = tx.get_relation(relation, true)?;
+        for val in in_data {
+            let proc_col = |col: &ColumnDef| {
+                let d_val = match val.get(&col.name as &str) {
+                    None => match &col.default_gen {
+                        Some(gen) => gen.clone().eval_to_const()?,
+                        None => {
+                            bail!(BadDataForRelation(relation.to_string(), val.clone()))
+                        }
+                    },
+                    Some(data) => DataValue::from(data),
+                };
+                col.typing.coerce(d_val)
+            };
+
+            let keys: Vec<_> = handle.metadata.keys.iter().map(proc_col).try_collect()?;
+            let vals: Vec<_> = handle
+                .metadata
+                .non_keys
+                .iter()
+                .map(proc_col)
+                .try_collect()?;
+            let k_store = handle.encode_key_for_store(&Tuple(keys), Default::default())?;
+            let v_store = handle.encode_val_for_store(&Tuple(vals), Default::default())?;
+            tx.tx.put(&k_store, &v_store)?;
+        }
+        Ok(())
+    }
+    /// Import a relation, the data is given as a JSON string, and the returned result is converted into a string
+    pub fn import_relation_str(&'s self, data: &str) -> String {
+        match self.import_relation_str_inner(data) {
+            Ok(()) => {
+                format!("{}", json!({"ok": true}))
+            }
+            Err(err) => {
+                format!("{}", json!({"ok": false, "message": err.to_string()}))
+            }
+        }
+    }
+    fn import_relation_str_inner(&'s self, data: &str) -> Result<()> {
+        let j_obj: JsonValue = serde_json::from_str(data).into_diagnostic()?;
+        let name_val = j_obj
+            .get("relation")
+            .ok_or_else(|| miette!("key 'relation' required"))?;
+        let name = name_val
+            .as_str()
+            .ok_or_else(|| miette!("field 'relation' must be a string"))?;
+        let data_val = j_obj
+            .get("data")
+            .ok_or_else(|| miette!("key 'data' required"))?;
+        let data = data_val
+            .as_array()
+            .ok_or_else(|| miette!("field 'data' must be an array"))?;
+        self.import_relation(name, data)
+    }
+    /// Backup the running database into an Sqlite file
+    pub fn backup_db(&'s self, out_file: String) -> Result<()> {
+        #[cfg(feature = "storage-sqlite")]
+        {
+            let sqlite_db = crate::new_cozo_sqlite(out_file)?;
+            let mut s_tx = sqlite_db.transact_write()?;
+            let tx = self.transact()?;
+            let iter = tx.tx.range_scan(&[], &[1]);
+            s_tx.tx.batch_put(iter)?;
+            Ok(())
+        }
+        #[cfg(not(feature = "storage-sqlite"))]
+        bail!("backup requires the 'storeage-sqlite' feature to be enabled")
+    }
+    /// Restore from an Sqlite backup
+    pub fn restore_backup(&'s self, in_file: String) -> Result<()> {
+        #[cfg(feature = "storage-sqlite")]
+        {
+            let sqlite_db = crate::new_cozo_sqlite(in_file)?;
+            let s_tx = sqlite_db.transact_write()?;
+            let mut tx = self.transact()?;
+            let iter = s_tx.tx.range_scan(&[], &[1]);
+            tx.tx.batch_put(iter)?;
+            Ok(())
+        }
+        #[cfg(not(feature = "storage-sqlite"))]
+        bail!("backup requires the 'storeage-sqlite' feature to be enabled")
+    }
+
+    fn compact_relation(&'s self) -> Result<()> {
+        let l = Tuple::default().encode_as_key(RelationId(0));
+        let u = Tuple(vec![DataValue::Bot]).encode_as_key(RelationId(u64::MAX));
+        self.db.range_compact(&l, &u)?;
+        Ok(())
+    }
+
+    fn load_last_ids(&'s self) -> Result<()> {
+        let mut tx = self.transact()?;
+        self.relation_store_id
+            .store(tx.load_last_relation_store_id()?.0, Ordering::Release);
+        tx.commit_tx()?;
+        Ok(())
+    }
+    fn transact(&'s self) -> Result<SessionTx<'_>> {
+        let ret = SessionTx {
+            tx: Box::new(self.db.transact(false)?),
+            mem_store_id: Default::default(),
+            relation_store_id: self.relation_store_id.clone(),
+        };
+        Ok(ret)
+    }
+    fn transact_write(&'s self) -> Result<SessionTx<'_>> {
+        let ret = SessionTx {
+            tx: Box::new(self.db.transact(true)?),
+            mem_store_id: Default::default(),
+            relation_store_id: self.relation_store_id.clone(),
+        };
+        Ok(ret)
     }
     fn do_run_script(
         &'s self,
