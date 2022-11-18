@@ -18,6 +18,7 @@ use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
 
 /// The Sqlite storage engine
+#[derive(Clone)]
 pub struct SqliteStorage {
     lock: Arc<RwLock<()>>,
     name: String,

@@ -330,6 +330,13 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled")
     }
+    /// Backup the running database into an Sqlite file, with JSON string return value
+    pub fn backup_db_str(&'s self, out_file: &str) -> String {
+        match self.backup_db(out_file.to_string()) {
+            Ok(_) => json!({"ok": true}).to_string(),
+            Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
+        }
+    }
     /// Restore from an Sqlite backup
     pub fn restore_backup(&'s self, in_file: String) -> Result<()> {
         #[cfg(feature = "storage-sqlite")]
@@ -343,6 +350,13 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled")
+    }
+    /// Restore from an Sqlite backup, with JSON string return value
+    pub fn restore_backup_str(&'s self, in_file: &str) -> String {
+        match self.restore_backup(in_file.to_string()) {
+            Ok(_) => json!({"ok": true}).to_string(),
+            Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
+        }
     }
 
     fn compact_relation(&'s self) -> Result<()> {
