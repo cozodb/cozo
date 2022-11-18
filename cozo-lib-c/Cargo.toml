@@ -16,6 +16,8 @@ crate-type = ["cdylib", "staticlib"]
 
 ## Enables the `minimal`, `requests` and `graph-algo` features
 compact = ["minimal", "requests", "graph-algo", "rayon"]
+## Enables the `storage-sqlite` and `graph-algo` features
+mobile = ["storage-sqlite", "graph-algo", "rayon"]
 ## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode
 compact-single-threaded = ["minimal", "requests", "graph-algo"]
 ## Enables the `storage-sqlite` feature
