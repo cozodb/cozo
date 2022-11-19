@@ -54,9 +54,9 @@ pub unsafe extern "C" fn cozo_open_db(
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
     };
 
-    let db = match DbInstance::new(engine, path, Default::default()) {
+    let db = match DbInstance::new_with_str(engine, path, "{}") {
         Ok(db) => db,
-        Err(err) => return CString::new(err.to_string()).unwrap().into_raw(),
+        Err(err) => return CString::new(err).unwrap().into_raw(),
     };
 
     let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);

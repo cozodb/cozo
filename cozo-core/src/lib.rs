@@ -34,13 +34,14 @@
 #![allow(clippy::too_many_arguments)]
 
 use itertools::Itertools;
+use miette::{bail, IntoDiagnostic, miette, Result};
 pub use miette::Error;
-use miette::{bail, miette, IntoDiagnostic, Result};
 use serde_json::{json, Map};
 
 pub use runtime::db::Db;
 pub use runtime::relation::decode_tuple_from_kv;
-pub use storage::mem::{new_cozo_mem, MemStorage};
+pub use storage::{Storage, StoreTx};
+pub use storage::mem::{MemStorage, new_cozo_mem};
 #[cfg(feature = "storage-rocksdb")]
 pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
 #[cfg(feature = "storage-sled")]
@@ -49,7 +50,6 @@ pub use storage::sled::{new_cozo_sled, SledStorage};
 pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 #[cfg(feature = "storage-tikv")]
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
-pub use storage::{Storage, StoreTx};
 
 use crate::data::json::JsonValue;
 use crate::runtime::db::{JSON_ERR_HANDLER, TEXT_ERR_HANDLER};
@@ -129,6 +129,11 @@ impl DbInstance {
                 kind
             ),
         })
+    }
+    /// Same as [Self::new], but inputs and error messages are all in strings
+    pub fn new_with_str(kind: &str, path: &str, options: &str) -> std::result::Result<Self, String> {
+        let options: JsonValue = serde_json::from_str(options).map_err(|e| e.to_string())?;
+        Self::new(kind, path, options).map_err(|err| err.to_string())
     }
     /// Dispatcher method. See [crate::Db::run_script].
     pub fn run_script(&self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
