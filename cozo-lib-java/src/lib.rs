@@ -11,21 +11,30 @@ use std::sync::Mutex;
 
 use lazy_static::lazy_static;
 use robusta_jni::bridge;
+use robusta_jni::jni::errors::Error as JniError;
+use robusta_jni::jni::errors::Result as JniResult;
 
-use cozo::Db;
-use cozo::RocksDbStorage;
+use cozo::*;
 
 #[derive(Default)]
-struct Handles<S> {
+struct Handles {
     current: AtomicI32,
-    dbs: Mutex<BTreeMap<i32, Db<S>>>,
+    dbs: Mutex<BTreeMap<i32, DbInstance>>,
 }
 
 lazy_static! {
-    static ref HANDLES: Handles<RocksDbStorage> = Handles {
+    static ref HANDLES: Handles = Handles {
         current: Default::default(),
         dbs: Mutex::new(Default::default())
     };
+}
+
+fn get_db(id: i32) -> JniResult<DbInstance> {
+    let db_ref = {
+        let dbs = HANDLES.dbs.lock().unwrap();
+        dbs.get(&id).cloned()
+    };
+    db_ref.ok_or_else(|| JniError::from("database already closed"))
 }
 
 #[bridge]
@@ -37,9 +46,9 @@ mod jni {
     use robusta_jni::jni::errors::Result as JniResult;
     use robusta_jni::jni::objects::AutoLocal;
 
-    use cozo::{new_cozo_rocksdb};
+    use cozo::*;
 
-    use crate::HANDLES;
+    use crate::{get_db, HANDLES};
 
     #[derive(Signature, TryIntoJavaValue, IntoJavaValue, TryFromJavaValue)]
     #[package(org.cozodb)]
@@ -49,8 +58,8 @@ mod jni {
     }
 
     impl<'env: 'borrow, 'borrow> CozoDb<'env, 'borrow> {
-        pub extern "jni" fn openDb(path: String) -> JniResult<i32> {
-            match new_cozo_rocksdb(path) {
+        pub extern "jni" fn openDb(kind: String, path: String) -> JniResult<i32> {
+            match DbInstance::new(&kind, &path, Default::default()) {
                 Ok(db) => {
                     let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
                     let mut dbs = HANDLES.dbs.lock().unwrap();
@@ -72,15 +81,24 @@ mod jni {
             script: String,
             params_str: String,
         ) -> JniResult<String> {
-            let db = {
-                let db_ref = {
-                    let dbs = HANDLES.dbs.lock().unwrap();
-                    dbs.get(&id).cloned()
-                };
-                let db = db_ref.ok_or_else(|| JniError::from("database already closed"))?;
-                db
-            };
+            let db = get_db(id)?;
             Ok(db.run_script_str(&script, &params_str))
+        }
+        pub extern "jni" fn exportRelations(id: i32, relations_str: String) -> JniResult<String> {
+            let db = get_db(id)?;
+            Ok(db.export_relations_str(&relations_str))
+        }
+        pub extern "jni" fn importRelation(id: i32, data: String) -> JniResult<String> {
+            let db = get_db(id)?;
+            Ok(db.import_relation_str(&data))
+        }
+        pub extern "jni" fn backup(id: i32, out_file: String) -> JniResult<String> {
+            let db = get_db(id)?;
+            Ok(db.backup_db_str(&out_file))
+        }
+        pub extern "jni" fn restore(id: i32, in_file: String) -> JniResult<String> {
+            let db = get_db(id)?;
+            Ok(db.restore_backup_str(&in_file))
         }
     }
 }

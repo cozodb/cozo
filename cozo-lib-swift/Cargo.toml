@@ -10,6 +10,8 @@ crate-type = ["staticlib"]
 
 [features]
 storage-rocksdb = ["cozo/storage-rocksdb"]
+jemalloc = ["cozo/jemalloc"]
+io-uring = ["cozo/io-uring"]
 
 [build-dependencies]
 swift-bridge-build = "0.1.41"
