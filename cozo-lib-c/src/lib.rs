@@ -17,95 +17,6 @@ use lazy_static::lazy_static;
 
 use cozo::*;
 
-#[derive(Clone)]
-enum DbInstance {
-    Mem(Db<MemStorage>),
-    #[cfg(feature = "storage-sqlite")]
-    Sqlite(Db<SqliteStorage>),
-    #[cfg(feature = "storage-rocksdb")]
-    RocksDb(Db<RocksDbStorage>),
-}
-
-impl DbInstance {
-    fn new(engine: &str, path: &str) -> Result<Self, String> {
-        match engine {
-            "mem" => Ok(Self::Mem(new_cozo_mem().map_err(|err| err.to_string())?)),
-            "sqlite" => {
-                #[cfg(feature = "storage-sqlite")]
-                {
-                    return Ok(Self::Sqlite(
-                        new_cozo_sqlite(path.to_string()).map_err(|err| err.to_string())?,
-                    ));
-                }
-
-                #[cfg(not(feature = "storage-sqlite"))]
-                {
-                    return Err("support for sqlite not compiled".to_string());
-                }
-            }
-            "rocksdb" => {
-                #[cfg(feature = "storage-rocksdb")]
-                {
-                    return Ok(Self::RocksDb(
-                        new_cozo_rocksdb(path.to_string()).map_err(|err| err.to_string())?,
-                    ));
-                }
-
-                #[cfg(not(feature = "storage-rocksdb"))]
-                {
-                    return Err("support for rocksdb not compiled".to_string());
-                }
-            }
-            _ => Err(format!("unsupported engine: {}", engine)),
-        }
-    }
-    fn run_script_str(&self, payload: &str, params: &str) -> String {
-        match self {
-            DbInstance::Mem(db) => db.run_script_str(payload, params),
-            #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.run_script_str(payload, params),
-            #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.run_script_str(payload, params),
-        }
-    }
-    fn import_relations(&self, data: &str) -> String {
-        match self {
-            DbInstance::Mem(db) => db.import_relation_str(data),
-            #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.import_relation_str(data),
-            #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.import_relation_str(data),
-        }
-    }
-    fn export_relations(&self, data: &str) -> String {
-        match self {
-            DbInstance::Mem(db) => db.export_relations_str(data),
-            #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.export_relations_str(data),
-            #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.export_relations_str(data),
-        }
-    }
-    fn backup(&self, path: &str) -> String {
-        match self {
-            DbInstance::Mem(db) => db.backup_db_str(path),
-            #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.backup_db_str(path),
-            #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.backup_db_str(path),
-        }
-    }
-    fn restore(&self, path: &str) -> String {
-        match self {
-            DbInstance::Mem(db) => db.restore_backup_str(path),
-            #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.restore_backup_str(path),
-            #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.restore_backup_str(path),
-        }
-    }
-}
-
 struct Handles {
     current: AtomicI32,
     dbs: Mutex<BTreeMap<i32, DbInstance>>,
@@ -133,19 +44,19 @@ pub unsafe extern "C" fn cozo_open_db(
     path: *const c_char,
     db_id: &mut i32,
 ) -> *mut c_char {
-    let path = match CStr::from_ptr(path).to_str() {
-        Ok(p) => p,
-        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
-    };
-
     let engine = match CStr::from_ptr(engine).to_str() {
         Ok(p) => p,
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
     };
 
-    let db = match DbInstance::new(engine, path) {
+    let path = match CStr::from_ptr(path).to_str() {
+        Ok(p) => p,
+        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+    };
+
+    let db = match DbInstance::new(engine, path, Default::default()) {
         Ok(db) => db,
-        Err(err) => return CString::new(err).unwrap().into_raw(),
+        Err(err) => return CString::new(err.to_string()).unwrap().into_raw(),
     };
 
     let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
@@ -254,7 +165,9 @@ pub unsafe extern "C" fn cozo_import_relation(
         Ok(p) => p,
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
     };
-    CString::new(db.import_relations(data)).unwrap().into_raw()
+    CString::new(db.import_relation_str(data))
+        .unwrap()
+        .into_raw()
 }
 
 #[no_mangle]
@@ -286,7 +199,9 @@ pub unsafe extern "C" fn cozo_export_relations(
         Ok(p) => p,
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
     };
-    CString::new(db.export_relations(data)).unwrap().into_raw()
+    CString::new(db.export_relations_str(data))
+        .unwrap()
+        .into_raw()
 }
 
 #[no_mangle]
@@ -315,7 +230,7 @@ pub unsafe extern "C" fn cozo_backup(db_id: i32, out_path: *const c_char) -> *mu
         Ok(p) => p,
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
     };
-    CString::new(db.backup(data)).unwrap().into_raw()
+    CString::new(db.backup_db_str(data)).unwrap().into_raw()
 }
 
 #[no_mangle]
@@ -344,7 +259,9 @@ pub unsafe extern "C" fn cozo_restore(db_id: i32, in_path: *const c_char) -> *mu
         Ok(p) => p,
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
     };
-    CString::new(db.restore(data)).unwrap().into_raw()
+    CString::new(db.restore_backup_str(data))
+        .unwrap()
+        .into_raw()
 }
 
 /// Free any C-string returned from the Cozo C API.

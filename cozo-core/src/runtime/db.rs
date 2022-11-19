@@ -18,7 +18,7 @@ use either::{Left, Right};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use miette::{
-    bail, ensure, miette, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
+    bail, ensure, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
     JSONReportHandler, Result, WrapErr,
 };
 use serde_json::{json, Map};
@@ -86,9 +86,9 @@ impl<S> Debug for Db<S> {
 pub(crate) struct BadDbInit(#[help] pub(crate) String);
 
 lazy_static! {
-    static ref TEXT_ERR_HANDLER: GraphicalReportHandler =
+    pub static ref TEXT_ERR_HANDLER: GraphicalReportHandler =
         miette::GraphicalReportHandler::new().with_theme(GraphicalTheme::unicode());
-    static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
+    pub static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
 }
 
 impl<'s, S: Storage<'s>> Db<S> {
@@ -134,55 +134,6 @@ impl<'s, S: Storage<'s>> Db<S> {
             err => err,
         }
     }
-    /// Run the CozoScript passed in. The `params` argument is a map of parameters.
-    /// Fold any error into the return JSON itself.
-    pub fn run_script_fold_err(
-        &'s self,
-        payload: &str,
-        params: &Map<String, JsonValue>,
-    ) -> JsonValue {
-        match self.run_script(payload, params) {
-            Ok(json) => json,
-            Err(mut err) => {
-                if err.source_code().is_none() {
-                    err = err.with_source_code(payload.to_string());
-                }
-                let mut text_err = String::new();
-                let mut json_err = String::new();
-                TEXT_ERR_HANDLER
-                    .render_report(&mut text_err, err.as_ref())
-                    .expect("render text error failed");
-                JSON_ERR_HANDLER
-                    .render_report(&mut json_err, err.as_ref())
-                    .expect("render json error failed");
-                let mut json: serde_json::Value =
-                    serde_json::from_str(&json_err).expect("parse rendered json error failed");
-                let map = json.as_object_mut().unwrap();
-                map.insert("ok".to_string(), json!(false));
-                map.insert("display".to_string(), json!(text_err));
-                json
-            }
-        }
-    }
-    /// Run the CozoScript passed in. The `params` argument is a map of parameters formatted as JSON.
-    pub fn run_script_str(&'s self, payload: &str, params: &str) -> String {
-        let params_json = if params.is_empty() {
-            Map::default()
-        } else {
-            match serde_json::from_str::<serde_json::Value>(params) {
-                Ok(serde_json::Value::Object(map)) => map,
-                Ok(_) => {
-                    return json!({"ok": false, "message": "params argument is not valid JSON"})
-                        .to_string()
-                }
-                Err(_) => {
-                    return json!({"ok": false, "message": "params argument is not a JSON map"})
-                        .to_string()
-                }
-            }
-        };
-        self.run_script_fold_err(payload, &params_json).to_string()
-    }
     /// Export relations to JSON data.
     pub fn export_relations<'a>(
         &'s self,
@@ -225,34 +176,6 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         Ok(JsonValue::Object(ret))
     }
-    /// Export relations to JSON-encoded string
-    pub fn export_relations_str(&'s self, relations_str: &str) -> String {
-        match self.export_relations_str_inner(relations_str) {
-            Ok(s) => {
-                let ret = json!({"ok": true, "data": s});
-                format!("{}", ret)
-            }
-            Err(err) => {
-                let ret = json!({"ok": false, "message": err.to_string()});
-                format!("{}", ret)
-            }
-        }
-    }
-    fn export_relations_str_inner(&'s self, relations_str: &str) -> Result<JsonValue> {
-        let j_val: JsonValue = serde_json::from_str(relations_str).into_diagnostic()?;
-        let v = j_val
-            .as_array()
-            .ok_or_else(|| miette!("expects an array"))?;
-        let relations: Vec<_> = v
-            .iter()
-            .map(|name| {
-                name.as_str()
-                    .ok_or_else(|| miette!("expects an array of string names"))
-            })
-            .try_collect()?;
-        let results = self.export_relations(relations.into_iter())?;
-        Ok(results)
-    }
     /// Import a relation
     pub fn import_relation(&'s self, relation: &str, in_data: &[JsonValue]) -> Result<()> {
         #[derive(Debug, Diagnostic, Error)]
@@ -289,33 +212,6 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         Ok(())
     }
-    /// Import a relation, the data is given as a JSON string, and the returned result is converted into a string
-    pub fn import_relation_str(&'s self, data: &str) -> String {
-        match self.import_relation_str_inner(data) {
-            Ok(()) => {
-                format!("{}", json!({"ok": true}))
-            }
-            Err(err) => {
-                format!("{}", json!({"ok": false, "message": err.to_string()}))
-            }
-        }
-    }
-    fn import_relation_str_inner(&'s self, data: &str) -> Result<()> {
-        let j_obj: JsonValue = serde_json::from_str(data).into_diagnostic()?;
-        let name_val = j_obj
-            .get("relation")
-            .ok_or_else(|| miette!("key 'relation' required"))?;
-        let name = name_val
-            .as_str()
-            .ok_or_else(|| miette!("field 'relation' must be a string"))?;
-        let data_val = j_obj
-            .get("data")
-            .ok_or_else(|| miette!("key 'data' required"))?;
-        let data = data_val
-            .as_array()
-            .ok_or_else(|| miette!("field 'data' must be an array"))?;
-        self.import_relation(name, data)
-    }
     /// Backup the running database into an Sqlite file
     pub fn backup_db(&'s self, out_file: String) -> Result<()> {
         #[cfg(feature = "storage-sqlite")]
@@ -330,13 +226,6 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled")
     }
-    /// Backup the running database into an Sqlite file, with JSON string return value
-    pub fn backup_db_str(&'s self, out_file: &str) -> String {
-        match self.backup_db(out_file.to_string()) {
-            Ok(_) => json!({"ok": true}).to_string(),
-            Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
-        }
-    }
     /// Restore from an Sqlite backup
     pub fn restore_backup(&'s self, in_file: String) -> Result<()> {
         #[cfg(feature = "storage-sqlite")]
@@ -350,13 +239,6 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled")
-    }
-    /// Restore from an Sqlite backup, with JSON string return value
-    pub fn restore_backup_str(&'s self, in_file: &str) -> String {
-        match self.restore_backup(in_file.to_string()) {
-            Ok(_) => json!({"ok": true}).to_string(),
-            Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
-        }
     }
 
     fn compact_relation(&'s self) -> Result<()> {
