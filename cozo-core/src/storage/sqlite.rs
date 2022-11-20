@@ -33,6 +33,9 @@ pub struct SqliteStorage {
 /// You must provide a disk-based path: `:memory:` is not OK.
 /// If you want a pure memory storage, use [`new_cozo_mem`](crate::new_cozo_mem).
 pub fn new_cozo_sqlite(path: String) -> Result<crate::Db<SqliteStorage>> {
+    if path.is_empty() {
+        bail!("empty path for sqlite storage")
+    }
     let conn = sqlite::open(&path).into_diagnostic()?;
     let query = r#"
         create table if not exists cozo
