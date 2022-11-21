@@ -2,4 +2,14 @@
 #lto = true
 
 [workspace]
-members = ["cozorocks", "cozo-lib-c", "cozo-lib-java", "cozo-core", "cozoserver", "cozo-lib-wasm", "cozo-lib-swift", "cozo-lib-python"]
+members = [
+    "cozo-core",
+    "cozorocks",
+    "cozoserver",
+    "cozo-lib-c",
+    "cozo-lib-java",
+    "cozo-lib-wasm",
+    "cozo-lib-swift",
+    "cozo-lib-python",
+    "cozo-lib-nodejs"
+]
