@@ -25,17 +25,23 @@ extern "C" {
 
 #[wasm_bindgen]
 pub struct CozoDb {
-    db: Db<MemStorage>,
+    db: DbInstance,
 }
 
 #[wasm_bindgen]
 impl CozoDb {
     pub fn new() -> Self {
         utils::set_panic_hook();
-        let db = new_cozo_mem().unwrap();
+        let db = DbInstance::new("mem", "", Default::default()).unwrap();
         Self { db }
     }
     pub fn run(&self, script: &str, params: &str) -> String {
         self.db.run_script_str(script, params)
+    }
+    pub fn export_relations(&self, rels: &str) -> String {
+        self.db.export_relations_str(rels)
+    }
+    pub fn import_relation(&self, data: &str) -> String {
+        self.db.import_relation_str(data)
     }
 }

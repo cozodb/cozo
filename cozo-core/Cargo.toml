@@ -18,7 +18,7 @@ exclude = [
 [features]
 #! # Features
 
-default = ["compact", "storage-rocksdb"]
+default = ["compact"]
 ## Enables the `minimal`, `requests` and `graph-algo` features
 compact = ["minimal", "requests", "graph-algo", "rayon"]
 ## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode
