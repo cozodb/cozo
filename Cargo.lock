@@ -591,9 +591,16 @@ dependencies = [
 name = "cozoserver"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "cozo",
+ "env_logger",
+ "log",
+ "rand 0.8.5",
  "rouille",
+ "serde",
+ "serde_derive",
+ "serde_json",
 ]
 
 [[package]]

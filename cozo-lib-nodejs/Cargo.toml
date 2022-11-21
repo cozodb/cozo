@@ -7,9 +7,6 @@ license = "MIT/Apache-2.0/BSD-3-Clause"
 edition = "2021"
 exclude = ["index.node"]
 
-[profile.release]
-lto = true
-
 [lib]
 crate-type = ["cdylib"]
 

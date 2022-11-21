@@ -17,15 +17,25 @@ use env_logger::Env;
 use log::{error, info};
 use rand::Rng;
 use rouille::{router, try_or_400, Request, Response};
+use serde_json::json;
 
-use cozo::new_cozo_rocksdb;
+use cozo::*;
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
 struct Args {
+    /// Database kind, can be `mem`, `sqlite`, `rocksdb` and others.
+    /// Some kinds may not be available if the executable did not set its build option.
+    #[clap(short, long, default_value_t = String::from("mem"))]
+    kind: String,
+
     /// Path to the directory to store the database
-    #[clap(value_parser)]
+    #[clap(short, long, default_value_t = String::from(""))]
     path: String,
+
+    /// Extra config in JSON format
+    #[clap(short, long, default_value_t = serde_json::Value::Null)]
+    config: serde_json::Value,
 
     /// Address to bind the service to
     #[clap(short, long, default_value_t = String::from("127.0.0.1"))]
@@ -36,6 +46,19 @@ struct Args {
     port: u16,
 }
 
+macro_rules! check_auth {
+    ($request:expr, $auth_guard:expr) => {
+        match $request.header("x-cozo-auth") {
+            None => return Response::text("Unauthorized").with_status_code(401),
+            Some(code) => {
+                if $auth_guard != code {
+                    return Response::text("Unauthorized").with_status_code(401);
+                }
+            }
+        }
+    };
+}
+
 fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
@@ -43,7 +66,7 @@ fn main() {
         eprintln!("{}", SECURITY_WARNING);
     }
 
-    let db = new_cozo_rocksdb(args.path.as_str()).unwrap();
+    let db = DbInstance::new(args.kind.as_str(), args.path.as_str(), args.config.clone()).unwrap();
 
     let mut path_buf = PathBuf::from(&args.path);
     path_buf.push("auth.txt");
@@ -84,14 +107,7 @@ fn main() {
             router!(request,
                 (POST) (/text-query) => {
                     if !request.remote_addr().ip().is_loopback() {
-                        match request.header("x-cozo-auth") {
-                            None => return Response::text("Unauthorized").with_status_code(401),
-                            Some(code) => {
-                                if auth_guard != code {
-                                    return Response::text("Unauthorized").with_status_code(401);
-                                }
-                            }
-                        }
+                        check_auth!(request, auth_guard);
                     }
 
                     #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
@@ -108,19 +124,96 @@ fn main() {
                     } else {
                         response.with_status_code(400)
                     }
-                    // {
-                    //
-                    //     Ok(mut result) => {
-                    //         if let Some(obj) = result.as_object_mut() {
-                    //             obj.insert(
-                    //                 "time_taken".to_string(),
-                    //                 json!(start.elapsed().as_millis() as u64),
-                    //             );
-                    //         }
-                    //         Response::json(&result)
-                    //     }
-                    //     _ => Response::json(&result).with_status_code(400)
-                    // }
+                },
+                (GET) (/export/{relations: String}) => {
+                    check_auth!(request, auth_guard);
+                    let relations = relations.split(",").filter_map(|t| {
+                        if t.is_empty() {
+                            None
+                        } else {
+                            Some(t)
+                        }
+                    });
+                    let result = db.export_relations(relations);
+                    match result {
+                        Ok(s) => {
+                            let ret = json!({"ok": true, "data": s});
+                            Response::json(&ret)
+                        }
+                        Err(err) => {
+                            let ret = json!({"ok": false, "message": err.to_string()});
+                            Response::json(&ret).with_status_code(400)
+                        }
+                    }
+                },
+                (PUT) (/import/{relation: String}) => {
+                    check_auth!(request, auth_guard);
+
+                    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+                    struct ImportPayload {
+                        data: Vec<serde_json::Value>,
+                    }
+
+                    let payload: ImportPayload = try_or_400!(rouille::input::json_input(request));
+
+                    let result = db.import_relation(&relation, &payload.data);
+
+                    match result {
+                        Ok(()) => {
+                            let ret = json!({"ok": true});
+                            Response::json(&ret)
+                        }
+                        Err(err) => {
+                            let ret = json!({"ok": false, "message": err.to_string()});
+                            Response::json(&ret).with_status_code(400)
+                        }
+                    }
+                },
+                (POST) (/backup) => {
+                    check_auth!(request, auth_guard);
+
+                    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+                    struct BackupPayload {
+                        path: String,
+                    }
+
+                    let payload: BackupPayload = try_or_400!(rouille::input::json_input(request));
+
+                    let result = db.backup_db(payload.path.clone());
+
+                    match result {
+                        Ok(()) => {
+                            let ret = json!({"ok": true});
+                            Response::json(&ret)
+                        }
+                        Err(err) => {
+                            let ret = json!({"ok": false, "message": err.to_string()});
+                            Response::json(&ret).with_status_code(400)
+                        }
+                    }
+                },
+                (POST) (/restore) => {
+                    check_auth!(request, auth_guard);
+
+                    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+                    struct BackupPayload {
+                        path: String,
+                    }
+
+                    let payload: BackupPayload = try_or_400!(rouille::input::json_input(request));
+
+                    let result = db.restore_backup(payload.path.clone());
+
+                    match result {
+                        Ok(()) => {
+                            let ret = json!({"ok": true});
+                            Response::json(&ret)
+                        }
+                        Err(err) => {
+                            let ret = json!({"ok": false, "message": err.to_string()});
+                            Response::json(&ret).with_status_code(400)
+                        }
+                    }
                 },
                 (GET) (/) => {
                     Response::html(HTML_CONTENT)

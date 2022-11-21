@@ -6,7 +6,44 @@ license = "MPL-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+#! # Features
+
+## Enables the `minimal`, `requests` and `graph-algo` features
+compact = ["minimal", "requests", "graph-algo", "rayon"]
+## Enables the `storage-sqlite` and `graph-algo` features
+mobile = ["storage-sqlite", "graph-algo", "rayon"]
+## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode
+compact-single-threaded = ["minimal", "requests", "graph-algo"]
+## Enables the `storage-sqlite` feature
+minimal = ["storage-sqlite"]
+## Enables the [Sqlite](https://www.sqlite.org/index.html) backend, also allows backup and restore with Sqlite data files.
+storage-sqlite = ["cozo/storage-sqlite"]
+## Enables the [RocksDB](http://rocksdb.org/) backend
+storage-rocksdb = ["cozo/storage-rocksdb"]
+## Enables the graph algorithms
+graph-algo = ["cozo/graph-algo"]
+## Allows the utilities to make web requests to fetch data
+requests = ["cozo/requests"]
+## Uses jemalloc as the global allocator, can make a difference in performance
+jemalloc = ["cozo/jemalloc"]
+## Enables io-uring option for the RocksDB storage
+io-uring = ["cozo/io-uring"]
+## Allows threading and enables the use of the `rayon` library for parallelizing algorithms
+rayon = ["cozo/rayon"]
+## Disallows the use of threads
+nothread = ["cozo/nothread"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [dependencies]
-cozo = { version = "0.1.2", path = "../cozo-core" }
+cozo = { version = "0.1.7", path = "../cozo-core", default-features = false }
 clap = { version = "3.2.8", features = ["derive"] }
 rouille = "3.5.0"
+env_logger = "0.9.3"
+log = "0.4.17"
+rand = "0.8.5"
+serde_derive = "1.0.137"
+serde = { version = "1.0.137" }
+chrono = "0.4.19"
+serde_json = "1.0.81"
