@@ -42,7 +42,7 @@ struct Args {
     bind: String,
 
     /// Port to use
-    #[clap(short, long, default_value_t = 9070)]
+    #[clap(short = 'P', long, default_value_t = 9070)]
     port: u16,
 }
 
@@ -69,7 +69,7 @@ fn main() {
     let db = DbInstance::new(args.kind.as_str(), args.path.as_str(), args.config.clone()).unwrap();
 
     let mut path_buf = PathBuf::from(&args.path);
-    path_buf.push("auth.txt");
+    path_buf.push(format!("cozo-{}-auth.txt", args.kind));
     let auth_guard = match fs::read_to_string(&path_buf) {
         Ok(s) => s.trim().to_string(),
         Err(_) => {
@@ -88,7 +88,7 @@ fn main() {
     } else {
         format!("{}:{}", args.bind, args.port)
     };
-    println!("Database web API running at http://{}", addr);
+    println!("Database ({} backend) web API running at http://{}", args.kind, addr);
     rouille::start_server(addr, move |request| {
         let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f");
         let log_ok = |req: &Request, _resp: &Response, elap: std::time::Duration| {
