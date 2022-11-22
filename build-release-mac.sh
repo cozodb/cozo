@@ -2,20 +2,35 @@
 
 set -e
 
-VERSION=$(cat ./Cargo.toml | grep -E "^version" | grep -Eo '[0-9.]+')
-ARCH=$(uname -m)
+VERSION=$(cat ./VERSION)
 
-rm -fr release
-mkdir release
+#rm -fr release
+mkdir -p release
 
-cargo build --release
-cargo build --release --manifest-path=cozo-lib-c/Cargo.toml
-cargo build --release --manifest-path=cozo-lib-java/Cargo.toml
+for TARGET in x86_64-apple-darwin aarch64-apple-darwin; do
+  # standalone, c, java, nodejs
+  CARGO_PROFILE_RELEASE_LTO=fat cargo build --release -p cozoserver -p cozo_c -p cozo_java -p cozo-node -F compact -F storage-rocksdb --target $TARGET
+  cp target/$TARGET/release/cozoserver release/cozoserver-$VERSION-$TARGET # standalone
+  cp target/$TARGET/release/libcozo_c.a release/libcozo_c-$VERSION-$TARGET.a # c static
+  cp target/$TARGET/release/libcozo_c.dylib release/libcozo_c-$VERSION-$TARGET.dylib # c dynamic
+  cp target/$TARGET/release/libcozo_java.dylib release/libcozo_java-$VERSION-$TARGET.dylib # java
+  cp target/$TARGET/release/libcozo_node.dylib release/libcozo_node-$VERSION-$TARGET.dylib # nodejs
 
-cp target/release/cozoserver release/cozoserver-${VERSION}-mac-${ARCH}
-cp target/release/libcozo_c.a release/libcozo_c-${VERSION}-mac-${ARCH}.a
-cp target/release/libcozo_c.dylib release/libcozo_c-${VERSION}-mac-${ARCH}.dylib
-cp target/release/libcozo_java.dylib release/libcozo_java-${VERSION}-mac-${ARCH}.dylib
-strip release/cozoserver-${VERSION}-mac-${ARCH}
+  # python
+  cd cozo-lib-python
+  CARGO_PROFILE_RELEASE_LTO=fat PYO3_NO_PYTHON=1 maturin build -F compact -F storage-rocksdb --release --strip --target $TARGET
+  cd ..
+done
 
-gzip release/*
+# copy python
+cp target/wheels/*.whl release/
+
+# swift
+cd cozo-lib-swift
+CARGO_PROFILE_RELEASE_LTO=fat ./build-rust.sh
+cd ..
+
+# WASM
+cd cozo-lib-wasm
+CARGO_PROFILE_RELEASE_LTO=fat ./build.sh
+cd ..

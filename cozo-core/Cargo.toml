@@ -1,6 +1,6 @@
 [package]
 name = "cozo"
-version = "0.1.7"
+version = "0.2.0"
 edition = "2021"
 description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data and algorithms"
 authors = ["Ziyang Hu"]
@@ -9,11 +9,8 @@ homepage = "https://github.com/cozodb/cozo"
 repository = "https://github.com/cozodb/cozo"
 documentation = "https://cozodb.github.io/current/manual"
 exclude = [
-    "docs/*",
     "tests/*",
 ]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 #! # Features

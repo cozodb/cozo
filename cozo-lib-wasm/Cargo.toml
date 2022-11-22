@@ -1,9 +1,13 @@
 [package]
 name = "cozo-lib-wasm"
-version = "0.1.0"
-authors = ["Ziyang Hu <hu.ziyang@cantab.net>"]
+version = "0.2.0"
 edition = "2021"
+description = "Cozo database for WASM"
+authors = ["Ziyang Hu"]
 license = "MPL-2.0"
+homepage = "https://github.com/cozodb/cozo"
+repository = "https://github.com/cozodb/cozo"
+documentation = "https://cozodb.github.io/current/manual"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -13,7 +17,7 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 wasm-bindgen = "0.2.63"
-cozo = { version = "0.1.7", path = "../cozo-core", default-features = false, features = ["wasm", "graph-algo", "nothread"] }
+cozo = { version = "0.2.0", path = "../cozo-core", default-features = false, features = ["wasm", "graph-algo", "nothread"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

@@ -6,8 +6,8 @@ cd $THISDIR
 
 export SWIFT_BRIDGE_OUT_DIR="$(pwd)/generated"
 # Build the project for the desired platforms:
-cargo build -p cozo-swift --target x86_64-apple-darwin --release
-cargo build -p cozo-swift --target aarch64-apple-darwin --release
+cargo build -p cozo-swift -F storage-rocksdb --target x86_64-apple-darwin --release
+cargo build -p cozo-swift -F storage-rocksdb --target aarch64-apple-darwin --release
 mkdir -p ../target/universal-macos/release
 
 lipo \
@@ -16,9 +16,9 @@ lipo \
     ../target/universal-macos/release/libcozo_swift.a
 
 cargo build -p cozo-swift --target aarch64-apple-ios --release
-
 cargo build -p cozo-swift --target x86_64-apple-ios --release
 cargo build -p cozo-swift --target aarch64-apple-ios-sim --release
+
 mkdir -p ../target/universal-ios/release
 
 lipo \

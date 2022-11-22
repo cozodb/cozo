@@ -1,7 +1,13 @@
 [package]
 name = "cozo-swift"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+description = "Cozo database for Swift"
+authors = ["Ziyang Hu"]
+license = "MPL-2.0"
+homepage = "https://github.com/cozodb/cozo"
+repository = "https://github.com/cozodb/cozo"
+documentation = "https://cozodb.github.io/current/manual"
 
 [lib]
 crate-type = ["staticlib"]
@@ -17,5 +23,5 @@ io-uring = ["cozo/io-uring"]
 swift-bridge-build = "0.1.41"
 
 [dependencies]
+cozo = { version = "0.2.0", path = "../cozo-core", default-features = false, features = ["compact"] }
 swift-bridge = "0.1.41"
-cozo = { version = "0.1.7", path = "../cozo-core", default-features = false, features = ["compact"] }
