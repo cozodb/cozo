@@ -31,6 +31,6 @@ for TARGET in aarch64-linux-android armv7-linux-androideabi i686-linux-android x
 done
 
 # python
-podman run --rm -v $(pwd):/io -w /io/cozo-lib-python ghcr.io/pyo3/maturin:latest build --release --strip -F compact -F storage-rocksdb
+CARGO_NET_GIT_FETCH_WITH_CLI=true podman run --rm -v $(pwd):/io -w /io/cozo-lib-python ghcr.io/pyo3/maturin:latest build --release --strip -F compact -F storage-rocksdb
 # copy python
 cp target/wheels/*.whl release/
