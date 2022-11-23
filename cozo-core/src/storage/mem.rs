@@ -116,7 +116,7 @@ impl<'s> StoreTx<'s> for MemTx<'s> {
                 bail!("write in read transaction")
             }
             MemTx::Writer(_, cache) => {
-                cache.remove(key);
+                cache.insert(key.to_vec(), None);
                 Ok(())
             }
         }
