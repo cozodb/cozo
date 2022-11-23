@@ -245,8 +245,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                                 .iter()
                                 .map(proc_col)
                                 .try_collect()?;
-                            let v_store =
-                                handle.encode_val_for_store(&Tuple(vals), Default::default())?;
+                            let v_store = handle
+                                .encode_val_only_for_store(&Tuple(vals), Default::default())?;
                             tx.tx.put(&k_store, &v_store)?;
                         }
                     }
@@ -340,8 +340,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                                     col.typing.coerce(DataValue::from(v))
                                 })
                                 .try_collect()?;
-                            let v_store =
-                                handle.encode_val_for_store(&Tuple(vals), Default::default())?;
+                            let v_store = handle
+                                .encode_val_only_for_store(&Tuple(vals), Default::default())?;
                             tx.tx.put(&k_store, &v_store)?;
                         }
                     }

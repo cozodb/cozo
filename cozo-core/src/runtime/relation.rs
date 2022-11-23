@@ -149,6 +149,15 @@ impl RelationHandle {
             .unwrap();
         Ok(ret)
     }
+    pub(crate) fn encode_val_only_for_store(
+        &self,
+        tuple: &Tuple,
+        _span: SourceSpan,
+    ) -> Result<Vec<u8>> {
+        let mut ret = self.encode_key_prefix(tuple.0.len());
+        tuple.0.serialize(&mut Serializer::new(&mut ret)).unwrap();
+        Ok(ret)
+    }
     pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle) -> Result<()> {
         let InputRelationHandle { metadata, .. } = inp;
         // check that every given key is found and compatible
