@@ -37,8 +37,8 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 pub use miette::Error;
 use miette::{
-    bail, miette, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
-    JSONReportHandler, Result, ThemeCharacters, ThemeStyles,
+    bail, miette, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic, JSONReportHandler,
+    Result, ThemeCharacters, ThemeStyles,
 };
 use serde_json::{json, Map};
 
@@ -205,17 +205,18 @@ impl DbInstance {
     pub fn export_relations<'a>(
         &self,
         relations: impl Iterator<Item = &'a str>,
+        as_objects: bool,
     ) -> Result<JsonValue> {
         match self {
-            DbInstance::Mem(db) => db.export_relations(relations),
+            DbInstance::Mem(db) => db.export_relations(relations, as_objects),
             #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.export_relations(relations),
+            DbInstance::Sqlite(db) => db.export_relations(relations, as_objects),
             #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.export_relations(relations),
+            DbInstance::RocksDb(db) => db.export_relations(relations, as_objects),
             #[cfg(feature = "storage-sled")]
-            DbInstance::Sled(db) => db.export_relations(relations),
+            DbInstance::Sled(db) => db.export_relations(relations, as_objects),
             #[cfg(feature = "storage-tikv")]
-            DbInstance::TiKv(db) => db.export_relations(relations),
+            DbInstance::TiKv(db) => db.export_relations(relations, as_objects),
         }
     }
     /// Export relations to JSON-encoded string
@@ -233,36 +234,44 @@ impl DbInstance {
     }
     fn export_relations_str_inner(&self, relations_str: &str) -> Result<JsonValue> {
         let j_val: JsonValue = serde_json::from_str(relations_str).into_diagnostic()?;
-        let v = j_val
+        let relations = j_val
+            .get("relations")
+            .ok_or_else(|| miette!("field 'relations' expected"))?;
+        let v = relations
             .as_array()
-            .ok_or_else(|| miette!("expects an array"))?;
+            .ok_or_else(|| miette!("expects field 'relations' to be an array"))?;
         let relations: Vec<_> = v
             .iter()
             .map(|name| {
-                name.as_str()
-                    .ok_or_else(|| miette!("expects an array of string names"))
+                name.as_str().ok_or_else(|| {
+                    miette!("expects field 'relations' to be an array of string names")
+                })
             })
             .try_collect()?;
-        let results = self.export_relations(relations.into_iter())?;
+        let as_objects = j_val.get("as_objects").unwrap_or(&JsonValue::Bool(false));
+        let as_objects = as_objects
+            .as_bool()
+            .ok_or_else(|| miette!("expects field 'as_objects' to be a boolean"))?;
+        let results = self.export_relations(relations.into_iter(), as_objects)?;
         Ok(results)
     }
     /// Dispatcher method. See [crate::Db::import_relations].
-    pub fn import_relation(&self, relation: &str, in_data: &[JsonValue]) -> Result<()> {
+    pub fn import_relations(&self, data: &Map<String, JsonValue>) -> Result<()> {
         match self {
-            DbInstance::Mem(db) => db.import_relation(relation, in_data),
+            DbInstance::Mem(db) => db.import_relations(data),
             #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.import_relation(relation, in_data),
+            DbInstance::Sqlite(db) => db.import_relations(data),
             #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.import_relation(relation, in_data),
+            DbInstance::RocksDb(db) => db.import_relations(data),
             #[cfg(feature = "storage-sled")]
-            DbInstance::Sled(db) => db.import_relation(relation, in_data),
+            DbInstance::Sled(db) => db.import_relations(data),
             #[cfg(feature = "storage-tikv")]
-            DbInstance::TiKv(db) => db.import_relation(relation, in_data),
+            DbInstance::TiKv(db) => db.import_relations(data),
         }
     }
     /// Import a relation, the data is given as a JSON string, and the returned result is converted into a string
-    pub fn import_relation_str(&self, data: &str) -> String {
-        match self.import_relation_str_inner(data) {
+    pub fn import_relations_str(&self, data: &str) -> String {
+        match self.import_relations_str_inner(data) {
             Ok(()) => {
                 format!("{}", json!({"ok": true}))
             }
@@ -271,21 +280,12 @@ impl DbInstance {
             }
         }
     }
-    fn import_relation_str_inner(&self, data: &str) -> Result<()> {
+    fn import_relations_str_inner(&self, data: &str) -> Result<()> {
         let j_obj: JsonValue = serde_json::from_str(data).into_diagnostic()?;
-        let name_val = j_obj
-            .get("relation")
-            .ok_or_else(|| miette!("key 'relation' required"))?;
-        let name = name_val
-            .as_str()
-            .ok_or_else(|| miette!("field 'relation' must be a string"))?;
-        let data_val = j_obj
-            .get("data")
-            .ok_or_else(|| miette!("key 'data' required"))?;
-        let data = data_val
-            .as_array()
-            .ok_or_else(|| miette!("field 'data' must be an array"))?;
-        self.import_relation(name, data)
+        let j_obj = j_obj
+            .as_object()
+            .ok_or_else(|| miette!("expect an object"))?;
+        self.import_relations(j_obj)
     }
     /// Dispatcher method. See [crate::Db::backup_db].
     pub fn backup_db(&self, out_file: String) -> Result<()> {

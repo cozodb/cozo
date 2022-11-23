@@ -16,7 +16,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use either::{Left, Right};
 use itertools::Itertools;
-use miette::{bail, ensure, Diagnostic, IntoDiagnostic, Result, WrapErr};
+use miette::{bail, ensure, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
 use serde_json::{json, Map};
 use smartstring::SmartString;
 use thiserror::Error;
@@ -125,14 +125,19 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
     }
     /// Export relations to JSON data.
+    ///
+    /// `relations` contains names of the stored relations to export.
+    ///
+    /// If `as_objects` is `true`, then the output contains objects (maps) for each row,
+    /// otherwise the output contains arrays for each row, with headers attached separately.
     pub fn export_relations<'a>(
         &'s self,
         relations: impl Iterator<Item = &'a str>,
+        as_objects: bool,
     ) -> Result<JsonValue> {
         let tx = self.transact()?;
         let mut ret = serde_json::Map::default();
         for rel in relations {
-            let mut coll = vec![];
             let handle = tx.get_relation(rel, false)?;
             let mut cols = handle
                 .metadata
@@ -152,54 +157,200 @@ impl<'s, S: Storage<'s>> Db<S> {
             let start = handle.encode_key_for_store(&Tuple(vec![]), Default::default())?;
             let end =
                 handle.encode_key_for_store(&Tuple(vec![DataValue::Bot]), Default::default())?;
-            for data in tx.tx.range_scan(&start, &end) {
-                let (k, v) = data?;
-                let tuple = decode_tuple_from_kv(&k, &v);
-                let mut j_map = serde_json::Map::default();
-                for (k, v) in cols.iter().zip(tuple.0) {
-                    let j_v = JsonValue::from(v);
-                    j_map.insert(k.to_string(), j_v);
+            if as_objects {
+                let mut coll = vec![];
+
+                for data in tx.tx.range_scan(&start, &end) {
+                    let (k, v) = data?;
+                    let tuple = decode_tuple_from_kv(&k, &v);
+                    let mut j_map = serde_json::Map::default();
+                    for (k, v) in cols.iter().zip(tuple.0) {
+                        let j_v = JsonValue::from(v);
+                        j_map.insert(k.to_string(), j_v);
+                    }
+                    coll.push(JsonValue::Object(j_map));
                 }
-                coll.push(JsonValue::Object(j_map));
+                ret.insert(rel.to_string(), JsonValue::Array(coll));
+            } else {
+                let mut rows = vec![];
+                for data in tx.tx.range_scan(&start, &end) {
+                    let (k, v) = data?;
+                    let tuple = decode_tuple_from_kv(&k, &v);
+                    let row = tuple
+                        .0
+                        .into_iter()
+                        .map(|dv| JsonValue::from(dv))
+                        .collect_vec();
+                    rows.push(JsonValue::Array(row));
+                }
+                let headers = cols.iter().map(|col| json!(col)).collect_vec();
+                ret.insert(
+                    rel.to_string(),
+                    json!({
+                        "headers": headers,
+                        "rows": rows
+                    }),
+                );
             }
-            ret.insert(rel.to_string(), JsonValue::Array(coll));
         }
         Ok(JsonValue::Object(ret))
     }
-    /// Import a relation
-    pub fn import_relation(&'s self, relation: &str, in_data: &[JsonValue]) -> Result<()> {
+    /// Import relations
+    pub fn import_relations(&'s self, data: &Map<String, JsonValue>) -> Result<()> {
         #[derive(Debug, Diagnostic, Error)]
         #[error("cannot import data for relation '{0}': {1}")]
         #[diagnostic(code(import::bad_data))]
         struct BadDataForRelation(String, JsonValue);
 
         let mut tx = self.transact_write()?;
-        let handle = tx.get_relation(relation, true)?;
-        for val in in_data {
-            let proc_col = |col: &ColumnDef| {
-                let d_val = match val.get(&col.name as &str) {
-                    None => match &col.default_gen {
-                        Some(gen) => gen.clone().eval_to_const()?,
-                        None => {
-                            bail!(BadDataForRelation(relation.to_string(), val.clone()))
-                        }
-                    },
-                    Some(data) => DataValue::from(data),
-                };
-                col.typing.coerce(d_val)
-            };
 
-            let keys: Vec<_> = handle.metadata.keys.iter().map(proc_col).try_collect()?;
-            let vals: Vec<_> = handle
-                .metadata
-                .non_keys
-                .iter()
-                .map(proc_col)
-                .try_collect()?;
-            let k_store = handle.encode_key_for_store(&Tuple(keys), Default::default())?;
-            let v_store = handle.encode_val_for_store(&Tuple(vals), Default::default())?;
-            tx.tx.put(&k_store, &v_store)?;
+        for (relation_op, in_data) in data {
+            let is_delete;
+            let relation: &str = match relation_op.strip_prefix('-') {
+                None => {
+                    is_delete = false;
+                    relation_op
+                }
+                Some(s) => {
+                    is_delete = true;
+                    s
+                }
+            };
+            let handle = tx.get_relation(relation, true)?;
+            match in_data {
+                JsonValue::Array(in_data) => {
+                    for val in in_data {
+                        let proc_col = |col: &ColumnDef| {
+                            let d_val = match val.get(&col.name as &str) {
+                                None => match &col.default_gen {
+                                    Some(gen) => gen.clone().eval_to_const()?,
+                                    None => {
+                                        bail!(BadDataForRelation(relation.to_string(), val.clone()))
+                                    }
+                                },
+                                Some(data) => DataValue::from(data),
+                            };
+                            col.typing.coerce(d_val)
+                        };
+                        let keys: Vec<_> =
+                            handle.metadata.keys.iter().map(proc_col).try_collect()?;
+                        let k_store =
+                            handle.encode_key_for_store(&Tuple(keys), Default::default())?;
+
+                        if is_delete {
+                            tx.tx.del(&k_store)?;
+                        } else {
+                            let vals: Vec<_> = handle
+                                .metadata
+                                .non_keys
+                                .iter()
+                                .map(proc_col)
+                                .try_collect()?;
+                            let v_store =
+                                handle.encode_val_for_store(&Tuple(vals), Default::default())?;
+                            tx.tx.put(&k_store, &v_store)?;
+                        }
+                    }
+                }
+                JsonValue::Object(map) => {
+                    let headers = map.get("headers").ok_or_else(|| {
+                        miette!("field 'headers' required for relation {}", relation)
+                    })?;
+                    let headers = headers.as_array().ok_or_else(|| {
+                        miette!("field 'headers' for relation {} must be an array", relation)
+                    })?;
+                    let header2idx: BTreeMap<_, _> = headers
+                        .iter()
+                        .enumerate()
+                        .map(|(i, k)| -> Result<(&str, usize)> {
+                            Ok((
+                                k.as_str()
+                                    .ok_or_else(|| miette!("header must be strings, got {}", k))?,
+                                i,
+                            ))
+                        })
+                        .try_collect()?;
+
+                    let key_indices: Vec<_> = handle
+                        .metadata
+                        .keys
+                        .iter()
+                        .map(|col| -> Result<(usize, &ColumnDef)> {
+                            let idx = header2idx.get(&col.name as &str).ok_or_else(|| {
+                                miette!(
+                                    "required header {} not found for relation {}",
+                                    col.name,
+                                    relation
+                                )
+                            })?;
+                            Ok((*idx, col))
+                        })
+                        .try_collect()?;
+
+                    let val_indices: Vec<_> = if is_delete {
+                        vec![]
+                    } else {
+                        handle
+                            .metadata
+                            .non_keys
+                            .iter()
+                            .map(|col| -> Result<(usize, &ColumnDef)> {
+                                let idx = header2idx.get(&col.name as &str).ok_or_else(|| {
+                                    miette!(
+                                        "required header {} not found for relation {}",
+                                        col.name,
+                                        relation
+                                    )
+                                })?;
+                                Ok((*idx, col))
+                            })
+                            .try_collect()?
+                    };
+
+                    let rows = map.get("rows").ok_or_else(|| {
+                        miette!("field 'rows' required for relation {}", relation)
+                    })?;
+                    let rows = rows.as_array().ok_or_else(|| {
+                        miette!("field 'rows' for relation {} must be an array", relation)
+                    })?;
+
+                    for row in rows {
+                        let row = row
+                            .as_array()
+                            .ok_or_else(|| miette!("expect rows to be an array of arrays"))?;
+                        let keys: Vec<_> = key_indices
+                            .iter()
+                            .map(|(i, col)| -> Result<DataValue> {
+                                let v = row
+                                    .get(*i)
+                                    .ok_or_else(|| miette!("row too short: {:?}", row))?;
+                                col.typing.coerce(DataValue::from(v))
+                            })
+                            .try_collect()?;
+                        let k_store =
+                            handle.encode_key_for_store(&Tuple(keys), Default::default())?;
+                        if is_delete {
+                            tx.tx.del(&k_store)?;
+                        } else {
+                            let vals: Vec<_> = val_indices
+                                .iter()
+                                .map(|(i, col)| -> Result<DataValue> {
+                                    let v = row
+                                        .get(*i)
+                                        .ok_or_else(|| miette!("row too short: {:?}", row))?;
+                                    col.typing.coerce(DataValue::from(v))
+                                })
+                                .try_collect()?;
+                            let v_store =
+                                handle.encode_val_for_store(&Tuple(vals), Default::default())?;
+                            tx.tx.put(&k_store, &v_store)?;
+                        }
+                    }
+                }
+                _ => bail!("expect import relation to be an array or an object"),
+            }
         }
+        tx.commit_tx()?;
         Ok(())
     }
     /// Backup the running database into an Sqlite file
