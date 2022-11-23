@@ -9,7 +9,6 @@
 use std::fmt::Debug;
 use std::fs;
 use std::net::Ipv6Addr;
-use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::Parser;
@@ -68,9 +67,8 @@ fn main() {
 
     let db = DbInstance::new(args.kind.as_str(), args.path.as_str(), args.config.clone()).unwrap();
 
-    let mut path_buf = PathBuf::from(&args.path);
-    path_buf.push(format!("cozo-{}-auth.txt", args.kind));
-    let auth_guard = match fs::read_to_string(&path_buf) {
+    let conf_path = format!("{}.{}.cozo_auth", args.path, args.kind);
+    let auth_guard = match fs::read_to_string(&conf_path) {
         Ok(s) => s.trim().to_string(),
         Err(_) => {
             let s = rand::thread_rng()
@@ -78,7 +76,7 @@ fn main() {
                 .take(64)
                 .map(char::from)
                 .collect();
-            fs::write(&path_buf, &s).unwrap();
+            fs::write(&conf_path, &s).unwrap();
             s
         }
     };
@@ -92,6 +90,7 @@ fn main() {
         "Database ({} backend) web API running at http://{}",
         args.kind, addr
     );
+    println!("The auth file is at {}", conf_path);
     rouille::start_server(addr, move |request| {
         let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f");
         let log_ok = |req: &Request, _resp: &Response, elap: std::time::Duration| {
@@ -129,7 +128,10 @@ fn main() {
                     }
                 },
                 (GET) (/export/{relations: String}) => {
-                    check_auth!(request, auth_guard);
+                    if !request.remote_addr().ip().is_loopback() {
+                        check_auth!(request, auth_guard);
+                    }
+
                     let relations = relations.split(",").filter_map(|t| {
                         if t.is_empty() {
                             None
@@ -154,7 +156,9 @@ fn main() {
                     }
                 },
                 (PUT) (/import) => {
-                    check_auth!(request, auth_guard);
+                    if !request.remote_addr().ip().is_loopback() {
+                        check_auth!(request, auth_guard);
+                    }
 
                     let payload: serde_json::Value = try_or_400!(rouille::input::json_input(request));
                     let payload = match payload.as_object() {

@@ -154,9 +154,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .collect_vec(),
             );
 
-            let start = handle.encode_key_for_store(&Tuple(vec![]), Default::default())?;
-            let end =
-                handle.encode_key_for_store(&Tuple(vec![DataValue::Bot]), Default::default())?;
+            let start = Tuple::default().encode_as_key(handle.id);
+            let end = Tuple::default().encode_as_key(handle.id.next());
             if as_objects {
                 let mut coll = vec![];
 
