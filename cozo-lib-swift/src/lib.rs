@@ -17,8 +17,8 @@ mod ffi {
 
         #[swift_bridge(associated_to = DbInstance)]
         fn run_script_str(&self, payload: &str, params: &str) -> String;
-        fn export_relations_str(&self, relations_str: &str) -> String;
-        fn import_relation_str(&self, data: &str) -> String;
+        fn export_relations_str(&self, data: &str) -> String;
+        fn import_relations_str(&self, data: &str) -> String;
         fn backup_db_str(&self, out_file: &str) -> String;
         fn restore_backup_str(&self, in_file: &str) -> String;
     }

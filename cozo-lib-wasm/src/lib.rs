@@ -38,10 +38,10 @@ impl CozoDb {
     pub fn run(&self, script: &str, params: &str) -> String {
         self.db.run_script_str(script, params)
     }
-    pub fn export_relations(&self, rels: &str) -> String {
-        self.db.export_relations_str(rels)
+    pub fn export_relations(&self, data: &str) -> String {
+        self.db.export_relations_str(data)
     }
-    pub fn import_relation(&self, data: &str) -> String {
-        self.db.import_relation_str(data)
+    pub fn import_relations(&self, data: &str) -> String {
+        self.db.import_relations_str(data)
     }
 }

@@ -143,7 +143,7 @@ pub unsafe extern "C" fn cozo_run_query(
 /// `json_payload`: a UTF-8 encoded JSON payload, see the manual for the expected fields.
 ///
 /// Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
-pub unsafe extern "C" fn cozo_import_relation(
+pub unsafe extern "C" fn cozo_import_relations(
     db_id: i32,
     json_payload: *const c_char,
 ) -> *mut c_char {
@@ -165,7 +165,7 @@ pub unsafe extern "C" fn cozo_import_relation(
         Ok(p) => p,
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
     };
-    CString::new(db.import_relation_str(data))
+    CString::new(db.import_relations_str(data))
         .unwrap()
         .into_raw()
 }

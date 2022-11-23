@@ -61,8 +61,8 @@ char *cozo_run_query(int32_t db_id, const char *script_raw, const char *params_r
  *
  * Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
  */
-char *cozo_import_relation(int32_t db_id,
-                           const char *json_payload);
+char *cozo_import_relations(int32_t db_id,
+                            const char *json_payload);
 
 /**
  * Export relations into JSON

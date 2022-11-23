@@ -120,7 +120,7 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_importRelations(
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
-            let res = db.import_relation_str(&data);
+            let res = db.import_relations_str(&data);
             env.new_string(res).unwrap().into_raw()
         }
     }

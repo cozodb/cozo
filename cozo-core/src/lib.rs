@@ -220,8 +220,8 @@ impl DbInstance {
         }
     }
     /// Export relations to JSON-encoded string
-    pub fn export_relations_str(&self, relations_str: &str) -> String {
-        match self.export_relations_str_inner(relations_str) {
+    pub fn export_relations_str(&self, data: &str) -> String {
+        match self.export_relations_str_inner(data) {
             Ok(s) => {
                 let ret = json!({"ok": true, "data": s});
                 format!("{}", ret)
@@ -232,8 +232,8 @@ impl DbInstance {
             }
         }
     }
-    fn export_relations_str_inner(&self, relations_str: &str) -> Result<JsonValue> {
-        let j_val: JsonValue = serde_json::from_str(relations_str).into_diagnostic()?;
+    fn export_relations_str_inner(&self, data: &str) -> Result<JsonValue> {
+        let j_val: JsonValue = serde_json::from_str(data).into_diagnostic()?;
         let relations = j_val
             .get("relations")
             .ok_or_else(|| miette!("field 'relations' expected"))?;

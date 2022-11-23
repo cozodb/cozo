@@ -48,10 +48,10 @@ class CozoDb {
         })
     }
 
-    importRelation(relation, data) {
+    importRelations(data) {
         return new Promise((resolve, reject) => {
-            const rels_str = JSON.stringify({relation, data});
-            native.import_relation(rels_str, (result_str) => {
+            const rels_str = JSON.stringify(data);
+            native.import_relations(rels_str, (result_str) => {
                 const result = JSON.parse(result_str);
                 if (result.ok) {
                     resolve(result)

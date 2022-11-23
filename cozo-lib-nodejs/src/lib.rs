@@ -199,7 +199,7 @@ fn export_relations(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     Ok(cx.undefined())
 }
 
-fn import_relation(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+fn import_relations(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
     let db = {
         let db_ref = {
@@ -222,7 +222,7 @@ fn import_relation(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let channel = cx.channel();
 
     std::thread::spawn(move || {
-        let result = db.import_relation_str(&data);
+        let result = db.import_relations_str(&data);
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
             let this = cx.undefined();
@@ -244,6 +244,6 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("backup_db", backup_db)?;
     cx.export_function("restore_db", restore_db)?;
     cx.export_function("export_relations", export_relations)?;
-    cx.export_function("import_relation", import_relation)?;
+    cx.export_function("import_relations", import_relations)?;
     Ok(())
 }

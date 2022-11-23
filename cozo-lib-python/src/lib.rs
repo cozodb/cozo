@@ -34,16 +34,16 @@ impl CozoDbPy {
             DB_CLOSED_MSG.to_string()
         }
     }
-    pub fn export_relations(&self, py: Python<'_>, rels: &str) -> String {
+    pub fn export_relations(&self, py: Python<'_>, data: &str) -> String {
         if let Some(db) = &self.db {
-            py.allow_threads(|| db.export_relations_str(rels))
+            py.allow_threads(|| db.export_relations_str(data))
         } else {
             DB_CLOSED_MSG.to_string()
         }
     }
-    pub fn import_relation(&self, py: Python<'_>, data: &str) -> String {
+    pub fn import_relations(&self, py: Python<'_>, data: &str) -> String {
         if let Some(db) = &self.db {
-            py.allow_threads(|| db.import_relation_str(data))
+            py.allow_threads(|| db.import_relations_str(data))
         } else {
             DB_CLOSED_MSG.to_string()
         }

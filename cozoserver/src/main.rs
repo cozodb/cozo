@@ -88,7 +88,10 @@ fn main() {
     } else {
         format!("{}:{}", args.bind, args.port)
     };
-    println!("Database ({} backend) web API running at http://{}", args.kind, addr);
+    println!(
+        "Database ({} backend) web API running at http://{}",
+        args.kind, addr
+    );
     rouille::start_server(addr, move |request| {
         let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f");
         let log_ok = |req: &Request, _resp: &Response, elap: std::time::Duration| {
@@ -134,7 +137,11 @@ fn main() {
                             Some(t)
                         }
                     });
-                    let result = db.export_relations(relations);
+                    let as_objects = match request.get_param("as_objects") {
+                        Some(s) => !s.is_empty(),
+                        None => false
+                    };
+                    let result = db.export_relations(relations, as_objects);
                     match result {
                         Ok(s) => {
                             let ret = json!({"ok": true, "data": s});
@@ -146,17 +153,19 @@ fn main() {
                         }
                     }
                 },
-                (PUT) (/import/{relation: String}) => {
+                (PUT) (/import) => {
                     check_auth!(request, auth_guard);
 
-                    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
-                    struct ImportPayload {
-                        data: Vec<serde_json::Value>,
-                    }
+                    let payload: serde_json::Value = try_or_400!(rouille::input::json_input(request));
+                    let payload = match payload.as_object() {
+                        Some(o) => o,
+                        None => {
+                            let ret = json!({"ok": false, "message": "bad import format"});
+                            return Response::json(&ret).with_status_code(400)
+                        }
+                    };
 
-                    let payload: ImportPayload = try_or_400!(rouille::input::json_input(request));
-
-                    let result = db.import_relation(&relation, &payload.data);
+                    let result = db.import_relations(payload);
 
                     match result {
                         Ok(()) => {
