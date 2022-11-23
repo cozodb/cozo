@@ -93,6 +93,7 @@ function App() {
                         }
                     }
                 } else {
+                    console.error('Query failed', res);
                     setStatusMessage(`finished with errors`);
                     if (res.display) {
                         const messages = parse(res.display);
