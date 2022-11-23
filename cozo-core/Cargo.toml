@@ -48,6 +48,36 @@ storage-sled = ["dep:sled"]
 ## Enables the [TiKV](https://tikv.org/) client backend
 storage-tikv = ["dep:tikv-client", "dep:tokio"]
 
+#! # Recommendation for features to enable
+#!
+#! Generally you will want the `storage-sqlite` and `graph-algo` features enabled,
+#! unless your environment makes compiling them difficult. The backup/restore functionalities
+#! are only available if `storage-sqlite` is on. Without `graph-algo` you cannot use any graph algorithms
+#! (utilities are still available),
+#! which could be OK if you only want to deal with pure Datalog.
+#!
+#! If having multiple threads
+#! running in the background is undesirable, you can enable the `nothread` feature.
+#!
+#! The `rayon` feature enables some algorithms to make use of parallelism. This is desirable in most circumstances.
+#! Naturally, it is incompatible with `nothread`.
+#!
+#! The `requests` feature allows the database to make outgoing HTTP requests to fetch data
+#! into queries -- only enable it if you need it.
+#!
+#! The `wasm` feature simply patches some functions so that they can compile on WASM platform,
+#! which lacks some std implementations at the moment. (On WASM you must also enable `nothread`).
+#! This feature will not work on any other platform.
+#!
+#! The `jemalloc` feature only makes sense for desktop and servers. It could improve performance,
+#! sometimes substantially, but you need to benchmark for your use case. It also tends to break
+#! builds on untested platforms. None of our prebuilt binaries have it enabled.
+#!
+#! Enable `storage-rocksdb` if you expect high concurrency or want better performance than SQLite,
+#! but note that RocksDB is much more resource-hungry and takes long to compile.
+#!
+#! The other storage options are just for experimentation. We do not recommend using them.
+
 [dependencies]
 casey = "0.3.3"
 either = "1.7.0"

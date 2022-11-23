@@ -24,9 +24,9 @@
 //! let result = db.run_script(script, &Default::default()).unwrap();
 //! println!("{:?}", result);
 //! ```
-//! We created an in-memory database with [`new_cozo_mem`](crate::new_cozo_mem) above.
-//! Persistent options include [`new_cozo_rocksdb`](crate::new_cozo_rocksdb),
-//! [`new_cozo_sqlite`](crate::new_cozo_sqlite) and others.
+//! We created an in-memory database above. There are other persistent options:
+//! see [DbInstance::new]. It is perfectly fine to run multiple storage engines in the same process.
+//!
 #![doc = document_features::document_features!()]
 #![warn(rust_2018_idioms, future_incompatible)]
 #![warn(missing_docs)]
@@ -68,8 +68,15 @@ pub(crate) mod storage;
 pub(crate) mod utils;
 
 #[derive(Clone)]
-/// A dispatcher for concrete storage implementations, wrapping [crate::Db].
-/// Many methods are dispatching methods -- see the corresponding methods on [crate::Db] for more details.
+/// A dispatcher for concrete storage implementations, wrapping [Db]. This is done so that
+/// client code does not have to deal with generic code constantly. You may prefer to use
+/// [Db] directly, especially if you provide a custom storage engine.
+///
+/// Many methods are dispatching methods for the corresponding methods on [Db].
+///
+/// Other methods are wrappers simplifying signatures to deal with only strings.
+/// These methods made code for interop with other languages much easier,
+/// but are not desirable if you are using Rust.
 pub enum DbInstance {
     /// In memory storage (not persistent)
     Mem(Db<MemStorage>),
@@ -89,7 +96,14 @@ pub enum DbInstance {
 
 impl DbInstance {
     /// Create a DbInstance, which is a dispatcher for various concrete implementations.
-    /// The valid kinds are `mem`, `sqlite`, `rocksdb`, `sled` and `tikv`,
+    /// The valid kinds are:
+    ///
+    /// * `mem`
+    /// * `sqlite`
+    /// * `rocksdb`
+    /// * `sled`
+    /// * `tikv`
+    ///
     /// assuming all features are enabled during compilation. Otherwise only
     /// some of the kinds are available. The `mem` kind is always available.
     ///
