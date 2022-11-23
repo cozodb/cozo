@@ -34,14 +34,17 @@
 #![allow(clippy::too_many_arguments)]
 
 use itertools::Itertools;
-use miette::{bail, IntoDiagnostic, miette, Result};
+use lazy_static::lazy_static;
 pub use miette::Error;
+use miette::{
+    bail, miette, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
+    JSONReportHandler, Result, ThemeCharacters, ThemeStyles,
+};
 use serde_json::{json, Map};
 
 pub use runtime::db::Db;
 pub use runtime::relation::decode_tuple_from_kv;
-pub use storage::{Storage, StoreTx};
-pub use storage::mem::{MemStorage, new_cozo_mem};
+pub use storage::mem::{new_cozo_mem, MemStorage};
 #[cfg(feature = "storage-rocksdb")]
 pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
 #[cfg(feature = "storage-sled")]
@@ -50,9 +53,9 @@ pub use storage::sled::{new_cozo_sled, SledStorage};
 pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 #[cfg(feature = "storage-tikv")]
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
+pub use storage::{Storage, StoreTx};
 
 use crate::data::json::JsonValue;
-use crate::runtime::db::{JSON_ERR_HANDLER, TEXT_ERR_HANDLER};
 
 // pub use storage::re::{new_cozo_redb, ReStorage};
 
@@ -131,7 +134,11 @@ impl DbInstance {
         })
     }
     /// Same as [Self::new], but inputs and error messages are all in strings
-    pub fn new_with_str(kind: &str, path: &str, options: &str) -> std::result::Result<Self, String> {
+    pub fn new_with_str(
+        kind: &str,
+        path: &str,
+        options: &str,
+    ) -> std::result::Result<Self, String> {
         let options: JsonValue = serde_json::from_str(options).map_err(|e| e.to_string())?;
         Self::new(kind, path, options).map_err(|err| err.to_string())
     }
@@ -322,4 +329,13 @@ impl DbInstance {
             Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
         }
     }
+}
+
+lazy_static! {
+    static ref TEXT_ERR_HANDLER: GraphicalReportHandler = miette::GraphicalReportHandler::new()
+        .with_theme(GraphicalTheme {
+            characters: ThemeCharacters::unicode(),
+            styles: ThemeStyles::ansi()
+        });
+    static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
 }

@@ -162,7 +162,17 @@ function App() {
                     } else {
                         let styles = {};
                         if (item.css) {
-                            styles.color = item.css.replace('color:', '').replace(';', '');
+                            for (let pair of item.css.split(';')) {
+                                pair = pair.trim();
+                                if (pair) {
+                                    const [k, v] = pair.split(':');
+                                    if (k.trim() === 'font-weight') {
+                                        styles['fontWeight'] = v.trim()
+                                    } else {
+                                        styles[k.trim()] = v.trim();
+                                    }
+                                }
+                            }
                         }
                         return <span key={id} style={styles}>{item.text}</span>
                     }
@@ -203,7 +213,8 @@ function App() {
 ?[person, page_rank] <~ PageRank(love[])`)
                 }}>HERE</a> ...</h2>
                 <p>
-                    ... and run the script, to compute the <a href="https://www.wikiwand.com/en/PageRank">PageRank</a> of
+                    ... and run the script, to compute the <a
+                    href="https://www.wikiwand.com/en/PageRank">PageRank</a> of
                     a hypothetical love triangle.
                 </p>
             </div>}

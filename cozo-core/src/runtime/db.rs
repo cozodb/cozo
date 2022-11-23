@@ -16,11 +16,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use either::{Left, Right};
 use itertools::Itertools;
-use lazy_static::lazy_static;
-use miette::{
-    bail, ensure, Diagnostic, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic,
-    JSONReportHandler, Result, WrapErr,
-};
+use miette::{bail, ensure, Diagnostic, IntoDiagnostic, Result, WrapErr};
 use serde_json::{json, Map};
 use smartstring::SmartString;
 use thiserror::Error;
@@ -84,12 +80,6 @@ impl<S> Debug for Db<S> {
 #[error("Initialization of database failed")]
 #[diagnostic(code(db::init))]
 pub(crate) struct BadDbInit(#[help] pub(crate) String);
-
-lazy_static! {
-    pub static ref TEXT_ERR_HANDLER: GraphicalReportHandler =
-        miette::GraphicalReportHandler::new().with_theme(GraphicalTheme::unicode());
-    pub static ref JSON_ERR_HANDLER: JSONReportHandler = miette::JSONReportHandler::new();
-}
 
 impl<'s, S: Storage<'s>> Db<S> {
     /// Create a new database object with the given storage.
