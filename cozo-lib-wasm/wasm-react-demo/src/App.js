@@ -35,6 +35,7 @@ function App() {
     const [statusMessage, setStatusMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState([]);
     const [queryResults, setQueryResults] = useState(null);
+    const [queryId, setQueryId] = useState(0);
 
     useEffect(() => {
         init().then(() => {
@@ -76,7 +77,7 @@ function App() {
         }
     }
 
-    async function handleQuery() {
+    function handleQuery() {
         if (!db) {
             setInProgress(false);
             setErrorMessage([]);
@@ -84,6 +85,7 @@ function App() {
             setQueryResults(null);
             return;
         }
+        setQueryId(queryId + 1);
         const query = queryText.trim();
         if (query) {
             setInProgress(true);
@@ -200,6 +202,7 @@ function App() {
             </pre> : null}
             {queryResults ? (queryResults.rows && queryResults.headers ?
                 <Table2
+                    cellRendererDependencies={queryResults.rows}
                     numRows={queryResults.rows.length}
                 >
                     {queryResults.headers.map((n, idx) => <Column
