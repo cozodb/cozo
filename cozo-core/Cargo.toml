@@ -82,7 +82,7 @@ storage-tikv = ["dep:tikv-client", "dep:tokio"]
 casey = "0.3.3"
 either = "1.7.0"
 rand = "0.8.5"
-miette = { version = "=5.3.0", features = ["fancy"] }
+miette = { version = "5.5.0", features = ["fancy"] }
 lazy_static = "1.4.0"
 log = "0.4.17"
 env_logger = "0.9.3"
