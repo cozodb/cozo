@@ -33,9 +33,10 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 
-use itertools::Itertools;
+use std::collections::BTreeMap;
 use lazy_static::lazy_static;
 pub use miette::Error;
+#[allow(unused_imports)]
 use miette::{
     bail, miette, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic, JSONReportHandler,
     Result, ThemeCharacters, ThemeStyles,
@@ -56,6 +57,7 @@ pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 
 use crate::data::json::JsonValue;
+use crate::data::value::DataValue;
 
 // pub use storage::re::{new_cozo_redb, ReStorage};
 
@@ -110,7 +112,7 @@ impl DbInstance {
     /// `path` is ignored for `mem` and `tikv` kinds.
     /// `options` is ignored for every kind except `tikv`.
     #[allow(unused_variables)]
-    pub fn new(kind: &str, path: &str, options: JsonValue) -> Result<Self> {
+    pub fn new(kind: &str, path: &str, options: &str) -> Result<Self> {
         Ok(match kind {
             "mem" => Self::Mem(new_cozo_mem()?),
             #[cfg(feature = "storage-sqlite")]
@@ -121,25 +123,14 @@ impl DbInstance {
             "sled" => Self::Sled(new_cozo_sled(path)?),
             #[cfg(feature = "storage-tikv")]
             "tikv" => {
-                let end_points = options
-                    .get("pd_endpoints")
-                    .ok_or_else(|| miette!("required option 'pd_endpoints' not found"))?;
-                let end_points = end_points
-                    .as_array()
-                    .ok_or_else(|| miette!("option 'pd_endpoints' must be an array"))?;
-                let end_points: Vec<_> = end_points
-                    .iter()
-                    .map(|v| {
-                        v.as_str()
-                            .map(|s| s.to_string())
-                            .ok_or_else(|| "option 'pd_endpoints' must contain strings")
-                    })
-                    .try_collect()?;
-                let optimistic = options.get("optimistic").unwrap_or(&JsonValue::Bool(true));
-                let optimistic = optimistic
-                    .as_bool()
-                    .ok_or_else(|| miette!("option 'optimistic' must be a bool"))?;
-                Self::TiKv(new_cozo_tikv(end_points, optimistic)?)
+                #[derive(serde_derive::Deserialize)]
+                struct TiKvOpts {
+                    end_points: Vec<String>,
+                    #[serde(default = "Default::default()")]
+                    optimistic: bool,
+                }
+                let opts: TiKvOpts = serde_json::from_str(options)?;
+                Self::TiKv(new_cozo_tikv(opts.end_points.clone(), opts.optimistic)?)
             }
             kind => bail!(
                 "database kind '{}' not supported (maybe not compiled in)",
@@ -153,11 +144,10 @@ impl DbInstance {
         path: &str,
         options: &str,
     ) -> std::result::Result<Self, String> {
-        let options: JsonValue = serde_json::from_str(options).map_err(|e| e.to_string())?;
         Self::new(kind, path, options).map_err(|err| err.to_string())
     }
     /// Dispatcher method. See [crate::Db::run_script].
-    pub fn run_script(&self, payload: &str, params: &Map<String, JsonValue>) -> Result<JsonValue> {
+    pub fn run_script(&self, payload: &str, params: &BTreeMap<String, DataValue>) -> Result<JsonValue> {
         match self {
             DbInstance::Mem(db) => db.run_script(payload, params),
             #[cfg(feature = "storage-sqlite")]
@@ -172,7 +162,7 @@ impl DbInstance {
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     /// Fold any error into the return JSON itself.
-    pub fn run_script_fold_err(&self, payload: &str, params: &Map<String, JsonValue>) -> JsonValue {
+    pub fn run_script_fold_err(&self, payload: &str, params: &BTreeMap<String, DataValue>) -> JsonValue {
         match self.run_script(payload, params) {
             Ok(json) => json,
             Err(mut err) => {
@@ -199,14 +189,10 @@ impl DbInstance {
     /// Run the CozoScript passed in. The `params` argument is a map of parameters formatted as JSON.
     pub fn run_script_str(&self, payload: &str, params: &str) -> String {
         let params_json = if params.is_empty() {
-            Map::default()
+            BTreeMap::default()
         } else {
-            match serde_json::from_str::<serde_json::Value>(params) {
-                Ok(serde_json::Value::Object(map)) => map,
-                Ok(_) => {
-                    return json!({"ok": false, "message": "params argument is not valid JSON"})
-                        .to_string()
-                }
+            match serde_json::from_str::<BTreeMap<String, DataValue>>(params) {
+                Ok(map) => map,
                 Err(_) => {
                     return json!({"ok": false, "message": "params argument is not a JSON map"})
                         .to_string()
@@ -247,26 +233,15 @@ impl DbInstance {
         }
     }
     fn export_relations_str_inner(&self, data: &str) -> Result<JsonValue> {
-        let j_val: JsonValue = serde_json::from_str(data).into_diagnostic()?;
-        let relations = j_val
-            .get("relations")
-            .ok_or_else(|| miette!("field 'relations' expected"))?;
-        let v = relations
-            .as_array()
-            .ok_or_else(|| miette!("expects field 'relations' to be an array"))?;
-        let relations: Vec<_> = v
-            .iter()
-            .map(|name| {
-                name.as_str().ok_or_else(|| {
-                    miette!("expects field 'relations' to be an array of string names")
-                })
-            })
-            .try_collect()?;
-        let as_objects = j_val.get("as_objects").unwrap_or(&JsonValue::Bool(false));
-        let as_objects = as_objects
-            .as_bool()
-            .ok_or_else(|| miette!("expects field 'as_objects' to be a boolean"))?;
-        let results = self.export_relations(relations.into_iter(), as_objects)?;
+        #[derive(serde_derive::Deserialize)]
+        struct Payload {
+            relations: Vec<String>,
+            #[serde(default = "Default::default")]
+            as_objects: bool,
+        }
+        let j_val: Payload = serde_json::from_str(data).into_diagnostic()?;
+        let results =
+            self.export_relations(j_val.relations.iter().map(|s| s as &str), j_val.as_objects)?;
         Ok(results)
     }
     /// Dispatcher method. See [crate::Db::import_relations].
@@ -295,11 +270,8 @@ impl DbInstance {
         }
     }
     fn import_relations_str_inner(&self, data: &str) -> Result<()> {
-        let j_obj: JsonValue = serde_json::from_str(data).into_diagnostic()?;
-        let j_obj = j_obj
-            .as_object()
-            .ok_or_else(|| miette!("expect an object"))?;
-        self.import_relations(j_obj)
+        let j_obj: Map<String, JsonValue> = serde_json::from_str(data).into_diagnostic()?;
+        self.import_relations(&j_obj)
     }
     /// Dispatcher method. See [crate::Db::backup_db].
     pub fn backup_db(&self, out_file: String) -> Result<()> {
@@ -323,7 +295,7 @@ impl DbInstance {
         }
     }
     /// Restore from an Sqlite backup
-    pub fn restore_backup(&self, in_file: String) -> Result<()> {
+    pub fn restore_backup(&self, in_file: &str) -> Result<()> {
         match self {
             DbInstance::Mem(db) => db.restore_backup(in_file),
             #[cfg(feature = "storage-sqlite")]
@@ -338,10 +310,41 @@ impl DbInstance {
     }
     /// Restore from an Sqlite backup, with JSON string return value
     pub fn restore_backup_str(&self, in_file: &str) -> String {
-        match self.restore_backup(in_file.to_string()) {
+        match self.restore_backup(in_file) {
             Ok(_) => json!({"ok": true}).to_string(),
             Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
         }
+    }
+    /// Dispatcher method. See [crate::Db::import_from_backup].
+    pub fn import_from_backup(&self, in_file: &str, relations: &[String]) -> Result<()> {
+        match self {
+            DbInstance::Mem(db) => db.import_from_backup(in_file, relations),
+            #[cfg(feature = "storage-sqlite")]
+            DbInstance::Sqlite(db) => db.import_from_backup(in_file, relations),
+            #[cfg(feature = "storage-rocksdb")]
+            DbInstance::RocksDb(db) => db.import_from_backup(in_file, relations),
+            #[cfg(feature = "storage-sled")]
+            DbInstance::Sled(db) => db.import_from_backup(in_file, relations),
+            #[cfg(feature = "storage-tikv")]
+            DbInstance::TiKv(db) => db.import_from_backup(in_file, relations),
+        }
+    }
+    /// Import relations from an Sqlite backup, with JSON string return value
+    pub fn import_from_backup_str(&self, payload: &str) -> String {
+        match self.import_from_backup_str_inner(payload) {
+            Ok(_) => json!({"ok": true}).to_string(),
+            Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
+        }
+    }
+    fn import_from_backup_str_inner(&self, payload: &str) -> Result<()> {
+        #[derive(serde_derive::Deserialize)]
+        struct Payload {
+            path: String,
+            relations: Vec<String>,
+        }
+        let json_payload: Payload = serde_json::from_str(payload).into_diagnostic()?;
+
+        self.import_from_backup(&json_payload.path, &json_payload.relations)
     }
 }
 

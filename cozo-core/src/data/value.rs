@@ -18,7 +18,7 @@ use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
 
 #[derive(Clone, Hash, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
-pub(crate) struct UuidWrapper(pub(crate) Uuid);
+pub struct UuidWrapper(pub(crate) Uuid);
 
 impl PartialOrd<Self> for UuidWrapper {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -38,7 +38,7 @@ impl Ord for UuidWrapper {
 }
 
 #[derive(Clone)]
-pub(crate) struct RegexWrapper(pub(crate) Regex);
+pub struct RegexWrapper(pub(crate) Regex);
 
 impl Hash for RegexWrapper {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -87,7 +87,7 @@ impl PartialOrd for RegexWrapper {
 #[derive(
     Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
-pub(crate) enum DataValue {
+pub enum DataValue {
     Null,
     Bool(bool),
     Num(Num),
@@ -115,7 +115,7 @@ impl From<f64> for DataValue {
 }
 
 #[derive(Copy, Clone, serde_derive::Deserialize, serde_derive::Serialize)]
-pub(crate) enum Num {
+pub enum Num {
     Int(i64),
     Float(f64),
 }

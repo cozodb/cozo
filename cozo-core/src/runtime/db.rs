@@ -105,7 +105,7 @@ impl<'s, S: Storage<'s>> Db<S> {
     pub fn run_script(
         &'s self,
         payload: &str,
-        params: &Map<String, JsonValue>,
+        params: &BTreeMap<String, DataValue>,
     ) -> Result<JsonValue> {
         #[cfg(not(feature = "wasm"))]
         let start = Instant::now();
@@ -367,10 +367,10 @@ impl<'s, S: Storage<'s>> Db<S> {
         bail!("backup requires the 'storage-sqlite' feature to be enabled")
     }
     /// Restore from an Sqlite backup
-    pub fn restore_backup(&'s self, in_file: String) -> Result<()> {
+    pub fn restore_backup(&'s self, in_file: &str) -> Result<()> {
         #[cfg(feature = "storage-sqlite")]
         {
-            let sqlite_db = crate::new_cozo_sqlite(in_file)?;
+            let sqlite_db = crate::new_cozo_sqlite(in_file.to_string())?;
             let s_tx = sqlite_db.transact_write()?;
             let store_id = s_tx.relation_store_id.load(Ordering::SeqCst);
             if store_id != 0 {
@@ -386,6 +386,39 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled")
+    }
+    /// Import data from relations in a backup file
+    pub fn import_from_backup(&'s self, in_file: &str, relations: &[String]) -> Result<()> {
+        #[cfg(not(feature = "storage-sqlite"))]
+        bail!("backup requires the 'storage-sqlite' feature to be enabled");
+
+        #[cfg(feature = "storage-sqlite")]
+        {
+            let source_db = crate::new_cozo_sqlite(in_file.to_string())?;
+            let mut src_tx = source_db.transact()?;
+            let mut dst_tx = self.transact_write()?;
+
+            for relation in relations {
+                let src_handle = src_tx.get_relation(relation, false)?;
+                let dst_handle = dst_tx.get_relation(relation, true)?;
+
+                let src_lower = Tuple::default().encode_as_key(src_handle.id);
+                let src_upper = Tuple::default().encode_as_key(src_handle.id.next());
+
+                let data_it = src_tx.tx.range_scan(&src_lower, &src_upper).map(
+                    |src_pair| -> Result<(Vec<u8>, Vec<u8>)> {
+                        let (mut src_k, mut src_v) = src_pair?;
+                        dst_handle.amend_key_prefix(&mut src_k);
+                        dst_handle.amend_key_prefix(&mut src_v);
+                        Ok((src_k, src_v))
+                    },
+                );
+                dst_tx.tx.batch_put(Box::new(data_it))?;
+            }
+
+            src_tx.commit_tx()?;
+            dst_tx.commit_tx()
+        }
     }
 
     fn compact_relation(&'s self) -> Result<()> {
@@ -421,13 +454,9 @@ impl<'s, S: Storage<'s>> Db<S> {
     fn do_run_script(
         &'s self,
         payload: &str,
-        params: &Map<String, JsonValue>,
+        param_pool: &BTreeMap<String, DataValue>,
     ) -> Result<JsonValue> {
-        let param_pool = params
-            .iter()
-            .map(|(k, v)| (k.clone(), DataValue::from(v)))
-            .collect();
-        match parse_script(payload, &param_pool)? {
+        match parse_script(payload, param_pool)? {
             CozoScript::Multi(ps) => {
                 let is_write = ps.iter().any(|p| p.out_opts.store_relation.is_some());
                 let mut cleanups = vec![];

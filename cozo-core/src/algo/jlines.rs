@@ -22,7 +22,6 @@ use thiserror::Error;
 
 use crate::algo::{AlgoImpl, CannotDetermineArity};
 use crate::data::expr::Expr;
-use crate::data::json::JsonValue;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
@@ -66,7 +65,7 @@ impl AlgoImpl for JsonReader {
             _ => bail!(BadFields(fields_span)),
         };
         let mut counter = -1i64;
-        let mut process_row = |row: &JsonValue| -> Result<()> {
+        let mut process_row = |row: &BTreeMap<String, DataValue>| -> Result<()> {
             let mut ret = if prepend_index {
                 counter += 1;
                 vec![DataValue::from(counter)]
@@ -82,7 +81,7 @@ impl AlgoImpl for JsonReader {
                             bail!("field {} is absent from JSON line", field);
                         }
                     }
-                    Some(v) => DataValue::from(v),
+                    Some(v) => v.clone(),
                 };
                 ret.push(val);
             }
@@ -103,11 +102,8 @@ impl AlgoImpl for JsonReader {
                     }
                 } else {
                     let content = fs::read_to_string(file_path).into_diagnostic()?;
-                    let data: JsonValue = serde_json::from_str(&content).into_diagnostic()?;
-                    let rows = data
-                        .as_array()
-                        .ok_or_else(|| miette!("JSON file is not an array"))?;
-                    for row in rows {
+                    let rows: Vec<BTreeMap<String, DataValue>> = serde_json::from_str(&content).into_diagnostic()?;
+                    for row in &rows {
                         process_row(row)?;
                     }
                 }
@@ -126,11 +122,8 @@ impl AlgoImpl for JsonReader {
                             }
                         }
                     } else {
-                        let data: JsonValue = serde_json::from_str(content).into_diagnostic()?;
-                        let rows = data
-                            .as_array()
-                            .ok_or_else(|| miette!("JSON file is not an array"))?;
-                        for row in rows {
+                        let rows: Vec<BTreeMap<String, DataValue>> = serde_json::from_str(content).into_diagnostic()?;
+                        for row in &rows {
                             process_row(row)?;
                         }
                     }
