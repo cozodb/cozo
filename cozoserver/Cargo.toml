@@ -38,6 +38,10 @@ io-uring = ["cozo/io-uring"]
 rayon = ["cozo/rayon"]
 ## Disallows the use of threads
 nothread = ["cozo/nothread"]
+## Enables the [Sled](https://github.com/spacejam/sled) backend
+storage-sled = ["cozo/storage-sled"]
+## Enables the [TiKV](https://tikv.org/) client backend
+storage-tikv = ["cozo/storage-tikv"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

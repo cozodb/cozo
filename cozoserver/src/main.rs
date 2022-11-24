@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fs;
 use std::net::Ipv6Addr;
@@ -36,8 +37,8 @@ struct Args {
     restore: Option<String>,
 
     /// Extra config in JSON format
-    #[clap(short, long, default_value_t = json!({}))]
-    config: serde_json::Value,
+    #[clap(short, long, default_value_t = String::from("{}"))]
+    config: String,
 
     /// Address to bind the service to
     #[clap(short, long, default_value_t = String::from("127.0.0.1"))]
@@ -68,10 +69,10 @@ fn main() {
         eprintln!("{}", SECURITY_WARNING);
     }
 
-    let db = DbInstance::new(args.kind.as_str(), args.path.as_str(), args.config.clone()).unwrap();
+    let db = DbInstance::new(args.kind.as_str(), args.path.as_str(), &args.config.clone()).unwrap();
 
     if let Some(restore_path) = &args.restore {
-        db.restore_backup(restore_path.to_string()).unwrap();
+        db.restore_backup(restore_path).unwrap();
     }
 
     let conf_path = format!("{}.{}.cozo_auth", args.path, args.kind);
@@ -122,11 +123,11 @@ fn main() {
                     #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
                     struct QueryPayload {
                         script: String,
-                        params: serde_json::Map<String, serde_json::Value>,
+                        params: BTreeMap<String, serde_json::Value>,
                     }
 
                     let payload: QueryPayload = try_or_400!(rouille::input::json_input(request));
-                    let result = db.run_script_fold_err(&payload.script, &payload.params);
+                    let result = db.run_script_fold_err(&payload.script, payload.params);
                     let response = Response::json(&result);
                     if let Some(serde_json::Value::Bool(true)) = result.get("ok") {
                         response

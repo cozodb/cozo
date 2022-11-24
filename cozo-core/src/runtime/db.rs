@@ -105,11 +105,13 @@ impl<'s, S: Storage<'s>> Db<S> {
     pub fn run_script(
         &'s self,
         payload: &str,
-        params: &BTreeMap<String, DataValue>,
+        params: BTreeMap<String, JsonValue>,
     ) -> Result<JsonValue> {
         #[cfg(not(feature = "wasm"))]
         let start = Instant::now();
-        match self.do_run_script(payload, params) {
+
+        let params = params.into_iter().map(|(k, v)| (k, DataValue::from(v))).collect();
+        match self.do_run_script(payload, &params) {
             Ok(mut json) => {
                 {
                     #[cfg(not(feature = "wasm"))]

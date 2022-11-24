@@ -34,6 +34,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::collections::BTreeMap;
+
 use lazy_static::lazy_static;
 pub use miette::Error;
 #[allow(unused_imports)]
@@ -57,7 +58,6 @@ pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 
 use crate::data::json::JsonValue;
-use crate::data::value::DataValue;
 
 // pub use storage::re::{new_cozo_redb, ReStorage};
 
@@ -113,6 +113,7 @@ impl DbInstance {
     /// `options` is ignored for every kind except `tikv`.
     #[allow(unused_variables)]
     pub fn new(kind: &str, path: &str, options: &str) -> Result<Self> {
+        let options = if options.is_empty() { "{}" } else { options };
         Ok(match kind {
             "mem" => Self::Mem(new_cozo_mem()?),
             #[cfg(feature = "storage-sqlite")]
@@ -126,10 +127,10 @@ impl DbInstance {
                 #[derive(serde_derive::Deserialize)]
                 struct TiKvOpts {
                     end_points: Vec<String>,
-                    #[serde(default = "Default::default()")]
+                    #[serde(default = "Default::default")]
                     optimistic: bool,
                 }
-                let opts: TiKvOpts = serde_json::from_str(options)?;
+                let opts: TiKvOpts = serde_json::from_str(options).into_diagnostic()?;
                 Self::TiKv(new_cozo_tikv(opts.end_points.clone(), opts.optimistic)?)
             }
             kind => bail!(
@@ -147,7 +148,11 @@ impl DbInstance {
         Self::new(kind, path, options).map_err(|err| err.to_string())
     }
     /// Dispatcher method. See [crate::Db::run_script].
-    pub fn run_script(&self, payload: &str, params: &BTreeMap<String, DataValue>) -> Result<JsonValue> {
+    pub fn run_script(
+        &self,
+        payload: &str,
+        params: BTreeMap<String, JsonValue>,
+    ) -> Result<JsonValue> {
         match self {
             DbInstance::Mem(db) => db.run_script(payload, params),
             #[cfg(feature = "storage-sqlite")]
@@ -162,7 +167,11 @@ impl DbInstance {
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     /// Fold any error into the return JSON itself.
-    pub fn run_script_fold_err(&self, payload: &str, params: &BTreeMap<String, DataValue>) -> JsonValue {
+    pub fn run_script_fold_err(
+        &self,
+        payload: &str,
+        params: BTreeMap<String, JsonValue>,
+    ) -> JsonValue {
         match self.run_script(payload, params) {
             Ok(json) => json,
             Err(mut err) => {
@@ -191,7 +200,7 @@ impl DbInstance {
         let params_json = if params.is_empty() {
             BTreeMap::default()
         } else {
-            match serde_json::from_str::<BTreeMap<String, DataValue>>(params) {
+            match serde_json::from_str::<BTreeMap<String, JsonValue>>(params) {
                 Ok(map) => map,
                 Err(_) => {
                     return json!({"ok": false, "message": "params argument is not a JSON map"})
@@ -199,7 +208,7 @@ impl DbInstance {
                 }
             }
         };
-        self.run_script_fold_err(payload, &params_json).to_string()
+        self.run_script_fold_err(payload, params_json).to_string()
     }
     /// Dispatcher method. See [crate::Db::export_relations].
     pub fn export_relations<'a>(

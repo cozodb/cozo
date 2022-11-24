@@ -55,7 +55,7 @@ lazy_static! {
                 lat: Float,
                 lon: Float
             }
-        "##, &Default::default()).unwrap();
+        "##, Default::default()).unwrap();
 
         db.run_script(
             r##"
@@ -73,7 +73,7 @@ lazy_static! {
                 desc: String
             }
         "##,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -93,7 +93,7 @@ lazy_static! {
                 desc: String
             }
         "##,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -108,7 +108,7 @@ lazy_static! {
 
             :replace idx2code { idx: Int => code: String }
         "##,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -126,7 +126,7 @@ lazy_static! {
 
             :replace route { fr: String, to: String => dist: Float }
         "##,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -145,11 +145,11 @@ lazy_static! {
 
             :replace contain { entity: String, contained: String }
         "##,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
 
-        db.run_script("::remove idx2code", &Default::default())
+        db.run_script("::remove idx2code", Default::default())
             .unwrap();
 
         dbg!(init.elapsed());
@@ -159,7 +159,7 @@ lazy_static! {
 
 fn check_db() {
     let _ = TEST_DB
-        .run_script("?[a] <- [[1]]", &Default::default())
+        .run_script("?[a] <- [[1]]", Default::default())
         .unwrap();
 }
 
@@ -173,7 +173,7 @@ fn dfs() {
         starting[] <- [['PEK']]
         ?[] <~ DFS(*route[], *airport[code], starting[], condition: (code == 'LHR'))
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap().as_array().unwrap();
@@ -194,7 +194,7 @@ fn empty() {
         r#"
         ?[id, name] <- [[]]
     "#,
-        &Default::default(),
+        Default::default(),
     );
     assert!(res.is_err());
 }
@@ -209,7 +209,7 @@ fn bfs() {
         starting[] <- [['PEK']]
         ?[] <~ BFS(*route[], *airport[code], starting[], condition: (code == 'LHR'))
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap().as_array().unwrap();
@@ -233,7 +233,7 @@ fn scc() {
         res[] <~ StronglyConnectedComponents(*route[], *airport[code]);
         ?[grp, code] := res[code, grp], grp != 0;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     dbg!(scc.elapsed());
@@ -249,7 +249,7 @@ fn cc() {
         res[] <~ ConnectedComponents(*route[], *airport[code]);
         ?[grp, code] := res[code, grp], grp != 0;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     dbg!(cc.elapsed());
@@ -264,7 +264,7 @@ fn astar() {
         starting[code, lat, lon] := code = 'HFE', *airport{code, lat, lon};
         goal[code, lat, lon] := code = 'LHR', *airport{code, lat, lon};
         ?[] <~ ShortestPathAStar(*route[], code_lat_lon[node, lat1, lon1], starting[], goal[goal, lat2, lon2], heuristic: haversine_deg_input(lat1, lon1, lat2, lon2) * 3963);
-    "#, &Default::default()).unwrap();
+    "#, Default::default()).unwrap();
     dbg!(astar.elapsed());
 }
 
@@ -280,7 +280,7 @@ fn deg_centrality() {
         :order -total;
         :limit 10;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     dbg!(deg_centrality.elapsed());
@@ -299,7 +299,7 @@ fn dijkstra() {
         res[] <~ ShortestPathDijkstra(*route[], starting[], ending[]);
         ?[path] := res[src, dst, cost, path];
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -318,7 +318,7 @@ fn yen() {
         ending[] <- [['SIN']];
         ?[] <~ KShortestPathYen(*route[], starting[], ending[], k: 5);
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
 
@@ -334,7 +334,7 @@ fn starts_with() {
             r#"
          ?[code] := *airport{code}, starts_with(code, 'US');
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -367,7 +367,7 @@ fn range_check() {
         r[code, dist] := *airport{code}, *route{fr: code, dist};
         ?[dist] := r['PEK', dist], dist > 7000, dist <= 7722;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -385,7 +385,7 @@ fn no_airports() {
             r#"
         ?[desc] := *country{code, desc}, not *airport{country: code};
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -412,7 +412,7 @@ fn no_routes_airport() {
             r#"
         ?[code] := *airport{code}, not *route{fr: code}, not *route{to: code}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -440,7 +440,7 @@ fn runway_distribution() {
             r#"
         ?[runways, count(code)] := *airport{code, runways}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -471,7 +471,7 @@ fn most_out_routes() {
         ?[code, n] := route_count[code, n], n > 180;
         :sort -n;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -503,7 +503,7 @@ fn most_out_routes_again() {
         ?[code, n] := route_count[n, code], n > 180;
         :sort -n;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -536,7 +536,7 @@ fn most_routes() {
         ?[code, n] := route_count[code, n], n > 400
         :sort -n;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -565,7 +565,7 @@ fn airport_with_one_route() {
         route_count[fr, count(fr)] := *route{fr}
         ?[count(a)] := route_count[a, n], n == 1;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -589,7 +589,7 @@ fn single_runway_with_most_routes() {
         :order -out_n;
         :limit 10;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -620,7 +620,7 @@ fn most_routes_in_canada() {
         :order -n_routes;
         :limit 10;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -652,7 +652,7 @@ fn uk_count() {
             r#"
        ?[region, count(region)] := *airport{country: 'UK', region}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -677,7 +677,7 @@ fn airports_by_country() {
 
         :order count
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -728,7 +728,7 @@ fn n_airports_by_continent() {
         ?[cont, max(count)] := *continent{code: cont}, airports_by_continent[cont, count]
         ?[cont, max(count)] := *continent{code: cont}, count = 0
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -753,7 +753,7 @@ fn routes_per_airport() {
         given[] <- [['A' ++ 'U' ++ 'S'],['AMS'],['JFK'],['DUB'],['MEX']]
         ?[code, count(code)] := given[code], *route{fr: code}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -778,7 +778,7 @@ fn airports_by_route_number() {
         route_count[fr, count(fr)] := *route{fr}
         ?[n, collect(code)] := route_count[code, n], n = 106;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -798,7 +798,7 @@ fn out_from_aus() {
         two_hops[count(a)] := *route{fr: 'AUS', to: a}, *route{fr: a}
         ?[max(total), collect(coll)] := two_hops[total], out_by_runways[n, ct], coll = [n, ct];
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -820,7 +820,7 @@ fn const_return() {
             r#"
         ?[name, count(code)] := *airport{code, region: 'US-OK'}, name = 'OK';
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -845,7 +845,7 @@ fn multi_res() {
         ?[total, high, low, four, france] := total[total], high[high], low[low],
                                                   four[four], france[france];
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -867,7 +867,7 @@ fn multi_unification() {
         target_airports[collect(code, 5)] := *airport{code}
         ?[a, count(a)] := target_airports[targets], a in targets, *route{fr: a}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -893,7 +893,7 @@ fn num_routes_from_eu_to_us() {
                              r = [fr, to]
         ?[n] := routes[rs], n = length(rs);
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -913,7 +913,7 @@ fn num_airports_in_us_with_routes_from_eu() {
                                *route{fr, to},
                                *airport{code: to, country: 'US'}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -932,7 +932,7 @@ fn num_routes_in_us_airports_from_eu() {
         ?[to, count(to)] := *contain['EU', fr], *route{fr, to}, *airport{code: to, country: 'US'}
         :order count(to);
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -965,7 +965,7 @@ fn routes_from_eu_to_us_starting_with_l() {
                                *route{fr: eu_code, to: us_code},
                                *airport{code: us_code, country: 'US'}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1001,7 +1001,7 @@ fn len_of_names_count() {
                      *airport{code: to, city},
                      n = length(city)
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1024,7 +1024,7 @@ fn group_count_by_out() {
         :order n;
         :limit 10;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1050,7 +1050,7 @@ fn mean_group_count() {
         rc[max(n), a] := route_count[n, a] or (*airport{code: a}, n = 0);
         ?[mean(n)] := rc[n, _];
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1070,7 +1070,7 @@ fn n_routes_from_london_uk() {
             r#"
         ?[code, count(code)] := *airport{code, city: 'London', region: 'GB-ENG'}, *route{fr: code}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1096,7 +1096,7 @@ fn reachable_from_london_uk_in_two_hops() {
         one_hop[to] := lon_uk_airports[fr], *route{fr, to}, not lon_uk_airports[to];
         ?[count_unique(a3)] := one_hop[a2], *route{fr: a2, to: a3}, not lon_uk_airports[a3];
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1115,7 +1115,7 @@ fn routes_within_england() {
         eng_aps[code] := *airport{code, region: 'GB-ENG'}
         ?[fr, to] := eng_aps[fr], *route{fr, to}, eng_aps[to],
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1149,7 +1149,7 @@ fn routes_within_england_time_no_dup() {
         eng_aps[code] := *airport{code, region: 'GB-ENG'}
         ?[pair] := eng_aps[fr], *route{fr, to}, eng_aps[to], pair = sorted([fr, to]);
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1184,7 +1184,7 @@ fn hard_route_finding() {
 
         :limit 1;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1211,7 +1211,7 @@ fn na_from_india() {
                           *airport{code: na_a, country},
                           country in ['US', 'CA']
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1238,7 +1238,7 @@ fn eu_cities_reachable_from_fll() {
             r#"
         ?[city] := *route{fr: 'FLL', to}, *contain['EU', to], *airport{code: to, city}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1264,7 +1264,7 @@ fn clt_to_eu_or_sa() {
             r#"
         ?[to] := *route{fr: 'CLT', to}, c_name in ['EU', 'SA'], *contain[c_name, to]
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1291,7 +1291,7 @@ fn london_to_us() {
         ?[fr, to] := fr in ['LHR', 'LCY', 'LGW', 'LTN', 'STN'],
                      *route{fr, to}, *airport{code: to, country: 'US'}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1325,7 +1325,7 @@ fn tx_to_ny() {
         ?[fr, to] := *airport{code: fr, region: 'US-TX'},
                      *route{fr, to}, *airport{code: to, region: 'US-NY'}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1353,7 +1353,7 @@ fn denver_to_mexico() {
             r#"
         ?[city] := *route{fr: 'DEN', to}, *airport{code: to, country: 'MX', city}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1381,7 +1381,7 @@ fn three_cities() {
         three[code] := city in ['London', 'Munich', 'Paris'], *airport{code, city}
         ?[s, d] := three[s], *route{fr: s, to: d}, three[d]
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1412,7 +1412,7 @@ fn long_distance_from_lgw() {
         ?[city, dist] := *route{fr: 'LGW', to, dist},
                          dist > 4000, *airport{code: to, city}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1446,7 +1446,7 @@ fn long_routes_one_dir() {
             r#"
         ?[fr, dist, to] := *route{fr, to, dist}, dist > 8000, fr < to;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1480,7 +1480,7 @@ fn longest_routes() {
         :sort -dist;
         :limit 20;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1510,7 +1510,7 @@ fn longest_routes_from_each_airports() {
         ?[fr, max(dist), choice(to)] := *route{fr, dist, to}
         :limit 10;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1538,7 +1538,7 @@ fn total_distance_from_three_cities() {
         three[code] := city in ['London', 'Munich', 'Paris'], *airport{code, city}
         ?[sum(dist)] := three[a], *route{fr: a, dist}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1560,7 +1560,7 @@ fn total_distance_within_three_cities() {
         three[code] := city in ['London', 'Munich', 'Paris'], *airport{code, city}
         ?[sum(dist)] := three[a], *route{fr: a, dist, to}, three[to]
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1581,7 +1581,7 @@ fn specific_distance() {
             r#"
         ?[dist] := *route{fr: 'AUS', to: 'MEX', dist}
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1601,7 +1601,7 @@ fn n_routes_between() {
         ?[count(fr)] := *route{fr, to, dist}, dist >= 100, dist <= 200,
                         us_a[fr], us_a[to]
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1623,7 +1623,7 @@ fn one_stop_distance() {
         :order dist;
         :limit 10;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1651,7 +1651,7 @@ fn airport_most_routes() {
         :order -count(fr);
         :limit 10;
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1677,7 +1677,7 @@ fn north_of_77() {
             r#"
         ?[city, latitude] := *airport{lat, city}, lat > 77, latitude = round(lat)
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1698,7 +1698,7 @@ fn greenwich_meridian() {
             r#"
         ?[code] := *airport{lon, code}, lon > -0.1, lon < 0.1
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1721,7 +1721,7 @@ fn box_around_heathrow() {
         ?[code] := h_box[lhr_lon, lhr_lat], *airport{code, lon, lat},
                     abs(lhr_lon - lon) < 1, abs(lhr_lat - lat) < 1
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1745,7 +1745,7 @@ fn dfw_by_region() {
                                   *airport{code: to, country: 'US', region},
                                   region in ['US-CA', 'US-TX', 'US-FL', 'US-CO', 'US-IL']
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1776,7 +1776,7 @@ fn great_circle_distance() {
                        *airport{code: 'NRT', lat: b_lat, lon: b_lon},
                         deg_diff = round(haversine_deg_input(a_lat, a_lon, b_lat, b_lon));
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1801,7 +1801,7 @@ fn aus_to_edi() {
                                         path = append(prev, to);
         ?[path] := routes['EDI', path];
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1829,7 +1829,7 @@ fn reachable_from_lhr() {
         :order -len;
         :limit 10;
         "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1873,7 +1873,7 @@ fn furthest_from_lhr() {
         :order -cost;
         :limit 10;
         "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1901,7 +1901,7 @@ fn skip_limit() {
             r#"
         ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1912,7 +1912,7 @@ fn skip_limit() {
             r#"
         ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1924,7 +1924,7 @@ fn skip_limit() {
         ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
         :limit 2
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1937,7 +1937,7 @@ fn skip_limit() {
         :limit 2
         :offset 1
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
@@ -1950,7 +1950,7 @@ fn skip_limit() {
         :limit 100
         :offset 1
     "#,
-            &Default::default(),
+            Default::default(),
         )
         .unwrap();
     let rows = res.get("rows").unwrap();
