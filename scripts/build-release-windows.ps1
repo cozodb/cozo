@@ -1,6 +1,6 @@
 $ErrorActionPreference="Stop"
 
-$COZO_VERSION = cat .\VERSION
+$VERSION = cat .\VERSION
 $CARGO_PROFILE_RELEASE_LTO = "fat"
 $TARGET = "x86_64-pc-windows-msvc"
 $PYO3_NO_PYTHON=1 
