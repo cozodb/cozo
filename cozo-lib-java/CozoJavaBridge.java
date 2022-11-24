@@ -8,6 +8,7 @@ public class CozoJavaBridge {
     private static native String importRelations(int id, String data);
     private static native String backup(int id, String file);
     private static native String restore(int id, String file);
+    private static native String importFromBackup(int id, String data);
 
     static {
         System.loadLibrary("cozo_java");

@@ -62,6 +62,13 @@ impl CozoDbPy {
             DB_CLOSED_MSG.to_string()
         }
     }
+    pub fn import_from_backup(&self, py: Python<'_>, data: &str) -> String {
+        if let Some(db) = &self.db {
+            py.allow_threads(|| db.import_from_backup_str(data))
+        } else {
+            DB_CLOSED_MSG.to_string()
+        }
+    }
     pub fn close(&mut self) -> bool {
         self.db.take().is_some()
     }

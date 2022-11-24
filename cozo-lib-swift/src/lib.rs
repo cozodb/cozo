@@ -21,6 +21,7 @@ mod ffi {
         fn import_relations_str(&self, data: &str) -> String;
         fn backup_db_str(&self, out_file: &str) -> String;
         fn restore_backup_str(&self, in_file: &str) -> String;
+        fn import_from_backup_str(&self, data: &str) -> String;
     }
 }
 

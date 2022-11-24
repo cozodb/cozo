@@ -264,6 +264,41 @@ pub unsafe extern "C" fn cozo_restore(db_id: i32, in_path: *const c_char) -> *mu
         .into_raw()
 }
 
+#[no_mangle]
+/// Import data into a relation
+/// `db_id`:        the ID representing the database.
+/// `json_payload`: a UTF-8 encoded JSON payload, see the manual for the expected fields.
+///
+/// Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
+pub unsafe extern "C" fn import_from_backup(
+    db_id: i32,
+    json_payload: *const c_char,
+) -> *mut c_char {
+    let db = {
+        let db_ref = {
+            let dbs = HANDLES.dbs.lock().unwrap();
+            dbs.get(&db_id).cloned()
+        };
+        match db_ref {
+            None => {
+                return CString::new(r##"{"ok":false,"message":"database closed"}"##)
+                    .unwrap()
+                    .into_raw();
+            }
+            Some(db) => db,
+        }
+    };
+
+    let data = match CStr::from_ptr(json_payload).to_str() {
+        Ok(p) => p,
+        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+    };
+
+    CString::new(db.import_from_backup_str(data))
+        .unwrap()
+        .into_raw()
+}
+
 /// Free any C-string returned from the Cozo C API.
 /// Must be called exactly once for each returned C-string.
 ///

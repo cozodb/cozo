@@ -98,6 +98,16 @@ char *cozo_restore(int32_t db_id,
                    const char *in_path);
 
 /**
+ * Import data into a relation
+ * `db_id`:        the ID representing the database.
+ * `json_payload`: a UTF-8 encoded JSON payload, see the manual for the expected fields.
+ *
+ * Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
+ */
+char *import_from_backup(int32_t db_id,
+                         const char *json_payload);
+
+/**
  * Free any C-string returned from the Cozo C API.
  * Must be called exactly once for each returned C-string.
  *

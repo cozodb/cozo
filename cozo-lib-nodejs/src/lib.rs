@@ -236,6 +236,43 @@ fn import_relations(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     Ok(cx.undefined())
 }
 
+fn import_from_backup(mut cx: FunctionContext) -> JsResult<JsUndefined> {
+    let id = cx.argument::<JsNumber>(0)?.value(&mut cx) as u32;
+    let db = {
+        let db_ref = {
+            let dbs = HANDLES.dbs.lock().unwrap();
+            dbs.get(&id).cloned()
+        };
+        match db_ref {
+            None => {
+                let s = cx.string("database already closed");
+                cx.throw(s)?
+            }
+            Some(db) => db,
+        }
+    };
+
+    let data = cx.argument::<JsString>(1)?.value(&mut cx);
+
+    let callback = cx.argument::<JsFunction>(2)?.root(&mut cx);
+
+    let channel = cx.channel();
+
+    std::thread::spawn(move || {
+        let result = db.import_from_backup_str(&data);
+        channel.send(move |mut cx| {
+            let callback = callback.into_inner(&mut cx);
+            let this = cx.undefined();
+            let json_str = cx.string(result);
+            callback.call(&mut cx, this, vec![json_str.upcast()])?;
+
+            Ok(())
+        });
+    });
+
+    Ok(cx.undefined())
+}
+
 #[neon::main]
 fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("open_db", open_db)?;
@@ -245,5 +282,6 @@ fn main(mut cx: ModuleContext) -> NeonResult<()> {
     cx.export_function("restore_db", restore_db)?;
     cx.export_function("export_relations", export_relations)?;
     cx.export_function("import_relations", import_relations)?;
+    cx.export_function("import_from_backup", import_from_backup)?;
     Ok(())
 }

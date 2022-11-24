@@ -1,5 +1,5 @@
 [package]
-name = "cozo_py_module"
+name = "cozo_py"
 version = "0.2.0"
 edition = "2021"
 description = "Cozo database for python"

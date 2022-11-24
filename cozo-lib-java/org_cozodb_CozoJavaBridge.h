@@ -63,6 +63,14 @@ JNIEXPORT jstring JNICALL Java_org_cozodb_CozoJavaBridge_backup
 JNIEXPORT jstring JNICALL Java_org_cozodb_CozoJavaBridge_restore
   (JNIEnv *, jclass, jint, jstring);
 
+/*
+ * Class:     org_cozodb_CozoJavaBridge
+ * Method:    importFromBackup
+ * Signature: (ILjava/lang/String;)Ljava/lang/String;
+ */
+JNIEXPORT jstring JNICALL Java_org_cozodb_CozoJavaBridge_importFromBackup
+  (JNIEnv *, jclass, jint, jstring);
+
 #ifdef __cplusplus
 }
 #endif
