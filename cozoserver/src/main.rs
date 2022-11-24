@@ -24,16 +24,19 @@ use cozo::*;
 #[clap(version, about, long_about = None)]
 struct Args {
     /// Database kind, can be `mem`, `sqlite`, `rocksdb` and others.
-    /// Some kinds may not be available if the executable did not set its build option.
     #[clap(short, long, default_value_t = String::from("mem"))]
     kind: String,
 
     /// Path to the directory to store the database
-    #[clap(short, long, default_value_t = String::from(""))]
+    #[clap(short, long, default_value_t = String::from("cozo.db"))]
     path: String,
 
+    /// Restore from the specified backup before starting the server
+    #[clap(long)]
+    restore: Option<String>,
+
     /// Extra config in JSON format
-    #[clap(short, long, default_value_t = serde_json::Value::Null)]
+    #[clap(short, long, default_value_t = json!({}))]
     config: serde_json::Value,
 
     /// Address to bind the service to
@@ -66,6 +69,10 @@ fn main() {
     }
 
     let db = DbInstance::new(args.kind.as_str(), args.path.as_str(), args.config.clone()).unwrap();
+
+    if let Some(restore_path) = &args.restore {
+        db.restore_backup(restore_path.to_string()).unwrap();
+    }
 
     let conf_path = format!("{}.{}.cozo_auth", args.path, args.kind);
     let auth_guard = match fs::read_to_string(&conf_path) {
@@ -193,29 +200,6 @@ fn main() {
                     let payload: BackupPayload = try_or_400!(rouille::input::json_input(request));
 
                     let result = db.backup_db(payload.path.clone());
-
-                    match result {
-                        Ok(()) => {
-                            let ret = json!({"ok": true});
-                            Response::json(&ret)
-                        }
-                        Err(err) => {
-                            let ret = json!({"ok": false, "message": err.to_string()});
-                            Response::json(&ret).with_status_code(400)
-                        }
-                    }
-                },
-                (POST) (/restore) => {
-                    check_auth!(request, auth_guard);
-
-                    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
-                    struct BackupPayload {
-                        path: String,
-                    }
-
-                    let payload: BackupPayload = try_or_400!(rouille::input::json_input(request));
-
-                    let result = db.restore_backup(payload.path.clone());
 
                     match result {
                         Ok(()) => {

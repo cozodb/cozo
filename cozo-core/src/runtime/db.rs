@@ -372,7 +372,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         {
             let sqlite_db = crate::new_cozo_sqlite(in_file)?;
             let s_tx = sqlite_db.transact_write()?;
-            let store_id = s_tx.relation_store_id.load(Ordering::AcqRel);
+            let store_id = s_tx.relation_store_id.load(Ordering::SeqCst);
             if store_id != 0 {
                 bail!(
                     "Cannot restore backup: data exists in the current database. \
