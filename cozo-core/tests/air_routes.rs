@@ -5,25 +5,29 @@
  * If a copy of the MPL was not distributed with this file,
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-#![cfg(feature = "storage-sled")]
 #![cfg(feature = "graph-algo")]
 
+use std::env;
 use std::str::FromStr;
 use std::time::Instant;
 
 use approx::AbsDiffEq;
-use cozo::{new_cozo_sled, Db, SledStorage};
 use env_logger::Env;
 use lazy_static::lazy_static;
 use serde_json::json;
 
+use cozo::DbInstance;
+
 lazy_static! {
-    static ref TEST_DB: Db<SledStorage> = {
+    static ref TEST_DB: DbInstance = {
         env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
         let creation = Instant::now();
-        let path = "_test_air_routes_sled";
+        let path = "_test_air_routes";
+        _ = std::fs::remove_file(path);
         _ = std::fs::remove_dir_all(path);
-        let db = new_cozo_sled(path).unwrap();
+        let db_kind = env::var("COZO_TEST_DB_KIND").unwrap_or("mem".to_string());
+
+        let db = DbInstance::new(&db_kind, path, Default::default()).unwrap();
         dbg!(creation.elapsed());
 
         let init = Instant::now();
@@ -53,7 +57,8 @@ lazy_static! {
             }
         "##, &Default::default()).unwrap();
 
-        db.run_script(r##"
+        db.run_script(
+            r##"
             res[idx, label, typ, code, icao, desc] <~
                 CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any'],
                           url: 'file://./tests/air-routes-latest-nodes.csv',
@@ -67,9 +72,13 @@ lazy_static! {
                 =>
                 desc: String
             }
-        "##, &Default::default()).unwrap();
+        "##,
+            &Default::default(),
+        )
+        .unwrap();
 
-         db.run_script(r##"
+        db.run_script(
+            r##"
             res[idx, label, typ, code, icao, desc] <~
                 CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any'],
                           url: 'file://./tests/air-routes-latest-nodes.csv',
@@ -83,9 +92,13 @@ lazy_static! {
                 =>
                 desc: String
             }
-        "##, &Default::default()).unwrap();
+        "##,
+            &Default::default(),
+        )
+        .unwrap();
 
-        db.run_script(r##"
+        db.run_script(
+            r##"
             res[idx, label, typ, code] <~
                 CsvReader(types: ['Int', 'Any', 'Any', 'Any'],
                           url: 'file://./tests/air-routes-latest-nodes.csv',
@@ -94,9 +107,13 @@ lazy_static! {
                 res[idx, label, typ, code],
 
             :replace idx2code { idx: Int => code: String }
-        "##, &Default::default()).unwrap();
+        "##,
+            &Default::default(),
+        )
+        .unwrap();
 
-        db.run_script(r##"
+        db.run_script(
+            r##"
             res[] <~
                 CsvReader(types: ['Int', 'Int', 'Int', 'String', 'Float?'],
                           url: 'file://./tests/air-routes-latest-edges.csv',
@@ -108,9 +125,13 @@ lazy_static! {
                 *idx2code[to_i, to]
 
             :replace route { fr: String, to: String => dist: Float }
-        "##, &Default::default()).unwrap();
+        "##,
+            &Default::default(),
+        )
+        .unwrap();
 
-        db.run_script(r##"
+        db.run_script(
+            r##"
             res[] <~
                 CsvReader(types: ['Int', 'Int', 'Int', 'String'],
                           url: 'file://./tests/air-routes-latest-edges.csv',
@@ -123,7 +144,10 @@ lazy_static! {
 
 
             :replace contain { entity: String, contained: String }
-        "##, &Default::default()).unwrap();
+        "##,
+            &Default::default(),
+        )
+        .unwrap();
 
         db.run_script("::remove idx2code", &Default::default())
             .unwrap();
