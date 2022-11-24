@@ -4,7 +4,6 @@ set -e
 
 VERSION=$(cat ./VERSION)
 
-cargo clean
 rm -fr release
 mkdir -p release
 
