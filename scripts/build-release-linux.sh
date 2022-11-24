@@ -25,7 +25,7 @@ for TARGET in x86_64-unknown-linux-gnu; do
 done
 
 for TARGET in aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
-  CARGO_PROFILE_RELEASE_LTO=fat cross build --release -p cozoserver -F compact -F storage-rocksdb --target $TARGET
+  CARGO_PROFILE_RELEASE_LTO=fat cross build --release -p cozoserver -p cozo_c -F compact --target $TARGET
   cp target/$TARGET/release/cozoserver release/cozoserver-$VERSION-$TARGET # standalone
   cp target/$TARGET/release/libcozo_c.a release/libcozo_c-$VERSION-$TARGET.a # c static
 done
