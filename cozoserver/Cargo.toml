@@ -43,7 +43,7 @@ nothread = ["cozo/nothread"]
 
 [dependencies]
 cozo = { version = "0.2.0", path = "../cozo-core", default-features = false }
-clap = { version = "3.2.8", features = ["derive"] }
+clap = { version = "4.0.26", features = ["derive"] }
 rouille = "3.5.0"
 env_logger = "0.9.3"
 log = "0.4.17"
