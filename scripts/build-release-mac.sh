@@ -26,6 +26,7 @@ done
 cp target/wheels/*.whl release/
 
 # swift
+cargo clean
 cd cozo-lib-swift
 CARGO_PROFILE_RELEASE_LTO=fat ./build-rust.sh
 cd ..
