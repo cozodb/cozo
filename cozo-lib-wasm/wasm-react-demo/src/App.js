@@ -78,7 +78,7 @@ function App() {
     }
 
     function handleQuery() {
-        if (!db) {
+        if (!db || inProgress) {
             setInProgress(false);
             setErrorMessage([]);
             setStatusMessage(['database not ready']);
@@ -92,38 +92,42 @@ function App() {
             setErrorMessage([]);
             setStatusMessage('');
             setQueryResults(null);
-            try {
-                const t0 = performance.now();
-                const res_str = db.run(query, params);
-                const t1 = performance.now();
-                const res = JSON.parse(res_str);
-                if (res.ok) {
-                    setStatusMessage(`finished with ${res.rows.length} rows in ${(t1 - t0).toFixed(1)}ms`);
-                    if (!res.headers) {
-                        res.headers = [];
-                        if (res.rows.length) {
-                            for (let i = 0; i < res.rows[0].length; i++) {
-                                res.headers.push('' + i);
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    try {
+                        const t0 = performance.now();
+                        const res_str = db.run(query, params);
+                        const t1 = performance.now();
+                        const res = JSON.parse(res_str);
+                        if (res.ok) {
+                            setStatusMessage(`finished with ${res.rows.length} rows in ${(t1 - t0).toFixed(1)}ms`);
+                            if (!res.headers) {
+                                res.headers = [];
+                                if (res.rows.length) {
+                                    for (let i = 0; i < res.rows[0].length; i++) {
+                                        res.headers.push('' + i);
+                                    }
+                                }
+                            }
+                        } else {
+                            console.error('Query failed', res);
+                            setStatusMessage(`finished with errors`);
+                            if (res.display) {
+                                const messages = parse(res.display);
+                                setErrorMessage(messages.spans);
+                            } else {
+                                setErrorMessage([res.message]);
                             }
                         }
+                        setQueryResults(res);
+                    } catch (e) {
+                        setStatusMessage(`query failed`);
+                        setErrorMessage(['' + e]);
+                    } finally {
+                        setInProgress(false);
                     }
-                } else {
-                    console.error('Query failed', res);
-                    setStatusMessage(`finished with errors`);
-                    if (res.display) {
-                        const messages = parse(res.display);
-                        setErrorMessage(messages.spans);
-                    } else {
-                        setErrorMessage([res.message]);
-                    }
-                }
-                setQueryResults(res);
-            } catch (e) {
-                setStatusMessage(`query failed`);
-                setErrorMessage(['' + e]);
-            } finally {
-                setInProgress(false);
-            }
+                }, 0)
+            })
         }
     }
 
@@ -157,7 +161,7 @@ function App() {
                 <div style={{paddingTop: 10, display: 'flex', flexDirection: 'row'}}>
                     <Button
                         icon="play"
-                        text={db ? "Run script" : "Loading WASM ..."}
+                        text={db ? (inProgress ? "Query is running" : "Run script") : "Loading WASM ..."}
                         onClick={() => handleQuery()}
                         disabled={!db || inProgress}
                         intent={Intent.PRIMARY}
@@ -211,7 +215,7 @@ function App() {
                         cellRenderer={renderCell(idx)}
                     />)}
                 </Table2> : null) : null}
-            {!(queryResults || errorMessage.length) && <div id="welcome">
+            {!(queryResults || errorMessage.length || inProgress) && <div id="welcome">
                 <p>
                     This is the demo page for Cozo running in your browser as
                     a <a href="https://webassembly.org/">Web assembly</a> module.
@@ -259,6 +263,7 @@ function ImportUrl({db}) {
             let content = await resp.text();
             const res = JSON.parse(db.import_relations(content));
             if (res.ok) {
+                AppToaster.show({message: "Imported", intent: Intent.SUCCESS})
                 handleClose()
             } else {
                 AppToaster.show({message: res.message, intent: Intent.DANGER})
@@ -310,6 +315,7 @@ function ImportFile({db}) {
             let content = await file.text();
             const res = JSON.parse(db.import_relations(content));
             if (res.ok) {
+                AppToaster.show({message: "Imported", intent: Intent.SUCCESS})
                 handleClose()
             } else {
                 AppToaster.show({message: res.message, intent: Intent.DANGER})
@@ -370,6 +376,7 @@ function Export({db}) {
         if (res.ok) {
             const blob = new Blob([JSON.stringify(res.data)], {type: "text/plain;charset=utf-8"});
             saveAs(blob, "export.json");
+            AppToaster.show({message: "Exported", intent: Intent.SUCCESS})
             handleClose()
         } else {
             AppToaster.show({message: res.message, intent: Intent.DANGER})
