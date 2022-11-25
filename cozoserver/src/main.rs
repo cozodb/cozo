@@ -191,7 +191,9 @@ fn main() {
                     }
                 },
                 (POST) (/backup) => {
-                    check_auth!(request, auth_guard);
+                    if !request.remote_addr().ip().is_loopback() {
+                        check_auth!(request, auth_guard);
+                    }
 
                     #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
                     struct BackupPayload {
@@ -201,6 +203,31 @@ fn main() {
                     let payload: BackupPayload = try_or_400!(rouille::input::json_input(request));
 
                     let result = db.backup_db(payload.path.clone());
+
+                    match result {
+                        Ok(()) => {
+                            let ret = json!({"ok": true});
+                            Response::json(&ret)
+                        }
+                        Err(err) => {
+                            let ret = json!({"ok": false, "message": err.to_string()});
+                            Response::json(&ret).with_status_code(400)
+                        }
+                    }
+                },
+                (POST) (/import-from-backup) => {
+                    if !request.remote_addr().ip().is_loopback() {
+                        check_auth!(request, auth_guard);
+                    }
+
+                    #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
+                    struct BackupImportPayload {
+                        path: String,
+                        relations: Vec<String>
+                    }
+
+                    let payload: BackupImportPayload = try_or_400!(rouille::input::json_input(request));
+                    let result = db.import_from_backup(&payload.path, &payload.relations);
 
                     match result {
                         Ok(()) => {
