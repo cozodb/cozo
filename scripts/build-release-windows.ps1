@@ -14,6 +14,10 @@ cp target/$TARGET/release/cozo_c.dll release/libcozo_c-$VERSION-$TARGET.dll # c 
 cp target/$TARGET/release/cozo_java.dll release/libcozo_java-$VERSION-$TARGET.dll # java
 cp target/$TARGET/release/cozo_node.dll release/libcozo_node-$VERSION-$TARGET.dll # nodejs
 
+cargo build --release -p cozoserver \
+    -F compact -F storage-rocksdb -F storage-tikv -F storage-sled --target $TARGET
+cp target/$TARGET/release/cozoserver release/cozoserver_all-$VERSION-$TARGET # standalone
+
 cd cozo-lib-python
 maturin build -F compact -F storage-rocksdb --release --strip --target $TARGET
 cd ..
