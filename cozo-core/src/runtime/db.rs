@@ -399,15 +399,16 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[cfg(feature = "storage-sqlite")]
         {
             let sqlite_db = crate::new_cozo_sqlite(in_file.to_string())?;
-            let mut s_tx = sqlite_db.transact_write()?;
-            let store_id = s_tx.relation_store_id.load(Ordering::SeqCst);
+            let mut s_tx = sqlite_db.transact()?;
+            let mut tx = self.transact_write()?;
+            let store_id = tx.relation_store_id.load(Ordering::SeqCst);
             if store_id != 0 {
                 bail!(
                     "Cannot restore backup: data exists in the current database. \
-                You can only restore into a new database."
+                You can only restore into a new database (store id: {}).",
+                    store_id
                 );
             }
-            let mut tx = self.transact()?;
             let iter = s_tx.tx.range_scan(&[], &[1]);
             tx.tx.batch_put(iter)?;
             s_tx.commit_tx()?;
