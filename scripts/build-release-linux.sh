@@ -18,7 +18,7 @@ for TARGET in aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
 
 done
 
-for TARGET in aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
+for TARGET in aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
   PROTOC=$PWD/tools/protoc CARGO_PROFILE_RELEASE_LTO=fat cross build --release -p cozoserver \
     -F compact -F storage-rocksdb -F storage-tikv -F storage-sled --target $TARGET
   cp target/$TARGET/release/cozoserver release/cozoserver_all-$VERSION-$TARGET # standalone
