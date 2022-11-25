@@ -31,9 +31,10 @@ lazy_static! {
 
 /// Open a database.
 ///
-/// `engine`: Which storage engine to use, can be "mem", "sqlite" or "rocksdb".
-/// `path`:   should contain the UTF-8 encoded path name as a null-terminated C-string.
-/// `db_id`:  will contain the id of the database opened.
+/// `engine`:  which storage engine to use, can be "mem", "sqlite" or "rocksdb".
+/// `path`:    should contain the UTF-8 encoded path name as a null-terminated C-string.
+/// `db_id`:   will contain the id of the database opened.
+/// `options`: options for the DB constructor: engine dependent.
 ///
 /// When the function is successful, null pointer is returned,
 /// otherwise a pointer to a C-string containing the error message will be returned.
@@ -42,6 +43,7 @@ lazy_static! {
 pub unsafe extern "C" fn cozo_open_db(
     engine: *const c_char,
     path: *const c_char,
+    options: *const c_char,
     db_id: &mut i32,
 ) -> *mut c_char {
     let engine = match CStr::from_ptr(engine).to_str() {
@@ -54,7 +56,12 @@ pub unsafe extern "C" fn cozo_open_db(
         Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
     };
 
-    let db = match DbInstance::new_with_str(engine, path, "{}") {
+    let options = match CStr::from_ptr(options).to_str() {
+        Ok(p) => p,
+        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+    };
+
+    let db = match DbInstance::new_with_str(engine, path, options) {
         Ok(db) => db,
         Err(err) => return CString::new(err).unwrap().into_raw(),
     };

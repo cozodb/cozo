@@ -32,7 +32,7 @@ pub struct CozoDb {
 impl CozoDb {
     pub fn new() -> Self {
         utils::set_panic_hook();
-        let db = DbInstance::new("mem", "", Default::default()).unwrap();
+        let db = DbInstance::new("mem", "", "").unwrap();
         Self { db }
     }
     pub fn run(&self, script: &str, params: &str) -> String {

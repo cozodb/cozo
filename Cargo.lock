@@ -492,7 +492,7 @@ checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
 name = "cozo"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "approx",
  "base64",
@@ -541,7 +541,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-lib-wasm"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "console_error_panic_hook",
  "cozo",
@@ -552,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-node"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cozo",
  "lazy_static",
@@ -561,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-swift"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cozo",
  "swift-bridge",
@@ -570,7 +570,7 @@ dependencies = [
 
 [[package]]
 name = "cozo_c"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cbindgen",
  "cozo",
@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "cozo_java"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cozo",
  "jni",
@@ -588,7 +588,7 @@ dependencies = [
 
 [[package]]
 name = "cozo_py"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cozo",
  "pyo3",
@@ -611,7 +611,7 @@ dependencies = [
 
 [[package]]
 name = "cozoserver"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "clap 4.0.26",

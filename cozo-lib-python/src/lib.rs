@@ -21,8 +21,8 @@ const DB_CLOSED_MSG: &str = r##"{"ok":false,"message":"database closed"}"##;
 #[pymethods]
 impl CozoDbPy {
     #[new]
-    fn new(kind: &str, path: &str) -> PyResult<Self> {
-        match DbInstance::new(kind, path, Default::default()) {
+    fn new(engine: &str, path: &str, options: &str) -> PyResult<Self> {
+        match DbInstance::new(engine, path, options) {
             Ok(db) => Ok(Self { db: Some(db) }),
             Err(err) => Err(PyException::new_err(format!("{:?}", err))),
         }

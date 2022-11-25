@@ -24,9 +24,9 @@ use cozo::*;
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
 struct Args {
-    /// Database kind, can be `mem`, `sqlite`, `rocksdb` and others.
+    /// Database engine, can be `mem`, `sqlite`, `rocksdb` and others.
     #[clap(short, long, default_value_t = String::from("mem"))]
-    kind: String,
+    engine: String,
 
     /// Path to the directory to store the database
     #[clap(short, long, default_value_t = String::from("cozo.db"))]
@@ -69,13 +69,13 @@ fn main() {
         eprintln!("{}", SECURITY_WARNING);
     }
 
-    let db = DbInstance::new(args.kind.as_str(), args.path.as_str(), &args.config.clone()).unwrap();
+    let db = DbInstance::new(args.engine.as_str(), args.path.as_str(), &args.config.clone()).unwrap();
 
     if let Some(restore_path) = &args.restore {
         db.restore_backup(restore_path).unwrap();
     }
 
-    let conf_path = format!("{}.{}.cozo_auth", args.path, args.kind);
+    let conf_path = format!("{}.{}.cozo_auth", args.path, args.engine);
     let auth_guard = match fs::read_to_string(&conf_path) {
         Ok(s) => s.trim().to_string(),
         Err(_) => {
@@ -96,7 +96,7 @@ fn main() {
     };
     println!(
         "Database ({} backend) web API running at http://{}",
-        args.kind, addr
+        args.engine, addr
     );
     println!("The auth file is at {}", conf_path);
     rouille::start_server(addr, move |request| {

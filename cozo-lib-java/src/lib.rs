@@ -38,12 +38,14 @@ fn get_db(id: i32) -> Option<DbInstance> {
 pub extern "system" fn Java_org_cozodb_CozoJavaBridge_openDb(
     env: JNIEnv,
     _class: JClass,
-    kind: JString,
+    engine: JString,
     path: JString,
+    options: JString,
 ) -> jint {
-    let kind: String = env.get_string(kind).unwrap().into();
+    let engine: String = env.get_string(engine).unwrap().into();
     let path: String = env.get_string(path).unwrap().into();
-    let id = match DbInstance::new(&kind, &path, Default::default()) {
+    let options: String = env.get_string(options).unwrap().into();
+    let id = match DbInstance::new(&engine, &path, &options) {
         Ok(db) => {
             let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
             let mut dbs = HANDLES.dbs.lock().unwrap();

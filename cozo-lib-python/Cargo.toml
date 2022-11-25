@@ -1,6 +1,6 @@
 [package]
 name = "cozo_py"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Cozo database for python"
 authors = ["Ziyang Hu"]
@@ -45,5 +45,5 @@ nothread = ["cozo/nothread"]
 
 
 [dependencies]
-cozo = { version = "0.2.0", path = "../cozo-core", default-features = false }
+cozo = { version = "0.2.1", path = "../cozo-core", default-features = false }
 pyo3 = { version = "0.17.1", features = ["extension-module", "abi3", "abi3-py37"] }

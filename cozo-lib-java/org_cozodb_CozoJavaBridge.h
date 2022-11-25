@@ -10,10 +10,10 @@ extern "C" {
 /*
  * Class:     org_cozodb_CozoJavaBridge
  * Method:    openDb
- * Signature: (Ljava/lang/String;Ljava/lang/String;)I
+ * Signature: (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
  */
 JNIEXPORT jint JNICALL Java_org_cozodb_CozoJavaBridge_openDb
-  (JNIEnv *, jclass, jstring, jstring);
+  (JNIEnv *, jclass, jstring, jstring, jstring);
 
 /*
  * Class:     org_cozodb_CozoJavaBridge

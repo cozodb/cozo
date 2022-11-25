@@ -25,9 +25,10 @@ lazy_static! {
 }
 
 fn open_db(mut cx: FunctionContext) -> JsResult<JsNumber> {
-    let kind = cx.argument::<JsString>(0)?.value(&mut cx);
+    let engine = cx.argument::<JsString>(0)?.value(&mut cx);
     let path = cx.argument::<JsString>(1)?.value(&mut cx);
-    match DbInstance::new(&kind, &path, Default::default()) {
+    let options = cx.argument::<JsString>(2)?.value(&mut cx);
+    match DbInstance::new(&engine, &path, &options) {
         Ok(db) => {
             let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
             let mut dbs = HANDLES.dbs.lock().unwrap();

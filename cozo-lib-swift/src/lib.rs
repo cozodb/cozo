@@ -13,7 +13,7 @@ mod ffi {
     extern "Rust" {
         type DbInstance;
 
-        fn new_db(kind: &str, path: &str, options: &str) -> Option<DbInstance>;
+        fn new_db(engine: &str, path: &str, options: &str) -> Option<DbInstance>;
 
         #[swift_bridge(associated_to = DbInstance)]
         fn run_script_str(&self, payload: &str, params: &str) -> String;
@@ -25,9 +25,9 @@ mod ffi {
     }
 }
 
-fn new_db(kind: &str, path: &str, options: &str) -> Option<DbInstance> {
+fn new_db(engine: &str, path: &str, options: &str) -> Option<DbInstance> {
     let options = if options.is_empty() { "{}" } else { options };
-    match DbInstance::new_with_str(kind, path, options) {
+    match DbInstance::new_with_str(engine, path, options) {
         Ok(db) => Some(db),
         Err(err) => {
             eprintln!("{}", err);

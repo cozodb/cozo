@@ -98,7 +98,7 @@ pub enum DbInstance {
 
 impl DbInstance {
     /// Create a DbInstance, which is a dispatcher for various concrete implementations.
-    /// The valid kinds are:
+    /// The valid engines are:
     ///
     /// * `mem`
     /// * `sqlite`
@@ -107,14 +107,14 @@ impl DbInstance {
     /// * `tikv`
     ///
     /// assuming all features are enabled during compilation. Otherwise only
-    /// some of the kinds are available. The `mem` kind is always available.
+    /// some of the engines are available. The `mem` kind is always available.
     ///
-    /// `path` is ignored for `mem` and `tikv` kinds.
-    /// `options` is ignored for every kind except `tikv`.
+    /// `path` is ignored for `mem` and `tikv` engines.
+    /// `options` is ignored for every engine except `tikv`.
     #[allow(unused_variables)]
-    pub fn new(kind: &str, path: &str, options: &str) -> Result<Self> {
+    pub fn new(engine: &str, path: &str, options: &str) -> Result<Self> {
         let options = if options.is_empty() { "{}" } else { options };
-        Ok(match kind {
+        Ok(match engine {
             "mem" => Self::Mem(new_cozo_mem()?),
             #[cfg(feature = "storage-sqlite")]
             "sqlite" => Self::Sqlite(new_cozo_sqlite(path.to_string())?),
@@ -133,19 +133,19 @@ impl DbInstance {
                 let opts: TiKvOpts = serde_json::from_str(options).into_diagnostic()?;
                 Self::TiKv(new_cozo_tikv(opts.end_points.clone(), opts.optimistic)?)
             }
-            kind => bail!(
-                "database kind '{}' not supported (maybe not compiled in)",
-                kind
+            k => bail!(
+                "database engine '{}' not supported (maybe not compiled in)",
+                k
             ),
         })
     }
     /// Same as [Self::new], but inputs and error messages are all in strings
     pub fn new_with_str(
-        kind: &str,
+        engine: &str,
         path: &str,
         options: &str,
     ) -> std::result::Result<Self, String> {
-        Self::new(kind, path, options).map_err(|err| err.to_string())
+        Self::new(engine, path, options).map_err(|err| err.to_string())
     }
     /// Dispatcher method. See [crate::Db::run_script].
     pub fn run_script(

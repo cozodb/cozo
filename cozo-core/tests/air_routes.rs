@@ -25,7 +25,7 @@ lazy_static! {
         let path = "_test_air_routes";
         _ = std::fs::remove_file(path);
         _ = std::fs::remove_dir_all(path);
-        let db_kind = env::var("COZO_TEST_DB_KIND").unwrap_or("mem".to_string());
+        let db_kind = env::var("COZO_TEST_DB_ENGINE").unwrap_or("mem".to_string());
 
         let db = DbInstance::new(&db_kind, path, Default::default()).unwrap();
         dbg!(creation.elapsed());

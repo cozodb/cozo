@@ -17,15 +17,16 @@ extern "C" {
 /**
  * Open a database.
  *
- * `engine`: Which storage engine to use, can be "mem", "sqlite" or "rocksdb".
- * `path`:   should contain the UTF-8 encoded path name as a null-terminated C-string.
- * `db_id`:  will contain the id of the database opened.
+ * `engine`:  which storage engine to use, can be "mem", "sqlite" or "rocksdb".
+ * `path`:    should contain the UTF-8 encoded path name as a null-terminated C-string.
+ * `db_id`:   will contain the id of the database opened.
+ * `options`: options for the DB constructor: engine dependent.
  *
  * When the function is successful, null pointer is returned,
  * otherwise a pointer to a C-string containing the error message will be returned.
  * The returned C-string must be freed with `cozo_free_str`.
  */
-char *cozo_open_db(const char *engine, const char *path, int32_t *db_id);
+char *cozo_open_db(const char *engine, const char *path, const char *options, int32_t *db_id);
 
 /**
  * Close a database.
