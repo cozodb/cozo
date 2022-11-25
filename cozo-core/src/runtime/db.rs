@@ -33,7 +33,7 @@ use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::relation::{
     FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, UnificationRA,
 };
-use crate::runtime::relation::{RelationHandle, RelationId};
+use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
 use crate::storage::{Storage, StoreTx};
 
@@ -141,6 +141,15 @@ impl<'s, S: Storage<'s>> Db<S> {
         let mut ret = serde_json::Map::default();
         for rel in relations {
             let handle = tx.get_relation(rel, false)?;
+
+            if handle.access_level < AccessLevel::ReadOnly {
+                bail!(InsufficientAccessLevel(
+                        handle.name.to_string(),
+                        "data export".to_string(),
+                        handle.access_level
+                    ));
+            }
+
             let mut cols = handle
                 .metadata
                 .keys
@@ -218,6 +227,15 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
             };
             let handle = tx.get_relation(relation, true)?;
+
+            if handle.access_level < AccessLevel::Protected {
+                bail!(InsufficientAccessLevel(
+                        handle.name.to_string(),
+                        "data import".to_string(),
+                        handle.access_level
+                    ));
+            }
+
             match in_data {
                 JsonValue::Array(in_data) => {
                     for val in in_data {
@@ -403,6 +421,14 @@ impl<'s, S: Storage<'s>> Db<S> {
             for relation in relations {
                 let src_handle = src_tx.get_relation(relation, false)?;
                 let dst_handle = dst_tx.get_relation(relation, true)?;
+
+                if dst_handle.access_level < AccessLevel::Protected {
+                    bail!(InsufficientAccessLevel(
+                        dst_handle.name.to_string(),
+                        "data import".to_string(),
+                        dst_handle.access_level
+                    ));
+                }
 
                 let src_lower = Tuple::default().encode_as_key(src_handle.id);
                 let src_upper = Tuple::default().encode_as_key(src_handle.id.next());
