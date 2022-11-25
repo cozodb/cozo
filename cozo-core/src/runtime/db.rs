@@ -110,7 +110,10 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[cfg(not(feature = "wasm"))]
         let start = Instant::now();
 
-        let params = params.into_iter().map(|(k, v)| (k, DataValue::from(v))).collect();
+        let params = params
+            .into_iter()
+            .map(|(k, v)| (k, DataValue::from(v)))
+            .collect();
         match self.do_run_script(payload, &params) {
             Ok(mut json) => {
                 {
@@ -144,10 +147,10 @@ impl<'s, S: Storage<'s>> Db<S> {
 
             if handle.access_level < AccessLevel::ReadOnly {
                 bail!(InsufficientAccessLevel(
-                        handle.name.to_string(),
-                        "data export".to_string(),
-                        handle.access_level
-                    ));
+                    handle.name.to_string(),
+                    "data export".to_string(),
+                    handle.access_level
+                ));
             }
 
             let mut cols = handle
@@ -230,10 +233,10 @@ impl<'s, S: Storage<'s>> Db<S> {
 
             if handle.access_level < AccessLevel::Protected {
                 bail!(InsufficientAccessLevel(
-                        handle.name.to_string(),
-                        "data import".to_string(),
-                        handle.access_level
-                    ));
+                    handle.name.to_string(),
+                    "data import".to_string(),
+                    handle.access_level
+                ));
             }
 
             match in_data {
@@ -377,10 +380,15 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[cfg(feature = "storage-sqlite")]
         {
             let sqlite_db = crate::new_cozo_sqlite(out_file)?;
+            if sqlite_db.relation_store_id.load(Ordering::SeqCst) != 0 {
+                bail!("Cannot create backup: data exists in the target database.");
+            }
             let mut s_tx = sqlite_db.transact_write()?;
-            let tx = self.transact()?;
-            let iter = tx.tx.range_scan(&[], &[1]);
+            let mut tx = self.transact()?;
+            let iter = tx.tx.range_scan(&[], &[0xFF]);
             s_tx.tx.batch_put(iter)?;
+            tx.commit_tx()?;
+            s_tx.commit_tx()?;
             Ok(())
         }
         #[cfg(not(feature = "storage-sqlite"))]
@@ -391,7 +399,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[cfg(feature = "storage-sqlite")]
         {
             let sqlite_db = crate::new_cozo_sqlite(in_file.to_string())?;
-            let s_tx = sqlite_db.transact_write()?;
+            let mut s_tx = sqlite_db.transact_write()?;
             let store_id = s_tx.relation_store_id.load(Ordering::SeqCst);
             if store_id != 0 {
                 bail!(
@@ -402,6 +410,8 @@ impl<'s, S: Storage<'s>> Db<S> {
             let mut tx = self.transact()?;
             let iter = s_tx.tx.range_scan(&[], &[1]);
             tx.tx.batch_put(iter)?;
+            s_tx.commit_tx()?;
+            tx.commit_tx()?;
             Ok(())
         }
         #[cfg(not(feature = "storage-sqlite"))]
