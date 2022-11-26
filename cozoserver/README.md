@@ -3,17 +3,23 @@
 The standalone executable for Cozo can be downloaded from the [release page](https://github.com/cozodb/cozo/releases) 
 (look for those with names `cozoserver-*`).
 
+This document describes how to set up cozoserver.
+To learn how to use CozoDB (CozoScript), follow
+the [tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
+first and then read the [manual](https://cozodb.github.io/current/manual/). You can run all the queries
+described in the tutorial with an in-browser DB [here](https://cozodb.github.io/wasm-demo/).
+
 ## Starting the server
 
 Run the cozoserver command in a terminal:
 
 ```bash
-./cozoserver <PATH_TO_DATA_DIRECTORY>
+./cozoserver
 ```
 
-If `<PATH_TO_DATA_DIRECTORY>` does not exist, it will be created. 
-Cozo will then start a web server and bind to address 127.0.0.1 and port 9070. 
-These two can be customized: run the executable with the -h option to learn how.
+This starts an in-memory, non-persistent database.
+For more options such as how to run a persistent database with other storage engines,
+see `./cozoserver -h`
 
 To stop Cozo, press `CTRL-C`, or send `SIGTERM` to the process with e.g. `kill`.
 
@@ -49,3 +55,24 @@ and a nicely-formatted diagnostic will be in `"display"` if available.
 > non-default binding will tell you where to find the token string. 
 > This “security measure” is not considered sufficient for any purpose 
 > and is only intended as a last defence against carelessness.
+
+## API
+
+* `POST /text-query`, described above.
+* `GET /export/{relations: String}`, where `relations` is a comma-separated list of relations to export. 
+   The query parameter `as_objects` can change the output format.
+* `PUT /import`, import data into the database. Data should be in `application/json` MIME type in the body,
+   in the same format as returned in the `data` field in the `/export` API.
+* `POST /backup`, backup database, should supply a JSON body of the form `{"path": <PATH>}`
+* `POST /import-from-backup`, import data into the database from a backup. Should supply a JSON body 
+   of the form `{"path": <PATH>, "relations": <ARRAY OF RELATION NAMES>}`.
+* `GET /`, if you open this in your browser and open your developer tools, you will be able to use
+   a very simple client to query this database.
+
+## Building
+
+Building `cozo-node` requires a [Rust toolchain](https://rustup.rs). Run
+
+```bash
+cargo build --release -p cozoserver -F compact -F storage-rocksdb
+```

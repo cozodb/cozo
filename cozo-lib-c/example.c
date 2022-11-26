@@ -19,7 +19,7 @@ void run_query(int32_t db_id, const char *query) {
 
 int main() {
     int32_t db_id;
-    char *err = cozo_open_db("_test_db", &db_id);
+    char *err = cozo_open_db("mem", "", "{}", &db_id);
 
     if (err) {
         printf("%s", err);

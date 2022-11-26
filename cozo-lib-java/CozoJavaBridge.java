@@ -9,12 +9,4 @@ public class CozoJavaBridge {
     private static native String backup(int id, String file);
     private static native String restore(int id, String file);
     private static native String importFromBackup(int id, String data);
-
-    static {
-        System.loadLibrary("cozo_java");
-    }
-
-    public static void main(String[] args) {
-        System.out.println("OK");
-    }
 }

@@ -2,39 +2,29 @@
 
 This directory contains the source of the Cozo C API.
 
-For building, refer [here](../BUILDING.md).
+This document describes how to set up the C library.
+To learn how to use CozoDB (CozoScript), follow
+the [tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
+first and then read the [manual](https://cozodb.github.io/current/manual/). You can run all the queries
+described in the tutorial with an in-browser DB [here](https://cozodb.github.io/wasm-demo/).
+
+You can download pre-built libraries from the [release page](https://github.com/cozodb/cozo/releases),
+look for those starting with `libcozo_c`.
 
 The API is contained in this single [header file](./cozo_c.h).
 
 An example for using the API is [here](./example.c).
 
 To build and run the example:
+
 ```bash
 gcc -L../target/release/ -lcozo_c example.c -o example && ./example
 ```
 
-## Building for iOS
+# Building Cozo from source
 
-See [this guide](https://blog.mozilla.org/data/2022/01/31/this-week-in-glean-building-and-deploying-a-rust-library-on-ios/)
-for detailed instructions on compilation for iOS.
-
-All scripts are run from this directory.
-
-For iOS devices:
+You need to install the [Rust toolchain](https://www.rust-lang.org/tools/install) on your system. Then:
 
 ```bash
-ARCHS=arm64 ./comiple-ios.sh cozo_c release
+cargo build --release -p cozo_c -F compact -F storage-rocksdb
 ```
-
-For simulator on Apple ARM:
-```bash
-IS_SIMULATOR=1 ARCHS=arm64 ./comiple-ios.sh cozo_c release
-```
-
-For simulator on x86-64:
-```bash
-IS_SIMULATOR=1 ARCHS=x86_64 ./comiple-ios.sh cozo_c release
-```
-
-The libraries are then found in `../target` subdirectories. The static libraries can then be linked into
-your iOS applications.
