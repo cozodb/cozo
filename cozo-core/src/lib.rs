@@ -7,21 +7,23 @@
  */
 
 //! This crate provides the core functionalities of [CozoDB](https://github.com/cozodb/cozo).
-//! It may be used directly for embedding CozoDB in other applications.
+//! It may be used to embed CozoDB in your application.
 //!
-//! This doc describes the Rust API. For general information about how to use Cozo, see:
+//! This doc describes the Rust API. To learn how to use CozoDB to query (CozoScript), see:
 //!
-//! * [Installation and first queries](https://github.com/cozodb/cozo#install)
-//! * [Tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
-//! * [Manual for CozoScript](https://cozodb.github.io/current/manual/)
+//! * [CozoScript Tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
+//! * [CozoScript Manual](https://cozodb.github.io/current/manual/)
 //!
-//! Example usage:
+//! You can run all the queries described in the tutorial with an in-browser DB [here](https://cozodb.github.io/wasm-demo/)
+//! without installing anything.
+//!
+//! Rust API usage:
 //! ```
 //! use cozo::*;
 //!
 //! let db = DbInstance::new("mem", "", Default::default()).unwrap();
 //! let script = "?[a] := a in [1, 2, 3]";
-//! let result = db.run_script(script, &Default::default()).unwrap();
+//! let result = db.run_script(script, Default::default()).unwrap();
 //! println!("{:?}", result);
 //! ```
 //! We created an in-memory database above. There are other persistent options:
