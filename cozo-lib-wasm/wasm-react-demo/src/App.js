@@ -44,11 +44,9 @@ function App() {
         })
     }, []);
 
-
     const renderCell = (colIdx) => (rowIdx) => <Cell>
         {displayValue(queryResults.rows[rowIdx][colIdx])}
     </Cell>
-
 
     function handleKeyDown(e) {
         if (e.key === 'Enter' && e.shiftKey) {
@@ -62,7 +60,6 @@ function App() {
             typeInTextarea('    ');
         }
     }
-
 
     function typeInTextarea(newText, el = document.activeElement) {
         const [start, end] = [el.selectionStart, el.selectionEnd];

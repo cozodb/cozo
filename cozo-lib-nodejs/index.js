@@ -12,8 +12,8 @@ const binding_path = binary.find(path.resolve(path.join(__dirname, './package.js
 const native = require(binding_path);
 
 class CozoDb {
-    constructor(path) {
-        this.db_id = native.open_db(path)
+    constructor(engine, path, options) {
+        this.db_id = native.open_db(engine || 'mem', path || 'data.db', JSON.stringify(options || {}))
     }
 
     close() {
@@ -34,10 +34,10 @@ class CozoDb {
         })
     }
 
-    exportRelations(rels) {
+    exportRelations(relations, as_objects) {
         return new Promise((resolve, reject) => {
-            const rels_str = JSON.stringify(rels);
-            native.export_relations(rels_str, (result_str) => {
+            const rels_str = JSON.stringify({relations, as_objects: as_objects || false});
+            native.export_relations(this.db_id, rels_str, (result_str) => {
                 const result = JSON.parse(result_str);
                 if (result.ok) {
                     resolve(result)
@@ -51,7 +51,20 @@ class CozoDb {
     importRelations(data) {
         return new Promise((resolve, reject) => {
             const rels_str = JSON.stringify(data);
-            native.import_relations(rels_str, (result_str) => {
+            native.import_relations(this.db_id, rels_str, (result_str) => {
+                const result = JSON.parse(result_str);
+                if (result.ok) {
+                    resolve(result)
+                } else {
+                    reject(result)
+                }
+            })
+        })
+    }
+
+    importRelationsFromBackup(path, rels) {
+        return new Promise((resolve, reject) => {
+            native.import_relations(this.db_id, path, JSON.stringify(rels), (result_str) => {
                 const result = JSON.parse(result_str);
                 if (result.ok) {
                     resolve(result)
@@ -64,7 +77,7 @@ class CozoDb {
 
     backup(path) {
         return new Promise((resolve, reject) => {
-            native.backup_db(path, (result_str) => {
+            native.backup_db(this.db_id, path, (result_str) => {
                 const result = JSON.parse(result_str);
                 if (result.ok) {
                     resolve(result)
@@ -77,7 +90,7 @@ class CozoDb {
 
     restore(path) {
         return new Promise((resolve, reject) => {
-            native.restore_db(path, (result_str) => {
+            native.restore_db(this.db_id, path, (result_str) => {
                 const result = JSON.parse(result_str);
                 if (result.ok) {
                     resolve(result)
