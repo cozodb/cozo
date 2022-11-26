@@ -10,5 +10,11 @@ which depends on this package.
 
 To build this package, you need to install the Rust toolchain
 as well as the [maturin](https://github.com/PyO3/maturin) python package.
-Refer maturin's docs for how to [develop](https://www.maturin.rs/develop.html) 
+Then run
+
+```bash
+maturin build -F compact -F storage-rocksdb --release
+```
+
+Refer maturin's docs for more information about how to [develop](https://www.maturin.rs/develop.html)
 and [build](https://www.maturin.rs/distribution.html) this package.
