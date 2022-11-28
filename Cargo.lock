@@ -531,6 +531,7 @@ dependencies = [
  "smallvec",
  "smartstring",
  "sqlite",
+ "sqlite3-src",
  "thiserror",
  "tikv-client",
  "tikv-jemallocator-global",

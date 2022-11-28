@@ -208,7 +208,9 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         Ok(JsonValue::Object(ret))
     }
-    /// Import relations
+    /// Import relations. The argument `data` accepts data in the shape of
+    /// what was returned by [Self::export_relations].
+    /// The target stored relations must already exist in the database.
     pub fn import_relations(&'s self, data: &Map<String, JsonValue>) -> Result<()> {
         #[derive(Debug, Diagnostic, Error)]
         #[error("cannot import data for relation '{0}': {1}")]
@@ -418,7 +420,8 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled")
     }
-    /// Import data from relations in a backup file
+    /// Import data from relations in a backup file.
+    /// The target stored relations must already exist in the database.
     pub fn import_from_backup(&'s self, in_file: &str, relations: &[String]) -> Result<()> {
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled");

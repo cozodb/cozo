@@ -26,7 +26,7 @@ minimal = ["storage-sqlite"]
 ## also allows backup and restore with Sqlite data files.
 ## Sqlite is easy to compile, has very low resource requirements and reasonable performance,
 ## but does not support much concurrency.
-storage-sqlite = ["dep:sqlite"]
+storage-sqlite = ["dep:sqlite", "dep:sqlite3-src"]
 ## Enables the [RocksDB](http://rocksdb.org/) backend.
 ## RocksDB is hard (even impossible) to compile on some platforms, uses quite a lot of resources
 ## including background threads, but is very performant and supports a high level of concurrency.
@@ -132,6 +132,7 @@ sled = { version = "0.34.7", optional = true }
 tikv-client = { version = "0.1.0", optional = true }
 tokio = { version = "1.21.2", optional = true }
 sqlite = { version = "0.30.1", optional = true }
+sqlite3-src = { version = "0.4.0", optional = true, features = ["bundled"] }
 js-sys = { version = "0.3.60", optional = true }
 #redb = "0.9.0"
 #ouroboros = "0.15.5"
