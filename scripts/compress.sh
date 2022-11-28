@@ -5,10 +5,18 @@ VERSION=$(cat ./VERSION)
 gzip release/*java*.dll
 gzip release/libcozo_node*
 
-for f in release/*.exe release/*.dll release/*.lib; do
+cd release
+
+for f in *.exe *.dll *.lib; do
   zip $f.zip $f
   rm $f
 done
+
+cd ..
+
+cd cozo-lib-swift
+tar cvzf ../release/CozoSwiftBridge-$VERSION.tgz CozoSwiftBridge
+cd ..
 
 gzip release/*.a release/*.so release/*.dylib release/*-darwin release/*-gnu release/*-musl
 

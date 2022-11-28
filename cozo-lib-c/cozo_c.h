@@ -56,7 +56,7 @@ bool cozo_close_db(int32_t id);
 char *cozo_run_query(int32_t db_id, const char *script_raw, const char *params_raw);
 
 /**
- * Import data into a relation
+ * Import data into relations
  * `db_id`:        the ID representing the database.
  * `json_payload`: a UTF-8 encoded JSON payload, see the manual for the expected fields.
  *

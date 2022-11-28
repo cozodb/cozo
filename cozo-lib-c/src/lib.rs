@@ -145,9 +145,10 @@ pub unsafe extern "C" fn cozo_run_query(
 }
 
 #[no_mangle]
-/// Import data into a relation
+/// Import data into relations
+///
 /// `db_id`:        the ID representing the database.
-/// `json_payload`: a UTF-8 encoded JSON payload, see the manual for the expected fields.
+/// `json_payload`: a UTF-8 encoded JSON payload, in the same form as returned by exporting relations.
 ///
 /// Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
 pub unsafe extern "C" fn cozo_import_relations(
@@ -272,9 +273,10 @@ pub unsafe extern "C" fn cozo_restore(db_id: i32, in_path: *const c_char) -> *mu
 }
 
 #[no_mangle]
-/// Import data into a relation
+/// Import data into relations from a backup
+///
 /// `db_id`:        the ID representing the database.
-/// `json_payload`: a UTF-8 encoded JSON payload, see the manual for the expected fields.
+/// `json_payload`: a UTF-8 encoded JSON payload: `{"path": ..., "relations": [...]}`
 ///
 /// Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
 pub unsafe extern "C" fn import_from_backup(
