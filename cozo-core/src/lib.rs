@@ -109,7 +109,7 @@ impl DbInstance {
     /// * `tikv`
     ///
     /// assuming all features are enabled during compilation. Otherwise only
-    /// some of the engines are available. The `mem` kind is always available.
+    /// some of the engines are available. The `mem` engine is always available.
     ///
     /// `path` is ignored for `mem` and `tikv` engines.
     /// `options` is ignored for every engine except `tikv`.
