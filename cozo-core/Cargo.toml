@@ -16,36 +16,47 @@ exclude = [
 #! # Features
 
 default = ["compact"]
-## Enables the `minimal`, `requests` and `graph-algo` features
+## Enables the `minimal`, `requests` and `graph-algo` features.
 compact = ["minimal", "requests", "graph-algo", "rayon"]
-## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode
+## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode.
 compact-single-threaded = ["minimal", "requests", "graph-algo"]
-## Enables the `storage-sqlite` feature
+## Enables the `storage-sqlite` feature.
 minimal = ["storage-sqlite"]
-## Enables the [Sqlite](https://www.sqlite.org/index.html) backend, also allows backup and restore with Sqlite data files.
+## Enables the [Sqlite](https://www.sqlite.org/index.html) backend,
+## also allows backup and restore with Sqlite data files.
+## Sqlite is easy to compile, has very low resource requirements and reasonable performance,
+## but does not support much concurrency.
 storage-sqlite = ["dep:sqlite"]
-## Enables the [RocksDB](http://rocksdb.org/) backend
+## Enables the [RocksDB](http://rocksdb.org/) backend.
+## RocksDB is hard (even impossible) to compile on some platforms, uses quite a lot of resources
+## including background threads, but is very performant and supports a high level of concurrency.
 storage-rocksdb = ["dep:cozorocks"]
-## Enables the graph algorithms
+## Enables the graph algorithms.
 graph-algo = ["dep:nalgebra"]
-## Allows the utilities to make web requests to fetch data
+## Allows the utilities to make web requests to fetch data.
 requests = ["dep:minreq"]
-## Uses jemalloc as the global allocator, can make a difference in performance
+## Uses jemalloc as the global allocator, can make a difference in performance.
 jemalloc = ["dep:tikv-jemallocator-global", "cozorocks?/jemalloc"]
 ## Enables io-uring option for the RocksDB storage
 io-uring = ["cozorocks?/io-uring"]
-## Enables the WASM target
+## Polyfills for the WASM target
 wasm = ["uuid/js", "dep:js-sys"]
-## Allows threading and enables the use of the `rayon` library for parallelizing algorithms
+## Allows threading and enables the use of the `rayon` library for parallelizing algorithms.
 rayon = ["dep:rayon"]
-## Disallows the use of threads
+## Disallows the use of threads.
 nothread = []
 
 #! The following features are highly experimental:
 
-## Enables the [Sled](https://github.com/spacejam/sled) backend
+## Enables the [Sled](https://github.com/spacejam/sled) backend.
+## Sled is slower than Sqlite for the usual workload of Cozo, can use quite a lot of disk space,
+## may not be stable enough, but supports a higher level of concurrency and is much easier to compile
+## than RockDB.
 storage-sled = ["dep:sled"]
-## Enables the [TiKV](https://tikv.org/) client backend
+## Enables the [TiKV](https://tikv.org/) client backend.
+## The only reason that you may want to use this is that your data does not fit in a single machine.
+## This engine is orders of magnitude slower than every other engine for graph traversals, due to the
+## significant network overhead. Simple point-lookup queries are fine, though.
 storage-tikv = ["dep:tikv-client", "dep:tokio"]
 
 #! # Recommendation for features to enable
