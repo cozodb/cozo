@@ -147,11 +147,7 @@ fn main() {
                             Some(t)
                         }
                     });
-                    let as_objects = match request.get_param("as_objects") {
-                        Some(s) => !s.is_empty(),
-                        None => false
-                    };
-                    let result = db.export_relations(relations, as_objects);
+                    let result = db.export_relations(relations);
                     match result {
                         Ok(s) => {
                             let ret = json!({"ok": true, "data": s});
@@ -168,15 +164,7 @@ fn main() {
                         check_auth!(request, auth_guard);
                     }
 
-                    let payload: serde_json::Value = try_or_400!(rouille::input::json_input(request));
-                    let payload = match payload.as_object() {
-                        Some(o) => o,
-                        None => {
-                            let ret = json!({"ok": false, "message": "bad import format"});
-                            return Response::json(&ret).with_status_code(400)
-                        }
-                    };
-
+                    let payload: BTreeMap<String, NamedRows> = try_or_400!(rouille::input::json_input(request));
                     let result = db.import_relations(payload);
 
                     match result {

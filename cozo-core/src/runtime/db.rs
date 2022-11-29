@@ -12,12 +12,12 @@ use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use either::{Left, Right};
 use itertools::Itertools;
 use miette::{bail, ensure, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
-use serde_json::{json, Map};
+use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
 
@@ -81,6 +81,28 @@ impl<S> Debug for Db<S> {
 #[diagnostic(code(db::init))]
 pub(crate) struct BadDbInit(#[help] pub(crate) String);
 
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug)]
+/// Rows in a relation, together with headers for the fields.
+pub struct NamedRows {
+    /// The headers
+    pub headers: Vec<String>,
+    /// The rows
+    pub rows: Vec<Vec<JsonValue>>,
+}
+
+impl NamedRows {
+    /// Convert to a JSON object
+    pub fn into_json(self) -> JsonValue {
+        json!({
+            "headers": self.headers,
+            "rows": self.rows
+        })
+    }
+}
+
+const STATUS_STR: &str = "status";
+const OK_STR: &str = "OK";
+
 impl<'s, S: Storage<'s>> Db<S> {
     /// Create a new database object with the given storage.
     /// You must call [`initialize`](Self::initialize) immediately after creation.
@@ -106,28 +128,12 @@ impl<'s, S: Storage<'s>> Db<S> {
         &'s self,
         payload: &str,
         params: BTreeMap<String, JsonValue>,
-    ) -> Result<JsonValue> {
-        #[cfg(not(feature = "wasm"))]
-        let start = Instant::now();
-
+    ) -> Result<NamedRows> {
         let params = params
             .into_iter()
             .map(|(k, v)| (k, DataValue::from(v)))
             .collect();
-        match self.do_run_script(payload, &params) {
-            Ok(mut json) => {
-                {
-                    #[cfg(not(feature = "wasm"))]
-                    let took = start.elapsed().as_secs_f64();
-                    let map = json.as_object_mut().unwrap();
-                    map.insert("ok".to_string(), json!(true));
-                    #[cfg(not(feature = "wasm"))]
-                    map.insert("took".to_string(), json!(took));
-                }
-                Ok(json)
-            }
-            err => err,
-        }
+        self.do_run_script(payload, &params)
     }
     /// Export relations to JSON data.
     ///
@@ -138,10 +144,9 @@ impl<'s, S: Storage<'s>> Db<S> {
     pub fn export_relations<'a>(
         &'s self,
         relations: impl Iterator<Item = &'a str>,
-        as_objects: bool,
-    ) -> Result<JsonValue> {
+    ) -> Result<BTreeMap<String, NamedRows>> {
         let tx = self.transact()?;
-        let mut ret = serde_json::Map::default();
+        let mut ret: BTreeMap<String, NamedRows> = BTreeMap::new();
         for rel in relations {
             let handle = tx.get_relation(rel, false)?;
 
@@ -170,48 +175,27 @@ impl<'s, S: Storage<'s>> Db<S> {
 
             let start = Tuple::default().encode_as_key(handle.id);
             let end = Tuple::default().encode_as_key(handle.id.next());
-            if as_objects {
-                let mut coll = vec![];
 
-                for data in tx.tx.range_scan(&start, &end) {
-                    let (k, v) = data?;
-                    let tuple = decode_tuple_from_kv(&k, &v);
-                    let mut j_map = serde_json::Map::default();
-                    for (k, v) in cols.iter().zip(tuple.0) {
-                        let j_v = JsonValue::from(v);
-                        j_map.insert(k.to_string(), j_v);
-                    }
-                    coll.push(JsonValue::Object(j_map));
-                }
-                ret.insert(rel.to_string(), JsonValue::Array(coll));
-            } else {
-                let mut rows = vec![];
-                for data in tx.tx.range_scan(&start, &end) {
-                    let (k, v) = data?;
-                    let tuple = decode_tuple_from_kv(&k, &v);
-                    let row = tuple
-                        .0
-                        .into_iter()
-                        .map(|dv| JsonValue::from(dv))
-                        .collect_vec();
-                    rows.push(JsonValue::Array(row));
-                }
-                let headers = cols.iter().map(|col| json!(col)).collect_vec();
-                ret.insert(
-                    rel.to_string(),
-                    json!({
-                        "headers": headers,
-                        "rows": rows
-                    }),
-                );
+            let mut rows = vec![];
+            for data in tx.tx.range_scan(&start, &end) {
+                let (k, v) = data?;
+                let tuple = decode_tuple_from_kv(&k, &v);
+                let row = tuple
+                    .0
+                    .into_iter()
+                    .map(|dv| JsonValue::from(dv))
+                    .collect_vec();
+                rows.push(row);
             }
+            let headers = cols.iter().map(|col| col.to_string()).collect_vec();
+            ret.insert(rel.to_string(), NamedRows { headers, rows });
         }
-        Ok(JsonValue::Object(ret))
+        Ok(ret)
     }
     /// Import relations. The argument `data` accepts data in the shape of
     /// what was returned by [Self::export_relations].
     /// The target stored relations must already exist in the database.
-    pub fn import_relations(&'s self, data: &Map<String, JsonValue>) -> Result<()> {
+    pub fn import_relations(&'s self, data: BTreeMap<String, NamedRows>) -> Result<()> {
         #[derive(Debug, Diagnostic, Error)]
         #[error("cannot import data for relation '{0}': {1}")]
         #[diagnostic(code(import::bad_data))]
@@ -224,7 +208,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             let relation: &str = match relation_op.strip_prefix('-') {
                 None => {
                     is_delete = false;
-                    relation_op
+                    &relation_op
                 }
                 Some(s) => {
                     is_delete = true;
@@ -241,137 +225,76 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ));
             }
 
-            match in_data {
-                JsonValue::Array(in_data) => {
-                    for val in in_data {
-                        let proc_col = |col: &ColumnDef| {
-                            let d_val = match val.get(&col.name as &str) {
-                                None => match &col.default_gen {
-                                    Some(gen) => gen.clone().eval_to_const()?,
-                                    None => {
-                                        bail!(BadDataForRelation(relation.to_string(), val.clone()))
-                                    }
-                                },
-                                Some(data) => DataValue::from(data),
-                            };
-                            col.typing.coerce(d_val)
-                        };
-                        let keys: Vec<_> =
-                            handle.metadata.keys.iter().map(proc_col).try_collect()?;
-                        let k_store =
-                            handle.encode_key_for_store(&Tuple(keys), Default::default())?;
+            let header2idx: BTreeMap<_, _> = in_data
+                .headers
+                .iter()
+                .enumerate()
+                .map(|(i, k)| -> Result<(&str, usize)> { Ok((k as &str, i)) })
+                .try_collect()?;
 
-                        if is_delete {
-                            tx.tx.del(&k_store)?;
-                        } else {
-                            let vals: Vec<_> = handle
-                                .metadata
-                                .non_keys
-                                .iter()
-                                .map(proc_col)
-                                .try_collect()?;
-                            let v_store = handle
-                                .encode_val_only_for_store(&Tuple(vals), Default::default())?;
-                            tx.tx.put(&k_store, &v_store)?;
-                        }
-                    }
-                }
-                JsonValue::Object(map) => {
-                    let headers = map.get("headers").ok_or_else(|| {
-                        miette!("field 'headers' required for relation {}", relation)
+            let key_indices: Vec<_> = handle
+                .metadata
+                .keys
+                .iter()
+                .map(|col| -> Result<(usize, &ColumnDef)> {
+                    let idx = header2idx.get(&col.name as &str).ok_or_else(|| {
+                        miette!(
+                            "required header {} not found for relation {}",
+                            col.name,
+                            relation
+                        )
                     })?;
-                    let headers = headers.as_array().ok_or_else(|| {
-                        miette!("field 'headers' for relation {} must be an array", relation)
-                    })?;
-                    let header2idx: BTreeMap<_, _> = headers
+                    Ok((*idx, col))
+                })
+                .try_collect()?;
+
+            let val_indices: Vec<_> = if is_delete {
+                vec![]
+            } else {
+                handle
+                    .metadata
+                    .non_keys
+                    .iter()
+                    .map(|col| -> Result<(usize, &ColumnDef)> {
+                        let idx = header2idx.get(&col.name as &str).ok_or_else(|| {
+                            miette!(
+                                "required header {} not found for relation {}",
+                                col.name,
+                                relation
+                            )
+                        })?;
+                        Ok((*idx, col))
+                    })
+                    .try_collect()?
+            };
+
+            for row in in_data.rows {
+                let keys: Vec<_> = key_indices
+                    .iter()
+                    .map(|(i, col)| -> Result<DataValue> {
+                        let v = row
+                            .get(*i)
+                            .ok_or_else(|| miette!("row too short: {:?}", row))?;
+                        col.typing.coerce(DataValue::from(v))
+                    })
+                    .try_collect()?;
+                let k_store = handle.encode_key_for_store(&Tuple(keys), Default::default())?;
+                if is_delete {
+                    tx.tx.del(&k_store)?;
+                } else {
+                    let vals: Vec<_> = val_indices
                         .iter()
-                        .enumerate()
-                        .map(|(i, k)| -> Result<(&str, usize)> {
-                            Ok((
-                                k.as_str()
-                                    .ok_or_else(|| miette!("header must be strings, got {}", k))?,
-                                i,
-                            ))
+                        .map(|(i, col)| -> Result<DataValue> {
+                            let v = row
+                                .get(*i)
+                                .ok_or_else(|| miette!("row too short: {:?}", row))?;
+                            col.typing.coerce(DataValue::from(v))
                         })
                         .try_collect()?;
-
-                    let key_indices: Vec<_> = handle
-                        .metadata
-                        .keys
-                        .iter()
-                        .map(|col| -> Result<(usize, &ColumnDef)> {
-                            let idx = header2idx.get(&col.name as &str).ok_or_else(|| {
-                                miette!(
-                                    "required header {} not found for relation {}",
-                                    col.name,
-                                    relation
-                                )
-                            })?;
-                            Ok((*idx, col))
-                        })
-                        .try_collect()?;
-
-                    let val_indices: Vec<_> = if is_delete {
-                        vec![]
-                    } else {
-                        handle
-                            .metadata
-                            .non_keys
-                            .iter()
-                            .map(|col| -> Result<(usize, &ColumnDef)> {
-                                let idx = header2idx.get(&col.name as &str).ok_or_else(|| {
-                                    miette!(
-                                        "required header {} not found for relation {}",
-                                        col.name,
-                                        relation
-                                    )
-                                })?;
-                                Ok((*idx, col))
-                            })
-                            .try_collect()?
-                    };
-
-                    let rows = map.get("rows").ok_or_else(|| {
-                        miette!("field 'rows' required for relation {}", relation)
-                    })?;
-                    let rows = rows.as_array().ok_or_else(|| {
-                        miette!("field 'rows' for relation {} must be an array", relation)
-                    })?;
-
-                    for row in rows {
-                        let row = row
-                            .as_array()
-                            .ok_or_else(|| miette!("expect rows to be an array of arrays"))?;
-                        let keys: Vec<_> = key_indices
-                            .iter()
-                            .map(|(i, col)| -> Result<DataValue> {
-                                let v = row
-                                    .get(*i)
-                                    .ok_or_else(|| miette!("row too short: {:?}", row))?;
-                                col.typing.coerce(DataValue::from(v))
-                            })
-                            .try_collect()?;
-                        let k_store =
-                            handle.encode_key_for_store(&Tuple(keys), Default::default())?;
-                        if is_delete {
-                            tx.tx.del(&k_store)?;
-                        } else {
-                            let vals: Vec<_> = val_indices
-                                .iter()
-                                .map(|(i, col)| -> Result<DataValue> {
-                                    let v = row
-                                        .get(*i)
-                                        .ok_or_else(|| miette!("row too short: {:?}", row))?;
-                                    col.typing.coerce(DataValue::from(v))
-                                })
-                                .try_collect()?;
-                            let v_store = handle
-                                .encode_val_only_for_store(&Tuple(vals), Default::default())?;
-                            tx.tx.put(&k_store, &v_store)?;
-                        }
-                    }
+                    let v_store =
+                        handle.encode_val_only_for_store(&Tuple(vals), Default::default())?;
+                    tx.tx.put(&k_store, &v_store)?;
                 }
-                _ => bail!("expect import relation to be an array or an object"),
             }
         }
         tx.commit_tx()?;
@@ -497,12 +420,15 @@ impl<'s, S: Storage<'s>> Db<S> {
         &'s self,
         payload: &str,
         param_pool: &BTreeMap<String, DataValue>,
-    ) -> Result<JsonValue> {
+    ) -> Result<NamedRows> {
         match parse_script(payload, param_pool)? {
             CozoScript::Multi(ps) => {
                 let is_write = ps.iter().any(|p| p.out_opts.store_relation.is_some());
                 let mut cleanups = vec![];
-                let mut res = json!(null);
+                let mut res = NamedRows {
+                    headers: vec![],
+                    rows: vec![],
+                };
                 {
                     let mut tx = if is_write {
                         self.transact_write()?
@@ -536,7 +462,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             CozoScript::Sys(op) => self.run_sys_op(op),
         }
     }
-    fn explain_compiled(&self, strata: &[CompiledProgram]) -> Result<JsonValue> {
+    fn explain_compiled(&self, strata: &[CompiledProgram]) -> Result<NamedRows> {
         let mut ret: Vec<JsonValue> = vec![];
         const STRATUM: &str = "stratum";
         const ATOM_IDX: &str = "atom_idx";
@@ -548,16 +474,16 @@ impl<'s, S: Storage<'s>> Db<S> {
         const JOINS_ON: &str = "joins_on";
         const FILTERS: &str = "filters/expr";
 
-        let headers = [
-            STRATUM,
-            RULE_IDX,
-            RULE_NAME,
-            ATOM_IDX,
-            OP,
-            REF_NAME,
-            JOINS_ON,
-            FILTERS,
-            OUT_BINDINGS,
+        let headers = vec![
+            STRATUM.to_string(),
+            RULE_IDX.to_string(),
+            RULE_NAME.to_string(),
+            ATOM_IDX.to_string(),
+            OP.to_string(),
+            REF_NAME.to_string(),
+            JOINS_ON.to_string(),
+            FILTERS.to_string(),
+            OUT_BINDINGS.to_string(),
         ];
 
         for (stratum, p) in strata.iter().enumerate() {
@@ -700,19 +626,19 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
         }
 
-        let ret = ret
+        let rows = ret
             .into_iter()
             .map(|m| {
                 headers
                     .iter()
-                    .map(|i| m.get(*i).unwrap_or(&JsonValue::Null).clone())
+                    .map(|i| m.get(i).unwrap_or(&JsonValue::Null).clone())
                     .collect_vec()
             })
             .collect_vec();
 
-        Ok(json!({"headers": headers, "rows": ret}))
+        Ok(NamedRows { headers, rows })
     }
-    fn run_sys_op(&'s self, op: SysOp) -> Result<JsonValue> {
+    fn run_sys_op(&'s self, op: SysOp) -> Result<NamedRows> {
         match op {
             SysOp::Explain(prog) => {
                 let mut tx = self.transact()?;
@@ -726,7 +652,10 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
             SysOp::Compact => {
                 self.compact_relation()?;
-                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
+                Ok(NamedRows {
+                    headers: vec![STATUS_STR.to_string()],
+                    rows: vec![vec![json!(OK_STR)]],
+                })
             }
             SysOp::ListRelations => self.list_relations(),
             SysOp::RemoveRelation(rel_names) => {
@@ -742,7 +671,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 for (lower, upper) in bounds {
                     self.db.del_range(&lower, &upper)?;
                 }
-                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
+                Ok(NamedRows {
+                    headers: vec![STATUS_STR.to_string()],
+                    rows: vec![vec![json!(OK_STR)]],
+                })
             }
             SysOp::ListRelation(rs) => self.list_relation(&rs),
             SysOp::RenameRelation(rename_pairs) => {
@@ -751,42 +683,55 @@ impl<'s, S: Storage<'s>> Db<S> {
                     tx.rename_relation(old, new)?;
                 }
                 tx.commit_tx()?;
-                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
+                Ok(NamedRows {
+                    headers: vec![STATUS_STR.to_string()],
+                    rows: vec![vec![json!(OK_STR)]],
+                })
             }
             SysOp::ListRunning => self.list_running(),
             SysOp::KillRunning(id) => {
                 let queries = self.running_queries.lock().unwrap();
                 Ok(match queries.get(&id) {
-                    None => {
-                        json!({"headers": ["status"], "rows": [["NOT_FOUND"]]})
-                    }
+                    None => NamedRows {
+                        headers: vec![STATUS_STR.to_string()],
+                        rows: vec![vec![json!("NOT_FOUND")]],
+                    },
                     Some(handle) => {
                         handle.poison.0.store(true, Ordering::Relaxed);
-                        json!({"headers": ["status"], "rows": [["KILLING"]]})
+                        NamedRows {
+                            headers: vec![STATUS_STR.to_string()],
+                            rows: vec![vec![json!("KILLING")]],
+                        }
                     }
                 })
             }
             SysOp::ShowTrigger(name) => {
                 let mut tx = self.transact()?;
                 let rel = tx.get_relation(&name, false)?;
-                let mut ret = vec![];
+                let mut rows: Vec<Vec<JsonValue>> = vec![];
                 for (i, trigger) in rel.put_triggers.iter().enumerate() {
-                    ret.push(json!(["put", i, trigger]))
+                    rows.push(vec![json!("put"), json!(i), json!(trigger)])
                 }
                 for (i, trigger) in rel.rm_triggers.iter().enumerate() {
-                    ret.push(json!(["rm", i, trigger]))
+                    rows.push(vec![json!("rm"), json!(i), json!(trigger)])
                 }
                 for (i, trigger) in rel.replace_triggers.iter().enumerate() {
-                    ret.push(json!(["replace", i, trigger]))
+                    rows.push(vec![json!("replace"), json!(i), json!(trigger)])
                 }
                 tx.commit_tx()?;
-                Ok(json!({"headers": ["type", "idx", "trigger"], "rows": ret}))
+                Ok(NamedRows {
+                    headers: vec!["type".to_string(), "idx".to_string(), "trigger".to_string()],
+                    rows,
+                })
             }
             SysOp::SetTriggers(name, puts, rms, replaces) => {
                 let mut tx = self.transact_write()?;
                 tx.set_relation_triggers(name, puts, rms, replaces)?;
                 tx.commit_tx()?;
-                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
+                Ok(NamedRows {
+                    headers: vec![STATUS_STR.to_string()],
+                    rows: vec![vec![json!(OK_STR)]],
+                })
             }
             SysOp::SetAccessLevel(names, level) => {
                 let mut tx = self.transact_write()?;
@@ -794,7 +739,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                     tx.set_access_level(name, level)?;
                 }
                 tx.commit_tx()?;
-                Ok(json!({"headers": ["status"], "rows": [["OK"]]}))
+                Ok(NamedRows {
+                    headers: vec![STATUS_STR.to_string()],
+                    rows: vec![vec![json!(OK_STR)]],
+                })
             }
         }
     }
@@ -802,7 +750,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         &self,
         tx: &mut SessionTx<'_>,
         input_program: InputProgram,
-    ) -> Result<(JsonValue, Vec<(Vec<u8>, Vec<u8>)>)> {
+    ) -> Result<(NamedRows, Vec<(Vec<u8>, Vec<u8>)>)> {
         let mut clean_ups = vec![];
         if let Some((meta, op)) = &input_program.out_opts.store_relation {
             if *op == RelationOp::Create {
@@ -907,10 +855,6 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
             }
         }
-        let json_headers = match input_program.get_entry_out_head() {
-            Err(_) => JsonValue::Null,
-            Ok(headers) => headers.into_iter().map(|v| json!(v.name)).collect(),
-        };
         if !input_program.out_opts.sorters.is_empty() {
             let entry_head = input_program.get_entry_out_head()?;
             let sorted_result =
@@ -937,15 +881,27 @@ impl<'s, S: Storage<'s>> Db<S> {
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
-                Ok((json!({"headers": ["status"], "rows": [["OK"]]}), clean_ups))
+                Ok((
+                    NamedRows {
+                        headers: vec![STATUS_STR.to_string()],
+                        rows: vec![vec![json!(OK_STR)]],
+                    },
+                    clean_ups,
+                ))
             } else {
-                let ret: Vec<Vec<JsonValue>> = sorted_iter
+                let rows: Vec<Vec<JsonValue>> = sorted_iter
                     .map_ok(|tuple| -> Vec<JsonValue> {
                         tuple.0.into_iter().map(JsonValue::from).collect()
                     })
                     .try_collect()?;
-
-                Ok((json!({ "rows": ret, "headers": json_headers }), clean_ups))
+                let headers: Vec<String> = match input_program.get_entry_out_head() {
+                    Ok(headers) => headers.into_iter().map(|v| v.name.to_string()).collect(),
+                    Err(_) => match rows.get(0) {
+                        None => vec![],
+                        Some(row) => (0..row.len()).map(|i| format!("_{}", i)).collect_vec(),
+                    },
+                };
+                Ok((NamedRows { headers, rows }, clean_ups))
             }
         } else {
             let scan = if early_return {
@@ -971,57 +927,83 @@ impl<'s, S: Storage<'s>> Db<S> {
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
-                Ok((json!({"headers": ["status"], "rows": [["OK"]]}), clean_ups))
+                Ok((
+                    NamedRows {
+                        headers: vec![STATUS_STR.to_string()],
+                        rows: vec![vec![json!(OK_STR)]],
+                    },
+                    clean_ups,
+                ))
             } else {
-                let ret: Vec<Vec<JsonValue>> = scan
+                let rows: Vec<Vec<JsonValue>> = scan
                     .map_ok(|tuple| -> Vec<JsonValue> {
                         tuple.0.into_iter().map(JsonValue::from).collect()
                     })
                     .try_collect()?;
 
-                Ok((json!({ "rows": ret, "headers": json_headers }), clean_ups))
+                let headers: Vec<String> = match input_program.get_entry_out_head() {
+                    Ok(headers) => headers.into_iter().map(|v| v.name.to_string()).collect(),
+                    Err(_) => match rows.get(0) {
+                        None => vec![],
+                        Some(row) => (0..row.len()).map(|i| format!("_{}", i)).collect_vec(),
+                    },
+                };
+
+                Ok((NamedRows { headers, rows }, clean_ups))
             }
         }
     }
-    pub(crate) fn list_running(&self) -> Result<JsonValue> {
-        let res = self
+    pub(crate) fn list_running(&self) -> Result<NamedRows> {
+        let rows = self
             .running_queries
             .lock()
             .unwrap()
             .iter()
-            .map(|(k, v)| json!([k, format!("{:?}", v.started_at)]))
+            .map(|(k, v)| vec![json!(k), json!(format!("{:?}", v.started_at))])
             .collect_vec();
-        Ok(json!({"rows": res, "headers": ["id", "started_at"]}))
+        Ok(NamedRows {
+            headers: vec!["id".to_string(), "started_at".to_string()],
+            rows,
+        })
     }
-    fn list_relation(&'s self, name: &str) -> Result<JsonValue> {
+    fn list_relation(&'s self, name: &str) -> Result<NamedRows> {
         let mut tx = self.transact()?;
         let handle = tx.get_relation(name, false)?;
-        let mut ret = vec![];
+        let mut rows = vec![];
         let mut idx = 0;
         for col in &handle.metadata.keys {
-            ret.push(json!([
-                col.name,
-                true,
-                idx,
-                col.typing.to_string(),
-                col.default_gen.is_some()
-            ]));
+            rows.push(vec![
+                json!(col.name),
+                json!(true),
+                json!(idx),
+                json!(col.typing.to_string()),
+                json!(col.default_gen.is_some()),
+            ]);
             idx += 1;
         }
         for col in &handle.metadata.non_keys {
-            ret.push(json!([
-                col.name,
-                false,
-                idx,
-                col.typing.to_string(),
-                col.default_gen.is_some()
-            ]));
+            rows.push(vec![
+                json!(col.name),
+                json!(false),
+                json!(idx),
+                json!(col.typing.to_string()),
+                json!(col.default_gen.is_some()),
+            ]);
             idx += 1;
         }
         tx.commit_tx()?;
-        Ok(json!({"rows": ret, "headers": ["column", "is_key", "index", "type", "has_default"]}))
+        Ok(NamedRows {
+            headers: vec![
+                "column".to_string(),
+                "is_key".to_string(),
+                "index".to_string(),
+                "type".to_string(),
+                "has_default".to_string(),
+            ],
+            rows,
+        })
     }
-    fn list_relations(&'s self) -> Result<JsonValue> {
+    fn list_relations(&'s self) -> Result<NamedRows> {
         let lower =
             Tuple(vec![DataValue::Str(SmartString::from(""))]).encode_as_key(RelationId::SYSTEM);
         let upper = Tuple(vec![DataValue::Str(SmartString::from(String::from(
@@ -1029,7 +1011,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         )))])
         .encode_as_key(RelationId::SYSTEM);
         let tx = self.db.transact(false)?;
-        let mut collected = vec![];
+        let mut rows: Vec<Vec<JsonValue>> = vec![];
         for kv_res in tx.range_scan(&lower, &upper) {
             let (k_slice, v_slice) = kv_res?;
             if upper <= k_slice {
@@ -1041,19 +1023,30 @@ impl<'s, S: Storage<'s>> Db<S> {
             let arity = n_keys + n_dependents;
             let name = meta.name;
             let access_level = meta.access_level.to_string();
-            collected.push(json!([
-                name,
-                arity,
-                access_level,
-                n_keys,
-                n_dependents,
-                meta.put_triggers.len(),
-                meta.rm_triggers.len(),
-                meta.replace_triggers.len(),
-            ]));
+            rows.push(vec![
+                json!(name),
+                json!(arity),
+                json!(access_level),
+                json!(n_keys),
+                json!(n_dependents),
+                json!(meta.put_triggers.len()),
+                json!(meta.rm_triggers.len()),
+                json!(meta.replace_triggers.len()),
+            ]);
         }
-        Ok(json!({"rows": collected, "headers":
-                ["name", "arity", "access_level", "n_keys", "n_non_keys", "n_put_triggers", "n_rm_triggers", "n_replace_triggers"]}))
+        Ok(NamedRows {
+            headers: vec![
+                "name".to_string(),
+                "arity".to_string(),
+                "access_level".to_string(),
+                "n_keys".to_string(),
+                "n_non_keys".to_string(),
+                "n_put_triggers".to_string(),
+                "n_rm_triggers".to_string(),
+                "n_replace_triggers".to_string(),
+            ],
+            rows,
+        })
     }
 }
 

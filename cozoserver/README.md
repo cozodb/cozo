@@ -59,8 +59,7 @@ and a nicely-formatted diagnostic will be in `"display"` if available.
 ## API
 
 * `POST /text-query`, described above.
-* `GET /export/{relations: String}`, where `relations` is a comma-separated list of relations to export. 
-   The query parameter `as_objects` can change the output format.
+* `GET /export/{relations: String}`, where `relations` is a comma-separated list of relations to export.
 * `PUT /import`, import data into the database. Data should be in `application/json` MIME type in the body,
    in the same format as returned in the `data` field in the `/export` API.
 * `POST /backup`, backup database, should supply a JSON body of the form `{"path": <PATH>}`

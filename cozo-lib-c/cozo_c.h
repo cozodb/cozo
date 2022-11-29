@@ -57,8 +57,9 @@ char *cozo_run_query(int32_t db_id, const char *script_raw, const char *params_r
 
 /**
  * Import data into relations
+ *
  * `db_id`:        the ID representing the database.
- * `json_payload`: a UTF-8 encoded JSON payload, see the manual for the expected fields.
+ * `json_payload`: a UTF-8 encoded JSON payload, in the same form as returned by exporting relations.
  *
  * Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
  */
@@ -99,9 +100,10 @@ char *cozo_restore(int32_t db_id,
                    const char *in_path);
 
 /**
- * Import data into a relation
+ * Import data into relations from a backup
+ *
  * `db_id`:        the ID representing the database.
- * `json_payload`: a UTF-8 encoded JSON payload, see the manual for the expected fields.
+ * `json_payload`: a UTF-8 encoded JSON payload: `{"path": ..., "relations": [...]}`
  *
  * Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
  */

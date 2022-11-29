@@ -36,6 +36,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 use lazy_static::lazy_static;
 pub use miette::Error;
@@ -44,9 +45,10 @@ use miette::{
     bail, miette, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic, JSONReportHandler,
     Result, ThemeCharacters, ThemeStyles,
 };
-use serde_json::{json, Map};
+use serde_json::json;
 
 pub use runtime::db::Db;
+pub use runtime::db::NamedRows;
 pub use runtime::relation::decode_tuple_from_kv;
 pub use storage::mem::{new_cozo_mem, MemStorage};
 #[cfg(feature = "storage-rocksdb")]
@@ -60,8 +62,6 @@ pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 
 use crate::data::json::JsonValue;
-
-// pub use storage::re::{new_cozo_redb, ReStorage};
 
 pub(crate) mod algo;
 pub(crate) mod data;
@@ -154,7 +154,7 @@ impl DbInstance {
         &self,
         payload: &str,
         params: BTreeMap<String, JsonValue>,
-    ) -> Result<JsonValue> {
+    ) -> Result<NamedRows> {
         match self {
             DbInstance::Mem(db) => db.run_script(payload, params),
             #[cfg(feature = "storage-sqlite")]
@@ -174,8 +174,21 @@ impl DbInstance {
         payload: &str,
         params: BTreeMap<String, JsonValue>,
     ) -> JsonValue {
+        #[cfg(not(feature = "wasm"))]
+        let start = Instant::now();
+
         match self.run_script(payload, params) {
-            Ok(json) => json,
+            Ok(named_rows) => {
+                let mut j_val = named_rows.into_json();
+                #[cfg(not(feature = "wasm"))]
+                let took = start.elapsed().as_secs_f64();
+                let map = j_val.as_object_mut().unwrap();
+                map.insert("ok".to_string(), json!(true));
+                #[cfg(not(feature = "wasm"))]
+                map.insert("took".to_string(), json!(took));
+
+                j_val
+            }
             Err(mut err) => {
                 if err.source_code().is_none() {
                     err = err.with_source_code(payload.to_string());
@@ -216,18 +229,17 @@ impl DbInstance {
     pub fn export_relations<'a>(
         &self,
         relations: impl Iterator<Item = &'a str>,
-        as_objects: bool,
-    ) -> Result<JsonValue> {
+    ) -> Result<BTreeMap<String, NamedRows>> {
         match self {
-            DbInstance::Mem(db) => db.export_relations(relations, as_objects),
+            DbInstance::Mem(db) => db.export_relations(relations),
             #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.export_relations(relations, as_objects),
+            DbInstance::Sqlite(db) => db.export_relations(relations),
             #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.export_relations(relations, as_objects),
+            DbInstance::RocksDb(db) => db.export_relations(relations),
             #[cfg(feature = "storage-sled")]
-            DbInstance::Sled(db) => db.export_relations(relations, as_objects),
+            DbInstance::Sled(db) => db.export_relations(relations),
             #[cfg(feature = "storage-tikv")]
-            DbInstance::TiKv(db) => db.export_relations(relations, as_objects),
+            DbInstance::TiKv(db) => db.export_relations(relations),
         }
     }
     /// Export relations to JSON-encoded string
@@ -247,16 +259,16 @@ impl DbInstance {
         #[derive(serde_derive::Deserialize)]
         struct Payload {
             relations: Vec<String>,
-            #[serde(default = "Default::default")]
-            as_objects: bool,
         }
         let j_val: Payload = serde_json::from_str(data).into_diagnostic()?;
-        let results =
-            self.export_relations(j_val.relations.iter().map(|s| s as &str), j_val.as_objects)?;
-        Ok(results)
+        let results = self.export_relations(j_val.relations.iter().map(|s| s as &str))?;
+        Ok(results
+            .into_iter()
+            .map(|(k, v)| (k, v.into_json()))
+            .collect())
     }
     /// Dispatcher method. See [crate::Db::import_relations].
-    pub fn import_relations(&self, data: &Map<String, JsonValue>) -> Result<()> {
+    pub fn import_relations(&self, data: BTreeMap<String, NamedRows>) -> Result<()> {
         match self {
             DbInstance::Mem(db) => db.import_relations(data),
             #[cfg(feature = "storage-sqlite")]
@@ -281,8 +293,8 @@ impl DbInstance {
         }
     }
     fn import_relations_str_inner(&self, data: &str) -> Result<()> {
-        let j_obj: Map<String, JsonValue> = serde_json::from_str(data).into_diagnostic()?;
-        self.import_relations(&j_obj)
+        let j_obj: BTreeMap<String, NamedRows> = serde_json::from_str(data).into_diagnostic()?;
+        self.import_relations(j_obj)
     }
     /// Dispatcher method. See [crate::Db::backup_db].
     pub fn backup_db(&self, out_file: String) -> Result<()> {
