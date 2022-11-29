@@ -279,7 +279,7 @@ pub unsafe extern "C" fn cozo_restore(db_id: i32, in_path: *const c_char) -> *mu
 /// `json_payload`: a UTF-8 encoded JSON payload: `{"path": ..., "relations": [...]}`
 ///
 /// Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
-pub unsafe extern "C" fn import_from_backup(
+pub unsafe extern "C" fn cozo_import_from_backup(
     db_id: i32,
     json_payload: *const c_char,
 ) -> *mut c_char {

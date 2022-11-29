@@ -41,4 +41,6 @@ cd cozo-lib-wasm
 CARGO_PROFILE_RELEASE_LTO=fat ./build.sh
 cd ..
 
+cp cozo-lib-c/cozo_c.h release/
+
 zip release/cozo_wasm-$VERSION-wasm32-unknown-unknown.zip $(find cozo-lib-wasm/pkg)

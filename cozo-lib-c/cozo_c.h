@@ -107,8 +107,8 @@ char *cozo_restore(int32_t db_id,
  *
  * Returns a UTF-8-encoded C-string indicating the result that **must** be freed with `cozo_free_str`.
  */
-char *import_from_backup(int32_t db_id,
-                         const char *json_payload);
+char *cozo_import_from_backup(int32_t db_id,
+                              const char *json_payload);
 
 /**
  * Free any C-string returned from the Cozo C API.
