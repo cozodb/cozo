@@ -14,6 +14,18 @@ see the Building section below.
 
 ## Installation
 
+### CocoaPods
+
+```ruby
+target 'YourApp' do
+  use_frameworks!
+
+  pod 'CozoSwiftBridge', '~> 0.2.1'
+end
+```
+
+### Swift Package Manager (SPM)
+
 The package is published as an archive containing a Swift package.
 Download it from the [release page] (look for `CozoSwiftBridge-<VERSION>.tgz`).
 Uncompress.
@@ -131,14 +143,3 @@ click the plus sign, search for `libc++`, then add `libc++.tbd` found under Appl
 
 Similar same process goes if you want to enable other features. Note that building the
 RocksDB engine for mobile is a very demanding task!
-
-## Calling for help
-
-We are no experts on Swift/iOS development. In fact, we learned Swift just enough to produce
-this package. Everything from packaging, distribution to the ergonomics of the Swift API is
-far from ideal, but is as good as we can produce now. If you like Cozo and you can improve 
-its user experience on Swift, feel free to open an issue for discussion, or file a pull request.
-
-By the way, the reason that we did not publish the Swift package directly to a GitHub repo is
-that the package contains very large binary artefacts, and GitHub will not like it if we put it
-directly in the repo.

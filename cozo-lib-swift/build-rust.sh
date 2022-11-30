@@ -33,3 +33,15 @@ swift-bridge-cli create-package \
     --simulator ../target/universal-ios/release/libcozo_swift.a \
     --macos ../target/universal-macos/release/libcozo_swift.a \
     --name CozoSwiftBridge
+
+cp CozoDB.swift CozoSwiftBridge/Sources/CozoSwiftBridge
+cp Package.swift CozoSwiftBridge/
+cp CozoSwiftBridge.podspec CozoSwiftBridge/
+
+VERSION=$(cat ../VERSION)
+
+cd CozoSwiftBridge
+
+tar cvzf ../../release/CozoSwiftBridge-$VERSION.tgz .
+
+cd ..

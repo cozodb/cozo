@@ -72,9 +72,8 @@ class CozoDb {
      * Export several relations
      * 
      * @param relations:  names of relations to export, in an array.
-     * @param as_objects: defaults to `false`, changes the return format.
      */
-    async exportRelations(relations: Array<string>, as_objects: boolean): object;
+    async exportRelations(relations: Array<string>): object;
 
     /**
      * Import several relations

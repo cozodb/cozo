@@ -14,10 +14,6 @@ done
 
 cd ..
 
-cd cozo-lib-swift
-tar cvzf ../release/CozoSwiftBridge-$VERSION.tgz CozoSwiftBridge
-cd ..
-
 gzip release/*.a release/*.so release/*.dylib release/*-darwin release/*-gnu release/*-musl
 
 mkdir -p cozo-lib-nodejs/build/stage/$VERSION/
