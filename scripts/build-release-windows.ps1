@@ -19,3 +19,8 @@ cp target/$TARGET/release/cozo_java.dll release/libcozo_java-$VERSION-$TARGET.dl
 cp target/$TARGET/release/cozo_node.dll release/libcozo_node-$VERSION-$TARGET.dll # nodejs
 
 cp target/wheels/*.whl release/
+
+$TARGET = "x86_64-pc-windows-gnu"
+cargo build --release -p cozoserver -p cozo_c -p cozo_java -p cozo-node -F compact -F storage-rocksdb --target $TARGET
+cp target/$TARGET/release/cozo_c.a0 release/libcozo_c-$VERSION-$TARGET.a # c static
+cp target/$TARGET/release/cozo_c.dll release/libcozo_c-$VERSION-$TARGET.dll # c dynamic
