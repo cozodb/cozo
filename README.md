@@ -5,7 +5,18 @@
 
 # `cozo`
 
-A general-purpose, transactional, relational database
+### Table of contents
+
+1. [Introduction](#Introduction)
+2. [Getting started](#Getting-started)
+3. [Install](#Install)
+4. [Architecture](#Architecture)
+5. [Status of the project](#Status-of-the-project)
+6. [Licensing and contributing](#Licensing-and-contributing)
+
+## Introduction
+
+Cozo is a general-purpose, transactional, relational database
 that uses **Datalog** for query, is **embeddable** but can also handle huge amounts of data and concurrency, and focuses on **graph** data and algorithms.
 
 ### What does _embeddable_ mean here?
@@ -97,6 +108,12 @@ How many airports are reachable from `FRA` by one stop?
 
 How many airports are reachable from `FRA` by any number of stops?
 
+```
+reachable[to] := *route{fr: 'FRA', to}
+reachable[to] := reachable[stop], *route{fr: stop, to}
+?[count_unique(to)] := reachable[to]
+```
+
 | count_unique(to) |
 |------------------|
 | 3462             |
@@ -104,12 +121,6 @@ How many airports are reachable from `FRA` by any number of stops?
 What are the two most difficult-to-reach airports
 by the minimum number of hops required,
 starting from `FRA`?
-
-```
-reachable[to] := *route{fr: 'FRA', to}
-reachable[to] := reachable[stop], *route{fr: stop, to}
-?[count_unique(to)] := reachable[to]
-```
 
 ```
 shortest_paths[to, shortest(path)] := *route{fr: 'FRA', to},
@@ -146,14 +157,14 @@ Cozo attempts to provide nice error messages when you make mistakes:
 ?[x, Y] := x = 1, y = x + 1
 ```
 
-<pre><span style="color: rgb(204, 0, 0) !important;">eval::unbound_symb_in_head</span><span>
+<pre><span style="color: rgb(204, 0, 0);">eval::unbound_symb_in_head</span><span>
 
-  </span><span style="color: rgb(204, 0, 0) !important;">×</span><span> Symbol 'Y' in rule head is unbound
+  </span><span style="color: rgb(204, 0, 0);">×</span><span> Symbol 'Y' in rule head is unbound
    ╭────
- </span><span style="color: rgba(0, 0, 0, 0.5) !important;">1</span><span> │ ?[x, Y] := x = 1, y = x + 1
-   · </span><span style="font-weight: bold !important; color: rgb(255, 0, 255) !important;">     ─</span><span>
+ </span><span style="color: rgba(0, 0, 0, 0.5);">1</span><span> │ ?[x, Y] := x = 1, y = x + 1
+   · </span><span style="font-weight: bold; color: rgb(255, 0, 255);">     ─</span><span>
    ╰────
-</span><span style="color: rgb(0, 153, 255) !important;">  help: </span><span>Note that symbols occurring only in negated positions are not considered bound
+</span><span style="color: rgb(0, 153, 255);">  help: </span><span>Note that symbols occurring only in negated positions are not considered bound
 </span></pre>
 
 ## Install
@@ -192,6 +203,75 @@ you can still try to compile your version to use, maybe with some tweaks in the 
 
 ## Architecture
 
+The Cozo database consists of three layers stuck on top of each other,
+with each layer only calling into the layer below:
+
+<table>
+<tbody>
+<tr><td>(<i>User code</i>)</td></tr>
+<tr><td>Language/environment wrapper</td></tr>
+<tr><td>Query engine</td></tr>
+<tr><td>Storage engine</td></tr>
+<tr><td>(<i>Operating system</i>)</td></tr>
+</tbody>
+</table>
+
+### Storage engine
+
+The storage engine defines a storage `trait` for the storage backend, which is an interface
+with required operations, mainly the provision of a key-value store for binary data
+with range scan capabilities. There are various implementations:
+
+* In-memory, non-persistent backend
+* [SQLite](https://www.sqlite.org/) storage backend
+* [RocksDB](http://rocksdb.org/) storage backend
+* [Sled](https://github.com/spacejam/sled) storage backend
+* [TiKV](https://tikv.org/) distributed storage backend
+
+Depending on the build configuration, not all backends may be available
+in a binary release.
+The SQLite backend is special in that it is also used as the backup file format,
+which allows the exchange of data between databases with different backends.
+If you are using the database embedded in Rust, you can even provide your own
+custom backend.
+
+The storage engine also defines a _row-oriented_ binary data format, which the storage
+engine implementation does not need to know anything about.
+This format enables the storage of rows of data as binary blobs
+that, when sorted lexicographically, give the correct order.
+This also means that data files for the SQLite backend cannot be queried with SQL
+in the usual way, and access must be through the decoding process in Cozo.
+
+### Query engine
+
+The query engine part provides various functionalities:
+
+* function/aggregation/algorithm definitions
+* database schema
+* transaction
+* query compilation
+* query execution
+
+This part is where most of
+the code of Cozo is concerned. The CozoScript manual [has a chapter](https://cozodb.github.io/current/manual/execution.html)
+about the execution process.
+
+Users interact with the query engine with the [Rust API](https://docs.rs/cozo/).
+
+### Language/environment wrapper
+
+For all languages/environments except Rust, this part just translates the Rust API
+into something that can be easily consumed by the targets. For Rust, there is no wrapper.
+For example, in the case of the standalone server, the Rust API is translated
+into HTTP endpoints, whereas in the case of NodeJS, the (synchronous) Rust API
+is translated into a series of asynchronous calls from the JavaScript runtime.
+
+If you want to make Cozo usable in other languages, this part is where your focus
+should be. Any existing generic interop libraries between Rust and your target language
+would make the job much easier. Otherwise, you can consider wrapping the C API,
+as this is supported by most languages. For the languages officially supported,
+only Golang wraps the C API directly.
+
 ## Status of the project
 
 Cozo is very young and **not** production-ready yet,
@@ -200,7 +280,7 @@ Any feedback is welcome.
 
 Versions before 1.0 do not promise syntax/API stability or storage compatibility.
 
-## Licensing
+## Licensing and contributing
 
 This project is licensed under MPL-2.0 or later.
 See [here](CONTRIBUTING.md) if you are interested in contributing to the project.
