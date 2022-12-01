@@ -87,8 +87,8 @@ shortest_paths[to, shortest(path)] := shortest_paths[stop, prev_path],
 
 | to  | path                                              | p_len |
 |-----|---------------------------------------------------|-------|
-| YPO | ['FRA','YYZ','YTS','YMO','YFA','ZKE','YAT','YPO'] | 8     |
-| BVI | ['FRA','AUH','BNE','ISA',"BQL','BEU','BVI']        | 7     |
+| YPO | `["FRA","YYZ","YTS","YMO","YFA","ZKE","YAT","YPO"]` | 8     |
+| BVI | `["FRA","AUH","BNE","ISA","BQL","BEU","BVI"]`        | 7     |
 
 What is the shortest path between `FRA` and `YPO`, by actual distance travelled?
 
@@ -100,7 +100,7 @@ end[] <- [['YPO]]
 
 | src | dst | distance | path                                                   |
 |-----|-----|----------|--------------------------------------------------------|
-| FRA | YPO | 4544.0   | ['FRA','YUL','YVO','YKQ','YMO','YFA','ZKE','YAT','YPO'] |
+| FRA | YPO | 4544.0   | `["FRA","YUL","YVO","YKQ","YMO","YFA","ZKE","YAT","YPO"]` |
 
 Cozo attempts to provide nice error messages when you make mistakes:
 
