@@ -241,6 +241,9 @@ function App() {
                     href="https://www.wikiwand.com/en/PageRank">PageRank</a> of
                     a hypothetical love triangle.
                 </p>
+                <p>
+                    The <a href="https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb">tutorial</a> contains many more examples.
+                </p>
             </div>}
         </div>
     );
