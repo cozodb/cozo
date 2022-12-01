@@ -37,29 +37,86 @@ and `FRA` is the code for Frankfurt Airport.
 
 How many airports are directly connected to `FRA`?
 
-<img src="static/1_direct_reachable.png" width="664" height="95" alt="directly connected">
+```
+?[count_unique(to)] := *route{fr: 'FRA', to}
+```
+
+| count_unique(to) |
+|------------------|
+| 310              |
+
 
 How many airports are reachable from `FRA` by one stop?
 
-<img src="static/2_one_hop_reachable.png" width="662" height="117" alt="one stop">
+```
+?[count_unique(to)] := *route{fr: 'FRA', to: 'stop},
+                       *route{fr: stop, to}
+```
+
+| count_unique(to) |
+|------------------|
+| 2222             |
 
 How many airports are reachable from `FRA` by any number of stops?
 
-<img src="static/3_all_rechable.png" width="664" height="132" alt="recursion">
+| count_unique(to) |
+|------------------|
+| 3462             |
 
 What are the two most difficult to reach airports
 by the minimum number of hops required,
 starting from `FRA`?
 
-<img src="static/4_most_hops.png" width="662" height="268" alt="shortest routes">
+```
+reachable[to] := *route{fr: 'FRA', to}
+reachable[to] := reachable[stop], *route{fr: stop, to}
+?[count_unique(to)] := reachable[to]
+```
+
+```
+shortest_paths[to, shortest(path)] := *route{fr: 'FRA', to},
+                                      path = ['FRA', to]
+shortest_paths[to, shortest(path)] := shortest_paths[stop, prev_path],
+                                      *route{fr: stop, to},
+                                      path = append(prev_path, to)
+?[to, path, p_len] := shortest_paths[to, path], p_len = length(path)
+
+:order -p_len
+:limit 2
+```
+
+| to  | path                                              | p_len |
+|-----|---------------------------------------------------|-------|
+| YPO | ['FRA','YYZ','YTS','YMO','YFA','ZKE','YAT','YPO'] | 8     |
+| BVI | ['FRA','AUH','BNE','ISA',"BQL','BEU','BVI']        | 7     |
 
 What is the shortest path between `FRA` and `YPO`, by actual distance travelled?
 
-<img src="static/5_algo.png" width="665" height="141" alt="algorithm">
+```
+start[] <- [['FRA']]
+end[] <- [['YPO]]
+?[src, dst, distance, path] <~ ShortestPathDijkstra(*route[], start[], end[])
+```
+
+| src | dst | distance | path                                                   |
+|-----|-----|----------|--------------------------------------------------------|
+| FRA | YPO | 4544.0   | ['FRA','YUL','YVO','YKQ','YMO','YFA','ZKE','YAT','YPO'] |
 
 Cozo attempts to provide nice error messages when you make mistakes:
 
-<img src="static/6_err_msg.png" width="660" height="261" alt="error message">
+```
+?[x, Y] := x = 1, y = x + 1
+```
+
+<pre id="error-message"><span style="color: rgb(204, 0, 0);">eval::unbound_symb_in_head</span><span>
+
+  </span><span style="color: rgb(204, 0, 0);">×</span><span> Symbol 'Y' in rule head is unbound
+   ╭────
+ </span><span style="color: rgba(0, 0, 0, 0.5);">1</span><span> │ ?[x, Y] := x = 1, y = x + 1
+   · </span><span style="font-weight: bold; color: rgb(255, 0, 255);">     ─</span><span>
+   ╰────
+</span><span style="color: rgb(0, 153, 255);">  help: </span><span>Note that symbols occurring only in negated positions are not considered bound
+</span></pre>
 
 ## Install
 
