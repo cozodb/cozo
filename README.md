@@ -237,7 +237,9 @@ custom backend.
 
 The storage engine also defines a _row-oriented_ binary data format, which the storage
 engine implementation does not need to know anything about.
-This format enables the storage of rows of data as binary blobs
+This format contains an implementation of the 
+[memcomparable format](https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format#memcomparable-format)
+used for the keys, which enables the storage of rows of data as binary blobs
 that, when sorted lexicographically, give the correct order.
 This also means that data files for the SQLite backend cannot be queried with SQL
 in the usual way, and access must be through the decoding process in Cozo.
