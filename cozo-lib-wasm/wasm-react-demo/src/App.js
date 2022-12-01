@@ -242,7 +242,7 @@ function App() {
                     a hypothetical love triangle.
                 </p>
                 <p>
-                    The <a href="https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb">tutorial</a> contains many more examples.
+                    The <a href="https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb">tutorial</a> contains many more examples.
                 </p>
             </div>}
         </div>

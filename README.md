@@ -71,7 +71,7 @@ a complete Cozo instance in your browser, at near-native speed for most operatio
 
 So open up the [Cozo in WASM page](https://cozodb.github.io/wasm-demo/), and then:
 
-* Follow the [tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb) to learn the basics;
+* Follow the [tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb) to learn the basics;
 * read the [manual](https://cozodb.github.io/current/manual/) for the finer points.
 
 After you have decided that Cozo is worth experimenting with for your next project, you can scroll down to learn

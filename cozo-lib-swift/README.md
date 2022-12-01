@@ -2,7 +2,7 @@
 
 This document describes how to set up the Cozo module for use in Swift on Apple hardware.
 To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
+the [tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
 first and then read the [manual](https://cozodb.github.io/current/manual/). You can run all the queries
 described in the tutorial with an in-browser DB [here](https://cozodb.github.io/wasm-demo/).
 
