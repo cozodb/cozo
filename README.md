@@ -52,7 +52,7 @@ you can build your queries piece by piece.
 > This is unlike the monolithic approach taken by the SQL `select-from-where` in nested forms,
 > which can sometimes read like [golfing](https://en.wikipedia.org/wiki/Code_golf).
 
-## Learning
+## Getting started
 
 Usually, to learn a database, you need to install it first.
 This is unnecessary for Cozo as a testimony to its extreme embeddability, since you can run
@@ -157,6 +157,8 @@ Cozo attempts to provide nice error messages when you make mistakes:
 </span></pre>
 
 ## Install
+
+We suggest that you [try out](#Getting-started) Cozo before you install it in your environment.
 
 How you install Cozo depends on which environment you want to use it in.
 Follow the links in the table below:
