@@ -1,37 +1,74 @@
 <img src="static/logo_c.png" width="200" height="175" alt="Logo">
 
 [![GitHub Workflow Status](https://img.shields.io/github/workflow/status/cozodb/cozo/Build)](https://github.com/cozodb/cozo/actions/workflows/build.yml)
-[![Crates.io](https://img.shields.io/crates/v/cozo)](https://crates.io/crates/cozo)
 [![GitHub](https://img.shields.io/github/license/cozodb/cozo)](https://github.com/cozodb/cozo/blob/main/LICENSE.txt)
 
 # `cozo`
 
 A general-purpose, transactional, relational database
-that uses **Datalog** for query, **embeddable** but can also handle huge amount of data and concurrency, and focuses on **graph** data and algorithms.
+that uses **Datalog** for query, is **embeddable** but can also handle huge amounts of data and concurrency, and focuses on **graph** data and algorithms.
 
-### What do you mean by _embeddable_?
+### What does _embeddable_ mean here?
+
+A database is almost surely embedded
+if you can use it on a phone which _never_ connects to any network
+(this situation is not as unusual as you might think). SQLite is embedded. MySQL/Postgres/Oracle are client-server.
+
+> A database is _embedded_ if it runs in the same process as your main program.
+This is in contradistinction to _client-server_ databases, where your program connects to
+a database server (maybe running on a separate machine) via a client library. Embedded databases
+generally require no setup and can be used in far more environments.
+>
+> We say Cozo is _embeddable_ instead of _embedded_ since you can also use it in client-server
+mode, which can make better use of server resources and allow much more concurrency than
+in embedded mode.
+
+### Why _graphs_?
+
+Because data are inherently interconnected. Most insights about data can only be obtained if
+you take this interconnectedness into account.
+
+> Most existing _graph_ databases start by requiring you to shoehorn your data into the labelled-property graph model.
+We don't go this route because we think the traditional relational model is much easier to work with for
+storing data, much more versatile, and can deal with graph data just fine. Even more importantly,
+the most piercing insights about data usually come from graph structures _implicit_ several levels deep
+in your data. The relational model, being an _algebra_, can deal with it just fine. The property graph model,
+not so much, since that model is not very composable.
 
 ### What is so cool about _Datalog_?
 
-### Why _graphs_?
+Datalog can express all relational queries. _Recursion_ in Datalog is much easier to express,
+much more powerful, and usually runs faster than in SQL. Datalog is also extremely composable:
+you can build your queries piece by piece.
+
+> Recursion is especially important for graph queries. Cozo's dialect of Datalog
+> supercharges it even further by allowing recursion through a safe subset of aggregations,
+> and by providing extremely efficient canned algorithms (such as PageRank) for the kinds of recursions
+> frequently required in graph analysis.
+>
+> As you learn Datalog, you will discover that the _rules_ of Datalog are like functions
+> in a programming language. Rules are composable, and decomposing a query into rules
+> can make it clearer and more maintainable, with no loss in efficiency.
+> This is unlike the monolithic approach taken by the SQL `select-from-where` in nested forms,
+> which can sometimes read like [golfing](https://en.wikipedia.org/wiki/Code_golf).
 
 ## Learning
 
 Usually, to learn a database, you need to install it first.
-This is unnecessary for Cozo as a testimony to its extreme embeddability, since you can run 
-a complete Cozo instance in your browser (at near native speed for most operations)!
+This is unnecessary for Cozo as a testimony to its extreme embeddability, since you can run
+a complete Cozo instance in your browser, at near-native speed for most operations!
 
 So open up the [Cozo in WASM page](https://cozodb.github.io/wasm-demo/), and then:
 
 * Follow the [tutorial](https://nbviewer.org/github/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb) to learn the basics;
-* Read the [manual](https://cozodb.github.io/current/manual/) for the finer points.
+* read the [manual](https://cozodb.github.io/current/manual/) for the finer points.
 
-After you have decided that Cozo is worth experimenting for your next project, you can scroll down to learn 
+After you have decided that Cozo is worth experimenting with for your next project, you can scroll down to learn
 how to use it embedded (or not) in your favourite environment.
 
 ### Teasers
 
-If you just want a taste of what querying with Cozo is like, here it is.
+If you are in a hurry and just want a taste of what querying with Cozo is like, here it is.
 In the following `*route` is a relation with two columns `fr` and `to`,
 representing a route between those airports,
 and `FRA` is the code for Frankfurt Airport.
@@ -64,7 +101,7 @@ How many airports are reachable from `FRA` by any number of stops?
 |------------------|
 | 3462             |
 
-What are the two most difficult to reach airports
+What are the two most difficult-to-reach airports
 by the minimum number of hops required,
 starting from `FRA`?
 
@@ -121,7 +158,7 @@ Cozo attempts to provide nice error messages when you make mistakes:
 
 ## Install
 
-How you install Cozo depends on where you want to use it from.
+How you install Cozo depends on which environment you want to use it in.
 Follow the links in the table below:
 
 | Language/Environment                                          | Official platform support                                                                                        | Storage |
@@ -147,9 +184,9 @@ For the storage column:
 * T: [TiKV](https://tikv.org/) distributed storage backend
 
 The [Rust doc](https://docs.rs/cozo/) has some tips on choosing storage,
-which is helpful even if you are not using Rust. 
-Even if a storage/platform is not officially supported, 
-you can still try to compile your own version to use, maybe with some tweaks in code.
+which is helpful even if you are not using Rust.
+Even if a storage/platform is not officially supported,
+you can still try to compile your version to use, maybe with some tweaks in the code.
 
 ## Architecture
 
@@ -163,5 +200,5 @@ Versions before 1.0 do not promise syntax/API stability or storage compatibility
 
 ## Licensing
 
-This project are licensed under MPL-2.0 or later.
+This project is licensed under MPL-2.0 or later.
 See [here](CONTRIBUTING.md) if you are interested in contributing to the project.
