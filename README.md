@@ -28,7 +28,7 @@ if you can use it on a phone which _never_ connects to any network
 > A database is _embedded_ if it runs in the same process as your main program.
 This is in contradistinction to _client-server_ databases, where your program connects to
 a database server (maybe running on a separate machine) via a client library. Embedded databases
-generally require no setup and can be used in far more environments.
+generally require no setup and can be used in a much wider range of environments.
 >
 > We say Cozo is _embeddable_ instead of _embedded_ since you can also use it in client-server
 mode, which can make better use of server resources and allow much more concurrency than
