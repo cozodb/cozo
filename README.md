@@ -174,13 +174,13 @@ We suggest that you [try out](#Getting-started) Cozo before you install it in yo
 How you install Cozo depends on which environment you want to use it in.
 Follow the links in the table below:
 
-| Language/Environment                                          | Official platform support                                                                                        | Storage |
+| Language/Environment                                          | Official platform support                                                                                               | Storage |
 |---------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|---------|
 | [Python](https://github.com/cozodb/pycozo)                    | Linux (x86_64), Mac (ARM64, x86_64), Windows (x86_64)                                                                   | MQR     |
 | [NodeJS](./cozo-lib-nodejs)                                   | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
 | [Web browser](./cozo-lib-wasm)                                | Modern browsers supporting [web assembly](https://developer.mozilla.org/en-US/docs/WebAssembly#browser_compatibility)   | M       |
-| [Java (JVM)](https://github.com/cozodb/cozo-lib-java)         | Linux (x86_64), Mac (ARM64, x86_64), Windows (x86_64)                                                                   | MQR     |
-| [Clojure (JVM)](https://github.com/cozodb/cozo-clj)           | Linux (x86_64), Mac (ARM64, x86_64), Windows (x86_64)                                                                   | MQR     |
+| [Java (JVM)](https://github.com/cozodb/cozo-lib-java)         | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
+| [Clojure (JVM)](https://github.com/cozodb/cozo-clj)           | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                                 | MQR     |
 | [Android](https://github.com/cozodb/cozo-lib-android)         | Android (ARM64, ARMv7, x86_64, x86)                                                                                     | MQ      |
 | [iOS/MacOS (Swift)](https://github.com/cozodb/cozo-lib-swift) | iOS (ARM64, simulators), Mac (ARM64, x86_64)                                                                            | MQ      |
 | [Rust](https://docs.rs/cozo/)                                 | Source only, usable on any [platform](https://doc.rust-lang.org/nightly/rustc/platform-support.html) with `std` support | MQRST   |
