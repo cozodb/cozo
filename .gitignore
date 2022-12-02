@@ -33,5 +33,6 @@ release.zip
 .fleet
 .vscode
 release/
+release*
 Cross.toml
 /tools

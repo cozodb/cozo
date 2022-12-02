@@ -1,5 +1,11 @@
 <img src="static/logo_c.png" width="200" height="175" alt="Logo">
 
+[![tutorial](https://img.shields.io/badge/tutorial-latest-brightgreen)](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
+[![manual](https://img.shields.io/badge/manual-latest-brightgreen)](https://cozodb.github.io/current/manual/)
+[![cozo-node](https://img.shields.io/npm/v/cozo-node)](https://www.npmjs.com/package/cozo-node)
+[![Crates.io](https://img.shields.io/crates/v/cozo)](https://crates.io/crates/cozo)
+[![docs.rs](https://img.shields.io/docsrs/cozo?label=docs.rs)](https://docs.rs/cozo)
+[![pypi](https://img.shields.io/pypi/v/pycozo)](https://pypi.org/project/pycozo/)
 [![GitHub Workflow Status](https://img.shields.io/github/workflow/status/cozodb/cozo/Build)](https://github.com/cozodb/cozo/actions/workflows/build.yml)
 [![GitHub](https://img.shields.io/github/license/cozodb/cozo)](https://github.com/cozodb/cozo/blob/main/LICENSE.txt)
 

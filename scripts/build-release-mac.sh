@@ -3,6 +3,7 @@
 set -e
 
 VERSION=$(cat ./VERSION)
+export MACOSX_DEPLOYMENT_TARGET=10.14
 
 #rm -fr release
 mkdir -p release
