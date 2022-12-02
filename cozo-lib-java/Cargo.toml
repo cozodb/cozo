@@ -1,6 +1,6 @@
 [package]
 name = "cozo_java"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 license = "MPL-2.0"
 homepage = "https://github.com/cozodb/cozo"
@@ -44,5 +44,5 @@ nothread = ["cozo/nothread"]
 [dependencies]
 jni = "0.20.0"
 # , features = ["compact"]
-cozo = { version = "0.2.1", path = "../cozo-core", default_features = false, features = ["compact"] }
+cozo = { version = "0.2.2", path = "../cozo-core", default_features = false, features = ["compact"] }
 lazy_static = "1.4.0"
