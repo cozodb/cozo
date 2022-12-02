@@ -447,7 +447,9 @@ fn make_const_rule(
         rule_symbol.clone(),
         InputInlineRulesOrAlgo::Algo {
             algo: AlgoApply {
-                algo: AlgoHandle { name: rule_symbol },
+                algo: AlgoHandle {
+                    name: Symbol::new("Constant", Default::default()),
+                },
                 rule_args: vec![],
                 options,
                 head: bindings,
