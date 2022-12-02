@@ -21,4 +21,4 @@ jobs:
     - name: Build
       run: cargo build -p cozo --release --verbose
     - name: Run tests
-      run: cargo test -p --release --verbose
+      run: cargo test -p cozo --release --verbose
