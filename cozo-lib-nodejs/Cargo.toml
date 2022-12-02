@@ -1,6 +1,6 @@
 [package]
 name = "cozo-node"
-version = "0.2.1"
+version = "0.2.2"
 description = "Cozo database for NodeJS"
 authors = ["Ziyang Hu"]
 license = "MPL-2.0"
@@ -44,7 +44,7 @@ nothread = ["cozo/nothread"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cozo = { version = "0.2.1", path = "../cozo-core", default-features = false }
+cozo = { version = "0.2.2", path = "../cozo-core", default-features = false }
 lazy_static = "1.4.0"
 
 [dependencies.neon]
