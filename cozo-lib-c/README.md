@@ -1,5 +1,7 @@
 # Cozo C lib
 
+[![C](https://img.shields.io/github/v/release/cozodb/cozo)](https://github.com/cozodb/cozo/releases)
+
 This directory contains the source of the Cozo C API.
 
 This document describes how to set up the C library.
