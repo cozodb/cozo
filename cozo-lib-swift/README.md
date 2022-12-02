@@ -29,7 +29,7 @@ end
 ### Swift Package Manager (SPM)
 
 The package is published as an archive containing a Swift package.
-Download it from the [release page] (look for `CozoSwiftBridge.tgz`).
+Download it from the [release page](https://github.com/cozodb/cozo/releases) (look for `CozoSwiftBridge.tgz`).
 Uncompress.
 
 In XCode of your project, select from the menu `File > Add Packages`,
@@ -45,7 +45,7 @@ If you did everything right, you should also see `CozoSwiftBridge` under
 `Build Phases > Link Binary With Libraries`.
 
 > You cannot download swift packages directly from GitHub repo, since
-in order to support that we would need to check in the binaries
+in order to support that we would need to check the binaries
 into version control, and GitHub does not like it (we tried to work
 this around with Git LFS, but no luck).
 
