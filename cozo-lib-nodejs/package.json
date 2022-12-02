@@ -1,0 +1,46 @@
+{
+  "name": "cozo-node",
+  "version": "0.1.6",
+  "description": "Cozo database for NodeJS",
+  "main": "index",
+  "files": [
+    "index.js",
+    "LICENSE.txt"
+  ],
+  "binary": {
+    "module_name": "index",
+    "host": "https://github.com/cozodb/cozo-lib-nodejs/releases/download/",
+    "remote_path": "{version}",
+    "package_name": "{napi_build_version}-{platform}-{arch}.tar.gz",
+    "module_path": "./native/{napi_build_version}",
+    "pkg_path": ".",
+    "napi_versions": [
+      6
+    ]
+  },
+  "scripts": {
+    "install": "node-pre-gyp install",
+    "package": "node-pre-gyp package"
+  },
+  "author": "Ziyang Hu",
+  "license": "MIT",
+  "devDependencies": {
+    "cargo-cp-artifact": "^0.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cozodb/cozo-lib-nodejs.git"
+  },
+  "keywords": [
+    "database",
+    "datalog",
+    "graph"
+  ],
+  "bugs": {
+    "url": "https://github.com/cozodb/cozo/issues"
+  },
+  "homepage": "https://github.com/cozodb/cozo#readme",
+  "dependencies": {
+    "@mapbox/node-pre-gyp": "^1.0.10"
+  }
+}

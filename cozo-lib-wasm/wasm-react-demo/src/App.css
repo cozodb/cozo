@@ -1,0 +1,29 @@
+/*
+ * Copyright 2022, The Cozo Project Authors.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+ * If a copy of the MPL was not distributed with this file,
+ * You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+
+@import "~normalize.css";
+@import "~@blueprintjs/core/lib/css/blueprint.css";
+@import "~@blueprintjs/icons/lib/css/blueprint-icons.css";
+@import "~@blueprintjs/table/lib/css/table.css";
+#error-message, #other-results {
+  padding: 10px;
+  overflow: scroll;
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 90%;
+}
+#query-box, #params-box {
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-size: 100%;
+  min-height: 200px;
+  max-height: 40vh;
+  min-width: 200px;
+}
+#welcome {
+  padding: 15px;
+}

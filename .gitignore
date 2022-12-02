@@ -34,3 +34,4 @@ release.zip
 .vscode
 release/
 Cross.toml
+/tools

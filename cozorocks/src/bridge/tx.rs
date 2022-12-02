@@ -1,5 +1,9 @@
 /*
- * Copyright 2022, The Cozo Project Authors. Licensed under MIT/Apache-2.0/BSD-3-Clause.
+ * Copyright 2022, The Cozo Project Authors.
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+ * If a copy of the MPL was not distributed with this file,
+ * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 use std::fmt::{Debug, Formatter};
@@ -22,6 +26,12 @@ impl Deref for PinSlice {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
         convert_pinnable_slice_back(&self.inner)
+    }
+}
+
+impl AsRef<[u8]> for PinSlice {
+    fn as_ref(&self) -> &[u8] {
+        self as &[u8]
     }
 }
 
@@ -176,6 +186,6 @@ impl Tx {
         IterBuilder {
             inner: self.inner.iterator(),
         }
-            .auto_prefix_mode(true)
+        .auto_prefix_mode(true)
     }
 }

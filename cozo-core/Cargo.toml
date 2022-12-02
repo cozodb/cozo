@@ -1,0 +1,138 @@
+[package]
+name = "cozo"
+version = "0.2.1"
+edition = "2021"
+description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data and algorithms"
+authors = ["Ziyang Hu"]
+license = "MPL-2.0"
+homepage = "https://github.com/cozodb/cozo"
+repository = "https://github.com/cozodb/cozo"
+documentation = "https://cozodb.github.io/current/manual"
+exclude = [
+    "tests/*",
+]
+
+[features]
+#! # Features
+
+default = ["compact"]
+## Enables the `minimal`, `requests` and `graph-algo` features.
+compact = ["minimal", "requests", "graph-algo", "rayon"]
+## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode.
+compact-single-threaded = ["minimal", "requests", "graph-algo"]
+## Enables the `storage-sqlite` feature.
+minimal = ["storage-sqlite"]
+## Enables the [Sqlite](https://www.sqlite.org/index.html) backend,
+## also allows backup and restore with Sqlite data files.
+## Sqlite is easy to compile, has very low resource requirements and reasonable performance,
+## but does not support much concurrency.
+storage-sqlite = ["dep:sqlite", "dep:sqlite3-src"]
+## Enables the [RocksDB](http://rocksdb.org/) backend.
+## RocksDB is hard (even impossible) to compile on some platforms, uses quite a lot of resources
+## including background threads, but is very performant and supports a high level of concurrency.
+storage-rocksdb = ["dep:cozorocks"]
+## Enables the graph algorithms.
+graph-algo = ["dep:nalgebra"]
+## Allows the utilities to make web requests to fetch data.
+requests = ["dep:minreq"]
+## Uses jemalloc as the global allocator, can make a difference in performance.
+jemalloc = ["dep:tikv-jemallocator-global", "cozorocks?/jemalloc"]
+## Enables io-uring option for the RocksDB storage
+io-uring = ["cozorocks?/io-uring"]
+## Polyfills for the WASM target
+wasm = ["uuid/js", "dep:js-sys"]
+## Allows threading and enables the use of the `rayon` library for parallelizing algorithms.
+rayon = ["dep:rayon"]
+## Disallows the use of threads.
+nothread = []
+
+#! The following features are highly experimental:
+
+## Enables the [Sled](https://github.com/spacejam/sled) backend.
+## Sled is slower than Sqlite for the usual workload of Cozo, can use quite a lot of disk space,
+## may not be stable enough, but supports a higher level of concurrency and is much easier to compile
+## than RockDB.
+storage-sled = ["dep:sled"]
+## Enables the [TiKV](https://tikv.org/) client backend.
+## The only reason that you may want to use this is that your data does not fit in a single machine.
+## This engine is orders of magnitude slower than every other engine for graph traversals, due to the
+## significant network overhead. Simple point-lookup queries are fine, though.
+storage-tikv = ["dep:tikv-client", "dep:tokio"]
+
+#! # Recommendation for features to enable
+#!
+#! Generally you will want the `storage-sqlite` and `graph-algo` features enabled,
+#! unless your environment makes compiling them difficult. The backup/restore functionalities
+#! are only available if `storage-sqlite` is on. Without `graph-algo` you cannot use any graph algorithms
+#! (utilities are still available),
+#! which could be OK if you only want to deal with pure Datalog.
+#!
+#! If having multiple threads
+#! running in the background is undesirable, you can enable the `nothread` feature.
+#!
+#! The `rayon` feature enables some algorithms to make use of parallelism. This is desirable in most circumstances.
+#! Naturally, it is incompatible with `nothread`.
+#!
+#! The `requests` feature allows the database to make outgoing HTTP requests to fetch data
+#! into queries -- only enable it if you need it.
+#!
+#! The `wasm` feature simply patches some functions so that they can compile on WASM platform,
+#! which lacks some std implementations at the moment. (On WASM you must also enable `nothread`).
+#! This feature will not work on any other platform.
+#!
+#! The `jemalloc` feature only makes sense for desktop and servers. It could improve performance,
+#! sometimes substantially, but you need to benchmark for your use case. It also tends to break
+#! builds on untested platforms. None of our prebuilt binaries have it enabled.
+#!
+#! Enable `storage-rocksdb` if you expect high concurrency or want better performance than SQLite,
+#! but note that RocksDB is much more resource-hungry and takes long to compile.
+#!
+#! The other storage options are just for experimentation. We do not recommend using them.
+
+[dependencies]
+casey = "0.3.3"
+either = "1.7.0"
+rand = "0.8.5"
+miette = { version = "5.5.0", features = ["fancy"] }
+lazy_static = "1.4.0"
+log = "0.4.17"
+env_logger = "0.9.3"
+smallvec = { version = "1.8.1", features = ["serde", "write", "union", "const_generics", "const_new"] }
+smartstring = { version = "1.0.1", features = ["serde"] }
+serde_json = "1.0.81"
+serde = { version = "1.0.137" }
+serde_derive = "1.0.137"
+serde_bytes = "0.11.7"
+rmp = "0.8.11"
+rmp-serde = "1.1.0"
+rmpv = "1.0.0"
+base64 = "0.13.0"
+chrono = "0.4.19"
+chrono-tz = "0.8.0"
+priority-queue = "1.2.3"
+ordered-float = "3.0.0"
+byteorder = "1.4.3"
+num-traits = "0.2.15"
+itertools = "0.10.3"
+regex = "1.6.0"
+pest = "2.2.1"
+pest_derive = "2.2.1"
+approx = "0.5.1"
+unicode-normalization = "0.1.21"
+thiserror = "1.0.34"
+uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
+csv = "1.1.6"
+document-features = "0.2.6"
+rayon = { version = "1.5.3", optional = true }
+nalgebra = { version = "0.31.1", optional = true }
+minreq = { version = "2.6.0", features = ["https-rustls"], optional = true }
+tikv-jemallocator-global = { version = "0.5.0", optional = true }
+cozorocks = { path = "../cozorocks", version = "0.1.0", optional = true }
+sled = { version = "0.34.7", optional = true }
+tikv-client = { version = "0.1.0", optional = true }
+tokio = { version = "1.21.2", optional = true }
+sqlite = { version = "0.30.1", optional = true }
+sqlite3-src = { version = "0.4.0", optional = true, features = ["bundled"] }
+js-sys = { version = "0.3.60", optional = true }
+#redb = "0.9.0"
+#ouroboros = "0.15.5"
