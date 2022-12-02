@@ -1,5 +1,7 @@
 # Cozo for Swift on Apple Hardware
 
+[![pod](https://img.shields.io/cocoapods/v/CozoSwiftBridge)](https://github.com/cozodb/cozo/tree/main/cozo-lib-swift)
+
 This document describes how to set up the Cozo module for use in Swift on Apple hardware.
 To learn how to use CozoDB (CozoScript), follow
 the [tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
@@ -20,14 +22,14 @@ see the Building section below.
 target 'YourApp' do
   use_frameworks!
 
-  pod 'CozoSwiftBridge', '~> 0.2.1'
+  pod 'CozoSwiftBridge', '~> 0.2.2'
 end
 ```
 
 ### Swift Package Manager (SPM)
 
 The package is published as an archive containing a Swift package.
-Download it from the [release page] (look for `CozoSwiftBridge-<VERSION>.tgz`).
+Download it from the [release page] (look for `CozoSwiftBridge.tgz`).
 Uncompress.
 
 In XCode of your project, select from the menu `File > Add Packages`,
@@ -41,6 +43,11 @@ click on the plus sign, and add `Workspace > CozoSwiftBridge > CozoSwiftBridge`
 
 If you did everything right, you should also see `CozoSwiftBridge` under 
 `Build Phases > Link Binary With Libraries`.
+
+> You cannot download swift packages directly from GitHub repo, since
+in order to support that we would need to check in the binaries
+into version control, and GitHub does not like it (we tried to work
+this around with Git LFS, but no luck).
 
 ## Using the library
 
@@ -59,62 +66,77 @@ Above we created an SQLite-based database. For memory-based ones:
 let db = new_cozo_db("mem", "", "");
 ```
 
-## API
+### API
 
-The function `new_cozo_db` can be used to create a database, passing in the engine type,
-the storage path, and options.
-The following methods are available on the returned database object:
 ```
-extension DbInstanceRef {
+public class CozoDB {
+    public let db: DbInstance
+
     /**
-     * Run query against a database.
+    * Constructs an in-memory database.
+    */
+    public init();
+
+    /**
+    * Constructs a database.
+    *
+    * `kind`: the engine kind, can be `mem` or `sqlite`.
+    * `path`: specifies the path to the storage file, only used for `sqlite` engine
+    */
+    public init(kind: String, path: String) throws;
+    
+    /**
+     * Run query against the database.
      *
-     * `payload`: a UTF-8 encoded C-string for the CozoScript to execute.
-     * `params`:  a UTF-8 encoded C-string for the params of the query,
-     *            in JSON format. You must always pass in a valid JSON map,
-     *            even if you do not use params in your query
-     *            (pass "{}" in this case).
+     * `query`:   the CozoScript to execute.
      */
-    public func run_script_str(_ payload: GenericToRustStr, _ params: GenericToRustStr) -> RustString;
+    public func run(_ query: String) throws -> [NamedRow];
+        
+    /**
+     * Run query against the database.
+     *
+     * `query`:   the CozoScript to execute.
+     * `params`:  the params of the query in JSON format.
+     */
+    public func run(_ query: String, params: JSON) throws -> [NamedRow];
+    
+    /**
+     * Export relations as JSON
+     *
+     * `relations`: the stored relations to export
+     */
+    public func exportRelations(relations: [String]) throws -> JSON;
     
     /**
      * Import data into relations
-     * `data`: a UTF-8 encoded JSON payload, see the manual for the expected fields.
+     * 
+     * `data`: the payload, in the same format as returned by `exportRelations`. 
      */
-    public func import_relations_str(_ data: GenericToRustStr) -> RustString;
-    
-    /**
-     * Export relations into JSON
-     *
-     * `data`: a UTF-8 encoded JSON payload, , in the same form as returned by exporting relations
-     */
-    public func export_relations_str(_ data: GenericToRustStr) -> RustString;
+    public func importRelations(data: JSON) throws;
    
     /**
      * Backup the database.
      *
-     * `out_file`: path of the output file.
+     * `path`: path of the output file.
      */
-    public func backup_db_str(_ out_file: GenericToRustStr) -> RustString;
+    public func backup(path: String) throws;
     
     /**
      * Restore the database from a backup.
      *
-     * `in_file`: path of the input file.
+     * `path`: path of the input file.
      */
-    public func restore_backup_str(_ in_file: GenericToRustStr) -> RustString;
+    public func restore(path: String) throws;
     
     /**
      * Import data into a relation
      *
-     * `data`: a UTF-8 encoded JSON payload: `{"path": ..., "relations": [...]}`
+     * `path`:      path of the input file.
+     * `relations`: the stored relations to import into.
      */
-    public func import_from_backup_str(_ data: GenericToRustStr) -> RustString;
+    public func importRelationsFromBackup(path: String, relations: [String]) throws;
 }
 ```
-You can pass Swift strings as arguments. The returned types are all `RustString`:
-you need to call `.toString()` on them to convert to Swift strings, and then parse them
-as JSON objects (for example, by using [SwiftyJSON](https://github.com/SwiftyJSON/SwiftyJSON).
 
 ## Building the Swift Package
 

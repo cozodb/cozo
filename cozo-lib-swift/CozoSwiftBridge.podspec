@@ -6,7 +6,7 @@ Pod::Spec.new do |spec|
   spec.homepage     = "https://github.com/cozodb/cozo/"
   spec.license      = "MPL-2.0"
   spec.author       = { "Ziyang Hu" => "hu.ziyang@cantab.net" }
-  spec.source       = { :http => "http://127.0.0.1:3000/CozoSwiftBridge.tgz" }
+  spec.source       = { :http => "https://github.com/cozodb/cozo/releases/download/v0.2.2/CozoSwiftBridge-0.2.2.tgz" }
   spec.source_files = "Sources/CozoSwiftBridge/*"
   spec.vendored_frameworks = "RustXcframework.xcframework"
   spec.requires_arc = true

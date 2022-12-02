@@ -1,13 +1,19 @@
 # CozoServer
 
-The standalone executable for Cozo can be downloaded from the [release page](https://github.com/cozodb/cozo/releases) 
-(look for those with names `cozoserver-*`).
+[![server](https://img.shields.io/github/v/release/cozodb/cozo)](https://github.com/cozodb/cozo/releases)
 
 This document describes how to set up cozoserver.
 To learn how to use CozoDB (CozoScript), follow
 the [tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
 first and then read the [manual](https://cozodb.github.io/current/manual/). You can run all the queries
 described in the tutorial with an in-browser DB [here](https://cozodb.github.io/wasm-demo/).
+
+## Download
+
+The standalone executable for Cozo can be downloaded from the [release page](https://github.com/cozodb/cozo/releases).
+Look for those with names `cozoserver-*`.
+Those with names `cozoserver_all-*` supports additional storage backends
+such as [TiKV](https://tikv.org/) storage, but are larger.
 
 ## Starting the server
 
