@@ -54,16 +54,16 @@ this around with Git LFS, but no luck).
 ```swift
 import CozoSwiftBridge
 
-...
-
-let path = NSHomeDirectory()
-let file = path + "/cozo-data.db"
-let db = new_cozo_db("sqlite", file, "");
-let result: String! = db?.run_script_str("::relations", "").toString();
+{
+    let path = NSHomeDirectory()
+    let file = path + "/cozo-data.db"
+    let db = CozoDB("sqlite", file)
+    let res = try! db.run("?[] <- [[1,2,3]]").toString()
+}
 ```
 Above we created an SQLite-based database. For memory-based ones:
 ```swift
-let db = new_cozo_db("mem", "", "");
+let db = CozoDB()
 ```
 
 ### API
