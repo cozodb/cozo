@@ -8,9 +8,13 @@
 
 use std::collections::BTreeMap;
 
+#[cfg(not(feature = "rayon"))]
+use approx::AbsDiffEq;
 #[cfg(feature = "rayon")]
 use graph::prelude::{page_rank, CsrLayout, DirectedCsrGraph, GraphBuilder, PageRankConfig};
 use miette::Result;
+#[cfg(not(feature = "rayon"))]
+use nalgebra::{Dynamic, OMatrix, U1};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
@@ -37,8 +41,8 @@ impl AlgoImpl for PageRank {
     ) -> Result<()> {
         let edges = algo.relation(0)?;
         let undirected = algo.bool_option("undirected", Some(false))?;
-        let theta = algo.unit_interval_option("theta", Some(0.8))? as f32;
-        let epsilon = algo.unit_interval_option("epsilon", Some(0.05))? as f32;
+        let theta = algo.unit_interval_option("theta", Some(0.85))? as f32;
+        let epsilon = algo.unit_interval_option("epsilon", Some(0.0001))? as f32;
         let iterations = algo.pos_integer_option("iterations", Some(10))?;
 
         let (graph, indices, _) = edges.convert_edge_to_graph(undirected, tx, stores)?;
@@ -98,9 +102,6 @@ fn pagerank(
     iterations: usize,
     poison: Poison,
 ) -> Result<OMatrix<f32, Dynamic, U1>> {
-    use approx::AbsDiffEq;
-    use nalgebra::{Dynamic, OMatrix, U1};
-
     let init_val = (1. - theta) / edges.len() as f32;
     let mut g_mat = OMatrix::<f32, Dynamic, Dynamic>::repeat(edges.len(), edges.len(), init_val);
     let n = edges.len();

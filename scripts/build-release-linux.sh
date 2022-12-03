@@ -4,8 +4,13 @@ set -e
 
 VERSION=$(cat ./VERSION)
 
-rm -fr release
+#rm -fr release
 mkdir -p release
+
+# python
+CARGO_NET_GIT_FETCH_WITH_CLI=true podman run --rm -v $(pwd):/io -w /io/cozo-lib-python ghcr.io/pyo3/maturin:latest build --release --strip -F compact -F storage-rocksdb
+# copy python
+cp target/wheels/*.whl release/
 
 for TARGET in aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
   # standalone, c, java, nodejs
@@ -34,8 +39,3 @@ for TARGET in aarch64-linux-android armv7-linux-androideabi i686-linux-android x
   CARGO_PROFILE_RELEASE_LTO=fat cross build -p cozo_java --release --target=$TARGET
   cp target/$TARGET/release/libcozo_java.so release/libcozo_java-$VERSION-$TARGET.so # java
 done
-
-# python
-CARGO_NET_GIT_FETCH_WITH_CLI=true podman run --rm -v $(pwd):/io -w /io/cozo-lib-python ghcr.io/pyo3/maturin:latest build --release --strip -F compact -F storage-rocksdb
-# copy python
-cp target/wheels/*.whl release/
