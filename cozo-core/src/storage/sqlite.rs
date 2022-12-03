@@ -126,7 +126,7 @@ pub struct SqliteTx<'a> {
     lock: Either<RwLockReadGuard<'a, ()>, RwLockWriteGuard<'a, ()>>,
     storage: &'a SqliteStorage,
     conn: Option<Connection>,
-    stmts: [RefCell<Option<Statement<'static>>>; N_CACHED_QUERIES],
+    stmts: [RefCell<Option<Statement<'a>>>; N_CACHED_QUERIES],
     committed: bool,
 }
 
