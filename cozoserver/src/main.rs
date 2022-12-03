@@ -69,7 +69,12 @@ fn main() {
         eprintln!("{}", SECURITY_WARNING);
     }
 
-    let db = DbInstance::new(args.engine.as_str(), args.path.as_str(), &args.config.clone()).unwrap();
+    let db = DbInstance::new(
+        args.engine.as_str(),
+        args.path.as_str(),
+        &args.config.clone(),
+    )
+    .unwrap();
 
     if let Some(restore_path) = &args.restore {
         db.restore_backup(restore_path).unwrap();
@@ -140,13 +145,7 @@ fn main() {
                         check_auth!(request, auth_guard);
                     }
 
-                    let relations = relations.split(",").filter_map(|t| {
-                        if t.is_empty() {
-                            None
-                        } else {
-                            Some(t)
-                        }
-                    });
+                    let relations = relations.split(',').filter(|t| !t.is_empty());
                     let result = db.export_relations(relations);
                     match result {
                         Ok(s) => {
@@ -190,7 +189,7 @@ fn main() {
 
                     let payload: BackupPayload = try_or_400!(rouille::input::json_input(request));
 
-                    let result = db.backup_db(payload.path.clone());
+                    let result = db.backup_db(payload.path);
 
                     match result {
                         Ok(()) => {

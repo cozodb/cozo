@@ -26,7 +26,7 @@ lazy_static! {
         _ = std::fs::remove_file(path);
         _ = std::fs::remove_dir_all(path);
         let db_kind = env::var("COZO_TEST_DB_ENGINE").unwrap_or("mem".to_string());
-
+        println!("Using {} engine", db_kind);
         let db = DbInstance::new(&db_kind, path, Default::default()).unwrap();
         dbg!(creation.elapsed());
 

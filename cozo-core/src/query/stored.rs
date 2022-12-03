@@ -444,7 +444,7 @@ fn make_const_rule(
     );
     let bindings_arity = bindings.len();
     program.prog.insert(
-        rule_symbol.clone(),
+        rule_symbol,
         InputInlineRulesOrAlgo::Algo {
             algo: AlgoApply {
                 algo: AlgoHandle {

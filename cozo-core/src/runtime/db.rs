@@ -180,11 +180,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             for data in tx.tx.range_scan(&start, &end) {
                 let (k, v) = data?;
                 let tuple = decode_tuple_from_kv(&k, &v);
-                let row = tuple
-                    .0
-                    .into_iter()
-                    .map(|dv| JsonValue::from(dv))
-                    .collect_vec();
+                let row = tuple.0.into_iter().map(JsonValue::from).collect_vec();
                 rows.push(row);
             }
             let headers = cols.iter().map(|col| col.to_string()).collect_vec();

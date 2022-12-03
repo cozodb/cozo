@@ -64,6 +64,9 @@ char *cozo_run_query(int32_t db_id, const char *script_raw, const char *params_r
 /**
  * Import data into relations
  *
+ * Note that triggers are _not_ run for the relations, if any exists.
+ * If you need to activate triggers, use queries with parameters.
+ *
  * `db_id`:        the ID representing the database.
  * `json_payload`: a UTF-8 encoded JSON payload, in the same form as returned by exporting relations.
  *
@@ -107,6 +110,9 @@ char *cozo_restore(int32_t db_id,
 
 /**
  * Import data into relations from a backup
+ *
+ * Note that triggers are _not_ run for the relations, if any exists.
+ * If you need to activate triggers, use queries with parameters.
  *
  * `db_id`:        the ID representing the database.
  * `json_payload`: a UTF-8 encoded JSON payload: `{"path": ..., "relations": [...]}`
