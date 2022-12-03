@@ -110,6 +110,9 @@ public class CozoDB {
     /**
      * Import data into relations
      * 
+     * Note that triggers are _not_ run for the relations, if any exists.
+     * If you need to activate triggers, use queries with parameters.
+     * 
      * `data`: the payload, in the same format as returned by `exportRelations`. 
      */
     public func importRelations(data: JSON) throws;
@@ -129,7 +132,10 @@ public class CozoDB {
     public func restore(path: String) throws;
     
     /**
-     * Import data into a relation
+     * Import data into a relation from a backup.
+     *
+     * Note that triggers are _not_ run for the relations, if any exists.
+     * If you need to activate triggers, use queries with parameters.
      *
      * `path`:      path of the input file.
      * `relations`: the stored relations to import into.

@@ -74,6 +74,10 @@ and a nicely-formatted diagnostic will be in `"display"` if available.
 * `GET /`, if you open this in your browser and open your developer tools, you will be able to use
    a very simple client to query this database.
 
+> For `import` and `import-from-backup`, triggers are _not_ run for the relations, if any exists.
+If you need to activate triggers, use queries with parameters.
+
+
 ## Building
 
 Building `cozo-node` requires a [Rust toolchain](https://rustup.rs). Run

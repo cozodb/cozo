@@ -147,6 +147,9 @@ pub unsafe extern "C" fn cozo_run_query(
 #[no_mangle]
 /// Import data into relations
 ///
+/// Note that triggers are _not_ run for the relations, if any exists.
+/// If you need to activate triggers, use queries with parameters.
+///
 /// `db_id`:        the ID representing the database.
 /// `json_payload`: a UTF-8 encoded JSON payload, in the same form as returned by exporting relations.
 ///
@@ -274,6 +277,9 @@ pub unsafe extern "C" fn cozo_restore(db_id: i32, in_path: *const c_char) -> *mu
 
 #[no_mangle]
 /// Import data into relations from a backup
+///
+/// Note that triggers are _not_ run for the relations, if any exists.
+/// If you need to activate triggers, use queries with parameters.
 ///
 /// `db_id`:        the ID representing the database.
 /// `json_payload`: a UTF-8 encoded JSON payload: `{"path": ..., "relations": [...]}`

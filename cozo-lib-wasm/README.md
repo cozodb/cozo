@@ -51,6 +51,8 @@ export class CozoDb {
 
     export_relations(data: string): string;
 
+    // Note that triggers are _not_ run for the relations, if any exists.
+    // If you need to activate triggers, use queries with parameters.
     import_relations(data: string): string;
 }
 ```

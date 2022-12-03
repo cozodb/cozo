@@ -282,6 +282,9 @@ impl DbInstance {
         }
     }
     /// Import a relation, the data is given as a JSON string, and the returned result is converted into a string
+    ///
+    /// Note that triggers are _not_ run for the relations, if any exists.
+    /// If you need to activate triggers, use queries with parameters.
     pub fn import_relations_str(&self, data: &str) -> String {
         match self.import_relations_str_inner(data) {
             Ok(()) => {
@@ -353,6 +356,9 @@ impl DbInstance {
         }
     }
     /// Import relations from an Sqlite backup, with JSON string return value
+    ///
+    /// Note that triggers are _not_ run for the relations, if any exists.
+    /// If you need to activate triggers, use queries with parameters.
     pub fn import_from_backup_str(&self, payload: &str) -> String {
         match self.import_from_backup_str_inner(payload) {
             Ok(_) => json!({"ok": true}).to_string(),

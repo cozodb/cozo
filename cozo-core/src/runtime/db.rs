@@ -195,6 +195,9 @@ impl<'s, S: Storage<'s>> Db<S> {
     /// Import relations. The argument `data` accepts data in the shape of
     /// what was returned by [Self::export_relations].
     /// The target stored relations must already exist in the database.
+    ///
+    /// Note that triggers are _not_ run for the relations, if any exists.
+    /// If you need to activate triggers, use queries with parameters.
     pub fn import_relations(&'s self, data: BTreeMap<String, NamedRows>) -> Result<()> {
         #[derive(Debug, Diagnostic, Error)]
         #[error("cannot import data for relation '{0}': {1}")]
@@ -345,6 +348,9 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
     /// Import data from relations in a backup file.
     /// The target stored relations must already exist in the database.
+    ///
+    /// Note that triggers are _not_ run for the relations, if any exists.
+    /// If you need to activate triggers, use queries with parameters.
     pub fn import_from_backup(&'s self, in_file: &str, relations: &[String]) -> Result<()> {
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled");
