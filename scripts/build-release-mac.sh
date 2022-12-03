@@ -8,7 +8,16 @@ export MACOSX_DEPLOYMENT_TARGET=10.14
 #rm -fr release
 mkdir -p release
 
-for TARGET in x86_64-apple-darwin aarch64-apple-darwin; do
+for TARGET in aarch64-apple-darwin x86_64-apple-darwin; do
+  CARGO_PROFILE_RELEASE_LTO=fat cargo build --release -p cozoserver \
+    -F compact -F storage-rocksdb -F storage-tikv -F storage-sled --target $TARGET
+  cp target/$TARGET/release/cozoserver release/cozoserver_all-$VERSION-$TARGET # standalone
+done
+
+# copy python
+cp target/wheels/*.whl release/
+
+for TARGET in aarch64-apple-darwin x86_64-apple-darwin; do
   # standalone, c, java, nodejs
   CARGO_PROFILE_RELEASE_LTO=fat cargo build --release -p cozoserver -p cozo_c -p cozo_java -p cozo-node -F compact -F storage-rocksdb --target $TARGET
   cp target/$TARGET/release/cozoserver release/cozoserver-$VERSION-$TARGET # standalone
@@ -22,15 +31,6 @@ for TARGET in x86_64-apple-darwin aarch64-apple-darwin; do
   CARGO_PROFILE_RELEASE_LTO=fat PYO3_NO_PYTHON=1 maturin build -F compact -F storage-rocksdb --release --strip --target $TARGET
   cd ..
 done
-
-for TARGET in x86_64-apple-darwin aarch64-apple-darwin; do
-  CARGO_PROFILE_RELEASE_LTO=fat cargo build --release -p cozoserver \
-    -F compact -F storage-rocksdb -F storage-tikv -F storage-sled --target $TARGET
-  cp target/$TARGET/release/cozoserver release/cozoserver_all-$VERSION-$TARGET # standalone
-done
-
-# copy python
-cp target/wheels/*.whl release/
 
 # swift
 cd cozo-lib-swift

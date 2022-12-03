@@ -7,11 +7,10 @@
  */
 
 use std::collections::BTreeMap;
-use std::mem;
 
-use approx::AbsDiffEq;
+#[cfg(feature = "rayon")]
+use graph::prelude::{page_rank, CsrLayout, DirectedCsrGraph, GraphBuilder, PageRankConfig};
 use miette::Result;
-use nalgebra::{Dynamic, OMatrix, U1};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::AlgoImpl;
@@ -34,20 +33,49 @@ impl AlgoImpl for PageRank {
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
         out: &'a InMemRelation,
-        poison: Poison,
+        _poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;
         let undirected = algo.bool_option("undirected", Some(false))?;
         let theta = algo.unit_interval_option("theta", Some(0.8))? as f32;
         let epsilon = algo.unit_interval_option("epsilon", Some(0.05))? as f32;
-        let iterations = algo.pos_integer_option("iterations", Some(20))?;
+        let iterations = algo.pos_integer_option("iterations", Some(10))?;
+
         let (graph, indices, _) = edges.convert_edge_to_graph(undirected, tx, stores)?;
-        let res = pagerank(&graph, theta, epsilon, iterations, poison)?;
-        for (idx, score) in res.iter().enumerate() {
-            out.put(
-                Tuple(vec![indices[idx].clone(), DataValue::from(*score as f64)]),
-                0,
+
+        #[cfg(feature = "rayon")]
+        {
+            let graph: DirectedCsrGraph<u32> = GraphBuilder::new()
+                .csr_layout(CsrLayout::Sorted)
+                .edges(
+                    graph
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(fr, ls)| ls.iter().map(move |to| (fr as u32, *to as u32))),
+                )
+                .build();
+
+            let (ranks, _n_run, _) = page_rank(
+                &graph,
+                PageRankConfig::new(iterations, epsilon as f64, theta),
             );
+
+            for (idx, score) in ranks.iter().enumerate() {
+                out.put(
+                    Tuple(vec![indices[idx].clone(), DataValue::from(*score as f64)]),
+                    0,
+                );
+            }
+        }
+        #[cfg(not(feature = "rayon"))]
+        {
+            let res = pagerank(&graph, theta, epsilon, iterations, _poison)?;
+            for (idx, score) in res.iter().enumerate() {
+                out.put(
+                    Tuple(vec![indices[idx].clone(), DataValue::from(*score as f64)]),
+                    0,
+                );
+            }
         }
         Ok(())
     }
@@ -62,6 +90,7 @@ impl AlgoImpl for PageRank {
     }
 }
 
+#[cfg(not(feature = "rayon"))]
 fn pagerank(
     edges: &[Vec<usize>],
     theta: f32,
@@ -69,6 +98,9 @@ fn pagerank(
     iterations: usize,
     poison: Poison,
 ) -> Result<OMatrix<f32, Dynamic, U1>> {
+    use approx::AbsDiffEq;
+    use nalgebra::{Dynamic, OMatrix, U1};
+
     let init_val = (1. - theta) / edges.len() as f32;
     let mut g_mat = OMatrix::<f32, Dynamic, Dynamic>::repeat(edges.len(), edges.len(), init_val);
     let n = edges.len();
@@ -90,7 +122,7 @@ fn pagerank(
     let scale_target = (n as f32).sqrt();
     let mut last_pi_vec = pi_vec.clone();
     for _ in 0..iterations {
-        mem::swap(&mut pi_vec, &mut last_pi_vec);
+        std::mem::swap(&mut pi_vec, &mut last_pi_vec);
         pi_vec = g_mat.tr_mul(&last_pi_vec);
         pi_vec.normalize_mut();
         let f = pi_vec.norm() / scale_target;
