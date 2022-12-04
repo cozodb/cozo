@@ -35,7 +35,12 @@ ColumnFamilyOptions default_cf_options() {
     options.compression = kLZ4Compression;
     options.level_compaction_dynamic_level_bytes = true;
     options.compaction_pri = kMinOverlappingRatio;
+
+    auto cache = NewLRUCache(128 << 20);
+
     BlockBasedTableOptions table_options;
+    table_options.block_cache = cache;
+
     table_options.block_size = 16 * 1024;
     table_options.cache_index_and_filter_blocks = true;
     table_options.pin_l0_filter_and_index_blocks_in_cache = true;
@@ -47,7 +52,7 @@ ColumnFamilyOptions default_cf_options() {
     return options;
 }
 
-shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
+shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     auto options = default_db_options();
 
     if (opts.prepare_for_bulk_load) {
@@ -84,13 +89,13 @@ shared_ptr<RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     }
     options.create_missing_column_families = true;
 
-    shared_ptr<RocksDbBridge> db = make_shared<RocksDbBridge>();
+    shared_ptr <RocksDbBridge> db = make_shared<RocksDbBridge>();
 
     db->db_path = string(opts.db_path);
 
     TransactionDB *txn_db = nullptr;
     write_status(
-            TransactionDB::Open(options, TransactionDBOptions(), db->db_path,&txn_db),
+            TransactionDB::Open(options, TransactionDBOptions(), db->db_path, &txn_db),
             status);
     db->db.reset(txn_db);
     db->destroy_on_exit = opts.destroy_on_exit;
