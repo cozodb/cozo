@@ -47,7 +47,7 @@ lazy_static! {
         db_path.push(format!("{}-{}.db", db_kind, data_size));
         // let _ = std::fs::remove_file(&db_path);
         // let _ = std::fs::remove_dir_all(&db_path);
-        let path_exists = Path::exists(db_path);
+        let path_exists = Path::exists(&db_path);
         let db = DbInstance::new(&db_kind, db_path.to_str().unwrap(), "").unwrap();
         if path_exists {
             return db
