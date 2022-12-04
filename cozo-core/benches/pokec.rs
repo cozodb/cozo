@@ -227,12 +227,17 @@ fn single_vertex() {
 
 fn single_vertex_write() {
     let i = rand::thread_rng().gen_range(1..SIZES.0 * 10);
-    TEST_DB
-        .run_script(
-            "?[uid, cmpl_pct, gender, age] <- [[$id, 0, null, null]] :put user {uid => cmpl_pct, gender, age}",
-            BTreeMap::from([("id".to_string(), json!(i))]),
-        )
-        .unwrap();
+    for _ in 0..10 {
+        if TEST_DB
+            .run_script(
+                "?[uid, cmpl_pct, gender, age] <- [[$id, 0, null, null]] :put user {uid => cmpl_pct, gender, age}",
+                BTreeMap::from([("id".to_string(), json!(i))]),
+            )
+            .is_ok() {
+            return
+        }
+    }
+    panic!()
 }
 
 fn single_edge_write() {
@@ -241,28 +246,40 @@ fn single_edge_write() {
     while j == i {
         j = rand::thread_rng().gen_range(1..SIZES.0);
     }
-    TEST_DB
-        .run_script(
-            r#"
+    for _ in 0..10 {
+        if TEST_DB
+            .run_script(
+                r#"
             {?[fr, to] <- [[$i, $j]] :put friends {fr, to}}
             {?[fr, to] <- [[$i, $j]] :put friends.rev {fr, to}}
             "#,
-            BTreeMap::from([("i".to_string(), json!(i)), ("j".to_string(), json!(j))]),
-        )
-        .unwrap();
+                BTreeMap::from([("i".to_string(), json!(i)), ("j".to_string(), json!(j))]),
+            )
+            .is_ok()
+        {
+            return;
+        }
+    }
+    panic!()
 }
 
 fn single_vertex_update() {
     let i = rand::thread_rng().gen_range(1..SIZES.0);
-    TEST_DB
-        .run_script(
-            r#"
+    for _ in 0..10 {
+        if TEST_DB
+            .run_script(
+                r#"
             ?[uid, cmpl_pct, age, gender] := uid = $id, *user{uid, age, gender}, cmpl_pct = -1
             :put user {uid => cmpl_pct, age, gender}
             "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
-        )
-        .unwrap();
+                BTreeMap::from([("id".to_string(), json!(i))]),
+            )
+            .is_ok()
+        {
+            return;
+        }
+    }
+    panic!()
 }
 
 fn aggregation() {
