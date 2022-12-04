@@ -676,7 +676,7 @@ fn throughput(_: &mut Bencher) {
     dbg!(init_time.elapsed());
 
     let expansion_1_time = Instant::now();
-    let mut count = 10000usize;
+    let count = 100;
     (0..count).into_par_iter().for_each(|_| {
         expansion_1();
     });
@@ -689,7 +689,7 @@ fn throughput(_: &mut Bencher) {
     dbg!((count as f64) / expansion_1_filter_time.elapsed().as_secs_f64());
 
     let expansion_2_time = Instant::now();
-    count = 1000;
+
     (0..count).into_par_iter().for_each(|_| {
         expansion_2();
     });
@@ -702,7 +702,7 @@ fn throughput(_: &mut Bencher) {
     dbg!((count as f64) / expansion_2_filter_time.elapsed().as_secs_f64());
 
     let expansion_3_time = Instant::now();
-    count = 500;
+
     (0..count).into_par_iter().for_each(|_| {
         expansion_3();
     });
@@ -715,7 +715,7 @@ fn throughput(_: &mut Bencher) {
     dbg!((count as f64) / expansion_3_filter_time.elapsed().as_secs_f64());
 
     let expansion_4_time = Instant::now();
-    count = 50;
+
     (0..count).into_par_iter().for_each(|_| {
         expansion_4();
     });
@@ -728,105 +728,94 @@ fn throughput(_: &mut Bencher) {
     dbg!((count as f64) / expansion_4_filter_time.elapsed().as_secs_f64());
 
     let neighbours_2_time = Instant::now();
-    count = 5000;
     (0..count).into_par_iter().for_each(|_| {
         neighbours_2();
     });
     dbg!((count as f64) / neighbours_2_time.elapsed().as_secs_f64());
 
     let neighbours_2_filter_time = Instant::now();
-    count = 5000;
     (0..count).into_par_iter().for_each(|_| {
         neighbours_2_filter();
     });
     dbg!((count as f64) / neighbours_2_filter_time.elapsed().as_secs_f64());
 
     let neighbours_2_data_time = Instant::now();
-    count = 5000;
     (0..count).into_par_iter().for_each(|_| {
         neighbours_2_data();
     });
     dbg!((count as f64) / neighbours_2_data_time.elapsed().as_secs_f64());
 
     let neighbours_2_filter_data_time = Instant::now();
-    count = 5000;
     (0..count).into_par_iter().for_each(|_| {
         neighbours_2_filter_data();
     });
     dbg!((count as f64) / neighbours_2_filter_data_time.elapsed().as_secs_f64());
 
     let pattern_cycle_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         pattern_cycle();
     });
     dbg!((count as f64) / pattern_cycle_time.elapsed().as_secs_f64());
 
     let pattern_long_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         pattern_long();
     });
     dbg!((count as f64) / pattern_long_time.elapsed().as_secs_f64());
 
     let pattern_short_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         pattern_short();
     });
     dbg!((count as f64) / pattern_short_time.elapsed().as_secs_f64());
 
     let aggregation_time = Instant::now();
-    count = 100;
+
     (0..count).into_par_iter().for_each(|_| {
         aggregation();
     });
     dbg!((count as f64) / aggregation_time.elapsed().as_secs_f64());
 
     let aggregation_distinct_time = Instant::now();
-    count = 100;
+
     (0..count).into_par_iter().for_each(|_| {
         aggregation_distinct();
     });
     dbg!((count as f64) / aggregation_distinct_time.elapsed().as_secs_f64());
 
     let aggregation_filter_time = Instant::now();
-    count = 100;
+
     (0..count).into_par_iter().for_each(|_| {
         aggregation_filter();
     });
     dbg!((count as f64) / aggregation_filter_time.elapsed().as_secs_f64());
 
     let min_max_time = Instant::now();
-    count = 100;
+
     (0..count).into_par_iter().for_each(|_| {
         min_max();
     });
     dbg!((count as f64) / min_max_time.elapsed().as_secs_f64());
 
     let single_vertex_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         single_vertex();
     });
     dbg!((count as f64) / single_vertex_time.elapsed().as_secs_f64());
 
     let single_vertex_write_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         single_vertex_write();
     });
     dbg!((count as f64) / single_vertex_write_time.elapsed().as_secs_f64());
 
     let single_edge_write_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         single_edge_write();
     });
     dbg!((count as f64) / single_edge_write_time.elapsed().as_secs_f64());
 
     let single_vertex_update_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         single_vertex_update();
     });
@@ -865,7 +854,7 @@ fn realistic(_: &mut Bencher) {
 
     for [analytical, read, update, write] in percentages {
         dbg!((analytical, read, update, write));
-        let count = if analytical > 0.0 { 1000 } else { 10000 };
+        let count = 100;
         let taken = Instant::now();
         (0..count).into_par_iter().for_each(|_| {
             let mut gen = thread_rng();
@@ -902,7 +891,7 @@ fn mixed(_: &mut Bencher) {
     assert!(mixed_pct <= 1.);
 
     let expansion_1_time = Instant::now();
-    let mut count = 10000usize;
+    let count = 100;
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, expansion_1);
     });
@@ -915,7 +904,7 @@ fn mixed(_: &mut Bencher) {
     dbg!((count as f64) / expansion_1_filter_time.elapsed().as_secs_f64());
 
     let expansion_2_time = Instant::now();
-    count = 1000;
+
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, expansion_2);
     });
@@ -928,7 +917,7 @@ fn mixed(_: &mut Bencher) {
     dbg!((count as f64) / expansion_2_filter_time.elapsed().as_secs_f64());
 
     let expansion_3_time = Instant::now();
-    count = 500;
+
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, expansion_3);
     });
@@ -941,7 +930,7 @@ fn mixed(_: &mut Bencher) {
     dbg!((count as f64) / expansion_3_filter_time.elapsed().as_secs_f64());
 
     let expansion_4_time = Instant::now();
-    count = 50;
+
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, expansion_4);
     });
@@ -954,84 +943,76 @@ fn mixed(_: &mut Bencher) {
     dbg!((count as f64) / expansion_4_filter_time.elapsed().as_secs_f64());
 
     let neighbours_2_time = Instant::now();
-    count = 5000;
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, neighbours_2);
     });
     dbg!((count as f64) / neighbours_2_time.elapsed().as_secs_f64());
 
     let neighbours_2_filter_time = Instant::now();
-    count = 5000;
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, neighbours_2_filter);
     });
     dbg!((count as f64) / neighbours_2_filter_time.elapsed().as_secs_f64());
 
     let neighbours_2_data_time = Instant::now();
-    count = 5000;
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, neighbours_2_data);
     });
     dbg!((count as f64) / neighbours_2_data_time.elapsed().as_secs_f64());
 
     let neighbours_2_filter_data_time = Instant::now();
-    count = 5000;
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, neighbours_2_filter_data);
     });
     dbg!((count as f64) / neighbours_2_filter_data_time.elapsed().as_secs_f64());
 
     let pattern_cycle_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, pattern_cycle);
     });
     dbg!((count as f64) / pattern_cycle_time.elapsed().as_secs_f64());
 
     let pattern_long_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, pattern_long);
     });
     dbg!((count as f64) / pattern_long_time.elapsed().as_secs_f64());
 
     let pattern_short_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, pattern_short);
     });
     dbg!((count as f64) / pattern_short_time.elapsed().as_secs_f64());
 
     let aggregation_time = Instant::now();
-    count = 100;
+
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, aggregation);
     });
     dbg!((count as f64) / aggregation_time.elapsed().as_secs_f64());
 
     let aggregation_distinct_time = Instant::now();
-    count = 100;
+
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, aggregation_distinct);
     });
     dbg!((count as f64) / aggregation_distinct_time.elapsed().as_secs_f64());
 
     let aggregation_filter_time = Instant::now();
-    count = 100;
+
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, aggregation_filter);
     });
     dbg!((count as f64) / aggregation_filter_time.elapsed().as_secs_f64());
 
     let min_max_time = Instant::now();
-    count = 100;
+
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, min_max);
     });
     dbg!((count as f64) / min_max_time.elapsed().as_secs_f64());
 
     let single_vertex_time = Instant::now();
-    count = 10000;
     (0..count).into_par_iter().for_each(|_| {
         wrap(mixed_pct, single_vertex);
     });
