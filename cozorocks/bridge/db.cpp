@@ -36,10 +36,10 @@ ColumnFamilyOptions default_cf_options() {
     options.level_compaction_dynamic_level_bytes = true;
     options.compaction_pri = kMinOverlappingRatio;
 
-    auto cache = NewLRUCache(128 << 20);
+//    auto cache = NewLRUCache(128 << 20);
 
     BlockBasedTableOptions table_options;
-    table_options.block_cache = cache;
+//    table_options.block_cache = cache;
 
     table_options.block_size = 16 * 1024;
     table_options.cache_index_and_filter_blocks = true;
