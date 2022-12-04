@@ -45,10 +45,13 @@ lazy_static! {
             .parse::<usize>()
             .unwrap();
         db_path.push(format!("{}-{}.db", db_kind, data_size));
-        let _ = std::fs::remove_file(&db_path);
-        let _ = std::fs::remove_dir_all(&db_path);
-
+        // let _ = std::fs::remove_file(&db_path);
+        // let _ = std::fs::remove_dir_all(&db_path);
+        let path_exists = Path::exists(db_path);
         let db = DbInstance::new(&db_kind, db_path.to_str().unwrap(), "").unwrap();
+        if path_exists {
+            return db
+        }
 
         let mut backup_path = data_dir.clone();
         backup_path.push(format!("backup-{}.db", data_size));
