@@ -76,9 +76,6 @@ lazy_static! {
                 return db
             }
 
-            // NODE_PATTERN = re.compile(r'CREATE \(:User {id: (\d+), completion_percentage: (\d+), gender: "(\w+)", age: (\d+)}\);')
-            // NODE_PARTIAL_PATTERN = re.compile(r'CREATE \(:User {id: (\d+), completion_percentage: (\d+)}\);')
-            // EDGE_PATTERN = re.compile(r'MATCH \(n:User {id: (\d+)}\), \(m:User {id: (\d+)}\) CREATE \(n\)-\[e: Friend\]->\(m\);')
             let node_re = Regex::new(r#"CREATE \(:User \{id: (\d+), completion_percentage: (\d+), gender: "(\w+)", age: (\d+)}\);"#).unwrap();
             let node_partial_re =
                 Regex::new(r#"CREATE \(:User \{id: (\d+), completion_percentage: (\d+)}\);"#).unwrap();
