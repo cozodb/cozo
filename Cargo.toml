@@ -10,3 +10,6 @@ members = [
     "cozo-lib-python",
     "cozo-lib-nodejs"
 ]
+
+[profile.bench]
+lto = true

@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use approx::AbsDiffEq;
 use env_logger::Env;
-use lazy_static::lazy_static;
+use lazy_static::{initialize, lazy_static};
 use serde_json::json;
 
 use cozo::DbInstance;
@@ -157,15 +157,9 @@ lazy_static! {
     };
 }
 
-fn check_db() {
-    let _ = TEST_DB
-        .run_script("?[a] <- [[1]]", Default::default())
-        .unwrap();
-}
-
 #[test]
 fn dfs() {
-    check_db();
+    initialize(&TEST_DB);
     let dfs = Instant::now();
     let rows = TEST_DB
         .run_script(
@@ -189,7 +183,7 @@ fn dfs() {
 
 #[test]
 fn empty() {
-    check_db();
+    initialize(&TEST_DB);
     let res = TEST_DB.run_script(
         r#"
         ?[id, name] <- [[]]
@@ -201,7 +195,7 @@ fn empty() {
 
 #[test]
 fn bfs() {
-    check_db();
+    initialize(&TEST_DB);
     let bfs = Instant::now();
     let rows = TEST_DB
         .run_script(
@@ -226,7 +220,7 @@ fn bfs() {
 
 #[test]
 fn scc() {
-    check_db();
+    initialize(&TEST_DB);
     let scc = Instant::now();
     let _ = TEST_DB
         .run_script(
@@ -236,13 +230,14 @@ fn scc() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
     dbg!(scc.elapsed());
 }
 
 #[test]
 fn cc() {
-    check_db();
+    initialize(&TEST_DB);
     let cc = Instant::now();
     let _ = TEST_DB
         .run_script(
@@ -252,13 +247,14 @@ fn cc() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
     dbg!(cc.elapsed());
 }
 
 #[test]
 fn astar() {
-    check_db();
+    initialize(&TEST_DB);
     let astar = Instant::now();
     let _ = TEST_DB.run_script(r#"
         code_lat_lon[code, lat, lon] := *airport{code, lat, lon}
@@ -271,7 +267,7 @@ fn astar() {
 
 #[test]
 fn deg_centrality() {
-    check_db();
+    initialize(&TEST_DB);
     let deg_centrality = Instant::now();
     TEST_DB
         .run_script(
@@ -283,13 +279,14 @@ fn deg_centrality() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
     dbg!(deg_centrality.elapsed());
 }
 
 #[test]
 fn dijkstra() {
-    check_db();
+    initialize(&TEST_DB);
     let dijkstra = Instant::now();
 
     TEST_DB
@@ -302,14 +299,15 @@ fn dijkstra() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     dbg!(dijkstra.elapsed());
 }
 
 #[test]
 fn yen() {
-    check_db();
+    initialize(&TEST_DB);
     let yen = Instant::now();
 
     TEST_DB
@@ -321,14 +319,15 @@ fn yen() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     dbg!(yen.elapsed());
 }
 
 #[test]
 fn starts_with() {
-    check_db();
+    initialize(&TEST_DB);
     let starts_with = Instant::now();
     let rows = TEST_DB
         .run_script(
@@ -360,7 +359,7 @@ fn starts_with() {
 
 #[test]
 fn range_check() {
-    check_db();
+    initialize(&TEST_DB);
     let range_check = Instant::now();
 
     let rows = TEST_DB
@@ -380,7 +379,7 @@ fn range_check() {
 
 #[test]
 fn no_airports() {
-    check_db();
+    initialize(&TEST_DB);
     let no_airports = Instant::now();
 
     let rows = TEST_DB
@@ -390,7 +389,8 @@ fn no_airports() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -407,7 +407,7 @@ fn no_airports() {
 
 #[test]
 fn no_routes_airport() {
-    check_db();
+    initialize(&TEST_DB);
     let no_routes_airports = Instant::now();
 
     let rows = TEST_DB
@@ -417,7 +417,8 @@ fn no_routes_airport() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -435,7 +436,7 @@ fn no_routes_airport() {
 
 #[test]
 fn runway_distribution() {
-    check_db();
+    initialize(&TEST_DB);
     let no_routes_airports = Instant::now();
 
     let rows = TEST_DB
@@ -445,7 +446,8 @@ fn runway_distribution() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -464,7 +466,7 @@ fn runway_distribution() {
 
 #[test]
 fn most_out_routes() {
-    check_db();
+    initialize(&TEST_DB);
     let most_out_routes = Instant::now();
 
     let rows = TEST_DB
@@ -476,7 +478,8 @@ fn most_out_routes() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -496,7 +499,7 @@ fn most_out_routes() {
 
 #[test]
 fn most_out_routes_again() {
-    check_db();
+    initialize(&TEST_DB);
     let most_out_routes_again = Instant::now();
 
     let rows = TEST_DB
@@ -508,7 +511,8 @@ fn most_out_routes_again() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -528,7 +532,7 @@ fn most_out_routes_again() {
 
 #[test]
 fn most_routes() {
-    check_db();
+    initialize(&TEST_DB);
     let most_routes = Instant::now();
 
     let rows = TEST_DB
@@ -541,7 +545,8 @@ fn most_routes() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -559,7 +564,7 @@ fn most_routes() {
 
 #[test]
 fn airport_with_one_route() {
-    check_db();
+    initialize(&TEST_DB);
     let airport_with_one_route = Instant::now();
 
     let rows = TEST_DB
@@ -570,7 +575,8 @@ fn airport_with_one_route() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[777]]));
     dbg!(airport_with_one_route.elapsed());
@@ -578,7 +584,7 @@ fn airport_with_one_route() {
 
 #[test]
 fn single_runway_with_most_routes() {
-    check_db();
+    initialize(&TEST_DB);
     let single_runway_with_most_routes = Instant::now();
 
     let rows = TEST_DB
@@ -594,7 +600,8 @@ fn single_runway_with_most_routes() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -611,7 +618,7 @@ fn single_runway_with_most_routes() {
 
 #[test]
 fn most_routes_in_canada() {
-    check_db();
+    initialize(&TEST_DB);
     let most_routes_in_canada = Instant::now();
 
     let rows = TEST_DB
@@ -625,7 +632,8 @@ fn most_routes_in_canada() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -647,7 +655,7 @@ fn most_routes_in_canada() {
 
 #[test]
 fn uk_count() {
-    check_db();
+    initialize(&TEST_DB);
     let uk_count = Instant::now();
 
     let rows = TEST_DB
@@ -657,7 +665,8 @@ fn uk_count() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -668,7 +677,7 @@ fn uk_count() {
 
 #[test]
 fn airports_by_country() {
-    check_db();
+    initialize(&TEST_DB);
     let airports_by_country = Instant::now();
 
     let rows = TEST_DB
@@ -682,7 +691,8 @@ fn airports_by_country() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -721,7 +731,7 @@ fn airports_by_country() {
 
 #[test]
 fn n_airports_by_continent() {
-    check_db();
+    initialize(&TEST_DB);
     let n_airports_by_continent = Instant::now();
 
     let rows = TEST_DB
@@ -733,7 +743,8 @@ fn n_airports_by_continent() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -747,7 +758,7 @@ fn n_airports_by_continent() {
 
 #[test]
 fn routes_per_airport() {
-    check_db();
+    initialize(&TEST_DB);
     let routes_per_airport = Instant::now();
 
     let rows = TEST_DB
@@ -758,7 +769,8 @@ fn routes_per_airport() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -772,7 +784,7 @@ fn routes_per_airport() {
 
 #[test]
 fn airports_by_route_number() {
-    check_db();
+    initialize(&TEST_DB);
     let airports_by_route_number = Instant::now();
 
     let rows = TEST_DB
@@ -783,7 +795,8 @@ fn airports_by_route_number() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[106, ["TFS", "YVR"]]]));
     dbg!(airports_by_route_number.elapsed());
@@ -791,7 +804,7 @@ fn airports_by_route_number() {
 
 #[test]
 fn out_from_aus() {
-    check_db();
+    initialize(&TEST_DB);
     let out_from_aus = Instant::now();
 
     let rows = TEST_DB
@@ -803,7 +816,8 @@ fn out_from_aus() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -815,7 +829,7 @@ fn out_from_aus() {
 
 #[test]
 fn const_return() {
-    check_db();
+    initialize(&TEST_DB);
     let const_return = Instant::now();
 
     let rows = TEST_DB
@@ -825,7 +839,8 @@ fn const_return() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([["OK", 4]]));
     dbg!(const_return.elapsed());
@@ -833,7 +848,7 @@ fn const_return() {
 
 #[test]
 fn multi_res() {
-    check_db();
+    initialize(&TEST_DB);
     let multi_res = Instant::now();
 
     let rows = TEST_DB
@@ -850,7 +865,8 @@ fn multi_res() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -861,7 +877,7 @@ fn multi_res() {
 
 #[test]
 fn multi_unification() {
-    check_db();
+    initialize(&TEST_DB);
     let multi_unification = Instant::now();
 
     let rows = TEST_DB
@@ -872,7 +888,8 @@ fn multi_unification() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -884,7 +901,7 @@ fn multi_unification() {
 
 #[test]
 fn num_routes_from_eu_to_us() {
-    check_db();
+    initialize(&TEST_DB);
     let num_routes_from_eu_to_us = Instant::now();
 
     let rows = TEST_DB
@@ -898,7 +915,8 @@ fn num_routes_from_eu_to_us() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[435]]));
     dbg!(num_routes_from_eu_to_us.elapsed());
@@ -906,7 +924,7 @@ fn num_routes_from_eu_to_us() {
 
 #[test]
 fn num_airports_in_us_with_routes_from_eu() {
-    check_db();
+    initialize(&TEST_DB);
     let num_airports_in_us_with_routes_from_eu = Instant::now();
 
     let rows = TEST_DB
@@ -918,7 +936,8 @@ fn num_airports_in_us_with_routes_from_eu() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[45]]));
     dbg!(num_airports_in_us_with_routes_from_eu.elapsed());
@@ -926,7 +945,7 @@ fn num_airports_in_us_with_routes_from_eu() {
 
 #[test]
 fn num_routes_in_us_airports_from_eu() {
-    check_db();
+    initialize(&TEST_DB);
     let num_routes_in_us_airports_from_eu = Instant::now();
 
     let rows = TEST_DB
@@ -937,7 +956,8 @@ fn num_routes_in_us_airports_from_eu() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -957,7 +977,7 @@ fn num_routes_in_us_airports_from_eu() {
 
 #[test]
 fn routes_from_eu_to_us_starting_with_l() {
-    check_db();
+    initialize(&TEST_DB);
     let routes_from_eu_to_us_starting_with_l = Instant::now();
 
     let rows = TEST_DB
@@ -970,7 +990,8 @@ fn routes_from_eu_to_us_starting_with_l() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -994,7 +1015,7 @@ fn routes_from_eu_to_us_starting_with_l() {
 
 #[test]
 fn len_of_names_count() {
-    check_db();
+    initialize(&TEST_DB);
     let len_of_names_count = Instant::now();
 
     let rows = TEST_DB
@@ -1006,15 +1027,19 @@ fn len_of_names_count() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
-    assert_eq!(json!(rows), serde_json::Value::from_str(r#"[[891.0]]"#).unwrap());
+    assert_eq!(
+        json!(rows),
+        serde_json::Value::from_str(r#"[[891.0]]"#).unwrap()
+    );
     dbg!(len_of_names_count.elapsed());
 }
 
 #[test]
 fn group_count_by_out() {
-    check_db();
+    initialize(&TEST_DB);
     let group_count_by_out = Instant::now();
 
     let rows = TEST_DB
@@ -1029,7 +1054,8 @@ fn group_count_by_out() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1043,7 +1069,7 @@ fn group_count_by_out() {
 
 #[test]
 fn mean_group_count() {
-    check_db();
+    initialize(&TEST_DB);
     let mean_group_count = Instant::now();
 
     let rows = TEST_DB
@@ -1055,7 +1081,8 @@ fn mean_group_count() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     let v = rows.get(0).unwrap().get(0).unwrap().as_f64().unwrap();
 
@@ -1065,7 +1092,7 @@ fn mean_group_count() {
 
 #[test]
 fn n_routes_from_london_uk() {
-    check_db();
+    initialize(&TEST_DB);
     let n_routes_from_london_uk = Instant::now();
 
     let rows = TEST_DB
@@ -1075,7 +1102,8 @@ fn n_routes_from_london_uk() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1089,7 +1117,7 @@ fn n_routes_from_london_uk() {
 
 #[test]
 fn reachable_from_london_uk_in_two_hops() {
-    check_db();
+    initialize(&TEST_DB);
     let reachable_from_london_uk_in_two_hops = Instant::now();
 
     let rows = TEST_DB
@@ -1101,7 +1129,8 @@ fn reachable_from_london_uk_in_two_hops() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[2353]]));
     dbg!(reachable_from_london_uk_in_two_hops.elapsed());
@@ -1109,7 +1138,7 @@ fn reachable_from_london_uk_in_two_hops() {
 
 #[test]
 fn routes_within_england() {
-    check_db();
+    initialize(&TEST_DB);
     let routes_within_england = Instant::now();
 
     let rows = TEST_DB
@@ -1120,7 +1149,8 @@ fn routes_within_england() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1143,7 +1173,7 @@ fn routes_within_england() {
 
 #[test]
 fn routes_within_england_time_no_dup() {
-    check_db();
+    initialize(&TEST_DB);
     let routes_within_england_time_no_dup = Instant::now();
 
     let rows = TEST_DB
@@ -1154,7 +1184,8 @@ fn routes_within_england_time_no_dup() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1174,7 +1205,7 @@ fn routes_within_england_time_no_dup() {
 
 #[test]
 fn hard_route_finding() {
-    check_db();
+    initialize(&TEST_DB);
     let hard_route_finding = Instant::now();
 
     let rows = TEST_DB
@@ -1189,7 +1220,8 @@ fn hard_route_finding() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1203,7 +1235,7 @@ fn hard_route_finding() {
 
 #[test]
 fn na_from_india() {
-    check_db();
+    initialize(&TEST_DB);
     let na_from_india = Instant::now();
 
     let rows = TEST_DB
@@ -1216,7 +1248,8 @@ fn na_from_india() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1233,7 +1266,7 @@ fn na_from_india() {
 
 #[test]
 fn eu_cities_reachable_from_fll() {
-    check_db();
+    initialize(&TEST_DB);
     let eu_cities_reachable_from_fll = Instant::now();
 
     let rows = TEST_DB
@@ -1243,7 +1276,8 @@ fn eu_cities_reachable_from_fll() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1259,7 +1293,7 @@ fn eu_cities_reachable_from_fll() {
 
 #[test]
 fn clt_to_eu_or_sa() {
-    check_db();
+    initialize(&TEST_DB);
     let clt_to_eu_or_sa = Instant::now();
 
     let rows = TEST_DB
@@ -1269,7 +1303,8 @@ fn clt_to_eu_or_sa() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1285,7 +1320,7 @@ fn clt_to_eu_or_sa() {
 
 #[test]
 fn london_to_us() {
-    check_db();
+    initialize(&TEST_DB);
     let london_to_us = Instant::now();
 
     let rows = TEST_DB
@@ -1296,7 +1331,8 @@ fn london_to_us() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1319,7 +1355,7 @@ fn london_to_us() {
 
 #[test]
 fn tx_to_ny() {
-    check_db();
+    initialize(&TEST_DB);
     let tx_to_ny = Instant::now();
 
     let rows = TEST_DB
@@ -1330,7 +1366,8 @@ fn tx_to_ny() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1348,7 +1385,7 @@ fn tx_to_ny() {
 
 #[test]
 fn denver_to_mexico() {
-    check_db();
+    initialize(&TEST_DB);
     let denver_to_mexico = Instant::now();
 
     let rows = TEST_DB
@@ -1358,7 +1395,8 @@ fn denver_to_mexico() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1375,7 +1413,7 @@ fn denver_to_mexico() {
 
 #[test]
 fn three_cities() {
-    check_db();
+    initialize(&TEST_DB);
     let three_cities = Instant::now();
 
     let rows = TEST_DB
@@ -1386,7 +1424,8 @@ fn three_cities() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1406,7 +1445,7 @@ fn three_cities() {
 
 #[test]
 fn long_distance_from_lgw() {
-    check_db();
+    initialize(&TEST_DB);
     let long_distance_from_lgw = Instant::now();
 
     let rows = TEST_DB
@@ -1417,7 +1456,8 @@ fn long_distance_from_lgw() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1441,7 +1481,7 @@ fn long_distance_from_lgw() {
 
 #[test]
 fn long_routes_one_dir() {
-    check_db();
+    initialize(&TEST_DB);
     let long_routes_one_dir = Instant::now();
 
     let rows = TEST_DB
@@ -1451,7 +1491,8 @@ fn long_routes_one_dir() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1473,7 +1514,7 @@ fn long_routes_one_dir() {
 
 #[test]
 fn longest_routes() {
-    check_db();
+    initialize(&TEST_DB);
     let longest_routes = Instant::now();
 
     let rows = TEST_DB
@@ -1485,7 +1526,8 @@ fn longest_routes() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1504,7 +1546,7 @@ fn longest_routes() {
 
 #[test]
 fn longest_routes_from_each_airports() {
-    check_db();
+    initialize(&TEST_DB);
     let longest_routes_from_each_airports = Instant::now();
 
     let rows = TEST_DB
@@ -1515,7 +1557,8 @@ fn longest_routes_from_each_airports() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1532,7 +1575,7 @@ fn longest_routes_from_each_airports() {
 
 #[test]
 fn total_distance_from_three_cities() {
-    check_db();
+    initialize(&TEST_DB);
     let total_distance_from_three_cities = Instant::now();
 
     let rows = TEST_DB
@@ -1543,7 +1586,8 @@ fn total_distance_from_three_cities() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1554,7 +1598,7 @@ fn total_distance_from_three_cities() {
 
 #[test]
 fn total_distance_within_three_cities() {
-    check_db();
+    initialize(&TEST_DB);
     let total_distance_within_three_cities = Instant::now();
 
     let rows = TEST_DB
@@ -1565,7 +1609,8 @@ fn total_distance_within_three_cities() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1576,7 +1621,7 @@ fn total_distance_within_three_cities() {
 
 #[test]
 fn specific_distance() {
-    check_db();
+    initialize(&TEST_DB);
     let specific_distance = Instant::now();
 
     let rows = TEST_DB
@@ -1586,15 +1631,19 @@ fn specific_distance() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
-    assert_eq!(json!(rows), serde_json::Value::from_str(r#"[[748.0]]"#).unwrap());
+    assert_eq!(
+        json!(rows),
+        serde_json::Value::from_str(r#"[[748.0]]"#).unwrap()
+    );
     dbg!(specific_distance.elapsed());
 }
 
 #[test]
 fn n_routes_between() {
-    check_db();
+    initialize(&TEST_DB);
     let n_routes_between = Instant::now();
 
     let rows = TEST_DB
@@ -1606,15 +1655,19 @@ fn n_routes_between() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
-    assert_eq!(json!(rows), serde_json::Value::from_str(r#"[[597]]"#).unwrap());
+    assert_eq!(
+        json!(rows),
+        serde_json::Value::from_str(r#"[[597]]"#).unwrap()
+    );
     dbg!(n_routes_between.elapsed());
 }
 
 #[test]
 fn one_stop_distance() {
-    check_db();
+    initialize(&TEST_DB);
     let one_stop_distance = Instant::now();
 
     let rows = TEST_DB
@@ -1628,7 +1681,8 @@ fn one_stop_distance() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1644,7 +1698,7 @@ fn one_stop_distance() {
 
 #[test]
 fn airport_most_routes() {
-    check_db();
+    initialize(&TEST_DB);
     let airport_most_routes = Instant::now();
 
     let rows = TEST_DB
@@ -1656,7 +1710,8 @@ fn airport_most_routes() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1672,7 +1727,7 @@ fn airport_most_routes() {
 
 #[test]
 fn north_of_77() {
-    check_db();
+    initialize(&TEST_DB);
     let north_of_77 = Instant::now();
 
     let rows = TEST_DB
@@ -1682,7 +1737,8 @@ fn north_of_77() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1693,7 +1749,7 @@ fn north_of_77() {
 
 #[test]
 fn greenwich_meridian() {
-    check_db();
+    initialize(&TEST_DB);
     let greenwich_meridian = Instant::now();
 
     let rows = TEST_DB
@@ -1703,7 +1759,8 @@ fn greenwich_meridian() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1714,7 +1771,7 @@ fn greenwich_meridian() {
 
 #[test]
 fn box_around_heathrow() {
-    check_db();
+    initialize(&TEST_DB);
     let box_around_heathrow = Instant::now();
 
     let rows = TEST_DB
@@ -1726,7 +1783,8 @@ fn box_around_heathrow() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1738,7 +1796,7 @@ fn box_around_heathrow() {
 
 #[test]
 fn dfw_by_region() {
-    check_db();
+    initialize(&TEST_DB);
     let dfw_by_region = Instant::now();
 
     let rows = TEST_DB
@@ -1750,7 +1808,8 @@ fn dfw_by_region() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1769,7 +1828,7 @@ fn dfw_by_region() {
 
 #[test]
 fn great_circle_distance() {
-    check_db();
+    initialize(&TEST_DB);
     let great_circle_distance = Instant::now();
 
     let rows = TEST_DB
@@ -1781,15 +1840,19 @@ fn great_circle_distance() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
-    assert_eq!(json!(rows), serde_json::Value::from_str(r#"[[1.0]]"#).unwrap());
+    assert_eq!(
+        json!(rows),
+        serde_json::Value::from_str(r#"[[1.0]]"#).unwrap()
+    );
     dbg!(great_circle_distance.elapsed());
 }
 
 #[test]
 fn aus_to_edi() {
-    check_db();
+    initialize(&TEST_DB);
     let aus_to_edi = Instant::now();
 
     let rows = TEST_DB
@@ -1806,7 +1869,8 @@ fn aus_to_edi() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1817,7 +1881,7 @@ fn aus_to_edi() {
 
 #[test]
 fn reachable_from_lhr() {
-    check_db();
+    initialize(&TEST_DB);
     let reachable_from_lhr = Instant::now();
 
     let rows = TEST_DB
@@ -1834,7 +1898,8 @@ fn reachable_from_lhr() {
         "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1859,7 +1924,7 @@ fn reachable_from_lhr() {
 
 #[test]
 fn furthest_from_lhr() {
-    check_db();
+    initialize(&TEST_DB);
     let furthest_from_lhr = Instant::now();
 
     let rows = TEST_DB
@@ -1878,7 +1943,8 @@ fn furthest_from_lhr() {
         "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(
         json!(rows),
@@ -1898,7 +1964,7 @@ fn furthest_from_lhr() {
 
 #[test]
 fn skip_limit() {
-    check_db();
+    initialize(&TEST_DB);
     let rows = TEST_DB
         .run_script(
             r#"
@@ -1906,7 +1972,8 @@ fn skip_limit() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[3], [4], [5], [6], [7], [8], [9]]));
 
@@ -1917,7 +1984,8 @@ fn skip_limit() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[3], [4], [5], [6], [7], [8], [9]]));
 
@@ -1929,7 +1997,8 @@ fn skip_limit() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[8], [9]]));
 
@@ -1942,7 +2011,8 @@ fn skip_limit() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[7], [8]]));
 
@@ -1955,7 +2025,8 @@ fn skip_limit() {
     "#,
             Default::default(),
         )
-        .unwrap().rows;
+        .unwrap()
+        .rows;
 
     assert_eq!(json!(rows), json!([[3], [4], [5], [6], [7], [8]]));
 }
