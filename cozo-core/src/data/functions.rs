@@ -66,6 +66,16 @@ pub(crate) fn op_list(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(args.to_vec()))
 }
 
+define_op!(OP_COALESCE, 0, true);
+pub(crate) fn op_coalesce(args: &[DataValue]) -> Result<DataValue> {
+    for val in args {
+        if *val != DataValue::Null {
+            return Ok(val.clone());
+        }
+    }
+    return Ok(DataValue::Null);
+}
+
 define_op!(OP_EQ, 2, false);
 pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::Bool(match (&args[0], &args[1]) {

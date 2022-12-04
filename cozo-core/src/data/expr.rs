@@ -594,6 +594,7 @@ impl Debug for Op {
 
 pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
     Some(match name {
+        "coalesce" => &OP_COALESCE,
         "list" => &OP_LIST,
         "add" => &OP_ADD,
         "sub" => &OP_SUB,

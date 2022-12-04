@@ -301,7 +301,7 @@ fn aggregation_count() {
 fn aggregation_filter() {
     TEST_DB
         .run_script(
-            "?[age, count(age)] := *user{age}, try(age >= 18, false)",
+            "?[age, count(age)] := *user{age}, coalesce(age, 0) >= 18",
             Default::default(),
         )
         .unwrap();
@@ -332,7 +332,7 @@ fn expansion_1_filter() {
     let i = rng.gen_range(1..SIZES.0);
     TEST_DB
         .run_script(
-            "?[to] := *friends{fr: $id, to}, *user{uid: to, age}, try(age >= 18, false)",
+            "?[to] := *friends{fr: $id, to}, *user{uid: to, age}, coalesce(age, 0) >= 18",
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
         .unwrap();
@@ -354,7 +354,7 @@ fn expansion_2_filter() {
     let i = rng.gen_range(1..SIZES.0);
     TEST_DB
             .run_script(
-                "?[to] := *friends{fr: $id, to: a}, *friends{fr: a, to}, *user{uid: to, age}, try(age >= 18, false)",
+                "?[to] := *friends{fr: $id, to: a}, *friends{fr: a, to}, *user{uid: to, age}, coalesce(age, 0) >= 18",
                 BTreeMap::from([("id".to_string(), json!(i))]),
             )
             .unwrap();
@@ -382,7 +382,7 @@ fn expansion_3_filter() {
             r#"
                         l1[to] := *friends{fr: $id, to}
                         l2[to] := l1[fr], *friends{fr, to}
-                        ?[to] := l2[fr], *friends{fr, to}, *user{uid: to, age}, try(age >= 18, false)
+                        ?[to] := l2[fr], *friends{fr, to}, *user{uid: to, age}, coalesce(age, 0) >= 18
                         "#,
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
@@ -443,7 +443,7 @@ fn neighbours_2_filter() {
             l1[to] := *friends{fr: $id, to}
             l2[to] := l1[to]
             l2[to] := l1[fr], *friends{fr, to}
-            ?[to] := l2[to], *user{uid: to, age}, try(age >= 18, false)
+            ?[to] := l2[to], *user{uid: to, age}, coalesce(age, 0) >= 18
             "#,
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
@@ -475,7 +475,7 @@ fn neighbours_2_filter_data() {
             l1[to] := *friends{fr: $id, to}
             l2[to] := l1[to]
             l2[to] := l1[fr], *friends{fr, to}
-            ?[to, age, cmpl_pct, gender] := l2[to], *user{uid: to, age, cmpl_pct, gender}, try(age >= 18, false)
+            ?[to, age, cmpl_pct, gender] := l2[to], *user{uid: to, age, cmpl_pct, gender}, coalesce(age, 0) >= 18
             "#,
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
@@ -776,12 +776,12 @@ fn throughput(_: &mut Bencher) {
     });
     dbg!((count as f64) / aggregation_time.elapsed().as_secs_f64());
 
-    let aggregation_distinct_time = Instant::now();
+    let aggregation_count_time = Instant::now();
 
     (0..count).into_par_iter().for_each(|_| {
         aggregation_count();
     });
-    dbg!((count as f64) / aggregation_distinct_time.elapsed().as_secs_f64());
+    dbg!((count as f64) / aggregation_count_time.elapsed().as_secs_f64());
 
     let aggregation_filter_time = Instant::now();
 
