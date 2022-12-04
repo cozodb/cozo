@@ -50,6 +50,7 @@ lazy_static! {
         let path_exists = Path::exists(&db_path);
         let db = DbInstance::new(&db_kind, db_path.to_str().unwrap(), "").unwrap();
         if path_exists {
+            db.run_script("::compact", Default::default()).unwrap();
             return db
         }
 
