@@ -226,8 +226,8 @@ fn single_vertex() {
 }
 
 fn single_vertex_write() {
+    let i = rand::thread_rng().gen_range(1..SIZES.0 * 10);
     for _ in 0..10 {
-        let i = rand::thread_rng().gen_range(1..SIZES.0 * 10);
         if TEST_DB
             .run_script(
                 "?[uid, cmpl_pct, gender, age] <- [[$id, 0, null, null]] :put user {uid => cmpl_pct, gender, age}",
@@ -241,12 +241,12 @@ fn single_vertex_write() {
 }
 
 fn single_edge_write() {
+    let i = rand::thread_rng().gen_range(1..SIZES.0);
+    let mut j = rand::thread_rng().gen_range(1..SIZES.0);
+    while j == i {
+        j = rand::thread_rng().gen_range(1..SIZES.0);
+    }
     for _ in 0..10 {
-        let i = rand::thread_rng().gen_range(1..SIZES.0);
-        let mut j = rand::thread_rng().gen_range(1..SIZES.0);
-        while j == i {
-            j = rand::thread_rng().gen_range(1..SIZES.0);
-        }
         if TEST_DB
             .run_script(
                 r#"
@@ -264,8 +264,8 @@ fn single_edge_write() {
 }
 
 fn single_vertex_update() {
+    let i = rand::thread_rng().gen_range(1..SIZES.0);
     for _ in 0..10 {
-        let i = rand::thread_rng().gen_range(1..SIZES.0);
         if TEST_DB
             .run_script(
                 r#"
