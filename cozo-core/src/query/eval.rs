@@ -199,8 +199,8 @@ impl<'a> SessionTx<'a> {
                             store.put(item, 0);
                         }
                         *changed.get_mut(rule_symb).unwrap() = true;
-                        poison.check()?;
                     }
+                    poison.check()?;
                 }
             }
             AggrKind::Normal => {
@@ -217,8 +217,8 @@ impl<'a> SessionTx<'a> {
                         trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
                         store_to_use.normal_aggr_put(&item, &rule.aggr, serial);
                         *changed.get_mut(rule_symb).unwrap() = true;
-                        poison.check()?;
                     }
+                    poison.check()?;
                 }
                 if store_to_use.normal_aggr_scan_and_put(
                     &ruleset[0].aggr,
@@ -311,8 +311,8 @@ impl<'a> SessionTx<'a> {
                             return Ok(true);
                         }
                     }
-                    poison.check()?;
                 }
+                poison.check()?;
             }
         }
         Ok(should_check_limit)

@@ -257,8 +257,8 @@ impl InMemRelation {
                         op.set(val)?;
                     }
                 }
-                poison.check()?;
             }
+            poison.check()?;
             for (i, aggr) in aggrs.iter().enumerate() {
                 if let Some((aggr_op, _aggr_args)) = aggr {
                     let op = aggr_op.normal_op.as_ref().unwrap();

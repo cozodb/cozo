@@ -198,7 +198,7 @@ const UPDATE_QUERIES: [QueryFn; 1] = [single_vertex_update];
 const AGGREGATE_QUERIES: [QueryFn; 4] = [
     aggregation,
     aggregation_filter,
-    aggregation_distinct,
+    aggregation_count,
     min_max,
 ];
 const ANALYTICAL_QUERIES: [QueryFn; 15] = [
@@ -292,16 +292,16 @@ fn aggregation() {
         .unwrap();
 }
 
-fn aggregation_distinct() {
+fn aggregation_count() {
     TEST_DB
-        .run_script("?[count_unique(age)] := *user{age}", Default::default())
+        .run_script("?[count(uid), count(age)] := *user{uid, age}", Default::default())
         .unwrap();
 }
 
 fn aggregation_filter() {
     TEST_DB
         .run_script(
-            "?[age, count(uid)] := *user{uid, age}, try(age >= 18, false)",
+            "?[age, count(age)] := *user{age}, try(age >= 18, false)",
             Default::default(),
         )
         .unwrap();
@@ -537,7 +537,7 @@ fn bench_aggregation(b: &mut Bencher) {
 #[bench]
 fn bench_aggregation_distinct(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(aggregation_distinct)
+    b.iter(aggregation_count)
 }
 
 #[bench]
@@ -779,7 +779,7 @@ fn throughput(_: &mut Bencher) {
     let aggregation_distinct_time = Instant::now();
 
     (0..count).into_par_iter().for_each(|_| {
-        aggregation_distinct();
+        aggregation_count();
     });
     dbg!((count as f64) / aggregation_distinct_time.elapsed().as_secs_f64());
 
@@ -994,7 +994,7 @@ fn mixed(_: &mut Bencher) {
     let aggregation_distinct_time = Instant::now();
 
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, aggregation_distinct);
+        wrap(mixed_pct, aggregation_count);
     });
     dbg!((count as f64) / aggregation_distinct_time.elapsed().as_secs_f64());
 
