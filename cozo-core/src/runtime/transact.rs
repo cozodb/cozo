@@ -12,10 +12,8 @@ use std::sync::Arc;
 use miette::Result;
 
 use crate::data::program::MagicSymbol;
-use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
-use crate::parse::SourceSpan;
 use crate::runtime::in_mem::{InMemRelation, StoredRelationId};
 use crate::runtime::relation::RelationId;
 use crate::storage::StoreTx;
@@ -31,20 +29,6 @@ impl<'a> SessionTx<'a> {
         let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
         let ret = InMemRelation::new(StoredRelationId(old_count), rule_name, arity);
-        ret.ensure_mem_db_for_epoch(0);
-        ret
-    }
-
-    pub(crate) fn new_temp_store(&self, span: SourceSpan) -> InMemRelation {
-        let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
-        let old_count = old_count & 0x00ff_ffffu32;
-        let ret = InMemRelation::new(
-            StoredRelationId(old_count),
-            MagicSymbol::Muggle {
-                inner: Symbol::new("", span),
-            },
-            0,
-        );
         ret.ensure_mem_db_for_epoch(0);
         ret
     }
