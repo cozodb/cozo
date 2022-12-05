@@ -188,25 +188,28 @@ impl InMemRelation {
         let epoch_map: &RefCell<BTreeMap<_, _>> = epoch_map.borrow();
         let epoch_map = epoch_map.borrow();
 
-        // FIXME
-        epoch_map.clone().into_iter().map(|(k, v)| {
-            if v.0.is_empty() {
-                Ok(k)
-            } else {
-                let combined =
-                    k.0.into_iter()
-                        .zip(v.0.into_iter())
-                        .map(|(kel, vel)| {
-                            if matches!(kel, DataValue::Guard) {
-                                vel
-                            } else {
-                                kel
-                            }
-                        })
-                        .collect_vec();
-                Ok(Tuple(combined))
-            }
-        })
+        let collected = epoch_map
+            .iter()
+            .map(|(k, v)| {
+                if v.0.is_empty() {
+                    k.clone()
+                } else {
+                    let combined =
+                        k.0.iter()
+                            .zip(v.0.iter())
+                            .map(|(kel, vel)| {
+                                if matches!(kel, DataValue::Guard) {
+                                    vel.clone()
+                                } else {
+                                    kel.clone()
+                                }
+                            })
+                            .collect_vec();
+                    Tuple(combined)
+                }
+            })
+            .collect_vec();
+        collected.into_iter().map(Ok)
     }
     pub(crate) fn scan_all<'a>(&'a self) -> impl Iterator<Item = Result<Tuple>> + 'a {
         self.scan_all_for_epoch(0)
@@ -218,27 +221,30 @@ impl InMemRelation {
         let epoch_map: &RefCell<BTreeMap<_, _>> = epoch_map.borrow();
         let epoch_map = epoch_map.borrow();
 
-        // FIXME
-        epoch_map.clone().into_iter().filter_map(|(k, v)| {
-            if v.0.is_empty() {
-                Some(Ok(k))
-            } else if v.0.last() == Some(&DataValue::Guard) {
-                None
-            } else {
-                let combined =
-                    k.0.iter()
-                        .zip(v.0.iter())
-                        .map(|(kel, vel)| {
-                            if matches!(kel, DataValue::Guard) {
-                                vel.clone()
-                            } else {
-                                kel.clone()
-                            }
-                        })
-                        .collect_vec();
-                Some(Ok(Tuple(combined)))
-            }
-        })
+        let collected = epoch_map
+            .iter()
+            .filter_map(|(k, v)| {
+                if v.0.is_empty() {
+                    Some(k.clone())
+                } else if v.0.last() == Some(&DataValue::Guard) {
+                    None
+                } else {
+                    let combined =
+                        k.0.iter()
+                            .zip(v.0.iter())
+                            .map(|(kel, vel)| {
+                                if matches!(kel, DataValue::Guard) {
+                                    vel.clone()
+                                } else {
+                                    kel.clone()
+                                }
+                            })
+                            .collect_vec();
+                    Some(Tuple(combined))
+                }
+            })
+            .collect_vec();
+        collected.into_iter().map(Ok)
     }
     pub(crate) fn scan_prefix(&self, prefix: &Tuple) -> impl Iterator<Item = Result<Tuple>> {
         self.scan_prefix_for_epoch(prefix, 0)
@@ -257,11 +263,11 @@ impl InMemRelation {
         let epoch_map: &RefCell<BTreeMap<_, _>> = epoch_map.borrow();
         let epoch_map = epoch_map.borrow();
 
-        let res = epoch_map
+        let collected = epoch_map
             .range((Included(prefix), Included(&upper)))
             .map(|(k, v)| {
                 if v.0.is_empty() {
-                    Ok(k.clone())
+                    k.clone()
                 } else {
                     let combined =
                         k.0.iter()
@@ -274,11 +280,11 @@ impl InMemRelation {
                                 }
                             })
                             .collect_vec();
-                    Ok(Tuple(combined))
+                    Tuple(combined)
                 }
             })
             .collect_vec();
-        res.into_iter()
+        collected.into_iter().map(Ok)
     }
     pub(crate) fn scan_bounded_prefix_for_epoch(
         &self,
@@ -300,8 +306,8 @@ impl InMemRelation {
 
         let res = epoch_map
             .range((Included(&prefix_bound), Included(&upper_bound)))
-            .map(|(k, _v)| Ok(k.clone()))
+            .map(|(k, _v)| k.clone())
             .collect_vec();
-        res.into_iter()
+        res.into_iter().map(Ok)
     }
 }
