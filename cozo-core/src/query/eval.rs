@@ -6,14 +6,19 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 
+use itertools::Itertools;
 use log::{debug, trace};
 use miette::Result;
 
+use crate::data::aggr::Aggregation;
 use crate::data::program::{MagicAlgoApply, MagicSymbol, NoEntryError};
 use crate::data::symb::{Symbol, PROG_ENTRY};
+use crate::data::tuple::Tuple;
+use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::db::Poison;
@@ -71,6 +76,7 @@ impl<'a> SessionTx<'a> {
         }
         Ok((ret_area, early_return))
     }
+    /// returns true if early return is activated
     fn semi_naive_magic_evaluate(
         &self,
         prog: &CompiledProgram,
@@ -159,6 +165,7 @@ impl<'a> SessionTx<'a> {
         let out = stores.get(rule_symb).unwrap();
         algo_impl.run(self, algo_apply, stores, out, poison)
     }
+    /// returns true is early return is activated
     fn initial_rule_eval(
         &self,
         rule_symb: &MagicSymbol,
@@ -204,33 +211,106 @@ impl<'a> SessionTx<'a> {
                 }
             }
             AggrKind::Normal => {
-                let store_to_use = self.new_temp_store(rule_symb.symbol().span);
+                let mut aggr_work: BTreeMap<Vec<DataValue>, Vec<Aggregation>> = BTreeMap::new();
+
                 for (rule_n, rule) in ruleset.iter().enumerate() {
                     debug!(
                         "Calculation for normal aggr rule {:?}.{}",
                         rule_symb, rule_n
                     );
-                    for (serial, item_res) in
-                        rule.relation.iter(self, Some(0), &use_delta)?.enumerate()
-                    {
+
+                    let keys_indices = rule
+                        .aggr
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, a)| if a.is_none() { Some(i) } else { None })
+                        .collect_vec();
+                    let extract_keys = |t: &Tuple| -> Vec<DataValue> {
+                        keys_indices.iter().map(|i| t.0[*i].clone()).collect_vec()
+                    };
+
+                    let val_indices_and_aggrs = rule
+                        .aggr
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, a)| match a {
+                            None => None,
+                            Some(aggr) => Some((i, aggr.clone())),
+                        })
+                        .collect_vec();
+
+                    for item_res in rule.relation.iter(self, Some(0), &use_delta)? {
                         let item = item_res?;
                         trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
-                        store_to_use.normal_aggr_put(&item, &rule.aggr, serial);
+
+                        let keys = extract_keys(&item);
+
+                        match aggr_work.entry(keys) {
+                            Entry::Occupied(mut ent) => {
+                                let aggr_ops = ent.get_mut();
+                                for (aggr_idx, (tuple_idx, _)) in
+                                    val_indices_and_aggrs.iter().enumerate()
+                                {
+                                    aggr_ops[aggr_idx]
+                                        .normal_op
+                                        .as_mut()
+                                        .unwrap()
+                                        .set(&item.0[*tuple_idx])?;
+                                }
+                            }
+                            Entry::Vacant(ent) => {
+                                let mut aggr_ops = Vec::with_capacity(val_indices_and_aggrs.len());
+                                for (i, (aggr, params)) in &val_indices_and_aggrs {
+                                    let mut cur_aggr = aggr.clone();
+                                    cur_aggr.normal_init(params)?;
+                                    cur_aggr.normal_op.as_mut().unwrap().set(&item.0[*i])?;
+                                    aggr_ops.push(cur_aggr)
+                                }
+                                ent.insert(aggr_ops);
+                            }
+                        }
+
                         *changed.get_mut(rule_symb).unwrap() = true;
                     }
                     poison.check()?;
                 }
-                if store_to_use.normal_aggr_scan_and_put(
-                    &ruleset[0].aggr,
-                    store,
-                    if should_check_limit {
-                        Some(limiter)
+
+                let mut inv_indices = Vec::with_capacity(ruleset[0].aggr.len());
+                let mut seen_keys = 0usize;
+                let mut seen_aggrs = 0usize;
+                for aggr in ruleset[0].aggr.iter() {
+                    if aggr.is_some() {
+                        inv_indices.push((true, seen_aggrs));
+                        seen_aggrs += 1;
                     } else {
-                        None
-                    },
-                    poison,
-                )? {
-                    return Ok(true);
+                        inv_indices.push((false, seen_keys));
+                        seen_keys += 1;
+                    }
+                }
+
+                for (keys, aggrs) in aggr_work {
+                    let tuple_data: Vec<_> = inv_indices
+                        .iter()
+                        .map(|(is_aggr, idx)| {
+                            if *is_aggr {
+                                aggrs[*idx].normal_op.as_ref().unwrap().get()
+                            } else {
+                                Ok(keys[*idx].clone())
+                            }
+                        })
+                        .try_collect()?;
+                    let tuple = Tuple(tuple_data);
+                    if should_check_limit {
+                        if !store.exists(&tuple, 0) {
+                            store.put_with_skip(tuple, limiter.should_skip_next());
+                            if limiter.incr_and_should_stop() {
+                                return Ok(true);
+                            }
+                        }
+                        // else, do nothing
+                    } else {
+                        store.put(tuple, 0);
+                    }
                 }
             }
         }
