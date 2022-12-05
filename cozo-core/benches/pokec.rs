@@ -195,12 +195,8 @@ const READ_QUERIES: [QueryFn; 1] = [single_vertex];
 const WRITE_QUERIES: [QueryFn; 2] = [single_edge_write, single_vertex_write];
 const UPDATE_QUERIES: [QueryFn; 1] = [single_vertex_update];
 #[allow(dead_code)]
-const AGGREGATE_QUERIES: [QueryFn; 4] = [
-    aggregation,
-    aggregation_filter,
-    aggregation_count,
-    min_max,
-];
+const AGGREGATE_QUERIES: [QueryFn; 4] =
+    [aggregation, aggregation_filter, aggregation_count, min_max];
 const ANALYTICAL_QUERIES: [QueryFn; 15] = [
     expansion_1,
     expansion_2,
@@ -294,7 +290,10 @@ fn aggregation() {
 
 fn aggregation_count() {
     TEST_DB
-        .run_script("?[count(uid), count(age)] := *user{uid, age}", Default::default())
+        .run_script(
+            "?[count(uid), count(age)] := *user{uid, age}",
+            Default::default(),
+        )
         .unwrap();
 }
 
@@ -1017,4 +1016,10 @@ fn mixed(_: &mut Bencher) {
         wrap(mixed_pct, single_vertex);
     });
     dbg!((count as f64) / single_vertex_time.elapsed().as_secs_f64());
+
+    let single_vertex_update_time = Instant::now();
+    (0..count).into_par_iter().for_each(|_| {
+        wrap(mixed_pct, single_vertex_update);
+    });
+    dbg!((count as f64) / single_vertex_update_time.elapsed().as_secs_f64());
 }

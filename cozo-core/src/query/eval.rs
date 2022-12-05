@@ -118,6 +118,10 @@ impl<'a> SessionTx<'a> {
                     }
                 }
             } else {
+                for store in stores.values() {
+                    store.ensure_mem_db_for_epoch(epoch);
+                }
+
                 mem::swap(&mut changed, &mut prev_changed);
                 for (_k, v) in changed.iter_mut() {
                     *v = false;

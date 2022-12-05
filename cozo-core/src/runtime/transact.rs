@@ -30,19 +30,23 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> InMemRelation {
         let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        InMemRelation::new(StoredRelationId(old_count), rule_name, arity)
+        let ret = InMemRelation::new(StoredRelationId(old_count), rule_name, arity);
+        ret.ensure_mem_db_for_epoch(0);
+        ret
     }
 
     pub(crate) fn new_temp_store(&self, span: SourceSpan) -> InMemRelation {
         let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        InMemRelation::new(
+        let ret = InMemRelation::new(
             StoredRelationId(old_count),
             MagicSymbol::Muggle {
                 inner: Symbol::new("", span),
             },
             0,
-        )
+        );
+        ret.ensure_mem_db_for_epoch(0);
+        ret
     }
 
     pub(crate) fn load_last_relation_store_id(&self) -> Result<RelationId> {
