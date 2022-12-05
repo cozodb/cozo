@@ -471,7 +471,7 @@ fn neighbours_2_filter_data() {
             r#"
             l1[to] := *friends{fr: $id, to}
             ?[to] := l1[to], *user{uid: to, age, cmpl_pct, gender}, coalesce(age, 0) >= 18
-            ?[to] := l1[fr], *friends{fr, to} *user{uid: to, age, cmpl_pct, gender}, coalesce(age, 0) >= 18
+            ?[to] := l1[fr], *friends{fr, to}, *user{uid: to, age, cmpl_pct, gender}, coalesce(age, 0) >= 18
             "#,
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
