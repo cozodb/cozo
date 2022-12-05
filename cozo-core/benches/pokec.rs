@@ -440,9 +440,8 @@ fn neighbours_2_filter() {
         .run_script(
             r#"
             l1[to] := *friends{fr: $id, to}
-            l2[to] := l1[to]
-            l2[to] := l1[fr], *friends{fr, to}
-            ?[to] := l2[to], *user{uid: to, age}, coalesce(age, 0) >= 18
+            ?[to] := l1[to], *user{uid: to, age}, coalesce(age, 0) >= 18
+            ?[to] := l1[fr], *friends{fr, to}, *user{uid: to, age}, coalesce(age, 0) >= 18
             "#,
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
@@ -456,9 +455,8 @@ fn neighbours_2_data() {
         .run_script(
             r#"
             l1[to] := *friends{fr: $id, to}
-            l2[to] := l1[to]
-            l2[to] := l1[fr], *friends{fr, to}
-            ?[to, age, cmpl_pct, gender] := l2[to], *user{uid: to, age, cmpl_pct, gender}
+            ?[to, age, cmpl_pct, gender] := l1[to], *user{uid: to, age, cmpl_pct, gender}
+            ?[to, age, cmpl_pct, gender] := l1[fr], *friends{fr, to}, *user{uid: to, age, cmpl_pct, gender}
             "#,
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
@@ -472,9 +470,8 @@ fn neighbours_2_filter_data() {
         .run_script(
             r#"
             l1[to] := *friends{fr: $id, to}
-            l2[to] := l1[to]
-            l2[to] := l1[fr], *friends{fr, to}
-            ?[to, age, cmpl_pct, gender] := l2[to], *user{uid: to, age, cmpl_pct, gender}, coalesce(age, 0) >= 18
+            ?[to] := l1[to], *user{uid: to, age, cmpl_pct, gender}, coalesce(age, 0) >= 18
+            ?[to] := l1[fr], *friends{fr, to} *user{uid: to, age, cmpl_pct, gender}, coalesce(age, 0) >= 18
             "#,
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
