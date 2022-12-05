@@ -75,7 +75,7 @@ impl<'a> SessionTx<'a> {
         let mut relation_store = if op == RelationOp::Replace || op == RelationOp::Create {
             self.create_relation(meta.clone())?
         } else {
-            self.get_relation(&meta.name, true)?
+            self.get_relation(&meta.name, false)?
         };
         if let Some((old_put, old_retract)) = replaced_old_triggers {
             relation_store.put_triggers = old_put;

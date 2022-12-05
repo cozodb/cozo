@@ -214,7 +214,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     s
                 }
             };
-            let handle = tx.get_relation(relation, true)?;
+            let handle = tx.get_relation(relation, false)?;
 
             if handle.access_level < AccessLevel::Protected {
                 bail!(InsufficientAccessLevel(
@@ -359,7 +359,7 @@ impl<'s, S: Storage<'s>> Db<S> {
 
             for relation in relations {
                 let src_handle = src_tx.get_relation(relation, false)?;
-                let dst_handle = dst_tx.get_relation(relation, true)?;
+                let dst_handle = dst_tx.get_relation(relation, false)?;
 
                 if dst_handle.access_level < AccessLevel::Protected {
                     bail!(InsufficientAccessLevel(
@@ -771,7 +771,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 #[diagnostic(code(eval::stored_relation_not_found))]
                 struct StoreRelationNotFoundError(String);
 
-                let existing = tx.get_relation(&meta.name, true)?;
+                let existing = tx.get_relation(&meta.name, false)?;
 
                 ensure!(
                     tx.relation_exists(&meta.name)?,
