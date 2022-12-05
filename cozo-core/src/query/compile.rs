@@ -34,8 +34,6 @@ pub(crate) enum CompiledRuleSet {
     Algo(MagicAlgoApply),
 }
 
-unsafe impl Send for CompiledRuleSet {}
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum AggrKind {
     None,
