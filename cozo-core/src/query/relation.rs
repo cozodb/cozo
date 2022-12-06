@@ -789,10 +789,6 @@ impl StoredRA {
             return if !need_to_filter_values
                 && eliminate_indices.is_superset(&all_right_val_indices)
             {
-                dbg!(left_tuple_len);
-                dbg!(key_len);
-                dbg!(val_len);
-                dbg!(&eliminate_indices);
                 let it = left_iter
                     .map_ok(move |tuple| -> Result<Option<Tuple>> {
                         let prefix = left_to_prefix_indices
