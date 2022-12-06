@@ -45,24 +45,27 @@ impl CompiledRuleSet {
     pub(crate) fn aggr_kind(&self) -> AggrKind {
         match self {
             CompiledRuleSet::Rules(rules) => {
-                let mut is_aggr = false;
-                for rule in rules {
-                    for aggr in &rule.aggr {
-                        if aggr.is_some() {
-                            is_aggr = true;
-                            break;
+                let mut has_non_meet = false;
+                let mut has_aggr = false;
+                for maybe_aggr in rules[0].aggr.iter() {
+                    match maybe_aggr {
+                        None => {
+                            // meet aggregations must all be at the last positions
+                            if has_aggr {
+                                has_non_meet = true
+                            }
+                        }
+                        Some((aggr, _)) => {
+                            has_aggr = true;
+                            has_non_meet = has_non_meet || !aggr.is_meet
                         }
                     }
                 }
-                if !is_aggr {
-                    return AggrKind::None;
+                match (has_aggr, has_non_meet) {
+                    (false, _) => AggrKind::None,
+                    (true, true) => AggrKind::Normal,
+                    (true, false) => AggrKind::Meet,
                 }
-                for (aggr, _args) in rules[0].aggr.iter().flatten() {
-                    if !aggr.is_meet {
-                        return AggrKind::Normal;
-                    }
-                }
-                AggrKind::Meet
             }
             CompiledRuleSet::Algo(_) => AggrKind::None,
         }
