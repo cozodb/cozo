@@ -644,8 +644,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         match op {
             SysOp::Explain(prog) => {
                 let mut tx = self.transact()?;
-                let (stratified_program, _) =
-                    prog.to_normalized_program(&tx)?.stratify()?;
+                let (stratified_program, _) = prog.to_normalized_program(&tx)?.stratify()?;
                 let program = stratified_program.magic_sets_rewrite(&tx)?;
                 let (compiled, _) = tx.stratified_magic_compile(&program)?;
                 tx.commit_tx()?;
@@ -1080,5 +1079,50 @@ impl Poison {
             pill.store(true, Ordering::Relaxed);
         });
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use itertools::Itertools;
+    use serde_json::json;
+
+    use crate::new_cozo_mem;
+
+    #[test]
+    fn test_limit_offset() {
+        let db = new_cozo_mem().unwrap();
+        let res = db
+            .run_script("?[a] := a in [5,3,1,2,4] :limit 2", Default::default())
+            .unwrap()
+            .rows
+            .into_iter()
+            .flatten()
+            .collect_vec();
+        assert_eq!(json!(res), json!([3, 5]));
+        let res = db
+            .run_script("?[a] := a in [5,3,1,2,4] :limit 2 :offset 1", Default::default())
+            .unwrap()
+            .rows
+            .into_iter()
+            .flatten()
+            .collect_vec();
+        assert_eq!(json!(res), json!([1, 3]));
+        let res = db
+            .run_script("?[a] := a in [5,3,1,2,4] :limit 2 :offset 4", Default::default())
+            .unwrap()
+            .rows
+            .into_iter()
+            .flatten()
+            .collect_vec();
+        assert_eq!(json!(res), json!([4]));
+        let res = db
+            .run_script("?[a] := a in [5,3,1,2,4] :limit 2 :offset 5", Default::default())
+            .unwrap()
+            .rows
+            .into_iter()
+            .flatten()
+            .collect_vec();
+        assert_eq!(json!(res), json!([]));
     }
 }

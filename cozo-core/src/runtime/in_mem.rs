@@ -36,9 +36,6 @@ impl Debug for StoredRelationId {
 pub(crate) struct InMemRelation {
     mem_db: Rc<RefCell<Vec<Rc<RefCell<BTreeMap<Tuple, Tuple>>>>>>,
     epoch_size: Arc<AtomicU32>,
-    // total: Rc<RefCell<BTreeMap<Tuple, Tuple>>>,
-    // current: Rc<RefCell<BTreeMap<Tuple, Tuple>>>,
-    // prev: Rc<RefCell<BTreeMap<Tuple, Tuple>>>,
     pub(crate) id: StoredRelationId,
     pub(crate) rule_name: MagicSymbol,
     pub(crate) arity: usize,
@@ -99,6 +96,7 @@ impl InMemRelation {
                     if ma.is_none() {
                         tuple.0[i].clone()
                     } else {
+                        // placeholder for meet aggregation
                         DataValue::Guard
                     }
                 })
@@ -131,6 +129,7 @@ impl InMemRelation {
                         if aggr.is_some() {
                             Ok(tuple.0[i].clone())
                         } else {
+                            // placeholder for key part
                             Ok(DataValue::Guard)
                         }
                     })
@@ -163,6 +162,7 @@ impl InMemRelation {
         let mut epoch_map = epoch_map.borrow_mut();
 
         if should_skip {
+            // put guard, so that when iterating results, those with guards are ignored
             epoch_map.insert(tuple, Tuple(vec![DataValue::Guard]));
         } else {
             epoch_map.insert(tuple, Tuple::default());
@@ -198,6 +198,7 @@ impl InMemRelation {
                         k.0.iter()
                             .zip(v.0.iter())
                             .map(|(kel, vel)| {
+                                // merge meet aggregation kv
                                 if matches!(kel, DataValue::Guard) {
                                     vel.clone()
                                 } else {
@@ -227,12 +228,14 @@ impl InMemRelation {
                 if v.0.is_empty() {
                     Some(k.clone())
                 } else if v.0.last() == Some(&DataValue::Guard) {
+                    // ignore since we are using :offset
                     None
                 } else {
                     let combined =
                         k.0.iter()
                             .zip(v.0.iter())
                             .map(|(kel, vel)| {
+                                // merge kv parts of meet aggr
                                 if matches!(kel, DataValue::Guard) {
                                     vel.clone()
                                 } else {
@@ -273,6 +276,7 @@ impl InMemRelation {
                         k.0.iter()
                             .zip(v.0.iter())
                             .map(|(kel, vel)| {
+                                // merge kv parts of meet aggr
                                 if matches!(kel, DataValue::Guard) {
                                     vel.clone()
                                 } else {
@@ -311,3 +315,5 @@ impl InMemRelation {
         res.into_iter().map(Ok)
     }
 }
+
+// meet put

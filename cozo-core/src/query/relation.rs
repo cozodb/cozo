@@ -1448,7 +1448,7 @@ pub(crate) struct InnerJoin {
     pub(crate) joiner: Joiner,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
     pub(crate) span: SourceSpan,
-    mat_right_cache: RefCell<Rc<Vec<Vec<DataValue>>>>,
+    mat_right_cache: RefCell<Rc<Vec<Tuple>>>,
     cached: AtomicBool,
 }
 
@@ -1614,7 +1614,7 @@ impl InnerJoin {
         let left_cache = match left_iter.next() {
             None => return Ok(Box::new(iter::empty())),
             Some(Err(err)) => return Err(err),
-            Some(Ok(data)) => data.0,
+            Some(Ok(data)) => data,
         };
 
         let right_join_indices_set = BTreeSet::from_iter(right_join_indices.iter().cloned());
@@ -1642,7 +1642,7 @@ impl InnerJoin {
                             .iter()
                             .map(|i| tuple.0[*i].clone())
                             .collect_vec();
-                        cache.insert(stored_tuple);
+                        cache.insert(Tuple(stored_tuple));
                     }
                     Err(e) => return Err(e),
                 }
@@ -1659,7 +1659,7 @@ impl InnerJoin {
         let it = CachedMaterializedIterator {
             eliminate_indices,
             left: left_iter,
-            left_cache,
+            left_cache: left_cache,
             left_join_indices,
             materialized: cached_data,
             right_invert_indices,
@@ -1671,23 +1671,23 @@ impl InnerJoin {
 }
 
 struct CachedMaterializedIterator<'a> {
-    materialized: Rc<Vec<Vec<DataValue>>>,
+    materialized: Rc<Vec<Tuple>>,
     eliminate_indices: BTreeSet<usize>,
     left_join_indices: Vec<usize>,
     right_invert_indices: Vec<usize>,
     right_idx: usize,
-    prefix: Vec<DataValue>,
+    prefix: Tuple,
     left: TupleIter<'a>,
-    left_cache: Vec<DataValue>,
+    left_cache: Tuple,
 }
 
 impl<'a> CachedMaterializedIterator<'a> {
-    fn advance_right(&mut self) -> Option<&Vec<DataValue>> {
+    fn advance_right(&mut self) -> Option<&Tuple> {
         if self.right_idx == self.materialized.len() {
             None
         } else {
             let ret = &self.materialized[self.right_idx];
-            if ret.starts_with(&self.prefix) {
+            if ret.0.starts_with(&self.prefix.0) {
                 self.right_idx += 1;
                 Some(ret)
             } else {
@@ -1703,9 +1703,9 @@ impl<'a> CachedMaterializedIterator<'a> {
                     let data = data.clone();
                     let mut ret = self.left_cache.clone();
                     for i in &self.right_invert_indices {
-                        ret.push(data[*i].clone());
+                        ret.0.push(data.0[*i].clone());
                     }
-                    let tuple = eliminate_from_tuple(Tuple(ret), &self.eliminate_indices);
+                    let tuple = eliminate_from_tuple(ret, &self.eliminate_indices);
                     return Ok(Some(tuple));
                 }
                 None => {
@@ -1713,7 +1713,7 @@ impl<'a> CachedMaterializedIterator<'a> {
                     match next_left {
                         None => return Ok(None),
                         Some(l) => {
-                            let left_tuple = l?.0;
+                            let left_tuple = l?;
                             let (prefix, idx) = build_mat_range_iter(
                                 &self.materialized,
                                 &self.left_join_indices,
@@ -1732,14 +1732,16 @@ impl<'a> CachedMaterializedIterator<'a> {
 }
 
 fn build_mat_range_iter(
-    mat: &[Vec<DataValue>],
+    mat: &[Tuple],
     left_join_indices: &[usize],
-    left_tuple: &[DataValue],
-) -> (Vec<DataValue>, usize) {
-    let prefix = left_join_indices
-        .iter()
-        .map(|i| left_tuple[*i].clone())
-        .collect_vec();
+    left_tuple: &Tuple,
+) -> (Tuple, usize) {
+    let prefix = Tuple(
+        left_join_indices
+            .iter()
+            .map(|i| left_tuple.0[*i].clone())
+            .collect_vec(),
+    );
     let idx = match mat.binary_search(&prefix) {
         Ok(i) => i,
         Err(i) => i,
