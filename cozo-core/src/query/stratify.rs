@@ -214,7 +214,8 @@ fn make_scc_reduced_graph<'a>(
 }
 
 impl NormalFormProgram {
-    pub(crate) fn stratify(self) -> Result<StratifiedNormalFormProgram> {
+    /// returns the stratified program and the store lifetimes of the intermediate relations
+    pub(crate) fn stratify(self) -> Result<(StratifiedNormalFormProgram, BTreeMap<Symbol, usize>)> {
         // prerequisite: the program is already in disjunctive normal form
         // 0. build a graph of the program
         let prog_entry: &Symbol = &Symbol::new(PROG_ENTRY, SourceSpan(0, 0));
@@ -254,15 +255,66 @@ impl NormalFormProgram {
             .collect::<BTreeMap<_, _>>();
         // 7. translate the stratification into datalog program
         let mut ret: Vec<NormalFormProgram> = vec![Default::default(); n_strata];
+
+        let mut store_lifetimes = BTreeMap::new();
+        for (fr, tos) in &stratified_graph {
+            if let Some(fr_idx) = invert_indices.get(fr) {
+                if let Some(fr_stratum) = invert_sort_result.get(fr_idx) {
+                    for (to, _) in tos {
+                        let used_in = n_strata - 1 - *fr_stratum;
+                        match store_lifetimes.entry((*to).clone()) {
+                            Entry::Vacant(e) => {
+                                e.insert(used_in);
+                            }
+                            Entry::Occupied(mut o) => {
+                                let existing = *o.get();
+                                if used_in > existing {
+                                    o.insert(used_in);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         for (name, ruleset) in self.prog {
             if let Some(scc_idx) = invert_indices.get(&name) {
-                if let Some(stratum_idx) = invert_sort_result.get(scc_idx) {
-                    let target = ret.get_mut(*stratum_idx).unwrap();
+                if let Some(rev_stratum_idx) = invert_sort_result.get(scc_idx) {
+                    let target = ret.get_mut(*rev_stratum_idx).unwrap();
                     target.prog.insert(name, ruleset);
                 }
             }
         }
 
-        Ok(StratifiedNormalFormProgram(ret))
+        Ok((StratifiedNormalFormProgram(ret), store_lifetimes))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::new_cozo_mem;
+
+    #[test]
+    fn test_dependencies() {
+        let db = new_cozo_mem().unwrap();
+        let _res = db
+            .run_script(
+                r#"
+        x[a] <- [[1], [2]]
+        w[a] := a in [2]
+        w[a] := w[b], a = b + 1, a < 10
+        y[count(a)] := x[a]
+        y[count(a)] := w[a]
+        z[count(a)] := y[a]
+        z[count(a)] := y[b], a = b + 1
+        ?[a] := z[a]
+        ?[a] := w[a]
+        "#,
+                Default::default(),
+            )
+            .unwrap()
+            .rows;
+        // dbg!(res);
     }
 }

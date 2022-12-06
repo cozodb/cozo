@@ -98,7 +98,7 @@ impl<'a> SessionTx<'a> {
         for epoch in 0u32.. {
             debug!("epoch {}", epoch);
             if epoch == 0 {
-                for (k, compiled_ruleset) in prog.iter() {
+                for (k, compiled_ruleset) in prog.iter().rev() {
                     match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => {
                             let aggr_kind = compiled_ruleset.aggr_kind();
@@ -127,7 +127,7 @@ impl<'a> SessionTx<'a> {
                     *v = false;
                 }
 
-                for (k, compiled_ruleset) in prog.iter() {
+                for (k, compiled_ruleset) in prog.iter().rev() {
                     match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => {
                             let is_meet_aggr = match compiled_ruleset.aggr_kind() {
@@ -148,7 +148,9 @@ impl<'a> SessionTx<'a> {
                             )? || used_limiter;
                         }
 
-                        CompiledRuleSet::Algo(_) => unreachable!(),
+                        CompiledRuleSet::Algo(_) => {
+                            // no need to do anything, algos are only calculated once
+                        },
                     }
                 }
             }

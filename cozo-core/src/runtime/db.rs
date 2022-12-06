@@ -644,10 +644,9 @@ impl<'s, S: Storage<'s>> Db<S> {
         match op {
             SysOp::Explain(prog) => {
                 let mut tx = self.transact()?;
-                let program = prog
-                    .to_normalized_program(&tx)?
-                    .stratify()?
-                    .magic_sets_rewrite(&tx)?;
+                let (stratified_program, _) =
+                    prog.to_normalized_program(&tx)?.stratify()?;
+                let program = stratified_program.magic_sets_rewrite(&tx)?;
                 let (compiled, _) = tx.stratified_magic_compile(&program)?;
                 tx.commit_tx()?;
                 self.explain_compiled(&compiled)
@@ -781,10 +780,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 existing.ensure_compatible(meta)?;
             }
         };
-        let program = input_program
-            .to_normalized_program(tx)?
-            .stratify()?
-            .magic_sets_rewrite(tx)?;
+        // TODO
+        let (stratified_program, _store_lifetimes) =
+            input_program.to_normalized_program(tx)?.stratify()?;
+        let program = stratified_program.magic_sets_rewrite(tx)?;
         let (compiled, stores) = tx.stratified_magic_compile(&program)?;
 
         let poison = Poison::default();
