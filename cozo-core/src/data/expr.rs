@@ -20,7 +20,6 @@ use thiserror::Error;
 
 use crate::data::functions::*;
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::SourceSpan;
 
