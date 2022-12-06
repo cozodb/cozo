@@ -18,29 +18,30 @@ pub(crate) type TupleIter<'a> = Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
 
 pub(crate) trait TupleT {
     fn encode_as_key(&self, prefix: RelationId) -> Vec<u8>;
-    fn decode_from_key(key: &[u8]) -> Self;
 }
 
-impl TupleT for  Tuple {
+impl<T> TupleT for T where T: AsRef<[DataValue]> {
     fn encode_as_key(&self, prefix: RelationId) -> Vec<u8> {
-        let len = self.len();
+        let len = self.as_ref().len();
         let mut ret = Vec::with_capacity(4 + 4 * len + 10 * len);
         let prefix_bytes = prefix.0.to_be_bytes();
         ret.extend(prefix_bytes);
-        for val in self.iter() {
+        for val in self.as_ref().iter() {
             ret.encode_datavalue(val);
         }
         ret
     }
-    fn decode_from_key(key: &[u8]) -> Self {
-        let mut remaining = &key[ENCODED_KEY_MIN_LEN..];
-        let mut ret = vec![];
-        while !remaining.is_empty() {
-            let (val, next) = DataValue::decode_from_key(remaining);
-            ret.push(val);
-            remaining = next;
-        }
-        ret
-    }
 }
+
+pub(crate) fn decode_tuple_from_key(key: &[u8]) -> Tuple {
+    let mut remaining = &key[ENCODED_KEY_MIN_LEN..];
+    let mut ret = vec![];
+    while !remaining.is_empty() {
+        let (val, next) = DataValue::decode_from_key(remaining);
+        ret.push(val);
+        remaining = next;
+    }
+    ret
+}
+
 pub(crate) const ENCODED_KEY_MIN_LEN: usize = 8;

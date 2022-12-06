@@ -309,7 +309,7 @@ impl Expr {
             }
         }
     }
-    pub(crate) fn eval(&self, bindings: &Tuple) -> Result<DataValue> {
+    pub(crate) fn eval(&self, bindings: impl AsRef<[DataValue]>) -> Result<DataValue> {
         match self {
             Expr::Binding { var, tuple_pos, .. } => match tuple_pos {
                 None => {
@@ -327,29 +327,29 @@ impl Expr {
                     #[diagnostic(code(eval::unbound))]
                     struct TupleTooShortError(String, usize, usize, #[label] SourceSpan);
 
-                    Ok(bindings
+                    Ok(bindings.as_ref()
                         .get(*i)
                         .ok_or_else(|| {
-                            TupleTooShortError(var.name.to_string(), *i, bindings.len(), var.span)
+                            TupleTooShortError(var.name.to_string(), *i, bindings.as_ref().len(), var.span)
                         })?
                         .clone())
                 }
             },
             Expr::Const { val, .. } => Ok(val.clone()),
             Expr::Apply { op, args, .. } => {
-                let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings)).try_collect()?;
+                let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings.as_ref())).try_collect()?;
                 Ok((op.inner)(&args)
                     .map_err(|err| EvalRaisedError(self.span(), err.to_string()))?)
             }
             Expr::Cond { clauses, .. } => {
                 for (cond, val) in clauses {
-                    let cond_val = cond.eval(bindings)?;
+                    let cond_val = cond.eval(bindings.as_ref())?;
                     let cond_val = cond_val
                         .get_bool()
                         .ok_or_else(|| PredicateTypeError(cond.span(), cond_val))?;
 
                     if cond_val {
-                        return val.eval(bindings);
+                        return val.eval(bindings.as_ref());
                     }
                 }
                 Ok(DataValue::Null)
@@ -359,17 +359,17 @@ impl Expr {
                     Ok(DataValue::Null)
                 } else {
                     for item in clauses.iter().take(clauses.len() - 1) {
-                        let res = item.eval(bindings);
+                        let res = item.eval(bindings.as_ref());
                         if res.is_ok() {
                             return res;
                         }
                     }
-                    clauses[clauses.len() - 1].eval(bindings)
+                    clauses[clauses.len() - 1].eval(bindings.as_ref())
                 }
             }
         }
     }
-    pub(crate) fn eval_pred(&self, bindings: &Tuple) -> Result<bool> {
+    pub(crate) fn eval_pred(&self, bindings: impl AsRef<[DataValue]>) -> Result<bool> {
         match self.eval(bindings)? {
             DataValue::Bool(b) => Ok(b),
             v => {

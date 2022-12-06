@@ -770,6 +770,72 @@ impl StoredRA {
             .map(|(a, _)| left_join_indices[a])
             .collect_vec();
 
+        let key_len = self.storage.metadata.keys.len();
+        if left_to_prefix_indices.len() >= key_len {
+            // We can use point lookups, finally
+            // TODO can use this branch if no values are touched!
+            return if self.storage.metadata.non_keys.is_empty() {
+                let it = left_iter
+                    .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                        let prefix = left_to_prefix_indices
+                            .iter()
+                            .map(|i| tuple[*i].clone())
+                            .collect_vec();
+                        let filters = self.filters.clone();
+                        let key = &prefix[0..key_len];
+                        for p in filters.iter() {
+                            if !p.eval_pred(key)? {
+                                return Ok(None);
+                            }
+                        }
+                        if self.storage.exists(tx, key)? {
+                            let mut ret = tuple.clone();
+                            ret.extend_from_slice(key);
+                            Ok(Some(ret))
+                        } else {
+                            Ok(None)
+                        }
+                    })
+                    .flatten_ok()
+                    .filter_map(invert_option_err);
+                Ok(if eliminate_indices.is_empty() {
+                    Box::new(it)
+                } else {
+                    Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+                })
+            } else {
+                let it = left_iter
+                    .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                        let prefix = left_to_prefix_indices
+                            .iter()
+                            .map(|i| tuple[*i].clone())
+                            .collect_vec();
+                        let filters = self.filters.clone();
+                        let key = &prefix[0..key_len];
+                        match self.storage.get(tx, key)? {
+                            None => Ok(None),
+                            Some(found) => {
+                                for p in filters.iter() {
+                                    if !p.eval_pred(&found)? {
+                                        return Ok(None);
+                                    }
+                                }
+                                let mut ret = tuple.clone();
+                                ret.extend(found);
+                                Ok(Some(ret))
+                            }
+                        }
+                    })
+                    .flatten_ok()
+                    .filter_map(invert_option_err);
+                Ok(if eliminate_indices.is_empty() {
+                    Box::new(it)
+                } else {
+                    Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+                })
+            };
+        }
+
         let mut skip_range_check = false;
         let it = left_iter
             .map_ok(move |tuple| {
