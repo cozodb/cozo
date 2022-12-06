@@ -644,6 +644,33 @@ fn bench_single_vertex(b: &mut Bencher) {
 }
 
 #[bench]
+fn qps_single_vertex_read(_b: &mut Bencher) {
+    use rayon::prelude::*;
+
+    initialize(&TEST_DB);
+    let count = 1_000_000;
+    let qps_single_vertex_read_time = Instant::now();
+    (0..count).into_par_iter().for_each(|_| {
+        single_vertex();
+    });
+    dbg!((count as f64) / qps_single_vertex_read_time.elapsed().as_secs_f64());
+}
+
+#[bench]
+fn qps_single_vertex_write(_b: &mut Bencher) {
+    use rayon::prelude::*;
+
+    initialize(&TEST_DB);
+    let count = 1_000_000;
+    let qps_single_vertex_write_time = Instant::now();
+    (0..count).into_par_iter().for_each(|_| {
+        single_vertex_write();
+    });
+    dbg!((count as f64) / qps_single_vertex_write_time.elapsed().as_secs_f64());
+}
+
+
+#[bench]
 fn bench_single_vertex_write(b: &mut Bencher) {
     initialize(&TEST_DB);
     b.iter(single_vertex_write)
