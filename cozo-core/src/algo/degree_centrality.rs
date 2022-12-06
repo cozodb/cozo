@@ -15,7 +15,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -39,12 +38,12 @@ impl AlgoImpl for DegreeCentrality {
         let mut counter: BTreeMap<DataValue, (usize, usize, usize)> = BTreeMap::new();
         for tuple in it {
             let tuple = tuple?;
-            let from = tuple.0[0].clone();
+            let from = tuple[0].clone();
             let (from_total, from_out, _) = counter.entry(from).or_default();
             *from_total += 1;
             *from_out += 1;
 
-            let to = tuple.0[1].clone();
+            let to = tuple[1].clone();
             let (to_total, _, to_in) = counter.entry(to).or_default();
             *to_total += 1;
             *to_in += 1;
@@ -53,7 +52,7 @@ impl AlgoImpl for DegreeCentrality {
         if let Ok(nodes) = algo.relation(1) {
             for tuple in nodes.iter(tx, stores)? {
                 let tuple = tuple?;
-                let id = &tuple.0[0];
+                let id = &tuple[0];
                 if !counter.contains_key(id) {
                     counter.insert(id.clone(), (0, 0, 0));
                 }
@@ -61,12 +60,12 @@ impl AlgoImpl for DegreeCentrality {
             }
         }
         for (k, (total_d, out_d, in_d)) in counter.into_iter() {
-            let tuple = Tuple(vec![
+            let tuple = vec![
                 k,
                 DataValue::from(total_d as i64),
                 DataValue::from(out_d as i64),
                 DataValue::from(in_d as i64),
-            ]);
+            ];
             out.put(tuple, 0);
             poison.check()?;
         }

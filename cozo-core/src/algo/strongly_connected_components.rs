@@ -55,7 +55,7 @@ impl AlgoImpl for StronglyConnectedComponent {
         for (grp_id, cc) in tarjan.iter().enumerate() {
             for idx in cc {
                 let val = indices.get(*idx).unwrap();
-                let tuple = Tuple(vec![val.clone(), DataValue::from(grp_id as i64)]);
+                let tuple = vec![val.clone(), DataValue::from(grp_id as i64)];
                 out.put(tuple, 0);
             }
         }
@@ -65,10 +65,10 @@ impl AlgoImpl for StronglyConnectedComponent {
         if let Ok(nodes) = algo.relation(1) {
             for tuple in nodes.iter(tx, stores)? {
                 let tuple = tuple?;
-                let node = tuple.0.into_iter().next().unwrap();
+                let node = tuple.into_iter().next().unwrap();
                 if !inv_indices.contains_key(&node) {
                     inv_indices.insert(node.clone(), usize::MAX);
-                    let tuple = Tuple(vec![node, DataValue::from(counter)]);
+                    let tuple = vec![node, DataValue::from(counter)];
                     out.put(tuple, 0);
                     counter += 1;
                 }

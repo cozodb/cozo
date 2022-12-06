@@ -61,12 +61,12 @@ impl AlgoImpl for ShortestPathAStar {
                     poison.clone(),
                 )?;
                 out.put(
-                    Tuple(vec![
-                        start.0[0].clone(),
-                        goal.0[0].clone(),
+                    vec![
+                        start[0].clone(),
+                        goal[0].clone(),
                         DataValue::from(cost),
                         DataValue::List(path),
-                    ]),
+                    ],
                     0,
                 );
             }
@@ -95,12 +95,12 @@ fn astar<'a>(
     stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
     poison: Poison,
 ) -> Result<(f64, Vec<DataValue>)> {
-    let start_node = &starting.0[0];
-    let goal_node = &goal.0[0];
+    let start_node = &starting[0];
+    let goal_node = &goal[0];
     let eval_heuristic = |node: &Tuple| -> Result<f64> {
-        let mut v = node.0.clone();
-        v.extend_from_slice(&goal.0);
-        let t = Tuple(v);
+        let mut v = node.clone();
+        v.extend_from_slice(&goal);
+        let t = v;
         let cost_val = heuristic.eval(&t)?;
         let cost = cost_val.get_float().ok_or_else(|| {
             BadExprValueError(
@@ -141,8 +141,8 @@ fn astar<'a>(
 
         for edge in edges.prefix_iter(&node, tx, stores)? {
             let edge = edge?;
-            let edge_dst = &edge.0[1];
-            let edge_cost = edge.0[2].get_float().ok_or_else(|| {
+            let edge_dst = &edge[1];
+            let edge_cost = edge[2].get_float().ok_or_else(|| {
                 BadExprValueError(
                     edge_dst.clone(),
                     edges.span(),

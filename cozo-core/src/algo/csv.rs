@@ -22,7 +22,6 @@ use crate::data::program::{
 };
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::{parse_type, SourceSpan};
 use crate::runtime::db::Poison;
@@ -91,16 +90,16 @@ impl AlgoImpl for CsvReader {
             types.len()
         };
         let mut process_row = |row: StringRecord| -> Result<()> {
-            let mut out_tuple = Tuple(Vec::with_capacity(out_tuple_size));
+            let mut out_tuple = Vec::with_capacity(out_tuple_size);
             if prepend_index {
                 counter += 1;
-                out_tuple.0.push(DataValue::from(counter));
+                out_tuple.push(DataValue::from(counter));
             }
             for (i, typ) in types.iter().enumerate() {
                 match row.get(i) {
                     None => {
                         if typ.nullable {
-                            out_tuple.0.push(DataValue::Null)
+                            out_tuple.push(DataValue::Null)
                         } else {
                             bail!(
                                 "encountered null value when processing CSV when non-null required"
@@ -110,8 +109,8 @@ impl AlgoImpl for CsvReader {
                     Some(s) => {
                         let dv = DataValue::Str(SmartString::from(s));
                         match &typ.coltype {
-                            ColType::Any | ColType::String => out_tuple.0.push(dv),
-                            ColType::Uuid => out_tuple.0.push(match op_to_uuid(&[dv]) {
+                            ColType::Any | ColType::String => out_tuple.push(dv),
+                            ColType::Uuid => out_tuple.push(match op_to_uuid(&[dv]) {
                                 Ok(uuid) => uuid,
                                 Err(err) => {
                                     if typ.nullable {
@@ -121,7 +120,7 @@ impl AlgoImpl for CsvReader {
                                     }
                                 }
                             }),
-                            ColType::Float => out_tuple.0.push(match op_to_float(&[dv]) {
+                            ColType::Float => out_tuple.push(match op_to_float(&[dv]) {
                                 Ok(data) => data,
                                 Err(err) => {
                                     if typ.nullable {
@@ -136,12 +135,12 @@ impl AlgoImpl for CsvReader {
                                 match f.get_int() {
                                     None => {
                                         if typ.nullable {
-                                            out_tuple.0.push(DataValue::Null)
+                                            out_tuple.push(DataValue::Null)
                                         } else {
                                             bail!("cannot convert {} to type {}", s, typ)
                                         }
                                     }
-                                    Some(i) => out_tuple.0.push(DataValue::from(i)),
+                                    Some(i) => out_tuple.push(DataValue::from(i)),
                                 };
                             }
                             _ => bail!("cannot convert {} to type {}", s, typ),

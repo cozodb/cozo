@@ -19,7 +19,7 @@ use thiserror::Error;
 use crate::data::memcmp::MemCmpEncoder;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::Symbol;
-use crate::data::tuple::{Tuple, ENCODED_KEY_MIN_LEN};
+use crate::data::tuple::{Tuple, TupleT, ENCODED_KEY_MIN_LEN};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
@@ -130,16 +130,16 @@ impl RelationHandle {
     pub(crate) fn encode_key_for_store(&self, tuple: &Tuple, span: SourceSpan) -> Result<Vec<u8>> {
         let len = self.metadata.keys.len();
         ensure!(
-            tuple.0.len() >= len,
+            tuple.len() >= len,
             StoredRelArityMismatch {
                 name: self.name.to_string(),
                 expect_arity: self.arity(),
-                actual_arity: tuple.0.len(),
+                actual_arity: tuple.len(),
                 span
             }
         );
         let mut ret = self.encode_key_prefix(len);
-        for val in &tuple.0[0..len] {
+        for val in &tuple[0..len] {
             ret.encode_datavalue(val);
         }
         Ok(ret)
@@ -148,7 +148,7 @@ impl RelationHandle {
         let start = self.metadata.keys.len();
         let len = self.metadata.non_keys.len();
         let mut ret = self.encode_key_prefix(len);
-        tuple.0[start..]
+        tuple[start..]
             .serialize(&mut Serializer::new(&mut ret))
             .unwrap();
         Ok(ret)
@@ -158,8 +158,8 @@ impl RelationHandle {
         tuple: &Tuple,
         _span: SourceSpan,
     ) -> Result<Vec<u8>> {
-        let mut ret = self.encode_key_prefix(tuple.0.len());
-        tuple.0.serialize(&mut Serializer::new(&mut ret)).unwrap();
+        let mut ret = self.encode_key_prefix(tuple.len());
+        tuple.serialize(&mut Serializer::new(&mut ret)).unwrap();
         Ok(ret)
     }
     pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle) -> Result<()> {
@@ -230,12 +230,12 @@ impl RelationHandle {
         tx: &'a SessionTx<'_>,
         prefix: &Tuple,
     ) -> impl Iterator<Item = Result<Tuple>> + 'a {
-        let mut lower = prefix.0.clone();
+        let mut lower = prefix.clone();
         lower.truncate(self.metadata.keys.len());
         let mut upper = lower.clone();
         upper.push(DataValue::Bot);
-        let prefix_encoded = Tuple(lower).encode_as_key(self.id);
-        let upper_encoded = Tuple(upper).encode_as_key(self.id);
+        let prefix_encoded = lower.encode_as_key(self.id);
+        let upper_encoded = upper.encode_as_key(self.id);
         // RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
         tx.tx.range_scan_tuple(&prefix_encoded, &upper_encoded)
     }
@@ -247,10 +247,10 @@ impl RelationHandle {
         upper: &[DataValue],
     ) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let mut lower_t = prefix.clone();
-        lower_t.0.extend_from_slice(lower);
+        lower_t.extend_from_slice(lower);
         let mut upper_t = prefix.clone();
-        upper_t.0.extend_from_slice(upper);
-        upper_t.0.push(DataValue::Bot);
+        upper_t.extend_from_slice(upper);
+        upper_t.push(DataValue::Bot);
         let lower_encoded = lower_t.encode_as_key(self.id);
         let upper_encoded = upper_t.encode_as_key(self.id);
         tx.tx.range_scan_tuple(&lower_encoded, &upper_encoded)
@@ -264,7 +264,7 @@ pub fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
     let mut tup = Tuple::decode_from_key(key);
     if !val.is_empty() {
         let vals: Vec<DataValue> = rmp_serde::from_slice(&val[ENCODED_KEY_MIN_LEN..]).unwrap();
-        tup.0.extend(vals);
+        tup.extend(vals);
     }
     tup
 }
@@ -277,7 +277,7 @@ struct RelNameConflictError(String);
 impl<'a> SessionTx<'a> {
     pub(crate) fn relation_exists(&self, name: &str) -> Result<bool> {
         let key = DataValue::Str(SmartString::from(name));
-        let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
+        let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
         self.tx.exists(&encoded, false)
     }
     pub(crate) fn set_relation_triggers(
@@ -300,7 +300,7 @@ impl<'a> SessionTx<'a> {
         original.replace_triggers = replaces;
 
         let name_key =
-            Tuple(vec![DataValue::Str(original.name.clone())]).encode_as_key(RelationId::SYSTEM);
+            vec![DataValue::Str(original.name.clone())].encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
         original
@@ -315,7 +315,7 @@ impl<'a> SessionTx<'a> {
         input_meta: InputRelationHandle,
     ) -> Result<RelationHandle> {
         let key = DataValue::Str(input_meta.name.name.clone());
-        let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
+        let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
 
         if self.tx.exists(&encoded, true)? {
             bail!(RelNameConflictError(input_meta.name.to_string()))
@@ -334,15 +334,14 @@ impl<'a> SessionTx<'a> {
         };
 
         self.tx.put(&encoded, &meta.id.raw_encode())?;
-        let name_key =
-            Tuple(vec![DataValue::Str(meta.name.clone())]).encode_as_key(RelationId::SYSTEM);
+        let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
             .unwrap();
         self.tx.put(&name_key, &meta_val)?;
 
-        let tuple = Tuple(vec![DataValue::Null]);
+        let tuple = vec![DataValue::Null];
         let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
         self.tx.put(&t_encoded, &meta.id.raw_encode())?;
         Ok(meta)
@@ -354,7 +353,7 @@ impl<'a> SessionTx<'a> {
         struct StoredRelationNotFoundError(String);
 
         let key = DataValue::Str(SmartString::from(name as &str));
-        let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
+        let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
 
         let found = self
             .tx
@@ -373,7 +372,7 @@ impl<'a> SessionTx<'a> {
             ))
         }
         let key = DataValue::Str(SmartString::from(name as &str));
-        let encoded = Tuple(vec![key]).encode_as_key(RelationId::SYSTEM);
+        let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
         self.tx.del(&encoded)?;
         let lower_bound = Tuple::default().encode_as_key(store.id);
         let upper_bound = Tuple::default().encode_as_key(store.id.next());
@@ -383,8 +382,7 @@ impl<'a> SessionTx<'a> {
         let mut meta = self.get_relation(&rel, true)?;
         meta.access_level = level;
 
-        let name_key =
-            Tuple(vec![DataValue::Str(meta.name.clone())]).encode_as_key(RelationId::SYSTEM);
+        let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
@@ -395,14 +393,14 @@ impl<'a> SessionTx<'a> {
     }
     pub(crate) fn rename_relation(&mut self, old: Symbol, new: Symbol) -> Result<()> {
         let new_key = DataValue::Str(new.name.clone());
-        let new_encoded = Tuple(vec![new_key]).encode_as_key(RelationId::SYSTEM);
+        let new_encoded = vec![new_key].encode_as_key(RelationId::SYSTEM);
 
         if self.tx.exists(&new_encoded, true)? {
             bail!(RelNameConflictError(new.name.to_string()))
         };
 
         let old_key = DataValue::Str(old.name.clone());
-        let old_encoded = Tuple(vec![old_key]).encode_as_key(RelationId::SYSTEM);
+        let old_encoded = vec![old_key].encode_as_key(RelationId::SYSTEM);
 
         let mut rel = self.get_relation(&old, true)?;
         if rel.access_level < AccessLevel::Normal {
@@ -434,6 +432,7 @@ pub(crate) struct InsufficientAccessLevel(
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+
     use crate::new_cozo_mem;
 
     #[test]
@@ -443,7 +442,8 @@ mod tests {
             .unwrap();
         db.run_script(":create friends.rev {to: Int, fr: Int}", Default::default())
             .unwrap();
-        db.run_script(r#"
+        db.run_script(
+            r#"
         ::set_triggers friends
 
         on put {
@@ -456,7 +456,10 @@ mod tests {
 
             :rm friends.rev{ to, fr }
         }
-        "#, Default::default()).unwrap();
+        "#,
+            Default::default(),
+        )
+        .unwrap();
         db.run_script(
             r"?[fr, to] <- [[1,2]] :put friends {fr, to}",
             Default::default(),

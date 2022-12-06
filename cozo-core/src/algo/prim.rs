@@ -20,7 +20,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -55,7 +54,7 @@ impl AlgoImpl for MinimumSpanningTreePrim {
 
                     EmptyStarting(rel.span())
                 })??;
-                let dv = &tuple.0[0];
+                let dv = &tuple[0];
                 *inv_indices.get(dv).ok_or_else(|| {
                     #[derive(Debug, Error, Diagnostic)]
                     #[error("The requested starting node {0:?} is not found")]
@@ -69,11 +68,11 @@ impl AlgoImpl for MinimumSpanningTreePrim {
         let msp = prim(&graph, starting, poison)?;
         for (src, dst, cost) in msp {
             out.put(
-                Tuple(vec![
+                vec![
                     indices[src].clone(),
                     indices[dst].clone(),
                     DataValue::from(cost),
-                ]),
+                ],
                 0,
             );
         }

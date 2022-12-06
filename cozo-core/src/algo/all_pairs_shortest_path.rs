@@ -22,7 +22,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -87,7 +86,7 @@ impl AlgoImpl for BetweennessCentrality {
 
         for (i, s) in centrality.into_iter().enumerate() {
             let node = indices[i].clone();
-            out.put(Tuple(vec![node, s.into()]), 0);
+            out.put(vec![node, s.into()], 0);
         }
 
         Ok(())
@@ -138,10 +137,7 @@ impl AlgoImpl for ClosenessCentrality {
             })
             .collect::<Result<_>>()?;
         for (idx, centrality) in res.into_iter().enumerate() {
-            out.put(
-                Tuple(vec![indices[idx].clone(), DataValue::from(centrality)]),
-                0,
-            );
+            out.put(vec![indices[idx].clone(), DataValue::from(centrality)], 0);
             poison.check()?;
         }
         Ok(())

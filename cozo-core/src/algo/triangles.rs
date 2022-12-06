@@ -17,7 +17,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -42,12 +41,12 @@ impl AlgoImpl for ClusteringCoefficients {
         let coefficients = clustering_coefficients(&graph, poison)?;
         for (idx, (cc, n_triangles, degree)) in coefficients.into_iter().enumerate() {
             out.put(
-                Tuple(vec![
+                vec![
                     indices[idx].clone(),
                     DataValue::from(cc),
                     DataValue::from(n_triangles as i64),
                     DataValue::from(degree as i64),
-                ]),
+                ],
                 0,
             );
         }

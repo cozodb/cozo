@@ -24,7 +24,7 @@ use thiserror::Error;
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::relation::ColumnDef;
-use crate::data::tuple::Tuple;
+use crate::data::tuple::{Tuple, TupleT};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::decode_tuple_from_kv;
 use crate::parse::sys::SysOp;
@@ -180,7 +180,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             for data in tx.tx.range_scan(&start, &end) {
                 let (k, v) = data?;
                 let tuple = decode_tuple_from_kv(&k, &v);
-                let row = tuple.0.into_iter().map(JsonValue::from).collect_vec();
+                let row = tuple.into_iter().map(JsonValue::from).collect_vec();
                 rows.push(row);
             }
             let headers = cols.iter().map(|col| col.to_string()).collect_vec();
@@ -277,7 +277,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         col.typing.coerce(DataValue::from(v))
                     })
                     .try_collect()?;
-                let k_store = handle.encode_key_for_store(&Tuple(keys), Default::default())?;
+                let k_store = handle.encode_key_for_store(&keys, Default::default())?;
                 if is_delete {
                     tx.tx.del(&k_store)?;
                 } else {
@@ -291,7 +291,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         })
                         .try_collect()?;
                     let v_store =
-                        handle.encode_val_only_for_store(&Tuple(vals), Default::default())?;
+                        handle.encode_val_only_for_store(&vals, Default::default())?;
                     tx.tx.put(&k_store, &v_store)?;
                 }
             }
@@ -390,7 +390,7 @@ impl<'s, S: Storage<'s>> Db<S> {
 
     fn compact_relation(&'s self) -> Result<()> {
         let l = Tuple::default().encode_as_key(RelationId(0));
-        let u = Tuple(vec![DataValue::Bot]).encode_as_key(RelationId(u64::MAX));
+        let u = vec![DataValue::Bot].encode_as_key(RelationId(u64::MAX));
         self.db.range_compact(&l, &u)?;
         Ok(())
     }
@@ -891,7 +891,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             } else {
                 let rows: Vec<Vec<JsonValue>> = sorted_iter
                     .map_ok(|tuple| -> Vec<JsonValue> {
-                        tuple.0.into_iter().map(JsonValue::from).collect()
+                        tuple.into_iter().map(JsonValue::from).collect()
                     })
                     .try_collect()?;
                 let headers: Vec<String> = match input_program.get_entry_out_head() {
@@ -937,7 +937,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             } else {
                 let rows: Vec<Vec<JsonValue>> = scan
                     .map_ok(|tuple| -> Vec<JsonValue> {
-                        tuple.0.into_iter().map(JsonValue::from).collect()
+                        tuple.into_iter().map(JsonValue::from).collect()
                     })
                     .try_collect()?;
 
@@ -1005,10 +1005,10 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
     fn list_relations(&'s self) -> Result<NamedRows> {
         let lower =
-            Tuple(vec![DataValue::Str(SmartString::from(""))]).encode_as_key(RelationId::SYSTEM);
-        let upper = Tuple(vec![DataValue::Str(SmartString::from(String::from(
+            vec![DataValue::Str(SmartString::from(""))].encode_as_key(RelationId::SYSTEM);
+        let upper = vec![DataValue::Str(SmartString::from(String::from(
             LARGEST_UTF_CHAR,
-        )))])
+        )))]
         .encode_as_key(RelationId::SYSTEM);
         let tx = self.db.transact(false)?;
         let mut rows: Vec<Vec<JsonValue>> = vec![];
@@ -1073,10 +1073,10 @@ impl Poison {
     }
     #[cfg(not(feature = "nothread"))]
     pub(crate) fn set_timeout(&self, secs: f64) -> Result<()> {
-        let pill = self.0.clone();
+        let pill = self.clone();
         thread::spawn(move || {
             thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
-            pill.store(true, Ordering::Relaxed);
+            pill.0.store(true, Ordering::Relaxed);
         });
         Ok(())
     }

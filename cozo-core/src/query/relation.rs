@@ -71,19 +71,17 @@ struct EntityIdExpected(DataValue, #[label] SourceSpan);
 
 fn eliminate_from_tuple(mut ret: Tuple, eliminate_indices: &BTreeSet<usize>) -> Tuple {
     if !eliminate_indices.is_empty() {
-        ret = Tuple(
-            ret.0
-                .into_iter()
-                .enumerate()
-                .filter_map(|(i, v)| {
-                    if eliminate_indices.contains(&i) {
-                        None
-                    } else {
-                        Some(v)
-                    }
-                })
-                .collect_vec(),
-        );
+        ret = ret
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, v)| {
+                if eliminate_indices.contains(&i) {
+                    None
+                } else {
+                    Some(v)
+                }
+            })
+            .collect_vec();
     }
     ret
 }
@@ -137,9 +135,9 @@ impl UnificationRA {
                     })?;
                     let mut coll = vec![];
                     for result in result_list {
-                        let mut ret = tuple.0.clone();
+                        let mut ret = tuple.clone();
                         ret.push(result.clone());
-                        let ret = Tuple(ret);
+                        let ret = ret;
                         let ret = eliminate_from_tuple(ret, &eliminate_indices);
                         coll.push(ret);
                     }
@@ -154,9 +152,9 @@ impl UnificationRA {
                     .iter(tx, epoch, use_delta)?
                     .map_ok(move |tuple| -> Result<Tuple> {
                         let result = self.expr.eval(&tuple)?;
-                        let mut ret = tuple.0;
+                        let mut ret = tuple;
                         ret.push(result);
-                        let ret = Tuple(ret);
+                        let ret = ret;
                         let ret = eliminate_from_tuple(ret, &eliminate_indices);
                         Ok(ret)
                     })
@@ -575,12 +573,12 @@ impl ReorderRA {
             .collect_vec();
         Ok(Box::new(self.relation.iter(tx, epoch, use_delta)?.map_ok(
             move |tuple| {
-                let old = tuple.0;
+                let old = tuple;
                 let new = reorder_indices
                     .iter()
                     .map(|i| old[*i].clone())
                     .collect_vec();
-                Tuple(new)
+                new
             },
         )))
     }
@@ -638,11 +636,11 @@ impl InlineFixedRA {
                 .map(|v| data[v].clone())
                 .collect_vec();
             Box::new(left_iter.filter_map_ok(move |tuple| {
-                let left_join_values = left_join_indices.iter().map(|v| &tuple.0[*v]).collect_vec();
+                let left_join_values = left_join_indices.iter().map(|v| &tuple[*v]).collect_vec();
                 if left_join_values.into_iter().eq(right_join_values.iter()) {
-                    let mut ret = tuple.0;
+                    let mut ret = tuple;
                     ret.extend_from_slice(&data);
-                    let ret = Tuple(ret);
+                    let ret = ret;
                     let ret = eliminate_from_tuple(ret, &eliminate_indices);
                     Some(ret)
                 } else {
@@ -666,13 +664,13 @@ impl InlineFixedRA {
                 left_iter
                     .filter_map_ok(move |tuple| {
                         let left_join_values =
-                            left_join_indices.iter().map(|v| &tuple.0[*v]).collect_vec();
+                            left_join_indices.iter().map(|v| &tuple[*v]).collect_vec();
                         right_mapping.get(&left_join_values).map(|v| {
                             v.iter()
                                 .map(|right_values| {
-                                    let mut left_data = tuple.0.clone();
+                                    let mut left_data = tuple.clone();
                                     left_data.extend_from_slice(right_values);
-                                    Tuple(left_data)
+                                    left_data
                                 })
                                 .collect_vec()
                         })
@@ -775,12 +773,10 @@ impl StoredRA {
         let mut skip_range_check = false;
         let it = left_iter
             .map_ok(move |tuple| {
-                let prefix = Tuple(
-                    left_to_prefix_indices
-                        .iter()
-                        .map(|i| tuple.0[*i].clone())
-                        .collect_vec(),
-                );
+                let prefix = left_to_prefix_indices
+                    .iter()
+                    .map(|i| tuple[*i].clone())
+                    .collect_vec();
                 let filters = self.filters.clone();
 
                 if !skip_range_check && !self.filters.is_empty() {
@@ -802,9 +798,9 @@ impl StoredRA {
                                             return Ok(None);
                                         }
                                     }
-                                    let mut ret = tuple.0.clone();
-                                    ret.extend(found.0);
-                                    Ok(Some(Tuple(ret)))
+                                    let mut ret = tuple.clone();
+                                    ret.extend(found);
+                                    Ok(Some(ret))
                                 })
                                 .filter_map(swap_option_result),
                         );
@@ -821,9 +817,9 @@ impl StoredRA {
                                     return Ok(None);
                                 }
                             }
-                            let mut ret = tuple.0.clone();
-                            ret.extend(found.0);
-                            Ok(Some(Tuple(ret)))
+                            let mut ret = tuple.clone();
+                            ret.extend(found);
+                            Ok(Some(ret))
                         })
                         .filter_map(swap_option_result),
                 )
@@ -859,19 +855,17 @@ impl StoredRA {
             Ok(Box::new(
                 left_iter
                     .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                        let prefix = Tuple(
-                            left_to_prefix_indices
-                                .iter()
-                                .map(|i| tuple.0[*i].clone())
-                                .collect_vec(),
-                        );
+                        let prefix = left_to_prefix_indices
+                            .iter()
+                            .map(|i| tuple[*i].clone())
+                            .collect_vec();
 
                         'outer: for found in self.storage.scan_prefix(tx, &prefix) {
                             let found = found?;
                             for (left_idx, right_idx) in
                                 left_join_indices.iter().zip(right_join_indices.iter())
                             {
-                                if tuple.0[*left_idx] != found.0[*right_idx] {
+                                if tuple[*left_idx] != found[*right_idx] {
                                     continue 'outer;
                                 }
                             }
@@ -879,20 +873,17 @@ impl StoredRA {
                         }
 
                         Ok(Some(if !eliminate_indices.is_empty() {
-                            Tuple(
-                                tuple
-                                    .0
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec(),
-                            )
+                            tuple
+                                .into_iter()
+                                .enumerate()
+                                .filter_map(|(i, v)| {
+                                    if eliminate_indices.contains(&i) {
+                                        None
+                                    } else {
+                                        Some(v)
+                                    }
+                                })
+                                .collect_vec()
                         } else {
                             tuple
                         }))
@@ -907,7 +898,7 @@ impl StoredRA {
                 let tuple = tuple?;
                 let to_join: Box<[DataValue]> = right_join_indices
                     .iter()
-                    .map(|i| tuple.0[*i].clone())
+                    .map(|i| tuple[*i].clone())
                     .collect();
                 right_join_vals.insert(to_join);
             }
@@ -916,27 +907,24 @@ impl StoredRA {
                     .map_ok(move |tuple| -> Result<Option<Tuple>> {
                         let left_join_vals: Box<[DataValue]> = left_join_indices
                             .iter()
-                            .map(|i| tuple.0[*i].clone())
+                            .map(|i| tuple[*i].clone())
                             .collect();
                         if right_join_vals.contains(&left_join_vals) {
                             return Ok(None);
                         }
 
                         Ok(Some(if !eliminate_indices.is_empty() {
-                            Tuple(
-                                tuple
-                                    .0
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec(),
-                            )
+                            tuple
+                                .into_iter()
+                                .enumerate()
+                                .filter_map(|(i, v)| {
+                                    if eliminate_indices.contains(&i) {
+                                        None
+                                    } else {
+                                        Some(v)
+                                    }
+                                })
+                                .collect_vec()
                         } else {
                             tuple
                         }))
@@ -1033,19 +1021,17 @@ impl InMemRelationRA {
             Ok(Box::new(
                 left_iter
                     .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                        let prefix = Tuple(
-                            left_to_prefix_indices
-                                .iter()
-                                .map(|i| tuple.0[*i].clone())
-                                .collect_vec(),
-                        );
+                        let prefix = left_to_prefix_indices
+                            .iter()
+                            .map(|i| tuple[*i].clone())
+                            .collect_vec();
 
                         'outer: for found in self.storage.scan_prefix(&prefix) {
                             let found = found?;
                             for (left_idx, right_idx) in
                                 left_join_indices.iter().zip(right_join_indices.iter())
                             {
-                                if tuple.0[*left_idx] != found.0[*right_idx] {
+                                if tuple[*left_idx] != found[*right_idx] {
                                     continue 'outer;
                                 }
                             }
@@ -1053,20 +1039,17 @@ impl InMemRelationRA {
                         }
 
                         Ok(Some(if !eliminate_indices.is_empty() {
-                            Tuple(
-                                tuple
-                                    .0
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec(),
-                            )
+                            tuple
+                                .into_iter()
+                                .enumerate()
+                                .filter_map(|(i, v)| {
+                                    if eliminate_indices.contains(&i) {
+                                        None
+                                    } else {
+                                        Some(v)
+                                    }
+                                })
+                                .collect_vec()
                         } else {
                             tuple
                         }))
@@ -1080,7 +1063,7 @@ impl InMemRelationRA {
                 let tuple = tuple?;
                 let to_join: Box<[DataValue]> = right_join_indices
                     .iter()
-                    .map(|i| tuple.0[*i].clone())
+                    .map(|i| tuple[*i].clone())
                     .collect();
                 right_join_vals.insert(to_join);
             }
@@ -1090,26 +1073,23 @@ impl InMemRelationRA {
                     .map_ok(move |tuple| -> Result<Option<Tuple>> {
                         let left_join_vals: Box<[DataValue]> = left_join_indices
                             .iter()
-                            .map(|i| tuple.0[*i].clone())
+                            .map(|i| tuple[*i].clone())
                             .collect();
                         if right_join_vals.contains(&left_join_vals) {
                             return Ok(None);
                         }
                         Ok(Some(if !eliminate_indices.is_empty() {
-                            Tuple(
-                                tuple
-                                    .0
-                                    .into_iter()
-                                    .enumerate()
-                                    .filter_map(|(i, v)| {
-                                        if eliminate_indices.contains(&i) {
-                                            None
-                                        } else {
-                                            Some(v)
-                                        }
-                                    })
-                                    .collect_vec(),
-                            )
+                            tuple
+                                .into_iter()
+                                .enumerate()
+                                .filter_map(|(i, v)| {
+                                    if eliminate_indices.contains(&i) {
+                                        None
+                                    } else {
+                                        Some(v)
+                                    }
+                                })
+                                .collect_vec()
                         } else {
                             tuple
                         }))
@@ -1149,12 +1129,10 @@ impl InMemRelationRA {
         let mut skip_range_check = false;
         let it = left_iter
             .map_ok(move |tuple| {
-                let prefix = Tuple(
-                    left_to_prefix_indices
-                        .iter()
-                        .map(|i| tuple.0[*i].clone())
-                        .collect_vec(),
-                );
+                let prefix = left_to_prefix_indices
+                    .iter()
+                    .map(|i| tuple[*i].clone())
+                    .collect_vec();
 
                 let filters = self.filters.clone();
 
@@ -1179,9 +1157,9 @@ impl InMemRelationRA {
                                             return Ok(None);
                                         }
                                     }
-                                    let mut ret = tuple.0.clone();
-                                    ret.extend(found.0);
-                                    Ok(Some(Tuple(ret)))
+                                    let mut ret = tuple.clone();
+                                    ret.extend(found);
+                                    Ok(Some(ret))
                                 })
                                 .filter_map(swap_option_result),
                         );
@@ -1198,9 +1176,9 @@ impl InMemRelationRA {
                                     return Ok(None);
                                 }
                             }
-                            let mut ret = tuple.0.clone();
-                            ret.extend(found.0);
-                            Ok(Some(Tuple(ret)))
+                            let mut ret = tuple.clone();
+                            ret.extend(found);
+                            Ok(Some(ret))
                         })
                         .filter_map(swap_option_result),
                 )
@@ -1325,7 +1303,7 @@ impl RelAlgebra {
         use_delta: &BTreeSet<StoredRelationId>,
     ) -> Result<TupleIter<'a>> {
         match self {
-            RelAlgebra::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(Tuple(t.clone()))))),
+            RelAlgebra::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(t.clone())))),
             RelAlgebra::InMem(r) => r.iter(epoch, use_delta),
             RelAlgebra::Stored(v) => v.iter(tx),
             RelAlgebra::Join(j) => j.iter(tx, epoch, use_delta),
@@ -1640,9 +1618,9 @@ impl InnerJoin {
                     Ok(tuple) => {
                         let stored_tuple = right_store_indices
                             .iter()
-                            .map(|i| tuple.0[*i].clone())
+                            .map(|i| tuple[*i].clone())
                             .collect_vec();
-                        cache.insert(Tuple(stored_tuple));
+                        cache.insert(stored_tuple);
                     }
                     Err(e) => return Err(e),
                 }
@@ -1687,7 +1665,7 @@ impl<'a> CachedMaterializedIterator<'a> {
             None
         } else {
             let ret = &self.materialized[self.right_idx];
-            if ret.0.starts_with(&self.prefix.0) {
+            if ret.starts_with(&self.prefix) {
                 self.right_idx += 1;
                 Some(ret)
             } else {
@@ -1703,7 +1681,7 @@ impl<'a> CachedMaterializedIterator<'a> {
                     let data = data.clone();
                     let mut ret = self.left_cache.clone();
                     for i in &self.right_invert_indices {
-                        ret.0.push(data.0[*i].clone());
+                        ret.push(data[*i].clone());
                     }
                     let tuple = eliminate_from_tuple(ret, &self.eliminate_indices);
                     return Ok(Some(tuple));
@@ -1736,12 +1714,10 @@ fn build_mat_range_iter(
     left_join_indices: &[usize],
     left_tuple: &Tuple,
 ) -> (Tuple, usize) {
-    let prefix = Tuple(
-        left_join_indices
-            .iter()
-            .map(|i| left_tuple.0[*i].clone())
-            .collect_vec(),
-    );
+    let prefix = left_join_indices
+        .iter()
+        .map(|i| left_tuple[*i].clone())
+        .collect_vec();
     let idx = match mat.binary_search(&prefix) {
         Ok(i) => i,
         Err(i) => i,

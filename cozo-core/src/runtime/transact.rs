@@ -12,7 +12,7 @@ use std::sync::Arc;
 use miette::Result;
 
 use crate::data::program::MagicSymbol;
-use crate::data::tuple::Tuple;
+use crate::data::tuple::TupleT;
 use crate::data::value::DataValue;
 use crate::runtime::in_mem::{InMemRelation, StoredRelationId};
 use crate::runtime::relation::RelationId;
@@ -34,7 +34,7 @@ impl<'a> SessionTx<'a> {
     }
 
     pub(crate) fn load_last_relation_store_id(&self) -> Result<RelationId> {
-        let tuple = Tuple(vec![DataValue::Null]);
+        let tuple = vec![DataValue::Null];
         let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
         let found = self.tx.get(&t_encoded, false)?;
         Ok(match found {

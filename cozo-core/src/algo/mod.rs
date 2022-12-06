@@ -51,7 +51,7 @@ use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::{Tuple, TupleIter};
+use crate::data::tuple::TupleIter;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -263,7 +263,7 @@ impl MagicAlgoRuleArg {
         let mut has_neg_edge = false;
 
         for tuple in self.iter(tx, stores)? {
-            let mut tuple = tuple?.0.into_iter();
+            let mut tuple = tuple?.into_iter();
             let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
             let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
             let weight = match tuple.next() {
@@ -342,7 +342,7 @@ impl MagicAlgoRuleArg {
         let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
 
         for tuple in self.iter(tx, stores)? {
-            let mut tuple = tuple?.0.into_iter();
+            let mut tuple = tuple?.into_iter();
             let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
             let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
             let from_idx = if let Some(idx) = inv_indices.get(&from) {
@@ -382,12 +382,12 @@ impl MagicAlgoRuleArg {
                 let store = stores.get(name).ok_or_else(|| {
                     RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
                 })?;
-                let t = Tuple(vec![prefix.clone()]);
+                let t = vec![prefix.clone()];
                 Box::new(store.scan_prefix(&t))
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
                 let relation = tx.get_relation(name, false)?;
-                let t = Tuple(vec![prefix.clone()]);
+                let t = vec![prefix.clone()];
                 Box::new(relation.scan_prefix(tx, &t))
             }
         })

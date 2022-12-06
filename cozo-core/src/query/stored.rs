@@ -111,12 +111,10 @@ impl<'a> SessionTx<'a> {
 
                 for tuple in res_iter {
                     let tuple = tuple?;
-                    let extracted = Tuple(
-                        key_extractors
-                            .iter()
-                            .map(|ex| ex.extract_data(&tuple))
-                            .try_collect()?,
-                    );
+                    let extracted = key_extractors
+                        .iter()
+                        .map(|ex| ex.extract_data(&tuple))
+                        .try_collect()?;
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     if has_triggers {
                         if let Some(existing) = self.tx.get(&key, false)? {
@@ -125,13 +123,13 @@ impl<'a> SessionTx<'a> {
                                 let mut remaining = &existing[ENCODED_KEY_MIN_LEN..];
                                 while !remaining.is_empty() {
                                     let (val, nxt) = DataValue::decode_from_key(remaining);
-                                    tup.0.push(val);
+                                    tup.push(val);
                                     remaining = nxt;
                                 }
                             }
-                            old_tuples.push(DataValue::List(tup.0));
+                            old_tuples.push(DataValue::List(tup));
                         }
-                        new_tuples.push(DataValue::List(extracted.0.clone()));
+                        new_tuples.push(DataValue::List(extracted.clone()));
                     }
                     self.tx.del(&key)?;
                 }
@@ -197,12 +195,10 @@ impl<'a> SessionTx<'a> {
                 for tuple in res_iter {
                     let tuple = tuple?;
 
-                    let extracted = Tuple(
-                        key_extractors
-                            .iter()
-                            .map(|ex| ex.extract_data(&tuple))
-                            .try_collect()?,
-                    );
+                    let extracted = key_extractors
+                        .iter()
+                        .map(|ex| ex.extract_data(&tuple))
+                        .try_collect()?;
 
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     let val = relation_store.encode_val_for_store(&extracted, *span)?;
@@ -212,7 +208,7 @@ impl<'a> SessionTx<'a> {
                         None => {
                             bail!(TransactAssertionFailure {
                                 relation: relation_store.name.to_string(),
-                                key: extracted.0,
+                                key: extracted,
                                 notice: "key does not exist in database".to_string()
                             })
                         }
@@ -220,7 +216,7 @@ impl<'a> SessionTx<'a> {
                             if &v as &[u8] != &val as &[u8] {
                                 bail!(TransactAssertionFailure {
                                     relation: relation_store.name.to_string(),
-                                    key: extracted.0,
+                                    key: extracted,
                                     notice: "key exists in database, but value does not match"
                                         .to_string()
                                 })
@@ -247,17 +243,15 @@ impl<'a> SessionTx<'a> {
 
                 for tuple in res_iter {
                     let tuple = tuple?;
-                    let extracted = Tuple(
-                        key_extractors
-                            .iter()
-                            .map(|ex| ex.extract_data(&tuple))
-                            .try_collect()?,
-                    );
+                    let extracted = key_extractors
+                        .iter()
+                        .map(|ex| ex.extract_data(&tuple))
+                        .try_collect()?;
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     if self.tx.exists(&key, true)? {
                         bail!(TransactAssertionFailure {
                             relation: relation_store.name.to_string(),
-                            key: extracted.0,
+                            key: extracted,
                             notice: "key exists in database".to_string()
                         })
                     }
@@ -294,12 +288,10 @@ impl<'a> SessionTx<'a> {
                 for tuple in res_iter {
                     let tuple = tuple?;
 
-                    let extracted = Tuple(
-                        key_extractors
-                            .iter()
-                            .map(|ex| ex.extract_data(&tuple))
-                            .try_collect()?,
-                    );
+                    let extracted = key_extractors
+                        .iter()
+                        .map(|ex| ex.extract_data(&tuple))
+                        .try_collect()?;
 
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     let val = relation_store.encode_val_for_store(&extracted, *span)?;
@@ -310,13 +302,13 @@ impl<'a> SessionTx<'a> {
                             let mut remaining = &existing[ENCODED_KEY_MIN_LEN..];
                             while !remaining.is_empty() {
                                 let (val, nxt) = DataValue::decode_from_key(remaining);
-                                tup.0.push(val);
+                                tup.push(val);
                                 remaining = nxt;
                             }
-                            old_tuples.push(DataValue::List(tup.0));
+                            old_tuples.push(DataValue::List(tup));
                         }
 
-                        new_tuples.push(DataValue::List(extracted.0));
+                        new_tuples.push(DataValue::List(extracted));
                     }
 
                     self.tx.put(&key, &val)?;
@@ -378,10 +370,10 @@ impl DataExtractor {
         Ok(match self {
             DataExtractor::DefaultExtractor(expr, typ) => typ
                 .coerce(expr.clone().eval_to_const()?)
-                .wrap_err_with(|| format!("when processing tuple {:?}", tuple.0))?,
+                .wrap_err_with(|| format!("when processing tuple {:?}", tuple))?,
             DataExtractor::IndexExtractor(i, typ) => typ
-                .coerce(tuple.0[*i].clone())
-                .wrap_err_with(|| format!("when processing tuple {:?}", tuple.0))?,
+                .coerce(tuple[*i].clone())
+                .wrap_err_with(|| format!("when processing tuple {:?}", tuple))?,
         })
     }
 }

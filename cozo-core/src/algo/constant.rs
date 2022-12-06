@@ -16,7 +16,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol, WrongAlgoOptionError};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -37,7 +36,7 @@ impl AlgoImpl for Constant {
         let data = algo.expr_option("data", None).unwrap();
         let data = data.get_const().unwrap().get_list().unwrap();
         for row in data {
-            let tuple = Tuple(row.get_list().unwrap().into());
+            let tuple = row.get_list().unwrap().into();
             out.put(tuple, 0)
         }
         Ok(())

@@ -15,7 +15,6 @@ use crate::algo::{AlgoImpl, NodeNotFoundError};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -49,7 +48,7 @@ impl AlgoImpl for Dfs {
 
         'outer: for node_tuple in starting_nodes.iter(tx, stores)? {
             let node_tuple = node_tuple?;
-            let starting_node = &node_tuple.0[0];
+            let starting_node = &node_tuple[0];
             if visited.contains(starting_node) {
                 continue;
             }
@@ -63,7 +62,7 @@ impl AlgoImpl for Dfs {
                 }
 
                 let cand_tuple = if skip_query_nodes {
-                    Tuple(vec![candidate.clone()])
+                    vec![candidate.clone()]
                 } else {
                     nodes
                         .prefix_iter(&candidate, tx, stores)?
@@ -85,7 +84,7 @@ impl AlgoImpl for Dfs {
 
                 for edge in edges.prefix_iter(&candidate, tx, stores)? {
                     let edge = edge?;
-                    let to_node = &edge.0[1];
+                    let to_node = &edge[1];
                     if visited.contains(to_node) {
                         continue;
                     }
@@ -105,7 +104,7 @@ impl AlgoImpl for Dfs {
             }
             route.push(starting.clone());
             route.reverse();
-            let tuple = Tuple(vec![starting, ending, DataValue::List(route)]);
+            let tuple = vec![starting, ending, DataValue::List(route)];
             out.put(tuple, 0);
             poison.check()?;
         }

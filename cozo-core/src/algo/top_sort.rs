@@ -15,7 +15,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -41,7 +40,7 @@ impl AlgoImpl for TopSort {
 
         for (idx, val_id) in sorted.iter().enumerate() {
             let val = indices.get(*val_id).unwrap();
-            let tuple = Tuple(vec![DataValue::from(idx as i64), val.clone()]);
+            let tuple = vec![DataValue::from(idx as i64), val.clone()];
             out.put(tuple, 0);
         }
 

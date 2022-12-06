@@ -21,7 +21,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -66,7 +65,7 @@ impl AlgoImpl for PageRank {
 
             for (idx, score) in ranks.iter().enumerate() {
                 out.put(
-                    Tuple(vec![indices[idx].clone(), DataValue::from(*score as f64)]),
+                    vec![indices[idx].clone(), DataValue::from(*score as f64)],
                     0,
                 );
             }

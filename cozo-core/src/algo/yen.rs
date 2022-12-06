@@ -19,7 +19,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -49,7 +48,7 @@ impl AlgoImpl for KShortestPathYen {
         let mut starting_nodes = BTreeSet::new();
         for tuple in starting.iter(tx, stores)? {
             let tuple = tuple?;
-            let node = &tuple.0[0];
+            let node = &tuple[0];
             if let Some(idx) = inv_indices.get(node) {
                 starting_nodes.insert(*idx);
             }
@@ -57,7 +56,7 @@ impl AlgoImpl for KShortestPathYen {
         let mut termination_nodes = BTreeSet::new();
         for tuple in termination.iter(tx, stores)? {
             let tuple = tuple?;
-            let node = &tuple.0[0];
+            let node = &tuple[0];
             if let Some(idx) = inv_indices.get(node) {
                 termination_nodes.insert(*idx);
             }
@@ -76,7 +75,7 @@ impl AlgoImpl for KShortestPathYen {
                                 path.into_iter().map(|u| indices[u].clone()).collect_vec(),
                             ),
                         ];
-                        out.put(Tuple(t), 0)
+                        out.put(t, 0)
                     }
                 }
             }
@@ -107,7 +106,7 @@ impl AlgoImpl for KShortestPathYen {
                         DataValue::from(cost),
                         DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
                     ];
-                    out.put(Tuple(t), 0)
+                    out.put(t, 0)
                 }
             }
         }

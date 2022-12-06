@@ -232,7 +232,7 @@ impl<'a> SessionTx<'a> {
                         .filter_map(|(i, a)| if a.is_none() { Some(i) } else { None })
                         .collect_vec();
                     let extract_keys = |t: &Tuple| -> Vec<DataValue> {
-                        keys_indices.iter().map(|i| t.0[*i].clone()).collect_vec()
+                        keys_indices.iter().map(|i| t[*i].clone()).collect_vec()
                     };
 
                     let val_indices_and_aggrs = rule
@@ -261,7 +261,7 @@ impl<'a> SessionTx<'a> {
                                         .normal_op
                                         .as_mut()
                                         .unwrap()
-                                        .set(&item.0[*tuple_idx])?;
+                                        .set(&item[*tuple_idx])?;
                                 }
                             }
                             Entry::Vacant(ent) => {
@@ -269,7 +269,7 @@ impl<'a> SessionTx<'a> {
                                 for (i, (aggr, params)) in &val_indices_and_aggrs {
                                     let mut cur_aggr = aggr.clone();
                                     cur_aggr.normal_init(params)?;
-                                    cur_aggr.normal_op.as_mut().unwrap().set(&item.0[*i])?;
+                                    cur_aggr.normal_op.as_mut().unwrap().set(&item[*i])?;
                                     aggr_ops.push(cur_aggr)
                                 }
                                 ent.insert(aggr_ops);
@@ -305,7 +305,7 @@ impl<'a> SessionTx<'a> {
                             }
                         })
                         .try_collect()?;
-                    let tuple = Tuple(tuple_data);
+                    let tuple = tuple_data;
                     if should_check_limit {
                         if !store.exists(&tuple, 0) {
                             store.put_with_skip(tuple, limiter.should_skip_next());

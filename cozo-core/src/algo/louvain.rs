@@ -17,7 +17,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -66,7 +65,7 @@ impl AlgoImpl for CommunityDetectionLouvain {
             if let Some(l) = keep_depth {
                 labels.truncate(l);
             }
-            out.put(Tuple(vec![DataValue::List(labels), node]), 0);
+            out.put(vec![DataValue::List(labels), node], 0);
         }
 
         Ok(())

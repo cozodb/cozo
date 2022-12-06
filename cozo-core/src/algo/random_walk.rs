@@ -18,7 +18,6 @@ use crate::algo::{AlgoImpl, BadExprValueError, NodeNotFoundError};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -55,7 +54,7 @@ impl AlgoImpl for RandomWalk {
         let mut rng = thread_rng();
         for start_node in starting.iter(tx, stores)? {
             let start_node = start_node?;
-            let start_node_key = &start_node.0[0];
+            let start_node_key = &start_node[0];
             let starting_tuple = nodes
                 .prefix_iter(start_node_key, tx, stores)?
                 .next()
@@ -68,7 +67,7 @@ impl AlgoImpl for RandomWalk {
                 let mut current_tuple = starting_tuple.clone();
                 let mut path = vec![start_node_key.clone()];
                 for _ in 0..steps {
-                    let cur_node_key = &current_tuple.0[0];
+                    let cur_node_key = &current_tuple[0];
                     let candidate_steps: Vec<_> =
                         edges.prefix_iter(cur_node_key, tx, stores)?.try_collect()?;
                     if candidate_steps.is_empty() {
@@ -79,7 +78,7 @@ impl AlgoImpl for RandomWalk {
                             .iter()
                             .map(|t| -> Result<f64> {
                                 let mut cand = current_tuple.clone();
-                                cand.0.extend_from_slice(&t.0);
+                                cand.extend_from_slice(&t);
                                 Ok(match weight_expr.eval(&cand)? {
                                     DataValue::Num(n) => {
                                         let f = n.get_float();
@@ -108,7 +107,7 @@ impl AlgoImpl for RandomWalk {
                     } else {
                         candidate_steps.choose(&mut rng).unwrap()
                     };
-                    let next_node = &next_step.0[1];
+                    let next_node = &next_step[1];
                     path.push(next_node.clone());
                     current_tuple = nodes
                         .prefix_iter(next_node, tx, stores)?
@@ -120,11 +119,11 @@ impl AlgoImpl for RandomWalk {
                     poison.check()?;
                 }
                 out.put(
-                    Tuple(vec![
+                    vec![
                         DataValue::from(counter),
                         start_node_key.clone(),
                         DataValue::List(path),
-                    ]),
+                    ],
                     0,
                 );
             }

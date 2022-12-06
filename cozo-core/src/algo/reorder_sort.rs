@@ -17,7 +17,6 @@ use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
 use crate::data::program::{MagicAlgoApply, MagicSymbol, WrongAlgoOptionError};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -117,7 +116,7 @@ impl AlgoImpl for ReorderSort {
             }
             let mut out_t = vec![DataValue::from(if break_ties { count } else { rank } as i64)];
             out_t.extend_from_slice(&val[0..val.len() - 1]);
-            out.put(Tuple(out_t), 0);
+            out.put(out_t, 0);
             poison.check()?;
         }
         Ok(())

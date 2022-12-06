@@ -19,7 +19,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -46,11 +45,11 @@ impl AlgoImpl for MinimumSpanningForestKruskal {
         let msp = kruskal(&graph, poison)?;
         for (src, dst, cost) in msp {
             out.put(
-                Tuple(vec![
+                vec![
                     indices[src].clone(),
                     indices[dst].clone(),
                     DataValue::from(cost),
-                ]),
+                ],
                 0,
             );
         }

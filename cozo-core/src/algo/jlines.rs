@@ -25,7 +25,6 @@ use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -86,7 +85,7 @@ impl AlgoImpl for JsonReader {
                 };
                 ret.push(val);
             }
-            out.put(Tuple(ret), 0);
+            out.put(ret, 0);
             Ok(())
         };
         match url.strip_prefix("file://") {

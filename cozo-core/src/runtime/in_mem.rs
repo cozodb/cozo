@@ -10,7 +10,6 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::ops::Bound::Included;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -88,20 +87,18 @@ impl InMemRelation {
         let zero_target: &RefCell<BTreeMap<_, _>> = zero_map.borrow();
         let mut zero_target = zero_target.borrow_mut();
 
-        let key = Tuple(
-            aggrs
-                .iter()
-                .enumerate()
-                .map(|(i, ma)| {
-                    if ma.is_none() {
-                        tuple.0[i].clone()
-                    } else {
-                        // placeholder for meet aggregation
-                        DataValue::Guard
-                    }
-                })
-                .collect_vec(),
-        );
+        let key = aggrs
+            .iter()
+            .enumerate()
+            .map(|(i, ma)| {
+                if ma.is_none() {
+                    tuple[i].clone()
+                } else {
+                    // placeholder for meet aggregation
+                    DataValue::Guard
+                }
+            })
+            .collect_vec();
         let prev_aggr = zero_target.get_mut(&key);
 
         if let Some(prev_aggr) = prev_aggr {
@@ -109,7 +106,7 @@ impl InMemRelation {
             for (i, aggr) in aggrs.iter_mut().enumerate() {
                 if let Some((aggr_op, _aggr_args)) = aggr {
                     let op = aggr_op.meet_op.as_mut().unwrap();
-                    changed |= op.update(&mut prev_aggr.0[i], &tuple.0[i])?;
+                    changed |= op.update(&mut prev_aggr[i], &tuple[i])?;
                 }
             }
             if changed && epoch != 0 {
@@ -121,20 +118,18 @@ impl InMemRelation {
             }
             Ok(changed)
         } else {
-            let tuple_to_store = Tuple(
-                aggrs
-                    .iter()
-                    .enumerate()
-                    .map(|(i, aggr)| -> Result<DataValue> {
-                        if aggr.is_some() {
-                            Ok(tuple.0[i].clone())
-                        } else {
-                            // placeholder for key part
-                            Ok(DataValue::Guard)
-                        }
-                    })
-                    .try_collect()?,
-            );
+            let tuple_to_store: Tuple = aggrs
+                .iter()
+                .enumerate()
+                .map(|(i, aggr)| -> Result<DataValue> {
+                    if aggr.is_some() {
+                        Ok(tuple[i].clone())
+                    } else {
+                        // placeholder for key part
+                        Ok(DataValue::Guard)
+                    }
+                })
+                .try_collect()?;
             zero_target.insert(key.clone(), tuple_to_store.clone());
             if epoch != 0 {
                 let epoch_maps = mem_db.borrow();
@@ -163,7 +158,7 @@ impl InMemRelation {
 
         if should_skip {
             // put guard, so that when iterating results, those with guards are ignored
-            epoch_map.insert(tuple, Tuple(vec![DataValue::Guard]));
+            epoch_map.insert(tuple, vec![DataValue::Guard]);
         } else {
             epoch_map.insert(tuple, Tuple::default());
         }
@@ -191,22 +186,22 @@ impl InMemRelation {
         let collected = epoch_map
             .iter()
             .map(|(k, v)| {
-                if v.0.is_empty() {
+                if v.is_empty() {
                     k.clone()
                 } else {
-                    let combined =
-                        k.0.iter()
-                            .zip(v.0.iter())
-                            .map(|(kel, vel)| {
-                                // merge meet aggregation kv
-                                if matches!(kel, DataValue::Guard) {
-                                    vel.clone()
-                                } else {
-                                    kel.clone()
-                                }
-                            })
-                            .collect_vec();
-                    Tuple(combined)
+                    let combined = k
+                        .iter()
+                        .zip(v.iter())
+                        .map(|(kel, vel)| {
+                            // merge meet aggregation kv
+                            if matches!(kel, DataValue::Guard) {
+                                vel.clone()
+                            } else {
+                                kel.clone()
+                            }
+                        })
+                        .collect_vec();
+                    combined
                 }
             })
             .collect_vec();
@@ -225,25 +220,25 @@ impl InMemRelation {
         let collected = epoch_map
             .iter()
             .filter_map(|(k, v)| {
-                if v.0.is_empty() {
+                if v.is_empty() {
                     Some(k.clone())
-                } else if v.0.last() == Some(&DataValue::Guard) {
+                } else if v.last() == Some(&DataValue::Guard) {
                     // ignore since we are using :offset
                     None
                 } else {
-                    let combined =
-                        k.0.iter()
-                            .zip(v.0.iter())
-                            .map(|(kel, vel)| {
-                                // merge kv parts of meet aggr
-                                if matches!(kel, DataValue::Guard) {
-                                    vel.clone()
-                                } else {
-                                    kel.clone()
-                                }
-                            })
-                            .collect_vec();
-                    Some(Tuple(combined))
+                    let combined = k
+                        .iter()
+                        .zip(v.iter())
+                        .map(|(kel, vel)| {
+                            // merge kv parts of meet aggr
+                            if matches!(kel, DataValue::Guard) {
+                                vel.clone()
+                            } else {
+                                kel.clone()
+                            }
+                        })
+                        .collect_vec();
+                    Some(combined)
                 }
             })
             .collect_vec();
@@ -257,9 +252,9 @@ impl InMemRelation {
         prefix: &Tuple,
         epoch: u32,
     ) -> impl Iterator<Item = Result<Tuple>> {
-        let mut upper = prefix.0.clone();
+        let mut upper = prefix.clone();
         upper.push(DataValue::Bot);
-        let upper = Tuple(upper);
+        let upper = upper;
         let mem_db: &RefCell<_> = self.mem_db.borrow();
         let epoch_maps = mem_db.borrow();
         let epoch_map = epoch_maps.get(epoch as usize).unwrap();
@@ -267,24 +262,24 @@ impl InMemRelation {
         let epoch_map = epoch_map.borrow();
 
         let collected = epoch_map
-            .range((Included(prefix), Included(&upper)))
+            .range(prefix.clone()..=upper)
             .map(|(k, v)| {
-                if v.0.is_empty() {
+                if v.is_empty() {
                     k.clone()
                 } else {
-                    let combined =
-                        k.0.iter()
-                            .zip(v.0.iter())
-                            .map(|(kel, vel)| {
-                                // merge kv parts of meet aggr
-                                if matches!(kel, DataValue::Guard) {
-                                    vel.clone()
-                                } else {
-                                    kel.clone()
-                                }
-                            })
-                            .collect_vec();
-                    Tuple(combined)
+                    let combined = k
+                        .iter()
+                        .zip(v.iter())
+                        .map(|(kel, vel)| {
+                            // merge kv parts of meet aggr
+                            if matches!(kel, DataValue::Guard) {
+                                vel.clone()
+                            } else {
+                                kel.clone()
+                            }
+                        })
+                        .collect_vec();
+                    combined
                 }
             })
             .collect_vec();
@@ -298,9 +293,9 @@ impl InMemRelation {
         epoch: u32,
     ) -> impl Iterator<Item = Result<Tuple>> {
         let mut prefix_bound = prefix.clone();
-        prefix_bound.0.extend_from_slice(lower);
+        prefix_bound.extend_from_slice(lower);
         let mut upper_bound = prefix.clone();
-        upper_bound.0.extend_from_slice(upper);
+        upper_bound.extend_from_slice(upper);
 
         let mem_db: &RefCell<_> = self.mem_db.borrow();
         let epoch_maps = mem_db.borrow();
@@ -309,7 +304,7 @@ impl InMemRelation {
         let epoch_map = epoch_map.borrow();
 
         let res = epoch_map
-            .range((Included(&prefix_bound), Included(&upper_bound)))
+            .range(prefix_bound..=upper_bound)
             .map(|(k, _v)| k.clone())
             .collect_vec();
         res.into_iter().map(Ok)

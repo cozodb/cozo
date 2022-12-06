@@ -87,7 +87,7 @@ impl PartialOrd for RegexWrapper {
 #[derive(
     Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
-pub(crate) enum DataValue {
+pub enum DataValue {
     Null,
     Bool(bool),
     Num(Num),

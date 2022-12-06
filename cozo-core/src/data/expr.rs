@@ -253,7 +253,7 @@ impl Expr {
                 all_evaluated = all_evaluated && matches!(arg, Expr::Const { .. });
             }
             if all_evaluated {
-                let result = self.eval(&Tuple(vec![]))?;
+                let result = self.eval(&vec![])?;
                 mem::swap(self, &mut Expr::Const { val: result, span });
             }
             // nested not's can accumulate during conversion to normal form
@@ -328,10 +328,9 @@ impl Expr {
                     struct TupleTooShortError(String, usize, usize, #[label] SourceSpan);
 
                     Ok(bindings
-                        .0
                         .get(*i)
                         .ok_or_else(|| {
-                            TupleTooShortError(var.name.to_string(), *i, bindings.0.len(), var.span)
+                            TupleTooShortError(var.name.to_string(), *i, bindings.len(), var.span)
                         })?
                         .clone())
                 }

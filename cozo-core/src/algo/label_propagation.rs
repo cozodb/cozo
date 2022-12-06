@@ -17,7 +17,6 @@ use crate::algo::AlgoImpl;
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
-use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
@@ -43,7 +42,7 @@ impl AlgoImpl for LabelPropagation {
         let labels = label_propagation(&graph, max_iter, poison)?;
         for (idx, label) in labels.into_iter().enumerate() {
             let node = indices[idx].clone();
-            out.put(Tuple(vec![DataValue::from(label as i64), node]), 0);
+            out.put(vec![DataValue::from(label as i64), node], 0);
         }
         Ok(())
     }

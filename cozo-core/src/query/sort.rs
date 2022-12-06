@@ -34,7 +34,7 @@ impl<'a> SessionTx<'a> {
         let mut all_data: Vec<_> = original.scan_all().try_collect()?;
         all_data.sort_by(|a, b| {
             for (idx, dir) in &idx_sorters {
-                match a.0[*idx].cmp(&b.0[*idx]) {
+                match a[*idx].cmp(&b[*idx]) {
                     Ordering::Equal => {}
                     o => {
                         return match dir {
