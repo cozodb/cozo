@@ -52,13 +52,16 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn stratified_magic_evaluate(
         &self,
         strata: &[CompiledProgram],
-        store_lifetimes: BTreeMap<Symbol, usize>,
+        store_lifetimes: BTreeMap<MagicSymbol, usize>,
         total_num_to_take: Option<usize>,
         num_to_skip: Option<usize>,
         poison: Poison,
     ) -> Result<(InMemRelation, bool)> {
         let mut stores = BTreeMap::new();
         let mut early_return = false;
+        let entry_symbol = MagicSymbol::Muggle {
+            inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
+        };
         for (stratum, cur_prog) in strata.iter().enumerate() {
             debug!("stratum {}", stratum);
             for (rule_name, rule_set) in cur_prog {
@@ -67,24 +70,33 @@ impl<'a> SessionTx<'a> {
 
             early_return = self.semi_naive_magic_evaluate(
                 cur_prog,
-                &stores,
+                &mut stores,
                 total_num_to_take,
                 num_to_skip,
                 poison.clone(),
             )?;
+            // remove stores that have outlived their usefulness!
+            stores = stores
+                .into_iter()
+                .filter(|(name, _)| {
+                    if *name == entry_symbol {
+                        return true;
+                    }
+                    match store_lifetimes.get(name) {
+                        None => false,
+                        Some(n) => *n > stratum,
+                    }
+                })
+                .collect()
         }
-        let ret_area = stores
-            .remove(&MagicSymbol::Muggle {
-                inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
-            })
-            .ok_or(NoEntryError)?;
+        let ret_area = stores.remove(&entry_symbol).ok_or(NoEntryError)?;
         Ok((ret_area, early_return))
     }
     /// returns true if early return is activated
     fn semi_naive_magic_evaluate(
         &self,
         prog: &CompiledProgram,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
         total_num_to_take: Option<usize>,
         num_to_skip: Option<usize>,
         poison: Poison,
@@ -202,7 +214,7 @@ impl<'a> SessionTx<'a> {
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
@@ -238,7 +250,7 @@ impl<'a> SessionTx<'a> {
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         poison: Poison,
     ) -> Result<()> {
@@ -281,7 +293,7 @@ impl<'a> SessionTx<'a> {
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
@@ -410,7 +422,7 @@ impl<'a> SessionTx<'a> {
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         epoch: u32,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
         prev_changed: &BTreeMap<&MagicSymbol, bool>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
@@ -484,7 +496,7 @@ impl<'a> SessionTx<'a> {
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         epoch: u32,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
         prev_changed: &BTreeMap<&MagicSymbol, bool>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         poison: Poison,
