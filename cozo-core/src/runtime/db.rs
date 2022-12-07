@@ -1215,6 +1215,6 @@ mod tests {
         r[code, dist] := *airport{code}, *route{fr: code, dist};
         ?[dist] := r['a', dist], dist > 0.5, dist <= 1.1;
         "#, Default::default()).unwrap().rows;
-        dbg!(res);
+        assert_eq!(res[0][0], json!(1.1))
     }
 }

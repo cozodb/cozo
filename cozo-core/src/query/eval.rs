@@ -120,6 +120,7 @@ impl<'a> SessionTx<'a> {
 
         for epoch in 0u32.. {
             debug!("epoch {}", epoch);
+            let mut to_merge = BTreeMap::new();
             if epoch == 0 {
                 for (k, compiled_ruleset) in prog.iter().rev() {
                     let new_store = match compiled_ruleset {
@@ -166,8 +167,7 @@ impl<'a> SessionTx<'a> {
                             out.wrap()
                         }
                     };
-                    let old_store = stores.get_mut(k).unwrap();
-                    old_store.merge(new_store)?;
+                    to_merge.insert(k, new_store);
                 }
             } else {
                 mem::swap(&mut changed, &mut prev_changed);
@@ -216,9 +216,12 @@ impl<'a> SessionTx<'a> {
                             NormalTempStore::default().wrap()
                         }
                     };
-                    let old_store = stores.get_mut(k).unwrap();
-                    old_store.merge(new_store)?;
+                    to_merge.insert(k, new_store);
                 }
+            }
+            for (k, new_store) in to_merge {
+                let old_store = stores.get_mut(k).unwrap();
+                old_store.merge(new_store)?;
             }
             if changed.values().all(|rule_changed| !*rule_changed) {
                 break;
