@@ -15,7 +15,7 @@ use log::{debug, trace};
 use miette::Result;
 
 use crate::data::aggr::Aggregation;
-use crate::data::program::{MagicAlgoApply, MagicSymbol, NoEntryError};
+use crate::data::program::{MagicSymbol, NoEntryError};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -132,7 +132,9 @@ impl<'a> SessionTx<'a> {
                             }
                         },
                         CompiledRuleSet::Algo(algo_apply) => {
-                            self.algo_application_eval(k, algo_apply, stores, poison.clone())?;
+                            let mut algo_impl = algo_apply.algo.get_impl()?;
+                            let out = stores.get(k).unwrap();
+                            algo_impl.run(self, algo_apply, stores, out, poison.clone())?;
                         }
                     }
                 }
@@ -190,17 +192,6 @@ impl<'a> SessionTx<'a> {
             }
         }
         Ok(used_limiter)
-    }
-    fn algo_application_eval(
-        &self,
-        rule_symb: &MagicSymbol,
-        algo_apply: &MagicAlgoApply,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
-        poison: Poison,
-    ) -> Result<()> {
-        let mut algo_impl = algo_apply.algo.get_impl()?;
-        let out = stores.get(rule_symb).unwrap();
-        algo_impl.run(self, algo_apply, stores, out, poison)
     }
     /// returns true is early return is activated
     fn initial_rule_normal_eval(

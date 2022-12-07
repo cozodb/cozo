@@ -21,7 +21,7 @@ use crate::data::program::{
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
-use crate::query::relation::RelAlgebra;
+use crate::query::ra::RelAlgebra;
 use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
