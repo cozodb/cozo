@@ -98,7 +98,6 @@ pub enum DataValue {
     Regex(RegexWrapper),
     List(Vec<DataValue>),
     Set(BTreeSet<DataValue>),
-    Guard,
     Bot,
 }
 
@@ -245,9 +244,6 @@ impl Display for DataValue {
             }
             DataValue::List(ls) => f.debug_list().entries(ls).finish(),
             DataValue::Set(s) => f.debug_list().entries(s).finish(),
-            DataValue::Guard => {
-                write!(f, "null")
-            }
             DataValue::Bot => write!(f, "null"),
         }
     }

@@ -28,7 +28,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct JsonReader;
@@ -38,8 +38,8 @@ impl AlgoImpl for JsonReader {
         &mut self,
         _tx: &SessionTx<'_>,
         algo: &MagicAlgoApply,
-        _stores: &BTreeMap<MagicSymbol, InMemRelation>,
-        out: &InMemRelation,
+        _stores: &BTreeMap<MagicSymbol, EpochStore>,
+        out: &mut NormalTempStore,
         _poison: Poison,
     ) -> Result<()> {
         let url = algo.string_option("url", None)?;
@@ -85,7 +85,7 @@ impl AlgoImpl for JsonReader {
                 };
                 ret.push(val);
             }
-            out.put(ret, 0);
+            out.put(ret);
             Ok(())
         };
         match url.strip_prefix("file://") {

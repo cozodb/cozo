@@ -18,7 +18,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct Dfs;
@@ -28,8 +28,8 @@ impl AlgoImpl for Dfs {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation_with_min_len(0, 2, tx, stores)?;
@@ -105,7 +105,7 @@ impl AlgoImpl for Dfs {
             route.push(starting.clone());
             route.reverse();
             let tuple = vec![starting, ending, DataValue::List(route)];
-            out.put(tuple, 0);
+            out.put(tuple);
             poison.check()?;
         }
         Ok(())

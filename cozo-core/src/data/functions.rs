@@ -49,7 +49,6 @@ fn ensure_same_value_type(a: &DataValue, b: &DataValue) -> Result<()> {
             | (Regex(_), Regex(_))
             | (List(_), List(_))
             | (Set(_), Set(_))
-            | (Guard, Guard)
             | (Bot, Bot)
     ) {
         bail!(
@@ -1272,7 +1271,6 @@ pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Regex(r) => !r.0.as_str().is_empty(),
         DataValue::List(l) => !l.is_empty(),
         DataValue::Set(s) => !s.is_empty(),
-        DataValue::Guard => false,
         DataValue::Bot => false,
     }))
 }
@@ -1290,7 +1288,6 @@ pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Regex(r) => if r.0.as_str().is_empty() {0 } else { 1},
         DataValue::List(l) => if l.is_empty() {0} else {1},
         DataValue::Set(s) => if s.is_empty() {0} else {1},
-        DataValue::Guard => 0,
         DataValue::Bot => 0,
     }))
 }

@@ -18,7 +18,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct DegreeCentrality;
@@ -28,8 +28,8 @@ impl AlgoImpl for DegreeCentrality {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         poison: Poison,
     ) -> Result<()> {
         let it = algo
@@ -66,8 +66,7 @@ impl AlgoImpl for DegreeCentrality {
                 DataValue::from(out_d as i64),
                 DataValue::from(in_d as i64),
             ];
-            out.put(tuple, 0);
-            poison.check()?;
+            out.put(tuple);
         }
         Ok(())
     }

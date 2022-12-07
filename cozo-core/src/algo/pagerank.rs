@@ -24,7 +24,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct PageRank;
@@ -34,8 +34,8 @@ impl AlgoImpl for PageRank {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         _poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;
@@ -64,10 +64,7 @@ impl AlgoImpl for PageRank {
             );
 
             for (idx, score) in ranks.iter().enumerate() {
-                out.put(
-                    vec![indices[idx].clone(), DataValue::from(*score as f64)],
-                    0,
-                );
+                out.put(vec![indices[idx].clone(), DataValue::from(*score as f64)]);
             }
         }
         #[cfg(not(feature = "rayon"))]

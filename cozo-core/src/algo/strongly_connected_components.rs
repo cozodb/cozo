@@ -22,7 +22,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 #[cfg(feature = "graph-algo")]
@@ -42,8 +42,8 @@ impl AlgoImpl for StronglyConnectedComponent {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;
@@ -56,7 +56,7 @@ impl AlgoImpl for StronglyConnectedComponent {
             for idx in cc {
                 let val = indices.get(*idx).unwrap();
                 let tuple = vec![val.clone(), DataValue::from(grp_id as i64)];
-                out.put(tuple, 0);
+                out.put(tuple);
             }
         }
 
@@ -69,7 +69,7 @@ impl AlgoImpl for StronglyConnectedComponent {
                 if !inv_indices.contains_key(&node) {
                     inv_indices.insert(node.clone(), usize::MAX);
                     let tuple = vec![node, DataValue::from(counter)];
-                    out.put(tuple, 0);
+                    out.put(tuple);
                     counter += 1;
                 }
             }

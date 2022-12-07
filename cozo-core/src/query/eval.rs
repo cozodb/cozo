@@ -7,7 +7,7 @@
  */
 
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::mem;
 
 use itertools::Itertools;
@@ -22,7 +22,7 @@ use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, MeetAggrStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct QueryLimiter {
@@ -56,33 +56,35 @@ impl<'a> SessionTx<'a> {
         total_num_to_take: Option<usize>,
         num_to_skip: Option<usize>,
         poison: Poison,
-    ) -> Result<(InMemRelation, bool)> {
-        let mut stores = BTreeMap::new();
+    ) -> Result<(EpochStore, bool)> {
+        let mut stores: BTreeMap<MagicSymbol, EpochStore> = BTreeMap::new();
         let mut early_return = false;
-        let entry_symbol = MagicSymbol::Muggle {
-            inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
-        };
         for (stratum, cur_prog) in strata.iter().enumerate() {
             if stratum > 0 {
                 // remove stores that have outlived their usefulness!
                 stores = stores
                     .into_iter()
-                    .filter(|(name, _)| {
-                        if *name == entry_symbol {
-                            return true;
-                        }
-                        match store_lifetimes.get(name) {
-                            None => false,
-                            Some(n) => *n >= stratum,
-                        }
+                    .filter(|(name, _)| match store_lifetimes.get(name) {
+                        None => false,
+                        Some(n) => *n >= stratum,
                     })
-                    .collect()
+                    .collect();
+                trace!("{:?}", stores);
             }
             for (rule_name, rule_set) in cur_prog {
-                stores.insert(rule_name.clone(), self.new_rule_store(rule_set.arity()));
+                let store = match rule_set.aggr_kind() {
+                    AggrKind::None | AggrKind::Normal => EpochStore::new_normal(rule_set.arity()),
+                    AggrKind::Meet => {
+                        let rs = match rule_set {
+                            CompiledRuleSet::Rules(rs) => rs,
+                            _ => unreachable!(),
+                        };
+                        EpochStore::new_meet(&rs[0].aggr)?
+                    }
+                };
+                stores.insert(rule_name.clone(), store);
             }
             debug!("stratum {}", stratum);
-
             early_return = self.semi_naive_magic_evaluate(
                 cur_prog,
                 &mut stores,
@@ -91,6 +93,9 @@ impl<'a> SessionTx<'a> {
                 poison.clone(),
             )?;
         }
+        let entry_symbol = MagicSymbol::Muggle {
+            inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
+        };
         let ret_area = stores.remove(&entry_symbol).ok_or(NoEntryError)?;
         Ok((ret_area, early_return))
     }
@@ -98,7 +103,7 @@ impl<'a> SessionTx<'a> {
     fn semi_naive_magic_evaluate(
         &self,
         prog: &CompiledProgram,
-        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
         total_num_to_take: Option<usize>,
         num_to_skip: Option<usize>,
         poison: Poison,
@@ -117,61 +122,65 @@ impl<'a> SessionTx<'a> {
             debug!("epoch {}", epoch);
             if epoch == 0 {
                 for (k, compiled_ruleset) in prog.iter().rev() {
-                    match compiled_ruleset {
+                    let new_store = match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => match compiled_ruleset.aggr_kind() {
                             AggrKind::None => {
-                                used_limiter = self.initial_rule_normal_eval(
+                                let res = self.initial_rule_non_aggr_eval(
                                     k,
                                     ruleset,
                                     stores,
                                     &mut changed,
                                     &mut limiter,
                                     poison.clone(),
-                                )? || used_limiter;
+                                )?;
+                                used_limiter = res.0 || used_limiter;
+                                res.1.wrap()
                             }
                             AggrKind::Normal => {
-                                used_limiter = self.initial_rule_aggr_eval(
+                                let res = self.initial_rule_aggr_eval(
                                     k,
                                     ruleset,
                                     stores,
                                     &mut changed,
                                     &mut limiter,
                                     poison.clone(),
-                                )? || used_limiter;
+                                )?;
+                                used_limiter = res.0 || used_limiter;
+                                res.1.wrap()
                             }
                             AggrKind::Meet => {
-                                self.initial_rule_meet_eval(
+                                let new = self.initial_rule_meet_eval(
                                     k,
                                     ruleset,
                                     stores,
                                     &mut changed,
                                     poison.clone(),
                                 )?;
+                                new.wrap()
                             }
                         },
                         CompiledRuleSet::Algo(algo_apply) => {
                             let mut algo_impl = algo_apply.algo.get_impl()?;
-                            let out = stores.get(k).unwrap();
-                            algo_impl.run(self, algo_apply, stores, out, poison.clone())?;
+                            let mut out = NormalTempStore::default();
+                            algo_impl.run(self, algo_apply, stores, &mut out, poison.clone())?;
+                            out.wrap()
                         }
-                    }
+                    };
+                    let old_store = stores.get_mut(k).unwrap();
+                    old_store.merge(new_store)?;
                 }
             } else {
-                for store in stores.values() {
-                    store.ensure_mem_db_for_epoch(epoch);
-                }
-
                 mem::swap(&mut changed, &mut prev_changed);
                 for (_k, v) in changed.iter_mut() {
                     *v = false;
                 }
 
                 for (k, compiled_ruleset) in prog.iter().rev() {
-                    match compiled_ruleset {
+                    let new_store = match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => {
                             match compiled_ruleset.aggr_kind() {
                                 AggrKind::None => {
-                                    used_limiter = self.incremental_rule_normal_eval(
+                                    let res = self.incremental_rule_non_aggr_eval(
                                         k,
                                         ruleset,
                                         epoch,
@@ -180,29 +189,35 @@ impl<'a> SessionTx<'a> {
                                         &mut changed,
                                         &mut limiter,
                                         poison.clone(),
-                                    )? || used_limiter;
+                                    )?;
+                                    used_limiter = res.0 || used_limiter;
+                                    res.1.wrap()
                                 }
                                 AggrKind::Meet => {
-                                    self.incremental_rule_meet_eval(
+                                    let new = self.incremental_rule_meet_eval(
                                         k,
                                         ruleset,
-                                        epoch,
                                         stores,
                                         &prev_changed,
                                         &mut changed,
                                         poison.clone(),
                                     )?;
+                                    new.wrap()
                                 }
                                 AggrKind::Normal => {
                                     // not doing anything
+                                    NormalTempStore::default().wrap()
                                 }
                             }
                         }
 
                         CompiledRuleSet::Algo(_) => {
                             // no need to do anything, algos are only calculated once
+                            NormalTempStore::default().wrap()
                         }
-                    }
+                    };
+                    let old_store = stores.get_mut(k).unwrap();
+                    old_store.merge(new_store)?;
                 }
             }
             if changed.values().all(|rule_changed| !*rule_changed) {
@@ -212,52 +227,54 @@ impl<'a> SessionTx<'a> {
         Ok(used_limiter)
     }
     /// returns true is early return is activated
-    fn initial_rule_normal_eval(
+    fn initial_rule_non_aggr_eval(
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
-    ) -> Result<bool> {
-        let store = stores.get(rule_symb).unwrap();
-        let use_delta = BTreeSet::default();
+    ) -> Result<(bool, NormalTempStore)> {
+        let mut out_store = NormalTempStore::default();
         let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
 
         for (rule_n, rule) in ruleset.iter().enumerate() {
             debug!("initial calculation for rule {:?}.{}", rule_symb, rule_n);
-            for item_res in rule.relation.iter(self, Some(0), &use_delta, stores)? {
+            for item_res in rule.relation.iter(self, None, stores)? {
                 let item = item_res?;
                 trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
                 if should_check_limit {
-                    if !store.exists(&item, 0) {
-                        store.put_with_skip(item, limiter.should_skip_next());
+                    if !out_store.exists(&item) {
+                        if limiter.should_skip_next() {
+                            out_store.put_with_skip(item);
+                        } else {
+                            out_store.put(item);
+                        }
                         if limiter.incr_and_should_stop() {
                             trace!("early stopping due to result count limit exceeded");
-                            return Ok(true);
+                            return Ok((true, out_store));
                         }
                     }
                 } else {
-                    store.put(item, 0);
+                    out_store.put(item);
                 }
                 *changed.get_mut(rule_symb).unwrap() = true;
             }
             poison.check()?;
         }
 
-        Ok(should_check_limit)
+        Ok((should_check_limit, out_store))
     }
     fn initial_rule_meet_eval(
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         poison: Poison,
-    ) -> Result<()> {
-        let store = stores.get(rule_symb).unwrap();
-        let use_delta = BTreeSet::default();
+    ) -> Result<MeetAggrStore> {
+        let mut out_store = MeetAggrStore::new(ruleset[0].aggr.clone())?;
 
         for (rule_n, rule) in ruleset.iter().enumerate() {
             debug!("initial calculation for rule {:?}.{}", rule_symb, rule_n);
@@ -265,16 +282,16 @@ impl<'a> SessionTx<'a> {
             for (aggr, args) in aggr.iter_mut().flatten() {
                 aggr.meet_init(args)?;
             }
-            for item_res in rule.relation.iter(self, Some(0), &use_delta, stores)? {
+            for item_res in rule.relation.iter(self, None, stores)? {
                 let item = item_res?;
                 trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
-                store.aggr_meet_put(&item, &mut aggr, 0)?;
+                out_store.meet_put(item)?;
 
                 *changed.get_mut(rule_symb).unwrap() = true;
             }
             poison.check()?;
         }
-        if store.is_empty() && ruleset[0].aggr.iter().all(|a| a.is_some()) {
+        if out_store.is_empty() && ruleset[0].aggr.iter().all(|a| a.is_some()) {
             let mut aggr = ruleset[0].aggr.clone();
             for (aggr, args) in aggr.iter_mut().flatten() {
                 aggr.meet_init(args)?;
@@ -287,21 +304,20 @@ impl<'a> SessionTx<'a> {
                     Ok(op.init_val())
                 })
                 .try_collect()?;
-            store.aggr_meet_put(&value, &mut aggr, 0)?;
+            out_store.meet_put(value)?;
         }
-        Ok(())
+        Ok(out_store)
     }
     fn initial_rule_aggr_eval(
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
-    ) -> Result<bool> {
-        let store = stores.get(rule_symb).unwrap();
-        let use_delta = BTreeSet::default();
+    ) -> Result<(bool, NormalTempStore)> {
+        let mut out_store = NormalTempStore::default();
         let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
         let mut aggr_work: BTreeMap<Vec<DataValue>, Vec<Aggregation>> = BTreeMap::new();
 
@@ -310,6 +326,7 @@ impl<'a> SessionTx<'a> {
                 "Calculation for normal aggr rule {:?}.{}",
                 rule_symb, rule_n
             );
+            trace!("{:?}", rule);
 
             let keys_indices = rule
                 .aggr
@@ -331,7 +348,7 @@ impl<'a> SessionTx<'a> {
                 })
                 .collect_vec();
 
-            for item_res in rule.relation.iter(self, Some(0), &use_delta, stores)? {
+            for item_res in rule.relation.iter(self, None, stores)? {
                 let item = item_res?;
                 trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
 
@@ -390,7 +407,7 @@ impl<'a> SessionTx<'a> {
                     op.get()
                 })
                 .try_collect()?;
-            store.put(empty_result, 0);
+            out_store.put(empty_result);
         }
 
         for (keys, aggrs) in aggr_work {
@@ -406,31 +423,36 @@ impl<'a> SessionTx<'a> {
                 .try_collect()?;
             let tuple = tuple_data;
             if should_check_limit {
-                if !store.exists(&tuple, 0) {
-                    store.put_with_skip(tuple, limiter.should_skip_next());
+                if !out_store.exists(&tuple) {
+                    if limiter.should_skip_next() {
+                        out_store.put_with_skip(tuple);
+                    } else {
+                        out_store.put(tuple);
+                    }
                     if limiter.incr_and_should_stop() {
-                        return Ok(true);
+                        return Ok((true, out_store));
                     }
                 }
                 // else, do nothing
             } else {
-                store.put(tuple, 0);
+                out_store.put(tuple);
             }
         }
-        Ok(should_check_limit)
+        Ok((should_check_limit, out_store))
     }
-    fn incremental_rule_normal_eval(
+    fn incremental_rule_non_aggr_eval(
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         epoch: u32,
-        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
         prev_changed: &BTreeMap<&MagicSymbol, bool>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
-    ) -> Result<bool> {
-        let store = stores.get(rule_symb).unwrap();
+    ) -> Result<(bool, NormalTempStore)> {
+        let prev_store = stores.get(rule_symb).unwrap();
+        let mut out_store = NormalTempStore::default();
         let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
         for (rule_n, rule) in ruleset.iter().enumerate() {
             let mut should_do_calculation = false;
@@ -446,12 +468,7 @@ impl<'a> SessionTx<'a> {
                 continue;
             }
 
-            let mut aggr = rule.aggr.clone();
-            for (aggr, args) in aggr.iter_mut().flatten() {
-                aggr.meet_init(args)?;
-            }
-
-            for (delta_key, delta_store) in stores.iter() {
+            for (delta_key, _) in stores.iter() {
                 if !rule.contained_rules.contains(delta_key) {
                     continue;
                 }
@@ -459,11 +476,10 @@ impl<'a> SessionTx<'a> {
                     "with delta {:?} for rule {:?}.{}",
                     delta_key, rule_symb, rule_n
                 );
-                let use_delta = BTreeSet::from([delta_store.id]);
-                for item_res in rule.relation.iter(self, Some(epoch), &use_delta, stores)? {
+                for item_res in rule.relation.iter(self, Some(delta_key), stores)? {
                     let item = item_res?;
                     // improvement: the clauses can actually be evaluated in parallel
-                    if store.exists(&item, 0) {
+                    if prev_store.exists(&item) {
                         trace!(
                             "item for {:?}.{}: {:?} at {}, rederived",
                             rule_symb,
@@ -480,30 +496,33 @@ impl<'a> SessionTx<'a> {
                             epoch
                         );
                         *changed.get_mut(rule_symb).unwrap() = true;
-                        store.put(item.clone(), epoch);
-                        store.put_with_skip(item, limiter.should_skip_next());
+                        if limiter.should_skip_next() {
+                            out_store.put_with_skip(item);
+                        } else {
+                            out_store.put(item);
+                        }
                         if should_check_limit && limiter.incr_and_should_stop() {
                             trace!("early stopping due to result count limit exceeded");
-                            return Ok(true);
+                            return Ok((true, out_store));
                         }
                     }
                 }
                 poison.check()?;
             }
         }
-        Ok(should_check_limit)
+        Ok((should_check_limit, out_store))
     }
     fn incremental_rule_meet_eval(
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        epoch: u32,
-        stores: &mut BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
         prev_changed: &BTreeMap<&MagicSymbol, bool>,
         changed: &mut BTreeMap<&MagicSymbol, bool>,
         poison: Poison,
-    ) -> Result<()> {
-        let store = stores.get(rule_symb).unwrap();
+    ) -> Result<MeetAggrStore> {
+        // let store = stores.get(rule_symb).unwrap();
+        let mut out_store = MeetAggrStore::new(ruleset[0].aggr.clone())?;
         for (rule_n, rule) in ruleset.iter().enumerate() {
             let mut should_do_calculation = false;
             for d_rule in &rule.contained_rules {
@@ -523,7 +542,7 @@ impl<'a> SessionTx<'a> {
                 aggr.meet_init(args)?;
             }
 
-            for (delta_key, delta_store) in stores.iter() {
+            for (delta_key, _) in stores.iter() {
                 if !rule.contained_rules.contains(delta_key) {
                     continue;
                 }
@@ -531,11 +550,10 @@ impl<'a> SessionTx<'a> {
                     "with delta {:?} for rule {:?}.{}",
                     delta_key, rule_symb, rule_n
                 );
-                let use_delta = BTreeSet::from([delta_store.id]);
-                for item_res in rule.relation.iter(self, Some(epoch), &use_delta, stores)? {
+                for item_res in rule.relation.iter(self, Some(delta_key), stores)? {
                     let item = item_res?;
                     // improvement: the clauses can actually be evaluated in parallel
-                    let aggr_changed = store.aggr_meet_put(&item, &mut aggr, epoch)?;
+                    let aggr_changed = out_store.meet_put(item)?;
                     if aggr_changed {
                         *changed.get_mut(rule_symb).unwrap() = true;
                     }
@@ -543,6 +561,6 @@ impl<'a> SessionTx<'a> {
                 poison.check()?;
             }
         }
-        Ok(())
+        Ok(out_store)
     }
 }

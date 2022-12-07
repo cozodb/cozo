@@ -407,7 +407,6 @@ impl<'s, S: Storage<'s>> Db<S> {
     fn transact(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             tx: Box::new(self.db.transact(false)?),
-            mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
         };
         Ok(ret)
@@ -415,7 +414,6 @@ impl<'s, S: Storage<'s>> Db<S> {
     fn transact_write(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             tx: Box::new(self.db.transact(true)?),
-            mem_store_id: Default::default(),
             relation_store_id: self.relation_store_id.clone(),
         };
         Ok(ret)
@@ -839,7 +837,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         };
 
         // the real evaluation
-        let (result, early_return) = tx.stratified_magic_evaluate(
+        let (result_store, early_return) = tx.stratified_magic_evaluate(
             &compiled,
             store_lifetimes,
             total_num_to_take,
@@ -851,22 +849,18 @@ impl<'s, S: Storage<'s>> Db<S> {
         if let Some(assertion) = &input_program.out_opts.assertion {
             match assertion {
                 QueryAssertion::AssertNone(span) => {
-                    if let Some(tuple) = result.scan_all().next() {
-                        let tuple = tuple?;
-
+                    if let Some(tuple) = result_store.all_iter().next() {
                         #[derive(Debug, Error, Diagnostic)]
                         #[error(
                             "The query is asserted to return no result, but a tuple {0:?} is found"
                         )]
                         #[diagnostic(code(eval::assert_none_failure))]
                         struct AssertNoneFailure(Tuple, #[label] SourceSpan);
-                        bail!(AssertNoneFailure(tuple, *span))
+                        bail!(AssertNoneFailure(tuple.into_tuple(), *span))
                     }
                 }
                 QueryAssertion::AssertSome(span) => {
-                    if let Some(tuple) = result.scan_all().next() {
-                        let _ = tuple?;
-                    } else {
+                    if result_store.all_iter().next().is_none() {
                         #[derive(Debug, Error, Diagnostic)]
                         #[error("The query is asserted to return some results, but returned none")]
                         #[diagnostic(code(eval::assert_some_failure))]
@@ -881,7 +875,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             // sort outputs if required
             let entry_head = input_program.get_entry_out_head()?;
             let sorted_result =
-                tx.sort_and_collect(result, &input_program.out_opts.sorters, &entry_head)?;
+                tx.sort_and_collect(result_store, &input_program.out_opts.sorters, &entry_head)?;
             let sorted_iter = if let Some(offset) = input_program.out_opts.offset {
                 Left(sorted_result.into_iter().skip(offset))
             } else {
@@ -892,7 +886,6 @@ impl<'s, S: Storage<'s>> Db<S> {
             } else {
                 Right(sorted_iter)
             };
-            let sorted_iter = sorted_iter.map(Ok);
             if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(
@@ -914,10 +907,10 @@ impl<'s, S: Storage<'s>> Db<S> {
             } else {
                 // not sorting outputs
                 let rows: Vec<Vec<JsonValue>> = sorted_iter
-                    .map_ok(|tuple| -> Vec<JsonValue> {
+                    .map(|tuple| -> Vec<JsonValue> {
                         tuple.into_iter().map(JsonValue::from).collect()
                     })
-                    .try_collect()?;
+                    .collect_vec();
                 let headers: Vec<String> = match input_program.get_entry_out_head() {
                     Ok(headers) => headers.into_iter().map(|v| v.name.to_string()).collect(),
                     Err(_) => match rows.get(0) {
@@ -929,15 +922,23 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
         } else {
             let scan = if early_return {
-                Right(Left(result.scan_early_returned()))
+                Right(Left(
+                    result_store.early_returned_iter().map(|t| t.into_tuple()),
+                ))
             } else if input_program.out_opts.limit.is_some()
                 || input_program.out_opts.offset.is_some()
             {
                 let limit = input_program.out_opts.limit.unwrap_or(usize::MAX);
                 let offset = input_program.out_opts.offset.unwrap_or(0);
-                Right(Right(result.scan_all().skip(offset).take(limit)))
+                Right(Right(
+                    result_store
+                        .all_iter()
+                        .skip(offset)
+                        .take(limit)
+                        .map(|t| t.into_tuple()),
+                ))
             } else {
-                Left(result.scan_all())
+                Left(result_store.all_iter().map(|t| t.into_tuple()))
             };
 
             if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
@@ -960,10 +961,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             } else {
                 let rows: Vec<Vec<JsonValue>> = scan
-                    .map_ok(|tuple| -> Vec<JsonValue> {
+                    .map(|tuple| -> Vec<JsonValue> {
                         tuple.into_iter().map(JsonValue::from).collect()
                     })
-                    .try_collect()?;
+                    .collect_vec();
 
                 let headers: Vec<String> = match input_program.get_entry_out_head() {
                     Ok(headers) => headers.into_iter().map(|v| v.name.to_string()).collect(),
@@ -1108,6 +1109,7 @@ impl Poison {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
+    use log::debug;
     use serde_json::json;
 
     use crate::new_cozo_mem;
@@ -1180,5 +1182,39 @@ mod tests {
             .unwrap()
             .rows;
         assert_eq!(res, vec![vec![json!(null), json!(0)]]);
+    }
+    #[test]
+    fn test_layers() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let db = new_cozo_mem().unwrap();
+        let res = db.run_script(r#"
+        y[a] := a in [1,2,3]
+        x[sum(a)] := y[a]
+        x[sum(a)] := a in [4,5,6]
+        ?[sum(a)] := x[a]
+        "#, Default::default()).unwrap().rows;
+        assert_eq!(res[0][0], json!(21.))
+    }
+    #[test]
+    fn test_conditions() {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let db = new_cozo_mem().unwrap();
+        db.run_script(r#"
+        {
+            ?[code] <- [['a'],['b'],['c']]
+            :create airport {code}
+        }
+        {
+            ?[fr, to, dist] <- [['a', 'b', 1.1], ['a', 'c', 0.5], ['b', 'c', 9.1]]
+            :create route {fr, to => dist}
+        }
+        "#, Default::default()).unwrap();
+        debug!("real test begins");
+        let res = db.run_script(r#"
+        r[code, dist] := *airport{code}, *route{fr: code, dist};
+        ?[dist] := r['a', dist], dist > 0.5, dist <= 1.1;
+        "#, Default::default()).unwrap().rows;
+        dbg!(res);
     }
 }

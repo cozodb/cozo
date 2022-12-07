@@ -8,6 +8,5 @@
 
 pub(crate) mod db;
 pub(crate) mod transact;
-pub(crate) mod in_mem;
 pub(crate) mod relation;
-// pub(crate) mod temp_store;
+pub(crate) mod temp_store;

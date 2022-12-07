@@ -26,7 +26,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct ShortestPathDijkstra;
@@ -36,8 +36,8 @@ impl AlgoImpl for ShortestPathDijkstra {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;
@@ -97,7 +97,7 @@ impl AlgoImpl for ShortestPathDijkstra {
                         DataValue::from(cost),
                         DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
                     ];
-                    out.put(t, 0)
+                    out.put(t)
                 }
             }
         } else {
@@ -144,7 +144,7 @@ impl AlgoImpl for ShortestPathDijkstra {
                         DataValue::from(cost),
                         DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
                     ];
-                    out.put(t, 0)
+                    out.put(t)
                 }
             }
         }

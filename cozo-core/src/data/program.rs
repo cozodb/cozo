@@ -22,8 +22,8 @@ use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
-use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::relation::InputRelationHandle;
+use crate::runtime::temp_store::EpochStore;
 use crate::runtime::transact::SessionTx;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -277,7 +277,7 @@ impl MagicAlgoApply {
         idx: usize,
         len: usize,
         tx: &SessionTx<'_>,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &BTreeMap<MagicSymbol, EpochStore>,
     ) -> Result<&MagicAlgoRuleArg> {
         #[derive(Error, Diagnostic, Debug)]
         #[error("Input relation to algorithm has insufficient arity")]

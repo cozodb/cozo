@@ -26,7 +26,6 @@ const UUID_TAG: u8 = 0x08;
 const REGEX_TAG: u8 = 0x09;
 const LIST_TAG: u8 = 0x0A;
 const SET_TAG: u8 = 0x0B;
-const GUARD_TAG: u8 = 0xFE;
 const BOT_TAG: u8 = 0xFF;
 
 const IS_FLOAT: u8 = 0b00010000;
@@ -79,7 +78,6 @@ pub(crate) trait MemCmpEncoder: Write {
                 }
                 self.write_u8(INIT_TAG).unwrap()
             }
-            DataValue::Guard => self.write_u8(GUARD_TAG).unwrap(),
             DataValue::Bot => self.write_u8(BOT_TAG).unwrap(),
         }
     }
@@ -271,7 +269,6 @@ impl DataValue {
                 }
                 (DataValue::Set(collected), &remaining[1..])
             }
-            GUARD_TAG => (DataValue::Guard, remaining),
             BOT_TAG => (DataValue::Bot, remaining),
             _ => unreachable!("{:?}", bs),
         }

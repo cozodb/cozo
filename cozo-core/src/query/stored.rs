@@ -36,7 +36,7 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn execute_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item = Result<Tuple>>,
+        res_iter: impl Iterator<Item = Tuple>,
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
@@ -110,7 +110,6 @@ impl<'a> SessionTx<'a> {
                 let mut old_tuples: Vec<DataValue> = vec![];
 
                 for tuple in res_iter {
-                    let tuple = tuple?;
                     let extracted = key_extractors
                         .iter()
                         .map(|ex| ex.extract_data(&tuple))
@@ -193,8 +192,6 @@ impl<'a> SessionTx<'a> {
                 key_extractors.extend(val_extractors);
 
                 for tuple in res_iter {
-                    let tuple = tuple?;
-
                     let extracted = key_extractors
                         .iter()
                         .map(|ex| ex.extract_data(&tuple))
@@ -242,7 +239,6 @@ impl<'a> SessionTx<'a> {
                 )?;
 
                 for tuple in res_iter {
-                    let tuple = tuple?;
                     let extracted = key_extractors
                         .iter()
                         .map(|ex| ex.extract_data(&tuple))
@@ -286,8 +282,6 @@ impl<'a> SessionTx<'a> {
                 key_extractors.extend(val_extractors);
 
                 for tuple in res_iter {
-                    let tuple = tuple?;
-
                     let extracted = key_extractors
                         .iter()
                         .map(|ex| ex.extract_data(&tuple))

@@ -22,7 +22,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct ShortestPathAStar;
@@ -32,8 +32,8 @@ impl AlgoImpl for ShortestPathAStar {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation_with_min_len(0, 3, tx, stores)?;
@@ -60,15 +60,12 @@ impl AlgoImpl for ShortestPathAStar {
                     stores,
                     poison.clone(),
                 )?;
-                out.put(
-                    vec![
-                        start[0].clone(),
-                        goal[0].clone(),
-                        DataValue::from(cost),
-                        DataValue::List(path),
-                    ],
-                    0,
-                );
+                out.put(vec![
+                    start[0].clone(),
+                    goal[0].clone(),
+                    DataValue::from(cost),
+                    DataValue::List(path),
+                ]);
             }
         }
 
@@ -92,7 +89,7 @@ fn astar<'a>(
     nodes: &'a MagicAlgoRuleArg,
     heuristic: &Expr,
     tx: &'a SessionTx<'_>,
-    stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+    stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     poison: Poison,
 ) -> Result<(f64, Vec<DataValue>)> {
     let start_node = &starting[0];

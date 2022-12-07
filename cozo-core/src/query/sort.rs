@@ -15,13 +15,13 @@ use miette::Result;
 use crate::data::program::SortDir;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::EpochStore;
 use crate::runtime::transact::SessionTx;
 
 impl<'a> SessionTx<'a> {
     pub(crate) fn sort_and_collect(
         &mut self,
-        original: InMemRelation,
+        original: EpochStore,
         sorters: &[(Symbol, SortDir)],
         head: &[Symbol],
     ) -> Result<Vec<Tuple>> {
@@ -31,7 +31,7 @@ impl<'a> SessionTx<'a> {
             .map(|(k, dir)| (head_indices[k], *dir))
             .collect_vec();
 
-        let mut all_data: Vec<_> = original.scan_all().try_collect()?;
+        let mut all_data: Vec<_> = original.all_iter().map(|v| v.into_tuple()).collect_vec();
         all_data.sort_by(|a, b| {
             for (idx, dir) in &idx_sorters {
                 match a[*idx].cmp(&b[*idx]) {

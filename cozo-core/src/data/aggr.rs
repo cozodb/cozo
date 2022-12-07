@@ -1206,7 +1206,7 @@ impl Aggregation {
             name if name == AGGR_INTERSECTION.name => Box::new(MeetAggrIntersection),
             name if name == AGGR_SHORTEST.name => Box::new(MeetAggrShortest),
             name if name == AGGR_MIN_COST.name => Box::new(MeetAggrMinCost),
-            _ => unreachable!(),
+            name => unreachable!("{}", name),
         });
         Ok(())
     }

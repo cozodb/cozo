@@ -20,7 +20,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct ClusteringCoefficients;
@@ -30,8 +30,8 @@ impl AlgoImpl for ClusteringCoefficients {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;
@@ -40,15 +40,12 @@ impl AlgoImpl for ClusteringCoefficients {
             graph.into_iter().map(|e| e.into_iter().collect()).collect();
         let coefficients = clustering_coefficients(&graph, poison)?;
         for (idx, (cc, n_triangles, degree)) in coefficients.into_iter().enumerate() {
-            out.put(
-                vec![
-                    indices[idx].clone(),
-                    DataValue::from(cc),
-                    DataValue::from(n_triangles as i64),
-                    DataValue::from(degree as i64),
-                ],
-                0,
-            );
+            out.put(vec![
+                indices[idx].clone(),
+                DataValue::from(cc),
+                DataValue::from(n_triangles as i64),
+                DataValue::from(degree as i64),
+            ]);
         }
 
         Ok(())

@@ -18,7 +18,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct TopSort;
@@ -28,8 +28,8 @@ impl AlgoImpl for TopSort {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;
@@ -41,7 +41,7 @@ impl AlgoImpl for TopSort {
         for (idx, val_id) in sorted.iter().enumerate() {
             let val = indices.get(*val_id).unwrap();
             let tuple = vec![DataValue::from(idx as i64), val.clone()];
-            out.put(tuple, 0);
+            out.put(tuple);
         }
 
         Ok(())

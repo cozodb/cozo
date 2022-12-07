@@ -55,7 +55,7 @@ use crate::data::tuple::TupleIter;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 #[cfg(feature = "graph-algo")]
@@ -99,8 +99,8 @@ pub(crate) trait AlgoImpl {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         poison: Poison,
     ) -> Result<()>;
     fn arity(
@@ -250,7 +250,7 @@ impl MagicAlgoRuleArg {
         undirected: bool,
         allow_negative_edges: bool,
         tx: &'a SessionTx<'_>,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     ) -> Result<(
         Vec<Vec<(usize, f64)>>,
         Vec<DataValue>,
@@ -335,7 +335,7 @@ impl MagicAlgoRuleArg {
         &'a self,
         undirected: bool,
         tx: &'a SessionTx<'_>,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
         let mut graph: Vec<Vec<usize>> = vec![];
         let mut indices: Vec<DataValue> = vec![];
@@ -375,7 +375,7 @@ impl MagicAlgoRuleArg {
         &'a self,
         prefix: &DataValue,
         tx: &'a SessionTx<'_>,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
             MagicAlgoRuleArg::InMem { name, .. } => {
@@ -383,7 +383,7 @@ impl MagicAlgoRuleArg {
                     RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
                 })?;
                 let t = vec![prefix.clone()];
-                Box::new(store.scan_prefix(&t))
+                Box::new(store.prefix_iter(&t).map(|t| Ok(t.into_tuple())))
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
                 let relation = tx.get_relation(name, false)?;
@@ -395,7 +395,7 @@ impl MagicAlgoRuleArg {
     pub(crate) fn arity(
         &self,
         tx: &SessionTx<'_>,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &BTreeMap<MagicSymbol, EpochStore>,
     ) -> Result<usize> {
         Ok(match self {
             MagicAlgoRuleArg::InMem { name, .. } => {
@@ -413,14 +413,14 @@ impl MagicAlgoRuleArg {
     pub(crate) fn iter<'a>(
         &'a self,
         tx: &'a SessionTx<'_>,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     ) -> Result<TupleIter<'a>> {
         Ok(match self {
             MagicAlgoRuleArg::InMem { name, .. } => {
                 let store = stores.get(name).ok_or_else(|| {
                     RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
                 })?;
-                Box::new(store.scan_all())
+                Box::new(store.all_iter().map(|t| Ok(t.into_tuple())))
             }
             MagicAlgoRuleArg::Stored { name, .. } => {
                 let relation = tx.get_relation(name, false)?;

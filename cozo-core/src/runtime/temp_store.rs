@@ -8,24 +8,20 @@
 
 use std::cmp::Ordering;
 use std::collections::btree_map::Entry;
+use std::collections::BTreeMap;
 use std::collections::Bound::Included;
-use std::collections::{BTreeMap, BTreeSet};
 use std::mem;
 use std::ops::Bound::Excluded;
 
 use either::{Left, Right};
 use itertools::Itertools;
-use miette::{Diagnostic, Result};
-use thiserror::Error;
+use miette::Result;
 
 use crate::data::aggr::Aggregation;
-use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 
-type Store = BTreeMap<Tuple, Tuple>;
-
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct NormalTempStore {
     inner: BTreeMap<Tuple, bool>,
 }
@@ -36,11 +32,8 @@ impl NormalTempStore {
     pub(crate) fn wrap(self) -> TempStore {
         TempStore::Normal(self)
     }
-    pub(crate) fn exists(&self, old: Option<&EpochStore>, key: &Tuple) -> bool {
-        // if let Some(old_store) = old {
-        //     if old_store.
-        // }
-        todo!()
+    pub(crate) fn exists(&self, key: &Tuple) -> bool {
+        self.inner.contains_key(key)
     }
 
     fn range_iter(
@@ -68,16 +61,16 @@ impl NormalTempStore {
         self.inner.insert(tuple, true);
     }
     fn merge(&mut self, mut other: Self) {
-        if self.inner.len() < other.inner.len() {
+        if self.inner.is_empty() {
             mem::swap(&mut self.inner, &mut other.inner);
-        }
-        if other.inner.is_empty() {
             return;
         }
+        // must do it in this order! cannot swap!
         self.inner.extend(other.inner)
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct MeetAggrStore {
     inner: BTreeMap<Tuple, Tuple>,
     aggregations: Vec<(Aggregation, Vec<DataValue>)>,
@@ -90,14 +83,12 @@ impl MeetAggrStore {
     pub(crate) fn wrap(self) -> TempStore {
         TempStore::MeetAggr(self)
     }
-    pub(crate) fn exists(&self, old: Option<&EpochStore>, key: &Tuple) -> bool {
-        // if let Some(old_store) = old {
-        //     if old_store.
-        // }
-        todo!()
+    pub(crate) fn exists(&self, key: &Tuple) -> bool {
+        let truncated = &key[0..self.grouping_len];
+        self.inner.contains_key(truncated)
     }
-    pub(crate) fn is_empty(&self, old: Option<&EpochStore>) -> bool {
-        todo!()
+    pub(crate) fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
     pub(crate) fn new(aggrs: Vec<Option<(Aggregation, Vec<DataValue>)>>) -> Result<Self> {
         let total_key_len = aggrs.len();
@@ -113,11 +104,9 @@ impl MeetAggrStore {
         })
     }
     fn merge(&mut self, mut other: Self) -> Result<()> {
+        // can switch the order because we are dealing with meet aggregations
         if self.inner.len() < other.inner.len() {
             mem::swap(&mut self.inner, &mut other.inner);
-        }
-        if other.inner.is_empty() {
-            return Ok(());
         }
         for (k, v) in other.inner {
             match self.inner.entry(k) {
@@ -195,6 +184,7 @@ impl MeetAggrStore {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum TempStore {
     Normal(NormalTempStore),
     MeetAggr(MeetAggrStore),
@@ -205,6 +195,12 @@ impl TempStore {
     // pub(crate) fn new() -> Self {
     //     Self::Normal(NormalTempStore::default())
     // }
+    fn exists(&self, key: &Tuple) -> bool {
+        match self {
+            TempStore::Normal(n) => n.exists(key),
+            TempStore::MeetAggr(m) => m.exists(key),
+        }
+    }
     fn merge(&mut self, other: Self) -> Result<()> {
         match (self, other) {
             (TempStore::Normal(s), TempStore::Normal(o)) => {
@@ -215,12 +211,12 @@ impl TempStore {
             _ => unreachable!(),
         }
     }
-    fn is_empty(&self) -> bool {
-        match self {
-            TempStore::Normal(n) => n.inner.is_empty(),
-            TempStore::MeetAggr(m) => m.inner.is_empty(),
-        }
-    }
+    // fn is_empty(&self) -> bool {
+    //     match self {
+    //         TempStore::Normal(n) => n.inner.is_empty(),
+    //         TempStore::MeetAggr(m) => m.inner.is_empty(),
+    //     }
+    // }
     fn range_iter(
         &self,
         lower: &Tuple,
@@ -234,12 +230,31 @@ impl TempStore {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct EpochStore {
     prev: TempStore,
     delta: TempStore,
+    pub(crate) arity: usize,
 }
 
 impl EpochStore {
+    pub(crate) fn exists(&self, key: &Tuple) -> bool {
+        self.prev.exists(key) || self.delta.exists(key)
+    }
+    pub(crate) fn new_normal(arity: usize) -> Self {
+        Self {
+            prev: TempStore::Normal(NormalTempStore::default()),
+            delta: TempStore::Normal(NormalTempStore::default()),
+            arity,
+        }
+    }
+    pub(crate) fn new_meet(aggrs: &[Option<(Aggregation, Vec<DataValue>)>]) -> Result<Self> {
+        Ok(Self {
+            prev: TempStore::MeetAggr(MeetAggrStore::new(aggrs.to_vec())?),
+            delta: TempStore::MeetAggr(MeetAggrStore::new(aggrs.to_vec())?),
+            arity: aggrs.len(),
+        })
+    }
     pub(crate) fn merge(&mut self, mut new: TempStore) -> Result<()> {
         mem::swap(&mut new, &mut self.delta);
         self.prev.merge(new)
@@ -267,7 +282,10 @@ impl EpochStore {
         upper.push(DataValue::Bot);
         self.range_iter(prefix, &upper, true)
     }
-    pub(crate) fn delta_prefix_iter(&self, prefix: &Tuple) -> impl Iterator<Item = TupleInIter<'_>> {
+    pub(crate) fn delta_prefix_iter(
+        &self,
+        prefix: &Tuple,
+    ) -> impl Iterator<Item = TupleInIter<'_>> {
         let mut upper = prefix.to_vec();
         upper.push(DataValue::Bot);
         self.delta_range_iter(prefix, &upper, true)
@@ -277,6 +295,9 @@ impl EpochStore {
     }
     pub(crate) fn delta_all_iter(&self) -> impl Iterator<Item = TupleInIter<'_>> {
         self.delta_prefix_iter(&vec![])
+    }
+    pub(crate) fn early_returned_iter(&self) -> impl Iterator<Item = TupleInIter<'_>> {
+        self.all_iter().filter(|t| !t.should_skip())
     }
 }
 
@@ -289,7 +310,7 @@ impl<'a> TupleInIter<'a> {
             .get(idx)
             .unwrap_or_else(|| self.1.get(idx - self.0.len()).unwrap())
     }
-    pub(crate) fn should_skip(&self) -> bool {
+    fn should_skip(&self) -> bool {
         self.2
     }
     pub(crate) fn into_tuple(self) -> Tuple {

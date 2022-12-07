@@ -208,7 +208,7 @@ impl<'s> StoreTx<'s> for ReTx<'s> {
                     it_builder: |tbl| tbl.range(lower.to_vec()..upper.to_vec()).unwrap(),
                 }
                 .build();
-                todo!()
+                panic!()
                 // match tbl.range(lower.to_vec()..upper.to_vec()) {
                 //     Ok(it) => Box::new(it.map(|(k, v)| Ok(decode_tuple_from_kv(k, v)))),
                 //     Err(err) => Box::new(iter::once(Err(miette!(err)))),
@@ -226,7 +226,7 @@ impl<'s> StoreTx<'s> for ReTx<'s> {
                     it_builder: |tbl| tbl.range(lower.to_vec()..upper.to_vec()).unwrap(),
                 }
                 .build();
-                todo!()
+                panic!()
                 // let tbl = &*inner.tbl_ptr.unwrap();
                 // match tbl.range(lower.to_vec()..upper.to_vec()) {
                 //     Ok(it) => Box::new(it.map(|(k, v)| Ok(decode_tuple_from_kv(k, v)))),
@@ -244,7 +244,7 @@ impl<'s> StoreTx<'s> for ReTx<'s> {
     where
         's: 'a,
     {
-        todo!()
+        panic!()
         // match self {
         //     ReTx::Read(inner) => unsafe {
         //         let tbl = &*inner.tbl_ptr.unwrap();
@@ -254,7 +254,7 @@ impl<'s> StoreTx<'s> for ReTx<'s> {
         //         }
         //     },
         //     ReTx::Write(inner) => unsafe {
-        //         todo!()
+        //         panic!()
         //         // let tbl = &*inner.tbl_ptr.unwrap();
         //         // match tbl.range(lower.to_vec()..upper.to_vec()) {
         //         //     Ok(it) => Box::new(it.map(|(k, v)| Ok((k.to_vec(), v.to_vec())))),

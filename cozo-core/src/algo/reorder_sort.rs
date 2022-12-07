@@ -20,7 +20,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::in_mem::InMemRelation;
+use crate::runtime::temp_store::{EpochStore, NormalTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct ReorderSort;
@@ -30,8 +30,8 @@ impl AlgoImpl for ReorderSort {
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, InMemRelation>,
-        out: &'a InMemRelation,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+        out: &'a mut NormalTempStore,
         poison: Poison,
     ) -> Result<()> {
         let in_rel = algo.relation(0)?;
@@ -116,7 +116,7 @@ impl AlgoImpl for ReorderSort {
             }
             let mut out_t = vec![DataValue::from(if break_ties { count } else { rank } as i64)];
             out_t.extend_from_slice(&val[0..val.len() - 1]);
-            out.put(out_t, 0);
+            out.put(out_t);
             poison.check()?;
         }
         Ok(())
