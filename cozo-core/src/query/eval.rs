@@ -209,7 +209,7 @@ impl<'a> SessionTx<'a> {
 
         for (rule_n, rule) in ruleset.iter().enumerate() {
             debug!("initial calculation for rule {:?}.{}", rule_symb, rule_n);
-            for item_res in rule.relation.iter(self, Some(0), &use_delta)? {
+            for item_res in rule.relation.iter(self, Some(0), &use_delta, stores)? {
                 let item = item_res?;
                 trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
                 if should_check_limit {
@@ -247,7 +247,7 @@ impl<'a> SessionTx<'a> {
             for (aggr, args) in aggr.iter_mut().flatten() {
                 aggr.meet_init(args)?;
             }
-            for item_res in rule.relation.iter(self, Some(0), &use_delta)? {
+            for item_res in rule.relation.iter(self, Some(0), &use_delta, stores)? {
                 let item = item_res?;
                 trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
                 store.aggr_meet_put(&item, &mut aggr, 0)?;
@@ -313,7 +313,7 @@ impl<'a> SessionTx<'a> {
                 })
                 .collect_vec();
 
-            for item_res in rule.relation.iter(self, Some(0), &use_delta)? {
+            for item_res in rule.relation.iter(self, Some(0), &use_delta, stores)? {
                 let item = item_res?;
                 trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
 
@@ -442,7 +442,7 @@ impl<'a> SessionTx<'a> {
                     delta_key, rule_symb, rule_n
                 );
                 let use_delta = BTreeSet::from([delta_store.id]);
-                for item_res in rule.relation.iter(self, Some(epoch), &use_delta)? {
+                for item_res in rule.relation.iter(self, Some(epoch), &use_delta, stores)? {
                     let item = item_res?;
                     // improvement: the clauses can actually be evaluated in parallel
                     if store.exists(&item, 0) {
@@ -514,7 +514,7 @@ impl<'a> SessionTx<'a> {
                     delta_key, rule_symb, rule_n
                 );
                 let use_delta = BTreeSet::from([delta_store.id]);
-                for item_res in rule.relation.iter(self, Some(epoch), &use_delta)? {
+                for item_res in rule.relation.iter(self, Some(epoch), &use_delta, stores)? {
                     let item = item_res?;
                     // improvement: the clauses can actually be evaluated in parallel
                     let aggr_changed = store.aggr_meet_put(&item, &mut aggr, epoch)?;

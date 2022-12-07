@@ -31,7 +31,7 @@ use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::ra::{
-    FilteredRA, InMemRelationRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, UnificationRA,
+    FilteredRA, TempStoreRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, UnificationRA,
 };
 use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
@@ -529,11 +529,11 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         }
                                         ("fixed", json!(null), json!(null), json!(null))
                                     }
-                                    RelAlgebra::InMem(InMemRelationRA {
-                                        storage, filters, ..
+                                    RelAlgebra::TempStore(TempStoreRA {
+                                        storage_key, filters, ..
                                     }) => (
                                         "load_mem",
-                                        json!(storage.rule_name.to_string()),
+                                        json!(storage_key.to_string()),
                                         json!(null),
                                         json!(filters.iter().map(|f| f.to_string()).collect_vec()),
                                     ),

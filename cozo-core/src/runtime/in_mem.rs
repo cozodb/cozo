@@ -18,7 +18,6 @@ use itertools::Itertools;
 use miette::Result;
 
 use crate::data::aggr::Aggregation;
-use crate::data::program::MagicSymbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 
@@ -36,7 +35,6 @@ pub(crate) struct InMemRelation {
     mem_db: Rc<RefCell<Vec<Rc<RefCell<BTreeMap<Tuple, Tuple>>>>>>,
     epoch_size: Arc<AtomicU32>,
     pub(crate) id: StoredRelationId,
-    pub(crate) rule_name: MagicSymbol,
     pub(crate) arity: usize,
 }
 
@@ -47,12 +45,11 @@ impl Debug for InMemRelation {
 }
 
 impl InMemRelation {
-    pub(crate) fn new(id: StoredRelationId, rule_name: MagicSymbol, arity: usize) -> InMemRelation {
+    pub(crate) fn new(id: StoredRelationId, arity: usize) -> InMemRelation {
         Self {
             epoch_size: Default::default(),
             mem_db: Default::default(),
             id,
-            rule_name,
             arity,
         }
     }

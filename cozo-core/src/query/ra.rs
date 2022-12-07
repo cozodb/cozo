@@ -20,6 +20,7 @@ use miette::{Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::expr::{compute_bounds, Expr};
+use crate::data::program::MagicSymbol;
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
 use crate::data::value::DataValue;
@@ -31,7 +32,7 @@ use crate::utils::swap_option_result;
 
 pub(crate) enum RelAlgebra {
     Fixed(InlineFixedRA),
-    InMem(InMemRelationRA),
+    TempStore(TempStoreRA),
     Stored(StoredRA),
     Join(Box<InnerJoin>),
     NegJoin(Box<NegJoin>),
@@ -44,7 +45,7 @@ impl RelAlgebra {
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             RelAlgebra::Fixed(i) => i.span,
-            RelAlgebra::InMem(i) => i.span,
+            RelAlgebra::TempStore(i) => i.span,
             RelAlgebra::Stored(i) => i.span,
             RelAlgebra::Join(i) => i.span,
             RelAlgebra::NegJoin(i) => i.span,
@@ -114,6 +115,7 @@ impl UnificationRA {
         tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
     ) -> Result<TupleIter<'a>> {
         let mut bindings = self.parent.bindings_after_eliminate();
         bindings.push(self.binding.clone());
@@ -121,7 +123,7 @@ impl UnificationRA {
         Ok(if self.is_multi {
             let it = self
                 .parent
-                .iter(tx, epoch, use_delta)?
+                .iter(tx, epoch, use_delta, stores)?
                 .map_ok(move |tuple| -> Result<Vec<Tuple>> {
                     let result_list = self.expr.eval(&tuple)?;
                     let result_list = result_list.get_list().ok_or_else(|| {
@@ -149,7 +151,7 @@ impl UnificationRA {
         } else {
             Box::new(
                 self.parent
-                    .iter(tx, epoch, use_delta)?
+                    .iter(tx, epoch, use_delta, stores)?
                     .map_ok(move |tuple| -> Result<Tuple> {
                         let result = self.expr.eval(&tuple)?;
                         let mut ret = tuple;
@@ -204,12 +206,13 @@ impl FilteredRA {
         tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
     ) -> Result<TupleIter<'a>> {
         let bindings = self.parent.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         Ok(Box::new(
             self.parent
-                .iter(tx, epoch, use_delta)?
+                .iter(tx, epoch, use_delta, stores)?
                 .filter_map(move |tuple| match tuple {
                     Ok(t) => {
                         for p in self.pred.iter() {
@@ -256,10 +259,10 @@ impl Debug for RelAlgebra {
                         .finish()
                 }
             }
-            RelAlgebra::InMem(r) => f
+            RelAlgebra::TempStore(r) => f
                 .debug_tuple("Derived")
                 .field(&bindings)
-                .field(&r.storage.rule_name)
+                .field(&r.storage_key)
                 .field(&r.filters)
                 .finish(),
             RelAlgebra::Stored(r) => f
@@ -313,7 +316,7 @@ impl RelAlgebra {
     pub(crate) fn fill_binding_indices(&mut self) -> Result<()> {
         match self {
             RelAlgebra::Fixed(_) => {}
-            RelAlgebra::InMem(d) => {
+            RelAlgebra::TempStore(d) => {
                 d.fill_binding_indices()?;
             }
             RelAlgebra::Stored(v) => {
@@ -353,10 +356,10 @@ impl RelAlgebra {
     pub(crate) fn cartesian_join(self, right: RelAlgebra, span: SourceSpan) -> Self {
         self.join(right, vec![], vec![], span)
     }
-    pub(crate) fn derived(bindings: Vec<Symbol>, storage: InMemRelation, span: SourceSpan) -> Self {
-        Self::InMem(InMemRelationRA {
+    pub(crate) fn derived(bindings: Vec<Symbol>, storage_key: MagicSymbol, span: SourceSpan) -> Self {
+        Self::TempStore(TempStoreRA {
             bindings,
-            storage,
+            storage_key,
             filters: vec![],
             span,
         })
@@ -407,16 +410,16 @@ impl RelAlgebra {
                     span,
                 })
             }
-            RelAlgebra::InMem(InMemRelationRA {
+            RelAlgebra::TempStore(TempStoreRA {
                 bindings,
-                storage,
+                storage_key,
                 mut filters,
                 span,
             }) => {
                 filters.push(filter);
-                RelAlgebra::InMem(InMemRelationRA {
+                RelAlgebra::TempStore(TempStoreRA {
                     bindings,
-                    storage,
+                    storage_key,
                     filters,
                     span,
                 })
@@ -555,6 +558,7 @@ impl ReorderRA {
         tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
     ) -> Result<TupleIter<'a>> {
         let old_order = self.relation.bindings_after_eliminate();
         let old_order_indices: BTreeMap<_, _> = old_order
@@ -571,7 +575,7 @@ impl ReorderRA {
                     .expect("program logic error: reorder indices mismatch")
             })
             .collect_vec();
-        Ok(Box::new(self.relation.iter(tx, epoch, use_delta)?.map_ok(
+        Ok(Box::new(self.relation.iter(tx, epoch, use_delta, stores)?.map_ok(
             move |tuple| {
                 let old = tuple;
                 let new = reorder_indices
@@ -1041,14 +1045,14 @@ fn join_is_prefix(right_join_indices: &[usize]) -> bool {
 }
 
 #[derive(Debug)]
-pub(crate) struct InMemRelationRA {
+pub(crate) struct TempStoreRA {
     pub(crate) bindings: Vec<Symbol>,
-    pub(crate) storage: InMemRelation,
+    pub(crate) storage_key: MagicSymbol,
     pub(crate) filters: Vec<Expr>,
     pub(crate) span: SourceSpan,
 }
 
-impl InMemRelationRA {
+impl TempStoreRA {
     fn fill_binding_indices(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
@@ -1063,26 +1067,28 @@ impl InMemRelationRA {
         Ok(())
     }
 
-    fn iter(
-        &self,
+    fn iter<'a>(
+        &'a self,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
-    ) -> Result<TupleIter<'_>> {
-        if epoch == Some(0) && use_delta.contains(&self.storage.id) {
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
+    ) -> Result<TupleIter<'a>> {
+        let storage = stores.get(&self.storage_key).unwrap();
+        if epoch == Some(0) && use_delta.contains(&storage.id) {
             return Ok(Box::new(iter::empty()));
         }
 
         let scan_epoch = match epoch {
             None => 0,
             Some(ep) => {
-                if use_delta.contains(&self.storage.id) {
+                if use_delta.contains(&storage.id) {
                     ep - 1
                 } else {
                     0
                 }
             }
         };
-        let it = self.storage.scan_all_for_epoch(scan_epoch);
+        let it = storage.scan_all_for_epoch(scan_epoch);
         Ok(if self.filters.is_empty() {
             Box::new(it)
         } else {
@@ -1094,7 +1100,9 @@ impl InMemRelationRA {
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
     ) -> Result<TupleIter<'a>> {
+        let storage = stores.get(&self.storage_key).unwrap();
         debug_assert!(!right_join_indices.is_empty());
         let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
         right_invert_indices.sort_by_key(|(_, b)| **b);
@@ -1114,7 +1122,7 @@ impl InMemRelationRA {
                             .map(|i| tuple[*i].clone())
                             .collect_vec();
 
-                        'outer: for found in self.storage.scan_prefix(&prefix) {
+                        'outer: for found in storage.scan_prefix(&prefix) {
                             let found = found?;
                             for (left_idx, right_idx) in
                                 left_join_indices.iter().zip(right_join_indices.iter())
@@ -1147,7 +1155,7 @@ impl InMemRelationRA {
             ))
         } else {
             let mut right_join_vals = BTreeSet::new();
-            for tuple in self.storage.scan_all() {
+            for tuple in storage.scan_all() {
                 let tuple = tuple?;
                 let to_join: Box<[DataValue]> = right_join_indices
                     .iter()
@@ -1194,8 +1202,10 @@ impl InMemRelationRA {
         eliminate_indices: BTreeSet<usize>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
     ) -> Result<TupleIter<'a>> {
-        if epoch == Some(0) && use_delta.contains(&self.storage.id) {
+        let storage = stores.get(&self.storage_key).unwrap();
+        if epoch == Some(0) && use_delta.contains(&storage.id) {
             return Ok(Box::new(iter::empty()));
         }
         let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
@@ -1207,7 +1217,7 @@ impl InMemRelationRA {
         let scan_epoch = match epoch {
             None => 0,
             Some(ep) => {
-                if use_delta.contains(&self.storage.id) {
+                if use_delta.contains(&storage.id) {
                     ep - 1
                 } else {
                     0
@@ -1232,7 +1242,7 @@ impl InMemRelationRA {
                         || !u_bound.iter().all(|v| *v == DataValue::Bot)
                     {
                         return Left(
-                            self.storage
+                            storage
                                 .scan_bounded_prefix_for_epoch(
                                     &prefix, &l_bound, &u_bound, scan_epoch,
                                 )
@@ -1253,7 +1263,7 @@ impl InMemRelationRA {
                 }
                 skip_range_check = true;
                 Right(
-                    self.storage
+                    storage
                         .scan_prefix_for_epoch(&prefix, scan_epoch)
                         .map(move |res_found| -> Result<Option<Tuple>> {
                             let found = res_found?;
@@ -1332,7 +1342,7 @@ impl RelAlgebra {
     pub(crate) fn eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         match self {
             RelAlgebra::Fixed(r) => r.do_eliminate_temp_vars(used),
-            RelAlgebra::InMem(_r) => Ok(()),
+            RelAlgebra::TempStore(_r) => Ok(()),
             RelAlgebra::Stored(_v) => Ok(()),
             RelAlgebra::Join(r) => r.do_eliminate_temp_vars(used),
             RelAlgebra::Reorder(r) => r.relation.eliminate_temp_vars(used),
@@ -1345,7 +1355,7 @@ impl RelAlgebra {
     fn eliminate_set(&self) -> Option<&BTreeSet<Symbol>> {
         match self {
             RelAlgebra::Fixed(r) => Some(&r.to_eliminate),
-            RelAlgebra::InMem(_) => None,
+            RelAlgebra::TempStore(_) => None,
             RelAlgebra::Stored(_) => None,
             RelAlgebra::Join(r) => Some(&r.to_eliminate),
             RelAlgebra::Reorder(_) => None,
@@ -1369,7 +1379,7 @@ impl RelAlgebra {
     fn bindings_before_eliminate(&self) -> Vec<Symbol> {
         match self {
             RelAlgebra::Fixed(f) => f.bindings.clone(),
-            RelAlgebra::InMem(d) => d.bindings.clone(),
+            RelAlgebra::TempStore(d) => d.bindings.clone(),
             RelAlgebra::Stored(v) => v.bindings.clone(),
             RelAlgebra::Join(j) => j.bindings(),
             RelAlgebra::Reorder(r) => r.bindings(),
@@ -1387,16 +1397,17 @@ impl RelAlgebra {
         tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
     ) -> Result<TupleIter<'a>> {
         match self {
             RelAlgebra::Fixed(f) => Ok(Box::new(f.data.iter().map(|t| Ok(t.clone())))),
-            RelAlgebra::InMem(r) => r.iter(epoch, use_delta),
+            RelAlgebra::TempStore(r) => r.iter(epoch, use_delta, stores),
             RelAlgebra::Stored(v) => v.iter(tx),
-            RelAlgebra::Join(j) => j.iter(tx, epoch, use_delta),
-            RelAlgebra::Reorder(r) => r.iter(tx, epoch, use_delta),
-            RelAlgebra::Filter(r) => r.iter(tx, epoch, use_delta),
-            RelAlgebra::NegJoin(r) => r.iter(tx, epoch, use_delta),
-            RelAlgebra::Unification(r) => r.iter(tx, epoch, use_delta),
+            RelAlgebra::Join(j) => j.iter(tx, epoch, use_delta, stores),
+            RelAlgebra::Reorder(r) => r.iter(tx, epoch, use_delta, stores),
+            RelAlgebra::Filter(r) => r.iter(tx, epoch, use_delta, stores),
+            RelAlgebra::NegJoin(r) => r.iter(tx, epoch, use_delta, stores),
+            RelAlgebra::Unification(r) => r.iter(tx, epoch, use_delta, stores),
         }
     }
 }
@@ -1426,7 +1437,7 @@ impl NegJoin {
 
     pub(crate) fn join_type(&self) -> &str {
         match &self.right {
-            RelAlgebra::InMem(_) => {
+            RelAlgebra::TempStore(_) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1465,11 +1476,12 @@ impl NegJoin {
         tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
     ) -> Result<TupleIter<'a>> {
         let bindings = self.left.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
         match &self.right {
-            RelAlgebra::InMem(r) => {
+            RelAlgebra::TempStore(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1478,9 +1490,10 @@ impl NegJoin {
                     )
                     .unwrap();
                 r.neg_join(
-                    self.left.iter(tx, epoch, use_delta)?,
+                    self.left.iter(tx, epoch, use_delta, stores)?,
                     join_indices,
                     eliminate_indices,
+                    stores
                 )
             }
             RelAlgebra::Stored(v) => {
@@ -1493,7 +1506,7 @@ impl NegJoin {
                     .unwrap();
                 v.neg_join(
                     tx,
-                    self.left.iter(tx, epoch, use_delta)?,
+                    self.left.iter(tx, epoch, use_delta, stores)?,
                     join_indices,
                     eliminate_indices,
                 )
@@ -1526,7 +1539,7 @@ impl InnerJoin {
         let mut left = used.clone();
         left.extend(self.joiner.left_keys.clone());
         if let Some(filters) = match &self.right {
-            RelAlgebra::InMem(r) => Some(&r.filters),
+            RelAlgebra::TempStore(r) => Some(&r.filters),
             _ => None,
         } {
             for filter in filters {
@@ -1549,7 +1562,7 @@ impl InnerJoin {
     pub(crate) fn join_type(&self) -> &str {
         match &self.right {
             RelAlgebra::Fixed(f) => f.join_type(),
-            RelAlgebra::InMem(_) => {
+            RelAlgebra::TempStore(_) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1593,6 +1606,7 @@ impl InnerJoin {
         tx: &'a SessionTx<'_>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
     ) -> Result<TupleIter<'a>> {
         let bindings = self.bindings();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
@@ -1606,12 +1620,12 @@ impl InnerJoin {
                     )
                     .unwrap();
                 f.join(
-                    self.left.iter(tx, epoch, use_delta)?,
+                    self.left.iter(tx, epoch, use_delta, stores)?,
                     join_indices,
                     eliminate_indices,
                 )
             }
-            RelAlgebra::InMem(r) => {
+            RelAlgebra::TempStore(r) => {
                 let join_indices = self
                     .joiner
                     .join_indices(
@@ -1621,14 +1635,15 @@ impl InnerJoin {
                     .unwrap();
                 if join_is_prefix(&join_indices.1) {
                     r.prefix_join(
-                        self.left.iter(tx, epoch, use_delta)?,
+                        self.left.iter(tx, epoch, use_delta, stores)?,
                         join_indices,
                         eliminate_indices,
                         epoch,
                         use_delta,
+                        stores
                     )
                 } else {
-                    self.materialized_join(tx, eliminate_indices, epoch, use_delta)
+                    self.materialized_join(tx, eliminate_indices, epoch, use_delta, stores)
                 }
             }
             RelAlgebra::Stored(r) => {
@@ -1643,17 +1658,17 @@ impl InnerJoin {
                     let left_len = self.left.bindings_after_eliminate().len();
                     r.prefix_join(
                         tx,
-                        self.left.iter(tx, epoch, use_delta)?,
+                        self.left.iter(tx, epoch, use_delta, stores)?,
                         join_indices,
                         eliminate_indices,
                         left_len,
                     )
                 } else {
-                    self.materialized_join(tx, eliminate_indices, epoch, use_delta)
+                    self.materialized_join(tx, eliminate_indices, epoch, use_delta, stores)
                 }
             }
             RelAlgebra::Join(_) | RelAlgebra::Filter(_) | RelAlgebra::Unification(_) => {
-                self.materialized_join(tx, eliminate_indices, epoch, use_delta)
+                self.materialized_join(tx, eliminate_indices, epoch, use_delta, stores)
             }
             RelAlgebra::Reorder(_) => {
                 panic!("joining on reordered")
@@ -1669,6 +1684,7 @@ impl InnerJoin {
         eliminate_indices: BTreeSet<usize>,
         epoch: Option<u32>,
         use_delta: &BTreeSet<StoredRelationId>,
+        stores: &'a BTreeMap<MagicSymbol, InMemRelation>
     ) -> Result<TupleIter<'a>> {
         let right_bindings = self.right.bindings_after_eliminate();
         let (left_join_indices, right_join_indices) = self
@@ -1676,7 +1692,7 @@ impl InnerJoin {
             .join_indices(&self.left.bindings_after_eliminate(), &right_bindings)
             .unwrap();
 
-        let mut left_iter = self.left.iter(tx, epoch, use_delta)?;
+        let mut left_iter = self.left.iter(tx, epoch, use_delta, stores)?;
         let left_cache = match left_iter.next() {
             None => return Ok(Box::new(iter::empty())),
             Some(Err(err)) => return Err(err),
@@ -1701,7 +1717,7 @@ impl InnerJoin {
             self.mat_right_cache.borrow().clone()
         } else {
             let mut cache = BTreeSet::new();
-            for item in self.right.iter(tx, epoch, use_delta)? {
+            for item in self.right.iter(tx, epoch, use_delta, stores)? {
                 match item {
                     Ok(tuple) => {
                         let stored_tuple = right_store_indices

@@ -11,7 +11,6 @@ use std::sync::Arc;
 
 use miette::Result;
 
-use crate::data::program::MagicSymbol;
 use crate::data::tuple::TupleT;
 use crate::data::value::DataValue;
 use crate::runtime::in_mem::{InMemRelation, StoredRelationId};
@@ -25,10 +24,10 @@ pub struct SessionTx<'a> {
 }
 
 impl<'a> SessionTx<'a> {
-    pub(crate) fn new_rule_store(&self, rule_name: MagicSymbol, arity: usize) -> InMemRelation {
+    pub(crate) fn new_rule_store(&self, arity: usize) -> InMemRelation {
         let old_count = self.mem_store_id.fetch_add(1, Ordering::AcqRel);
         let old_count = old_count & 0x00ff_ffffu32;
-        let ret = InMemRelation::new(StoredRelationId(old_count), rule_name, arity);
+        let ret = InMemRelation::new(StoredRelationId(old_count), arity);
         ret.ensure_mem_db_for_epoch(0);
         ret
     }

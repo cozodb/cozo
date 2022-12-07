@@ -101,7 +101,7 @@ impl<'a> SessionTx<'a> {
             for (name, ruleset) in &stratum.prog {
                 stores.insert(
                     name.clone(),
-                    self.new_rule_store(name.clone(), ruleset.arity()?),
+                    self.new_rule_store(ruleset.arity()?),
                 );
             }
         }
@@ -165,15 +165,12 @@ impl<'a> SessionTx<'a> {
         for atom in &rule.body {
             match atom {
                 MagicAtom::Rule(rule_app) => {
-                    let store = stores
-                        .get(&rule_app.name)
-                        .ok_or_else(|| {
-                            RuleNotFound(
-                                rule_app.name.symbol().to_string(),
-                                rule_app.name.symbol().span,
-                            )
-                        })?
-                        .clone();
+                    let store = stores.get(&rule_app.name).ok_or_else(|| {
+                        RuleNotFound(
+                            rule_app.name.symbol().to_string(),
+                            rule_app.name.symbol().span,
+                        )
+                    })?;
 
                     ensure!(
                         store.arity == rule_app.args.len(),
@@ -200,7 +197,8 @@ impl<'a> SessionTx<'a> {
                         }
                     }
 
-                    let right = RelAlgebra::derived(right_vars, store, rule_app.span);
+                    let right =
+                        RelAlgebra::derived(right_vars, rule_app.name.clone(), rule_app.span);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rule_app.span);
                 }
@@ -250,8 +248,7 @@ impl<'a> SessionTx<'a> {
                                 rule_app.name.symbol().to_string(),
                                 rule_app.name.symbol().span,
                             )
-                        })?
-                        .clone();
+                        })?;
                     ensure!(
                         store.arity == rule_app.args.len(),
                         ArityMismatch(
@@ -277,7 +274,7 @@ impl<'a> SessionTx<'a> {
                         }
                     }
 
-                    let right = RelAlgebra::derived(right_vars, store, rule_app.span);
+                    let right = RelAlgebra::derived(right_vars, rule_app.name.clone(), rule_app.span);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars, rule_app.span);
                 }
