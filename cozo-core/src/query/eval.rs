@@ -57,12 +57,6 @@ impl<'a> SessionTx<'a> {
         num_to_skip: Option<usize>,
         poison: Poison,
     ) -> Result<(InMemRelation, bool)> {
-        let ret_area = stores
-            .get(&MagicSymbol::Muggle {
-                inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
-            })
-            .ok_or(NoEntryError)?
-            .clone();
         let mut early_return = false;
         for (idx, cur_prog) in strata.iter().enumerate() {
             debug!("stratum {}", idx);
@@ -74,6 +68,12 @@ impl<'a> SessionTx<'a> {
                 poison.clone(),
             )?;
         }
+        let ret_area = stores
+            .get(&MagicSymbol::Muggle {
+                inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
+            })
+            .ok_or(NoEntryError)?
+            .clone();
         Ok((ret_area, early_return))
     }
     /// returns true if early return is activated
