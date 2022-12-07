@@ -290,8 +290,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                             col.typing.coerce(DataValue::from(v))
                         })
                         .try_collect()?;
-                    let v_store =
-                        handle.encode_val_only_for_store(&vals, Default::default())?;
+                    let v_store = handle.encode_val_only_for_store(&vals, Default::default())?;
                     tx.tx.put(&k_store, &v_store)?;
                 }
             }
@@ -1004,8 +1003,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         })
     }
     fn list_relations(&'s self) -> Result<NamedRows> {
-        let lower =
-            vec![DataValue::Str(SmartString::from(""))].encode_as_key(RelationId::SYSTEM);
+        let lower = vec![DataValue::Str(SmartString::from(""))].encode_as_key(RelationId::SYSTEM);
         let upper = vec![DataValue::Str(SmartString::from(String::from(
             LARGEST_UTF_CHAR,
         )))]
@@ -1087,6 +1085,7 @@ mod tests {
     use itertools::Itertools;
     use serde_json::json;
 
+    use crate::data::value::DataValue;
     use crate::new_cozo_mem;
 
     #[test]
@@ -1101,7 +1100,10 @@ mod tests {
             .collect_vec();
         assert_eq!(json!(res), json!([3, 5]));
         let res = db
-            .run_script("?[a] := a in [5,3,1,2,4] :limit 2 :offset 1", Default::default())
+            .run_script(
+                "?[a] := a in [5,3,1,2,4] :limit 2 :offset 1",
+                Default::default(),
+            )
             .unwrap()
             .rows
             .into_iter()
@@ -1109,7 +1111,10 @@ mod tests {
             .collect_vec();
         assert_eq!(json!(res), json!([1, 3]));
         let res = db
-            .run_script("?[a] := a in [5,3,1,2,4] :limit 2 :offset 4", Default::default())
+            .run_script(
+                "?[a] := a in [5,3,1,2,4] :limit 2 :offset 4",
+                Default::default(),
+            )
             .unwrap()
             .rows
             .into_iter()
@@ -1117,12 +1122,39 @@ mod tests {
             .collect_vec();
         assert_eq!(json!(res), json!([4]));
         let res = db
-            .run_script("?[a] := a in [5,3,1,2,4] :limit 2 :offset 5", Default::default())
+            .run_script(
+                "?[a] := a in [5,3,1,2,4] :limit 2 :offset 5",
+                Default::default(),
+            )
             .unwrap()
             .rows
             .into_iter()
             .flatten()
             .collect_vec();
         assert_eq!(json!(res), json!([]));
+    }
+    #[test]
+    fn test_normal_aggr_empty() {
+        let db = new_cozo_mem().unwrap();
+        let res = db
+            .run_script("?[count(a)] := a in []", Default::default())
+            .unwrap()
+            .rows;
+        assert_eq!(res, vec![vec![json!(0)]]);
+    }
+    #[test]
+    fn test_meet_aggr_empty() {
+        let db = new_cozo_mem().unwrap();
+        let res = db
+            .run_script("?[min(a)] := a in []", Default::default())
+            .unwrap()
+            .rows;
+        assert_eq!(res, vec![vec![json!(null)]]);
+
+        let res = db
+            .run_script("?[min(a), count(a)] := a in []", Default::default())
+            .unwrap()
+            .rows;
+        assert_eq!(res, vec![vec![json!(null), json!(0)]]);
     }
 }

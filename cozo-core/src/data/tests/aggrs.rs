@@ -362,26 +362,6 @@ fn test_max() {
 }
 
 #[test]
-fn test_choice() {
-    let mut aggr = parse_aggr("choice").unwrap().clone();
-    aggr.normal_init(&[]).unwrap();
-    aggr.meet_init(&[]).unwrap();
-
-    let mut choice_aggr = aggr.normal_op.unwrap();
-    choice_aggr.set(&DataValue::from(1)).unwrap();
-    choice_aggr.set(&DataValue::from(2)).unwrap();
-    choice_aggr.set(&DataValue::from(3)).unwrap();
-    assert_eq!(choice_aggr.get().unwrap(), DataValue::from(1));
-
-    let m_choice_aggr = aggr.meet_op.unwrap();
-    let mut v = DataValue::from(5);
-    m_choice_aggr.update(&mut v, &DataValue::from(1)).unwrap();
-    m_choice_aggr.update(&mut v, &DataValue::from(2)).unwrap();
-    m_choice_aggr.update(&mut v, &DataValue::from(3)).unwrap();
-    assert_eq!(v, DataValue::from(5));
-}
-
-#[test]
 fn test_choice_last() {
     let mut aggr = parse_aggr("choice_last").unwrap().clone();
     aggr.normal_init(&[]).unwrap();
@@ -438,7 +418,7 @@ fn test_min_cost() {
         .unwrap();
     assert_eq!(
         min_cost_aggr.get().unwrap(),
-        DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)])
+        DataValue::List(vec![DataValue::Bool(true), DataValue::from(1.)])
     );
 
     let m_min_cost_aggr = aggr.meet_op.unwrap();
@@ -533,16 +513,16 @@ fn test_shortest() {
 }
 
 #[test]
-fn test_coalesce() {
-    let mut aggr = parse_aggr("coalesce").unwrap().clone();
+fn test_choice() {
+    let mut aggr = parse_aggr("choice").unwrap().clone();
     aggr.normal_init(&[]).unwrap();
     aggr.meet_init(&[]).unwrap();
 
-    let mut coalesce_aggr = aggr.normal_op.unwrap();
-    coalesce_aggr.set(&DataValue::Null).unwrap();
-    coalesce_aggr.set(&DataValue::from(1)).unwrap();
-    coalesce_aggr.set(&DataValue::from(2)).unwrap();
-    assert_eq!(coalesce_aggr.get().unwrap(), DataValue::from(1));
+    let mut choice_aggr = aggr.normal_op.unwrap();
+    choice_aggr.set(&DataValue::Null).unwrap();
+    choice_aggr.set(&DataValue::from(1)).unwrap();
+    choice_aggr.set(&DataValue::from(2)).unwrap();
+    assert_eq!(choice_aggr.get().unwrap(), DataValue::from(1));
 
     let m_coalesce_aggr = aggr.meet_op.unwrap();
     let mut v = DataValue::Null;

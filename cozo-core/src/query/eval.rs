@@ -150,7 +150,7 @@ impl<'a> SessionTx<'a> {
 
                         CompiledRuleSet::Algo(_) => {
                             // no need to do anything, algos are only calculated once
-                        },
+                        }
                     }
                 }
             }
@@ -214,6 +214,21 @@ impl<'a> SessionTx<'a> {
                         *changed.get_mut(rule_symb).unwrap() = true;
                     }
                     poison.check()?;
+                }
+                if is_meet && store.is_empty() && ruleset[0].aggr.iter().all(|a| a.is_some()) {
+                    let mut aggr = ruleset[0].aggr.clone();
+                    for (aggr, args) in aggr.iter_mut().flatten() {
+                        aggr.meet_init(args)?;
+                    }
+                    let value: Vec<_> = aggr
+                        .iter()
+                        .map(|a| -> Result<DataValue> {
+                            let (aggr, args) = a.as_ref().unwrap();
+                            let op = aggr.meet_op.as_ref().unwrap();
+                            Ok(op.init_val())
+                        })
+                        .try_collect()?;
+                    store.aggr_meet_put(&value, &mut aggr, 0)?;
                 }
             }
             AggrKind::Normal => {
@@ -292,6 +307,21 @@ impl<'a> SessionTx<'a> {
                         inv_indices.push((false, seen_keys));
                         seen_keys += 1;
                     }
+                }
+
+                if aggr_work.is_empty() && ruleset[0].aggr.iter().all(|v| v.is_some()) {
+                    let empty_result: Vec<_> = ruleset[0]
+                        .aggr
+                        .iter()
+                        .map(|a| {
+                            let (aggr, args) = a.as_ref().unwrap();
+                            let mut aggr = aggr.clone();
+                            aggr.normal_init(args)?;
+                            let op = aggr.normal_op.unwrap();
+                            op.get()
+                        })
+                        .try_collect()?;
+                    store.put(empty_result, 0);
                 }
 
                 for (keys, aggrs) in aggr_work {

@@ -163,6 +163,14 @@ impl InMemRelation {
             epoch_map.insert(tuple, Tuple::default());
         }
     }
+    pub(crate) fn is_empty(&self) -> bool {
+        let mem_db: &RefCell<_> = self.mem_db.borrow();
+        let epoch_maps = mem_db.borrow();
+        let epoch_map = epoch_maps.get(0).unwrap();
+        let epoch_map: &RefCell<BTreeMap<_, _>> = epoch_map.borrow();
+        let epoch_map = epoch_map.borrow();
+        epoch_map.is_empty()
+    }
     pub(crate) fn exists(&self, tuple: &Tuple, epoch: u32) -> bool {
         let mem_db: &RefCell<_> = self.mem_db.borrow();
         let epoch_maps = mem_db.borrow();
