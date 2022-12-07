@@ -309,7 +309,7 @@ impl<'a> IntoIterator for TupleInIter<'a> {
     }
 }
 
-struct TupleInIterIterator<'a> {
+pub(crate) struct TupleInIterIterator<'a> {
     inner: TupleInIter<'a>,
     idx: usize,
 }

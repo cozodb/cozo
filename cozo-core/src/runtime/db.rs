@@ -299,6 +299,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         Ok(())
     }
     /// Backup the running database into an Sqlite file
+    #[allow(unused_variables)]
     pub fn backup_db(&'s self, out_file: String) -> Result<()> {
         #[cfg(feature = "storage-sqlite")]
         {
@@ -318,6 +319,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         bail!("backup requires the 'storage-sqlite' feature to be enabled")
     }
     /// Restore from an Sqlite backup
+    #[allow(unused_variables)]
     pub fn restore_backup(&'s self, in_file: &str) -> Result<()> {
         #[cfg(feature = "storage-sqlite")]
         {
@@ -346,6 +348,7 @@ impl<'s, S: Storage<'s>> Db<S> {
     ///
     /// Note that triggers are _not_ run for the relations, if any exists.
     /// If you need to activate triggers, use queries with parameters.
+    #[allow(unused_variables)]
     pub fn import_from_backup(&'s self, in_file: &str, relations: &[String]) -> Result<()> {
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled");
@@ -1085,7 +1088,6 @@ mod tests {
     use itertools::Itertools;
     use serde_json::json;
 
-    use crate::data::value::DataValue;
     use crate::new_cozo_mem;
 
     #[test]
