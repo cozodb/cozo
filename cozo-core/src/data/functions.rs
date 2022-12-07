@@ -1277,10 +1277,31 @@ pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
     }))
 }
 
+
+define_op!(OP_TO_UNITY, 1, false);
+pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::from(match &args[0] {
+        DataValue::Null => 0,
+        DataValue::Bool(b) => if *b {1} else {0},
+        DataValue::Num(n) => if n.get_float() != 0. {1} else {0},
+        DataValue::Str(s) => if s.is_empty() {0} else { 1},
+        DataValue::Bytes(b) => if b.is_empty() {0} else { 1},
+        DataValue::Uuid(u) => if u.0.is_nil() {0} else { 1 },
+        DataValue::Regex(r) => if r.0.as_str().is_empty() {0 } else { 1},
+        DataValue::List(l) => if l.is_empty() {0} else {1},
+        DataValue::Set(s) => if s.is_empty() {0} else {1},
+        DataValue::Guard => 0,
+        DataValue::Bot => 0,
+    }))
+}
+
+
 define_op!(OP_TO_FLOAT, 1, false);
 pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {
         DataValue::Num(n) => n.get_float().into(),
+        DataValue::Null => DataValue::from(0.0),
+        DataValue::Bool(b) => DataValue::from(if *b { 1.0 } else { 0.0 }),
         DataValue::Str(t) => match t as &str {
             "PI" => f64::PI().into(),
             "E" => f64::E().into(),

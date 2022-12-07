@@ -326,17 +326,26 @@ impl Expr {
                     #[diagnostic(code(eval::unbound))]
                     struct TupleTooShortError(String, usize, usize, #[label] SourceSpan);
 
-                    Ok(bindings.as_ref()
+                    Ok(bindings
+                        .as_ref()
                         .get(*i)
                         .ok_or_else(|| {
-                            TupleTooShortError(var.name.to_string(), *i, bindings.as_ref().len(), var.span)
+                            TupleTooShortError(
+                                var.name.to_string(),
+                                *i,
+                                bindings.as_ref().len(),
+                                var.span,
+                            )
                         })?
                         .clone())
                 }
             },
             Expr::Const { val, .. } => Ok(val.clone()),
             Expr::Apply { op, args, .. } => {
-                let args: Box<[DataValue]> = args.iter().map(|v| v.eval(bindings.as_ref())).try_collect()?;
+                let args: Box<[DataValue]> = args
+                    .iter()
+                    .map(|v| v.eval(bindings.as_ref()))
+                    .try_collect()?;
                 Ok((op.inner)(&args)
                     .map_err(|err| EvalRaisedError(self.span(), err.to_string()))?)
             }
@@ -701,6 +710,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "difference" => &OP_DIFFERENCE,
         "to_uuid" => &OP_TO_UUID,
         "to_bool" => &OP_TO_BOOL,
+        "to_unity" => &OP_TO_UNITY,
         "rand_uuid_v1" => &OP_RAND_UUID_V1,
         "rand_uuid_v4" => &OP_RAND_UUID_V4,
         "uuid_timestamp" => &OP_UUID_TIMESTAMP,

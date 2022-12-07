@@ -1218,7 +1218,60 @@ fn test_to_string() {
 }
 
 #[test]
+fn test_to_unity() {
+    assert_eq!(op_to_unity(&[DataValue::Null]).unwrap(), DataValue::from(0));
+    assert_eq!(
+        op_to_unity(&[DataValue::Bool(false)]).unwrap(),
+        DataValue::from(0)
+    );
+    assert_eq!(
+        op_to_unity(&[DataValue::Bool(true)]).unwrap(),
+        DataValue::from(1)
+    );
+    assert_eq!(
+        op_to_unity(&[DataValue::from(10)]).unwrap(),
+        DataValue::from(1)
+    );
+    assert_eq!(
+        op_to_unity(&[DataValue::from(1.0)]).unwrap(),
+        DataValue::from(1)
+    );
+    assert_eq!(
+        op_to_unity(&[DataValue::from(f64::NAN)]).unwrap(),
+        DataValue::from(1)
+    );
+    assert_eq!(
+        op_to_unity(&[DataValue::Str("0".into())]).unwrap(),
+        DataValue::from(1)
+    );
+    assert_eq!(
+        op_to_unity(&[DataValue::Str("".into())]).unwrap(),
+        DataValue::from(0)
+    );
+    assert_eq!(
+        op_to_unity(&[DataValue::List(vec![])]).unwrap(),
+        DataValue::from(0)
+    );
+    assert_eq!(
+        op_to_unity(&[DataValue::List(vec![DataValue::Null])]).unwrap(),
+        DataValue::from(1)
+    );
+}
+
+#[test]
 fn test_to_float() {
+    assert_eq!(
+        op_to_float(&[DataValue::Null]).unwrap(),
+        DataValue::from(0.0)
+    );
+    assert_eq!(
+        op_to_float(&[DataValue::Bool(false)]).unwrap(),
+        DataValue::from(0.0)
+    );
+    assert_eq!(
+        op_to_float(&[DataValue::Bool(true)]).unwrap(),
+        DataValue::from(1.0)
+    );
     assert_eq!(
         op_to_float(&[DataValue::from(1)]).unwrap(),
         DataValue::from(1.0)
