@@ -63,10 +63,25 @@ impl<'a> SessionTx<'a> {
             inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
         };
         for (stratum, cur_prog) in strata.iter().enumerate() {
-            debug!("stratum {}", stratum);
+            if stratum > 0 {
+                // remove stores that have outlived their usefulness!
+                stores = stores
+                    .into_iter()
+                    .filter(|(name, _)| {
+                        if *name == entry_symbol {
+                            return true;
+                        }
+                        match store_lifetimes.get(name) {
+                            None => false,
+                            Some(n) => *n >= stratum,
+                        }
+                    })
+                    .collect()
+            }
             for (rule_name, rule_set) in cur_prog {
                 stores.insert(rule_name.clone(), self.new_rule_store(rule_set.arity()));
             }
+            debug!("stratum {}", stratum);
 
             early_return = self.semi_naive_magic_evaluate(
                 cur_prog,
@@ -75,19 +90,6 @@ impl<'a> SessionTx<'a> {
                 num_to_skip,
                 poison.clone(),
             )?;
-            // remove stores that have outlived their usefulness!
-            stores = stores
-                .into_iter()
-                .filter(|(name, _)| {
-                    if *name == entry_symbol {
-                        return true;
-                    }
-                    match store_lifetimes.get(name) {
-                        None => false,
-                        Some(n) => *n > stratum,
-                    }
-                })
-                .collect()
         }
         let ret_area = stores.remove(&entry_symbol).ok_or(NoEntryError)?;
         Ok((ret_area, early_return))
