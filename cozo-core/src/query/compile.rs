@@ -22,7 +22,6 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::query::ra::RelAlgebra;
-use crate::runtime::in_mem::InMemRelation;
 use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
 
@@ -42,6 +41,12 @@ pub(crate) enum AggrKind {
 }
 
 impl CompiledRuleSet {
+    pub(crate) fn arity(&self) -> usize {
+        match self {
+            CompiledRuleSet::Rules(rs) => rs[0].aggr.len(),
+            CompiledRuleSet::Algo(algo) => algo.arity,
+        }
+    }
     pub(crate) fn aggr_kind(&self) -> AggrKind {
         match self {
             CompiledRuleSet::Rules(rules) => {
@@ -94,15 +99,17 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn stratified_magic_compile(
         &mut self,
         prog: &StratifiedMagicProgram,
-    ) -> Result<(Vec<CompiledProgram>, BTreeMap<MagicSymbol, InMemRelation>)> {
-        let mut stores: BTreeMap<MagicSymbol, InMemRelation> = Default::default();
+    ) -> Result<Vec<CompiledProgram>> {
+        // let mut stores: BTreeMap<MagicSymbol, InMemRelation> = Default::default();
+        let mut store_arities: BTreeMap<&MagicSymbol, usize> = Default::default();
 
         for stratum in prog.0.iter() {
             for (name, ruleset) in &stratum.prog {
-                stores.insert(
-                    name.clone(),
-                    self.new_rule_store(ruleset.arity()?),
-                );
+                // stores.insert(
+                //     name.clone(),
+                //     self.new_rule_store(ruleset.arity()?),
+                // );
+                store_arities.insert(name, ruleset.arity()?);
             }
         }
 
@@ -121,7 +128,7 @@ impl<'a> SessionTx<'a> {
                                 for rule in body.iter() {
                                     let header = &rule.head;
                                     let mut relation =
-                                        self.compile_magic_rule_body(rule, k, &stores, header)?;
+                                        self.compile_magic_rule_body(rule, k, &store_arities, header)?;
                                     relation.fill_binding_indices().with_context(|| {
                                         format!(
                                             "error encountered when filling binding indices for {:#?}",
@@ -145,13 +152,13 @@ impl<'a> SessionTx<'a> {
                     .try_collect()
             })
             .try_collect()?;
-        Ok((compiled, stores))
+        Ok(compiled)
     }
     pub(crate) fn compile_magic_rule_body(
         &mut self,
         rule: &MagicInlineRule,
         rule_name: &MagicSymbol,
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        store_arities: &BTreeMap<&MagicSymbol, usize>,
         ret_vars: &[Symbol],
     ) -> Result<RelAlgebra> {
         let mut ret = RelAlgebra::unit(rule_name.symbol().span);
@@ -165,7 +172,7 @@ impl<'a> SessionTx<'a> {
         for atom in &rule.body {
             match atom {
                 MagicAtom::Rule(rule_app) => {
-                    let store = stores.get(&rule_app.name).ok_or_else(|| {
+                    let store_arity = store_arities.get(&rule_app.name).ok_or_else(|| {
                         RuleNotFound(
                             rule_app.name.symbol().to_string(),
                             rule_app.name.symbol().span,
@@ -173,10 +180,10 @@ impl<'a> SessionTx<'a> {
                     })?;
 
                     ensure!(
-                        store.arity == rule_app.args.len(),
+                        *store_arity == rule_app.args.len(),
                         ArityMismatch(
                             rule_app.name.symbol().to_string(),
-                            store.arity,
+                            *store_arity,
                             rule_app.args.len(),
                             rule_app.span
                         )
@@ -241,19 +248,17 @@ impl<'a> SessionTx<'a> {
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rel_app.span);
                 }
                 MagicAtom::NegatedRule(rule_app) => {
-                    let store = stores
-                        .get(&rule_app.name)
-                        .ok_or_else(|| {
-                            RuleNotFound(
-                                rule_app.name.symbol().to_string(),
-                                rule_app.name.symbol().span,
-                            )
-                        })?;
+                    let store_arity = store_arities.get(&rule_app.name).ok_or_else(|| {
+                        RuleNotFound(
+                            rule_app.name.symbol().to_string(),
+                            rule_app.name.symbol().span,
+                        )
+                    })?;
                     ensure!(
-                        store.arity == rule_app.args.len(),
+                        *store_arity == rule_app.args.len(),
                         ArityMismatch(
                             rule_app.name.symbol().to_string(),
-                            store.arity,
+                            *store_arity,
                             rule_app.args.len(),
                             rule_app.span
                         )
@@ -274,7 +279,8 @@ impl<'a> SessionTx<'a> {
                         }
                     }
 
-                    let right = RelAlgebra::derived(right_vars, rule_app.name.clone(), rule_app.span);
+                    let right =
+                        RelAlgebra::derived(right_vars, rule_app.name.clone(), rule_app.span);
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars, rule_app.span);
                 }

@@ -650,7 +650,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let mut tx = self.transact()?;
                 let (stratified_program, _) = prog.to_normalized_program(&tx)?.stratify()?;
                 let program = stratified_program.magic_sets_rewrite(&tx)?;
-                let (compiled, _) = tx.stratified_magic_compile(&program)?;
+                let compiled = tx.stratified_magic_compile(&program)?;
                 tx.commit_tx()?;
                 self.explain_compiled(&compiled)
             }
@@ -789,10 +789,10 @@ impl<'s, S: Storage<'s>> Db<S> {
         };
 
         // query compilation
-        let (stratified_program, _store_lifetimes) =
+        let (stratified_program, store_lifetimes) =
             input_program.to_normalized_program(tx)?.stratify()?;
         let program = stratified_program.magic_sets_rewrite(tx)?;
-        let (compiled, stores) = tx.stratified_magic_compile(&program)?;
+        let compiled = tx.stratified_magic_compile(&program)?;
 
         // poison is used to terminate queries early
         let poison = Poison::default();
@@ -841,7 +841,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         // the real evaluation
         let (result, early_return) = tx.stratified_magic_evaluate(
             &compiled,
-            &stores,
+            store_lifetimes,
             total_num_to_take,
             num_to_skip,
             poison,

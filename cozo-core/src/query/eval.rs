@@ -52,28 +52,32 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn stratified_magic_evaluate(
         &self,
         strata: &[CompiledProgram],
-        stores: &BTreeMap<MagicSymbol, InMemRelation>,
+        store_lifetimes: BTreeMap<Symbol, usize>,
         total_num_to_take: Option<usize>,
         num_to_skip: Option<usize>,
         poison: Poison,
     ) -> Result<(InMemRelation, bool)> {
+        let mut stores = BTreeMap::new();
         let mut early_return = false;
-        for (idx, cur_prog) in strata.iter().enumerate() {
-            debug!("stratum {}", idx);
+        for (stratum, cur_prog) in strata.iter().enumerate() {
+            debug!("stratum {}", stratum);
+            for (rule_name, rule_set) in cur_prog {
+                stores.insert(rule_name.clone(), self.new_rule_store(rule_set.arity()));
+            }
+
             early_return = self.semi_naive_magic_evaluate(
                 cur_prog,
-                stores,
+                &stores,
                 total_num_to_take,
                 num_to_skip,
                 poison.clone(),
             )?;
         }
         let ret_area = stores
-            .get(&MagicSymbol::Muggle {
+            .remove(&MagicSymbol::Muggle {
                 inner: Symbol::new(PROG_ENTRY, SourceSpan(0, 0)),
             })
-            .ok_or(NoEntryError)?
-            .clone();
+            .ok_or(NoEntryError)?;
         Ok((ret_area, early_return))
     }
     /// returns true if early return is activated
