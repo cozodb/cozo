@@ -756,6 +756,81 @@ impl StoredRA {
         Ok(())
     }
 
+    fn point_lookup_join<'a>(
+        &'a self,
+        tx: &'a SessionTx<'_>,
+        left_iter: TupleIter<'a>,
+        key_len: usize,
+        left_to_prefix_indices: Vec<usize>,
+        eliminate_indices: BTreeSet<usize>,
+        left_tuple_len: usize,
+    ) -> Result<TupleIter<'a>> {
+        let val_len = self.storage.metadata.non_keys.len();
+        let all_right_val_indices: BTreeSet<usize> =
+            (0..val_len).map(|i| left_tuple_len + key_len + i).collect();
+        return if self.filters.is_empty() && eliminate_indices.is_superset(&all_right_val_indices) {
+            let it = left_iter
+                .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                    let prefix = left_to_prefix_indices
+                        .iter()
+                        .map(|i| tuple[*i].clone())
+                        .collect_vec();
+                    let key = &prefix[0..key_len];
+                    for p in self.filters.iter() {
+                        if !p.eval_pred(key)? {
+                            return Ok(None);
+                        }
+                    }
+                    if self.storage.exists(tx, key)? {
+                        let mut ret = tuple;
+                        ret.extend_from_slice(key);
+                        for _ in 0..val_len {
+                            ret.push(DataValue::Bot);
+                        }
+                        Ok(Some(ret))
+                    } else {
+                        Ok(None)
+                    }
+                })
+                .flatten_ok()
+                .filter_map(invert_option_err);
+            Ok(if eliminate_indices.is_empty() {
+                Box::new(it)
+            } else {
+                Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+            })
+        } else {
+            let it = left_iter
+                .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                    let prefix = left_to_prefix_indices
+                        .iter()
+                        .map(|i| tuple[*i].clone())
+                        .collect_vec();
+                    let key = &prefix[0..key_len];
+                    match self.storage.get(tx, key)? {
+                        None => Ok(None),
+                        Some(found) => {
+                            for p in self.filters.iter() {
+                                if !p.eval_pred(&found)? {
+                                    return Ok(None);
+                                }
+                            }
+                            let mut ret = tuple;
+                            ret.extend(found);
+                            Ok(Some(ret))
+                        }
+                    }
+                })
+                .flatten_ok()
+                .filter_map(invert_option_err);
+            Ok(if eliminate_indices.is_empty() {
+                Box::new(it)
+            } else {
+                Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+            })
+        };
+    }
+
     fn prefix_join<'a>(
         &'a self,
         tx: &'a SessionTx<'_>,
@@ -773,85 +848,18 @@ impl StoredRA {
 
         let key_len = self.storage.metadata.keys.len();
         if left_to_prefix_indices.len() >= key_len {
-            let val_len = self.storage.metadata.non_keys.len();
-            let all_right_val_indices: BTreeSet<usize> =
-                (0..val_len).map(|i| left_tuple_len + key_len + i).collect();
-            let mut need_to_filter_values = false;
-            for f in self.filters.iter() {
-                let bind_indices = f.binding_indices();
-                if !all_right_val_indices.is_disjoint(&bind_indices) {
-                    need_to_filter_values = true;
-                    break;
-                }
-            }
-            // We can use point lookups, finally
-            // TODO can use this branch if no values are touched!
-            return if !need_to_filter_values
-                && eliminate_indices.is_superset(&all_right_val_indices)
-            {
-                let it = left_iter
-                    .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                        let prefix = left_to_prefix_indices
-                            .iter()
-                            .map(|i| tuple[*i].clone())
-                            .collect_vec();
-                        let key = &prefix[0..key_len];
-                        for p in self.filters.iter() {
-                            if !p.eval_pred(key)? {
-                                return Ok(None);
-                            }
-                        }
-                        if self.storage.exists(tx, key)? {
-                            let mut ret = tuple;
-                            ret.extend_from_slice(key);
-                            for _ in 0..val_len {
-                                ret.push(DataValue::Bot);
-                            }
-                            Ok(Some(ret))
-                        } else {
-                            Ok(None)
-                        }
-                    })
-                    .flatten_ok()
-                    .filter_map(invert_option_err);
-                Ok(if eliminate_indices.is_empty() {
-                    Box::new(it)
-                } else {
-                    Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
-                })
-            } else {
-                let it = left_iter
-                    .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                        let prefix = left_to_prefix_indices
-                            .iter()
-                            .map(|i| tuple[*i].clone())
-                            .collect_vec();
-                        let key = &prefix[0..key_len];
-                        match self.storage.get(tx, key)? {
-                            None => Ok(None),
-                            Some(found) => {
-                                for p in self.filters.iter() {
-                                    if !p.eval_pred(&found)? {
-                                        return Ok(None);
-                                    }
-                                }
-                                let mut ret = tuple;
-                                ret.extend(found);
-                                Ok(Some(ret))
-                            }
-                        }
-                    })
-                    .flatten_ok()
-                    .filter_map(invert_option_err);
-                Ok(if eliminate_indices.is_empty() {
-                    Box::new(it)
-                } else {
-                    Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
-                })
-            };
+            return self.point_lookup_join(
+                tx,
+                left_iter,
+                key_len,
+                left_to_prefix_indices,
+                eliminate_indices,
+                left_tuple_len,
+            );
         }
 
         let mut skip_range_check = false;
+        // In some cases, maybe we can stop as soon as we get one result?
         let it = left_iter
             .map_ok(move |tuple| {
                 let prefix = left_to_prefix_indices
