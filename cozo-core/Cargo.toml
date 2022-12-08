@@ -28,8 +28,9 @@ minimal = ["storage-sqlite"]
 ## but does not support much concurrency.
 storage-sqlite = ["dep:sqlite", "dep:sqlite3-src"]
 ## Enables the [RocksDB](http://rocksdb.org/) backend.
-## RocksDB is hard (even impossible) to compile on some platforms, uses quite a lot of resources
-## including background threads, but is very performant and supports a high level of concurrency.
+## RocksDB is hard to compile on some platforms, uses more resources than SQLite,
+## but is very performant and supports an extremely high level of concurrency.
+## You can also [fine-tune](https://github.com/cozodb/cozo/blob/main/TUNING_ROCKSDB.md) RocksDB options.
 storage-rocksdb = ["dep:cozorocks"]
 ## Enables the graph algorithms.
 graph-algo = ["dep:nalgebra"]
@@ -50,8 +51,7 @@ nothread = []
 
 ## Enables the [Sled](https://github.com/spacejam/sled) backend.
 ## Sled is slower than Sqlite for the usual workload of Cozo, can use quite a lot of disk space,
-## may not be stable enough, but supports a higher level of concurrency and is much easier to compile
-## than RockDB.
+## and may not be stable enough. In general you should use RocksDB instead.
 storage-sled = ["dep:sled"]
 ## Enables the [TiKV](https://tikv.org/) client backend.
 ## The only reason that you may want to use this is that your data does not fit in a single machine.
@@ -96,7 +96,7 @@ rand = "0.8.5"
 miette = { version = "5.5.0", features = ["fancy"] }
 lazy_static = "1.4.0"
 log = "0.4.17"
-env_logger = "0.9.3"
+env_logger = "0.10.0"
 smallvec = { version = "1.8.1", features = ["serde", "write", "union", "const_generics", "const_new"] }
 smartstring = { version = "1.0.1", features = ["serde"] }
 serde_json = "1.0.81"
@@ -127,7 +127,7 @@ rayon = { version = "1.5.3", optional = true }
 nalgebra = { version = "0.31.1", optional = true }
 minreq = { version = "2.6.0", features = ["https-rustls"], optional = true }
 tikv-jemallocator-global = { version = "0.5.0", optional = true }
-cozorocks = { path = "../cozorocks", version = "0.1.1", optional = true }
+cozorocks = { path = "../cozorocks", version = "0.1.2", optional = true }
 sled = { version = "0.34.7", optional = true }
 tikv-client = { version = "0.1.0", optional = true }
 tokio = { version = "1.21.2", optional = true }

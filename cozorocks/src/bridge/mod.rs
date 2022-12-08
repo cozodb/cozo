@@ -22,6 +22,7 @@ pub(crate) mod ffi {
     #[derive(Debug, Clone)]
     struct DbOpts<'a> {
         pub db_path: &'a str,
+        pub options_path: &'a str,
         pub prepare_for_bulk_load: bool,
         pub increase_parallelism: usize,
         pub optimize_level_style_compaction: bool,
@@ -39,6 +40,7 @@ pub(crate) mod ffi {
         pub use_fixed_prefix_extractor: bool,
         pub fixed_prefix_extractor_len: usize,
         pub destroy_on_exit: bool,
+        pub block_cache_size: usize,
     }
 
     #[derive(Clone, Debug, Eq, PartialEq)]

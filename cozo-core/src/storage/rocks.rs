@@ -7,8 +7,9 @@
  */
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use log::info;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
 use cozorocks::{DbBuilder, DbIter, RocksDb, Tx};
@@ -68,17 +69,34 @@ pub fn new_cozo_rocksdb(path: impl AsRef<str>) -> Result<Db<RocksDbStorage>> {
         }
     };
 
-    let mut store_path = path_buf;
+    let mut store_path = path_buf.clone();
     store_path.push("data");
+
+    let store_path = store_path
+        .to_str()
+        .ok_or_else(|| miette!("bad path name"))?;
+
+    let mut options_path = path_buf.clone();
+    options_path.push("options");
+
+    let options_path = if Path::exists(&options_path) {
+        info!(
+            "RockDB storage engine will use options file {}",
+            options_path.to_string_lossy()
+        );
+        options_path
+            .to_str()
+            .ok_or_else(|| miette!("bad path name"))?
+    } else {
+        ""
+    };
+
     let db_builder = builder
         .create_if_missing(is_new)
         .use_capped_prefix_extractor(true, KEY_PREFIX_LEN)
         .use_bloom_filter(true, 9.9, true)
-        .path(
-            store_path
-                .to_str()
-                .ok_or_else(|| miette!("bad path name"))?,
-        );
+        .path(store_path)
+        .options_path(options_path);
 
     let db = db_builder.build()?;
 

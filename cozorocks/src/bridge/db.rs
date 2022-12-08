@@ -20,6 +20,7 @@ impl<'a> Default for DbOpts<'a> {
     fn default() -> Self {
         Self {
             db_path: "",
+            options_path: "",
             prepare_for_bulk_load: false,
             increase_parallelism: 0,
             optimize_level_style_compaction: false,
@@ -37,6 +38,7 @@ impl<'a> Default for DbOpts<'a> {
             use_fixed_prefix_extractor: false,
             fixed_prefix_extractor_len: 0,
             destroy_on_exit: false,
+            block_cache_size: 0,
         }
     }
 }
@@ -44,6 +46,10 @@ impl<'a> Default for DbOpts<'a> {
 impl<'a> DbBuilder<'a> {
     pub fn path(mut self, path: &'a str) -> Self {
         self.opts.db_path = path;
+        self
+    }
+    pub fn options_path(mut self, options_path: &'a str) -> Self {
+        self.opts.options_path = options_path;
         self
     }
     pub fn prepare_for_bulk_load(mut self, val: bool) -> Self {

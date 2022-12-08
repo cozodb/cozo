@@ -214,6 +214,8 @@ which is helpful even if you are not using Rust.
 Even if a storage/platform is not officially supported,
 you can still try to compile your version to use, maybe with some tweaks in the code.
 
+You can [tune the RockDB engine](TUNING_ROCKSDB.md) for more performance.
+
 ## Architecture
 
 The Cozo database consists of three layers stuck on top of each other,

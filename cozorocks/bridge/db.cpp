@@ -8,6 +8,7 @@
 #include <memory>
 #include "db.h"
 #include "cozorocks/src/bridge/mod.rs.h"
+#include "rocksdb/utilities/options_util.h"
 
 Options default_db_options() {
     Options options = Options();
@@ -54,6 +55,36 @@ ColumnFamilyOptions default_cf_options() {
 
 shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     auto options = default_db_options();
+
+    shared_ptr<Cache> cache = nullptr;
+
+    if (opts.block_cache_size > 0) {
+        cache = NewLRUCache(1 * 1024 * 1024 * 1024);
+    }
+
+    if (!opts.options_path.empty()) {
+        DBOptions loaded_db_opt;
+        std::vector<ColumnFamilyDescriptor> loaded_cf_descs;
+        ConfigOptions config_options;
+        string options_path = string(opts.options_path);
+        Status s = LoadOptionsFromFile(config_options, options_path, &loaded_db_opt,
+                                       &loaded_cf_descs);
+        if (!s.ok()) {
+            write_status(s, status);
+            return nullptr;
+        }
+
+        if (cache != nullptr) {
+            for (size_t i = 0; i < loaded_cf_descs.size(); ++i) {
+                auto* loaded_bbt_opt =
+                        loaded_cf_descs[0]
+                                .options.table_factory->GetOptions<BlockBasedTableOptions>();
+                loaded_bbt_opt->block_cache = cache;
+            }
+        }
+
+        options = Options(loaded_db_opt, loaded_cf_descs[0].options);
+    }
 
     if (opts.prepare_for_bulk_load) {
         options.PrepareForBulkLoad();
