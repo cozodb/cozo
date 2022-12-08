@@ -180,7 +180,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             let end = Tuple::default().encode_as_key(handle.id.next());
 
             let mut rows = vec![];
-            for data in tx.tx.range_scan(&start, &end) {
+            for data in tx.store_tx.range_scan(&start, &end) {
                 let (k, v) = data?;
                 let tuple = decode_tuple_from_kv(&k, &v);
                 let row = tuple.into_iter().map(JsonValue::from).collect_vec();
@@ -282,7 +282,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .try_collect()?;
                 let k_store = handle.encode_key_for_store(&keys, Default::default())?;
                 if is_delete {
-                    tx.tx.del(&k_store)?;
+                    tx.store_tx.del(&k_store)?;
                 } else {
                     let vals: Vec<_> = val_indices
                         .iter()
@@ -294,7 +294,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         })
                         .try_collect()?;
                     let v_store = handle.encode_val_only_for_store(&vals, Default::default())?;
-                    tx.tx.put(&k_store, &v_store)?;
+                    tx.store_tx.put(&k_store, &v_store)?;
                 }
             }
         }
@@ -312,8 +312,8 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
             let mut s_tx = sqlite_db.transact_write()?;
             let mut tx = self.transact()?;
-            let iter = tx.tx.range_scan(&[], &[0xFF]);
-            s_tx.tx.batch_put(iter)?;
+            let iter = tx.store_tx.range_scan(&[], &[0xFF]);
+            s_tx.store_tx.batch_put(iter)?;
             tx.commit_tx()?;
             s_tx.commit_tx()?;
             Ok(())
@@ -337,8 +337,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                     store_id
                 );
             }
-            let iter = s_tx.tx.range_scan(&[], &[1]);
-            tx.tx.batch_put(iter)?;
+            let iter = s_tx.store_tx.range_scan(&[], &[1]);
+            tx.store_tx.batch_put(iter)?;
             s_tx.commit_tx()?;
             tx.commit_tx()?;
             Ok(())
@@ -377,7 +377,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let src_lower = Tuple::default().encode_as_key(src_handle.id);
                 let src_upper = Tuple::default().encode_as_key(src_handle.id.next());
 
-                let data_it = src_tx.tx.range_scan(&src_lower, &src_upper).map(
+                let data_it = src_tx.store_tx.range_scan(&src_lower, &src_upper).map(
                     |src_pair| -> Result<(Vec<u8>, Vec<u8>)> {
                         let (mut src_k, mut src_v) = src_pair?;
                         dst_handle.amend_key_prefix(&mut src_k);
@@ -385,7 +385,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         Ok((src_k, src_v))
                     },
                 );
-                dst_tx.tx.batch_put(Box::new(data_it))?;
+                dst_tx.store_tx.batch_put(Box::new(data_it))?;
             }
 
             src_tx.commit_tx()?;
@@ -409,14 +409,14 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
     fn transact(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
-            tx: Box::new(self.db.transact(false)?),
+            store_tx: Box::new(self.db.transact(false)?),
             relation_store_id: self.relation_store_id.clone(),
         };
         Ok(ret)
     }
     fn transact_write(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
-            tx: Box::new(self.db.transact(true)?),
+            store_tx: Box::new(self.db.transact(true)?),
             relation_store_id: self.relation_store_id.clone(),
         };
         Ok(ret)

@@ -17,7 +17,7 @@ use crate::runtime::relation::RelationId;
 use crate::storage::StoreTx;
 
 pub struct SessionTx<'a> {
-    pub(crate) tx: Box<dyn StoreTx<'a> + 'a>,
+    pub(crate) store_tx: Box<dyn StoreTx<'a> + 'a>,
     pub(crate) relation_store_id: Arc<AtomicU64>,
 }
 
@@ -25,7 +25,7 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn load_last_relation_store_id(&self) -> Result<RelationId> {
         let tuple = vec![DataValue::Null];
         let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
-        let found = self.tx.get(&t_encoded, false)?;
+        let found = self.store_tx.get(&t_encoded, false)?;
         Ok(match found {
             None => RelationId::SYSTEM,
             Some(slice) => RelationId::raw_decode(&slice),
@@ -33,7 +33,7 @@ impl<'a> SessionTx<'a> {
     }
 
     pub fn commit_tx(&mut self) -> Result<()> {
-        self.tx.commit()?;
+        self.store_tx.commit()?;
         Ok(())
     }
 }

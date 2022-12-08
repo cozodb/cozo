@@ -116,7 +116,7 @@ impl<'a> SessionTx<'a> {
                         .try_collect()?;
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     if has_triggers {
-                        if let Some(existing) = self.tx.get(&key, false)? {
+                        if let Some(existing) = self.store_tx.get(&key, false)? {
                             let mut tup = extracted.clone();
                             if !existing.is_empty() {
                                 let mut remaining = &existing[ENCODED_KEY_MIN_LEN..];
@@ -130,7 +130,7 @@ impl<'a> SessionTx<'a> {
                         }
                         new_tuples.push(DataValue::List(extracted.clone()));
                     }
-                    self.tx.del(&key)?;
+                    self.store_tx.del(&key)?;
                 }
 
                 if has_triggers && !new_tuples.is_empty() {
@@ -200,7 +200,7 @@ impl<'a> SessionTx<'a> {
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     let val = relation_store.encode_val_for_store(&extracted, *span)?;
 
-                    let existing = self.tx.get(&key, true)?;
+                    let existing = self.store_tx.get(&key, true)?;
                     match existing {
                         None => {
                             bail!(TransactAssertionFailure {
@@ -244,7 +244,7 @@ impl<'a> SessionTx<'a> {
                         .map(|ex| ex.extract_data(&tuple))
                         .try_collect()?;
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
-                    if self.tx.exists(&key, true)? {
+                    if self.store_tx.exists(&key, true)? {
                         bail!(TransactAssertionFailure {
                             relation: relation_store.name.to_string(),
                             key: extracted,
@@ -291,7 +291,7 @@ impl<'a> SessionTx<'a> {
                     let val = relation_store.encode_val_for_store(&extracted, *span)?;
 
                     if has_triggers {
-                        if let Some(existing) = self.tx.get(&key, false)? {
+                        if let Some(existing) = self.store_tx.get(&key, false)? {
                             let mut tup = extracted.clone();
                             let mut remaining = &existing[ENCODED_KEY_MIN_LEN..];
                             while !remaining.is_empty() {
@@ -305,7 +305,7 @@ impl<'a> SessionTx<'a> {
                         new_tuples.push(DataValue::List(extracted));
                     }
 
-                    self.tx.put(&key, &val)?;
+                    self.store_tx.put(&key, &val)?;
                 }
 
                 if has_triggers && !new_tuples.is_empty() {

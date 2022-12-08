@@ -223,7 +223,7 @@ impl RelationHandle {
     ) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
-        tx.tx.range_scan_tuple(&lower, &upper)
+        tx.store_tx.range_scan_tuple(&lower, &upper)
     }
 
     pub(crate) fn get<'a>(
@@ -233,14 +233,14 @@ impl RelationHandle {
     ) -> Result<Option<Tuple>> {
         let key_data = key.encode_as_key(self.id);
         Ok(tx
-            .tx
+            .store_tx
             .get(&key_data, false)?
             .map(|val_data| decode_tuple_from_kv(&key_data, &val_data)))
     }
 
     pub(crate) fn exists<'a>(&self, tx: &'a SessionTx<'_>, key: &[DataValue]) -> Result<bool> {
         let key_data = key.encode_as_key(self.id);
-        tx.tx.exists(&key_data, false)
+        tx.store_tx.exists(&key_data, false)
     }
 
     pub(crate) fn scan_prefix<'a>(
@@ -255,7 +255,7 @@ impl RelationHandle {
         let prefix_encoded = lower.encode_as_key(self.id);
         let upper_encoded = upper.encode_as_key(self.id);
         // RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
-        tx.tx.range_scan_tuple(&prefix_encoded, &upper_encoded)
+        tx.store_tx.range_scan_tuple(&prefix_encoded, &upper_encoded)
     }
     pub(crate) fn scan_bounded_prefix<'a>(
         &self,
@@ -271,7 +271,7 @@ impl RelationHandle {
         upper_t.push(DataValue::Bot);
         let lower_encoded = lower_t.encode_as_key(self.id);
         let upper_encoded = upper_t.encode_as_key(self.id);
-        tx.tx.range_scan_tuple(&lower_encoded, &upper_encoded)
+        tx.store_tx.range_scan_tuple(&lower_encoded, &upper_encoded)
     }
 }
 
@@ -296,7 +296,7 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn relation_exists(&self, name: &str) -> Result<bool> {
         let key = DataValue::Str(SmartString::from(name));
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
-        self.tx.exists(&encoded, false)
+        self.store_tx.exists(&encoded, false)
     }
     pub(crate) fn set_relation_triggers(
         &mut self,
@@ -324,7 +324,7 @@ impl<'a> SessionTx<'a> {
         original
             .serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
             .unwrap();
-        self.tx.put(&name_key, &meta_val)?;
+        self.store_tx.put(&name_key, &meta_val)?;
 
         Ok(())
     }
@@ -335,7 +335,7 @@ impl<'a> SessionTx<'a> {
         let key = DataValue::Str(input_meta.name.name.clone());
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
 
-        if self.tx.exists(&encoded, true)? {
+        if self.store_tx.exists(&encoded, true)? {
             bail!(RelNameConflictError(input_meta.name.to_string()))
         };
 
@@ -351,17 +351,17 @@ impl<'a> SessionTx<'a> {
             access_level: AccessLevel::Normal,
         };
 
-        self.tx.put(&encoded, &meta.id.raw_encode())?;
+        self.store_tx.put(&encoded, &meta.id.raw_encode())?;
         let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
 
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
             .unwrap();
-        self.tx.put(&name_key, &meta_val)?;
+        self.store_tx.put(&name_key, &meta_val)?;
 
         let tuple = vec![DataValue::Null];
         let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
-        self.tx.put(&t_encoded, &meta.id.raw_encode())?;
+        self.store_tx.put(&t_encoded, &meta.id.raw_encode())?;
         Ok(meta)
     }
     pub(crate) fn get_relation(&self, name: &str, lock: bool) -> Result<RelationHandle> {
@@ -374,7 +374,7 @@ impl<'a> SessionTx<'a> {
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
 
         let found = self
-            .tx
+            .store_tx
             .get(&encoded, lock)?
             .ok_or_else(|| StoredRelationNotFoundError(name.to_string()))?;
         let metadata = RelationHandle::decode(&found)?;
@@ -391,7 +391,7 @@ impl<'a> SessionTx<'a> {
         }
         let key = DataValue::Str(SmartString::from(name as &str));
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
-        self.tx.del(&encoded)?;
+        self.store_tx.del(&encoded)?;
         let lower_bound = Tuple::default().encode_as_key(store.id);
         let upper_bound = Tuple::default().encode_as_key(store.id.next());
         Ok((lower_bound, upper_bound))
@@ -405,7 +405,7 @@ impl<'a> SessionTx<'a> {
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
             .unwrap();
-        self.tx.put(&name_key, &meta_val)?;
+        self.store_tx.put(&name_key, &meta_val)?;
 
         Ok(())
     }
@@ -413,7 +413,7 @@ impl<'a> SessionTx<'a> {
         let new_key = DataValue::Str(new.name.clone());
         let new_encoded = vec![new_key].encode_as_key(RelationId::SYSTEM);
 
-        if self.tx.exists(&new_encoded, true)? {
+        if self.store_tx.exists(&new_encoded, true)? {
             bail!(RelNameConflictError(new.name.to_string()))
         };
 
@@ -432,8 +432,8 @@ impl<'a> SessionTx<'a> {
 
         let mut meta_val = vec![];
         rel.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
-        self.tx.del(&old_encoded)?;
-        self.tx.put(&new_encoded, &meta_val)?;
+        self.store_tx.del(&old_encoded)?;
+        self.store_tx.put(&new_encoded, &meta_val)?;
 
         Ok(())
     }
