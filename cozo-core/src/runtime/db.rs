@@ -11,11 +11,14 @@ use std::default::Default;
 use std::fmt::{Debug, Formatter};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+#[allow(unused_imports)]
 use std::thread;
+#[allow(unused_imports)]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use either::{Left, Right};
 use itertools::Itertools;
+#[allow(unused_imports)]
 use miette::{bail, ensure, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
 use serde_json::json;
 use smartstring::SmartString;
@@ -439,6 +442,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     };
 
                     for p in ps {
+                        #[allow(unused_variables)]
                         let sleep_opt = p.out_opts.sleep;
                         let (q_res, q_cleanups) = self.run_query(&mut tx, p)?;
                         res = q_res;

@@ -96,7 +96,7 @@ fn astar<'a>(
     let goal_node = &goal[0];
     let eval_heuristic = |node: &Tuple| -> Result<f64> {
         let mut v = node.clone();
-        v.extend_from_slice(&goal);
+        v.extend_from_slice(goal);
         let t = v;
         let cost_val = heuristic.eval(&t)?;
         let cost = cost_val.get_float().ok_or_else(|| {

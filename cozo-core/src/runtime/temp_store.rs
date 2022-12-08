@@ -60,13 +60,29 @@ impl NormalTempStore {
     pub(crate) fn put_with_skip(&mut self, tuple: Tuple) {
         self.inner.insert(tuple, true);
     }
-    fn merge(&mut self, mut other: Self) {
-        if self.inner.is_empty() {
-            mem::swap(&mut self.inner, &mut other.inner);
-            return;
+    // returns true if prev is guaranteed to be the same as self after this function call,
+    // false if we are not sure.
+    pub(crate) fn merge_in(&mut self, prev: &mut Self, mut new: Self) -> bool {
+        prev.inner.clear();
+        if new.inner.is_empty() {
+            return false;
         }
-        // must do it in this order! cannot swap!
-        self.inner.extend(other.inner)
+        if self.inner.is_empty() {
+            mem::swap(&mut new, self);
+            return true;
+        }
+        for (k, v) in new.inner {
+            match self.inner.entry(k) {
+                Entry::Vacant(ent) => {
+                    prev.inner.insert(ent.key().clone(), v);
+                    ent.insert(v);
+                }
+                Entry::Occupied(mut ent) => {
+                    ent.insert(v);
+                }
+            }
+        }
+        false
     }
 }
 
@@ -102,27 +118,6 @@ impl MeetAggrStore {
             aggregations,
             grouping_len,
         })
-    }
-    fn merge(&mut self, mut other: Self) -> Result<()> {
-        // can switch the order because we are dealing with meet aggregations
-        if self.inner.len() < other.inner.len() {
-            mem::swap(&mut self.inner, &mut other.inner);
-        }
-        for (k, v) in other.inner {
-            match self.inner.entry(k) {
-                Entry::Vacant(ent) => {
-                    ent.insert(v);
-                }
-                Entry::Occupied(mut ent) => {
-                    let current = ent.get_mut();
-                    for (i, (aggr, _)) in self.aggregations.iter().enumerate() {
-                        let op = aggr.meet_op.as_ref().unwrap();
-                        op.update(&mut current[i], &v[i])?;
-                    }
-                }
-            }
-        }
-        Ok(())
     }
     // also need to check if value exists beforehand! use the idempotency!
     // need to think this through more carefully.
@@ -182,6 +177,40 @@ impl MeetAggrStore {
                 }
             })
     }
+    /// returns true if prev is guaranteed to be the same as self after this function call,
+    /// false if we are not sure.
+    pub(crate) fn merge_in(&mut self, prev: &mut Self, mut new: Self) -> Result<bool> {
+        prev.inner.clear();
+        if new.inner.is_empty() {
+            return Ok(false);
+        }
+        if self.inner.is_empty() {
+            mem::swap(self, &mut new);
+            return Ok(true);
+        }
+        for (k, v) in new.inner {
+            match self.inner.entry(k) {
+                Entry::Vacant(ent) => {
+                    prev.inner.insert(ent.key().clone(), v.clone());
+                    ent.insert(v);
+                }
+                Entry::Occupied(mut ent) => {
+                    let mut changed = false;
+                    {
+                        let target = ent.get_mut();
+                        for (i, (aggr_op, _)) in self.aggregations.iter().enumerate() {
+                            let op = aggr_op.meet_op.as_ref().unwrap();
+                            changed |= op.update(&mut target[i], &v[i])?;
+                        }
+                    }
+                    if changed {
+                        prev.inner.insert(ent.key().clone(), ent.get().clone());
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
 }
 
 #[derive(Debug)]
@@ -191,32 +220,12 @@ pub(crate) enum TempStore {
 }
 
 impl TempStore {
-    // TODO
-    // pub(crate) fn new() -> Self {
-    //     Self::Normal(NormalTempStore::default())
-    // }
     fn exists(&self, key: &Tuple) -> bool {
         match self {
             TempStore::Normal(n) => n.exists(key),
             TempStore::MeetAggr(m) => m.exists(key),
         }
     }
-    fn merge(&mut self, other: Self) -> Result<()> {
-        match (self, other) {
-            (TempStore::Normal(s), TempStore::Normal(o)) => {
-                s.merge(o);
-                Ok(())
-            }
-            (TempStore::MeetAggr(s), TempStore::MeetAggr(o)) => s.merge(o),
-            _ => unreachable!(),
-        }
-    }
-    // fn is_empty(&self) -> bool {
-    //     match self {
-    //         TempStore::Normal(n) => n.inner.is_empty(),
-    //         TempStore::MeetAggr(m) => m.inner.is_empty(),
-    //     }
-    // }
     fn range_iter(
         &self,
         lower: &Tuple,
@@ -228,36 +237,60 @@ impl TempStore {
             TempStore::MeetAggr(m) => Right(m.range_iter(lower, upper, upper_inclusive)),
         }
     }
+    fn is_empty(&self) -> bool {
+        match self {
+            TempStore::Normal(n) => n.inner.is_empty(),
+            TempStore::MeetAggr(m) => m.inner.is_empty(),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct EpochStore {
-    prev: TempStore,
+    total: TempStore,
     delta: TempStore,
+    use_total_for_delta: bool,
     pub(crate) arity: usize,
 }
 
 impl EpochStore {
     pub(crate) fn exists(&self, key: &Tuple) -> bool {
-        self.prev.exists(key) || self.delta.exists(key)
+        self.total.exists(key)
     }
     pub(crate) fn new_normal(arity: usize) -> Self {
         Self {
-            prev: TempStore::Normal(NormalTempStore::default()),
+            total: TempStore::Normal(NormalTempStore::default()),
             delta: TempStore::Normal(NormalTempStore::default()),
+            use_total_for_delta: true,
             arity,
         }
     }
     pub(crate) fn new_meet(aggrs: &[Option<(Aggregation, Vec<DataValue>)>]) -> Result<Self> {
         Ok(Self {
-            prev: TempStore::MeetAggr(MeetAggrStore::new(aggrs.to_vec())?),
+            total: TempStore::MeetAggr(MeetAggrStore::new(aggrs.to_vec())?),
             delta: TempStore::MeetAggr(MeetAggrStore::new(aggrs.to_vec())?),
+            use_total_for_delta: true,
             arity: aggrs.len(),
         })
     }
-    pub(crate) fn merge(&mut self, mut new: TempStore) -> Result<()> {
-        mem::swap(&mut new, &mut self.delta);
-        self.prev.merge(new)
+    pub(crate) fn merge_in(&mut self, new: TempStore) -> Result<()> {
+        match (&mut self.total, &mut self.delta, new) {
+            (TempStore::Normal(total), TempStore::Normal(prev), TempStore::Normal(new)) => {
+                self.use_total_for_delta = total.merge_in(prev, new);
+            }
+            (TempStore::MeetAggr(total), TempStore::MeetAggr(prev), TempStore::MeetAggr(new)) => {
+                self.use_total_for_delta = total.merge_in(prev, new)?;
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
+    }
+    pub(crate) fn has_delta(&self) -> bool {
+        if self.use_total_for_delta {
+            !self.total.is_empty()
+        } else {
+            !self.delta.is_empty()
+        }
     }
     pub(crate) fn range_iter(
         &self,
@@ -265,9 +298,7 @@ impl EpochStore {
         upper: &Tuple,
         upper_inclusive: bool,
     ) -> impl Iterator<Item = TupleInIter<'_>> {
-        self.delta
-            .range_iter(lower, upper, upper_inclusive)
-            .merge(self.prev.range_iter(lower, upper, upper_inclusive))
+        self.total.range_iter(lower, upper, upper_inclusive)
     }
     pub(crate) fn delta_range_iter(
         &self,
@@ -275,7 +306,11 @@ impl EpochStore {
         upper: &Tuple,
         upper_inclusive: bool,
     ) -> impl Iterator<Item = TupleInIter<'_>> {
-        self.delta.range_iter(lower, upper, upper_inclusive)
+        if self.use_total_for_delta {
+            self.total.range_iter(lower, upper, upper_inclusive)
+        } else {
+            self.delta.range_iter(lower, upper, upper_inclusive)
+        }
     }
     pub(crate) fn prefix_iter(&self, prefix: &Tuple) -> impl Iterator<Item = TupleInIter<'_>> {
         let mut upper = prefix.to_vec();
@@ -363,7 +398,7 @@ impl PartialEq<[DataValue]> for TupleInIter<'_> {
 
 impl PartialOrd<[DataValue]> for TupleInIter<'_> {
     fn partial_cmp(&self, other: &'_ [DataValue]) -> Option<Ordering> {
-        self.into_iter().partial_cmp(other.into_iter())
+        self.into_iter().partial_cmp(other.iter())
     }
 }
 

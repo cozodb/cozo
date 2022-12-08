@@ -19,7 +19,7 @@ use thiserror::Error;
 use crate::data::memcmp::MemCmpEncoder;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::Symbol;
-use crate::data::tuple::{Tuple, TupleT, ENCODED_KEY_MIN_LEN, decode_tuple_from_key};
+use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_LEN};
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
@@ -226,17 +226,21 @@ impl RelationHandle {
         tx.tx.range_scan_tuple(&lower, &upper)
     }
 
-    pub(crate) fn get<'a>(&self, tx: &'a SessionTx<'_>, key: &[DataValue]) -> Result<Option<Tuple>> {
+    pub(crate) fn get<'a>(
+        &self,
+        tx: &'a SessionTx<'_>,
+        key: &[DataValue],
+    ) -> Result<Option<Tuple>> {
         let key_data = key.encode_as_key(self.id);
-        Ok(match tx.tx.get(&key_data, false)? {
-            None => None,
-            Some(val_data) => Some(decode_tuple_from_kv(&key_data, &val_data)),
-        })
+        Ok(tx
+            .tx
+            .get(&key_data, false)?
+            .map(|val_data| decode_tuple_from_kv(&key_data, &val_data)))
     }
 
     pub(crate) fn exists<'a>(&self, tx: &'a SessionTx<'_>, key: &[DataValue]) -> Result<bool> {
         let key_data = key.encode_as_key(self.id);
-        Ok(tx.tx.exists(&key_data, false)?)
+        tx.tx.exists(&key_data, false)
     }
 
     pub(crate) fn scan_prefix<'a>(

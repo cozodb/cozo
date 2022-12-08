@@ -1035,7 +1035,7 @@ impl MeetAggrObj for MeetAggrBitAnd {
                 if left == right {
                     return Ok(false);
                 }
-                if left.len() == 0 {
+                if left.is_empty() {
                     *left = right.clone();
                     return Ok(true);
                 }
@@ -1104,7 +1104,7 @@ impl MeetAggrObj for MeetAggrBitOr {
                 if left == right {
                     return Ok(false);
                 }
-                if left.len() == 0 {
+                if left.is_empty() {
                     *left = right.clone();
                     return Ok(true);
                 }

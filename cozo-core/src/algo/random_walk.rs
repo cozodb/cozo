@@ -78,7 +78,7 @@ impl AlgoImpl for RandomWalk {
                             .iter()
                             .map(|t| -> Result<f64> {
                                 let mut cand = current_tuple.clone();
-                                cand.extend_from_slice(&t);
+                                cand.extend_from_slice(t);
                                 Ok(match weight_expr.eval(&cand)? {
                                     DataValue::Num(n) => {
                                         let f = n.get_float();

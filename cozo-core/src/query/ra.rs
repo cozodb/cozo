@@ -775,7 +775,7 @@ impl StoredRA {
         let val_len = self.storage.metadata.non_keys.len();
         let all_right_val_indices: BTreeSet<usize> =
             (0..val_len).map(|i| left_tuple_len + key_len + i).collect();
-        return if self.filters.is_empty() && eliminate_indices.is_superset(&all_right_val_indices) {
+        if self.filters.is_empty() && eliminate_indices.is_superset(&all_right_val_indices) {
             let it = left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
                     let prefix = left_to_prefix_indices
@@ -835,7 +835,7 @@ impl StoredRA {
             } else {
                 Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
             })
-        };
+        }
     }
 
     fn prefix_join<'a>(
@@ -1229,7 +1229,7 @@ impl TempStoreRA {
                     {
                         let mut lower_bound = prefix.clone();
                         lower_bound.extend(l_bound);
-                        let mut upper_bound = prefix.clone();
+                        let mut upper_bound = prefix;
                         upper_bound.extend(u_bound);
                         let it = if scan_epoch {
                             Left(storage.delta_range_iter(&lower_bound, &upper_bound, true))
@@ -1744,7 +1744,7 @@ impl InnerJoin {
         let it = CachedMaterializedIterator {
             eliminate_indices,
             left: left_iter,
-            left_cache: left_cache,
+            left_cache,
             left_join_indices,
             materialized: cached_data,
             right_invert_indices,

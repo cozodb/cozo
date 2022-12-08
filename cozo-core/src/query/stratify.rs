@@ -13,7 +13,10 @@ use itertools::Itertools;
 use miette::{ensure, Diagnostic, Result};
 use thiserror::Error;
 
-use crate::data::program::{AlgoRuleArg, MagicSymbol, NormalFormAlgoOrRules, NormalFormAtom, NormalFormProgram, StratifiedNormalFormProgram};
+use crate::data::program::{
+    AlgoRuleArg, MagicSymbol, NormalFormAlgoOrRules, NormalFormAtom, NormalFormProgram,
+    StratifiedNormalFormProgram,
+};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::parse::SourceSpan;
 use crate::query::graph::{
@@ -212,7 +215,9 @@ fn make_scc_reduced_graph<'a>(
 
 impl NormalFormProgram {
     /// returns the stratified program and the store lifetimes of the intermediate relations
-    pub(crate) fn stratify(self) -> Result<(StratifiedNormalFormProgram, BTreeMap<MagicSymbol, usize>)> {
+    pub(crate) fn stratify(
+        self,
+    ) -> Result<(StratifiedNormalFormProgram, BTreeMap<MagicSymbol, usize>)> {
         // prerequisite: the program is already in disjunctive normal form
         // 0. build a graph of the program
         let prog_entry: &Symbol = &Symbol::new(PROG_ENTRY, SourceSpan(0, 0));
@@ -257,9 +262,11 @@ impl NormalFormProgram {
         for (fr, tos) in &stratified_graph {
             if let Some(fr_idx) = invert_indices.get(fr) {
                 if let Some(fr_stratum) = invert_sort_result.get(fr_idx) {
-                    for (to, _) in tos {
+                    for to in tos.keys() {
                         let used_in = n_strata - 1 - *fr_stratum;
-                        let magic_to = MagicSymbol::Muggle { inner: (*to).clone() };
+                        let magic_to = MagicSymbol::Muggle {
+                            inner: (*to).clone(),
+                        };
                         match store_lifetimes.entry(magic_to) {
                             Entry::Vacant(e) => {
                                 e.insert(used_in);

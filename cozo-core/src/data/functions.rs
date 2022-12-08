@@ -72,7 +72,7 @@ pub(crate) fn op_coalesce(args: &[DataValue]) -> Result<DataValue> {
             return Ok(val.clone());
         }
     }
-    return Ok(DataValue::Null);
+    Ok(DataValue::Null)
 }
 
 define_op!(OP_EQ, 2, false);
@@ -1280,8 +1280,8 @@ define_op!(OP_TO_UNITY, 1, false);
 pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::from(match &args[0] {
         DataValue::Null => 0,
-        DataValue::Bool(b) => if *b {1} else {0},
-        DataValue::Num(n) => if n.get_float() != 0. {1} else {0},
+        DataValue::Bool(b) => *b as i64,
+        DataValue::Num(n) => (n.get_float() != 0.) as i64,
         DataValue::Str(s) => if s.is_empty() {0} else { 1},
         DataValue::Bytes(b) => if b.is_empty() {0} else { 1},
         DataValue::Uuid(u) => if u.0.is_nil() {0} else { 1 },

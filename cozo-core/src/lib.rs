@@ -36,6 +36,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::collections::BTreeMap;
+#[allow(unused_imports)]
 use std::time::Instant;
 
 use lazy_static::lazy_static;

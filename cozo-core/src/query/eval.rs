@@ -8,7 +8,6 @@
 
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
-use std::mem;
 
 use itertools::Itertools;
 use log::{debug, trace};
@@ -62,13 +61,10 @@ impl<'a> SessionTx<'a> {
         for (stratum, cur_prog) in strata.iter().enumerate() {
             if stratum > 0 {
                 // remove stores that have outlived their usefulness!
-                stores = stores
-                    .into_iter()
-                    .filter(|(name, _)| match store_lifetimes.get(name) {
-                        None => false,
-                        Some(n) => *n >= stratum,
-                    })
-                    .collect();
+                stores.retain(|name, _| match store_lifetimes.get(name) {
+                    None => false,
+                    Some(n) => *n >= stratum,
+                });
                 trace!("{:?}", stores);
             }
             for (rule_name, rule_set) in cur_prog {
@@ -108,8 +104,6 @@ impl<'a> SessionTx<'a> {
         num_to_skip: Option<usize>,
         poison: Poison,
     ) -> Result<bool> {
-        let mut changed: BTreeMap<_, _> = prog.keys().map(|k| (k, false)).collect();
-        let mut prev_changed = changed.clone();
         let mut limiter = QueryLimiter {
             total: total_num_to_take,
             skip: num_to_skip,
@@ -130,7 +124,6 @@ impl<'a> SessionTx<'a> {
                                     k,
                                     ruleset,
                                     stores,
-                                    &mut changed,
                                     &mut limiter,
                                     poison.clone(),
                                 )?;
@@ -142,7 +135,6 @@ impl<'a> SessionTx<'a> {
                                     k,
                                     ruleset,
                                     stores,
-                                    &mut changed,
                                     &mut limiter,
                                     poison.clone(),
                                 )?;
@@ -154,7 +146,6 @@ impl<'a> SessionTx<'a> {
                                     k,
                                     ruleset,
                                     stores,
-                                    &mut changed,
                                     poison.clone(),
                                 )?;
                                 new.wrap()
@@ -170,11 +161,6 @@ impl<'a> SessionTx<'a> {
                     to_merge.insert(k, new_store);
                 }
             } else {
-                mem::swap(&mut changed, &mut prev_changed);
-                for (_k, v) in changed.iter_mut() {
-                    *v = false;
-                }
-
                 for (k, compiled_ruleset) in prog.iter().rev() {
                     let new_store = match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => {
@@ -185,8 +171,6 @@ impl<'a> SessionTx<'a> {
                                         ruleset,
                                         epoch,
                                         stores,
-                                        &prev_changed,
-                                        &mut changed,
                                         &mut limiter,
                                         poison.clone(),
                                     )?;
@@ -198,8 +182,6 @@ impl<'a> SessionTx<'a> {
                                         k,
                                         ruleset,
                                         stores,
-                                        &prev_changed,
-                                        &mut changed,
                                         poison.clone(),
                                     )?;
                                     new.wrap()
@@ -219,11 +201,14 @@ impl<'a> SessionTx<'a> {
                     to_merge.insert(k, new_store);
                 }
             }
+            let mut changed = false;
             for (k, new_store) in to_merge {
                 let old_store = stores.get_mut(k).unwrap();
-                old_store.merge(new_store)?;
+                old_store.merge_in(new_store)?;
+                trace!("delta for {}: {}", k, old_store.has_delta());
+                changed |= old_store.has_delta();
             }
-            if changed.values().all(|rule_changed| !*rule_changed) {
+            if !changed {
                 break;
             }
         }
@@ -235,7 +220,6 @@ impl<'a> SessionTx<'a> {
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         stores: &mut BTreeMap<MagicSymbol, EpochStore>,
-        changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
     ) -> Result<(bool, NormalTempStore)> {
@@ -262,7 +246,6 @@ impl<'a> SessionTx<'a> {
                 } else {
                     out_store.put(item);
                 }
-                *changed.get_mut(rule_symb).unwrap() = true;
             }
             poison.check()?;
         }
@@ -274,7 +257,6 @@ impl<'a> SessionTx<'a> {
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         stores: &mut BTreeMap<MagicSymbol, EpochStore>,
-        changed: &mut BTreeMap<&MagicSymbol, bool>,
         poison: Poison,
     ) -> Result<MeetAggrStore> {
         let mut out_store = MeetAggrStore::new(ruleset[0].aggr.clone())?;
@@ -289,8 +271,6 @@ impl<'a> SessionTx<'a> {
                 let item = item_res?;
                 trace!("item for {:?}.{}: {:?} at {}", rule_symb, rule_n, item, 0);
                 out_store.meet_put(item)?;
-
-                *changed.get_mut(rule_symb).unwrap() = true;
             }
             poison.check()?;
         }
@@ -316,7 +296,6 @@ impl<'a> SessionTx<'a> {
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         stores: &mut BTreeMap<MagicSymbol, EpochStore>,
-        changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
     ) -> Result<(bool, NormalTempStore)> {
@@ -345,10 +324,7 @@ impl<'a> SessionTx<'a> {
                 .aggr
                 .iter()
                 .enumerate()
-                .filter_map(|(i, a)| match a {
-                    None => None,
-                    Some(aggr) => Some((i, aggr.clone())),
-                })
+                .filter_map(|(i, a)| a.as_ref().map(|aggr| (i, aggr.clone())))
                 .collect_vec();
 
             for item_res in rule.relation.iter(self, None, stores)? {
@@ -379,8 +355,6 @@ impl<'a> SessionTx<'a> {
                         ent.insert(aggr_ops);
                     }
                 }
-
-                *changed.get_mut(rule_symb).unwrap() = true;
             }
             poison.check()?;
         }
@@ -449,8 +423,6 @@ impl<'a> SessionTx<'a> {
         ruleset: &[CompiledRule],
         epoch: u32,
         stores: &mut BTreeMap<MagicSymbol, EpochStore>,
-        prev_changed: &BTreeMap<&MagicSymbol, bool>,
-        changed: &mut BTreeMap<&MagicSymbol, bool>,
         limiter: &mut QueryLimiter,
         poison: Poison,
     ) -> Result<(bool, NormalTempStore)> {
@@ -458,16 +430,12 @@ impl<'a> SessionTx<'a> {
         let mut out_store = NormalTempStore::default();
         let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
         for (rule_n, rule) in ruleset.iter().enumerate() {
-            let mut should_do_calculation = false;
-            for d_rule in &rule.contained_rules {
-                if let Some(changed) = prev_changed.get(d_rule) {
-                    if *changed {
-                        should_do_calculation = true;
-                        break;
-                    }
-                }
-            }
-            if !should_do_calculation {
+            let dependencies_changed = rule
+                .contained_rules
+                .iter()
+                .map(|symb| stores.get(symb).unwrap().has_delta())
+                .any(|v| v);
+            if !dependencies_changed {
                 continue;
             }
 
@@ -498,7 +466,6 @@ impl<'a> SessionTx<'a> {
                             item,
                             epoch
                         );
-                        *changed.get_mut(rule_symb).unwrap() = true;
                         if limiter.should_skip_next() {
                             out_store.put_with_skip(item);
                         } else {
@@ -520,23 +487,16 @@ impl<'a> SessionTx<'a> {
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         stores: &mut BTreeMap<MagicSymbol, EpochStore>,
-        prev_changed: &BTreeMap<&MagicSymbol, bool>,
-        changed: &mut BTreeMap<&MagicSymbol, bool>,
         poison: Poison,
     ) -> Result<MeetAggrStore> {
-        // let store = stores.get(rule_symb).unwrap();
         let mut out_store = MeetAggrStore::new(ruleset[0].aggr.clone())?;
         for (rule_n, rule) in ruleset.iter().enumerate() {
-            let mut should_do_calculation = false;
-            for d_rule in &rule.contained_rules {
-                if let Some(changed) = prev_changed.get(d_rule) {
-                    if *changed {
-                        should_do_calculation = true;
-                        break;
-                    }
-                }
-            }
-            if !should_do_calculation {
+            let dependencies_changed = rule
+                .contained_rules
+                .iter()
+                .map(|symb| stores.get(symb).unwrap().has_delta())
+                .any(|v| v);
+            if !dependencies_changed {
                 continue;
             }
 
@@ -554,12 +514,7 @@ impl<'a> SessionTx<'a> {
                     delta_key, rule_symb, rule_n
                 );
                 for item_res in rule.relation.iter(self, Some(delta_key), stores)? {
-                    let item = item_res?;
-                    // improvement: the clauses can actually be evaluated in parallel
-                    let aggr_changed = out_store.meet_put(item)?;
-                    if aggr_changed {
-                        *changed.get_mut(rule_symb).unwrap() = true;
-                    }
+                    out_store.meet_put(item_res?)?;
                 }
                 poison.check()?;
             }
