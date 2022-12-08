@@ -9,10 +9,12 @@
 use approx::AbsDiffEq;
 use num_traits::FloatConst;
 use regex::Regex;
+use serde_json::json;
 use smartstring::SmartString;
 
 use crate::data::functions::*;
 use crate::data::value::{DataValue, RegexWrapper};
+use crate::new_cozo_mem;
 
 #[test]
 fn test_add() {
@@ -1438,4 +1440,15 @@ fn test_to_bool() {
         op_to_bool(&[DataValue::List(vec![DataValue::from(0)])]).unwrap(),
         DataValue::Bool(true)
     );
+}
+
+#[test]
+fn test_coalesce() {
+    let db = new_cozo_mem().unwrap();
+    let res = db.run_script("?[a] := a = null ~ 1 ~ 2", Default::default()).unwrap().rows;
+    assert_eq!(res[0][0], json!(1));
+    let res = db.run_script("?[a] := a = null ~ null ~ null", Default::default()).unwrap().rows;
+    assert_eq!(res[0][0], json!(null));
+    let res = db.run_script("?[a] := a = 2 ~ null ~ 1", Default::default()).unwrap().rows;
+    assert_eq!(res[0][0], json!(2));
 }

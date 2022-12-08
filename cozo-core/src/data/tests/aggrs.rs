@@ -362,26 +362,6 @@ fn test_max() {
 }
 
 #[test]
-fn test_choice_last() {
-    let mut aggr = parse_aggr("choice_last").unwrap().clone();
-    aggr.normal_init(&[]).unwrap();
-    aggr.meet_init(&[]).unwrap();
-
-    let mut choice_aggr = aggr.normal_op.unwrap();
-    choice_aggr.set(&DataValue::from(1)).unwrap();
-    choice_aggr.set(&DataValue::from(2)).unwrap();
-    choice_aggr.set(&DataValue::from(3)).unwrap();
-    assert_eq!(choice_aggr.get().unwrap(), DataValue::from(3));
-
-    let m_choice_aggr = aggr.meet_op.unwrap();
-    let mut v = DataValue::from(5);
-    m_choice_aggr.update(&mut v, &DataValue::from(1)).unwrap();
-    m_choice_aggr.update(&mut v, &DataValue::from(2)).unwrap();
-    m_choice_aggr.update(&mut v, &DataValue::from(3)).unwrap();
-    assert_eq!(v, DataValue::from(3));
-}
-
-#[test]
 fn test_choice_rand() {
     let mut aggr = parse_aggr("choice_rand").unwrap().clone();
     aggr.normal_init(&[]).unwrap();

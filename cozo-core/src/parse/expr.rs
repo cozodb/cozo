@@ -17,8 +17,8 @@ use thiserror::Error;
 
 use crate::data::expr::{get_op, Expr};
 use crate::data::functions::{
-    OP_ADD, OP_AND, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LIST, OP_LT, OP_MINUS,
-    OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
+    OP_ADD, OP_AND, OP_COALESCE, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LIST, OP_LT,
+    OP_MINUS, OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
 };
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -42,6 +42,7 @@ lazy_static! {
                 | Op::infix(Rule::op_concat, Left))
             .op(Op::infix(Rule::op_mul, Left) | Op::infix(Rule::op_div, Left))
             .op(Op::infix(Rule::op_pow, Right))
+            .op(Op::infix(Rule::op_coalesce, Left))
             .op(Op::prefix(Rule::minus))
             .op(Op::prefix(Rule::negate))
     };
@@ -99,6 +100,7 @@ fn build_expr_infix(lhs: Result<Expr>, op: Pair<'_>, rhs: Result<Expr>) -> Resul
         Rule::op_concat => &OP_CONCAT,
         Rule::op_or => &OP_OR,
         Rule::op_and => &OP_AND,
+        Rule::op_coalesce => &OP_COALESCE,
         _ => unreachable!(),
     };
     let start = args[0].span().0;

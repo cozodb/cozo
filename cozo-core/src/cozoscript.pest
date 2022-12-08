@@ -80,7 +80,7 @@ grouped = _{"(" ~ rule_body ~ ")"}
 
 expr = {unary_op* ~ term ~ (operation ~ unary_op* ~ term)*}
 operation = _{ (op_and | op_or | op_pow | op_concat | op_add | op_sub | op_mul | op_div | op_mod |
-                op_ge | op_le | op_gt | op_lt | op_eq | op_ne)}
+                op_ge | op_le | op_gt | op_lt | op_eq | op_ne | op_coalesce )}
 op_or = { "||" }
 op_and = { "&&" }
 op_concat = { "++" }
@@ -96,6 +96,7 @@ op_lt = { "<" }
 op_ge = { ">=" }
 op_le = { "<=" }
 op_pow = { "^" }
+op_coalesce = { "~" }
 unary_op = _{ minus | negate }
 minus = { "-" }
 negate = { "!" }

@@ -716,51 +716,6 @@ impl MeetAggrObj for MeetAggrMax {
     }
 }
 
-define_aggr!(AGGR_CHOICE_LAST, true);
-
-pub(crate) struct AggrChoiceLast {
-    found: DataValue,
-}
-
-impl Default for AggrChoiceLast {
-    fn default() -> Self {
-        Self {
-            found: DataValue::Null,
-        }
-    }
-}
-
-impl NormalAggrObj for AggrChoiceLast {
-    fn set(&mut self, value: &DataValue) -> Result<()> {
-        self.found = value.clone();
-        Ok(())
-    }
-
-    fn get(&self) -> Result<DataValue> {
-        Ok(self.found.clone())
-    }
-}
-
-pub(crate) struct MeetAggrChoiceLast;
-
-impl MeetAggrObj for MeetAggrChoiceLast {
-    fn init_val(&self) -> DataValue {
-        DataValue::Null
-    }
-
-    fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
-        if *right == DataValue::Null {
-            return Ok(false);
-        }
-        Ok(if *left == *right {
-            false
-        } else {
-            *left = right.clone();
-            true
-        })
-    }
-}
-
 define_aggr!(AGGR_LATEST_BY, false);
 
 pub(crate) struct AggrLatestBy {
@@ -1178,7 +1133,6 @@ pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
         "max" => &AGGR_MAX,
         "mean" => &AGGR_MEAN,
         "choice" => &AGGR_CHOICE,
-        "choice_last" => &AGGR_CHOICE_LAST,
         "collect" => &AGGR_COLLECT,
         "shortest" => &AGGR_SHORTEST,
         "min_cost" => &AGGR_MIN_COST,
@@ -1199,7 +1153,6 @@ impl Aggregation {
             name if name == AGGR_MIN.name => Box::new(MeetAggrMin),
             name if name == AGGR_MAX.name => Box::new(MeetAggrMax),
             name if name == AGGR_CHOICE.name => Box::new(MeetAggrChoice),
-            name if name == AGGR_CHOICE_LAST.name => Box::new(MeetAggrChoiceLast),
             name if name == AGGR_BIT_AND.name => Box::new(MeetAggrBitAnd),
             name if name == AGGR_BIT_OR.name => Box::new(MeetAggrBitOr),
             name if name == AGGR_UNION.name => Box::new(MeetAggrUnion),
@@ -1225,7 +1178,6 @@ impl Aggregation {
             name if name == AGGR_VARIANCE.name => Box::new(AggrVariance::default()),
             name if name == AGGR_STD_DEV.name => Box::new(AggrStdDev::default()),
             name if name == AGGR_CHOICE.name => Box::new(AggrChoice::default()),
-            name if name == AGGR_CHOICE_LAST.name => Box::new(AggrChoiceLast::default()),
             name if name == AGGR_BIT_AND.name => Box::new(AggrBitAnd::default()),
             name if name == AGGR_BIT_OR.name => Box::new(AggrBitOr::default()),
             name if name == AGGR_BIT_XOR.name => Box::new(AggrBitXor::default()),
