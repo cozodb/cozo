@@ -30,6 +30,7 @@ pub struct CozoDb {
 
 #[wasm_bindgen]
 impl CozoDb {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         utils::set_panic_hook();
         let db = DbInstance::new("mem", "", "").unwrap();

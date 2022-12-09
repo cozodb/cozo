@@ -98,29 +98,24 @@ struct ArityMismatch(String, usize, usize, #[label] SourceSpan);
 impl<'a> SessionTx<'a> {
     pub(crate) fn stratified_magic_compile(
         &mut self,
-        prog: &StratifiedMagicProgram,
+        prog: StratifiedMagicProgram,
     ) -> Result<Vec<CompiledProgram>> {
-        // let mut stores: BTreeMap<MagicSymbol, InMemRelation> = Default::default();
-        let mut store_arities: BTreeMap<&MagicSymbol, usize> = Default::default();
+        let mut store_arities: BTreeMap<MagicSymbol, usize> = Default::default();
 
         for stratum in prog.0.iter() {
             for (name, ruleset) in &stratum.prog {
-                // stores.insert(
-                //     name.clone(),
-                //     self.new_rule_store(ruleset.arity()?),
-                // );
-                store_arities.insert(name, ruleset.arity()?);
+                store_arities.insert(name.clone(), ruleset.arity()?);
             }
         }
 
         let compiled: Vec<_> = prog
             .0
-            .iter()
+            .into_iter()
             .rev()
             .map(|cur_prog| -> Result<CompiledProgram> {
                 cur_prog
                     .prog
-                    .iter()
+                    .into_iter()
                     .map(|(k, body)| -> Result<(MagicSymbol, CompiledRuleSet)> {
                         match body {
                             MagicRulesOrAlgo::Rules { rules: body } => {
@@ -128,7 +123,7 @@ impl<'a> SessionTx<'a> {
                                 for rule in body.iter() {
                                     let header = &rule.head;
                                     let mut relation =
-                                        self.compile_magic_rule_body(rule, k, &store_arities, header)?;
+                                        self.compile_magic_rule_body(rule, &k, &store_arities, header)?;
                                     relation.fill_binding_indices().with_context(|| {
                                         format!(
                                             "error encountered when filling binding indices for {:#?}",
@@ -141,11 +136,11 @@ impl<'a> SessionTx<'a> {
                                         contained_rules: rule.contained_rules(),
                                     })
                                 }
-                                Ok((k.clone(), CompiledRuleSet::Rules(collected)))
+                                Ok((k, CompiledRuleSet::Rules(collected)))
                             }
 
                             MagicRulesOrAlgo::Algo { algo: algo_apply } => {
-                                Ok((k.clone(), CompiledRuleSet::Algo(algo_apply.clone())))
+                                Ok((k, CompiledRuleSet::Algo(algo_apply)))
                             }
                         }
                     })
@@ -158,7 +153,7 @@ impl<'a> SessionTx<'a> {
         &mut self,
         rule: &MagicInlineRule,
         rule_name: &MagicSymbol,
-        store_arities: &BTreeMap<&MagicSymbol, usize>,
+        store_arities: &BTreeMap<MagicSymbol, usize>,
         ret_vars: &[Symbol],
     ) -> Result<RelAlgebra> {
         let mut ret = RelAlgebra::unit(rule_name.symbol().span);

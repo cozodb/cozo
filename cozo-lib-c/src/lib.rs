@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 #![warn(rust_2018_idioms, future_incompatible)]
+#![allow(clippy::missing_safety_doc)]
 
 use std::collections::BTreeMap;
 use std::ffi::{c_char, CStr, CString};

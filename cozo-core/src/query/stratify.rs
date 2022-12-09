@@ -215,7 +215,7 @@ fn make_scc_reduced_graph<'a>(
 
 impl NormalFormProgram {
     /// returns the stratified program and the store lifetimes of the intermediate relations
-    pub(crate) fn stratify(
+    pub(crate) fn into_stratified_program(
         self,
     ) -> Result<(StratifiedNormalFormProgram, BTreeMap<MagicSymbol, usize>)> {
         // prerequisite: the program is already in disjunctive normal form
@@ -256,7 +256,8 @@ impl NormalFormProgram {
             .flat_map(|(stratum, indices)| indices.into_iter().map(move |idx| (idx, stratum)))
             .collect::<BTreeMap<_, _>>();
         // 7. translate the stratification into datalog program
-        let mut ret: Vec<NormalFormProgram> = vec![Default::default(); n_strata];
+        let mut ret: Vec<NormalFormProgram> =
+            (0..n_strata).map(|_| Default::default()).collect_vec();
 
         let mut store_lifetimes = BTreeMap::new();
         for (fr, tos) in &stratified_graph {

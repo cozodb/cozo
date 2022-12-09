@@ -650,9 +650,10 @@ impl<'s, S: Storage<'s>> Db<S> {
         match op {
             SysOp::Explain(prog) => {
                 let mut tx = self.transact()?;
-                let (stratified_program, _) = prog.to_normalized_program(&tx)?.stratify()?;
+                let (normalized_program, _) = prog.into_normalized_program(&tx)?;
+                let (stratified_program, _) = normalized_program.into_stratified_program()?;
                 let program = stratified_program.magic_sets_rewrite(&tx)?;
-                let compiled = tx.stratified_magic_compile(&program)?;
+                let compiled = tx.stratified_magic_compile(program)?;
                 tx.commit_tx()?;
                 self.explain_compiled(&compiled)
             }
@@ -791,14 +792,15 @@ impl<'s, S: Storage<'s>> Db<S> {
         };
 
         // query compilation
-        let (stratified_program, store_lifetimes) =
-            input_program.to_normalized_program(tx)?.stratify()?;
+        let entry_head_or_default = input_program.get_entry_out_head_or_default()?;
+        let (normalized_program, out_opts) = input_program.into_normalized_program(tx)?;
+        let (stratified_program, store_lifetimes) = normalized_program.into_stratified_program()?;
         let program = stratified_program.magic_sets_rewrite(tx)?;
-        let compiled = tx.stratified_magic_compile(&program)?;
+        let compiled = tx.stratified_magic_compile(program)?;
 
         // poison is used to terminate queries early
         let poison = Poison::default();
-        if let Some(secs) = input_program.out_opts.timeout {
+        if let Some(secs) = out_opts.timeout {
             poison.set_timeout(secs)?;
         }
         // give the query an ID and store it so that it can be queried and cancelled
@@ -828,14 +830,14 @@ impl<'s, S: Storage<'s>> Db<S> {
             running_queries: self.running_queries.clone(),
         };
 
-        let total_num_to_take = if input_program.out_opts.sorters.is_empty() {
-            input_program.out_opts.num_to_take()
+        let total_num_to_take = if out_opts.sorters.is_empty() {
+            out_opts.num_to_take()
         } else {
             None
         };
 
-        let num_to_skip = if input_program.out_opts.sorters.is_empty() {
-            input_program.out_opts.offset
+        let num_to_skip = if out_opts.sorters.is_empty() {
+            out_opts.offset
         } else {
             None
         };
@@ -850,7 +852,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         )?;
 
         // deal with assertions
-        if let Some(assertion) = &input_program.out_opts.assertion {
+        if let Some(assertion) = &out_opts.assertion {
             match assertion {
                 QueryAssertion::AssertNone(span) => {
                     if let Some(tuple) = result_store.all_iter().next() {
@@ -875,29 +877,28 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
         }
 
-        if !input_program.out_opts.sorters.is_empty() {
+        if !out_opts.sorters.is_empty() {
             // sort outputs if required
-            let entry_head = input_program.get_entry_out_head()?;
             let sorted_result =
-                tx.sort_and_collect(result_store, &input_program.out_opts.sorters, &entry_head)?;
-            let sorted_iter = if let Some(offset) = input_program.out_opts.offset {
+                tx.sort_and_collect(result_store, &out_opts.sorters, &entry_head_or_default)?;
+            let sorted_iter = if let Some(offset) = out_opts.offset {
                 Left(sorted_result.into_iter().skip(offset))
             } else {
                 Right(sorted_result.into_iter())
             };
-            let sorted_iter = if let Some(limit) = input_program.out_opts.limit {
+            let sorted_iter = if let Some(limit) = out_opts.limit {
                 Left(sorted_iter.take(limit))
             } else {
                 Right(sorted_iter)
             };
-            if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
+            if let Some((meta, relation_op)) = &out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(
                         self,
                         sorted_iter,
                         *relation_op,
                         meta,
-                        &input_program.get_entry_out_head_or_default()?,
+                        &entry_head_or_default,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
@@ -915,25 +916,25 @@ impl<'s, S: Storage<'s>> Db<S> {
                         tuple.into_iter().map(JsonValue::from).collect()
                     })
                     .collect_vec();
-                let headers: Vec<String> = match input_program.get_entry_out_head() {
-                    Ok(headers) => headers.into_iter().map(|v| v.name.to_string()).collect(),
-                    Err(_) => match rows.get(0) {
-                        None => vec![],
-                        Some(row) => (0..row.len()).map(|i| format!("_{}", i)).collect_vec(),
+                Ok((
+                    NamedRows {
+                        headers: entry_head_or_default
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect_vec(),
+                        rows,
                     },
-                };
-                Ok((NamedRows { headers, rows }, clean_ups))
+                    clean_ups,
+                ))
             }
         } else {
             let scan = if early_return {
                 Right(Left(
                     result_store.early_returned_iter().map(|t| t.into_tuple()),
                 ))
-            } else if input_program.out_opts.limit.is_some()
-                || input_program.out_opts.offset.is_some()
-            {
-                let limit = input_program.out_opts.limit.unwrap_or(usize::MAX);
-                let offset = input_program.out_opts.offset.unwrap_or(0);
+            } else if out_opts.limit.is_some() || out_opts.offset.is_some() {
+                let limit = out_opts.limit.unwrap_or(usize::MAX);
+                let offset = out_opts.offset.unwrap_or(0);
                 Right(Right(
                     result_store
                         .all_iter()
@@ -945,14 +946,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Left(result_store.all_iter().map(|t| t.into_tuple()))
             };
 
-            if let Some((meta, relation_op)) = &input_program.out_opts.store_relation {
+            if let Some((meta, relation_op)) = &out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(
                         self,
                         scan,
                         *relation_op,
                         meta,
-                        &input_program.get_entry_out_head_or_default()?,
+                        &entry_head_or_default,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
@@ -970,15 +971,16 @@ impl<'s, S: Storage<'s>> Db<S> {
                     })
                     .collect_vec();
 
-                let headers: Vec<String> = match input_program.get_entry_out_head() {
-                    Ok(headers) => headers.into_iter().map(|v| v.name.to_string()).collect(),
-                    Err(_) => match rows.get(0) {
-                        None => vec![],
-                        Some(row) => (0..row.len()).map(|i| format!("_{}", i)).collect_vec(),
+                Ok((
+                    NamedRows {
+                        headers: entry_head_or_default
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect_vec(),
+                        rows,
                     },
-                };
-
-                Ok((NamedRows { headers, rows }, clean_ups))
+                    clean_ups,
+                ))
             }
         }
     }
@@ -1192,19 +1194,26 @@ mod tests {
         let _ = env_logger::builder().is_test(true).try_init();
 
         let db = new_cozo_mem().unwrap();
-        let res = db.run_script(r#"
+        let res = db
+            .run_script(
+                r#"
         y[a] := a in [1,2,3]
         x[sum(a)] := y[a]
         x[sum(a)] := a in [4,5,6]
         ?[sum(a)] := x[a]
-        "#, Default::default()).unwrap().rows;
+        "#,
+                Default::default(),
+            )
+            .unwrap()
+            .rows;
         assert_eq!(res[0][0], json!(21.))
     }
     #[test]
     fn test_conditions() {
         let _ = env_logger::builder().is_test(true).try_init();
         let db = new_cozo_mem().unwrap();
-        db.run_script(r#"
+        db.run_script(
+            r#"
         {
             ?[code] <- [['a'],['b'],['c']]
             :create airport {code}
@@ -1213,12 +1222,21 @@ mod tests {
             ?[fr, to, dist] <- [['a', 'b', 1.1], ['a', 'c', 0.5], ['b', 'c', 9.1]]
             :create route {fr, to => dist}
         }
-        "#, Default::default()).unwrap();
+        "#,
+            Default::default(),
+        )
+        .unwrap();
         debug!("real test begins");
-        let res = db.run_script(r#"
+        let res = db
+            .run_script(
+                r#"
         r[code, dist] := *airport{code}, *route{fr: code, dist};
         ?[dist] := r['a', dist], dist > 0.5, dist <= 1.1;
-        "#, Default::default()).unwrap().rows;
+        "#,
+                Default::default(),
+            )
+            .unwrap()
+            .rows;
         assert_eq!(res[0][0], json!(1.1))
     }
 }

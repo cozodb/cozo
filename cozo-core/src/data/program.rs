@@ -184,7 +184,7 @@ impl TempSymbGen {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum InputInlineRulesOrAlgo {
     Rules { rules: Vec<InputInlineRule> },
     Algo { algo: AlgoApply },
@@ -209,20 +209,6 @@ pub(crate) struct AlgoApply {
     pub(crate) algo_impl: Box<dyn AlgoImpl>,
 }
 
-impl Clone for AlgoApply {
-    fn clone(&self) -> Self {
-        Self {
-            algo: self.algo.clone(),
-            rule_args: self.rule_args.clone(),
-            options: self.options.clone(),
-            head: self.head.clone(),
-            arity: self.arity,
-            span: self.span,
-            algo_impl: self.algo.get_impl().unwrap(),
-        }
-    }
-}
-
 impl AlgoApply {
     pub(crate) fn arity(&self) -> Result<usize> {
         self.algo_impl.arity(&self.options, &self.head, self.span)
@@ -239,7 +225,6 @@ impl Debug for AlgoApply {
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct MagicAlgoApply {
     pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<MagicAlgoRuleArg>,
@@ -325,7 +310,6 @@ impl Debug for MagicAlgoApply {
     }
 }
 
-#[derive(Clone)]
 pub(crate) enum AlgoRuleArg {
     InMem {
         name: Symbol,
@@ -374,7 +358,7 @@ impl Display for AlgoRuleArg {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum MagicAlgoRuleArg {
     InMem {
         name: MagicSymbol,
@@ -415,7 +399,7 @@ impl MagicAlgoRuleArg {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct InputProgram {
     pub(crate) prog: BTreeMap<Symbol, InputInlineRulesOrAlgo>,
     pub(crate) out_opts: QueryOutOptions,
@@ -568,9 +552,12 @@ impl InputProgram {
 
         Err(NoEntryError.into())
     }
-    pub(crate) fn to_normalized_program(&self, tx: &SessionTx<'_>) -> Result<NormalFormProgram> {
+    pub(crate) fn into_normalized_program(
+        self,
+        tx: &SessionTx<'_>,
+    ) -> Result<(NormalFormProgram, QueryOutOptions)> {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
-        for (k, rules_or_algo) in &self.prog {
+        for (k, rules_or_algo) in self.prog {
             match rules_or_algo {
                 InputInlineRulesOrAlgo::Rules { rules } => {
                     let mut collected_rules = vec![];
@@ -581,7 +568,7 @@ impl InputProgram {
                             Symbol::new(&format!("***{}", counter) as &str, span)
                         };
                         let normalized_body = InputAtom::Conjunction {
-                            inner: rule.body.clone(),
+                            inner: rule.body,
                             span: rule.span,
                         }
                         .disjunctive_normal_form(tx)?;
@@ -631,23 +618,18 @@ impl InputProgram {
                     );
                 }
                 InputInlineRulesOrAlgo::Algo { algo: algo_apply } => {
-                    prog.insert(
-                        k.clone(),
-                        NormalFormAlgoOrRules::Algo {
-                            algo: algo_apply.clone(),
-                        },
-                    );
+                    prog.insert(k.clone(), NormalFormAlgoOrRules::Algo { algo: algo_apply });
                 }
             }
         }
-        Ok(NormalFormProgram { prog })
+        Ok((NormalFormProgram { prog }, self.out_opts))
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct StratifiedNormalFormProgram(pub(crate) Vec<NormalFormProgram>);
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum NormalFormAlgoOrRules {
     Rules { rules: Vec<NormalFormInlineRule> },
     Algo { algo: AlgoApply },
@@ -662,15 +644,15 @@ impl NormalFormAlgoOrRules {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub(crate) struct NormalFormProgram {
     pub(crate) prog: BTreeMap<Symbol, NormalFormAlgoOrRules>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct StratifiedMagicProgram(pub(crate) Vec<MagicProgram>);
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum MagicRulesOrAlgo {
     Rules { rules: Vec<MagicInlineRule> },
     Algo { algo: MagicAlgoApply },
@@ -697,7 +679,7 @@ impl MagicRulesOrAlgo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct MagicProgram {
     pub(crate) prog: BTreeMap<MagicSymbol, MagicRulesOrAlgo>,
 }
@@ -815,7 +797,7 @@ impl MagicSymbol {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct InputInlineRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
@@ -823,14 +805,14 @@ pub(crate) struct InputInlineRule {
     pub(crate) span: SourceSpan,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct NormalFormInlineRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) body: Vec<NormalFormAtom>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct MagicInlineRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
@@ -852,7 +834,6 @@ impl MagicInlineRule {
     }
 }
 
-#[derive(Clone)]
 pub(crate) enum InputAtom {
     Rule {
         inner: InputRuleApplyAtom,
