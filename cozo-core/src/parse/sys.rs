@@ -19,7 +19,7 @@ use crate::data::value::DataValue;
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::AccessLevel;
-use crate::AlgoImpl;
+use crate::FixedRule;
 
 pub(crate) enum SysOp {
     Compact,
@@ -43,7 +43,7 @@ struct ProcessIdError(String, #[label] SourceSpan);
 pub(crate) fn parse_sys(
     mut src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    algorithms: &BTreeMap<String, Arc<Box<dyn AlgoImpl>>>,
+    algorithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
 ) -> Result<SysOp> {
     let inner = src.next().unwrap();
     Ok(match inner.as_rule() {

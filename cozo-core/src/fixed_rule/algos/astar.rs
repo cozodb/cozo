@@ -14,7 +14,7 @@ use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, AlgoInputRelation, AlgoPayload, BadExprValueError, NodeNotFoundError};
+use crate::fixed_rule::{FixedRule, FixedRuleInputRelation, FixedRulePayload, BadExprValueError, NodeNotFoundError};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
@@ -25,10 +25,10 @@ use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct ShortestPathAStar;
 
-impl AlgoImpl for ShortestPathAStar {
+impl FixedRule for ShortestPathAStar {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
@@ -72,8 +72,8 @@ impl AlgoImpl for ShortestPathAStar {
 fn astar(
     starting: &Tuple,
     goal: &Tuple,
-    edges: AlgoInputRelation<'_, '_>,
-    nodes: AlgoInputRelation<'_, '_>,
+    edges: FixedRuleInputRelation<'_, '_>,
+    nodes: FixedRuleInputRelation<'_, '_>,
     heuristic: &Expr,
     poison: Poison,
 ) -> Result<(f64, Vec<DataValue>)> {

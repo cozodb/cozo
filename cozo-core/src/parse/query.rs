@@ -19,23 +19,23 @@ use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::constant::Constant;
-use crate::algo::{AlgoHandle, AlgoNotFoundError};
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::program::{
-    AlgoApply, AlgoRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrAlgo,
+    FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
     InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
     QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
 };
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::DataValue;
+use crate::fixed_rule::utilities::constant::Constant;
+use crate::fixed_rule::{FixedRuleHandle, FixedRuleNotFoundError};
 use crate::parse::expr::build_expr;
 use crate::parse::schema::parse_schema;
 use crate::parse::{ExtractSpan, Pair, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::InputRelationHandle;
-use crate::AlgoImpl;
+use crate::FixedRule;
 
 #[derive(Error, Diagnostic, Debug)]
 #[error("Query option {0} is not constant")]
@@ -94,9 +94,9 @@ fn merge_spans(symbs: &[Symbol]) -> SourceSpan {
 pub(crate) fn parse_query(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    algorithms: &BTreeMap<String, Arc<Box<dyn AlgoImpl>>>,
+    fixedrithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
 ) -> Result<InputProgram> {
-    let mut progs: BTreeMap<Symbol, InputInlineRulesOrAlgo> = Default::default();
+    let mut progs: BTreeMap<Symbol, InputInlineRulesOrFixed> = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
     let mut stored_relation = None;
 
@@ -107,12 +107,12 @@ pub(crate) fn parse_query(
 
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
-                        e.insert(InputInlineRulesOrAlgo::Rules { rules: vec![rule] });
+                        e.insert(InputInlineRulesOrFixed::Rules { rules: vec![rule] });
                     }
                     Entry::Occupied(mut e) => {
                         let key = e.key().to_string();
                         match e.get_mut() {
-                            InputInlineRulesOrAlgo::Rules { rules: rs } => {
+                            InputInlineRulesOrFixed::Rules { rules: rs } => {
                                 #[derive(Debug, Error, Diagnostic)]
                                 #[error("Rule {0} has multiple definitions with conflicting heads")]
                                 #[diagnostic(code(parser::head_aggr_mismatch))]
@@ -134,32 +134,32 @@ pub(crate) fn parse_query(
 
                                 rs.push(rule);
                             }
-                            InputInlineRulesOrAlgo::Algo { algo } => {
-                                let algo_span = algo.span;
+                            InputInlineRulesOrFixed::Fixed { fixed } => {
+                                let fixed_span = fixed.span;
                                 bail!(MultipleRuleDefinitionError(
                                     e.key().name.to_string(),
-                                    vec![rule.span, algo_span]
+                                    vec![rule.span, fixed_span]
                                 ))
                             }
                         }
                     }
                 }
             }
-            Rule::algo_rule => {
+            Rule::fixed_rule => {
                 let rule_span = pair.extract_span();
-                let (name, apply) = parse_algo_rule(pair, param_pool, algorithms)?;
+                let (name, apply) = parse_fixed_rule(pair, param_pool, fixedrithms)?;
 
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
-                        e.insert(InputInlineRulesOrAlgo::Algo { algo: apply });
+                        e.insert(InputInlineRulesOrFixed::Fixed { fixed: apply });
                     }
                     Entry::Occupied(e) => {
                         let found_name = e.key().name.to_string();
                         let mut found_span = match e.get() {
-                            InputInlineRulesOrAlgo::Rules { rules } => {
+                            InputInlineRulesOrFixed::Rules { rules } => {
                                 rules.iter().map(|r| r.span).collect_vec()
                             }
-                            InputInlineRulesOrAlgo::Algo { algo } => vec![algo.span],
+                            InputInlineRulesOrFixed::Fixed { fixed } => vec![fixed.span],
                         };
                         found_span.push(rule_span);
                         bail!(MultipleRuleDefinitionError(found_name, found_span));
@@ -173,11 +173,11 @@ pub(crate) fn parse_query(
 
                 if let Some(found) = progs.get(&name) {
                     let mut found_span = match found {
-                        InputInlineRulesOrAlgo::Rules { rules } => {
+                        InputInlineRulesOrFixed::Rules { rules } => {
                             rules.iter().map(|r| r.span).collect_vec()
                         }
-                        InputInlineRulesOrAlgo::Algo { algo } => {
-                            vec![algo.span]
+                        InputInlineRulesOrFixed::Fixed { fixed } => {
+                            vec![fixed.span]
                         }
                     };
                     found_span.push(span);
@@ -199,12 +199,12 @@ pub(crate) fn parse_query(
                 let data = build_expr(src.next().unwrap(), param_pool)?;
                 let mut options = BTreeMap::new();
                 options.insert(SmartString::from("data"), data);
-                let handle = AlgoHandle {
+                let handle = FixedRuleHandle {
                     name: Symbol::new("Constant", span),
                 };
-                let algo_impl = Box::new(Constant);
-                algo_impl.init_options(&mut options, span)?;
-                let arity = algo_impl.arity(&options, &head, span)?;
+                let fixed_impl = Box::new(Constant);
+                fixed_impl.init_options(&mut options, span)?;
+                let arity = fixed_impl.arity(&options, &head, span)?;
 
                 ensure!(arity != 0, EmptyRowForConstRule(span));
                 ensure!(
@@ -213,15 +213,15 @@ pub(crate) fn parse_query(
                 );
                 progs.insert(
                     name,
-                    InputInlineRulesOrAlgo::Algo {
-                        algo: AlgoApply {
-                            algo: handle,
+                    InputInlineRulesOrFixed::Fixed {
+                        fixed: FixedRuleApply {
+                            fixed_handle: handle,
                             rule_args: vec![],
                             options: Rc::new(options),
                             head,
                             arity,
                             span,
-                            algo_impl: Arc::new(algo_impl),
+                            fixed_impl: Arc::new(fixed_impl),
                         },
                     },
                 );
@@ -652,55 +652,55 @@ fn parse_rule_head_arg(
     })
 }
 
-fn parse_algo_rule(
+fn parse_fixed_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    algorithms: &BTreeMap<String, Arc<Box<dyn AlgoImpl>>>,
-) -> Result<(Symbol, AlgoApply)> {
+    fixedrithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
+) -> Result<(Symbol, FixedRuleApply)> {
     let mut src = src.into_inner();
     let (out_symbol, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
 
     #[derive(Debug, Error, Diagnostic)]
-    #[error("Algorithm rule cannot be combined with aggregation")]
-    #[diagnostic(code(parser::algo_aggr_conflict))]
-    struct AggrInAlgoError(#[label] SourceSpan);
+    #[error("fixedrithm rule cannot be combined with aggregation")]
+    #[diagnostic(code(parser::fixed_aggr_conflict))]
+    struct AggrInfixedError(#[label] SourceSpan);
 
     for (a, v) in aggr.iter().zip(head.iter()) {
-        ensure!(a.is_none(), AggrInAlgoError(v.span))
+        ensure!(a.is_none(), AggrInfixedError(v.span))
     }
 
     let name_pair = src.next().unwrap();
-    let algo_name = &name_pair.as_str();
-    let mut rule_args: Vec<AlgoRuleArg> = vec![];
+    let fixed_name = &name_pair.as_str();
+    let mut rule_args: Vec<FixedRuleArg> = vec![];
     let mut options: BTreeMap<SmartString<LazyCompact>, Expr> = Default::default();
     let args_list = src.next().unwrap();
     let args_list_span = args_list.extract_span();
 
     for nxt in args_list.into_inner() {
         match nxt.as_rule() {
-            Rule::algo_rel => {
+            Rule::fixed_rel => {
                 let inner = nxt.into_inner().next().unwrap();
                 let span = inner.extract_span();
                 match inner.as_rule() {
-                    Rule::algo_rule_rel => {
+                    Rule::fixed_rule_rel => {
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap();
                         let bindings = els
                             .map(|v| Symbol::new(v.as_str(), v.extract_span()))
                             .collect_vec();
-                        rule_args.push(AlgoRuleArg::InMem {
+                        rule_args.push(FixedRuleArg::InMem {
                             name: Symbol::new(name.as_str(), name.extract_span()),
                             bindings,
                             span,
                         })
                     }
-                    Rule::algo_relation_rel => {
+                    Rule::fixed_relation_rel => {
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap();
                         let bindings = els
                             .map(|v| Symbol::new(v.as_str(), v.extract_span()))
                             .collect_vec();
-                        rule_args.push(AlgoRuleArg::Stored {
+                        rule_args.push(FixedRuleArg::Stored {
                             name: Symbol::new(
                                 name.as_str().strip_prefix('*').unwrap(),
                                 name.extract_span(),
@@ -709,7 +709,7 @@ fn parse_algo_rule(
                             span,
                         })
                     }
-                    Rule::algo_named_relation_rel => {
+                    Rule::fixed_named_relation_rel => {
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap();
                         let bindings = els
@@ -725,7 +725,7 @@ fn parse_algo_rule(
                             })
                             .collect();
 
-                        rule_args.push(AlgoRuleArg::NamedStored {
+                        rule_args.push(FixedRuleArg::NamedStored {
                             name: Symbol::new(
                                 name.as_str().strip_prefix(':').unwrap(),
                                 name.extract_span(),
@@ -737,7 +737,7 @@ fn parse_algo_rule(
                     _ => unreachable!(),
                 }
             }
-            Rule::algo_opt_pair => {
+            Rule::fixed_opt_pair => {
                 let mut inner = nxt.into_inner();
                 let name = inner.next().unwrap().as_str();
                 let val = inner.next().unwrap();
@@ -748,12 +748,13 @@ fn parse_algo_rule(
         }
     }
 
-    let algo = AlgoHandle::new(algo_name, name_pair.extract_span());
+    let fixed = FixedRuleHandle::new(fixed_name, name_pair.extract_span());
 
-    let algo_impl = algorithms.get(&algo.name as &str)
-        .ok_or_else(|| AlgoNotFoundError(algo.name.to_string(), name_pair.extract_span()))?;
-    algo_impl.init_options(&mut options, args_list_span)?;
-    let arity = algo_impl.arity(&options, &head, name_pair.extract_span())?;
+    let fixed_impl = fixedrithms
+        .get(&fixed.name as &str)
+        .ok_or_else(|| FixedRuleNotFoundError(fixed.name.to_string(), name_pair.extract_span()))?;
+    fixed_impl.init_options(&mut options, args_list_span)?;
+    let arity = fixed_impl.arity(&options, &head, name_pair.extract_span())?;
 
     ensure!(
         head.is_empty() || arity == head.len(),
@@ -762,14 +763,14 @@ fn parse_algo_rule(
 
     Ok((
         out_symbol,
-        AlgoApply {
-            algo,
+        FixedRuleApply {
+            fixed_handle: fixed,
             rule_args,
             options: Rc::new(options),
             head,
             arity,
             span: args_list_span,
-            algo_impl: algo_impl.clone(),
+            fixed_impl: fixed_impl.clone(),
         },
     ))
 }
@@ -797,9 +798,9 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
     );
     prog.prog.insert(
         entry_symbol,
-        InputInlineRulesOrAlgo::Algo {
-            algo: AlgoApply {
-                algo: AlgoHandle {
+        InputInlineRulesOrFixed::Fixed {
+            fixed: FixedRuleApply {
+                fixed_handle: FixedRuleHandle {
                     name: Symbol::new("Constant", Default::default()),
                 },
                 rule_args: vec![],
@@ -807,7 +808,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
                 head: bindings.to_vec(),
                 arity: bindings.len(),
                 span: Default::default(),
-                algo_impl: Arc::new(Box::new(Constant)),
+                fixed_impl: Arc::new(Box::new(Constant)),
             },
         },
     );

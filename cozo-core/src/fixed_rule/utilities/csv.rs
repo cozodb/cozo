@@ -13,11 +13,11 @@ use miette::{bail, ensure, IntoDiagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 
 #[cfg(feature = "requests")]
-use crate::algo::jlines::get_file_content_from_url;
-use crate::algo::{AlgoImpl, AlgoPayload, CannotDetermineArity};
+use crate::fixed_rule::utilities::jlines::get_file_content_from_url;
+use crate::fixed_rule::{FixedRule, FixedRulePayload, CannotDetermineArity};
 use crate::data::expr::Expr;
 use crate::data::functions::{op_to_float, op_to_uuid};
-use crate::data::program::{AlgoOptionNotFoundError, WrongAlgoOptionError};
+use crate::data::program::{FixedRuleOptionNotFoundError, WrongFixedRuleOptionError};
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -27,10 +27,10 @@ use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct CsvReader;
 
-impl AlgoImpl for CsvReader {
+impl FixedRule for CsvReader {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         _poison: Poison,
     ) -> Result<()> {
@@ -38,10 +38,10 @@ impl AlgoImpl for CsvReader {
         let delimiter = delimiter.as_bytes();
         ensure!(
             delimiter.len() == 1,
-            WrongAlgoOptionError {
+            WrongFixedRuleOptionError {
                 name: "delimiter".to_string(),
                 span: payload.span(),
-                algo_name: "CsvReader".to_string(),
+                rule_name: "CsvReader".to_string(),
                 help: "'delimiter' must be a single-byte string".to_string()
             }
         );
@@ -63,10 +63,10 @@ impl AlgoImpl for CsvReader {
         let mut types = vec![];
         for type_str in types_opts.get_list().unwrap() {
             let type_str = type_str.get_string().unwrap();
-            let typ = parse_type(type_str).map_err(|e| WrongAlgoOptionError {
+            let typ = parse_type(type_str).map_err(|e| WrongFixedRuleOptionError {
                 name: "types".to_string(),
                 span: payload.span(),
-                algo_name: "CsvReader".to_string(),
+                rule_name: "CsvReader".to_string(),
                 help: e.to_string(),
             })?;
             types.push(typ);
@@ -197,10 +197,10 @@ impl AlgoImpl for CsvReader {
         };
         let columns = options
             .get("types")
-            .ok_or_else(|| AlgoOptionNotFoundError {
+            .ok_or_else(|| FixedRuleOptionNotFoundError {
                 name: "types".to_string(),
                 span,
-                algo_name: "CsvReader".to_string(),
+                rule_name: "CsvReader".to_string(),
             })?;
         let columns = columns.clone().eval_to_const()?;
         if let Some(l) = columns.get_list() {

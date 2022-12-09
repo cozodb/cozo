@@ -6,12 +6,12 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, AlgoPayload, NodeNotFoundError};
+use crate::fixed_rule::{FixedRule, FixedRulePayload, NodeNotFoundError};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -19,12 +19,12 @@ use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
 
-pub(crate) struct Bfs;
+pub(crate) struct Dfs;
 
-impl AlgoImpl for Bfs {
+impl FixedRule for Dfs {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
@@ -48,42 +48,44 @@ impl AlgoImpl for Bfs {
             if visited.contains(starting_node) {
                 continue;
             }
-            visited.insert(starting_node.clone());
 
-            let mut queue: VecDeque<DataValue> = VecDeque::default();
-            queue.push_front(starting_node.clone());
+            let mut stack: Vec<DataValue> = vec![];
+            stack.push(starting_node.clone());
 
-            while let Some(candidate) = queue.pop_back() {
+            while let Some(candidate) = stack.pop() {
+                if visited.contains(&candidate) {
+                    continue;
+                }
+
+                let cand_tuple = if skip_query_nodes {
+                    vec![candidate.clone()]
+                } else {
+                    nodes
+                        .prefix_iter(&candidate)?
+                        .next()
+                        .ok_or_else(|| NodeNotFoundError {
+                            missing: candidate.clone(),
+                            span: nodes.span(),
+                        })??
+                };
+
+                if condition.eval_pred(&cand_tuple)? {
+                    found.push((starting_node.clone(), candidate.clone()));
+                    if found.len() >= limit {
+                        break 'outer;
+                    }
+                }
+
+                visited.insert(candidate.clone());
+
                 for edge in edges.prefix_iter(&candidate)? {
                     let edge = edge?;
                     let to_node = &edge[1];
                     if visited.contains(to_node) {
                         continue;
                     }
-
-                    visited.insert(to_node.clone());
                     backtrace.insert(to_node.clone(), candidate.clone());
-
-                    let cand_tuple = if skip_query_nodes {
-                        vec![to_node.clone()]
-                    } else {
-                        nodes
-                            .prefix_iter(to_node)?
-                            .next()
-                            .ok_or_else(|| NodeNotFoundError {
-                                missing: candidate.clone(),
-                                span: nodes.span(),
-                            })??
-                    };
-
-                    if condition.eval_pred(&cand_tuple)? {
-                        found.push((starting_node.clone(), to_node.clone()));
-                        if found.len() >= limit {
-                            break 'outer;
-                        }
-                    }
-
-                    queue.push_front(to_node.clone());
+                    stack.push(to_node.clone());
                     poison.check()?;
                 }
             }
@@ -100,6 +102,7 @@ impl AlgoImpl for Bfs {
             route.reverse();
             let tuple = vec![starting, ending, DataValue::List(route)];
             out.put(tuple);
+            poison.check()?;
         }
         Ok(())
     }

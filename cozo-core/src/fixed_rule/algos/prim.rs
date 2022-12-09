@@ -16,7 +16,7 @@ use priority_queue::PriorityQueue;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::{AlgoImpl, AlgoPayload};
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -26,10 +26,10 @@ use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct MinimumSpanningTreePrim;
 
-impl AlgoImpl for MinimumSpanningTreePrim {
+impl FixedRule for MinimumSpanningTreePrim {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {

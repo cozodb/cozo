@@ -12,7 +12,7 @@ use std::fmt::Debug;
 use miette::Result;
 use itertools::Itertools;
 
-use crate::algo::strongly_connected_components::TarjanScc;
+use crate::fixed_rule::algos::strongly_connected_components::TarjanScc;
 use crate::runtime::db::Poison;
 
 pub(crate) type Graph<T> = BTreeMap<T, Vec<T>>;

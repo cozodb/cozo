@@ -17,12 +17,12 @@ use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::{AlgoHandle, AlgoImpl};
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRuleHandle};
 use crate::parse::SourceSpan;
 use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::temp_store::EpochStore;
@@ -187,78 +187,80 @@ impl TempSymbGen {
 }
 
 #[derive(Debug)]
-pub(crate) enum InputInlineRulesOrAlgo {
+pub(crate) enum InputInlineRulesOrFixed {
     Rules { rules: Vec<InputInlineRule> },
-    Algo { algo: AlgoApply },
+    Fixed { fixed: FixedRuleApply },
 }
 
-impl InputInlineRulesOrAlgo {
+impl InputInlineRulesOrFixed {
     pub(crate) fn first_span(&self) -> SourceSpan {
         match self {
-            InputInlineRulesOrAlgo::Rules { rules, .. } => rules[0].span,
-            InputInlineRulesOrAlgo::Algo { algo, .. } => algo.span,
+            InputInlineRulesOrFixed::Rules { rules, .. } => rules[0].span,
+            InputInlineRulesOrFixed::Fixed { fixed, .. } => fixed.span,
         }
     }
 }
 
-pub(crate) struct AlgoApply {
-    pub(crate) algo: AlgoHandle,
-    pub(crate) rule_args: Vec<AlgoRuleArg>,
+pub(crate) struct FixedRuleApply {
+    pub(crate) fixed_handle: FixedRuleHandle,
+    pub(crate) rule_args: Vec<FixedRuleArg>,
     pub(crate) options: Rc<BTreeMap<SmartString<LazyCompact>, Expr>>,
     pub(crate) head: Vec<Symbol>,
     pub(crate) arity: usize,
     pub(crate) span: SourceSpan,
-    pub(crate) algo_impl: Arc<Box<dyn AlgoImpl>>,
+    pub(crate) fixed_impl: Arc<Box<dyn FixedRule>>,
 }
 
-impl AlgoApply {
+impl FixedRuleApply {
     pub(crate) fn arity(&self) -> Result<usize> {
-        self.algo_impl.as_ref().arity(&self.options, &self.head, self.span)
+        self.fixed_impl
+            .as_ref()
+            .arity(&self.options, &self.head, self.span)
     }
 }
 
-impl Debug for AlgoApply {
+impl Debug for FixedRuleApply {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AlgoApply")
-            .field("algo", &self.algo.name)
+        f.debug_struct("FixedRuleApply")
+            .field("name", &self.fixed_handle.name)
             .field("rules", &self.rule_args)
             .field("options", &self.options)
             .finish()
     }
 }
 
-pub(crate) struct MagicAlgoApply {
-    pub(crate) algo: AlgoHandle,
-    pub(crate) rule_args: Vec<MagicAlgoRuleArg>,
+pub(crate) struct MagicFixedRuleApply {
+    pub(crate) fixed_handle: FixedRuleHandle,
+    pub(crate) rule_args: Vec<MagicFixedRuleRuleArg>,
     pub(crate) options: Rc<BTreeMap<SmartString<LazyCompact>, Expr>>,
     pub(crate) span: SourceSpan,
     pub(crate) arity: usize,
-    pub(crate) algo_impl: Arc<Box<dyn AlgoImpl>>,
+    pub(crate) fixed_impl: Arc<Box<dyn FixedRule>>,
 }
 
 #[derive(Error, Diagnostic, Debug)]
-#[error("Cannot find a required named option '{name}' for '{algo_name}'")]
-#[diagnostic(code(algo::arg_not_found))]
-pub(crate) struct AlgoOptionNotFoundError {
+#[error("Cannot find a required named option '{name}' for '{rule_name}'")]
+#[diagnostic(code(fixed_rule::arg_not_found))]
+pub(crate) struct FixedRuleOptionNotFoundError {
     pub(crate) name: String,
     #[label]
     pub(crate) span: SourceSpan,
-    pub(crate) algo_name: String,
+    pub(crate) rule_name: String,
 }
 
 #[derive(Error, Diagnostic, Debug)]
-#[error("Wrong value for option '{name}' of '{algo_name}'")]
-#[diagnostic(code(algo::arg_wrong))]
-pub(crate) struct WrongAlgoOptionError {
+#[error("Wrong value for option '{name}' of '{rule_name}'")]
+#[diagnostic(code(fixed_rule::arg_wrong))]
+pub(crate) struct WrongFixedRuleOptionError {
     pub(crate) name: String,
     #[label]
     pub(crate) span: SourceSpan,
-    pub(crate) algo_name: String,
+    pub(crate) rule_name: String,
     #[help]
     pub(crate) help: String,
 }
 
-impl MagicAlgoApply {
+impl MagicFixedRuleApply {
     #[allow(dead_code)]
     pub(crate) fn relation_with_min_len(
         &self,
@@ -266,11 +268,11 @@ impl MagicAlgoApply {
         len: usize,
         tx: &SessionTx<'_>,
         stores: &BTreeMap<MagicSymbol, EpochStore>,
-    ) -> Result<&MagicAlgoRuleArg> {
+    ) -> Result<&MagicFixedRuleRuleArg> {
         #[derive(Error, Diagnostic, Debug)]
-        #[error("Input relation to algorithm has insufficient arity")]
+        #[error("Input relation to fixed rule has insufficient arity")]
         #[diagnostic(help("Arity should be at least {0} but is {1}"))]
-        #[diagnostic(code(algo::input_relation_bad_arity))]
+        #[diagnostic(code(fixed_rule::input_relation_bad_arity))]
         struct InputRelationArityError(usize, usize, #[label] SourceSpan);
 
         let rel = self.relation(idx)?;
@@ -281,39 +283,39 @@ impl MagicAlgoApply {
         );
         Ok(rel)
     }
-    pub(crate) fn relation(&self, idx: usize) -> Result<&MagicAlgoRuleArg> {
+    pub(crate) fn relation(&self, idx: usize) -> Result<&MagicFixedRuleRuleArg> {
         #[derive(Error, Diagnostic, Debug)]
-        #[error("Cannot find a required positional argument at index {idx} for '{algo_name}'")]
-        #[diagnostic(code(algo::not_enough_args))]
-        pub(crate) struct AlgoNotEnoughRelationError {
+        #[error("Cannot find a required positional argument at index {idx} for '{rule_name}'")]
+        #[diagnostic(code(fixed_rule::not_enough_args))]
+        pub(crate) struct FixedRuleNotEnoughRelationError {
             idx: usize,
             #[label]
             span: SourceSpan,
-            algo_name: String,
+            rule_name: String,
         }
 
         Ok(self
             .rule_args
             .get(idx)
-            .ok_or_else(|| AlgoNotEnoughRelationError {
+            .ok_or_else(|| FixedRuleNotEnoughRelationError {
                 idx,
                 span: self.span,
-                algo_name: self.algo.name.to_string(),
+                rule_name: self.fixed_handle.name.to_string(),
             })?)
     }
 }
 
-impl Debug for MagicAlgoApply {
+impl Debug for MagicFixedRuleApply {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AlgoApply")
-            .field("algo", &self.algo.name)
+        f.debug_struct("FixedRuleApply")
+            .field("name", &self.fixed_handle.name)
             .field("rules", &self.rule_args)
             .field("options", &self.options)
             .finish()
     }
 }
 
-pub(crate) enum AlgoRuleArg {
+pub(crate) enum FixedRuleArg {
     InMem {
         name: Symbol,
         bindings: Vec<Symbol>,
@@ -331,24 +333,24 @@ pub(crate) enum AlgoRuleArg {
     },
 }
 
-impl Debug for AlgoRuleArg {
+impl Debug for FixedRuleArg {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-impl Display for AlgoRuleArg {
+impl Display for FixedRuleArg {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            AlgoRuleArg::InMem { name, bindings, .. } => {
+            FixedRuleArg::InMem { name, bindings, .. } => {
                 write!(f, "{}", name)?;
                 f.debug_list().entries(bindings).finish()?;
             }
-            AlgoRuleArg::Stored { name, bindings, .. } => {
+            FixedRuleArg::Stored { name, bindings, .. } => {
                 write!(f, ":{}", name)?;
                 f.debug_list().entries(bindings).finish()?;
             }
-            AlgoRuleArg::NamedStored { name, bindings, .. } => {
+            FixedRuleArg::NamedStored { name, bindings, .. } => {
                 write!(f, "*")?;
                 let mut sf = f.debug_struct(name);
                 for (k, v) in bindings {
@@ -362,7 +364,7 @@ impl Display for AlgoRuleArg {
 }
 
 #[derive(Debug)]
-pub(crate) enum MagicAlgoRuleArg {
+pub(crate) enum MagicFixedRuleRuleArg {
     InMem {
         name: MagicSymbol,
         bindings: Vec<Symbol>,
@@ -375,24 +377,25 @@ pub(crate) enum MagicAlgoRuleArg {
     },
 }
 
-impl MagicAlgoRuleArg {
+impl MagicFixedRuleRuleArg {
     #[allow(dead_code)]
     pub(crate) fn bindings(&self) -> &[Symbol] {
         match self {
-            MagicAlgoRuleArg::InMem { bindings, .. }
-            | MagicAlgoRuleArg::Stored { bindings, .. } => bindings,
+            MagicFixedRuleRuleArg::InMem { bindings, .. }
+            | MagicFixedRuleRuleArg::Stored { bindings, .. } => bindings,
         }
     }
     #[allow(dead_code)]
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
-            MagicAlgoRuleArg::InMem { span, .. } | MagicAlgoRuleArg::Stored { span, .. } => *span,
+            MagicFixedRuleRuleArg::InMem { span, .. }
+            | MagicFixedRuleRuleArg::Stored { span, .. } => *span,
         }
     }
     pub(crate) fn get_binding_map(&self, starting: usize) -> BTreeMap<Symbol, usize> {
         let bindings = match self {
-            MagicAlgoRuleArg::InMem { bindings, .. }
-            | MagicAlgoRuleArg::Stored { bindings, .. } => bindings,
+            MagicFixedRuleRuleArg::InMem { bindings, .. }
+            | MagicFixedRuleRuleArg::Stored { bindings, .. } => bindings,
         };
         bindings
             .iter()
@@ -404,7 +407,7 @@ impl MagicAlgoRuleArg {
 
 #[derive(Debug)]
 pub(crate) struct InputProgram {
-    pub(crate) prog: BTreeMap<Symbol, InputInlineRulesOrAlgo>,
+    pub(crate) prog: BTreeMap<Symbol, InputInlineRulesOrFixed>,
     pub(crate) out_opts: QueryOutOptions,
 }
 
@@ -412,7 +415,7 @@ impl Display for InputProgram {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for (name, rules) in &self.prog {
             match rules {
-                InputInlineRulesOrAlgo::Rules { rules, .. } => {
+                InputInlineRulesOrFixed::Rules { rules, .. } => {
                     for InputInlineRule {
                         head, aggr, body, ..
                     } in rules
@@ -443,10 +446,10 @@ impl Display for InputProgram {
                         writeln!(f, ";")?;
                     }
                 }
-                InputInlineRulesOrAlgo::Algo {
-                    algo:
-                        AlgoApply {
-                            algo,
+                InputInlineRulesOrFixed::Fixed {
+                    fixed:
+                        FixedRuleApply {
+                            fixed_handle: handle,
                             rule_args,
                             options,
                             head,
@@ -456,7 +459,7 @@ impl Display for InputProgram {
                     write!(f, "{}", name)?;
                     f.debug_list().entries(head).finish()?;
                     write!(f, " <~ ")?;
-                    write!(f, "{}(", algo.name)?;
+                    write!(f, "{}(", handle.name)?;
                     let mut first = true;
                     for rule_arg in rule_args {
                         if first {
@@ -499,8 +502,8 @@ impl InputProgram {
     pub(crate) fn get_entry_arity(&self) -> Result<usize> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
-                InputInlineRulesOrAlgo::Rules { rules } => Ok(rules.last().unwrap().head.len()),
-                InputInlineRulesOrAlgo::Algo { algo: algo_apply } => algo_apply.arity(),
+                InputInlineRulesOrFixed::Rules { rules } => Ok(rules.last().unwrap().head.len()),
+                InputInlineRulesOrFixed::Fixed { fixed } => fixed.arity(),
             };
         }
 
@@ -520,7 +523,7 @@ impl InputProgram {
     pub(crate) fn get_entry_out_head(&self) -> Result<Vec<Symbol>> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
-                InputInlineRulesOrAlgo::Rules { rules } => {
+                InputInlineRulesOrFixed::Rules { rules } => {
                     let head = &rules.last().unwrap().head;
                     let mut ret = Vec::with_capacity(head.len());
                     let aggrs = &rules.last().unwrap().aggr;
@@ -543,11 +546,11 @@ impl InputProgram {
                     }
                     Ok(ret)
                 }
-                InputInlineRulesOrAlgo::Algo { algo: algo_apply } => {
-                    if algo_apply.head.is_empty() {
+                InputInlineRulesOrFixed::Fixed { fixed } => {
+                    if fixed.head.is_empty() {
                         Err(EntryHeadNotExplicitlyDefinedError(entry.first_span()).into())
                     } else {
-                        Ok(algo_apply.head.to_vec())
+                        Ok(fixed.head.to_vec())
                     }
                 }
             };
@@ -560,9 +563,9 @@ impl InputProgram {
         tx: &SessionTx<'_>,
     ) -> Result<(NormalFormProgram, QueryOutOptions)> {
         let mut prog: BTreeMap<Symbol, _> = Default::default();
-        for (k, rules_or_algo) in self.prog {
-            match rules_or_algo {
-                InputInlineRulesOrAlgo::Rules { rules } => {
+        for (k, rules_or_fixed) in self.prog {
+            match rules_or_fixed {
+                InputInlineRulesOrFixed::Rules { rules } => {
                     let mut collected_rules = vec![];
                     for rule in rules {
                         let mut counter = -1;
@@ -615,13 +618,13 @@ impl InputProgram {
                     }
                     prog.insert(
                         k.clone(),
-                        NormalFormAlgoOrRules::Rules {
+                        NormalFormRulesOrFixed::Rules {
                             rules: collected_rules,
                         },
                     );
                 }
-                InputInlineRulesOrAlgo::Algo { algo: algo_apply } => {
-                    prog.insert(k.clone(), NormalFormAlgoOrRules::Algo { algo: algo_apply });
+                InputInlineRulesOrFixed::Fixed { fixed } => {
+                    prog.insert(k.clone(), NormalFormRulesOrFixed::Fixed { fixed });
                 }
             }
         }
@@ -633,58 +636,58 @@ impl InputProgram {
 pub(crate) struct StratifiedNormalFormProgram(pub(crate) Vec<NormalFormProgram>);
 
 #[derive(Debug)]
-pub(crate) enum NormalFormAlgoOrRules {
+pub(crate) enum NormalFormRulesOrFixed {
     Rules { rules: Vec<NormalFormInlineRule> },
-    Algo { algo: AlgoApply },
+    Fixed { fixed: FixedRuleApply },
 }
 
-impl NormalFormAlgoOrRules {
+impl NormalFormRulesOrFixed {
     pub(crate) fn rules(&self) -> Option<&[NormalFormInlineRule]> {
         match self {
-            NormalFormAlgoOrRules::Rules { rules: r } => Some(r),
-            NormalFormAlgoOrRules::Algo { algo: _ } => None,
+            NormalFormRulesOrFixed::Rules { rules: r } => Some(r),
+            NormalFormRulesOrFixed::Fixed { fixed: _ } => None,
         }
     }
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct NormalFormProgram {
-    pub(crate) prog: BTreeMap<Symbol, NormalFormAlgoOrRules>,
+    pub(crate) prog: BTreeMap<Symbol, NormalFormRulesOrFixed>,
 }
 
 #[derive(Debug)]
 pub(crate) struct StratifiedMagicProgram(pub(crate) Vec<MagicProgram>);
 
 #[derive(Debug)]
-pub(crate) enum MagicRulesOrAlgo {
+pub(crate) enum MagicRulesOrFixed {
     Rules { rules: Vec<MagicInlineRule> },
-    Algo { algo: MagicAlgoApply },
+    Fixed { fixed: MagicFixedRuleApply },
 }
 
-impl Default for MagicRulesOrAlgo {
+impl Default for MagicRulesOrFixed {
     fn default() -> Self {
         Self::Rules { rules: vec![] }
     }
 }
 
-impl MagicRulesOrAlgo {
+impl MagicRulesOrFixed {
     pub(crate) fn arity(&self) -> Result<usize> {
         Ok(match self {
-            MagicRulesOrAlgo::Rules { rules } => rules.first().unwrap().head.len(),
-            MagicRulesOrAlgo::Algo { algo } => algo.arity,
+            MagicRulesOrFixed::Rules { rules } => rules.first().unwrap().head.len(),
+            MagicRulesOrFixed::Fixed { fixed } => fixed.arity,
         })
     }
     pub(crate) fn mut_rules(&mut self) -> Option<&mut Vec<MagicInlineRule>> {
         match self {
-            MagicRulesOrAlgo::Rules { rules } => Some(rules),
-            MagicRulesOrAlgo::Algo { algo: _ } => None,
+            MagicRulesOrFixed::Rules { rules } => Some(rules),
+            MagicRulesOrFixed::Fixed { fixed: _ } => None,
         }
     }
 }
 
 #[derive(Debug)]
 pub(crate) struct MagicProgram {
-    pub(crate) prog: BTreeMap<MagicSymbol, MagicRulesOrAlgo>,
+    pub(crate) prog: BTreeMap<MagicSymbol, MagicRulesOrFixed>,
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq)]

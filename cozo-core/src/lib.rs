@@ -62,17 +62,17 @@ pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 pub use runtime::temp_store::RegularTempStore;
-pub use algo::AlgoImpl;
+pub use fixed_rule::FixedRule;
 
 use crate::data::json::JsonValue;
 
-pub(crate) mod algo;
 pub(crate) mod data;
 pub(crate) mod parse;
 pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod storage;
 pub(crate) mod utils;
+pub(crate) mod fixed_rule;
 
 #[derive(Clone)]
 /// A dispatcher for concrete storage implementations, wrapping [Db]. This is done so that

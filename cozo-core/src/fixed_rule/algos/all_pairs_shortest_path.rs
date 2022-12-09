@@ -17,8 +17,8 @@ use priority_queue::PriorityQueue;
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::shortest_path_dijkstra::dijkstra_keep_ties;
-use crate::algo::{AlgoImpl, AlgoPayload};
+use crate::fixed_rule::algos::shortest_path_dijkstra::dijkstra_keep_ties;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -28,10 +28,10 @@ use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct BetweennessCentrality;
 
-impl AlgoImpl for BetweennessCentrality {
+impl FixedRule for BetweennessCentrality {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
@@ -100,10 +100,10 @@ impl AlgoImpl for BetweennessCentrality {
 
 pub(crate) struct ClosenessCentrality;
 
-impl AlgoImpl for ClosenessCentrality {
+impl FixedRule for ClosenessCentrality {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {

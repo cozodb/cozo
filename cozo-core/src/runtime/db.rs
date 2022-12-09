@@ -38,8 +38,8 @@ use crate::query::ra::{
 use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
 use crate::storage::{Storage, StoreTx};
-use crate::{decode_tuple_from_kv, AlgoImpl};
-use crate::algo::DEFAULT_ALGOS;
+use crate::{decode_tuple_from_kv, FixedRule};
+use crate::fixed_rule::DEFAULT_FIXED_RULES;
 
 struct RunningQueryHandle {
     started_at: f64,
@@ -72,7 +72,7 @@ pub struct Db<S> {
     relation_store_id: Arc<AtomicU64>,
     queries_count: Arc<AtomicU64>,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
-    pub(crate) algorithms: Arc<BTreeMap<String, Arc<Box<dyn AlgoImpl>>>>,
+    pub(crate) algorithms: Arc<BTreeMap<String, Arc<Box<dyn FixedRule>>>>,
 }
 
 impl<S> Debug for Db<S> {
@@ -118,7 +118,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             relation_store_id: Arc::new(Default::default()),
             queries_count: Arc::new(Default::default()),
             running_queries: Arc::new(Mutex::new(Default::default())),
-            algorithms: DEFAULT_ALGOS.clone(),
+            algorithms: DEFAULT_FIXED_RULES.clone(),
         };
         Ok(ret)
     }
@@ -626,7 +626,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                             ret.extend(ret_for_relation)
                         }
                     }
-                    CompiledRuleSet::Algo(_) => ret.push(json!({
+                    CompiledRuleSet::Fixed(_) => ret.push(json!({
                         STRATUM: stratum,
                         ATOM_IDX: 0,
                         OP: "algo",

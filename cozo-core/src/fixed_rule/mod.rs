@@ -14,104 +14,73 @@ use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-#[cfg(feature = "graph-algo")]
-use crate::algo::all_pairs_shortest_path::{BetweennessCentrality, ClosenessCentrality};
-#[cfg(feature = "graph-algo")]
-use crate::algo::astar::ShortestPathAStar;
-#[cfg(feature = "graph-algo")]
-use crate::algo::bfs::Bfs;
-use crate::algo::constant::Constant;
-use crate::algo::csv::CsvReader;
-#[cfg(feature = "graph-algo")]
-use crate::algo::degree_centrality::DegreeCentrality;
-#[cfg(feature = "graph-algo")]
-use crate::algo::dfs::Dfs;
-use crate::algo::jlines::JsonReader;
-#[cfg(feature = "graph-algo")]
-use crate::algo::kruskal::MinimumSpanningForestKruskal;
-#[cfg(feature = "graph-algo")]
-use crate::algo::label_propagation::LabelPropagation;
-#[cfg(feature = "graph-algo")]
-use crate::algo::louvain::CommunityDetectionLouvain;
-#[cfg(feature = "graph-algo")]
-use crate::algo::pagerank::PageRank;
-#[cfg(feature = "graph-algo")]
-use crate::algo::prim::MinimumSpanningTreePrim;
-#[cfg(feature = "graph-algo")]
-use crate::algo::random_walk::RandomWalk;
-use crate::algo::reorder_sort::ReorderSort;
-#[cfg(feature = "graph-algo")]
-use crate::algo::shortest_path_dijkstra::ShortestPathDijkstra;
-#[cfg(feature = "graph-algo")]
-use crate::algo::strongly_connected_components::StronglyConnectedComponent;
-#[cfg(feature = "graph-algo")]
-use crate::algo::top_sort::TopSort;
-#[cfg(feature = "graph-algo")]
-use crate::algo::triangles::ClusteringCoefficients;
-#[cfg(feature = "graph-algo")]
-use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
 use crate::data::program::{
-    AlgoOptionNotFoundError, MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol, WrongAlgoOptionError,
+    FixedRuleOptionNotFoundError, MagicFixedRuleApply, MagicFixedRuleRuleArg, MagicSymbol,
+    WrongFixedRuleOptionError,
 };
 use crate::data::symb::Symbol;
 use crate::data::tuple::TupleIter;
 use crate::data::value::DataValue;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::all_pairs_shortest_path::{
+    BetweennessCentrality, ClosenessCentrality,
+};
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::astar::ShortestPathAStar;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::bfs::Bfs;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::degree_centrality::DegreeCentrality;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::dfs::Dfs;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::kruskal::MinimumSpanningForestKruskal;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::label_propagation::LabelPropagation;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::louvain::CommunityDetectionLouvain;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::pagerank::PageRank;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::prim::MinimumSpanningTreePrim;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::shortest_path_dijkstra::ShortestPathDijkstra;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::strongly_connected_components::StronglyConnectedComponent;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::top_sort::TopSort;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::triangles::ClusteringCoefficients;
+#[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::yen::KShortestPathYen;
+use crate::fixed_rule::utilities::constant::Constant;
+use crate::fixed_rule::utilities::csv::CsvReader;
+use crate::fixed_rule::utilities::jlines::JsonReader;
+use crate::fixed_rule::utilities::random_walk::RandomWalk;
+use crate::fixed_rule::utilities::reorder_sort::ReorderSort;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::{EpochStore, RegularTempStore};
 use crate::runtime::transact::SessionTx;
 
-#[cfg(feature = "graph-algo")]
-pub(crate) mod all_pairs_shortest_path;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod astar;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod bfs;
-pub(crate) mod constant;
-pub(crate) mod csv;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod degree_centrality;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod dfs;
-pub(crate) mod jlines;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod kruskal;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod label_propagation;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod louvain;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod pagerank;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod prim;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod random_walk;
-pub(crate) mod reorder_sort;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod shortest_path_dijkstra;
-pub(crate) mod strongly_connected_components;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod top_sort;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod triangles;
-#[cfg(feature = "graph-algo")]
-pub(crate) mod yen;
+pub(crate) mod algos;
+pub(crate) mod utilities;
 
-pub struct AlgoPayload<'a, 'b> {
-    pub(crate) manifest: &'a MagicAlgoApply,
+pub struct FixedRulePayload<'a, 'b> {
+    pub(crate) manifest: &'a MagicFixedRuleApply,
     pub(crate) stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     pub(crate) tx: &'a SessionTx<'b>,
 }
 
 #[derive(Copy, Clone)]
-pub struct AlgoInputRelation<'a, 'b> {
-    arg_manifest: &'a MagicAlgoRuleArg,
+pub struct FixedRuleInputRelation<'a, 'b> {
+    arg_manifest: &'a MagicFixedRuleRuleArg,
     stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     tx: &'a SessionTx<'b>,
 }
 
-impl<'a, 'b> AlgoInputRelation<'a, 'b> {
+impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
     pub fn arity(&self) -> Result<usize> {
         self.arg_manifest.arity(self.tx, self.stores)
     }
@@ -133,10 +102,34 @@ impl<'a, 'b> AlgoInputRelation<'a, 'b> {
         self.arg_manifest.get_binding_map(offset)
     }
     pub fn iter(&self) -> Result<TupleIter<'a>> {
-        self.arg_manifest.iter(self.tx, self.stores)
+        Ok(match &self.arg_manifest {
+            MagicFixedRuleRuleArg::InMem { name, .. } => {
+                let store = self.stores.get(name).ok_or_else(|| {
+                    RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
+                })?;
+                Box::new(store.all_iter().map(|t| Ok(t.into_tuple())))
+            }
+            MagicFixedRuleRuleArg::Stored { name, .. } => {
+                let relation = self.tx.get_relation(name, false)?;
+                Box::new(relation.scan_all(self.tx))
+            }
+        })
     }
     pub fn prefix_iter(&self, prefix: &DataValue) -> Result<TupleIter<'_>> {
-        self.arg_manifest.prefix_iter(prefix, self.tx, self.stores)
+        Ok(match self.arg_manifest {
+            MagicFixedRuleRuleArg::InMem { name, .. } => {
+                let store = self.stores.get(name).ok_or_else(|| {
+                    RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
+                })?;
+                let t = vec![prefix.clone()];
+                Box::new(store.prefix_iter(&t).map(|t| Ok(t.into_tuple())))
+            }
+            MagicFixedRuleRuleArg::Stored { name, .. } => {
+                let relation = self.tx.get_relation(name, false)?;
+                let t = vec![prefix.clone()];
+                Box::new(relation.scan_prefix(self.tx, &t))
+            }
+        })
     }
     pub fn span(&self) -> SourceSpan {
         self.arg_manifest.span()
@@ -145,8 +138,38 @@ impl<'a, 'b> AlgoInputRelation<'a, 'b> {
         &self,
         undirected: bool,
     ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
-        self.arg_manifest
-            .convert_edge_to_graph(undirected, self.tx, self.stores)
+        let mut graph: Vec<Vec<usize>> = vec![];
+        let mut indices: Vec<DataValue> = vec![];
+        let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
+
+        for tuple in self.iter()? {
+            let mut tuple = tuple?.into_iter();
+            let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
+            let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
+            let from_idx = if let Some(idx) = inv_indices.get(&from) {
+                *idx
+            } else {
+                inv_indices.insert(from.clone(), graph.len());
+                indices.push(from.clone());
+                graph.push(vec![]);
+                graph.len() - 1
+            };
+            let to_idx = if let Some(idx) = inv_indices.get(&to) {
+                *idx
+            } else {
+                inv_indices.insert(to.clone(), graph.len());
+                indices.push(to.clone());
+                graph.push(vec![]);
+                graph.len() - 1
+            };
+            let from_target = graph.get_mut(from_idx).unwrap();
+            from_target.push(to_idx);
+            if undirected {
+                let to_target = graph.get_mut(to_idx).unwrap();
+                to_target.push(from_idx);
+            }
+        }
+        Ok((graph, indices, inv_indices))
     }
     pub fn convert_edge_to_weighted_graph(
         &self,
@@ -158,26 +181,95 @@ impl<'a, 'b> AlgoInputRelation<'a, 'b> {
         BTreeMap<DataValue, usize>,
         bool,
     )> {
-        self.arg_manifest.convert_edge_to_weighted_graph(
-            undirected,
-            allow_negative_edges,
-            self.tx,
-            self.stores,
-        )
+        let mut graph: Vec<Vec<(usize, f64)>> = vec![];
+        let mut indices: Vec<DataValue> = vec![];
+        let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
+        let mut has_neg_edge = false;
+
+        for tuple in self.iter()? {
+            let mut tuple = tuple?.into_iter();
+            let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
+            let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
+            let weight = match tuple.next() {
+                None => 1.0,
+                Some(d) => match d.get_float() {
+                    Some(f) => {
+                        ensure!(
+                            f.is_finite(),
+                            BadEdgeWeightError(
+                                d,
+                                self.arg_manifest
+                                    .bindings()
+                                    .get(2)
+                                    .map(|s| s.span)
+                                    .unwrap_or_else(|| self.span())
+                            )
+                        );
+                        if f < 0. {
+                            if !allow_negative_edges {
+                                bail!(BadEdgeWeightError(
+                                    d,
+                                    self.arg_manifest
+                                        .bindings()
+                                        .get(2)
+                                        .map(|s| s.span)
+                                        .unwrap_or_else(|| self.span())
+                                ));
+                            }
+                            has_neg_edge = true;
+                        }
+                        f
+                    }
+                    None => {
+                        bail!(BadEdgeWeightError(
+                            d,
+                            self.arg_manifest
+                                .bindings()
+                                .get(2)
+                                .map(|s| s.span)
+                                .unwrap_or_else(|| self.span())
+                        ))
+                    }
+                },
+            };
+            let from_idx = if let Some(idx) = inv_indices.get(&from) {
+                *idx
+            } else {
+                inv_indices.insert(from.clone(), graph.len());
+                indices.push(from.clone());
+                graph.push(vec![]);
+                graph.len() - 1
+            };
+            let to_idx = if let Some(idx) = inv_indices.get(&to) {
+                *idx
+            } else {
+                inv_indices.insert(to.clone(), graph.len());
+                indices.push(to.clone());
+                graph.push(vec![]);
+                graph.len() - 1
+            };
+            let from_target = graph.get_mut(from_idx).unwrap();
+            from_target.push((to_idx, weight));
+            if undirected {
+                let to_target = graph.get_mut(to_idx).unwrap();
+                to_target.push((from_idx, weight));
+            }
+        }
+        Ok((graph, indices, inv_indices, has_neg_edge))
     }
 }
 
-impl<'a, 'b> AlgoPayload<'a, 'b> {
-    pub fn get_input(&self, idx: usize) -> Result<AlgoInputRelation<'a, 'b>> {
+impl<'a, 'b> FixedRulePayload<'a, 'b> {
+    pub fn get_input(&self, idx: usize) -> Result<FixedRuleInputRelation<'a, 'b>> {
         let arg_manifest = self.manifest.relation(idx)?;
-        Ok(AlgoInputRelation {
+        Ok(FixedRuleInputRelation {
             arg_manifest,
             stores: self.stores,
             tx: self.tx,
         })
     }
     pub fn name(&self) -> &str {
-        &self.manifest.algo.name
+        &self.manifest.fixed_handle.name
     }
     pub fn span(&self) -> SourceSpan {
         self.manifest.span
@@ -187,10 +279,10 @@ impl<'a, 'b> AlgoPayload<'a, 'b> {
             Some(ex) => Ok(ex.clone()),
             None => match default {
                 Some(ex) => Ok(ex),
-                None => Err(AlgoOptionNotFoundError {
+                None => Err(FixedRuleOptionNotFoundError {
                     name: name.to_string(),
                     span: self.manifest.span,
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                 }
                 .into()),
             },
@@ -205,19 +297,19 @@ impl<'a, 'b> AlgoPayload<'a, 'b> {
         match self.manifest.options.get(name) {
             Some(ex) => match ex.clone().eval_to_const()? {
                 DataValue::Str(s) => Ok(s),
-                _ => Err(WrongAlgoOptionError {
+                _ => Err(WrongFixedRuleOptionError {
                     name: name.to_string(),
                     span: ex.span(),
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                     help: "a string is required".to_string(),
                 }
                 .into()),
             },
             None => match default {
-                None => Err(AlgoOptionNotFoundError {
+                None => Err(FixedRuleOptionNotFoundError {
                     name: name.to_string(),
                     span: self.manifest.span,
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                 }
                 .into()),
                 Some(s) => Ok(SmartString::from(s)),
@@ -232,36 +324,36 @@ impl<'a, 'b> AlgoPayload<'a, 'b> {
                     Some(i) => {
                         ensure!(
                             i > 0,
-                            WrongAlgoOptionError {
+                            WrongFixedRuleOptionError {
                                 name: name.to_string(),
                                 span: v.span(),
-                                algo_name: self.manifest.algo.name.to_string(),
+                                rule_name: self.manifest.fixed_handle.name.to_string(),
                                 help: "a positive integer is required".to_string(),
                             }
                         );
                         Ok(i as usize)
                     }
-                    None => Err(AlgoOptionNotFoundError {
+                    None => Err(FixedRuleOptionNotFoundError {
                         name: name.to_string(),
                         span: self.span(),
-                        algo_name: self.manifest.algo.name.to_string(),
+                        rule_name: self.manifest.fixed_handle.name.to_string(),
                     }
                     .into()),
                 },
-                _ => Err(WrongAlgoOptionError {
+                _ => Err(WrongFixedRuleOptionError {
                     name: name.to_string(),
                     span: v.span(),
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                     help: "a positive integer is required".to_string(),
                 }
                 .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
-                None => Err(AlgoOptionNotFoundError {
+                None => Err(FixedRuleOptionNotFoundError {
                     name: name.to_string(),
                     span: self.manifest.span,
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                 }
                 .into()),
             },
@@ -274,36 +366,36 @@ impl<'a, 'b> AlgoPayload<'a, 'b> {
                     Some(i) => {
                         ensure!(
                             i >= 0,
-                            WrongAlgoOptionError {
+                            WrongFixedRuleOptionError {
                                 name: name.to_string(),
                                 span: v.span(),
-                                algo_name: self.manifest.algo.name.to_string(),
+                                rule_name: self.manifest.fixed_handle.name.to_string(),
                                 help: "a non-negative integer is required".to_string(),
                             }
                         );
                         Ok(i as usize)
                     }
-                    None => Err(AlgoOptionNotFoundError {
+                    None => Err(FixedRuleOptionNotFoundError {
                         name: name.to_string(),
                         span: self.manifest.span,
-                        algo_name: self.manifest.algo.name.to_string(),
+                        rule_name: self.manifest.fixed_handle.name.to_string(),
                     }
                     .into()),
                 },
-                _ => Err(WrongAlgoOptionError {
+                _ => Err(WrongFixedRuleOptionError {
                     name: name.to_string(),
                     span: v.span(),
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                     help: "a non-negative integer is required".to_string(),
                 }
                 .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
-                None => Err(AlgoOptionNotFoundError {
+                None => Err(FixedRuleOptionNotFoundError {
                     name: name.to_string(),
                     span: self.manifest.span,
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                 }
                 .into()),
             },
@@ -316,29 +408,29 @@ impl<'a, 'b> AlgoPayload<'a, 'b> {
                     let f = n.get_float();
                     ensure!(
                         (0. ..=1.).contains(&f),
-                        WrongAlgoOptionError {
+                        WrongFixedRuleOptionError {
                             name: name.to_string(),
                             span: v.span(),
-                            algo_name: self.manifest.algo.name.to_string(),
+                            rule_name: self.manifest.fixed_handle.name.to_string(),
                             help: "a number between 0. and 1. is required".to_string(),
                         }
                     );
                     Ok(f)
                 }
-                _ => Err(WrongAlgoOptionError {
+                _ => Err(WrongFixedRuleOptionError {
                     name: name.to_string(),
                     span: v.span(),
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                     help: "a number between 0. and 1. is required".to_string(),
                 }
                 .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
-                None => Err(AlgoOptionNotFoundError {
+                None => Err(FixedRuleOptionNotFoundError {
                     name: name.to_string(),
                     span: self.manifest.span,
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                 }
                 .into()),
             },
@@ -348,20 +440,20 @@ impl<'a, 'b> AlgoPayload<'a, 'b> {
         match self.manifest.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {
                 Ok(DataValue::Bool(b)) => Ok(b),
-                _ => Err(WrongAlgoOptionError {
+                _ => Err(WrongFixedRuleOptionError {
                     name: name.to_string(),
                     span: v.span(),
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                     help: "a boolean value is required".to_string(),
                 }
                 .into()),
             },
             None => match default {
                 Some(v) => Ok(v),
-                None => Err(AlgoOptionNotFoundError {
+                None => Err(FixedRuleOptionNotFoundError {
                     name: name.to_string(),
                     span: self.manifest.span,
-                    algo_name: self.manifest.algo.name.to_string(),
+                    rule_name: self.manifest.fixed_handle.name.to_string(),
                 }
                 .into()),
             },
@@ -370,7 +462,7 @@ impl<'a, 'b> AlgoPayload<'a, 'b> {
 }
 
 /// Trait for an implementation of an algorithm or a utility
-pub trait AlgoImpl: Send + Sync {
+pub trait FixedRule: Send + Sync {
     /// Called to initialize the options given.
     /// Will always be called once, before anything else.
     /// You can mutate the options if you need to.
@@ -395,7 +487,7 @@ pub trait AlgoImpl: Send + Sync {
     /// for user-initiated termination.
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &'_ mut RegularTempStore,
         poison: Poison,
     ) -> Result<()>;
@@ -411,141 +503,141 @@ pub(crate) struct CannotDetermineArity(
 );
 
 #[derive(Clone, Debug)]
-pub(crate) struct AlgoHandle {
+pub(crate) struct FixedRuleHandle {
     pub(crate) name: Symbol,
 }
 
 lazy_static! {
-    pub(crate) static ref DEFAULT_ALGOS: Arc<BTreeMap<String, Arc<Box<dyn AlgoImpl>>>> = {
+    pub(crate) static ref DEFAULT_FIXED_RULES: Arc<BTreeMap<String, Arc<Box<dyn FixedRule>>>> = {
         Arc::new(BTreeMap::from([
             #[cfg(feature = "graph-algo")]
             (
                 "ClusteringCoefficients".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ClusteringCoefficients)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(ClusteringCoefficients)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "DegreeCentrality".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(DegreeCentrality)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(DegreeCentrality)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "ClosenessCentrality".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ClosenessCentrality)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(ClosenessCentrality)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "BetweennessCentrality".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(BetweennessCentrality)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(BetweennessCentrality)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "DepthFirstSearch".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Dfs)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(Dfs)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "DFS".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Dfs)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(Dfs)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "BreadthFirstSearch".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Bfs)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(Bfs)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "BFS".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Bfs)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(Bfs)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "ShortestPathDijkstra".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ShortestPathDijkstra)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(ShortestPathDijkstra)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "ShortestPathAStar".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ShortestPathAStar)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(ShortestPathAStar)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "KShortestPathYen".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(KShortestPathYen)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(KShortestPathYen)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "MinimumSpanningTreePrim".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(MinimumSpanningTreePrim)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(MinimumSpanningTreePrim)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "MinimumSpanningForestKruskal".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(MinimumSpanningForestKruskal)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(MinimumSpanningForestKruskal)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "TopSort".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(TopSort)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(TopSort)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "ConnectedComponents".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(StronglyConnectedComponent::new(false))),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(StronglyConnectedComponent::new(false))),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "StronglyConnectedComponents".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(StronglyConnectedComponent::new(true))),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(StronglyConnectedComponent::new(true))),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "SCC".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(StronglyConnectedComponent::new(true))),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(StronglyConnectedComponent::new(true))),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "PageRank".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(PageRank)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(PageRank)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "CommunityDetectionLouvain".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(CommunityDetectionLouvain)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(CommunityDetectionLouvain)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "LabelPropagation".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(LabelPropagation)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(LabelPropagation)),
             ),
             #[cfg(feature = "graph-algo")]
             (
                 "RandomWalk".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(RandomWalk)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(RandomWalk)),
             ),
             (
                 "ReorderSort".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ReorderSort)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(ReorderSort)),
             ),
             (
                 "JsonReader".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(JsonReader)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(JsonReader)),
             ),
             (
                 "CsvReader".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(CsvReader)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(CsvReader)),
             ),
             (
                 "Constant".to_string(),
-                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Constant)),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(Constant)),
             ),
         ]))
     };
 }
 
-impl AlgoHandle {
+impl FixedRuleHandle {
     pub(crate) fn new(name: &str, span: SourceSpan) -> Self {
-        AlgoHandle {
+        FixedRuleHandle {
             name: Symbol::new(name, span),
         }
     }
@@ -602,190 +694,26 @@ pub(crate) struct BadExprValueError(
 );
 
 #[derive(Error, Diagnostic, Debug)]
-#[error("The requested algorithm '{0}' is not found")]
-#[diagnostic(code(parser::algo_not_found))]
-pub(crate) struct AlgoNotFoundError(pub(crate) String, #[label] pub(crate) SourceSpan);
+#[error("The requested fixed rule '{0}' is not found")]
+#[diagnostic(code(parser::fixed_rule_not_found))]
+pub(crate) struct FixedRuleNotFoundError(pub(crate) String, #[label] pub(crate) SourceSpan);
 
-impl MagicAlgoRuleArg {
-    #[allow(dead_code)]
-    pub(crate) fn convert_edge_to_weighted_graph<'a>(
-        &'a self,
-        undirected: bool,
-        allow_negative_edges: bool,
-        tx: &'a SessionTx<'_>,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-    ) -> Result<(
-        Vec<Vec<(usize, f64)>>,
-        Vec<DataValue>,
-        BTreeMap<DataValue, usize>,
-        bool,
-    )> {
-        let mut graph: Vec<Vec<(usize, f64)>> = vec![];
-        let mut indices: Vec<DataValue> = vec![];
-        let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
-        let mut has_neg_edge = false;
-
-        for tuple in self.iter(tx, stores)? {
-            let mut tuple = tuple?.into_iter();
-            let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
-            let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
-            let weight = match tuple.next() {
-                None => 1.0,
-                Some(d) => match d.get_float() {
-                    Some(f) => {
-                        ensure!(
-                            f.is_finite(),
-                            BadEdgeWeightError(
-                                d,
-                                self.bindings()
-                                    .get(2)
-                                    .map(|s| s.span)
-                                    .unwrap_or_else(|| self.span())
-                            )
-                        );
-                        if f < 0. {
-                            if !allow_negative_edges {
-                                bail!(BadEdgeWeightError(
-                                    d,
-                                    self.bindings()
-                                        .get(2)
-                                        .map(|s| s.span)
-                                        .unwrap_or_else(|| self.span())
-                                ));
-                            }
-                            has_neg_edge = true;
-                        }
-                        f
-                    }
-                    None => {
-                        bail!(BadEdgeWeightError(
-                            d,
-                            self.bindings()
-                                .get(2)
-                                .map(|s| s.span)
-                                .unwrap_or_else(|| self.span())
-                        ))
-                    }
-                },
-            };
-            let from_idx = if let Some(idx) = inv_indices.get(&from) {
-                *idx
-            } else {
-                inv_indices.insert(from.clone(), graph.len());
-                indices.push(from.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let to_idx = if let Some(idx) = inv_indices.get(&to) {
-                *idx
-            } else {
-                inv_indices.insert(to.clone(), graph.len());
-                indices.push(to.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let from_target = graph.get_mut(from_idx).unwrap();
-            from_target.push((to_idx, weight));
-            if undirected {
-                let to_target = graph.get_mut(to_idx).unwrap();
-                to_target.push((from_idx, weight));
-            }
-        }
-        Ok((graph, indices, inv_indices, has_neg_edge))
-    }
-    pub(crate) fn convert_edge_to_graph<'a>(
-        &'a self,
-        undirected: bool,
-        tx: &'a SessionTx<'_>,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-    ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
-        let mut graph: Vec<Vec<usize>> = vec![];
-        let mut indices: Vec<DataValue> = vec![];
-        let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
-
-        for tuple in self.iter(tx, stores)? {
-            let mut tuple = tuple?.into_iter();
-            let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
-            let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
-            let from_idx = if let Some(idx) = inv_indices.get(&from) {
-                *idx
-            } else {
-                inv_indices.insert(from.clone(), graph.len());
-                indices.push(from.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let to_idx = if let Some(idx) = inv_indices.get(&to) {
-                *idx
-            } else {
-                inv_indices.insert(to.clone(), graph.len());
-                indices.push(to.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let from_target = graph.get_mut(from_idx).unwrap();
-            from_target.push(to_idx);
-            if undirected {
-                let to_target = graph.get_mut(to_idx).unwrap();
-                to_target.push(from_idx);
-            }
-        }
-        Ok((graph, indices, inv_indices))
-    }
-    pub(crate) fn prefix_iter<'a>(
-        &'a self,
-        prefix: &DataValue,
-        tx: &'a SessionTx<'_>,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-    ) -> Result<TupleIter<'a>> {
-        Ok(match self {
-            MagicAlgoRuleArg::InMem { name, .. } => {
-                let store = stores.get(name).ok_or_else(|| {
-                    RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
-                })?;
-                let t = vec![prefix.clone()];
-                Box::new(store.prefix_iter(&t).map(|t| Ok(t.into_tuple())))
-            }
-            MagicAlgoRuleArg::Stored { name, .. } => {
-                let relation = tx.get_relation(name, false)?;
-                let t = vec![prefix.clone()];
-                Box::new(relation.scan_prefix(tx, &t))
-            }
-        })
-    }
+impl MagicFixedRuleRuleArg {
     pub(crate) fn arity(
         &self,
         tx: &SessionTx<'_>,
         stores: &BTreeMap<MagicSymbol, EpochStore>,
     ) -> Result<usize> {
         Ok(match self {
-            MagicAlgoRuleArg::InMem { name, .. } => {
+            MagicFixedRuleRuleArg::InMem { name, .. } => {
                 let store = stores.get(name).ok_or_else(|| {
                     RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
                 })?;
                 store.arity
             }
-            MagicAlgoRuleArg::Stored { name, .. } => {
+            MagicFixedRuleRuleArg::Stored { name, .. } => {
                 let handle = tx.get_relation(name, false)?;
                 handle.arity()
-            }
-        })
-    }
-    pub(crate) fn iter<'a>(
-        &'a self,
-        tx: &'a SessionTx<'_>,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-    ) -> Result<TupleIter<'a>> {
-        Ok(match self {
-            MagicAlgoRuleArg::InMem { name, .. } => {
-                let store = stores.get(name).ok_or_else(|| {
-                    RuleNotFoundError(name.symbol().to_string(), name.symbol().span)
-                })?;
-                Box::new(store.all_iter().map(|t| Ok(t.into_tuple())))
-            }
-            MagicAlgoRuleArg::Stored { name, .. } => {
-                let relation = tx.get_relation(name, false)?;
-                Box::new(relation.scan_all(tx))
             }
         })
     }

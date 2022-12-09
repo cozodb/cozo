@@ -21,7 +21,7 @@ use crate::data::value::DataValue;
 use crate::parse::query::parse_query;
 use crate::parse::schema::parse_nullable_type;
 use crate::parse::sys::{parse_sys, SysOp};
-use crate::AlgoImpl;
+use crate::FixedRule;
 
 pub(crate) mod expr;
 pub(crate) mod query;
@@ -106,7 +106,7 @@ pub(crate) fn parse_type(src: &str) -> Result<NullableColType> {
 pub(crate) fn parse_script(
     src: &str,
     param_pool: &BTreeMap<String, DataValue>,
-    algorithms: &BTreeMap<String, Arc<Box<dyn AlgoImpl>>>,
+    algorithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
 ) -> Result<CozoScript> {
     let parsed = CozoScriptParser::parse(Rule::script, src)
         .map_err(|err| {

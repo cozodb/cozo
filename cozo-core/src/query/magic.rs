@@ -15,9 +15,9 @@ use smallvec::SmallVec;
 use smartstring::SmartString;
 
 use crate::data::program::{
-    AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicInlineRule, MagicProgram,
-    MagicRelationApplyAtom, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol,
-    NormalFormAlgoOrRules, NormalFormAtom, NormalFormInlineRule, NormalFormProgram,
+    FixedRuleArg, MagicFixedRuleApply, MagicFixedRuleRuleArg, MagicAtom, MagicInlineRule, MagicProgram,
+    MagicRelationApplyAtom, MagicRuleApplyAtom, MagicRulesOrFixed, MagicSymbol,
+    NormalFormRulesOrFixed, NormalFormAtom, NormalFormInlineRule, NormalFormProgram,
     StratifiedMagicProgram, StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -29,7 +29,7 @@ impl NormalFormProgram {
     pub(crate) fn exempt_aggr_rules_for_magic_sets(&self, exempt_rules: &mut BTreeSet<Symbol>) {
         for (name, rule_set) in self.prog.iter() {
             match rule_set {
-                NormalFormAlgoOrRules::Rules { rules: rule_set } => {
+                NormalFormRulesOrFixed::Rules { rules: rule_set } => {
                     'outer: for rule in rule_set.iter() {
                         for aggr in rule.aggr.iter() {
                             if aggr.is_some() {
@@ -39,7 +39,7 @@ impl NormalFormProgram {
                         }
                     }
                 }
-                NormalFormAlgoOrRules::Algo { algo: _ } => {}
+                NormalFormRulesOrFixed::Fixed { fixed: _ } => {}
             }
         }
     }
@@ -67,13 +67,13 @@ impl MagicProgram {
         };
         for (rule_head, ruleset) in self.prog {
             match ruleset {
-                MagicRulesOrAlgo::Rules { rules: ruleset } => {
+                MagicRulesOrFixed::Rules { rules: ruleset } => {
                     magic_rewrite_ruleset(rule_head, ruleset, &mut ret_prog);
                 }
-                MagicRulesOrAlgo::Algo { algo: algo_apply } => {
+                MagicRulesOrFixed::Fixed { fixed } => {
                     ret_prog
                         .prog
-                        .insert(rule_head, MagicRulesOrAlgo::Algo { algo: algo_apply });
+                        .insert(rule_head, MagicRulesOrFixed::Fixed { fixed });
                 }
             }
         }
@@ -138,7 +138,7 @@ fn magic_rewrite_ruleset(
 
             ret_prog.prog.insert(
                 sup_kw.clone(),
-                MagicRulesOrAlgo::Rules {
+                MagicRulesOrFixed::Rules {
                     rules: vec![MagicInlineRule {
                         head: sup_args.clone(),
                         aggr: sup_aggr,
@@ -257,7 +257,7 @@ impl NormalFormProgram {
         let mut downstream_rules: BTreeSet<Symbol> = Default::default();
         for rules in self.prog.values() {
             match rules {
-                NormalFormAlgoOrRules::Rules { rules } => {
+                NormalFormRulesOrFixed::Rules { rules } => {
                     for rule in rules {
                         for atom in rule.body.iter() {
                             match atom {
@@ -272,9 +272,9 @@ impl NormalFormProgram {
                         }
                     }
                 }
-                NormalFormAlgoOrRules::Algo { algo } => {
-                    for rel in algo.rule_args.iter() {
-                        if let AlgoRuleArg::InMem { name, .. } = rel {
+                NormalFormRulesOrFixed::Fixed { fixed } => {
+                    for rel in fixed.rule_args.iter() {
+                        if let FixedRuleArg::InMem { name, .. } = rel {
                             downstream_rules.insert(name.clone());
                         }
                     }
@@ -302,42 +302,42 @@ impl NormalFormProgram {
                 continue;
             }
             match rules {
-                NormalFormAlgoOrRules::Algo { algo: algo_apply } => {
+                NormalFormRulesOrFixed::Fixed { fixed } => {
                     adorned_prog.prog.insert(
                         MagicSymbol::Muggle {
                             inner: rule_name.clone(),
                         },
-                        MagicRulesOrAlgo::Algo {
-                            algo: MagicAlgoApply {
-                                span: algo_apply.span,
-                                algo: algo_apply.algo.clone(),
-                                algo_impl: algo_apply.algo_impl.clone(),
-                                rule_args: algo_apply
+                        MagicRulesOrFixed::Fixed {
+                            fixed: MagicFixedRuleApply {
+                                span: fixed.span,
+                                fixed_handle: fixed.fixed_handle.clone(),
+                                fixed_impl: fixed.fixed_impl.clone(),
+                                rule_args: fixed
                                     .rule_args
                                     .iter()
-                                    .map(|r| -> Result<MagicAlgoRuleArg> {
+                                    .map(|r| -> Result<MagicFixedRuleRuleArg> {
                                         Ok(match r {
-                                            AlgoRuleArg::InMem {
+                                            FixedRuleArg::InMem {
                                                 name,
                                                 bindings,
                                                 span,
-                                            } => MagicAlgoRuleArg::InMem {
+                                            } => MagicFixedRuleRuleArg::InMem {
                                                 name: MagicSymbol::Muggle {
                                                     inner: name.clone(),
                                                 },
                                                 bindings: bindings.clone(),
                                                 span: *span,
                                             },
-                                            AlgoRuleArg::Stored {
+                                            FixedRuleArg::Stored {
                                                 name,
                                                 bindings,
                                                 span,
-                                            } => MagicAlgoRuleArg::Stored {
+                                            } => MagicFixedRuleRuleArg::Stored {
                                                 name: name.clone(),
                                                 bindings: bindings.clone(),
                                                 span: *span,
                                             },
-                                            AlgoRuleArg::NamedStored {
+                                            FixedRuleArg::NamedStored {
                                                 name,
                                                 bindings,
                                                 span,
@@ -374,7 +374,7 @@ impl NormalFormProgram {
                                                         Some(k) => k.clone(),
                                                     })
                                                     .collect_vec();
-                                                MagicAlgoRuleArg::Stored {
+                                                MagicFixedRuleRuleArg::Stored {
                                                     name: name.clone(),
                                                     bindings: new_bindings,
                                                     span: *span,
@@ -383,13 +383,13 @@ impl NormalFormProgram {
                                         })
                                     })
                                     .try_collect()?,
-                                options: algo_apply.options.clone(),
-                                arity: algo_apply.arity,
+                                options: fixed.options.clone(),
+                                arity: fixed.arity,
                             },
                         },
                     );
                 }
-                NormalFormAlgoOrRules::Rules { rules } => {
+                NormalFormRulesOrFixed::Rules { rules } => {
                     let mut adorned_rules = Vec::with_capacity(rules.len());
                     for rule in rules {
                         let adorned_rule = rule.adorn(
@@ -403,7 +403,7 @@ impl NormalFormProgram {
                         MagicSymbol::Muggle {
                             inner: rule_name.clone(),
                         },
-                        MagicRulesOrAlgo::Rules {
+                        MagicRulesOrFixed::Rules {
                             rules: adorned_rules,
                         },
                     );
@@ -436,7 +436,7 @@ impl NormalFormProgram {
             }
             adorned_prog.prog.insert(
                 head,
-                MagicRulesOrAlgo::Rules {
+                MagicRulesOrFixed::Rules {
                     rules: adorned_rules,
                 },
             );

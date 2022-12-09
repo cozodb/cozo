@@ -14,7 +14,7 @@ use miette::{ensure, Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::program::{
-    AlgoRuleArg, MagicSymbol, NormalFormAlgoOrRules, NormalFormAtom, NormalFormProgram,
+    FixedRuleArg, MagicSymbol, NormalFormRulesOrFixed, NormalFormAtom, NormalFormProgram,
     StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -43,7 +43,7 @@ fn convert_normal_form_program_to_graph(
         .prog
         .iter()
         .filter_map(|(k, ruleset)| match ruleset {
-            NormalFormAlgoOrRules::Rules { rules: ruleset } => {
+            NormalFormRulesOrFixed::Rules { rules: ruleset } => {
                 let has_aggr = ruleset
                     .iter()
                     .any(|rule| rule.aggr.iter().any(|a| a.is_some()));
@@ -60,22 +60,22 @@ fn convert_normal_form_program_to_graph(
                     None
                 }
             }
-            NormalFormAlgoOrRules::Algo { algo: _ } => None,
+            NormalFormRulesOrFixed::Fixed { fixed: _ } => None,
         })
         .collect();
-    let algo_rules: BTreeSet<_> = nf_prog
+    let fixed_rules: BTreeSet<_> = nf_prog
         .prog
         .iter()
         .filter_map(|(k, ruleset)| match ruleset {
-            NormalFormAlgoOrRules::Rules { rules: _ } => None,
-            NormalFormAlgoOrRules::Algo { algo: _ } => Some(k),
+            NormalFormRulesOrFixed::Rules { rules: _ } => None,
+            NormalFormRulesOrFixed::Fixed { fixed: _ } => Some(k),
         })
         .collect();
     nf_prog
         .prog
         .iter()
         .map(|(k, ruleset)| match ruleset {
-            NormalFormAlgoOrRules::Rules { rules: ruleset } => {
+            NormalFormRulesOrFixed::Rules { rules: ruleset } => {
                 let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
                 let has_aggr = ruleset
                     .iter()
@@ -93,18 +93,18 @@ fn convert_normal_form_program_to_graph(
                         for (found_key, is_negated) in contained {
                             let found_key_is_meet =
                                 meet_rules.contains(found_key) && found_key != k;
-                            let found_key_is_algo = algo_rules.contains(found_key);
+                            let found_key_is_fixed_rule = fixed_rules.contains(found_key);
                             match ret.entry(found_key) {
                                 Entry::Vacant(e) => {
                                     if has_aggr {
                                         if is_meet && k == found_key {
-                                            e.insert(found_key_is_algo || is_negated);
+                                            e.insert(found_key_is_fixed_rule || is_negated);
                                         } else {
                                             e.insert(true);
                                         }
                                     } else {
                                         e.insert(
-                                            found_key_is_algo || found_key_is_meet || is_negated,
+                                            found_key_is_fixed_rule || found_key_is_meet || is_negated,
                                         );
                                     }
                                 }
@@ -112,12 +112,12 @@ fn convert_normal_form_program_to_graph(
                                     let old = *e.get();
                                     let new_val = if has_aggr {
                                         if is_meet && k == found_key {
-                                            found_key_is_algo || found_key_is_meet || is_negated
+                                            found_key_is_fixed_rule || found_key_is_meet || is_negated
                                         } else {
                                             true
                                         }
                                     } else {
-                                        found_key_is_algo || found_key_is_meet || is_negated
+                                        found_key_is_fixed_rule || found_key_is_meet || is_negated
                                     };
                                     e.insert(old || new_val);
                                 }
@@ -127,14 +127,14 @@ fn convert_normal_form_program_to_graph(
                 }
                 (k, ret)
             }
-            NormalFormAlgoOrRules::Algo { algo } => {
+            NormalFormRulesOrFixed::Fixed { fixed } => {
                 let mut ret: BTreeMap<&Symbol, bool> = BTreeMap::default();
-                for rel in &algo.rule_args {
+                for rel in &fixed.rule_args {
                     match rel {
-                        AlgoRuleArg::InMem { name, .. } => {
+                        FixedRuleArg::InMem { name, .. } => {
                             ret.insert(name, true);
                         }
-                        AlgoRuleArg::Stored { .. } | AlgoRuleArg::NamedStored { .. } => {}
+                        FixedRuleArg::Stored { .. } | FixedRuleArg::NamedStored { .. } => {}
                     }
                 }
                 (k, ret)

@@ -20,7 +20,7 @@ use minreq::Response;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::{AlgoImpl, AlgoPayload, CannotDetermineArity};
+use crate::fixed_rule::{FixedRule, FixedRulePayload, CannotDetermineArity};
 use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
 use crate::data::symb::Symbol;
@@ -31,10 +31,10 @@ use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct JsonReader;
 
-impl AlgoImpl for JsonReader {
+impl FixedRule for JsonReader {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         _poison: Poison,
     ) -> Result<()> {

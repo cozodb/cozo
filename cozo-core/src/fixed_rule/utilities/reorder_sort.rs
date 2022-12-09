@@ -12,22 +12,22 @@ use itertools::Itertools;
 use miette::{bail, Result};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, AlgoPayload, CannotDetermineArity};
 use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
-use crate::data::program::WrongAlgoOptionError;
+use crate::data::program::WrongFixedRuleOptionError;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload, CannotDetermineArity};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct ReorderSort;
 
-impl AlgoImpl for ReorderSort {
+impl FixedRule for ReorderSort {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
@@ -46,10 +46,10 @@ impl AlgoImpl for ReorderSort {
                 .collect_vec(),
             Expr::Apply { op, args, .. } if *op == OP_LIST => args.to_vec(),
             _ => {
-                bail!(WrongAlgoOptionError {
+                bail!(WrongFixedRuleOptionError {
                     name: "out".to_string(),
                     span: payload.span(),
-                    algo_name: payload.name().to_string(),
+                    rule_name: payload.name().to_string(),
                     help: "This option must evaluate to a list".to_string()
                 })
             }

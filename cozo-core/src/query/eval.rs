@@ -13,7 +13,7 @@ use itertools::Itertools;
 use log::{debug, trace};
 use miette::Result;
 
-use crate::algo::AlgoPayload;
+use crate::fixed_rule::FixedRulePayload;
 use crate::data::aggr::Aggregation;
 use crate::data::program::{MagicSymbol, NoEntryError};
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -152,15 +152,15 @@ impl<'a> SessionTx<'a> {
                                 new.wrap()
                             }
                         },
-                        CompiledRuleSet::Algo(algo_apply) => {
-                            let algo_impl = algo_apply.algo_impl.as_ref();
+                        CompiledRuleSet::Fixed(fixed) => {
+                            let fixed_impl = fixed.fixed_impl.as_ref();
                             let mut out = RegularTempStore::default();
-                            let payload = AlgoPayload {
-                                manifest: algo_apply,
+                            let payload = FixedRulePayload {
+                                manifest: fixed,
                                 stores,
                                 tx: self,
                             };
-                            algo_impl.run(payload, &mut out, poison.clone())?;
+                            fixed_impl.run(payload, &mut out, poison.clone())?;
                             out.wrap()
                         }
                     };
@@ -199,7 +199,7 @@ impl<'a> SessionTx<'a> {
                             }
                         }
 
-                        CompiledRuleSet::Algo(_) => {
+                        CompiledRuleSet::Fixed(_) => {
                             // no need to do anything, algos are only calculated once
                             RegularTempStore::default().wrap()
                         }

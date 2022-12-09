@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{
-    MagicAlgoApply, MagicAtom, MagicInlineRule, MagicRulesOrAlgo, MagicSymbol,
+    MagicFixedRuleApply, MagicAtom, MagicInlineRule, MagicRulesOrFixed, MagicSymbol,
     StratifiedMagicProgram,
 };
 use crate::data::symb::Symbol;
@@ -30,7 +30,7 @@ pub(crate) type CompiledProgram = BTreeMap<MagicSymbol, CompiledRuleSet>;
 #[derive(Debug)]
 pub(crate) enum CompiledRuleSet {
     Rules(Vec<CompiledRule>),
-    Algo(MagicAlgoApply),
+    Fixed(MagicFixedRuleApply),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -44,7 +44,7 @@ impl CompiledRuleSet {
     pub(crate) fn arity(&self) -> usize {
         match self {
             CompiledRuleSet::Rules(rs) => rs[0].aggr.len(),
-            CompiledRuleSet::Algo(algo) => algo.arity,
+            CompiledRuleSet::Fixed(fixed) => fixed.arity,
         }
     }
     pub(crate) fn aggr_kind(&self) -> AggrKind {
@@ -72,7 +72,7 @@ impl CompiledRuleSet {
                     (true, false) => AggrKind::Meet,
                 }
             }
-            CompiledRuleSet::Algo(_) => AggrKind::None,
+            CompiledRuleSet::Fixed(_) => AggrKind::None,
         }
     }
 }
@@ -118,7 +118,7 @@ impl<'a> SessionTx<'a> {
                     .into_iter()
                     .map(|(k, body)| -> Result<(MagicSymbol, CompiledRuleSet)> {
                         match body {
-                            MagicRulesOrAlgo::Rules { rules: body } => {
+                            MagicRulesOrFixed::Rules { rules: body } => {
                                 let mut collected = Vec::with_capacity(body.len());
                                 for rule in body.iter() {
                                     let header = &rule.head;
@@ -139,8 +139,8 @@ impl<'a> SessionTx<'a> {
                                 Ok((k, CompiledRuleSet::Rules(collected)))
                             }
 
-                            MagicRulesOrAlgo::Algo { algo: algo_apply } => {
-                                Ok((k, CompiledRuleSet::Algo(algo_apply)))
+                            MagicRulesOrFixed::Fixed { fixed } => {
+                                Ok((k, CompiledRuleSet::Fixed(fixed)))
                             }
                         }
                     })

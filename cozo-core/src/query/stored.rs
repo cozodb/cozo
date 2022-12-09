@@ -15,14 +15,14 @@ use miette::{bail, Diagnostic, Result, WrapErr};
 use smartstring::SmartString;
 use thiserror::Error;
 
-use crate::algo::constant::Constant;
-use crate::algo::AlgoHandle;
+use crate::fixed_rule::FixedRuleHandle;
 use crate::data::expr::Expr;
-use crate::data::program::{AlgoApply, InputInlineRulesOrAlgo, InputProgram, RelationOp};
+use crate::data::program::{FixedRuleApply, InputInlineRulesOrFixed, InputProgram, RelationOp};
 use crate::data::relation::{ColumnDef, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, ENCODED_KEY_MIN_LEN};
 use crate::data::value::DataValue;
+use crate::fixed_rule::utilities::constant::Constant;
 use crate::parse::parse_script;
 use crate::runtime::relation::{AccessLevel, InputRelationHandle, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
@@ -43,8 +43,6 @@ impl<'a> SessionTx<'a> {
         meta: &InputRelationHandle,
         headers: &[Symbol],
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
-        // TODO
-        let algorithms = BTreeMap::new();
         let mut to_clear = vec![];
         let mut replaced_old_triggers = None;
         if op == RelationOp::Replace {
@@ -60,7 +58,7 @@ impl<'a> SessionTx<'a> {
                     replaced_old_triggers = Some((old_handle.put_triggers, old_handle.rm_triggers))
                 }
                 for trigger in &old_handle.replace_triggers {
-                    let program = parse_script(trigger, &Default::default(), &algorithms)?
+                    let program = parse_script(trigger, &Default::default(), &db.algorithms)?
                         .get_single_program()?;
 
                     let (_, cleanups) = db.run_query(self, program).map_err(|err| {
@@ -437,9 +435,9 @@ fn make_const_rule(
     let bindings_arity = bindings.len();
     program.prog.insert(
         rule_symbol,
-        InputInlineRulesOrAlgo::Algo {
-            algo: AlgoApply {
-                algo: AlgoHandle {
+        InputInlineRulesOrFixed::Fixed {
+            fixed: FixedRuleApply {
+                fixed_handle: FixedRuleHandle {
                     name: Symbol::new("Constant", Default::default()),
                 },
                 rule_args: vec![],
@@ -447,7 +445,7 @@ fn make_const_rule(
                 head: bindings,
                 arity: bindings_arity,
                 span: Default::default(),
-                algo_impl: Arc::new(Box::new(Constant)),
+                fixed_impl: Arc::new(Box::new(Constant)),
             },
         },
     );

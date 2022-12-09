@@ -14,7 +14,7 @@ use rand::distributions::WeightedIndex;
 use rand::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, AlgoPayload, BadExprValueError, NodeNotFoundError};
+use crate::fixed_rule::{FixedRule, FixedRulePayload, BadExprValueError, NodeNotFoundError};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -24,10 +24,10 @@ use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct RandomWalk;
 
-impl AlgoImpl for RandomWalk {
+impl FixedRule for RandomWalk {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {

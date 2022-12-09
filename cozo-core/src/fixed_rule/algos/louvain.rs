@@ -13,7 +13,7 @@ use log::debug;
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, AlgoPayload};
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -23,10 +23,10 @@ use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct CommunityDetectionLouvain;
 
-impl AlgoImpl for CommunityDetectionLouvain {
+impl FixedRule for CommunityDetectionLouvain {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
@@ -255,7 +255,7 @@ fn louvain_step(
 mod tests {
     use itertools::Itertools;
 
-    use crate::algo::louvain::louvain;
+    use crate::fixed_rule::algos::louvain::louvain;
     use crate::runtime::db::Poison;
 
     #[test]

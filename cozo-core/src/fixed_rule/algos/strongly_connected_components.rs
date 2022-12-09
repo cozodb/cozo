@@ -14,9 +14,9 @@ use itertools::Itertools;
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, AlgoPayload};
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicSymbol};
+use crate::data::program::{MagicFixedRuleApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -37,10 +37,10 @@ impl StronglyConnectedComponent {
 }
 
 #[cfg(feature = "graph-algo")]
-impl AlgoImpl for StronglyConnectedComponent {
+impl FixedRule for StronglyConnectedComponent {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {

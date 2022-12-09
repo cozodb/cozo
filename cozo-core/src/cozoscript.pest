@@ -7,8 +7,8 @@
  */
 
 script = _{sys_script | multi_script | query_script}
-query_script = {SOI ~ (option | rule | const_rule | algo_rule)+ ~ EOI}
-query_script_inner = {"{" ~ (option | rule | const_rule | algo_rule)+ ~ "}"}
+query_script = {SOI ~ (option | rule | const_rule | fixed_rule)+ ~ EOI}
+query_script_inner = {"{" ~ (option | rule | const_rule | fixed_rule)+ ~ "}"}
 multi_script = {SOI ~ query_script_inner+ ~ EOI}
 sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op | trigger_relation_op |
                     trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op | access_level_op) ~ EOI}
@@ -48,19 +48,19 @@ compound_ident = @{ident ~ ("." ~ ident)?}
 
 rule = {rule_head ~ ":=" ~ rule_body ~ ";"?}
 const_rule = {rule_head ~ "<-" ~ expr ~ ";"?}
-algo_rule = {rule_head ~ "<~" ~ ident ~ algo_args_list ~ ";"?}
-algo_args_list = {"(" ~ (algo_arg ~ ",")* ~ algo_arg? ~ ")"}
+fixed_rule = {rule_head ~ "<~" ~ ident ~ fixed_args_list ~ ";"?}
+fixed_args_list = {"(" ~ (fixed_arg ~ ",")* ~ fixed_arg? ~ ")"}
 
 rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
 head_arg = {aggr_arg | var}
 aggr_arg = {ident ~ "(" ~ var ~ ("," ~ expr)* ~ ")"}
-algo_arg = _{algo_rel | algo_opt_pair}
-algo_opt_pair = {ident ~ ":" ~ expr}
-algo_rel = {algo_rule_rel | algo_relation_rel | algo_named_relation_rel }
-algo_rule_rel = {ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
-algo_relation_rel = {relation_ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
-algo_named_relation_rel = {relation_ident ~ "{" ~ (algo_named_relation_arg_pair ~ ",")* ~ algo_named_relation_arg_pair? ~ "}"}
-algo_named_relation_arg_pair = {ident ~ (":" ~ ident)?}
+fixed_arg = _{fixed_rel | fixed_opt_pair}
+fixed_opt_pair = {ident ~ ":" ~ expr}
+fixed_rel = {fixed_rule_rel | fixed_relation_rel | fixed_named_relation_rel }
+fixed_rule_rel = {ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
+fixed_relation_rel = {relation_ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
+fixed_named_relation_rel = {relation_ident ~ "{" ~ (fixed_named_relation_arg_pair ~ ",")* ~ fixed_named_relation_arg_pair? ~ "}"}
+fixed_named_relation_arg_pair = {ident ~ (":" ~ ident)?}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
 rule_apply = {underscore_ident ~ "[" ~ apply_args ~ "]"}

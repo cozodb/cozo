@@ -12,9 +12,9 @@ use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::{AlgoImpl, AlgoPayload};
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
-use crate::data::program::WrongAlgoOptionError;
+use crate::data::program::WrongFixedRuleOptionError;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
@@ -23,10 +23,10 @@ use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct Constant;
 
-impl AlgoImpl for Constant {
+impl FixedRule for Constant {
     fn run(
         &self,
-        payload: AlgoPayload<'_, '_>,
+        payload: FixedRulePayload<'_, '_>,
         out: &mut RegularTempStore,
         _poison: Poison,
     ) -> Result<()> {
@@ -76,18 +76,18 @@ impl AlgoImpl for Constant {
         options: &mut BTreeMap<SmartString<LazyCompact>, Expr>,
         span: SourceSpan,
     ) -> Result<()> {
-        let data = options.get("data").ok_or_else(|| WrongAlgoOptionError {
+        let data = options.get("data").ok_or_else(|| WrongFixedRuleOptionError {
             name: "data".to_string(),
             span: Default::default(),
-            algo_name: "Constant".to_string(),
+            rule_name: "Constant".to_string(),
             help: "a list of lists is required".to_string(),
         })?;
         let data = match data.clone().eval_to_const()? {
             DataValue::List(l) => l,
-            _ => bail!(WrongAlgoOptionError {
+            _ => bail!(WrongFixedRuleOptionError {
                 name: "data".to_string(),
                 span: Default::default(),
-                algo_name: "Constant".to_string(),
+                rule_name: "Constant".to_string(),
                 help: "a list of lists is required".to_string(),
             }),
         };
