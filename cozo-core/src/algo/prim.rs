@@ -28,7 +28,7 @@ pub(crate) struct MinimumSpanningTreePrim;
 
 impl AlgoImpl for MinimumSpanningTreePrim {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

@@ -39,7 +39,7 @@ impl StronglyConnectedComponent {
 #[cfg(feature = "graph-algo")]
 impl AlgoImpl for StronglyConnectedComponent {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

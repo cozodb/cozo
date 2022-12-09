@@ -7,6 +7,7 @@
  */
 
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use itertools::Itertools;
 use miette::{bail, Diagnostic, Result, WrapErr};
@@ -441,7 +442,7 @@ fn make_const_rule(
                 head: bindings,
                 arity: bindings_arity,
                 span: Default::default(),
-                algo_impl: Box::new(Constant),
+                algo_impl: Rc::new(Box::new(Constant)),
             },
         },
     );

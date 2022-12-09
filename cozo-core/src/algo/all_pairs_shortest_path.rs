@@ -30,7 +30,7 @@ pub(crate) struct BetweennessCentrality;
 
 impl AlgoImpl for BetweennessCentrality {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
@@ -102,7 +102,7 @@ pub(crate) struct ClosenessCentrality;
 
 impl AlgoImpl for ClosenessCentrality {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

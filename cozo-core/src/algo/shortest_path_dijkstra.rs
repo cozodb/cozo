@@ -31,7 +31,7 @@ pub(crate) struct ShortestPathDijkstra;
 
 impl AlgoImpl for ShortestPathDijkstra {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

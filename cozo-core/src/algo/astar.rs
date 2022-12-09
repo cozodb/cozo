@@ -27,7 +27,7 @@ pub(crate) struct ShortestPathAStar;
 
 impl AlgoImpl for ShortestPathAStar {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

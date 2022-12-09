@@ -29,7 +29,7 @@ pub(crate) struct CsvReader;
 
 impl AlgoImpl for CsvReader {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         _poison: Poison,

@@ -27,7 +27,7 @@ pub(crate) struct MinimumSpanningForestKruskal;
 
 impl AlgoImpl for MinimumSpanningForestKruskal {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

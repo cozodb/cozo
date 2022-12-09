@@ -23,7 +23,7 @@ pub(crate) struct TopSort;
 
 impl AlgoImpl for TopSort {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

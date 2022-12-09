@@ -26,7 +26,7 @@ pub(crate) struct ReorderSort;
 
 impl AlgoImpl for ReorderSort {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

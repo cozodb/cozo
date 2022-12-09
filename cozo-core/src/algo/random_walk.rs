@@ -26,7 +26,7 @@ pub(crate) struct RandomWalk;
 
 impl AlgoImpl for RandomWalk {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

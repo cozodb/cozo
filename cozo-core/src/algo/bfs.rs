@@ -23,7 +23,7 @@ pub(crate) struct Bfs;
 
 impl AlgoImpl for Bfs {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

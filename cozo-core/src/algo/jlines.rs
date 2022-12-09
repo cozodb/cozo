@@ -33,7 +33,7 @@ pub(crate) struct JsonReader;
 
 impl AlgoImpl for JsonReader {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         _poison: Poison,

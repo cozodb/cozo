@@ -392,7 +392,7 @@ pub trait AlgoImpl {
     /// The outputs are written to `out`. You should check `poison` periodically
     /// for user-initiated termination.
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &'_ mut RegularTempStore,
         poison: Poison,

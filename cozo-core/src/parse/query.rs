@@ -10,6 +10,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use std::rc::Rc;
 
 use either::{Left, Right};
 use itertools::Itertools;
@@ -217,7 +218,7 @@ pub(crate) fn parse_query(
                             head,
                             arity,
                             span,
-                            algo_impl,
+                            algo_impl: Rc::new(algo_impl),
                         },
                     },
                 );
@@ -762,7 +763,7 @@ fn parse_algo_rule(
             head,
             arity,
             span: args_list_span,
-            algo_impl,
+            algo_impl: Rc::new(algo_impl),
         },
     ))
 }
@@ -800,7 +801,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
                 head: bindings.to_vec(),
                 arity: bindings.len(),
                 span: Default::default(),
-                algo_impl: Box::new(Constant),
+                algo_impl: Rc::new(Box::new(Constant)),
             },
         },
     );

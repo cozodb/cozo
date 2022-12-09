@@ -15,10 +15,10 @@ use smallvec::SmallVec;
 use smartstring::SmartString;
 
 use crate::data::program::{
-    AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicProgram, MagicRelationApplyAtom,
-    MagicInlineRule, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol, NormalFormAlgoOrRules,
-    NormalFormAtom, NormalFormProgram, NormalFormInlineRule, StratifiedMagicProgram,
-    StratifiedNormalFormProgram,
+    AlgoRuleArg, MagicAlgoApply, MagicAlgoRuleArg, MagicAtom, MagicInlineRule, MagicProgram,
+    MagicRelationApplyAtom, MagicRuleApplyAtom, MagicRulesOrAlgo, MagicSymbol,
+    NormalFormAlgoOrRules, NormalFormAtom, NormalFormInlineRule, NormalFormProgram,
+    StratifiedMagicProgram, StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::parse::SourceSpan;
@@ -51,9 +51,10 @@ impl StratifiedNormalFormProgram {
         let mut collected = vec![];
         for prog in self.0 {
             prog.exempt_aggr_rules_for_magic_sets(&mut exempt_rules);
+            let down_stream_rules = prog.get_downstream_rules();
             let adorned = prog.adorn(&exempt_rules, tx)?;
             collected.push(adorned.magic_rewrite());
-            exempt_rules.extend(prog.get_downstream_rules());
+            exempt_rules.extend(down_stream_rules);
         }
         Ok(StratifiedMagicProgram(collected))
     }
@@ -282,7 +283,7 @@ impl NormalFormProgram {
         }
         downstream_rules
     }
-    fn adorn(&self, upstream_rules: &BTreeSet<Symbol>, tx: &SessionTx<'_>) -> Result<MagicProgram> {
+    fn adorn(self, upstream_rules: &BTreeSet<Symbol>, tx: &SessionTx<'_>) -> Result<MagicProgram> {
         let rules_to_rewrite: BTreeSet<_> = self
             .prog
             .keys()
@@ -310,6 +311,7 @@ impl NormalFormProgram {
                             algo: MagicAlgoApply {
                                 span: algo_apply.span,
                                 algo: algo_apply.algo.clone(),
+                                algo_impl: algo_apply.algo_impl.clone(),
                                 rule_args: algo_apply
                                     .rule_args
                                     .iter()
@@ -382,7 +384,7 @@ impl NormalFormProgram {
                                     })
                                     .try_collect()?,
                                 options: algo_apply.options.clone(),
-                                arity: algo_apply.arity
+                                arity: algo_apply.arity,
                             },
                         },
                     );

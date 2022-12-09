@@ -25,7 +25,7 @@ pub(crate) struct ClusteringCoefficients;
 
 impl AlgoImpl for ClusteringCoefficients {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

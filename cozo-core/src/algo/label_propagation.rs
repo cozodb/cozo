@@ -25,7 +25,7 @@ pub(crate) struct LabelPropagation;
 
 impl AlgoImpl for LabelPropagation {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

@@ -25,7 +25,7 @@ pub(crate) struct Constant;
 
 impl AlgoImpl for Constant {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         _poison: Poison,

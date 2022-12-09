@@ -9,6 +9,7 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
+use std::rc::Rc;
 
 use miette::{ensure, Diagnostic, Result};
 use smallvec::SmallVec;
@@ -206,12 +207,12 @@ pub(crate) struct AlgoApply {
     pub(crate) head: Vec<Symbol>,
     pub(crate) arity: usize,
     pub(crate) span: SourceSpan,
-    pub(crate) algo_impl: Box<dyn AlgoImpl>,
+    pub(crate) algo_impl: Rc<Box<dyn AlgoImpl>>,
 }
 
 impl AlgoApply {
     pub(crate) fn arity(&self) -> Result<usize> {
-        self.algo_impl.arity(&self.options, &self.head, self.span)
+        self.algo_impl.as_ref().arity(&self.options, &self.head, self.span)
     }
 }
 
@@ -231,6 +232,7 @@ pub(crate) struct MagicAlgoApply {
     pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
     pub(crate) span: SourceSpan,
     pub(crate) arity: usize,
+    pub(crate) algo_impl: Rc<Box<dyn AlgoImpl>>,
 }
 
 #[derive(Error, Diagnostic, Debug)]

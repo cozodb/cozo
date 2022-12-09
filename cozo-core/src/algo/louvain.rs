@@ -25,7 +25,7 @@ pub(crate) struct CommunityDetectionLouvain;
 
 impl AlgoImpl for CommunityDetectionLouvain {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

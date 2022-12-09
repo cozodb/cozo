@@ -30,7 +30,7 @@ pub(crate) struct PageRank;
 impl AlgoImpl for PageRank {
     #[allow(unused_variables)]
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

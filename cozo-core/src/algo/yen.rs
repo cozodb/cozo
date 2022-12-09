@@ -27,7 +27,7 @@ pub(crate) struct KShortestPathYen;
 
 impl AlgoImpl for KShortestPathYen {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,

@@ -23,7 +23,7 @@ pub(crate) struct DegreeCentrality;
 
 impl AlgoImpl for DegreeCentrality {
     fn run(
-        &mut self,
+        &self,
         payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         poison: Poison,
