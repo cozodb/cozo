@@ -24,7 +24,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, NormalTempStore};
+use crate::runtime::temp_store::{EpochStore, RegularTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct PageRank;
@@ -35,7 +35,7 @@ impl AlgoImpl for PageRank {
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut NormalTempStore,
+        out: &'a mut RegularTempStore,
         _poison: Poison,
     ) -> Result<()> {
         let edges = algo.relation(0)?;

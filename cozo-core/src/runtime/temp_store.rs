@@ -21,18 +21,21 @@ use crate::data::aggr::Aggregation;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 
+/// A store holding temp data during evaluation of queries.
+/// The public interface is used in custom implementations of algorithms/utilities.
 #[derive(Default, Debug)]
-pub(crate) struct NormalTempStore {
+pub struct RegularTempStore {
     inner: BTreeMap<Tuple, bool>,
 }
 
 const EMPTY_TUPLE_REF: &Tuple = &vec![];
 
-impl NormalTempStore {
+impl RegularTempStore {
     pub(crate) fn wrap(self) -> TempStore {
         TempStore::Normal(self)
     }
-    pub(crate) fn exists(&self, key: &Tuple) -> bool {
+    /// Tests if a key already exists in the store.
+    pub fn exists(&self, key: &Tuple) -> bool {
         self.inner.contains_key(key)
     }
 
@@ -52,11 +55,10 @@ impl NormalTempStore {
             .range((lower_bound, upper_bound))
             .map(|(t, skip)| TupleInIter(t, EMPTY_TUPLE_REF, *skip))
     }
-    // must check prev_store for existence before putting here!
-    pub(crate) fn put(&mut self, tuple: Tuple) {
+    /// Add a tuple to the store
+    pub fn put(&mut self, tuple: Tuple) {
         self.inner.insert(tuple, false);
     }
-    // must check prev_store for existence before putting here!
     pub(crate) fn put_with_skip(&mut self, tuple: Tuple) {
         self.inner.insert(tuple, true);
     }
@@ -215,7 +217,7 @@ impl MeetAggrStore {
 
 #[derive(Debug)]
 pub(crate) enum TempStore {
-    Normal(NormalTempStore),
+    Normal(RegularTempStore),
     MeetAggr(MeetAggrStore),
 }
 
@@ -259,8 +261,8 @@ impl EpochStore {
     }
     pub(crate) fn new_normal(arity: usize) -> Self {
         Self {
-            total: TempStore::Normal(NormalTempStore::default()),
-            delta: TempStore::Normal(NormalTempStore::default()),
+            total: TempStore::Normal(RegularTempStore::default()),
+            delta: TempStore::Normal(RegularTempStore::default()),
             use_total_for_delta: true,
             arity,
         }

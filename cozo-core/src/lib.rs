@@ -61,6 +61,7 @@ pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 #[cfg(feature = "storage-tikv")]
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
+pub use runtime::temp_store::RegularTempStore;
 
 use crate::data::json::JsonValue;
 

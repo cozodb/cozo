@@ -21,7 +21,7 @@ use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, MeetAggrStore, NormalTempStore};
+use crate::runtime::temp_store::{EpochStore, MeetAggrStore, RegularTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct QueryLimiter {
@@ -153,7 +153,7 @@ impl<'a> SessionTx<'a> {
                         },
                         CompiledRuleSet::Algo(algo_apply) => {
                             let mut algo_impl = algo_apply.algo.get_impl()?;
-                            let mut out = NormalTempStore::default();
+                            let mut out = RegularTempStore::default();
                             algo_impl.run(self, algo_apply, stores, &mut out, poison.clone())?;
                             out.wrap()
                         }
@@ -188,14 +188,14 @@ impl<'a> SessionTx<'a> {
                                 }
                                 AggrKind::Normal => {
                                     // not doing anything
-                                    NormalTempStore::default().wrap()
+                                    RegularTempStore::default().wrap()
                                 }
                             }
                         }
 
                         CompiledRuleSet::Algo(_) => {
                             // no need to do anything, algos are only calculated once
-                            NormalTempStore::default().wrap()
+                            RegularTempStore::default().wrap()
                         }
                     };
                     to_merge.insert(k, new_store);
@@ -222,8 +222,8 @@ impl<'a> SessionTx<'a> {
         stores: &mut BTreeMap<MagicSymbol, EpochStore>,
         limiter: &mut QueryLimiter,
         poison: Poison,
-    ) -> Result<(bool, NormalTempStore)> {
-        let mut out_store = NormalTempStore::default();
+    ) -> Result<(bool, RegularTempStore)> {
+        let mut out_store = RegularTempStore::default();
         let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
 
         for (rule_n, rule) in ruleset.iter().enumerate() {
@@ -298,8 +298,8 @@ impl<'a> SessionTx<'a> {
         stores: &mut BTreeMap<MagicSymbol, EpochStore>,
         limiter: &mut QueryLimiter,
         poison: Poison,
-    ) -> Result<(bool, NormalTempStore)> {
-        let mut out_store = NormalTempStore::default();
+    ) -> Result<(bool, RegularTempStore)> {
+        let mut out_store = RegularTempStore::default();
         let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
         let mut aggr_work: BTreeMap<Vec<DataValue>, Vec<Aggregation>> = BTreeMap::new();
 
@@ -425,9 +425,9 @@ impl<'a> SessionTx<'a> {
         stores: &mut BTreeMap<MagicSymbol, EpochStore>,
         limiter: &mut QueryLimiter,
         poison: Poison,
-    ) -> Result<(bool, NormalTempStore)> {
+    ) -> Result<(bool, RegularTempStore)> {
         let prev_store = stores.get(rule_symb).unwrap();
-        let mut out_store = NormalTempStore::default();
+        let mut out_store = RegularTempStore::default();
         let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
         for (rule_n, rule) in ruleset.iter().enumerate() {
             let dependencies_changed = rule

@@ -55,7 +55,7 @@ use crate::data::tuple::TupleIter;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, NormalTempStore};
+use crate::runtime::temp_store::{EpochStore, RegularTempStore};
 use crate::runtime::transact::SessionTx;
 
 #[cfg(feature = "graph-algo")]
@@ -94,13 +94,19 @@ pub(crate) mod triangles;
 #[cfg(feature = "graph-algo")]
 pub(crate) mod yen;
 
+pub struct AlgoPayload<'a> {
+    manifest: MagicAlgoApply,
+    params: Vec<&'a EpochStore>,
+    tx: &'a SessionTx<'a>
+}
+
 pub(crate) trait AlgoImpl {
     fn run<'a>(
         &mut self,
         tx: &'a SessionTx<'_>,
         algo: &'a MagicAlgoApply,
         stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut NormalTempStore,
+        out: &'a mut RegularTempStore,
         poison: Poison,
     ) -> Result<()>;
     fn arity(

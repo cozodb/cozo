@@ -25,7 +25,7 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::{parse_type, SourceSpan};
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, NormalTempStore};
+use crate::runtime::temp_store::{EpochStore, RegularTempStore};
 use crate::runtime::transact::SessionTx;
 
 pub(crate) struct CsvReader;
@@ -36,7 +36,7 @@ impl AlgoImpl for CsvReader {
         _tx: &SessionTx<'_>,
         algo: &MagicAlgoApply,
         _stores: &BTreeMap<MagicSymbol, EpochStore>,
-        out: &mut NormalTempStore,
+        out: &mut RegularTempStore,
         _poison: Poison,
     ) -> Result<()> {
         let delimiter = algo.string_option("delimiter", Some(","))?;
