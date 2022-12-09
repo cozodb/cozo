@@ -29,7 +29,6 @@ use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::relation::ColumnDef;
 use crate::data::tuple::{Tuple, TupleT};
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
-use crate::decode_tuple_from_kv;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
@@ -39,6 +38,8 @@ use crate::query::ra::{
 use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
 use crate::storage::{Storage, StoreTx};
+use crate::{decode_tuple_from_kv, AlgoImpl};
+use crate::algo::DEFAULT_ALGOS;
 
 struct RunningQueryHandle {
     started_at: f64,
@@ -71,6 +72,7 @@ pub struct Db<S> {
     relation_store_id: Arc<AtomicU64>,
     queries_count: Arc<AtomicU64>,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
+    pub(crate) algorithms: Arc<BTreeMap<String, Arc<Box<dyn AlgoImpl>>>>,
 }
 
 impl<S> Debug for Db<S> {
@@ -116,6 +118,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             relation_store_id: Arc::new(Default::default()),
             queries_count: Arc::new(Default::default()),
             running_queries: Arc::new(Mutex::new(Default::default())),
+            algorithms: DEFAULT_ALGOS.clone(),
         };
         Ok(ret)
     }
@@ -426,7 +429,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         payload: &str,
         param_pool: &BTreeMap<String, DataValue>,
     ) -> Result<NamedRows> {
-        match parse_script(payload, param_pool)? {
+        match parse_script(payload, param_pool, &self.algorithms)? {
             CozoScript::Multi(ps) => {
                 let is_write = ps.iter().any(|p| p.out_opts.store_relation.is_some());
                 let mut cleanups = vec![];
@@ -948,13 +951,7 @@ impl<'s, S: Storage<'s>> Db<S> {
 
             if let Some((meta, relation_op)) = &out_opts.store_relation {
                 let to_clear = tx
-                    .execute_relation(
-                        self,
-                        scan,
-                        *relation_op,
-                        meta,
-                        &entry_head_or_default,
-                    )
+                    .execute_relation(self, scan, *relation_op, meta, &entry_head_or_default)
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
                 Ok((

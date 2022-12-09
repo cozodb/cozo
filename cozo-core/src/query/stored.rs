@@ -8,6 +8,7 @@
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use itertools::Itertools;
 use miette::{bail, Diagnostic, Result, WrapErr};
@@ -42,6 +43,8 @@ impl<'a> SessionTx<'a> {
         meta: &InputRelationHandle,
         headers: &[Symbol],
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+        // TODO
+        let algorithms = BTreeMap::new();
         let mut to_clear = vec![];
         let mut replaced_old_triggers = None;
         if op == RelationOp::Replace {
@@ -57,8 +60,8 @@ impl<'a> SessionTx<'a> {
                     replaced_old_triggers = Some((old_handle.put_triggers, old_handle.rm_triggers))
                 }
                 for trigger in &old_handle.replace_triggers {
-                    let program =
-                        parse_script(trigger, &Default::default())?.get_single_program()?;
+                    let program = parse_script(trigger, &Default::default(), &algorithms)?
+                        .get_single_program()?;
 
                     let (_, cleanups) = db.run_query(self, program).map_err(|err| {
                         if err.source_code().is_some() {
@@ -137,7 +140,8 @@ impl<'a> SessionTx<'a> {
                 if has_triggers && !new_tuples.is_empty() {
                     for trigger in &relation_store.rm_triggers {
                         let mut program =
-                            parse_script(trigger, &Default::default())?.get_single_program()?;
+                            parse_script(trigger, &Default::default(), &db.algorithms)?
+                                .get_single_program()?;
 
                         let mut bindings = relation_store
                             .metadata
@@ -312,7 +316,8 @@ impl<'a> SessionTx<'a> {
                 if has_triggers && !new_tuples.is_empty() {
                     for trigger in &relation_store.put_triggers {
                         let mut program =
-                            parse_script(trigger, &Default::default())?.get_single_program()?;
+                            parse_script(trigger, &Default::default(), &db.algorithms)?
+                                .get_single_program()?;
 
                         let mut bindings = relation_store
                             .metadata
@@ -442,7 +447,7 @@ fn make_const_rule(
                 head: bindings,
                 arity: bindings_arity,
                 span: Default::default(),
-                algo_impl: Rc::new(Box::new(Constant)),
+                algo_impl: Arc::new(Box::new(Constant)),
             },
         },
     );

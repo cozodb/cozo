@@ -7,6 +7,7 @@
  */
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use itertools::Itertools;
 use miette::{Diagnostic, Result};
@@ -18,6 +19,7 @@ use crate::data::value::DataValue;
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::AccessLevel;
+use crate::AlgoImpl;
 
 pub(crate) enum SysOp {
     Compact,
@@ -41,6 +43,7 @@ struct ProcessIdError(String, #[label] SourceSpan);
 pub(crate) fn parse_sys(
     mut src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
+    algorithms: &BTreeMap<String, Arc<Box<dyn AlgoImpl>>>,
 ) -> Result<SysOp> {
     let inner = src.next().unwrap();
     Ok(match inner.as_rule() {
@@ -55,7 +58,11 @@ pub(crate) fn parse_sys(
             SysOp::KillRunning(i)
         }
         Rule::explain_op => {
-            let prog = parse_query(inner.into_inner().next().unwrap().into_inner(), param_pool)?;
+            let prog = parse_query(
+                inner.into_inner().next().unwrap().into_inner(),
+                param_pool,
+                algorithms,
+            )?;
             SysOp::Explain(Box::new(prog))
         }
         Rule::list_relations_op => SysOp::ListRelations,
@@ -93,7 +100,7 @@ pub(crate) fn parse_sys(
                 "protected" => AccessLevel::Protected,
                 "read_only" => AccessLevel::ReadOnly,
                 "hidden" => AccessLevel::Hidden,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             let mut rels = vec![];
             for rel_p in ps {
@@ -119,7 +126,7 @@ pub(crate) fn parse_sys(
                 let op = clause_inner.next().unwrap();
                 let script = clause_inner.next().unwrap();
                 let script_str = script.as_str();
-                parse_query(script.into_inner(), &Default::default())?;
+                parse_query(script.into_inner(), &Default::default(), algorithms)?;
                 match op.as_rule() {
                     Rule::trigger_put => puts.push(script_str.to_string()),
                     Rule::trigger_rm => rms.push(script_str.to_string()),

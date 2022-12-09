@@ -8,6 +8,7 @@
 
 use std::cmp::{max, min};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use miette::{bail, ensure, Diagnostic, IntoDiagnostic, Result};
 use pest::error::InputLocation;
@@ -20,6 +21,7 @@ use crate::data::value::DataValue;
 use crate::parse::query::parse_query;
 use crate::parse::schema::parse_nullable_type;
 use crate::parse::sys::{parse_sys, SysOp};
+use crate::AlgoImpl;
 
 pub(crate) mod expr;
 pub(crate) mod query;
@@ -104,6 +106,7 @@ pub(crate) fn parse_type(src: &str) -> Result<NullableColType> {
 pub(crate) fn parse_script(
     src: &str,
     param_pool: &BTreeMap<String, DataValue>,
+    algorithms: &BTreeMap<String, Arc<Box<dyn AlgoImpl>>>,
 ) -> Result<CozoScript> {
     let parsed = CozoScriptParser::parse(Rule::script, src)
         .map_err(|err| {
@@ -117,19 +120,21 @@ pub(crate) fn parse_script(
         .unwrap();
     Ok(match parsed.as_rule() {
         Rule::query_script => {
-            let q = parse_query(parsed.into_inner(), param_pool)?;
+            let q = parse_query(parsed.into_inner(), param_pool, algorithms)?;
             CozoScript::Multi(vec![q])
         }
         Rule::multi_script => {
             let mut qs = vec![];
             for pair in parsed.into_inner() {
                 if pair.as_rule() != Rule::EOI {
-                    qs.push(parse_query(pair.into_inner(), param_pool)?);
+                    qs.push(parse_query(pair.into_inner(), param_pool, algorithms)?);
                 }
             }
             CozoScript::Multi(qs)
         }
-        Rule::sys_script => CozoScript::Sys(parse_sys(parsed.into_inner(), param_pool)?),
+        Rule::sys_script => {
+            CozoScript::Sys(parse_sys(parsed.into_inner(), param_pool, algorithms)?)
+        }
         _ => unreachable!(),
     })
 }

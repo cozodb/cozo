@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+use std::sync::Arc;
 
 use either::{Left, Right};
 use itertools::Itertools;
@@ -19,7 +20,7 @@ use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::algo::constant::Constant;
-use crate::algo::AlgoHandle;
+use crate::algo::{AlgoHandle, AlgoNotFoundError};
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::program::{
@@ -34,6 +35,7 @@ use crate::parse::expr::build_expr;
 use crate::parse::schema::parse_schema;
 use crate::parse::{ExtractSpan, Pair, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::InputRelationHandle;
+use crate::AlgoImpl;
 
 #[derive(Error, Diagnostic, Debug)]
 #[error("Query option {0} is not constant")]
@@ -92,6 +94,7 @@ fn merge_spans(symbs: &[Symbol]) -> SourceSpan {
 pub(crate) fn parse_query(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
+    algorithms: &BTreeMap<String, Arc<Box<dyn AlgoImpl>>>,
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputInlineRulesOrAlgo> = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
@@ -144,7 +147,7 @@ pub(crate) fn parse_query(
             }
             Rule::algo_rule => {
                 let rule_span = pair.extract_span();
-                let (name, apply) = parse_algo_rule(pair, param_pool)?;
+                let (name, apply) = parse_algo_rule(pair, param_pool, algorithms)?;
 
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
@@ -199,7 +202,7 @@ pub(crate) fn parse_query(
                 let handle = AlgoHandle {
                     name: Symbol::new("Constant", span),
                 };
-                let algo_impl = handle.get_impl()?;
+                let algo_impl = Box::new(Constant);
                 algo_impl.init_options(&mut options, span)?;
                 let arity = algo_impl.arity(&options, &head, span)?;
 
@@ -218,7 +221,7 @@ pub(crate) fn parse_query(
                             head,
                             arity,
                             span,
-                            algo_impl: Rc::new(algo_impl),
+                            algo_impl: Arc::new(algo_impl),
                         },
                     },
                 );
@@ -237,7 +240,8 @@ pub(crate) fn parse_query(
             Rule::sleep_option => {
                 #[cfg(feature = "wasm")]
                 bail!(":sleep is not supported under WASM");
-                #[cfg(not(feature = "wasm"))] {
+                #[cfg(not(feature = "wasm"))]
+                {
                     let pair = pair.into_inner().next().unwrap();
                     let span = pair.extract_span();
                     let sleep = build_expr(pair, param_pool)?
@@ -651,6 +655,7 @@ fn parse_rule_head_arg(
 fn parse_algo_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
+    algorithms: &BTreeMap<String, Arc<Box<dyn AlgoImpl>>>,
 ) -> Result<(Symbol, AlgoApply)> {
     let mut src = src.into_inner();
     let (out_symbol, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
@@ -745,7 +750,8 @@ fn parse_algo_rule(
 
     let algo = AlgoHandle::new(algo_name, name_pair.extract_span());
 
-    let algo_impl = algo.get_impl()?;
+    let algo_impl = algorithms.get(&algo.name as &str)
+        .ok_or_else(|| AlgoNotFoundError(algo.name.to_string(), name_pair.extract_span()))?;
     algo_impl.init_options(&mut options, args_list_span)?;
     let arity = algo_impl.arity(&options, &head, name_pair.extract_span())?;
 
@@ -763,7 +769,7 @@ fn parse_algo_rule(
             head,
             arity,
             span: args_list_span,
-            algo_impl: Rc::new(algo_impl),
+            algo_impl: algo_impl.clone(),
         },
     ))
 }
@@ -801,7 +807,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
                 head: bindings.to_vec(),
                 arity: bindings.len(),
                 span: Default::default(),
-                algo_impl: Rc::new(Box::new(Constant)),
+                algo_impl: Arc::new(Box::new(Constant)),
             },
         },
     );

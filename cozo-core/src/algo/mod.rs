@@ -7,7 +7,9 @@
  */
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
+use lazy_static::lazy_static;
 use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -368,7 +370,7 @@ impl<'a, 'b> AlgoPayload<'a, 'b> {
 }
 
 /// Trait for an implementation of an algorithm or a utility
-pub trait AlgoImpl {
+pub trait AlgoImpl: Send + Sync {
     /// Called to initialize the options given.
     /// Will always be called once, before anything else.
     /// You can mutate the options if you need to.
@@ -413,59 +415,139 @@ pub(crate) struct AlgoHandle {
     pub(crate) name: Symbol,
 }
 
+lazy_static! {
+    pub(crate) static ref DEFAULT_ALGOS: Arc<BTreeMap<String, Arc<Box<dyn AlgoImpl>>>> = {
+        Arc::new(BTreeMap::from([
+            #[cfg(feature = "graph-algo")]
+            (
+                "ClusteringCoefficients".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ClusteringCoefficients)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "DegreeCentrality".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(DegreeCentrality)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "ClosenessCentrality".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ClosenessCentrality)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "BetweennessCentrality".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(BetweennessCentrality)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "DepthFirstSearch".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Dfs)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "DFS".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Dfs)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "BreadthFirstSearch".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Bfs)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "BFS".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Bfs)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "ShortestPathDijkstra".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ShortestPathDijkstra)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "ShortestPathAStar".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ShortestPathAStar)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "KShortestPathYen".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(KShortestPathYen)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "MinimumSpanningTreePrim".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(MinimumSpanningTreePrim)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "MinimumSpanningForestKruskal".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(MinimumSpanningForestKruskal)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "TopSort".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(TopSort)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "ConnectedComponents".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(StronglyConnectedComponent::new(false))),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "StronglyConnectedComponents".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(StronglyConnectedComponent::new(true))),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "SCC".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(StronglyConnectedComponent::new(true))),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "PageRank".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(PageRank)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "CommunityDetectionLouvain".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(CommunityDetectionLouvain)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "LabelPropagation".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(LabelPropagation)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "RandomWalk".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(RandomWalk)),
+            ),
+            (
+                "ReorderSort".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(ReorderSort)),
+            ),
+            (
+                "JsonReader".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(JsonReader)),
+            ),
+            (
+                "CsvReader".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(CsvReader)),
+            ),
+            (
+                "Constant".to_string(),
+                Arc::<Box<dyn AlgoImpl>>::new(Box::new(Constant)),
+            ),
+        ]))
+    };
+}
+
 impl AlgoHandle {
     pub(crate) fn new(name: &str, span: SourceSpan) -> Self {
         AlgoHandle {
             name: Symbol::new(name, span),
         }
-    }
-
-    pub(crate) fn get_impl(&self) -> Result<Box<dyn AlgoImpl>> {
-        Ok(match &self.name.name as &str {
-            #[cfg(feature = "graph-algo")]
-            "ClusteringCoefficients" => Box::new(ClusteringCoefficients),
-            #[cfg(feature = "graph-algo")]
-            "DegreeCentrality" => Box::new(DegreeCentrality),
-            #[cfg(feature = "graph-algo")]
-            "ClosenessCentrality" => Box::new(ClosenessCentrality),
-            #[cfg(feature = "graph-algo")]
-            "BetweennessCentrality" => Box::new(BetweennessCentrality),
-            #[cfg(feature = "graph-algo")]
-            "DepthFirstSearch" | "DFS" => Box::new(Dfs),
-            #[cfg(feature = "graph-algo")]
-            "BreadthFirstSearch" | "BFS" => Box::new(Bfs),
-            #[cfg(feature = "graph-algo")]
-            "ShortestPathDijkstra" => Box::new(ShortestPathDijkstra),
-            #[cfg(feature = "graph-algo")]
-            "ShortestPathAStar" => Box::new(ShortestPathAStar),
-            #[cfg(feature = "graph-algo")]
-            "KShortestPathYen" => Box::new(KShortestPathYen),
-            #[cfg(feature = "graph-algo")]
-            "MinimumSpanningTreePrim" => Box::new(MinimumSpanningTreePrim),
-            #[cfg(feature = "graph-algo")]
-            "MinimumSpanningForestKruskal" => Box::new(MinimumSpanningForestKruskal),
-            #[cfg(feature = "graph-algo")]
-            "TopSort" => Box::new(TopSort),
-            #[cfg(feature = "graph-algo")]
-            "ConnectedComponents" => Box::new(StronglyConnectedComponent::new(false)),
-            #[cfg(feature = "graph-algo")]
-            "StronglyConnectedComponents" | "SCC" => {
-                Box::new(StronglyConnectedComponent::new(true))
-            }
-            #[cfg(feature = "graph-algo")]
-            "PageRank" => Box::new(PageRank),
-            #[cfg(feature = "graph-algo")]
-            "CommunityDetectionLouvain" => Box::new(CommunityDetectionLouvain),
-            #[cfg(feature = "graph-algo")]
-            "LabelPropagation" => Box::new(LabelPropagation),
-            #[cfg(feature = "graph-algo")]
-            "RandomWalk" => Box::new(RandomWalk),
-            "ReorderSort" => Box::new(ReorderSort),
-            "JsonReader" => Box::new(JsonReader),
-            "CsvReader" => Box::new(CsvReader),
-            "Constant" => Box::new(Constant),
-            name => bail!(AlgoNotFoundError(name.to_string(), self.name.span)),
-        })
     }
 }
 
