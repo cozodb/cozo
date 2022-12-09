@@ -203,7 +203,7 @@ impl InputInlineRulesOrAlgo {
 pub(crate) struct AlgoApply {
     pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<AlgoRuleArg>,
-    pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
+    pub(crate) options: Rc<BTreeMap<SmartString<LazyCompact>, Expr>>,
     pub(crate) head: Vec<Symbol>,
     pub(crate) arity: usize,
     pub(crate) span: SourceSpan,
@@ -229,7 +229,7 @@ impl Debug for AlgoApply {
 pub(crate) struct MagicAlgoApply {
     pub(crate) algo: AlgoHandle,
     pub(crate) rule_args: Vec<MagicAlgoRuleArg>,
-    pub(crate) options: BTreeMap<SmartString<LazyCompact>, Expr>,
+    pub(crate) options: Rc<BTreeMap<SmartString<LazyCompact>, Expr>>,
     pub(crate) span: SourceSpan,
     pub(crate) arity: usize,
     pub(crate) algo_impl: Rc<Box<dyn AlgoImpl>>,
@@ -465,7 +465,7 @@ impl Display for InputProgram {
                         }
                         write!(f, "{}", rule_arg)?;
                     }
-                    for (k, v) in options {
+                    for (k, v) in options.as_ref() {
                         if first {
                             first = false;
                         } else {

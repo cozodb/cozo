@@ -214,7 +214,7 @@ pub(crate) fn parse_query(
                         algo: AlgoApply {
                             algo: handle,
                             rule_args: vec![],
-                            options,
+                            options: Rc::new(options),
                             head,
                             arity,
                             span,
@@ -759,7 +759,7 @@ fn parse_algo_rule(
         AlgoApply {
             algo,
             rule_args,
-            options,
+            options: Rc::new(options),
             head,
             arity,
             span: args_list_span,
@@ -797,7 +797,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
                     name: Symbol::new("Constant", Default::default()),
                 },
                 rule_args: vec![],
-                options,
+                options: Rc::new(options),
                 head: bindings.to_vec(),
                 arity: bindings.len(),
                 span: Default::default(),

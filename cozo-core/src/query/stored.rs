@@ -438,7 +438,7 @@ fn make_const_rule(
                     name: Symbol::new("Constant", Default::default()),
                 },
                 rule_args: vec![],
-                options,
+                options: Rc::new(options),
                 head: bindings,
                 arity: bindings_arity,
                 span: Default::default(),
