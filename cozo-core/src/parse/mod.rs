@@ -59,7 +59,7 @@ impl CozoScript {
 #[derive(
     Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Default,
 )]
-pub(crate) struct SourceSpan(pub(crate) usize, pub(crate) usize);
+pub struct SourceSpan(pub(crate) usize, pub(crate) usize);
 
 impl SourceSpan {
     pub(crate) fn merge(self, other: Self) -> Self {

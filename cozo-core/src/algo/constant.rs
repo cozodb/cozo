@@ -12,28 +12,25 @@ use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, AlgoPayload};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicSymbol, WrongAlgoOptionError};
+use crate::data::program::WrongAlgoOptionError;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct Constant;
 
 impl AlgoImpl for Constant {
     fn run(
         &mut self,
-        _tx: &SessionTx<'_>,
-        algo: &MagicAlgoApply,
-        _stores: &BTreeMap<MagicSymbol, EpochStore>,
+        payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         _poison: Poison,
     ) -> Result<()> {
-        let data = algo.expr_option("data", None).unwrap();
+        let data = payload.expr_option("data", None).unwrap();
         let data = data.get_const().unwrap().get_list().unwrap();
         for row in data {
             let tuple = row.get_list().unwrap().into();
@@ -74,7 +71,7 @@ impl AlgoImpl for Constant {
         })
     }
 
-    fn process_options(
+    fn init_options(
         &self,
         options: &mut BTreeMap<SmartString<LazyCompact>, Expr>,
         span: SourceSpan,

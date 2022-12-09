@@ -199,7 +199,7 @@ pub(crate) fn parse_query(
                     name: Symbol::new("Constant", span),
                 };
                 let algo_impl = handle.get_impl()?;
-                algo_impl.process_options(&mut options, span)?;
+                algo_impl.init_options(&mut options, span)?;
                 let arity = algo_impl.arity(&options, &head, span)?;
 
                 ensure!(arity != 0, EmptyRowForConstRule(span));
@@ -745,7 +745,7 @@ fn parse_algo_rule(
     let algo = AlgoHandle::new(algo_name, name_pair.extract_span());
 
     let algo_impl = algo.get_impl()?;
-    algo_impl.process_options(&mut options, args_list_span)?;
+    algo_impl.init_options(&mut options, args_list_span)?;
     let arity = algo_impl.arity(&options, &head, name_pair.extract_span())?;
 
     ensure!(

@@ -19,38 +19,34 @@ use rayon::prelude::*;
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, AlgoPayload};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct ShortestPathDijkstra;
 
 impl AlgoImpl for ShortestPathDijkstra {
-    fn run<'a>(
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.relation(0)?;
-        let starting = algo.relation(1)?;
-        let termination = algo.relation(2);
-        let undirected = algo.bool_option("undirected", Some(false))?;
-        let keep_ties = algo.bool_option("keep_ties", Some(false))?;
+        let edges = payload.get_input(0)?;
+        let starting = payload.get_input(1)?;
+        let termination = payload.get_input(2);
+        let undirected = payload.bool_option("undirected", Some(false))?;
+        let keep_ties = payload.bool_option("keep_ties", Some(false))?;
 
         let (graph, indices, inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
+            edges.convert_edge_to_weighted_graph(undirected, false)?;
 
         let mut starting_nodes = BTreeSet::new();
-        for tuple in starting.iter(tx, stores)? {
+        for tuple in starting.iter()? {
             let tuple = tuple?;
             let node = &tuple[0];
             if let Some(idx) = inv_indices.get(node) {
@@ -61,7 +57,7 @@ impl AlgoImpl for ShortestPathDijkstra {
             Err(_) => None,
             Ok(t) => {
                 let mut tn = BTreeSet::new();
-                for tuple in t.iter(tx, stores)? {
+                for tuple in t.iter()? {
                     let tuple = tuple?;
                     let node = &tuple[0];
                     if let Some(idx) = inv_indices.get(node) {

@@ -24,7 +24,7 @@ use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::SourceSpan;
 
 #[derive(Clone, PartialEq, Eq, serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) enum Expr {
+pub enum Expr {
     Binding {
         var: Symbol,
         tuple_pos: Option<usize>,
@@ -542,7 +542,7 @@ impl Default for ValueRange {
 }
 
 #[derive(Clone)]
-pub(crate) struct Op {
+pub struct Op {
     pub(crate) name: &'static str,
     pub(crate) min_arity: usize,
     pub(crate) vararg: bool,

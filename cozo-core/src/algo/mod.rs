@@ -49,7 +49,9 @@ use crate::algo::triangles::ClusteringCoefficients;
 #[cfg(feature = "graph-algo")]
 use crate::algo::yen::KShortestPathYen;
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol};
+use crate::data::program::{
+    AlgoOptionNotFoundError, MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol, WrongAlgoOptionError,
+};
 use crate::data::symb::Symbol;
 use crate::data::tuple::TupleIter;
 use crate::data::value::DataValue;
@@ -94,34 +96,307 @@ pub(crate) mod triangles;
 #[cfg(feature = "graph-algo")]
 pub(crate) mod yen;
 
-pub struct AlgoPayload<'a> {
-    manifest: MagicAlgoApply,
-    params: Vec<&'a EpochStore>,
-    tx: &'a SessionTx<'a>
+pub struct AlgoPayload<'a, 'b> {
+    pub(crate) manifest: &'a MagicAlgoApply,
+    pub(crate) stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+    pub(crate) tx: &'a SessionTx<'b>,
 }
 
-pub(crate) trait AlgoImpl {
-    fn run<'a>(
-        &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
-        poison: Poison,
-    ) -> Result<()>;
-    fn arity(
+#[derive(Copy, Clone)]
+pub struct AlgoInputRelation<'a, 'b> {
+    arg_manifest: &'a MagicAlgoRuleArg,
+    stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+    tx: &'a SessionTx<'b>,
+}
+
+impl<'a, 'b> AlgoInputRelation<'a, 'b> {
+    pub fn arity(&self) -> Result<usize> {
+        self.arg_manifest.arity(self.tx, self.stores)
+    }
+    pub fn ensure_min_len(self, len: usize) -> Result<Self> {
+        #[derive(Error, Diagnostic, Debug)]
+        #[error("Input relation to algorithm has insufficient arity")]
+        #[diagnostic(help("Arity should be at least {0} but is {1}"))]
+        #[diagnostic(code(algo::input_relation_bad_arity))]
+        struct InputRelationArityError(usize, usize, #[label] SourceSpan);
+
+        let arity = self.arg_manifest.arity(self.tx, self.stores)?;
+        ensure!(
+            arity >= len,
+            InputRelationArityError(len, arity, self.arg_manifest.span())
+        );
+        Ok(self)
+    }
+    pub fn get_binding_map(&self, offset: usize) -> BTreeMap<Symbol, usize> {
+        self.arg_manifest.get_binding_map(offset)
+    }
+    pub fn iter(&self) -> Result<TupleIter<'a>> {
+        self.arg_manifest.iter(self.tx, self.stores)
+    }
+    pub fn prefix_iter(&self, prefix: &DataValue) -> Result<TupleIter<'_>> {
+        self.arg_manifest.prefix_iter(prefix, self.tx, self.stores)
+    }
+    pub fn span(&self) -> SourceSpan {
+        self.arg_manifest.span()
+    }
+    fn convert_edge_to_graph(
         &self,
-        _options: &BTreeMap<SmartString<LazyCompact>, Expr>,
-        _rule_head: &[Symbol],
-        _span: SourceSpan,
-    ) -> Result<usize>;
-    fn process_options(
+        undirected: bool,
+    ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
+        self.arg_manifest
+            .convert_edge_to_graph(undirected, self.tx, self.stores)
+    }
+    pub fn convert_edge_to_weighted_graph(
+        &self,
+        undirected: bool,
+        allow_negative_edges: bool,
+    ) -> Result<(
+        Vec<Vec<(usize, f64)>>,
+        Vec<DataValue>,
+        BTreeMap<DataValue, usize>,
+        bool,
+    )> {
+        self.arg_manifest.convert_edge_to_weighted_graph(
+            undirected,
+            allow_negative_edges,
+            self.tx,
+            self.stores,
+        )
+    }
+}
+
+impl<'a, 'b> AlgoPayload<'a, 'b> {
+    pub fn get_input(&self, idx: usize) -> Result<AlgoInputRelation<'a, 'b>> {
+        let arg_manifest = self.manifest.relation(idx)?;
+        Ok(AlgoInputRelation {
+            arg_manifest,
+            stores: self.stores,
+            tx: self.tx,
+        })
+    }
+    pub fn name(&self) -> &str {
+        &self.manifest.algo.name
+    }
+    pub fn span(&self) -> SourceSpan {
+        self.manifest.span
+    }
+    pub fn expr_option(&self, name: &str, default: Option<Expr>) -> Result<Expr> {
+        match self.manifest.options.get(name) {
+            Some(ex) => Ok(ex.clone()),
+            None => match default {
+                Some(ex) => Ok(ex),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.manifest.span,
+                    algo_name: self.manifest.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
+    }
+
+    pub fn string_option(
+        &self,
+        name: &str,
+        default: Option<&str>,
+    ) -> Result<SmartString<LazyCompact>> {
+        match self.manifest.options.get(name) {
+            Some(ex) => match ex.clone().eval_to_const()? {
+                DataValue::Str(s) => Ok(s),
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: ex.span(),
+                    algo_name: self.manifest.algo.name.to_string(),
+                    help: "a string is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.manifest.span,
+                    algo_name: self.manifest.algo.name.to_string(),
+                }
+                .into()),
+                Some(s) => Ok(SmartString::from(s)),
+            },
+        }
+    }
+
+    pub fn pos_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
+        match self.manifest.options.get(name) {
+            Some(v) => match v.clone().eval_to_const() {
+                Ok(DataValue::Num(n)) => match n.get_int() {
+                    Some(i) => {
+                        ensure!(
+                            i > 0,
+                            WrongAlgoOptionError {
+                                name: name.to_string(),
+                                span: v.span(),
+                                algo_name: self.manifest.algo.name.to_string(),
+                                help: "a positive integer is required".to_string(),
+                            }
+                        );
+                        Ok(i as usize)
+                    }
+                    None => Err(AlgoOptionNotFoundError {
+                        name: name.to_string(),
+                        span: self.span(),
+                        algo_name: self.manifest.algo.name.to_string(),
+                    }
+                    .into()),
+                },
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: v.span(),
+                    algo_name: self.manifest.algo.name.to_string(),
+                    help: "a positive integer is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                Some(v) => Ok(v),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.manifest.span,
+                    algo_name: self.manifest.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
+    }
+    pub fn non_neg_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
+        match self.manifest.options.get(name) {
+            Some(v) => match v.clone().eval_to_const() {
+                Ok(DataValue::Num(n)) => match n.get_int() {
+                    Some(i) => {
+                        ensure!(
+                            i >= 0,
+                            WrongAlgoOptionError {
+                                name: name.to_string(),
+                                span: v.span(),
+                                algo_name: self.manifest.algo.name.to_string(),
+                                help: "a non-negative integer is required".to_string(),
+                            }
+                        );
+                        Ok(i as usize)
+                    }
+                    None => Err(AlgoOptionNotFoundError {
+                        name: name.to_string(),
+                        span: self.manifest.span,
+                        algo_name: self.manifest.algo.name.to_string(),
+                    }
+                    .into()),
+                },
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: v.span(),
+                    algo_name: self.manifest.algo.name.to_string(),
+                    help: "a non-negative integer is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                Some(v) => Ok(v),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.manifest.span,
+                    algo_name: self.manifest.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
+    }
+    pub fn unit_interval_option(&self, name: &str, default: Option<f64>) -> Result<f64> {
+        match self.manifest.options.get(name) {
+            Some(v) => match v.clone().eval_to_const() {
+                Ok(DataValue::Num(n)) => {
+                    let f = n.get_float();
+                    ensure!(
+                        (0. ..=1.).contains(&f),
+                        WrongAlgoOptionError {
+                            name: name.to_string(),
+                            span: v.span(),
+                            algo_name: self.manifest.algo.name.to_string(),
+                            help: "a number between 0. and 1. is required".to_string(),
+                        }
+                    );
+                    Ok(f)
+                }
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: v.span(),
+                    algo_name: self.manifest.algo.name.to_string(),
+                    help: "a number between 0. and 1. is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                Some(v) => Ok(v),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.manifest.span,
+                    algo_name: self.manifest.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
+    }
+    pub(crate) fn bool_option(&self, name: &str, default: Option<bool>) -> Result<bool> {
+        match self.manifest.options.get(name) {
+            Some(v) => match v.clone().eval_to_const() {
+                Ok(DataValue::Bool(b)) => Ok(b),
+                _ => Err(WrongAlgoOptionError {
+                    name: name.to_string(),
+                    span: v.span(),
+                    algo_name: self.manifest.algo.name.to_string(),
+                    help: "a boolean value is required".to_string(),
+                }
+                .into()),
+            },
+            None => match default {
+                Some(v) => Ok(v),
+                None => Err(AlgoOptionNotFoundError {
+                    name: name.to_string(),
+                    span: self.manifest.span,
+                    algo_name: self.manifest.algo.name.to_string(),
+                }
+                .into()),
+            },
+        }
+    }
+}
+
+/// Trait for an implementation of an algorithm or a utility
+pub trait AlgoImpl {
+    /// Called to initialize the options given.
+    /// Will always be called once, before anything else.
+    /// You can mutate the options if you need to.
+    /// The default implementation does nothing.
+    fn init_options(
         &self,
         _options: &mut BTreeMap<SmartString<LazyCompact>, Expr>,
         _span: SourceSpan,
     ) -> Result<()> {
         Ok(())
     }
+    /// You must return the row width of the returned relation and it must be accurate.
+    /// This function may be called multiple times.
+    fn arity(
+        &self,
+        options: &BTreeMap<SmartString<LazyCompact>, Expr>,
+        rule_head: &[Symbol],
+        span: SourceSpan,
+    ) -> Result<usize>;
+    /// You should implement the logic of your algorithm/utility in this function.
+    /// The outputs are written to `out`. You should check `poison` periodically
+    /// for user-initiated termination.
+    fn run(
+        &mut self,
+        payload: AlgoPayload<'_, '_>,
+        out: &'_ mut RegularTempStore,
+        poison: Poison,
+    ) -> Result<()>;
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -336,7 +611,6 @@ impl MagicAlgoRuleArg {
         }
         Ok((graph, indices, inv_indices, has_neg_edge))
     }
-    #[allow(dead_code)]
     pub(crate) fn convert_edge_to_graph<'a>(
         &'a self,
         undirected: bool,
@@ -376,7 +650,6 @@ impl MagicAlgoRuleArg {
         }
         Ok((graph, indices, inv_indices))
     }
-    #[allow(dead_code)]
     pub(crate) fn prefix_iter<'a>(
         &'a self,
         prefix: &DataValue,

@@ -14,52 +14,39 @@ use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, BadExprValueError, NodeNotFoundError};
+use crate::algo::{AlgoImpl, AlgoInputRelation, AlgoPayload, BadExprValueError, NodeNotFoundError};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicAlgoRuleArg, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct ShortestPathAStar;
 
 impl AlgoImpl for ShortestPathAStar {
-    fn run<'a>(
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.relation_with_min_len(0, 3, tx, stores)?;
-        let nodes = algo.relation(1)?;
-        let starting = algo.relation(2)?;
-        let goals = algo.relation(3)?;
-        let mut heuristic = algo.expr_option("heuristic", None)?;
+        let edges = payload.get_input(0)?.ensure_min_len(3)?;
+        let nodes = payload.get_input(1)?;
+        let starting = payload.get_input(2)?;
+        let goals = payload.get_input(3)?;
+        let mut heuristic = payload.expr_option("heuristic", None)?;
 
         let mut binding_map = nodes.get_binding_map(0);
-        let goal_binding_map = goals.get_binding_map(nodes.arity(tx, stores)?);
+        let goal_binding_map = goals.get_binding_map(nodes.arity()?);
         binding_map.extend(goal_binding_map);
         heuristic.fill_binding_indices(&binding_map)?;
-        for start in starting.iter(tx, stores)? {
+        for start in starting.iter()? {
             let start = start?;
-            for goal in goals.iter(tx, stores)? {
+            for goal in goals.iter()? {
                 let goal = goal?;
-                let (cost, path) = astar(
-                    &start,
-                    &goal,
-                    edges,
-                    nodes,
-                    &heuristic,
-                    tx,
-                    stores,
-                    poison.clone(),
-                )?;
+                let (cost, path) = astar(&start, &goal, edges, nodes, &heuristic, poison.clone())?;
                 out.put(vec![
                     start[0].clone(),
                     goal[0].clone(),
@@ -82,14 +69,12 @@ impl AlgoImpl for ShortestPathAStar {
     }
 }
 
-fn astar<'a>(
+fn astar(
     starting: &Tuple,
     goal: &Tuple,
-    edges: &'a MagicAlgoRuleArg,
-    nodes: &'a MagicAlgoRuleArg,
+    edges: AlgoInputRelation<'_, '_>,
+    nodes: AlgoInputRelation<'_, '_>,
     heuristic: &Expr,
-    tx: &'a SessionTx<'_>,
-    stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     poison: Poison,
 ) -> Result<(f64, Vec<DataValue>)> {
     let start_node = &starting[0];
@@ -136,7 +121,7 @@ fn astar<'a>(
             return Ok((cost, ret));
         }
 
-        for edge in edges.prefix_iter(&node, tx, stores)? {
+        for edge in edges.prefix_iter(&node)? {
             let edge = edge?;
             let edge_dst = &edge[1];
             let edge_cost = edge[2].get_float().ok_or_else(|| {
@@ -162,13 +147,14 @@ fn astar<'a>(
                 back_trace.insert(edge_dst.clone(), node.clone());
                 g_score.insert(edge_dst.clone(), tentative_cost_to_dst);
 
-                let edge_dst_tuple = nodes
-                    .prefix_iter(edge_dst, tx, stores)?
-                    .next()
-                    .ok_or_else(|| NodeNotFoundError {
-                        missing: edge_dst.clone(),
-                        span: nodes.span(),
-                    })??;
+                let edge_dst_tuple =
+                    nodes
+                        .prefix_iter(edge_dst)?
+                        .next()
+                        .ok_or_else(|| NodeNotFoundError {
+                            missing: edge_dst.clone(),
+                            span: nodes.span(),
+                        })??;
 
                 let heuristic_cost = eval_heuristic(&edge_dst_tuple)?;
                 sub_priority += 1;

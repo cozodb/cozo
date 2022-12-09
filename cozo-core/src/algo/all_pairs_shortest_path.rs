@@ -18,32 +18,28 @@ use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::shortest_path_dijkstra::dijkstra_keep_ties;
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, AlgoPayload};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct BetweennessCentrality;
 
 impl AlgoImpl for BetweennessCentrality {
-    fn run<'a>(
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.relation(0)?;
-        let undirected = algo.bool_option("undirected", Some(false))?;
+        let edges = payload.get_input(0)?;
+        let undirected = payload.bool_option("undirected", Some(false))?;
 
         let (graph, indices, _inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
+            edges.convert_edge_to_weighted_graph(undirected, false)?;
 
         let n = graph.len();
         if n == 0 {
@@ -105,19 +101,17 @@ impl AlgoImpl for BetweennessCentrality {
 pub(crate) struct ClosenessCentrality;
 
 impl AlgoImpl for ClosenessCentrality {
-    fn run<'a>(
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.relation(0)?;
-        let undirected = algo.bool_option("undirected", Some(false))?;
+        let edges = payload.get_input(0)?;
+        let undirected = payload.bool_option("undirected", Some(false))?;
 
         let (graph, indices, _inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
+            edges.convert_edge_to_weighted_graph(undirected, false)?;
 
         let n = graph.len();
         if n == 0 {

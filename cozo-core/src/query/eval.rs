@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use itertools::Itertools;
 use log::{debug, trace};
 use miette::Result;
+use crate::algo::AlgoPayload;
 
 use crate::data::aggr::Aggregation;
 use crate::data::program::{MagicSymbol, NoEntryError};
@@ -154,7 +155,12 @@ impl<'a> SessionTx<'a> {
                         CompiledRuleSet::Algo(algo_apply) => {
                             let mut algo_impl = algo_apply.algo.get_impl()?;
                             let mut out = RegularTempStore::default();
-                            algo_impl.run(self, algo_apply, stores, &mut out, poison.clone())?;
+                            let payload = AlgoPayload {
+                                manifest: algo_apply,
+                                stores,
+                                tx: self,
+                            };
+                            algo_impl.run(payload, &mut out, poison.clone())?;
                             out.wrap()
                         }
                     };

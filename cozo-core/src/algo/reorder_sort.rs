@@ -12,31 +12,28 @@ use itertools::Itertools;
 use miette::{bail, Result};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, CannotDetermineArity};
+use crate::algo::{AlgoImpl, AlgoPayload, CannotDetermineArity};
 use crate::data::expr::Expr;
 use crate::data::functions::OP_LIST;
-use crate::data::program::{MagicAlgoApply, MagicSymbol, WrongAlgoOptionError};
+use crate::data::program::WrongAlgoOptionError;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct ReorderSort;
 
 impl AlgoImpl for ReorderSort {
-    fn run<'a>(
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let in_rel = algo.relation(0)?;
+        let in_rel = payload.get_input(0)?;
 
-        let mut out_list = match algo.expr_option("out", None)? {
+        let mut out_list = match payload.expr_option("out", None)? {
             Expr::Const {
                 val: DataValue::List(l),
                 span,
@@ -51,24 +48,24 @@ impl AlgoImpl for ReorderSort {
             _ => {
                 bail!(WrongAlgoOptionError {
                     name: "out".to_string(),
-                    span: algo.span,
-                    algo_name: algo.algo.name.to_string(),
+                    span: payload.span(),
+                    algo_name: payload.name().to_string(),
                     help: "This option must evaluate to a list".to_string()
                 })
             }
         };
 
-        let mut sort_by = algo.expr_option(
+        let mut sort_by = payload.expr_option(
             "sort_by",
             Some(Expr::Const {
                 val: DataValue::Null,
                 span: SourceSpan(0, 0),
             }),
         )?;
-        let sort_descending = algo.bool_option("descending", Some(false))?;
-        let break_ties = algo.bool_option("break_ties", Some(false))?;
-        let skip = algo.non_neg_integer_option("skip", Some(0))?;
-        let take = algo.non_neg_integer_option("take", Some(0))?;
+        let sort_descending = payload.bool_option("descending", Some(false))?;
+        let break_ties = payload.bool_option("break_ties", Some(false))?;
+        let skip = payload.non_neg_integer_option("skip", Some(0))?;
+        let take = payload.non_neg_integer_option("take", Some(0))?;
 
         let binding_map = in_rel.get_binding_map(0);
         sort_by.fill_binding_indices(&binding_map)?;
@@ -77,7 +74,7 @@ impl AlgoImpl for ReorderSort {
         }
 
         let mut buffer = vec![];
-        for tuple in in_rel.iter(tx, stores)? {
+        for tuple in in_rel.iter()? {
             let tuple = tuple?;
             let sorter = sort_by.eval(&tuple)?;
             let mut s_tuple: Vec<_> = out_list.iter().map(|ex| ex.eval(&tuple)).try_collect()?;

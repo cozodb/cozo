@@ -62,6 +62,7 @@ pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 pub use runtime::temp_store::RegularTempStore;
+pub use algo::AlgoImpl;
 
 use crate::data::json::JsonValue;
 

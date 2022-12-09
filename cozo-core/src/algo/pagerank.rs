@@ -17,34 +17,31 @@ use miette::Result;
 use nalgebra::{Dynamic, OMatrix, U1};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, AlgoPayload};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct PageRank;
 
 impl AlgoImpl for PageRank {
-    fn run<'a>(
+    #[allow(unused_variables)]
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
-        _poison: Poison,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
+        poison: Poison,
     ) -> Result<()> {
-        let edges = algo.relation(0)?;
-        let undirected = algo.bool_option("undirected", Some(false))?;
-        let theta = algo.unit_interval_option("theta", Some(0.85))? as f32;
-        let epsilon = algo.unit_interval_option("epsilon", Some(0.0001))? as f32;
-        let iterations = algo.pos_integer_option("iterations", Some(10))?;
+        let edges = payload.get_input(0)?;
+        let undirected = payload.bool_option("undirected", Some(false))?;
+        let theta = payload.unit_interval_option("theta", Some(0.85))? as f32;
+        let epsilon = payload.unit_interval_option("epsilon", Some(0.0001))? as f32;
+        let iterations = payload.pos_integer_option("iterations", Some(10))?;
 
-        let (graph, indices, _) = edges.convert_edge_to_graph(undirected, tx, stores)?;
+        let (graph, indices, _) = edges.convert_edge_to_graph(undirected)?;
 
         #[cfg(feature = "rayon")]
         {

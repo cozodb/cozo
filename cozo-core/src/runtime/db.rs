@@ -1079,7 +1079,7 @@ impl<'s, S: Storage<'s>> Db<S> {
 }
 
 #[derive(Clone, Default)]
-pub(crate) struct Poison(pub(crate) Arc<AtomicBool>);
+pub struct Poison(pub(crate) Arc<AtomicBool>);
 
 impl Poison {
     #[inline(always)]

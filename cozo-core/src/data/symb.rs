@@ -19,7 +19,7 @@ use thiserror::Error;
 use crate::parse::SourceSpan;
 
 #[derive(Clone, Deserialize, Serialize)]
-pub(crate) struct Symbol {
+pub struct Symbol {
     pub(crate) name: SmartString<LazyCompact>,
     #[serde(skip)]
     pub(crate) span: SourceSpan,

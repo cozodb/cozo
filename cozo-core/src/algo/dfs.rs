@@ -11,32 +11,28 @@ use std::collections::{BTreeMap, BTreeSet};
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, NodeNotFoundError};
+use crate::algo::{AlgoImpl, AlgoPayload, NodeNotFoundError};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct Dfs;
 
 impl AlgoImpl for Dfs {
-    fn run<'a>(
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.relation_with_min_len(0, 2, tx, stores)?;
-        let nodes = algo.relation(1)?;
-        let starting_nodes = algo.relation(2).unwrap_or(nodes);
-        let limit = algo.pos_integer_option("limit", Some(1))?;
-        let mut condition = algo.expr_option("condition", None)?;
+        let edges = payload.get_input(0)?.ensure_min_len(2)?;
+        let nodes = payload.get_input(1)?;
+        let starting_nodes = payload.get_input(2).unwrap_or(nodes);
+        let limit = payload.pos_integer_option("limit", Some(1))?;
+        let mut condition = payload.expr_option("condition", None)?;
         let binding_map = nodes.get_binding_map(0);
         condition.fill_binding_indices(&binding_map)?;
         let binding_indices = condition.binding_indices();
@@ -46,7 +42,7 @@ impl AlgoImpl for Dfs {
         let mut backtrace: BTreeMap<DataValue, DataValue> = Default::default();
         let mut found: Vec<(DataValue, DataValue)> = vec![];
 
-        'outer: for node_tuple in starting_nodes.iter(tx, stores)? {
+        'outer: for node_tuple in starting_nodes.iter()? {
             let node_tuple = node_tuple?;
             let starting_node = &node_tuple[0];
             if visited.contains(starting_node) {
@@ -65,7 +61,7 @@ impl AlgoImpl for Dfs {
                     vec![candidate.clone()]
                 } else {
                     nodes
-                        .prefix_iter(&candidate, tx, stores)?
+                        .prefix_iter(&candidate)?
                         .next()
                         .ok_or_else(|| NodeNotFoundError {
                             missing: candidate.clone(),
@@ -82,7 +78,7 @@ impl AlgoImpl for Dfs {
 
                 visited.insert(candidate.clone());
 
-                for edge in edges.prefix_iter(&candidate, tx, stores)? {
+                for edge in edges.prefix_iter(&candidate)? {
                     let edge = edge?;
                     let to_node = &edge[1];
                     if visited.contains(to_node) {

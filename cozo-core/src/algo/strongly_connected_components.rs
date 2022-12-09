@@ -14,7 +14,7 @@ use itertools::Itertools;
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, AlgoPayload};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
@@ -38,18 +38,16 @@ impl StronglyConnectedComponent {
 
 #[cfg(feature = "graph-algo")]
 impl AlgoImpl for StronglyConnectedComponent {
-    fn run<'a>(
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.relation(0)?;
+        let edges = payload.get_input(0)?;
 
         let (graph, indices, mut inv_indices) =
-            edges.convert_edge_to_graph(!self.strong, tx, stores)?;
+            edges.convert_edge_to_graph(!self.strong)?;
 
         let tarjan = TarjanScc::new(&graph).run(poison)?;
         for (grp_id, cc) in tarjan.iter().enumerate() {
@@ -62,8 +60,8 @@ impl AlgoImpl for StronglyConnectedComponent {
 
         let mut counter = tarjan.len() as i64;
 
-        if let Ok(nodes) = algo.relation(1) {
-            for tuple in nodes.iter(tx, stores)? {
+        if let Ok(nodes) = payload.get_input(1) {
+            for tuple in nodes.iter()? {
                 let tuple = tuple?;
                 let node = tuple.into_iter().next().unwrap();
                 if !inv_indices.contains_key(&node) {

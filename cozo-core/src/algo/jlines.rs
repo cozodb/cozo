@@ -20,39 +20,35 @@ use minreq::Response;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::{AlgoImpl, CannotDetermineArity};
+use crate::algo::{AlgoImpl, AlgoPayload, CannotDetermineArity};
 use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
-use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct JsonReader;
 
 impl AlgoImpl for JsonReader {
     fn run(
         &mut self,
-        _tx: &SessionTx<'_>,
-        algo: &MagicAlgoApply,
-        _stores: &BTreeMap<MagicSymbol, EpochStore>,
+        payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         _poison: Poison,
     ) -> Result<()> {
-        let url = algo.string_option("url", None)?;
-        let json_lines = algo.bool_option("json_lines", Some(true))?;
-        let null_if_absent = algo.bool_option("null_if_absent", Some(false))?;
-        let prepend_index = algo.bool_option("prepend_index", Some(false))?;
+        let url = payload.string_option("url", None)?;
+        let json_lines = payload.bool_option("json_lines", Some(true))?;
+        let null_if_absent = payload.bool_option("null_if_absent", Some(false))?;
+        let prepend_index = payload.bool_option("prepend_index", Some(false))?;
 
         #[derive(Error, Diagnostic, Debug)]
         #[error("fields specification must be a list of strings")]
         #[diagnostic(code(eval::algo_bad_fields))]
         struct BadFields(#[label] SourceSpan);
 
-        let fields_expr = algo.expr_option("fields", None)?;
+        let fields_expr = payload.expr_option("fields", None)?;
         let fields_span = fields_expr.span();
         let fields: Vec<_> = match fields_expr.eval_to_const()? {
             DataValue::List(l) => l
@@ -96,13 +92,15 @@ impl AlgoImpl for JsonReader {
                         let line = line.into_diagnostic()?;
                         let line = line.trim();
                         if !line.is_empty() {
-                            let row: BTreeMap<String, JsonValue> = serde_json::from_str(line).into_diagnostic()?;
+                            let row: BTreeMap<String, JsonValue> =
+                                serde_json::from_str(line).into_diagnostic()?;
                             process_row(&row)?;
                         }
                     }
                 } else {
                     let content = fs::read_to_string(file_path).into_diagnostic()?;
-                    let rows: Vec<BTreeMap<String, JsonValue>> = serde_json::from_str(&content).into_diagnostic()?;
+                    let rows: Vec<BTreeMap<String, JsonValue>> =
+                        serde_json::from_str(&content).into_diagnostic()?;
                     for row in &rows {
                         process_row(row)?;
                     }
@@ -122,7 +120,8 @@ impl AlgoImpl for JsonReader {
                             }
                         }
                     } else {
-                        let rows: Vec<BTreeMap<String, JsonValue>> = serde_json::from_str(content).into_diagnostic()?;
+                        let rows: Vec<BTreeMap<String, JsonValue>> =
+                            serde_json::from_str(content).into_diagnostic()?;
                         for row in &rows {
                             process_row(row)?;
                         }

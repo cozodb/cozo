@@ -12,48 +12,43 @@ use csv::StringRecord;
 use miette::{bail, ensure, IntoDiagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::algo::{AlgoImpl, CannotDetermineArity};
 #[cfg(feature = "requests")]
 use crate::algo::jlines::get_file_content_from_url;
+use crate::algo::{AlgoImpl, AlgoPayload, CannotDetermineArity};
 use crate::data::expr::Expr;
 use crate::data::functions::{op_to_float, op_to_uuid};
-use crate::data::program::{
-    AlgoOptionNotFoundError, MagicAlgoApply, MagicSymbol, WrongAlgoOptionError,
-};
+use crate::data::program::{AlgoOptionNotFoundError, WrongAlgoOptionError};
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::{parse_type, SourceSpan};
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct CsvReader;
 
 impl AlgoImpl for CsvReader {
     fn run(
         &mut self,
-        _tx: &SessionTx<'_>,
-        algo: &MagicAlgoApply,
-        _stores: &BTreeMap<MagicSymbol, EpochStore>,
+        payload: AlgoPayload<'_, '_>,
         out: &mut RegularTempStore,
         _poison: Poison,
     ) -> Result<()> {
-        let delimiter = algo.string_option("delimiter", Some(","))?;
+        let delimiter = payload.string_option("delimiter", Some(","))?;
         let delimiter = delimiter.as_bytes();
         ensure!(
             delimiter.len() == 1,
             WrongAlgoOptionError {
                 name: "delimiter".to_string(),
-                span: algo.span,
+                span: payload.span(),
                 algo_name: "CsvReader".to_string(),
                 help: "'delimiter' must be a single-byte string".to_string()
             }
         );
         let delimiter = delimiter[0];
-        let prepend_index = algo.bool_option("prepend_index", Some(false))?;
-        let has_headers = algo.bool_option("has_headers", Some(true))?;
-        let types_opts = algo.expr_option("types", None)?.eval_to_const()?;
+        let prepend_index = payload.bool_option("prepend_index", Some(false))?;
+        let has_headers = payload.bool_option("has_headers", Some(true))?;
+        let types_opts = payload.expr_option("types", None)?.eval_to_const()?;
         let typing = NullableColType {
             coltype: ColType::List {
                 eltype: Box::new(NullableColType {
@@ -70,7 +65,7 @@ impl AlgoImpl for CsvReader {
             let type_str = type_str.get_string().unwrap();
             let typ = parse_type(type_str).map_err(|e| WrongAlgoOptionError {
                 name: "types".to_string(),
-                span: algo.span,
+                span: payload.span(),
                 algo_name: "CsvReader".to_string(),
                 help: e.to_string(),
             })?;
@@ -152,7 +147,7 @@ impl AlgoImpl for CsvReader {
             Ok(())
         };
 
-        let url = algo.string_option("url", None)?;
+        let url = payload.string_option("url", None)?;
         match url.strip_prefix("file://") {
             Some(file_path) => {
                 let mut rdr = rdr_builder.from_path(file_path).into_diagnostic()?;

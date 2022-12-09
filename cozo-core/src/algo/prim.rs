@@ -16,37 +16,32 @@ use priority_queue::PriorityQueue;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, AlgoPayload};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct MinimumSpanningTreePrim;
 
 impl AlgoImpl for MinimumSpanningTreePrim {
-    fn run<'a>(
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.relation(0)?;
-        let (graph, indices, inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(true, true, tx, stores)?;
+        let edges = payload.get_input(0)?;
+        let (graph, indices, inv_indices, _) = edges.convert_edge_to_weighted_graph(true, true)?;
         if graph.is_empty() {
             return Ok(());
         }
-        let starting = match algo.relation(1) {
+        let starting = match payload.get_input(1) {
             Err(_) => 0,
             Ok(rel) => {
-                let tuple = rel.iter(tx, stores)?.next().ok_or_else(|| {
+                let tuple = rel.iter()?.next().ok_or_else(|| {
                     #[derive(Debug, Error, Diagnostic)]
                     #[error("The provided starting nodes relation is empty")]
                     #[diagnostic(code(algo::empty_starting))]

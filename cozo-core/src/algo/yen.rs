@@ -15,38 +15,34 @@ use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::algo::shortest_path_dijkstra::dijkstra;
-use crate::algo::AlgoImpl;
+use crate::algo::{AlgoImpl, AlgoPayload};
 use crate::data::expr::Expr;
-use crate::data::program::{MagicAlgoApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
-use crate::runtime::temp_store::{EpochStore, RegularTempStore};
-use crate::runtime::transact::SessionTx;
+use crate::runtime::temp_store::RegularTempStore;
 
 pub(crate) struct KShortestPathYen;
 
 impl AlgoImpl for KShortestPathYen {
-    fn run<'a>(
+    fn run(
         &mut self,
-        tx: &'a SessionTx<'_>,
-        algo: &'a MagicAlgoApply,
-        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
-        out: &'a mut RegularTempStore,
+        payload: AlgoPayload<'_, '_>,
+        out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = algo.relation(0)?;
-        let starting = algo.relation(1)?;
-        let termination = algo.relation(2)?;
-        let undirected = algo.bool_option("undirected", Some(false))?;
-        let k = algo.pos_integer_option("k", None)?;
+        let edges = payload.get_input(0)?;
+        let starting = payload.get_input(1)?;
+        let termination = payload.get_input(2)?;
+        let undirected = payload.bool_option("undirected", Some(false))?;
+        let k = payload.pos_integer_option("k", None)?;
 
         let (graph, indices, inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(undirected, false, tx, stores)?;
+            edges.convert_edge_to_weighted_graph(undirected, false)?;
 
         let mut starting_nodes = BTreeSet::new();
-        for tuple in starting.iter(tx, stores)? {
+        for tuple in starting.iter()? {
             let tuple = tuple?;
             let node = &tuple[0];
             if let Some(idx) = inv_indices.get(node) {
@@ -54,7 +50,7 @@ impl AlgoImpl for KShortestPathYen {
             }
         }
         let mut termination_nodes = BTreeSet::new();
-        for tuple in termination.iter(tx, stores)? {
+        for tuple in termination.iter()? {
             let tuple = tuple?;
             let node = &tuple[0];
             if let Some(idx) = inv_indices.get(node) {
