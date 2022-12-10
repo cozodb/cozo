@@ -35,3 +35,5 @@ pub(crate) mod top_sort;
 pub(crate) mod triangles;
 #[cfg(feature = "graph-algo")]
 pub(crate) mod yen;
+#[cfg(feature = "graph-algo")]
+pub(crate) mod shortest_path_bfs;

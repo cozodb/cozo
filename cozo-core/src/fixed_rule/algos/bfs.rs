@@ -110,6 +110,6 @@ impl FixedRule for Bfs {
         _rule_head: &[Symbol],
         _span: SourceSpan,
     ) -> Result<usize> {
-        Ok(1)
+        Ok(3)
     }
 }

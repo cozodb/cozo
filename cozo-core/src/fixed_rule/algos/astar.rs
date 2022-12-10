@@ -14,11 +14,13 @@ use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::{FixedRule, FixedRuleInputRelation, FixedRulePayload, BadExprValueError, NodeNotFoundError};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{
+    BadExprValueError, FixedRule, FixedRuleInputRelation, FixedRulePayload, NodeNotFoundError,
+};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -32,7 +34,7 @@ impl FixedRule for ShortestPathAStar {
         out: &mut RegularTempStore,
         poison: Poison,
     ) -> Result<()> {
-        let edges = payload.get_input(0)?.ensure_min_len(3)?;
+        let edges = payload.get_input(0)?.ensure_min_len(2)?;
         let nodes = payload.get_input(1)?;
         let starting = payload.get_input(2)?;
         let goals = payload.get_input(3)?;
@@ -124,13 +126,16 @@ fn astar(
         for edge in edges.prefix_iter(&node)? {
             let edge = edge?;
             let edge_dst = &edge[1];
-            let edge_cost = edge[2].get_float().ok_or_else(|| {
-                BadExprValueError(
-                    edge_dst.clone(),
-                    edges.span(),
-                    "edge cost must be a number".to_string(),
-                )
-            })?;
+            let edge_cost = match edge.get(2) {
+                None => 1.,
+                Some(cost) => cost.get_float().ok_or_else(|| {
+                    BadExprValueError(
+                        edge_dst.clone(),
+                        edges.span(),
+                        "edge cost must be a number".to_string(),
+                    )
+                })?,
+            };
             ensure!(
                 !edge_cost.is_nan(),
                 BadExprValueError(

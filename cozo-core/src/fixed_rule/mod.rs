@@ -45,6 +45,8 @@ use crate::fixed_rule::algos::pagerank::PageRank;
 #[cfg(feature = "graph-algo")]
 use crate::fixed_rule::algos::prim::MinimumSpanningTreePrim;
 #[cfg(feature = "graph-algo")]
+use crate::fixed_rule::algos::shortest_path_bfs::ShortestPathBFS;
+#[cfg(feature = "graph-algo")]
 use crate::fixed_rule::algos::shortest_path_dijkstra::ShortestPathDijkstra;
 #[cfg(feature = "graph-algo")]
 use crate::fixed_rule::algos::strongly_connected_components::StronglyConnectedComponent;
@@ -549,6 +551,11 @@ lazy_static! {
             (
                 "BFS".to_string(),
                 Arc::<Box<dyn FixedRule>>::new(Box::new(Bfs)),
+            ),
+            #[cfg(feature = "graph-algo")]
+            (
+                "ShortestPathBFS".to_string(),
+                Arc::<Box<dyn FixedRule>>::new(Box::new(ShortestPathBFS)),
             ),
             #[cfg(feature = "graph-algo")]
             (
