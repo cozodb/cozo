@@ -6,12 +6,9 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::iter;
-use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use either::{Left, Right};
 use itertools::Itertools;
@@ -474,8 +471,6 @@ impl RelAlgebra {
                     joiner,
                     to_eliminate,
                     span,
-                    mat_right_cache: RefCell::new(Default::default()),
-                    cached: Default::default(),
                 }));
                 if !remaining.is_empty() {
                     joined = RelAlgebra::Filter(FilteredRA {
@@ -521,8 +516,6 @@ impl RelAlgebra {
             },
             to_eliminate: Default::default(),
             span,
-            mat_right_cache: RefCell::new(Default::default()),
-            cached: Default::default(),
         }))
     }
     pub(crate) fn neg_join(
@@ -1531,8 +1524,6 @@ pub(crate) struct InnerJoin {
     pub(crate) joiner: Joiner,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
     pub(crate) span: SourceSpan,
-    mat_right_cache: RefCell<Rc<Vec<Tuple>>>,
-    cached: AtomicBool,
 }
 
 impl InnerJoin {
@@ -1689,6 +1680,7 @@ impl InnerJoin {
         delta_rule: Option<&MagicSymbol>,
         stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     ) -> Result<TupleIter<'a>> {
+        debug!("using materialized join");
         let right_bindings = self.right.bindings_after_eliminate();
         let (left_join_indices, right_join_indices) = self
             .joiner
@@ -1716,9 +1708,7 @@ impl InnerJoin {
             .sorted_by_key(|(_, b)| **b)
             .map(|(a, _)| a)
             .collect_vec();
-        let cached_data = if self.cached.load(Ordering::Relaxed) {
-            self.mat_right_cache.borrow().clone()
-        } else {
+        let cached_data = {
             let mut cache = BTreeSet::new();
             for item in self.right.iter(tx, delta_rule, stores)? {
                 match item {
@@ -1732,10 +1722,7 @@ impl InnerJoin {
                     Err(e) => return Err(e),
                 }
             }
-            let cache = cache.into_iter().collect_vec();
-            *self.mat_right_cache.borrow_mut() = Rc::new(cache);
-            self.cached.store(true, Ordering::Relaxed);
-            self.mat_right_cache.borrow().clone()
+            cache.into_iter().collect_vec()
         };
 
         let (prefix, right_idx) =
@@ -1756,7 +1743,7 @@ impl InnerJoin {
 }
 
 struct CachedMaterializedIterator<'a> {
-    materialized: Rc<Vec<Tuple>>,
+    materialized: Vec<Tuple>,
     eliminate_indices: BTreeSet<usize>,
     left_join_indices: Vec<usize>,
     right_invert_indices: Vec<usize>,

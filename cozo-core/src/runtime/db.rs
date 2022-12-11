@@ -1293,4 +1293,18 @@ mod tests {
             .rows;
         assert_eq!(res[0][0], json!(1.1))
     }
+    #[test]
+    fn test_classical() {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let db = new_cozo_mem().unwrap();
+        let res = db.run_script(r#"
+parent[] <- [['joseph', 'jakob'],
+             ['jakob', 'issac'],
+             ['issac', 'abraham']]
+grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
+?[who] := grandparent[who, 'abraham']
+        "#, Default::default()).unwrap().rows;
+        println!("{:?}", res);
+        assert_eq!(res[0][0], json!("jakob"))
+    }
 }

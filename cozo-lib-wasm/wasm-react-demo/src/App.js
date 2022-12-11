@@ -224,19 +224,15 @@ function App() {
                     Please refer to the <a href="https://github.com/cozodb/cozo/">project homepage</a> for
                     more information about the Cozo database.
                 </p>
-                <h2>Not sure what to run? Click/touch <a onClick={() => {
-                    setQueryText(`love[loving, loved] <- [['alice', 'eve'], ['bob', 'alice'],
-                        ['eve', 'alice'], ['eve', 'bob'],
-                        ['eve', 'charlie'], ['charlie', 'eve'],
-                        ['david', 'george'], ['george', 'george']]
-cls[loving, loved] := love[loving, loved]
-cls[loving, loved] := cls[loving, middle], love[middle, loved]
-?[loving, loved] := cls[loving, loved]`)
-                }}>HERE</a> ...</h2>
+                <h2>Not sure what to run?</h2>
                 <p>
-                    ... and run the script, to compute the <a
-                    href="https://en.wikipedia.org/wiki/Transitive_closure">transitive closure</a> of
-                    a hypothetical love triangle.
+                    <a onClick={() => {
+                    setQueryText(`parent[] <- [['joseph', 'jakob'], 
+             ['jakob', 'issac'], 
+             ['issac', 'abraham']]
+grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
+?[who] := grandparent[who, 'abraham']`)
+                }}>Here</a> is a classical example recursive example.
                 </p>
                 <p>
                     The <a href="https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb">tutorial</a> contains many more examples.
