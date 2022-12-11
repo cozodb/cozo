@@ -1,6 +1,6 @@
 [package]
 name = "cozo"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data and algorithms"
 authors = ["Ziyang Hu"]
@@ -96,7 +96,7 @@ serde_bytes = "0.11.7"
 rmp = "0.8.11"
 rmp-serde = "1.1.0"
 rmpv = "1.0.0"
-base64 = "0.13.0"
+base64 = "0.20.0"
 chrono = "0.4.19"
 chrono-tz = "0.8.0"
 priority-queue = "1.2.3"

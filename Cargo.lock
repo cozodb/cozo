@@ -180,6 +180,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
+name = "base64"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ea22880d78093b0cbe17c89f64a7d457941e65759157ec6cb31a31d652b05e5"
+
+[[package]]
 name = "bindgen"
 version = "0.57.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -525,10 +531,10 @@ checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
 name = "cozo"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "approx",
- "base64",
+ "base64 0.20.0",
  "byteorder",
  "casey",
  "chrono",
@@ -575,7 +581,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-lib-wasm"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "console_error_panic_hook",
  "cozo",
@@ -586,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-node"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "cozo",
  "lazy_static",
@@ -595,7 +601,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-swift"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "cozo",
  "swift-bridge",
@@ -604,7 +610,7 @@ dependencies = [
 
 [[package]]
 name = "cozo_c"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "cbindgen",
  "cozo",
@@ -613,7 +619,7 @@ dependencies = [
 
 [[package]]
 name = "cozo_java"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "cozo",
  "jni",
@@ -622,7 +628,7 @@ dependencies = [
 
 [[package]]
 name = "cozo_py"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "cozo",
  "pyo3",
@@ -645,7 +651,7 @@ dependencies = [
 
 [[package]]
 name = "cozoserver"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "clap 4.0.29",
@@ -1222,7 +1228,7 @@ checksum = "ad402dbef95d726c4170fc69209c4d669a199c6462c63c69d67fa1d8f44511f4"
 dependencies = [
  "derive-new",
  "prost 0.11.3",
- "prost-build 0.11.3",
+ "prost-build 0.11.4",
  "prost-types 0.11.2",
  "tempfile",
 ]
@@ -2427,9 +2433,9 @@ dependencies = [
 
 [[package]]
 name = "prost-build"
-version = "0.11.3"
+version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e330bf1316db56b12c2bcfa399e8edddd4821965ea25ddb2c134b610b1c1c604"
+checksum = "276470f7f281b0ed53d2ae42dd52b4a8d08853a3c70e7fe95882acbb98a6ae94"
 dependencies = [
  "bytes",
  "heck 0.4.0",
@@ -2661,11 +2667,10 @@ dependencies = [
 
 [[package]]
 name = "rayon"
-version = "1.6.0"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e060280438193c554f654141c9ea9417886713b7acd75974c85b18a69a88e0b"
+checksum = "6db3a213adf02b3bcfd2d3846bb41cb22857d131789e01df434fb7e7bc0759b7"
 dependencies = [
- "crossbeam-deque",
  "either",
  "rayon-core",
 ]
@@ -2729,7 +2734,7 @@ version = "0.11.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68cc60575865c7831548863cc02356512e3f1dc2f3f82cb837d7fc4cc8f3c97c"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -2813,7 +2818,7 @@ version = "3.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f86e4c51a773f953f02bbab5fd049f004bfd384341d62da2a079aff812ab176"
 dependencies = [
- "base64",
+ "base64 0.13.1",
  "brotli",
  "chrono",
  "deflate",
@@ -3858,9 +3863,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.22.5"
+version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "368bfe657969fb01238bb756d351dcade285e0f6fcbd36dcb23359a5169975be"
+checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
 dependencies = [
  "webpki",
 ]

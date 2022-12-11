@@ -22,7 +22,7 @@ see the Building section below.
 target 'YourApp' do
   use_frameworks!
 
-  pod 'CozoSwiftBridge', '~> 0.2.2'
+  pod 'CozoSwiftBridge', '~> 0.3.0'
 end
 ```
 
