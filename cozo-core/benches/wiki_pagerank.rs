@@ -76,3 +76,18 @@ fn wikipedia_pagerank(b: &mut Bencher) {
             .unwrap()
     });
 }
+
+#[bench]
+fn wikipedia_louvain(b: &mut Bencher) {
+    initialize(&TEST_DB);
+    b.iter(|| {
+        let start = Instant::now();
+        TEST_DB
+            .run_script(
+                "?[grp, idx] <~ CommunityDetectionLouvain(*article[])",
+                Default::default(),
+            )
+            .unwrap();
+        dbg!(start.elapsed());
+    })
+}

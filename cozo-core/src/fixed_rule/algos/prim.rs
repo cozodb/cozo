@@ -8,6 +8,7 @@
 
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
+use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 
 use miette::Diagnostic;
 use miette::Result;
@@ -34,8 +35,8 @@ impl FixedRule for MinimumSpanningTreePrim {
         poison: Poison,
     ) -> Result<()> {
         let edges = payload.get_input(0)?;
-        let (graph, indices, inv_indices, _) = edges.convert_edge_to_weighted_graph(true, true)?;
-        if graph.is_empty() {
+        let (graph, indices, inv_indices) = edges.to_directed_weighted_graph(true, true)?;
+        if graph.node_count() == 0 {
             return Ok(());
         }
         let starting = match payload.get_input(1) {
@@ -63,9 +64,9 @@ impl FixedRule for MinimumSpanningTreePrim {
         let msp = prim(&graph, starting, poison)?;
         for (src, dst, cost) in msp {
             out.put(vec![
-                indices[src].clone(),
-                indices[dst].clone(),
-                DataValue::from(cost),
+                indices[src as usize].clone(),
+                indices[dst as usize].clone(),
+                DataValue::from(cost as f64),
             ]);
         }
         Ok(())
@@ -82,29 +83,30 @@ impl FixedRule for MinimumSpanningTreePrim {
 }
 
 fn prim(
-    graph: &[Vec<(usize, f64)>],
-    starting: usize,
+    graph: &DirectedCsrGraph<u32, (), f32>,
+    starting: u32,
     poison: Poison,
-) -> Result<Vec<(usize, usize, f64)>> {
-    let mut visited = vec![false; graph.len()];
-    let mut mst_edges = Vec::with_capacity(graph.len() - 1);
+) -> Result<Vec<(u32, u32, f32)>> {
+    let mut visited = vec![false; graph.node_count() as usize];
+    let mut mst_edges = Vec::with_capacity((graph.node_count() - 1) as usize);
     let mut pq = PriorityQueue::new();
 
-    let mut relax_edges_at_node = |node: usize, pq: &mut PriorityQueue<_, _>| {
-        visited[node] = true;
-        let edges = &graph[node];
-        for (to_node, cost) in edges {
-            if visited[*to_node] {
+    let mut relax_edges_at_node = |node: u32, pq: &mut PriorityQueue<_, _>| {
+        visited[node as usize] = true;
+        for target in graph.out_neighbors_with_values(node) {
+            let to_node = target.target;
+            let cost = target.value;
+            if visited[to_node as usize] {
                 continue;
             }
-            pq.push_increase(*to_node, (Reverse(OrderedFloat(*cost)), node));
+            pq.push_increase(to_node, (Reverse(OrderedFloat(cost)), node));
         }
     };
 
     relax_edges_at_node(starting, &mut pq);
 
     while let Some((to_node, (Reverse(OrderedFloat(cost)), from_node))) = pq.pop() {
-        if mst_edges.len() == graph.len() - 1 {
+        if mst_edges.len() == (graph.node_count() - 1) as usize {
             break;
         }
         mst_edges.push((from_node, to_node, cost));

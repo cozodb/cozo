@@ -9,12 +9,12 @@
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
+use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 
 use itertools::Itertools;
 use miette::Result;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
-#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
@@ -42,8 +42,8 @@ impl FixedRule for ShortestPathDijkstra {
         let undirected = payload.bool_option("undirected", Some(false))?;
         let keep_ties = payload.bool_option("keep_ties", Some(false))?;
 
-        let (graph, indices, inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(undirected, false)?;
+        let (graph, indices, inv_indices) =
+            edges.to_directed_weighted_graph(undirected, false)?;
 
         let mut starting_nodes = BTreeSet::new();
         for tuple in starting.iter()? {
@@ -88,22 +88,19 @@ impl FixedRule for ShortestPathDijkstra {
                 };
                 for (target, cost, path) in res {
                     let t = vec![
-                        indices[start].clone(),
-                        indices[target].clone(),
-                        DataValue::from(cost),
-                        DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
+                        indices[start as usize].clone(),
+                        indices[target as usize].clone(),
+                        DataValue::from(cost as f64),
+                        DataValue::List(path.into_iter().map(|u| indices[u as usize].clone()).collect_vec()),
                     ];
                     out.put(t)
                 }
             }
         } else {
-            #[cfg(feature = "rayon")]
             let it = starting_nodes.into_par_iter();
-            #[cfg(not(feature = "rayon"))]
-            let it = starting_nodes.into_iter();
 
             let all_res: Vec<_> = it
-                .map(|start| -> Result<(usize, Vec<(usize, f64, Vec<usize>)>)> {
+                .map(|start| -> Result<(u32, Vec<(u32, f32, Vec<u32>)>)> {
                     Ok((
                         start,
                         if let Some(tn) = &termination_nodes {
@@ -135,10 +132,10 @@ impl FixedRule for ShortestPathDijkstra {
             for (start, res) in all_res {
                 for (target, cost, path) in res {
                     let t = vec![
-                        indices[start].clone(),
-                        indices[target].clone(),
-                        DataValue::from(cost),
-                        DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
+                        indices[start as usize].clone(),
+                        indices[target as usize].clone(),
+                        DataValue::from(cost as f64),
+                        DataValue::List(path.into_iter().map(|u| indices[u as usize].clone()).collect_vec()),
                     ];
                     out.put(t)
                 }
@@ -182,41 +179,41 @@ impl Ord for HeapState {
 impl Eq for HeapState {}
 
 pub(crate) trait ForbiddenEdge {
-    fn is_forbidden(&self, src: usize, dst: usize) -> bool;
+    fn is_forbidden(&self, src: u32, dst: u32) -> bool;
 }
 
 impl ForbiddenEdge for () {
-    fn is_forbidden(&self, _src: usize, _dst: usize) -> bool {
+    fn is_forbidden(&self, _src: u32, _dst: u32) -> bool {
         false
     }
 }
 
-impl ForbiddenEdge for BTreeSet<(usize, usize)> {
-    fn is_forbidden(&self, src: usize, dst: usize) -> bool {
+impl ForbiddenEdge for BTreeSet<(u32, u32)> {
+    fn is_forbidden(&self, src: u32, dst: u32) -> bool {
         self.contains(&(src, dst))
     }
 }
 
 pub(crate) trait ForbiddenNode {
-    fn is_forbidden(&self, node: usize) -> bool;
+    fn is_forbidden(&self, node: u32) -> bool;
 }
 
 impl ForbiddenNode for () {
-    fn is_forbidden(&self, _node: usize) -> bool {
+    fn is_forbidden(&self, _node: u32) -> bool {
         false
     }
 }
 
-impl ForbiddenNode for BTreeSet<usize> {
-    fn is_forbidden(&self, node: usize) -> bool {
+impl ForbiddenNode for BTreeSet<u32> {
+    fn is_forbidden(&self, node: u32) -> bool {
         self.contains(&node)
     }
 }
 
 pub(crate) trait Goal {
     fn is_exhausted(&self) -> bool;
-    fn visit(&mut self, node: usize);
-    fn iter(&self, total: usize) -> Box<dyn Iterator<Item = usize> + '_>;
+    fn visit(&mut self, node: u32);
+    fn iter(&self, total: u32) -> Box<dyn Iterator<Item = u32> + '_>;
 }
 
 impl Goal for () {
@@ -224,19 +221,19 @@ impl Goal for () {
         false
     }
 
-    fn visit(&mut self, _node: usize) {}
+    fn visit(&mut self, _node: u32) {}
 
-    fn iter(&self, total: usize) -> Box<dyn Iterator<Item = usize> + '_> {
+    fn iter(&self, total: u32) -> Box<dyn Iterator<Item = u32> + '_> {
         Box::new(0..total)
     }
 }
 
-impl Goal for Option<usize> {
+impl Goal for Option<u32> {
     fn is_exhausted(&self) -> bool {
         self.is_none()
     }
 
-    fn visit(&mut self, node: usize) {
+    fn visit(&mut self, node: u32) {
         if let Some(u) = &self {
             if *u == node {
                 self.take();
@@ -244,7 +241,7 @@ impl Goal for Option<usize> {
         }
     }
 
-    fn iter(&self, _total: usize) -> Box<dyn Iterator<Item = usize> + '_> {
+    fn iter(&self, _total: u32) -> Box<dyn Iterator<Item = u32> + '_> {
         if let Some(u) = self {
             Box::new(iter::once(*u))
         } else {
@@ -253,51 +250,55 @@ impl Goal for Option<usize> {
     }
 }
 
-impl Goal for BTreeSet<usize> {
+impl Goal for BTreeSet<u32> {
     fn is_exhausted(&self) -> bool {
         self.is_empty()
     }
 
-    fn visit(&mut self, node: usize) {
+    fn visit(&mut self, node: u32) {
         self.remove(&node);
     }
 
-    fn iter(&self, _total: usize) -> Box<dyn Iterator<Item = usize> + '_> {
+    fn iter(&self, _total: u32) -> Box<dyn Iterator<Item = u32> + '_> {
         Box::new(self.iter().cloned())
     }
 }
 
 pub(crate) fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
-    edges: &[Vec<(usize, f64)>],
-    start: usize,
+    edges: &DirectedCsrGraph<u32, (), f32>,
+    start: u32,
     goals: &G,
     forbidden_edges: &FE,
     forbidden_nodes: &FN,
-) -> Vec<(usize, f64, Vec<usize>)> {
-    let mut distance = vec![f64::INFINITY; edges.len()];
+) -> Vec<(u32, f32, Vec<u32>)> {
+    let graph_size = edges.node_count();
+    let mut distance = vec![f32::INFINITY; graph_size as usize];
     let mut pq = PriorityQueue::new();
-    let mut back_pointers = vec![usize::MAX; edges.len()];
-    distance[start] = 0.;
+    let mut back_pointers = vec![u32::MAX; graph_size as usize];
+    distance[start as usize] = 0.;
     pq.push(start, Reverse(OrderedFloat(0.)));
     let mut goals_remaining = goals.clone();
 
     while let Some((node, Reverse(OrderedFloat(cost)))) = pq.pop() {
-        if cost > distance[node] {
+        if cost > distance[node as usize] {
             continue;
         }
 
-        for (nxt_node, path_weight) in &edges[node] {
-            if forbidden_nodes.is_forbidden(*nxt_node) {
+        for target in  edges.out_neighbors_with_values(node) {
+            let nxt_node = target.target;
+            let path_weight = target.value;
+
+            if forbidden_nodes.is_forbidden(nxt_node) {
                 continue;
             }
-            if forbidden_edges.is_forbidden(node, *nxt_node) {
+            if forbidden_edges.is_forbidden(node, nxt_node) {
                 continue;
             }
-            let nxt_cost = cost + *path_weight;
-            if nxt_cost < distance[*nxt_node] {
-                pq.push_increase(*nxt_node, Reverse(OrderedFloat(nxt_cost)));
-                distance[*nxt_node] = nxt_cost;
-                back_pointers[*nxt_node] = node;
+            let nxt_cost = cost + path_weight;
+            if nxt_cost < distance[nxt_node as usize] {
+                pq.push_increase(nxt_node, Reverse(OrderedFloat(nxt_cost)));
+                distance[nxt_node as usize] = nxt_cost;
+                back_pointers[nxt_node as usize] = node;
             }
         }
 
@@ -308,9 +309,9 @@ pub(crate) fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
     }
 
     let ret = goals
-        .iter(edges.len())
+        .iter(edges.node_count())
         .map(|target| {
-            let cost = distance[target];
+            let cost = distance[target as usize];
             if !cost.is_finite() {
                 (target, cost, vec![])
             } else {
@@ -318,7 +319,7 @@ pub(crate) fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
                 let mut current = target;
                 while current != start {
                     path.push(current);
-                    current = back_pointers[current];
+                    current = back_pointers[current as usize];
                 }
                 path.push(start);
                 path.reverse();
@@ -331,41 +332,44 @@ pub(crate) fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
 }
 
 pub(crate) fn dijkstra_keep_ties<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
-    edges: &[Vec<(usize, f64)>],
-    start: usize,
+    edges: &DirectedCsrGraph<u32, (), f32>,
+    start: u32,
     goals: &G,
     forbidden_edges: &FE,
     forbidden_nodes: &FN,
     poison: Poison,
-) -> Result<Vec<(usize, f64, Vec<usize>)>> {
-    let mut distance = vec![f64::INFINITY; edges.len()];
+) -> Result<Vec<(u32, f32, Vec<u32>)>> {
+    let mut distance = vec![f32::INFINITY; edges.node_count() as usize];
     let mut pq = PriorityQueue::new();
-    let mut back_pointers: Vec<SmallVec<[usize; 1]>> = vec![smallvec![]; edges.len()];
-    distance[start] = 0.;
+    let mut back_pointers: Vec<SmallVec<[u32; 1]>> = vec![smallvec![]; edges.node_count() as usize];
+    distance[start as usize] = 0.;
     pq.push(start, Reverse(OrderedFloat(0.)));
     let mut goals_remaining = goals.clone();
 
     while let Some((node, Reverse(OrderedFloat(cost)))) = pq.pop() {
-        if cost > distance[node] {
+        if cost > distance[node as usize] {
             continue;
         }
 
-        for (nxt_node, path_weight) in &edges[node] {
-            if forbidden_nodes.is_forbidden(*nxt_node) {
+        for target in edges.out_neighbors_with_values(node) {
+            let nxt_node = target.target;
+            let path_weight = target.value;
+
+            if forbidden_nodes.is_forbidden(nxt_node) {
                 continue;
             }
-            if forbidden_edges.is_forbidden(node, *nxt_node) {
+            if forbidden_edges.is_forbidden(node, nxt_node) {
                 continue;
             }
-            let nxt_cost = cost + *path_weight;
-            if nxt_cost < distance[*nxt_node] {
-                pq.push_increase(*nxt_node, Reverse(OrderedFloat(nxt_cost)));
-                distance[*nxt_node] = nxt_cost;
-                back_pointers[*nxt_node].clear();
-                back_pointers[*nxt_node].push(node);
-            } else if nxt_cost == distance[*nxt_node] {
-                pq.push_increase(*nxt_node, Reverse(OrderedFloat(nxt_cost)));
-                back_pointers[*nxt_node].push(node);
+            let nxt_cost = cost + path_weight;
+            if nxt_cost < distance[nxt_node as usize] {
+                pq.push_increase(nxt_node, Reverse(OrderedFloat(nxt_cost)));
+                distance[nxt_node as usize] = nxt_cost;
+                back_pointers[nxt_node as usize].clear();
+                back_pointers[nxt_node as usize].push(node);
+            } else if nxt_cost == distance[nxt_node as usize] {
+                pq.push_increase(nxt_node, Reverse(OrderedFloat(nxt_cost)));
+                back_pointers[nxt_node as usize].push(node);
             }
             poison.check()?;
         }
@@ -377,27 +381,27 @@ pub(crate) fn dijkstra_keep_ties<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal +
     }
 
     let ret = goals
-        .iter(edges.len())
+        .iter(edges.node_count())
         .flat_map(|target| {
-            let cost = distance[target];
+            let cost = distance[target as usize];
             if !cost.is_finite() {
                 vec![(target, cost, vec![])]
             } else {
                 struct CollectPath {
-                    collected: Vec<(usize, f64, Vec<usize>)>,
+                    collected: Vec<(u32, f32, Vec<u32>)>,
                 }
 
                 impl CollectPath {
                     fn collect(
                         &mut self,
-                        chain: &[usize],
-                        start: usize,
-                        target: usize,
-                        cost: f64,
-                        back_pointers: &[SmallVec<[usize; 1]>],
+                        chain: &[u32],
+                        start: u32,
+                        target: u32,
+                        cost: f32,
+                        back_pointers: &[SmallVec<[u32; 1]>],
                     ) {
                         let last = chain.last().unwrap();
-                        let prevs = &back_pointers[*last];
+                        let prevs = &back_pointers[*last as usize];
                         for nxt in prevs {
                             let mut ret = chain.to_vec();
                             ret.push(*nxt);

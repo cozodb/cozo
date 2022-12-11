@@ -9,6 +9,7 @@
 
 use std::cmp::min;
 use std::collections::BTreeMap;
+use graph::prelude::{DirectedCsrGraph, DirectedNeighbors, Graph};
 
 use itertools::Itertools;
 use miette::Result;
@@ -47,12 +48,12 @@ impl FixedRule for StronglyConnectedComponent {
         let edges = payload.get_input(0)?;
 
         let (graph, indices, mut inv_indices) =
-            edges.convert_edge_to_graph(!self.strong)?;
+            edges.to_directed_graph(!self.strong)?;
 
-        let tarjan = TarjanScc::new(&graph).run(poison)?;
+        let tarjan = TarjanSccG::new(graph).run(poison)?;
         for (grp_id, cc) in tarjan.iter().enumerate() {
             for idx in cc {
-                let val = indices.get(*idx).unwrap();
+                let val = indices.get(*idx as usize).unwrap();
                 let tuple = vec![val.clone(), DataValue::from(grp_id as i64)];
                 out.put(tuple);
             }
@@ -65,7 +66,7 @@ impl FixedRule for StronglyConnectedComponent {
                 let tuple = tuple?;
                 let node = tuple.into_iter().next().unwrap();
                 if !inv_indices.contains_key(&node) {
-                    inv_indices.insert(node.clone(), usize::MAX);
+                    inv_indices.insert(node.clone(), u32::MAX);
                     let tuple = vec![node, DataValue::from(counter)];
                     out.put(tuple);
                     counter += 1;
@@ -86,60 +87,62 @@ impl FixedRule for StronglyConnectedComponent {
     }
 }
 
-pub(crate) struct TarjanScc<'a> {
-    graph: &'a [Vec<usize>],
-    id: usize,
-    ids: Vec<Option<usize>>,
-    low: Vec<usize>,
+
+pub(crate) struct TarjanSccG {
+    graph: DirectedCsrGraph<u32>,
+    id: u32,
+    ids: Vec<Option<u32>>,
+    low: Vec<u32>,
     on_stack: Vec<bool>,
-    stack: Vec<usize>,
+    stack: Vec<u32>,
 }
 
-impl<'a> TarjanScc<'a> {
-    pub(crate) fn new(graph: &'a [Vec<usize>]) -> Self {
+
+impl TarjanSccG {
+    pub(crate) fn new(graph: DirectedCsrGraph<u32>) -> Self {
+        let graph_size = graph.node_count();
         Self {
             graph,
             id: 0,
-            ids: vec![None; graph.len()],
-            low: vec![0; graph.len()],
-            on_stack: vec![false; graph.len()],
+            ids: vec![None; graph_size as usize],
+            low: vec![0; graph_size as usize],
+            on_stack: vec![false; graph_size as usize],
             stack: vec![],
         }
     }
-    pub(crate) fn run(mut self, poison: Poison) -> Result<Vec<Vec<usize>>> {
-        for i in 0..self.graph.len() {
-            if self.ids[i].is_none() {
+    pub(crate) fn run(mut self, poison: Poison) -> Result<Vec<Vec<u32>>> {
+        for i in 0..self.graph.node_count() {
+            if self.ids[i as usize].is_none() {
                 self.dfs(i);
                 poison.check()?;
             }
         }
 
-        let mut low_map: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        let mut low_map: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
         for (idx, grp) in self.low.into_iter().enumerate() {
-            low_map.entry(grp).or_default().push(idx);
+            low_map.entry(grp).or_default().push(idx as u32);
         }
 
         Ok(low_map.into_iter().map(|(_, vs)| vs).collect_vec())
     }
-    fn dfs(&mut self, at: usize) {
+    fn dfs(&mut self, at: u32) {
         self.stack.push(at);
-        self.on_stack[at] = true;
+        self.on_stack[at as usize] = true;
         self.id += 1;
-        self.ids[at] = Some(self.id);
-        self.low[at] = self.id;
-        for to in &self.graph[at] {
-            let to = *to;
-            if self.ids[to].is_none() {
+        self.ids[at as usize] = Some(self.id);
+        self.low[at as usize] = self.id;
+        for to in self.graph.out_neighbors(at).cloned().collect_vec() {
+            if self.ids[to as usize].is_none() {
                 self.dfs(to);
             }
-            if self.on_stack[to] {
-                self.low[at] = min(self.low[at], self.low[to]);
+            if self.on_stack[to as usize] {
+                self.low[at as usize] = min(self.low[at as usize], self.low[to as usize]);
             }
         }
-        if self.ids[at].unwrap() == self.low[at] {
+        if self.ids[at as usize].unwrap() == self.low[at as usize] {
             while let Some(node) = self.stack.pop() {
-                self.on_stack[node] = false;
-                self.low[node] = self.ids[at].unwrap();
+                self.on_stack[node as usize] = false;
+                self.low[node as usize] = self.ids[at as usize].unwrap();
                 if node == at {
                     break;
                 }
@@ -147,3 +150,4 @@ impl<'a> TarjanScc<'a> {
         }
     }
 }
+

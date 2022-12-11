@@ -33,7 +33,7 @@ storage-sqlite = ["dep:sqlite", "dep:sqlite3-src"]
 ## You can also [fine-tune](https://github.com/cozodb/cozo/blob/main/TUNING_ROCKSDB.md) RocksDB options.
 storage-rocksdb = ["dep:cozorocks"]
 ## Enables the graph algorithms.
-graph-algo = ["dep:nalgebra"]
+graph-algo = []
 ## Allows the utilities to make web requests to fetch data.
 requests = ["dep:minreq"]
 ## Uses jemalloc as the global allocator, can make a difference in performance.
@@ -124,7 +124,6 @@ uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
 csv = "1.1.6"
 document-features = "0.2.6"
 rayon = { version = "1.5.3", optional = true }
-nalgebra = { version = "0.31.1", optional = true }
 minreq = { version = "2.6.0", features = ["https-rustls"], optional = true }
 tikv-jemallocator-global = { version = "0.5.0", optional = true }
 cozorocks = { path = "../cozorocks", version = "0.1.2", optional = true }

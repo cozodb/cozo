@@ -10,17 +10,14 @@ use std::collections::BTreeMap;
 
 #[cfg(not(feature = "rayon"))]
 use approx::AbsDiffEq;
-#[cfg(feature = "rayon")]
-use graph::prelude::{page_rank, CsrLayout, DirectedCsrGraph, GraphBuilder, PageRankConfig};
+use graph::prelude::{page_rank, PageRankConfig};
 use miette::Result;
-#[cfg(not(feature = "rayon"))]
-use nalgebra::{Dynamic, OMatrix, U1};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -41,38 +38,15 @@ impl FixedRule for PageRank {
         let epsilon = payload.unit_interval_option("epsilon", Some(0.0001))? as f32;
         let iterations = payload.pos_integer_option("iterations", Some(10))?;
 
-        let (graph, indices, _) = edges.convert_edge_to_graph(undirected)?;
+        let (graph, indices, _) = edges.to_directed_graph(undirected)?;
 
-        #[cfg(feature = "rayon")]
-        {
-            let graph: DirectedCsrGraph<u32> = GraphBuilder::new()
-                .csr_layout(CsrLayout::Sorted)
-                .edges(
-                    graph
-                        .iter()
-                        .enumerate()
-                        .flat_map(|(fr, ls)| ls.iter().map(move |to| (fr as u32, *to as u32))),
-                )
-                .build();
+        let (ranks, _n_run, _) = page_rank(
+            &graph,
+            PageRankConfig::new(iterations, epsilon as f64, theta),
+        );
 
-            let (ranks, _n_run, _) = page_rank(
-                &graph,
-                PageRankConfig::new(iterations, epsilon as f64, theta),
-            );
-
-            for (idx, score) in ranks.iter().enumerate() {
-                out.put(vec![indices[idx].clone(), DataValue::from(*score as f64)]);
-            }
-        }
-        #[cfg(not(feature = "rayon"))]
-        {
-            let res = pagerank(&graph, theta, epsilon, iterations, _poison)?;
-            for (idx, score) in res.iter().enumerate() {
-                out.put(
-                    Tuple(vec![indices[idx].clone(), DataValue::from(*score as f64)]),
-                    0,
-                );
-            }
+        for (idx, score) in ranks.iter().enumerate() {
+            out.put(vec![indices[idx].clone(), DataValue::from(*score as f64)]);
         }
         Ok(())
     }

@@ -9,8 +9,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use either::{Left, Right};
+use graph::prelude::{CsrLayout, DirectedCsrGraph, GraphBuilder};
 use lazy_static::lazy_static;
-use miette::{bail, ensure, Diagnostic, Result};
+use miette::{bail, ensure, Diagnostic, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -136,128 +138,194 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
     pub fn span(&self) -> SourceSpan {
         self.arg_manifest.span()
     }
-    fn convert_edge_to_graph(
+    pub fn to_directed_graph(
         &self,
         undirected: bool,
-    ) -> Result<(Vec<Vec<usize>>, Vec<DataValue>, BTreeMap<DataValue, usize>)> {
-        let mut graph: Vec<Vec<usize>> = vec![];
+    ) -> Result<(
+        DirectedCsrGraph<u32>,
+        Vec<DataValue>,
+        BTreeMap<DataValue, u32>,
+    )> {
         let mut indices: Vec<DataValue> = vec![];
-        let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
-
-        for tuple in self.iter()? {
-            let mut tuple = tuple?.into_iter();
-            let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
-            let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
-            let from_idx = if let Some(idx) = inv_indices.get(&from) {
-                *idx
-            } else {
-                inv_indices.insert(from.clone(), graph.len());
-                indices.push(from.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let to_idx = if let Some(idx) = inv_indices.get(&to) {
-                *idx
-            } else {
-                inv_indices.insert(to.clone(), graph.len());
-                indices.push(to.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let from_target = graph.get_mut(from_idx).unwrap();
-            from_target.push(to_idx);
-            if undirected {
-                let to_target = graph.get_mut(to_idx).unwrap();
-                to_target.push(from_idx);
+        let mut inv_indices: BTreeMap<DataValue, u32> = Default::default();
+        let mut error: Option<Report> = None;
+        let it = self.iter()?.filter_map(|r_tuple| match r_tuple {
+            Ok(tuple) => {
+                let mut tuple = tuple.into_iter();
+                let from = match tuple.next() {
+                    None => {
+                        error = Some(NotAnEdgeError(self.span()).into());
+                        return None;
+                    }
+                    Some(f) => f,
+                };
+                let to = match tuple.next() {
+                    None => {
+                        error = Some(NotAnEdgeError(self.span()).into());
+                        return None;
+                    }
+                    Some(f) => f,
+                };
+                let from_idx = if let Some(idx) = inv_indices.get(&from) {
+                    *idx
+                } else {
+                    let idx = indices.len() as u32;
+                    inv_indices.insert(from.clone(), idx);
+                    indices.push(from.clone());
+                    idx
+                };
+                let to_idx = if let Some(idx) = inv_indices.get(&to) {
+                    *idx
+                } else {
+                    let idx = indices.len() as u32;
+                    inv_indices.insert(to.clone(), idx);
+                    indices.push(to.clone());
+                    idx
+                };
+                Some((from_idx, to_idx))
             }
+            Err(err) => {
+                error = Some(err);
+                None
+            }
+        });
+        let it = if undirected {
+            Right(it.flat_map(|(f, t)| [(f, t), (t, f)]))
+        } else {
+            Left(it)
+        };
+        let graph: DirectedCsrGraph<u32> = GraphBuilder::new()
+            .csr_layout(CsrLayout::Sorted)
+            .edges(it)
+            .build();
+        if let Some(err) = error {
+            bail!(err)
         }
         Ok((graph, indices, inv_indices))
     }
-    pub fn convert_edge_to_weighted_graph(
+
+    pub fn to_directed_weighted_graph(
         &self,
         undirected: bool,
-        allow_negative_edges: bool,
+        allow_negative_weights: bool,
     ) -> Result<(
-        Vec<Vec<(usize, f64)>>,
+        DirectedCsrGraph<u32, (), f32>,
         Vec<DataValue>,
-        BTreeMap<DataValue, usize>,
-        bool,
+        BTreeMap<DataValue, u32>,
     )> {
-        let mut graph: Vec<Vec<(usize, f64)>> = vec![];
         let mut indices: Vec<DataValue> = vec![];
-        let mut inv_indices: BTreeMap<DataValue, usize> = Default::default();
-        let mut has_neg_edge = false;
+        let mut inv_indices: BTreeMap<DataValue, u32> = Default::default();
+        let mut error: Option<Report> = None;
+        let it = self.iter()?.filter_map(|r_tuple| match r_tuple {
+            Ok(tuple) => {
+                let mut tuple = tuple.into_iter();
+                let from = match tuple.next() {
+                    None => {
+                        error = Some(NotAnEdgeError(self.span()).into());
+                        return None;
+                    }
+                    Some(f) => f,
+                };
+                let to = match tuple.next() {
+                    None => {
+                        error = Some(NotAnEdgeError(self.span()).into());
+                        return None;
+                    }
+                    Some(f) => f,
+                };
+                let from_idx = if let Some(idx) = inv_indices.get(&from) {
+                    *idx
+                } else {
+                    let idx = indices.len() as u32;
+                    inv_indices.insert(from.clone(), idx);
+                    indices.push(from.clone());
+                    idx
+                };
+                let to_idx = if let Some(idx) = inv_indices.get(&to) {
+                    *idx
+                } else {
+                    let idx = indices.len() as u32;
+                    inv_indices.insert(to.clone(), idx);
+                    indices.push(to.clone());
+                    idx
+                };
 
-        for tuple in self.iter()? {
-            let mut tuple = tuple?.into_iter();
-            let from = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
-            let to = tuple.next().ok_or_else(|| NotAnEdgeError(self.span()))?;
-            let weight = match tuple.next() {
-                None => 1.0,
-                Some(d) => match d.get_float() {
-                    Some(f) => {
-                        ensure!(
-                            f.is_finite(),
-                            BadEdgeWeightError(
-                                d,
-                                self.arg_manifest
-                                    .bindings()
-                                    .get(2)
-                                    .map(|s| s.span)
-                                    .unwrap_or_else(|| self.span())
-                            )
-                        );
-                        if f < 0. {
-                            if !allow_negative_edges {
-                                bail!(BadEdgeWeightError(
+                let weight = match tuple.next() {
+                    None => 1.0,
+                    Some(d) => match d.get_float() {
+                        Some(f) => {
+                            if !f.is_finite() {
+                                error = Some(
+                                    BadEdgeWeightError(
+                                        d,
+                                        self.arg_manifest
+                                            .bindings()
+                                            .get(2)
+                                            .map(|s| s.span)
+                                            .unwrap_or_else(|| self.span()),
+                                    )
+                                    .into(),
+                                );
+                                return None;
+                            };
+
+                            if f < 0. {
+                                if !allow_negative_weights {
+                                    error = Some(
+                                        BadEdgeWeightError(
+                                            d,
+                                            self.arg_manifest
+                                                .bindings()
+                                                .get(2)
+                                                .map(|s| s.span)
+                                                .unwrap_or_else(|| self.span()),
+                                        )
+                                        .into(),
+                                    );
+                                    return None;
+                                }
+                            }
+                            f
+                        }
+                        None => {
+                            error = Some(
+                                BadEdgeWeightError(
                                     d,
                                     self.arg_manifest
                                         .bindings()
                                         .get(2)
                                         .map(|s| s.span)
-                                        .unwrap_or_else(|| self.span())
-                                ));
-                            }
-                            has_neg_edge = true;
+                                        .unwrap_or_else(|| self.span()),
+                                )
+                                .into(),
+                            );
+                            return None;
                         }
-                        f
-                    }
-                    None => {
-                        bail!(BadEdgeWeightError(
-                            d,
-                            self.arg_manifest
-                                .bindings()
-                                .get(2)
-                                .map(|s| s.span)
-                                .unwrap_or_else(|| self.span())
-                        ))
-                    }
-                },
-            };
-            let from_idx = if let Some(idx) = inv_indices.get(&from) {
-                *idx
-            } else {
-                inv_indices.insert(from.clone(), graph.len());
-                indices.push(from.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let to_idx = if let Some(idx) = inv_indices.get(&to) {
-                *idx
-            } else {
-                inv_indices.insert(to.clone(), graph.len());
-                indices.push(to.clone());
-                graph.push(vec![]);
-                graph.len() - 1
-            };
-            let from_target = graph.get_mut(from_idx).unwrap();
-            from_target.push((to_idx, weight));
-            if undirected {
-                let to_target = graph.get_mut(to_idx).unwrap();
-                to_target.push((from_idx, weight));
+                    },
+                };
+
+                Some((from_idx, to_idx, weight as f32))
             }
+            Err(err) => {
+                error = Some(err);
+                None
+            }
+        });
+        let it = if undirected {
+            Right(it.flat_map(|(f, t, w)| [(f, t, w), (t, f, w)]))
+        } else {
+            Left(it)
+        };
+        let graph: DirectedCsrGraph<u32, (), f32> = GraphBuilder::new()
+            .csr_layout(CsrLayout::Sorted)
+            .edges_with_values(it)
+            .build();
+
+        if let Some(err) = error {
+            bail!(err)
         }
-        Ok((graph, indices, inv_indices, has_neg_edge))
+
+        Ok((graph, indices, inv_indices))
     }
 }
 

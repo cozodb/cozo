@@ -6,13 +6,13 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Debug;
 
-use miette::Result;
 use itertools::Itertools;
+use miette::Result;
 
-use crate::fixed_rule::algos::strongly_connected_components::TarjanScc;
 use crate::runtime::db::Poison;
 
 pub(crate) type Graph<T> = BTreeMap<T, Vec<T>>;
@@ -128,4 +128,66 @@ pub(crate) fn generalized_kahn(
     }
     debug_assert_eq!(in_degree.iter().sum::<usize>(), 0);
     ret
+}
+
+struct TarjanScc<'a> {
+    graph: &'a [Vec<usize>],
+    id: usize,
+    ids: Vec<Option<usize>>,
+    low: Vec<usize>,
+    on_stack: Vec<bool>,
+    stack: Vec<usize>,
+}
+
+impl<'a> TarjanScc<'a> {
+    fn new(graph: &'a [Vec<usize>]) -> Self {
+        Self {
+            graph,
+            id: 0,
+            ids: vec![None; graph.len()],
+            low: vec![0; graph.len()],
+            on_stack: vec![false; graph.len()],
+            stack: vec![],
+        }
+    }
+    fn run(mut self, poison: Poison) -> Result<Vec<Vec<usize>>> {
+        for i in 0..self.graph.len() {
+            if self.ids[i].is_none() {
+                self.dfs(i);
+                poison.check()?;
+            }
+        }
+
+        let mut low_map: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+        for (idx, grp) in self.low.into_iter().enumerate() {
+            low_map.entry(grp).or_default().push(idx);
+        }
+
+        Ok(low_map.into_iter().map(|(_, vs)| vs).collect_vec())
+    }
+    fn dfs(&mut self, at: usize) {
+        self.stack.push(at);
+        self.on_stack[at] = true;
+        self.id += 1;
+        self.ids[at] = Some(self.id);
+        self.low[at] = self.id;
+        for to in &self.graph[at] {
+            let to = *to;
+            if self.ids[to].is_none() {
+                self.dfs(to);
+            }
+            if self.on_stack[to] {
+                self.low[at] = min(self.low[at], self.low[to]);
+            }
+        }
+        if self.ids[at].unwrap() == self.low[at] {
+            while let Some(node) = self.stack.pop() {
+                self.on_stack[node] = false;
+                self.low[node] = self.ids[at].unwrap();
+                if node == at {
+                    break;
+                }
+            }
+        }
+    }
 }

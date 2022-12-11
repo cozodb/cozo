@@ -8,12 +8,12 @@
 
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
+use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 
 use itertools::Itertools;
 use miette::Result;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
-#[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
@@ -38,28 +38,25 @@ impl FixedRule for BetweennessCentrality {
         let edges = payload.get_input(0)?;
         let undirected = payload.bool_option("undirected", Some(false))?;
 
-        let (graph, indices, _inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(undirected, false)?;
+        let (graph, indices, _inv_indices) =
+            edges.to_directed_weighted_graph(undirected, false)?;
 
-        let n = graph.len();
+        let n = graph.node_count();
         if n == 0 {
             return Ok(());
         }
 
-        #[cfg(feature = "rayon")]
         let it = (0..n).into_par_iter();
-        #[cfg(not(feature = "rayon"))]
-        let it = (0..n).into_iter();
 
         let centrality_segs: Vec<_> = it
-            .map(|start| -> Result<BTreeMap<usize, f64>> {
+            .map(|start| -> Result<BTreeMap<u32, f32>> {
                 let res_for_start =
                     dijkstra_keep_ties(&graph, start, &(), &(), &(), poison.clone())?;
-                let mut ret: BTreeMap<usize, f64> = Default::default();
+                let mut ret: BTreeMap<u32, f32> = Default::default();
                 let grouped = res_for_start.into_iter().group_by(|(n, _, _)| *n);
                 for (_, grp) in grouped.into_iter() {
                     let grp = grp.collect_vec();
-                    let l = grp.len() as f64;
+                    let l = grp.len() as f32;
                     for (_, _, path) in grp {
                         if path.len() < 3 {
                             continue;
@@ -73,16 +70,16 @@ impl FixedRule for BetweennessCentrality {
                 Ok(ret)
             })
             .collect::<Result<_>>()?;
-        let mut centrality: Vec<f64> = vec![0.; graph.len()];
+        let mut centrality: Vec<f32> = vec![0.; n as usize];
         for m in centrality_segs {
             for (k, v) in m {
-                centrality[k] += v;
+                centrality[k as usize] += v;
             }
         }
 
         for (i, s) in centrality.into_iter().enumerate() {
             let node = indices[i].clone();
-            out.put(vec![node, s.into()]);
+            out.put(vec![node, (s as f64).into()]);
         }
 
         Ok(())
@@ -110,28 +107,25 @@ impl FixedRule for ClosenessCentrality {
         let edges = payload.get_input(0)?;
         let undirected = payload.bool_option("undirected", Some(false))?;
 
-        let (graph, indices, _inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(undirected, false)?;
+        let (graph, indices, _inv_indices) =
+            edges.to_directed_weighted_graph(undirected, false)?;
 
-        let n = graph.len();
+        let n = graph.node_count();
         if n == 0 {
             return Ok(());
         }
-        #[cfg(feature = "rayon")]
         let it = (0..n).into_par_iter();
-        #[cfg(not(feature = "rayon"))]
-        let it = (0..n).into_iter();
 
         let res: Vec<_> = it
-            .map(|start| -> Result<f64> {
+            .map(|start| -> Result<f32> {
                 let distances = dijkstra_cost_only(&graph, start, poison.clone())?;
-                let total_dist: f64 = distances.iter().filter(|d| d.is_finite()).cloned().sum();
-                let nc: f64 = distances.iter().filter(|d| d.is_finite()).count() as f64;
-                Ok(nc * nc / total_dist / (n - 1) as f64)
+                let total_dist: f32 = distances.iter().filter(|d| d.is_finite()).cloned().sum();
+                let nc: f32 = distances.iter().filter(|d| d.is_finite()).count() as f32;
+                Ok(nc * nc / total_dist / (n - 1) as f32)
             })
             .collect::<Result<_>>()?;
         for (idx, centrality) in res.into_iter().enumerate() {
-            out.put(vec![indices[idx].clone(), DataValue::from(centrality)]);
+            out.put(vec![indices[idx].clone(), DataValue::from(centrality as f64)]);
             poison.check()?;
         }
         Ok(())
@@ -148,28 +142,32 @@ impl FixedRule for ClosenessCentrality {
 }
 
 pub(crate) fn dijkstra_cost_only(
-    edges: &[Vec<(usize, f64)>],
-    start: usize,
+    edges: &DirectedCsrGraph<u32, (), f32>,
+    start: u32,
     poison: Poison,
-) -> Result<Vec<f64>> {
-    let mut distance = vec![f64::INFINITY; edges.len()];
+) -> Result<Vec<f32>> {
+    let mut distance = vec![f32::INFINITY; edges.node_count() as usize];
     let mut pq = PriorityQueue::new();
-    let mut back_pointers = vec![usize::MAX; edges.len()];
-    distance[start] = 0.;
+    let mut back_pointers = vec![u32::MAX; edges.node_count() as usize];
+    distance[start as usize] = 0.;
     pq.push(start, Reverse(OrderedFloat(0.)));
 
     while let Some((node, Reverse(OrderedFloat(cost)))) = pq.pop() {
-        if cost > distance[node] {
+        if cost > distance[node as usize] {
             continue;
         }
 
-        for (nxt_node, path_weight) in &edges[node] {
-            let nxt_cost = cost + *path_weight;
-            if nxt_cost < distance[*nxt_node] {
-                pq.push_increase(*nxt_node, Reverse(OrderedFloat(nxt_cost)));
-                distance[*nxt_node] = nxt_cost;
-                back_pointers[*nxt_node] = node;
+        for target in edges.out_neighbors_with_values(node) {
+            let nxt_node = target.target;
+            let path_weight = target.value;
+
+            let nxt_cost = cost + path_weight;
+            if nxt_cost < distance[nxt_node as usize] {
+                pq.push_increase(nxt_node, Reverse(OrderedFloat(nxt_cost)));
+                distance[nxt_node as usize] = nxt_cost;
+                back_pointers[nxt_node as usize] = node;
             }
+
         }
         poison.check()?;
     }

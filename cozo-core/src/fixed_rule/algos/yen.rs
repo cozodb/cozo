@@ -8,17 +8,18 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues};
 use itertools::Itertools;
 use miette::Result;
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::algos::shortest_path_dijkstra::dijkstra;
-use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::algos::shortest_path_dijkstra::dijkstra;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -38,8 +39,7 @@ impl FixedRule for KShortestPathYen {
         let undirected = payload.bool_option("undirected", Some(false))?;
         let k = payload.pos_integer_option("k", None)?;
 
-        let (graph, indices, inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(undirected, false)?;
+        let (graph, indices, inv_indices) = edges.to_directed_weighted_graph(undirected, false)?;
 
         let mut starting_nodes = BTreeSet::new();
         for tuple in starting.iter()? {
@@ -64,11 +64,13 @@ impl FixedRule for KShortestPathYen {
                         k_shortest_path_yen(k as usize, &graph, start, *goal, poison.clone())?
                     {
                         let t = vec![
-                            indices[start].clone(),
-                            indices[*goal].clone(),
-                            DataValue::from(cost),
+                            indices[start as usize].clone(),
+                            indices[*goal as usize].clone(),
+                            DataValue::from(cost as f64),
                             DataValue::List(
-                                path.into_iter().map(|u| indices[u].clone()).collect_vec(),
+                                path.into_iter()
+                                    .map(|u| indices[u as usize].clone())
+                                    .collect_vec(),
                             ),
                         ];
                         out.put(t)
@@ -84,7 +86,7 @@ impl FixedRule for KShortestPathYen {
 
             let res_all: Vec<_> = first_it
                 .map(
-                    |(start, goal)| -> Result<(usize, usize, Vec<(f64, Vec<usize>)>)> {
+                    |(start, goal)| -> Result<(u32, u32, Vec<(f32, Vec<u32>)>)> {
                         Ok((
                             start,
                             goal,
@@ -97,10 +99,10 @@ impl FixedRule for KShortestPathYen {
             for (start, goal, res) in res_all {
                 for (cost, path) in res {
                     let t = vec![
-                        indices[start].clone(),
-                        indices[goal].clone(),
-                        DataValue::from(cost),
-                        DataValue::List(path.into_iter().map(|u| indices[u].clone()).collect_vec()),
+                        indices[start as usize].clone(),
+                        indices[goal as usize].clone(),
+                        DataValue::from(cost as f64),
+                        DataValue::List(path.into_iter().map(|u| indices[u as usize].clone()).collect_vec()),
                     ];
                     out.put(t)
                 }
@@ -121,13 +123,13 @@ impl FixedRule for KShortestPathYen {
 
 fn k_shortest_path_yen(
     k: usize,
-    edges: &[Vec<(usize, f64)>],
-    start: usize,
-    goal: usize,
+    edges: &DirectedCsrGraph<u32, (), f32>,
+    start: u32,
+    goal: u32,
     poison: Poison,
-) -> Result<Vec<(f64, Vec<usize>)>> {
-    let mut k_shortest: Vec<(f64, Vec<usize>)> = Vec::with_capacity(k);
-    let mut candidates: Vec<(f64, Vec<usize>)> = vec![];
+) -> Result<Vec<(f32, Vec<u32>)>> {
+    let mut k_shortest: Vec<(f32, Vec<u32>)> = Vec::with_capacity(k);
+    let mut candidates: Vec<(f32, Vec<u32>)> = vec![];
 
     match dijkstra(edges, start, &Some(goal), &(), &())
         .into_iter()
@@ -170,10 +172,11 @@ fn k_shortest_path_yen(
                 for i in 0..root_path.len() - 1 {
                     let s = root_path[i];
                     let d = root_path[i + 1];
-                    let eds = &edges[s];
-                    for (e, c) in eds {
-                        if *e == d {
-                            total_cost += *c;
+                    for target in edges.out_neighbors_with_values(s) {
+                        let e = target.target;
+                        let c = target.value;
+                        if e == d {
+                            total_cost += c;
                             break;
                         }
                     }

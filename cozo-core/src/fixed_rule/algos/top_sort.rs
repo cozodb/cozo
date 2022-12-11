@@ -7,6 +7,7 @@
  */
 
 use std::collections::BTreeMap;
+use graph::prelude::{DirectedCsrGraph, DirectedNeighbors, Graph};
 
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
@@ -30,12 +31,12 @@ impl FixedRule for TopSort {
     ) -> Result<()> {
         let edges = payload.get_input(0)?;
 
-        let (graph, indices, _) = edges.convert_edge_to_graph(false)?;
+        let (graph, indices, _) = edges.to_directed_graph(false)?;
 
-        let sorted = kahn(&graph, poison)?;
+        let sorted = kahn_g(&graph, poison)?;
 
         for (idx, val_id) in sorted.iter().enumerate() {
-            let val = indices.get(*val_id).unwrap();
+            let val = indices.get(*val_id as usize).unwrap();
             let tuple = vec![DataValue::from(idx as i64), val.clone()];
             out.put(tuple);
         }
@@ -53,31 +54,31 @@ impl FixedRule for TopSort {
     }
 }
 
-pub(crate) fn kahn(graph: &[Vec<usize>], poison: Poison) -> Result<Vec<usize>> {
-    let mut in_degree = vec![0; graph.len()];
-    for tos in graph {
-        for to in tos {
-            in_degree[*to] += 1;
+
+pub(crate) fn kahn_g(graph: &DirectedCsrGraph<u32>, poison: Poison) -> Result<Vec<u32>> {
+    let graph_size = graph.node_count();
+    let mut in_degree = vec![0; graph_size as usize];
+    for tos in 0..graph_size {
+        for to in graph.out_neighbors(tos) {
+            in_degree[*to as usize] += 1;
         }
     }
-    let mut sorted = Vec::with_capacity(graph.len());
+    let mut sorted = Vec::with_capacity(graph_size as usize);
     let mut pending = vec![];
 
     for (node, degree) in in_degree.iter().enumerate() {
         if *degree == 0 {
-            pending.push(node);
+            pending.push(node as u32);
         }
     }
 
     while !pending.is_empty() {
         let removed = pending.pop().unwrap();
         sorted.push(removed);
-        if let Some(edges) = graph.get(removed) {
-            for nxt in edges {
-                in_degree[*nxt] -= 1;
-                if in_degree[*nxt] == 0 {
-                    pending.push(*nxt);
-                }
+        for nxt in graph.out_neighbors(removed as u32) {
+            in_degree[*nxt as usize] -= 1;
+            if in_degree[*nxt as usize] == 0 {
+                pending.push(*nxt);
             }
         }
         poison.check()?;

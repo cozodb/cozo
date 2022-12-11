@@ -8,15 +8,16 @@
 
 use std::collections::BTreeMap;
 
+use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 use itertools::Itertools;
 use miette::Result;
 use rand::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -33,8 +34,7 @@ impl FixedRule for LabelPropagation {
         let edges = payload.get_input(0)?;
         let undirected = payload.bool_option("undirected", Some(false))?;
         let max_iter = payload.pos_integer_option("max_iter", Some(10))?;
-        let (graph, indices, _inv_indices, _) =
-            edges.convert_edge_to_weighted_graph(undirected, true)?;
+        let (graph, indices, _inv_indices) = edges.to_directed_weighted_graph(undirected, true)?;
         let labels = label_propagation(&graph, max_iter, poison)?;
         for (idx, label) in labels.into_iter().enumerate() {
             let node = indices[idx].clone();
@@ -54,11 +54,11 @@ impl FixedRule for LabelPropagation {
 }
 
 fn label_propagation(
-    graph: &[Vec<(usize, f64)>],
+    graph: &DirectedCsrGraph<u32, (), f32>,
     max_iter: usize,
     poison: Poison,
-) -> Result<Vec<usize>> {
-    let n_nodes = graph.len();
+) -> Result<Vec<u32>> {
+    let n_nodes = graph.node_count();
     let mut labels = (0..n_nodes).collect_vec();
     let mut rng = thread_rng();
     let mut iter_order = (0..n_nodes).collect_vec();
@@ -66,14 +66,13 @@ fn label_propagation(
         iter_order.shuffle(&mut rng);
         let mut changed = false;
         for node in &iter_order {
-            let mut labels_for_node: BTreeMap<usize, f64> = BTreeMap::new();
-            let neighbours = &graph[*node];
-            if neighbours.is_empty() {
-                continue;
+            let mut labels_for_node: BTreeMap<u32, f32> = BTreeMap::new();
+            for edge in graph.out_neighbors_with_values(*node) {
+                let label = labels[edge.target as usize];
+                *labels_for_node.entry(label).or_default() += edge.value;
             }
-            for (to_node, weight) in neighbours {
-                let label = labels[*to_node];
-                *labels_for_node.entry(label).or_default() += *weight;
+            if labels_for_node.is_empty() {
+                continue;
             }
             let mut labels_by_score = labels_for_node.into_iter().collect_vec();
             labels_by_score.sort_by(|a, b| a.1.total_cmp(&b.1).reverse());
@@ -84,9 +83,9 @@ fn label_propagation(
                 .map(|(l, _)| l)
                 .collect_vec();
             let new_label = *candidate_labels.choose(&mut rng).unwrap();
-            if new_label != labels[*node] {
+            if new_label != labels[*node as usize] {
                 changed = true;
-                labels[*node] = new_label;
+                labels[*node as usize] = new_label;
             }
             poison.check()?;
         }

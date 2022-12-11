@@ -9,15 +9,6 @@ export MACOSX_DEPLOYMENT_TARGET=10.14
 mkdir -p release
 
 for TARGET in aarch64-apple-darwin x86_64-apple-darwin; do
-  CARGO_PROFILE_RELEASE_LTO=fat cargo build --release -p cozoserver \
-    -F compact -F storage-rocksdb -F storage-tikv -F storage-sled --target $TARGET
-  cp target/$TARGET/release/cozoserver release/cozoserver_all-$VERSION-$TARGET # standalone
-done
-
-# copy python
-cp target/wheels/*.whl release/
-
-for TARGET in aarch64-apple-darwin x86_64-apple-darwin; do
   # standalone, c, java, nodejs
   CARGO_PROFILE_RELEASE_LTO=fat cargo build --release -p cozoserver -p cozo_c -p cozo_java -p cozo-node -F compact -F storage-rocksdb --target $TARGET
   cp target/$TARGET/release/cozoserver release/cozoserver-$VERSION-$TARGET # standalone
@@ -32,10 +23,20 @@ for TARGET in aarch64-apple-darwin x86_64-apple-darwin; do
   cd ..
 done
 
+# copy python
+cp target/wheels/*.whl release/
+
 # swift
 cd cozo-lib-swift
 CARGO_PROFILE_RELEASE_LTO=fat ./build-rust.sh
 cd ..
+
+# with TiKV
+for TARGET in aarch64-apple-darwin x86_64-apple-darwin; do
+  CARGO_PROFILE_RELEASE_LTO=fat cargo build --release -p cozoserver \
+    -F compact -F storage-rocksdb -F storage-tikv -F storage-sled --target $TARGET
+  cp target/$TARGET/release/cozoserver release/cozoserver_all-$VERSION-$TARGET # standalone
+done
 
 # WASM
 cd cozo-lib-wasm

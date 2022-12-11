@@ -8,6 +8,7 @@
 
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
+use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 
 use itertools::Itertools;
 use miette::Result;
@@ -33,16 +34,16 @@ impl FixedRule for MinimumSpanningForestKruskal {
         poison: Poison,
     ) -> Result<()> {
         let edges = payload.get_input(0)?;
-        let (graph, indices, _, _) = edges.convert_edge_to_weighted_graph(true, true)?;
-        if graph.is_empty() {
+        let (graph, indices, _) = edges.to_directed_weighted_graph(true, true)?;
+        if graph.node_count() == 0 {
             return Ok(());
         }
         let msp = kruskal(&graph, poison)?;
         for (src, dst, cost) in msp {
             out.put(vec![
-                indices[src].clone(),
-                indices[dst].clone(),
-                DataValue::from(cost),
+                indices[src as usize].clone(),
+                indices[dst as usize].clone(),
+                DataValue::from(cost as f64),
             ]);
         }
 
@@ -59,15 +60,16 @@ impl FixedRule for MinimumSpanningForestKruskal {
     }
 }
 
-fn kruskal(edges: &[Vec<(usize, f64)>], poison: Poison) -> Result<Vec<(usize, usize, f64)>> {
+fn kruskal(edges: &DirectedCsrGraph<u32, (), f32>, poison: Poison) -> Result<Vec<(u32, u32, f32)>> {
     let mut pq = PriorityQueue::new();
-    let mut uf = UnionFind::new(edges.len());
-    let mut mst = Vec::with_capacity(edges.len() - 1);
-    for (from, tos) in edges.iter().enumerate() {
-        for (to, cost) in tos {
-            pq.push((from, *to), Reverse(OrderedFloat(*cost)));
+    let mut uf = UnionFind::new(edges.node_count());
+    let mut mst = Vec::with_capacity((edges.node_count() - 1) as usize);
+    for from in 0..edges.node_count() {
+        for target in edges.out_neighbors_with_values(from) {
+            let to = target.target;
+            let cost = target.value;
+            pq.push((from, to), Reverse(OrderedFloat(cost)));
         }
-        poison.check()?;
     }
     while let Some(((from, to), Reverse(OrderedFloat(cost)))) = pq.pop() {
         if uf.connected(from, to) {
@@ -76,7 +78,7 @@ fn kruskal(edges: &[Vec<(usize, f64)>], poison: Poison) -> Result<Vec<(usize, us
         uf.union(from, to);
 
         mst.push((from, to, cost));
-        if uf.szs[0] == edges.len() {
+        if uf.szs[0] == edges.node_count() {
             break;
         }
         poison.check()?;
@@ -85,43 +87,43 @@ fn kruskal(edges: &[Vec<(usize, f64)>], poison: Poison) -> Result<Vec<(usize, us
 }
 
 struct UnionFind {
-    ids: Vec<usize>,
-    szs: Vec<usize>,
+    ids: Vec<u32>,
+    szs: Vec<u32>,
 }
 
 impl UnionFind {
-    fn new(n: usize) -> Self {
+    fn new(n: u32) -> Self {
         Self {
             ids: (0..n).collect_vec(),
-            szs: vec![1; n],
+            szs: vec![1; n as usize],
         }
     }
-    fn union(&mut self, p: usize, q: usize) {
+    fn union(&mut self, p: u32, q: u32) {
         let root1 = self.find(p);
         let root2 = self.find(q);
         if root1 != root2 {
-            if self.szs[root1] < self.szs[root2] {
-                self.szs[root2] += self.szs[root1];
-                self.ids[root1] = root2;
+            if self.szs[root1 as usize] < self.szs[root2 as usize] {
+                self.szs[root2 as usize] += self.szs[root1 as usize];
+                self.ids[root1 as usize] = root2;
             } else {
-                self.szs[root1] += self.szs[root2];
-                self.ids[root2] = root1;
+                self.szs[root1 as usize] += self.szs[root2 as usize];
+                self.ids[root2 as usize] = root1;
             }
         }
     }
-    fn find(&mut self, mut p: usize) -> usize {
+    fn find(&mut self, mut p: u32) -> u32 {
         let mut root = p;
-        while root != self.ids[root] {
-            root = self.ids[root];
+        while root != self.ids[root as usize] {
+            root = self.ids[root as usize];
         }
         while p != root {
-            let next = self.ids[p];
-            self.ids[p] = root;
+            let next = self.ids[p as usize];
+            self.ids[p as usize] = root;
             p = next;
         }
         root
     }
-    fn connected(&mut self, p: usize, q: usize) -> bool {
+    fn connected(&mut self, p: u32, q: u32) -> bool {
         self.find(p) == self.find(q)
     }
 }
