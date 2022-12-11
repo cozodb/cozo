@@ -6,34 +6,38 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-#[cfg(feature = "graph-algo")]
 pub(crate) mod all_pairs_shortest_path;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod astar;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod bfs;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod degree_centrality;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod dfs;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod kruskal;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod label_propagation;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod louvain;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod pagerank;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod prim;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod shortest_path_dijkstra;
 pub(crate) mod strongly_connected_components;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod top_sort;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod triangles;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod yen;
-#[cfg(feature = "graph-algo")]
 pub(crate) mod shortest_path_bfs;
+pub(crate) mod random_walk;
+
+pub(crate) use all_pairs_shortest_path::{BetweennessCentrality, ClosenessCentrality};
+pub(crate) use astar::ShortestPathAStar;
+pub(crate) use bfs::Bfs;
+pub(crate) use degree_centrality::DegreeCentrality;
+pub(crate) use dfs::Dfs;
+pub(crate) use kruskal::MinimumSpanningForestKruskal;
+pub(crate) use label_propagation::LabelPropagation;
+pub(crate) use louvain::CommunityDetectionLouvain;
+pub(crate) use pagerank::PageRank;
+pub(crate) use prim::MinimumSpanningTreePrim;
+pub(crate) use shortest_path_dijkstra::ShortestPathDijkstra;
+pub(crate) use strongly_connected_components::StronglyConnectedComponent;
+pub(crate) use top_sort::TopSort;
+pub(crate) use triangles::ClusteringCoefficients;
+pub(crate) use yen::KShortestPathYen;
+pub(crate) use shortest_path_bfs::ShortestPathBFS;
+pub(crate) use random_walk::RandomWalk;

@@ -108,9 +108,6 @@ impl<'s> Storage<'s> for SqliteStorage {
             statement.bind((2, &upper_b as &[u8])).unwrap();
             while statement.next().unwrap() != State::Done {}
         };
-        #[cfg(feature = "nothread")]
-        closure();
-        #[cfg(not(feature = "nothread"))]
         std::thread::spawn(closure);
         Ok(())
     }

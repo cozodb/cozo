@@ -9,9 +9,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+#[allow(unused_imports)]
 use either::{Left, Right};
+#[cfg(feature = "graph-algo")]
 use graph::prelude::{CsrLayout, DirectedCsrGraph, GraphBuilder};
 use lazy_static::lazy_static;
+#[allow(unused_imports)]
 use miette::{bail, ensure, Diagnostic, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -25,49 +28,14 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::TupleIter;
 use crate::data::value::DataValue;
 #[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::all_pairs_shortest_path::{
-    BetweennessCentrality, ClosenessCentrality,
-};
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::astar::ShortestPathAStar;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::bfs::Bfs;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::degree_centrality::DegreeCentrality;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::dfs::Dfs;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::kruskal::MinimumSpanningForestKruskal;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::label_propagation::LabelPropagation;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::louvain::CommunityDetectionLouvain;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::pagerank::PageRank;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::prim::MinimumSpanningTreePrim;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::shortest_path_bfs::ShortestPathBFS;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::shortest_path_dijkstra::ShortestPathDijkstra;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::strongly_connected_components::StronglyConnectedComponent;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::top_sort::TopSort;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::triangles::ClusteringCoefficients;
-#[cfg(feature = "graph-algo")]
-use crate::fixed_rule::algos::yen::KShortestPathYen;
-use crate::fixed_rule::utilities::constant::Constant;
-use crate::fixed_rule::utilities::csv::CsvReader;
-use crate::fixed_rule::utilities::jlines::JsonReader;
-use crate::fixed_rule::utilities::random_walk::RandomWalk;
-use crate::fixed_rule::utilities::reorder_sort::ReorderSort;
+use crate::fixed_rule::algos::*;
+use crate::fixed_rule::utilities::*;
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::{EpochStore, RegularTempStore};
 use crate::runtime::transact::SessionTx;
 
+#[cfg(feature = "graph-algo")]
 pub(crate) mod algos;
 pub(crate) mod utilities;
 
@@ -138,6 +106,7 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
     pub fn span(&self) -> SourceSpan {
         self.arg_manifest.span()
     }
+    #[cfg(feature = "graph-algo")]
     pub fn to_directed_graph(
         &self,
         undirected: bool,
@@ -203,7 +172,7 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
         }
         Ok((graph, indices, inv_indices))
     }
-
+    #[cfg(feature = "graph-algo")]
     pub fn to_directed_weighted_graph(
         &self,
         undirected: bool,

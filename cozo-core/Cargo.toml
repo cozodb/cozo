@@ -17,7 +17,7 @@ exclude = [
 
 default = ["compact"]
 ## Enables the `minimal`, `requests` and `graph-algo` features.
-compact = ["minimal", "requests", "graph-algo", "rayon"]
+compact = ["minimal", "requests", "graph-algo"]
 ## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode.
 compact-single-threaded = ["minimal", "requests", "graph-algo"]
 ## Enables the `storage-sqlite` feature.
@@ -33,7 +33,7 @@ storage-sqlite = ["dep:sqlite", "dep:sqlite3-src"]
 ## You can also [fine-tune](https://github.com/cozodb/cozo/blob/main/TUNING_ROCKSDB.md) RocksDB options.
 storage-rocksdb = ["dep:cozorocks"]
 ## Enables the graph algorithms.
-graph-algo = []
+graph-algo = ["graph", "rayon"]
 ## Allows the utilities to make web requests to fetch data.
 requests = ["dep:minreq"]
 ## Uses jemalloc as the global allocator, can make a difference in performance.
@@ -42,10 +42,6 @@ jemalloc = ["dep:tikv-jemallocator-global", "cozorocks?/jemalloc"]
 io-uring = ["cozorocks?/io-uring"]
 ## Polyfills for the WASM target
 wasm = ["uuid/js", "dep:js-sys"]
-## Allows threading and enables the use of the `rayon` library for parallelizing algorithms.
-rayon = ["dep:rayon", "dep:graph"]
-## Disallows the use of threads.
-nothread = []
 
 #! The following features are highly experimental:
 
@@ -66,12 +62,6 @@ storage-tikv = ["dep:tikv-client", "dep:tokio"]
 #! are only available if `storage-sqlite` is on. Without `graph-algo` you cannot use any graph algorithms
 #! (utilities are still available),
 #! which could be OK if you only want to deal with pure Datalog.
-#!
-#! If having multiple threads
-#! running in the background is undesirable, you can enable the `nothread` feature.
-#!
-#! The `rayon` feature enables some algorithms to make use of parallelism. This is desirable in most circumstances.
-#! Naturally, it is incompatible with `nothread`.
 #!
 #! The `requests` feature allows the database to make outgoing HTTP requests to fetch data
 #! into queries -- only enable it if you need it.

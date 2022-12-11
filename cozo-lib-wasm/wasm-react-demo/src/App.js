@@ -225,20 +225,17 @@ function App() {
                     more information about the Cozo database.
                 </p>
                 <h2>Not sure what to run? Click/touch <a onClick={() => {
-                    setQueryText(`love[loving, loved] <- [['alice', 'eve'],
-                        ['bob', 'alice'],
-                        ['eve', 'alice'],
-                        ['eve', 'bob'],
-                        ['eve', 'charlie'],
-                        ['charlie', 'eve'],
-                        ['david', 'george'],
-                        ['george', 'george']]
-
-?[person, page_rank] <~ PageRank(love[])`)
+                    setQueryText(`love[loving, loved] <- [['alice', 'eve'], ['bob', 'alice'],
+                        ['eve', 'alice'], ['eve', 'bob'],
+                        ['eve', 'charlie'], ['charlie', 'eve'],
+                        ['david', 'george'], ['george', 'george']]
+cls[loving, loved] := love[loving, loved]
+cls[loving, loved] := cls[loving, middle], love[middle, loved]
+?[loving, loved] := cls[loving, loved]`)
                 }}>HERE</a> ...</h2>
                 <p>
                     ... and run the script, to compute the <a
-                    href="https://www.wikiwand.com/en/PageRank">PageRank</a> of
+                    href="https://en.wikipedia.org/wiki/Transitive_closure">transitive closure</a> of
                     a hypothetical love triangle.
                 </p>
                 <p>

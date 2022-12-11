@@ -238,9 +238,10 @@ pub(crate) fn parse_query(
                 out_opts.timeout = Some(timeout);
             }
             Rule::sleep_option => {
-                #[cfg(feature = "wasm")]
+                #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
                 bail!(":sleep is not supported under WASM");
-                #[cfg(not(feature = "wasm"))]
+
+                #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                 {
                     let pair = pair.into_inner().next().unwrap();
                     let span = pair.extract_span();

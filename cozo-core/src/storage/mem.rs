@@ -67,9 +67,9 @@ impl<'s> Storage<'s> for MemStorage {
                 wtr.remove(k);
             }
         };
-        #[cfg(feature = "nothread")]
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
         closure();
-        #[cfg(not(feature = "nothread"))]
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         std::thread::spawn(closure);
         Ok(())
     }

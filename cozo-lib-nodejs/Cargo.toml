@@ -17,9 +17,9 @@ crate-type = ["cdylib"]
 #! # Features
 
 ## Enables the `minimal`, `requests` and `graph-algo` features
-compact = ["minimal", "requests", "graph-algo", "rayon"]
+compact = ["minimal", "requests", "graph-algo"]
 ## Enables the `storage-sqlite` and `graph-algo` features
-mobile = ["storage-sqlite", "graph-algo", "rayon"]
+mobile = ["storage-sqlite", "graph-algo"]
 ## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode
 compact-single-threaded = ["minimal", "requests", "graph-algo"]
 ## Enables the `storage-sqlite` feature
@@ -36,10 +36,6 @@ requests = ["cozo/requests"]
 jemalloc = ["cozo/jemalloc"]
 ## Enables io-uring option for the RocksDB storage
 io-uring = ["cozo/io-uring"]
-## Allows threading and enables the use of the `rayon` library for parallelizing algorithms
-rayon = ["cozo/rayon"]
-## Disallows the use of threads
-nothread = ["cozo/nothread"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

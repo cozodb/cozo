@@ -177,17 +177,17 @@ impl DbInstance {
         payload: &str,
         params: BTreeMap<String, JsonValue>,
     ) -> JsonValue {
-        #[cfg(not(feature = "wasm"))]
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
         let start = Instant::now();
 
         match self.run_script(payload, params) {
             Ok(named_rows) => {
                 let mut j_val = named_rows.into_json();
-                #[cfg(not(feature = "wasm"))]
+                #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                 let took = start.elapsed().as_secs_f64();
                 let map = j_val.as_object_mut().unwrap();
                 map.insert("ok".to_string(), json!(true));
-                #[cfg(not(feature = "wasm"))]
+                #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                 map.insert("took".to_string(), json!(took));
 
                 j_val
