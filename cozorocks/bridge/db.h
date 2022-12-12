@@ -42,6 +42,8 @@ struct SstFileWriterBridge {
 
 };
 
+static WriteOptions DEFAULT_WRITE_OPTIONS = WriteOptions();
+
 struct RocksDbBridge {
     unique_ptr<TransactionDB> db;
 
@@ -91,6 +93,12 @@ struct RocksDbBridge {
         optimizations.skip_duplicate_key_check = true;
         auto s2 = db->Write(w_opts, optimizations, &batch);
         write_status(s2, status);
+    }
+
+    inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) const {
+        auto raw_db = this->get_base_db();
+        auto s = raw_db->Put(DEFAULT_WRITE_OPTIONS, convert_slice(key), convert_slice(val));
+        write_status(s, status);
     }
 
     void compact_range(RustBytes start, RustBytes end, RocksDbStatus &status) const {

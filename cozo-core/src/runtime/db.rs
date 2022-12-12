@@ -327,12 +327,10 @@ impl<'s, S: Storage<'s>> Db<S> {
             if sqlite_db.relation_store_id.load(Ordering::SeqCst) != 0 {
                 bail!("Cannot create backup: data exists in the target database.");
             }
-            let mut s_tx = sqlite_db.transact_write()?;
             let mut tx = self.transact()?;
             let iter = tx.store_tx.range_scan(&[], &[0xFF]);
-            s_tx.store_tx.batch_put(iter)?;
+            sqlite_db.db.batch_put(iter)?;
             tx.commit_tx()?;
-            s_tx.commit_tx()?;
             Ok(())
         }
         #[cfg(not(feature = "storage-sqlite"))]
@@ -345,19 +343,21 @@ impl<'s, S: Storage<'s>> Db<S> {
         {
             let sqlite_db = crate::new_cozo_sqlite(in_file.to_string())?;
             let mut s_tx = sqlite_db.transact()?;
-            let mut tx = self.transact_write()?;
-            let store_id = tx.relation_store_id.load(Ordering::SeqCst);
-            if store_id != 0 {
-                bail!(
-                    "Cannot restore backup: data exists in the current database. \
+            {
+                let mut tx = self.transact()?;
+                let store_id = tx.relation_store_id.load(Ordering::SeqCst);
+                if store_id != 0 {
+                    bail!(
+                        "Cannot restore backup: data exists in the current database. \
                 You can only restore into a new database (store id: {}).",
-                    store_id
-                );
+                        store_id
+                    );
+                }
+                tx.commit_tx()?;
             }
-            let iter = s_tx.store_tx.range_scan(&[], &[1]);
-            tx.store_tx.batch_put(iter)?;
+            let iter = s_tx.store_tx.total_scan();
+            self.db.batch_put(iter)?;
             s_tx.commit_tx()?;
-            tx.commit_tx()?;
             Ok(())
         }
         #[cfg(not(feature = "storage-sqlite"))]
@@ -402,7 +402,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                         Ok((src_k, src_v))
                     },
                 );
-                dst_tx.store_tx.batch_put(Box::new(data_it))?;
+                for result in data_it {
+                    let (key, val) = result?;
+                    dst_tx.store_tx.put(&key, &val)?;
+                }
             }
 
             src_tx.commit_tx()?;
@@ -1297,13 +1300,19 @@ mod tests {
     fn test_classical() {
         let _ = env_logger::builder().is_test(true).try_init();
         let db = new_cozo_mem().unwrap();
-        let res = db.run_script(r#"
+        let res = db
+            .run_script(
+                r#"
 parent[] <- [['joseph', 'jakob'],
              ['jakob', 'issac'],
              ['issac', 'abraham']]
 grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
 ?[who] := grandparent[who, 'abraham']
-        "#, Default::default()).unwrap().rows;
+        "#,
+                Default::default(),
+            )
+            .unwrap()
+            .rows;
         println!("{:?}", res);
         assert_eq!(res[0][0], json!("jakob"))
     }

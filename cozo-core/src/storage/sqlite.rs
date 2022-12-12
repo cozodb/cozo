@@ -112,10 +112,27 @@ impl<'s> Storage<'s> for SqliteStorage {
         Ok(())
     }
 
+    fn batch_put<'a>(
+        &'a self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
+    ) -> Result<()> {
+        let mut tx = self.transact(true)?;
+        for result in data {
+            let (key, val) = result?;
+            tx.put(&key, &val)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     fn range_compact(&'_ self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
         let mut pool = self.pool.lock().unwrap();
         while pool.pop().is_some() {}
         Ok(())
+    }
+
+    fn storage_kind(&self) -> &'static str {
+        "sqlite"
     }
 }
 
@@ -274,26 +291,17 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
         Box::new(RawIter(statement))
     }
 
-    fn batch_put<'a>(
-        &'a mut self,
-        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
-    ) -> Result<()>
+    fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where
         's: 'a,
     {
-        self.ensure_stmt(PUT_QUERY);
-        let mut statement = self.stmts[PUT_QUERY].borrow_mut();
-        let statement = statement.as_mut().unwrap();
-        statement.reset().unwrap();
-
-        for pair in data {
-            let (key, val) = pair?;
-            statement.bind((1, key.as_slice())).unwrap();
-            statement.bind((2, val.as_slice())).unwrap();
-            while statement.next().into_diagnostic()? != State::Done {}
-            statement.reset().unwrap();
-        }
-        Ok(())
+        let statement = self
+            .conn
+            .as_ref()
+            .unwrap()
+            .prepare("select k, v from cozo order by k;")
+            .unwrap();
+        Box::new(RawIter(statement))
     }
 }
 

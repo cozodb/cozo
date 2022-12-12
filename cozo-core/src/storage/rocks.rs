@@ -120,6 +120,10 @@ impl RocksDbStorage {
 impl Storage<'_> for RocksDbStorage {
     type Tx = RocksDbTx;
 
+    fn storage_kind(&self) -> &'static str {
+        "rocksdb"
+    }
+
     fn transact(&self, _write: bool) -> Result<Self::Tx> {
         let db_tx = self.db.transact().set_snapshot(true).start();
         Ok(RocksDbTx { db_tx })
@@ -131,6 +135,17 @@ impl Storage<'_> for RocksDbStorage {
 
     fn range_compact(&self, lower: &[u8], upper: &[u8]) -> Result<()> {
         self.db.range_compact(lower, upper).into_diagnostic()
+    }
+
+    fn batch_put<'a>(
+        &'a self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
+    ) -> Result<()> {
+        for result in data {
+            let (key, val) = result?;
+            self.db.raw_put(&key, &val)?;
+        }
+        Ok(())
     }
 }
 
@@ -195,6 +210,13 @@ impl<'s> StoreTx<'s> for RocksDbTx {
             started: false,
             upper_bound: upper.to_vec(),
         })
+    }
+
+    fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
+    where
+        's: 'a,
+    {
+        self.range_scan(&[], &[u8::MAX])
     }
 }
 

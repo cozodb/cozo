@@ -43,6 +43,10 @@ const DEL_MARKER: u8 = 0;
 impl Storage<'_> for SledStorage {
     type Tx = SledTx;
 
+    fn storage_kind(&self) -> &'static str {
+        "sled"
+    }
+
     fn transact(&self, _write: bool) -> Result<Self::Tx> {
         Ok(SledTx {
             db: self.db.clone(),
@@ -64,6 +68,19 @@ impl Storage<'_> for SledStorage {
     }
 
     fn range_compact(&self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    fn batch_put<'a>(
+        &'a self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
+    ) -> Result<()> {
+        let mut tx = self.transact(true)?;
+        for result in data {
+            let (key, val) = result?;
+            tx.put(&key, &val)?;
+        }
+        tx.commit()?;
         Ok(())
     }
 }
@@ -211,6 +228,13 @@ impl<'s> StoreTx<'s> for SledTx {
                     .map_ok(|(k, v)| (k.to_vec(), v.to_vec())),
             )
         }
+    }
+
+    fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
+    where
+        's: 'a,
+    {
+        self.range_scan(&[], &[u8::MAX])
     }
 }
 

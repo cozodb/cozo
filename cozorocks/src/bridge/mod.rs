@@ -133,6 +133,12 @@ pub(crate) mod ffi {
             upper: &[u8],
             status: &mut RocksDbStatus,
         );
+        fn put(
+            self: &RocksDbBridge,
+            key: &[u8],
+            val: &[u8],
+            status: &mut RocksDbStatus,
+        );
         fn compact_range(
             self: &RocksDbBridge,
             lower: &[u8],

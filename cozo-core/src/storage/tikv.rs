@@ -61,6 +61,10 @@ pub struct TiKvStorage {
 impl Storage<'_> for TiKvStorage {
     type Tx = TiKvTx;
 
+    fn storage_kind(&self) -> &'static str {
+        "tikv"
+    }
+
     fn transact(&self, _write: bool) -> Result<Self::Tx> {
         let tx = if self.optimistic {
             RT.block_on(self.client.begin_optimistic())
@@ -86,6 +90,19 @@ impl Storage<'_> for TiKvStorage {
     }
 
     fn range_compact(&self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    fn batch_put<'a>(
+        &'a self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
+    ) -> Result<()> {
+        let mut tx = self.transact(true)?;
+        for result in data {
+            let (key, val) = result?;
+            tx.put(&key, &val)?;
+        }
+        tx.commit()?;
         Ok(())
     }
 }
@@ -152,6 +169,13 @@ impl<'s> StoreTx<'s> for TiKvTx {
         's: 'a,
     {
         Box::new(BatchScannerRaw::new(self.tx.clone(), lower, upper))
+    }
+
+    fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
+    where
+        's: 'a,
+    {
+        self.range_scan(&[], &[u8::MAX])
     }
 }
 

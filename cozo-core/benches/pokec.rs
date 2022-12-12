@@ -58,8 +58,12 @@ lazy_static! {
         backup_path.push(format!("backup-{}.db", data_size));
         if Path::exists(&backup_path) {
             println!("restore from backup");
+            let import_time = Instant::now();
             db.restore_backup(backup_path.to_str().unwrap()).unwrap();
+            dbg!(import_time.elapsed());
+            dbg!(((SIZES.0 + 2 * SIZES.1) as f64) / import_time.elapsed().as_secs_f64());
         } else {
+            println!("parse data from text file");
             let mut file_path = data_dir.clone();
             file_path.push(format!("pokec_{}_import.cypher", data_size));
 
@@ -525,6 +529,21 @@ fn pattern_short() {
 }
 
 #[bench]
+fn nothing(_: &mut Bencher) {
+    initialize(&TEST_DB);
+}
+
+#[bench]
+fn backup_db(_: &mut Bencher) {
+    initialize(&TEST_DB);
+    let data_size = env::var("COZO_BENCH_POKEC_SIZE").unwrap_or("medium".to_string());
+    let backup_taken = Instant::now();
+    TEST_DB.backup_db(format!("backup-{}.db", data_size)).unwrap();
+    dbg!(backup_taken.elapsed());
+    dbg!(((SIZES.0 + 2 * SIZES.1) as f64) / backup_taken.elapsed().as_secs_f64());
+}
+
+#[bench]
 fn bench_aggregation(b: &mut Bencher) {
     initialize(&TEST_DB);
     b.iter(aggregation)
@@ -668,7 +687,6 @@ fn qps_single_vertex_write(_b: &mut Bencher) {
     });
     dbg!((count as f64) / qps_single_vertex_write_time.elapsed().as_secs_f64());
 }
-
 
 #[bench]
 fn bench_single_vertex_write(b: &mut Bencher) {

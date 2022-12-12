@@ -28,6 +28,9 @@ pub trait Storage<'s> {
     /// The associated transaction type used by this engine
     type Tx: StoreTx<'s>;
 
+    /// Returns a string that identifies the storage kind
+    fn storage_kind(&self) -> &'static str;
+
     /// Create a transaction object. Write ops will only be called when `write == true`.
     fn transact(&'s self, write: bool) -> Result<Self::Tx>;
 
@@ -39,6 +42,14 @@ pub trait Storage<'s> {
     /// Compact the key range. Can be a no-op if the storage engine does not
     /// have the concept of compaction.
     fn range_compact(&'s self, lower: &[u8], upper: &[u8]) -> Result<()>;
+
+    /// Put multiple key-value pairs into the database.
+    /// No duplicate data will be sent, and the order data come in is strictly ascending.
+    /// There will be no other access to the database while this function is running.
+    fn batch_put<'a>(
+        &'a self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
+    ) -> Result<()>;
 }
 
 /// Trait for the associated transaction type of a storage engine.
@@ -92,20 +103,8 @@ pub trait StoreTx<'s> {
     where
         's: 'a;
 
-    /// Put multiple key-value pairs into the database.
-    /// The default implementation just calls `put` repeatedly.
-    /// Implement if there is a more efficient way.
-    fn batch_put<'a>(
-        &'a mut self,
-        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
-    ) -> Result<()>
+    /// Scan for all rows. The rows are required to be in ascending order.
+    fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where
-        's: 'a,
-    {
-        for pair in data {
-            let (k, v) = pair?;
-            self.put(&k, &v)?;
-        }
-        Ok(())
-    }
+        's: 'a;
 }

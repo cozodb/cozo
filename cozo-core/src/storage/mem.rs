@@ -41,6 +41,10 @@ pub struct MemStorage {
 impl<'s> Storage<'s> for MemStorage {
     type Tx = MemTx<'s>;
 
+    fn storage_kind(&self) -> &'static str {
+        "mem"
+    }
+
     fn transact(&'s self, write: bool) -> Result<Self::Tx> {
         Ok(if write {
             let wtr = self.store.write().unwrap();
@@ -75,6 +79,18 @@ impl<'s> Storage<'s> for MemStorage {
     }
 
     fn range_compact(&'s self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    fn batch_put<'a>(
+        &'a self,
+        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
+    ) -> Result<()> {
+        let mut store = self.store.write().unwrap();
+        for pair in data {
+            let (k, v) = pair?;
+            store.insert(k, v);
+        }
         Ok(())
     }
 }
@@ -197,36 +213,38 @@ impl<'s> StoreTx<'s> for MemTx<'s> {
         }
     }
 
-    fn batch_put<'a>(
-        &'a mut self,
-        data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
-    ) -> Result<()>
+    fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where
         's: 'a,
     {
         match self {
-            MemTx::Reader(_) => {
-                bail!("write in read transaction")
-            }
-            MemTx::Writer(_, cache) => {
-                for pair in data {
-                    let (k, v) = pair?;
-                    cache.insert(k, Some(v));
-                }
-                Ok(())
-            }
+            MemTx::Reader(rdr) => Box::new(rdr.iter().map(|(k, v)| Ok((k.clone(), v.clone())))),
+            MemTx::Writer(wtr, cache) => Box::new(CacheIterRaw {
+                change_iter: cache.iter().fuse(),
+                db_iter: wtr.iter().fuse(),
+                change_cache: None,
+                db_cache: None,
+            }),
         }
     }
 }
 
-struct CacheIterRaw<'a> {
-    change_iter: Fuse<Range<'a, Vec<u8>, Option<Vec<u8>>>>,
-    db_iter: Fuse<Range<'a, Vec<u8>, Vec<u8>>>,
+struct CacheIterRaw<'a, C, T>
+where
+    C: Iterator<Item = (&'a Vec<u8>, &'a Option<Vec<u8>>)> + 'a,
+    T: Iterator<Item = (&'a Vec<u8>, &'a Vec<u8>)>,
+{
+    change_iter: C,
+    db_iter: T,
     change_cache: Option<(&'a Vec<u8>, &'a Option<Vec<u8>>)>,
     db_cache: Option<(&'a Vec<u8>, &'a Vec<u8>)>,
 }
 
-impl CacheIterRaw<'_> {
+impl<'a, C, T> CacheIterRaw<'a, C, T>
+where
+    C: Iterator<Item = (&'a Vec<u8>, &'a Option<Vec<u8>>)> + 'a,
+    T: Iterator<Item = (&'a Vec<u8>, &'a Vec<u8>)>,
+{
     #[inline]
     fn fill_cache(&mut self) -> Result<()> {
         if self.change_cache.is_none() {
@@ -283,7 +301,11 @@ impl CacheIterRaw<'_> {
     }
 }
 
-impl Iterator for CacheIterRaw<'_> {
+impl<'a, C, T> Iterator for CacheIterRaw<'a, C, T>
+where
+    C: Iterator<Item = (&'a Vec<u8>, &'a Option<Vec<u8>>)> + 'a,
+    T: Iterator<Item = (&'a Vec<u8>, &'a Vec<u8>)>,
+{
     type Item = Result<(Vec<u8>, Vec<u8>)>;
 
     #[inline]
