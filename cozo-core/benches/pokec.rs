@@ -19,12 +19,17 @@ use test::Bencher;
 
 use lazy_static::{initialize, lazy_static};
 use rand::Rng;
+use rayon::prelude::*;
 use regex::Regex;
 use serde_json::json;
 
 use cozo::{DbInstance, NamedRows};
 
 lazy_static! {
+    static ref ITERATIONS: usize = {
+        let size = env::var("COZO_BENCH_ITERATIONS").unwrap_or("100".to_string());
+        size.parse::<usize>().unwrap()
+    };
     static ref SIZES: (usize, usize) = {
         let size = env::var("COZO_BENCH_POKEC_SIZE").unwrap_or("medium".to_string());
         match &size as &str {
@@ -195,12 +200,12 @@ lazy_static! {
 }
 
 type QueryFn = fn() -> ();
-const READ_QUERIES: [QueryFn; 1] = [single_vertex];
+const READ_QUERIES: [QueryFn; 1] = [single_vertex_read];
 const WRITE_QUERIES: [QueryFn; 2] = [single_edge_write, single_vertex_write];
 const UPDATE_QUERIES: [QueryFn; 1] = [single_vertex_update];
 #[allow(dead_code)]
 const AGGREGATE_QUERIES: [QueryFn; 4] =
-    [aggregation, aggregation_filter, aggregation_count, min_max];
+    [aggregation_group, aggregation_filter, aggregation_count, aggregation_min_max];
 const ANALYTICAL_QUERIES: [QueryFn; 15] = [
     expansion_1,
     expansion_2,
@@ -219,7 +224,7 @@ const ANALYTICAL_QUERIES: [QueryFn; 15] = [
     pattern_short,
 ];
 
-fn single_vertex() {
+fn single_vertex_read() {
     let i = rand::thread_rng().gen_range(1..SIZES.0);
     TEST_DB
         .run_script(
@@ -286,7 +291,7 @@ fn single_vertex_update() {
     panic!()
 }
 
-fn aggregation() {
+fn aggregation_group() {
     TEST_DB
         .run_script("?[age, count(uid)] := *user{uid, age}", Default::default())
         .unwrap();
@@ -310,7 +315,7 @@ fn aggregation_filter() {
         .unwrap();
 }
 
-fn min_max() {
+fn aggregation_min_max() {
     TEST_DB
         .run_script(
             "?[min(uid), max(uid), mean(uid)] := *user{uid, age}",
@@ -538,15 +543,17 @@ fn backup_db(_: &mut Bencher) {
     initialize(&TEST_DB);
     let data_size = env::var("COZO_BENCH_POKEC_SIZE").unwrap_or("medium".to_string());
     let backup_taken = Instant::now();
-    TEST_DB.backup_db(format!("backup-{}.db", data_size)).unwrap();
+    TEST_DB
+        .backup_db(format!("backup-{}.db", data_size))
+        .unwrap();
     dbg!(backup_taken.elapsed());
     dbg!(((SIZES.0 + 2 * SIZES.1) as f64) / backup_taken.elapsed().as_secs_f64());
 }
 
 #[bench]
-fn bench_aggregation(b: &mut Bencher) {
+fn bench_aggregation_group(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(aggregation)
+    b.iter(aggregation_group)
 }
 
 #[bench]
@@ -562,9 +569,9 @@ fn bench_aggregation_filter(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_min_max(b: &mut Bencher) {
+fn bench_aggregation_min_max(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(min_max)
+    b.iter(aggregation_min_max)
 }
 
 #[bench]
@@ -659,7 +666,7 @@ fn bench_pattern_short(b: &mut Bencher) {
 #[bench]
 fn bench_single_vertex(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(single_vertex)
+    b.iter(single_vertex_read)
 }
 
 #[bench]
@@ -670,7 +677,7 @@ fn qps_single_vertex_read(_b: &mut Bencher) {
     let count = 1_000_000;
     let qps_single_vertex_read_time = Instant::now();
     (0..count).into_par_iter().for_each(|_| {
-        single_vertex();
+        single_vertex_read();
     });
     dbg!((count as f64) / qps_single_vertex_read_time.elapsed().as_secs_f64());
 }
@@ -707,161 +714,245 @@ fn bench_single_vertex_update(b: &mut Bencher) {
 }
 
 #[bench]
-fn throughput(_: &mut Bencher) {
-    use rayon::prelude::*;
-
-    println!("throughput benchmarks");
-    dbg!(rayon::current_num_threads());
-    let init_time = Instant::now();
+fn tp_expansion_1_plain(_b: &mut Bencher) {
     initialize(&TEST_DB);
-    dbg!(init_time.elapsed());
-
     let expansion_1_time = Instant::now();
-    let count = 100;
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         expansion_1();
     });
-    dbg!((count as f64) / expansion_1_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / expansion_1_time.elapsed().as_secs_f64());
 
+}
+
+#[bench]
+fn tp_expansion_1_filter(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let expansion_1_filter_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         expansion_1_filter();
     });
-    dbg!((count as f64) / expansion_1_filter_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / expansion_1_filter_time.elapsed().as_secs_f64());
 
+}
+
+#[bench]
+fn tp_expansion_2_plain(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let expansion_2_time = Instant::now();
-
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         expansion_2();
     });
-    dbg!((count as f64) / expansion_2_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / expansion_2_time.elapsed().as_secs_f64());
 
+}
+
+#[bench]
+fn tp_expansion_2_filter(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let expansion_2_filter_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         expansion_2_filter();
     });
-    dbg!((count as f64) / expansion_2_filter_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / expansion_2_filter_time.elapsed().as_secs_f64());
 
+}
+
+#[bench]
+fn tp_expansion_3_plain(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let expansion_3_time = Instant::now();
-
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         expansion_3();
     });
-    dbg!((count as f64) / expansion_3_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / expansion_3_time.elapsed().as_secs_f64());
 
+}
+
+#[bench]
+fn tp_expansion_3_filter(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let expansion_3_filter_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         expansion_3_filter();
     });
-    dbg!((count as f64) / expansion_3_filter_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / expansion_3_filter_time.elapsed().as_secs_f64());
 
+}
+
+#[bench]
+fn tp_expansion_4_plain(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let expansion_4_time = Instant::now();
-
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         expansion_4();
     });
-    dbg!((count as f64) / expansion_4_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / expansion_4_time.elapsed().as_secs_f64());
 
+}
+
+#[bench]
+fn tp_expansion_4_filter(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let expansion_4_filter_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         expansion_4_filter();
     });
-    dbg!((count as f64) / expansion_4_filter_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / expansion_4_filter_time.elapsed().as_secs_f64());
 
+}
+
+#[bench]
+fn tp_neighbours_2_plain(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let neighbours_2_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         neighbours_2();
     });
-    dbg!((count as f64) / neighbours_2_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / neighbours_2_time.elapsed().as_secs_f64());
 
+}
+
+#[bench]
+fn tp_neighbours_2_filter(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let neighbours_2_filter_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         neighbours_2_filter();
     });
-    dbg!((count as f64) / neighbours_2_filter_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / neighbours_2_filter_time.elapsed().as_secs_f64());
+}
 
+#[bench]
+fn tp_neighbours_2_data(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let neighbours_2_data_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         neighbours_2_data();
     });
-    dbg!((count as f64) / neighbours_2_data_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / neighbours_2_data_time.elapsed().as_secs_f64());
+}
 
+#[bench]
+fn tp_neighbours_2_filter_data(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let neighbours_2_filter_data_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         neighbours_2_filter_data();
     });
-    dbg!((count as f64) / neighbours_2_filter_data_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / neighbours_2_filter_data_time.elapsed().as_secs_f64());
+}
 
+#[bench]
+fn tp_pattern_cycle(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let pattern_cycle_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         pattern_cycle();
     });
-    dbg!((count as f64) / pattern_cycle_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / pattern_cycle_time.elapsed().as_secs_f64());
+}
 
+#[bench]
+fn tp_pattern_long(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let pattern_long_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         pattern_long();
     });
-    dbg!((count as f64) / pattern_long_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / pattern_long_time.elapsed().as_secs_f64());
+}
 
+#[bench]
+fn tp_pattern_short(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let pattern_short_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         pattern_short();
     });
-    dbg!((count as f64) / pattern_short_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / pattern_short_time.elapsed().as_secs_f64());
+}
 
-    let aggregation_time = Instant::now();
-
-    (0..count).into_par_iter().for_each(|_| {
-        aggregation();
+#[bench]
+fn tp_aggregation_group(_b: &mut Bencher) {
+    initialize(&TEST_DB);
+    let aggregation_group_time = Instant::now();
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
+        aggregation_group();
     });
-    dbg!((count as f64) / aggregation_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / aggregation_group_time.elapsed().as_secs_f64());
+}
 
+#[bench]
+fn tp_aggregation_count(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let aggregation_count_time = Instant::now();
-
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         aggregation_count();
     });
-    dbg!((count as f64) / aggregation_count_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / aggregation_count_time.elapsed().as_secs_f64());
+}
 
+#[bench]
+fn tp_aggregation_filter(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let aggregation_filter_time = Instant::now();
-
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         aggregation_filter();
     });
-    dbg!((count as f64) / aggregation_filter_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / aggregation_filter_time.elapsed().as_secs_f64());
+}
 
-    let min_max_time = Instant::now();
-
-    (0..count).into_par_iter().for_each(|_| {
-        min_max();
+#[bench]
+fn tp_aggregation_min_max(_b: &mut Bencher) {
+    initialize(&TEST_DB);
+    let aggregation_min_max_time = Instant::now();
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
+        aggregation_min_max();
     });
-    dbg!((count as f64) / min_max_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / aggregation_min_max_time.elapsed().as_secs_f64());
+}
 
-    let single_vertex_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
-        single_vertex();
+#[bench]
+fn tp_single_vertex_read(_b: &mut Bencher) {
+    initialize(&TEST_DB);
+    let single_vertex_read_time = Instant::now();
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
+        single_vertex_read();
     });
-    dbg!((count as f64) / single_vertex_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / single_vertex_read_time.elapsed().as_secs_f64());
+}
 
+#[bench]
+fn tp_single_vertex_write(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let single_vertex_write_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         single_vertex_write();
     });
-    dbg!((count as f64) / single_vertex_write_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / single_vertex_write_time.elapsed().as_secs_f64());
+}
 
+#[bench]
+fn tp_single_edge_write(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let single_edge_write_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
-        single_edge_write();
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
+        single_vertex_write();
     });
-    dbg!((count as f64) / single_edge_write_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / single_edge_write_time.elapsed().as_secs_f64());
+}
 
+
+#[bench]
+fn tp_single_vertex_update(_b: &mut Bencher) {
+    initialize(&TEST_DB);
     let single_vertex_update_time = Instant::now();
-    (0..count).into_par_iter().for_each(|_| {
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
         single_vertex_update();
     });
-    dbg!((count as f64) / single_vertex_update_time.elapsed().as_secs_f64());
+    dbg!((*ITERATIONS as f64) / single_vertex_update_time.elapsed().as_secs_f64());
 }
+
 
 fn wrap(mixed_pct: f64, f: QueryFn) {
     use rand::prelude::*;
@@ -1028,7 +1119,7 @@ fn mixed(_: &mut Bencher) {
     let aggregation_time = Instant::now();
 
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, aggregation);
+        wrap(mixed_pct, aggregation_group);
     });
     dbg!((count as f64) / aggregation_time.elapsed().as_secs_f64());
 
@@ -1049,13 +1140,13 @@ fn mixed(_: &mut Bencher) {
     let min_max_time = Instant::now();
 
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, min_max);
+        wrap(mixed_pct, aggregation_min_max);
     });
     dbg!((count as f64) / min_max_time.elapsed().as_secs_f64());
 
     let single_vertex_time = Instant::now();
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, single_vertex);
+        wrap(mixed_pct, single_vertex_read);
     });
     dbg!((count as f64) / single_vertex_time.elapsed().as_secs_f64());
 
