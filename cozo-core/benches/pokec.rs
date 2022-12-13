@@ -751,7 +751,7 @@ fn tp_expansion_2_plain(_b: &mut Bencher) {
 }
 
 #[bench]
-fn tp_expansion_2_filter(_b: &mut Bencher) {
+fn tp_expansion_2_filter_only(_b: &mut Bencher) {
     initialize(&TEST_DB);
     let expansion_2_filter_time = Instant::now();
     (0..*ITERATIONS).into_par_iter().for_each(|_| {
