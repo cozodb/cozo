@@ -50,8 +50,8 @@ lazy_static! {
             .parse::<usize>()
             .unwrap();
         db_path.push(format!("{}-{}.db", db_kind, data_size));
-        let _ = std::fs::remove_file(&db_path);
-        let _ = std::fs::remove_dir_all(&db_path);
+        // let _ = std::fs::remove_file(&db_path);
+        // let _ = std::fs::remove_dir_all(&db_path);
         let path_exists = Path::exists(&db_path);
         let db = DbInstance::new(&db_kind, db_path.to_str().unwrap(), "").unwrap();
         if path_exists {
@@ -211,17 +211,17 @@ const AGGREGATE_QUERIES: [QueryFn; 4] = [
     aggregation_min_max,
 ];
 const ANALYTICAL_QUERIES: [QueryFn; 15] = [
-    expansion_1,
-    expansion_2,
-    expansion_3,
-    expansion_4,
+    expansion_1_plain,
+    expansion_2_plain,
+    expansion_3_plain,
+    expansion_4_plain,
     expansion_1_filter,
     expansion_2_filter,
     expansion_3_filter,
     expansion_4_filter,
-    neighbours_2,
-    neighbours_2_filter,
-    neighbours_2_data,
+    neighbours_2_plain,
+    neighbours_2_filter_only,
+    neighbours_2_data_only,
     neighbours_2_filter_data,
     pattern_cycle,
     pattern_long,
@@ -328,7 +328,7 @@ fn aggregation_min_max() {
         .unwrap();
 }
 
-fn expansion_1() {
+fn expansion_1_plain() {
     let mut rng = rand::thread_rng();
     let i = rng.gen_range(1..SIZES.0);
     TEST_DB
@@ -350,7 +350,7 @@ fn expansion_1_filter() {
         .unwrap();
 }
 
-fn expansion_2() {
+fn expansion_2_plain() {
     let mut rng = rand::thread_rng();
     let i = rng.gen_range(1..SIZES.0);
     TEST_DB
@@ -372,7 +372,7 @@ fn expansion_2_filter() {
             .unwrap();
 }
 
-fn expansion_3() {
+fn expansion_3_plain() {
     let mut rng = rand::thread_rng();
     let i = rng.gen_range(1..SIZES.0);
     TEST_DB
@@ -401,7 +401,7 @@ fn expansion_3_filter() {
         .unwrap();
 }
 
-fn expansion_4() {
+fn expansion_4_plain() {
     let i = rand::thread_rng().gen_range(1..SIZES.0);
     TEST_DB
         .run_script(
@@ -431,7 +431,7 @@ fn expansion_4_filter() {
         .unwrap();
 }
 
-fn neighbours_2() {
+fn neighbours_2_plain() {
     let mut rng = rand::thread_rng();
     let i = rng.gen_range(1..SIZES.0);
     TEST_DB
@@ -446,7 +446,7 @@ fn neighbours_2() {
         .unwrap();
 }
 
-fn neighbours_2_filter() {
+fn neighbours_2_filter_only() {
     let mut rng = rand::thread_rng();
     let i = rng.gen_range(1..SIZES.0);
     TEST_DB
@@ -461,7 +461,7 @@ fn neighbours_2_filter() {
         .unwrap();
 }
 
-fn neighbours_2_data() {
+fn neighbours_2_data_only() {
     let mut rng = rand::thread_rng();
     let i = rng.gen_range(1..SIZES.0);
     TEST_DB
@@ -584,7 +584,7 @@ fn bench_aggregation_min_max(b: &mut Bencher) {
 #[bench]
 fn bench_expansion_1(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(expansion_1)
+    b.iter(expansion_1_plain)
 }
 
 #[bench]
@@ -596,7 +596,7 @@ fn bench_expansion_1_filter(b: &mut Bencher) {
 #[bench]
 fn bench_expansion_2(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(expansion_2)
+    b.iter(expansion_2_plain)
 }
 
 #[bench]
@@ -608,7 +608,7 @@ fn bench_expansion_2_filter(b: &mut Bencher) {
 #[bench]
 fn bench_expansion_3(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(expansion_3)
+    b.iter(expansion_3_plain)
 }
 
 #[bench]
@@ -620,7 +620,7 @@ fn bench_expansion_3_filter(b: &mut Bencher) {
 #[bench]
 fn bench_expansion_4(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(expansion_4)
+    b.iter(expansion_4_plain)
 }
 
 #[bench]
@@ -632,19 +632,19 @@ fn bench_expansion_4_filter(b: &mut Bencher) {
 #[bench]
 fn bench_neighbours_2(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(neighbours_2)
+    b.iter(neighbours_2_plain)
 }
 
 #[bench]
 fn bench_neighbours_2_filter(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(neighbours_2_filter)
+    b.iter(neighbours_2_filter_only)
 }
 
 #[bench]
 fn bench_neighbours_2_data(b: &mut Bencher) {
     initialize(&TEST_DB);
-    b.iter(neighbours_2_data)
+    b.iter(neighbours_2_data_only)
 }
 
 #[bench]
@@ -725,7 +725,7 @@ fn tp_expansion_1_plain(_b: &mut Bencher) {
     initialize(&TEST_DB);
     let expansion_1_time = Instant::now();
     (0..*ITERATIONS).into_par_iter().for_each(|_| {
-        expansion_1();
+        expansion_1_plain();
     });
     dbg!((*ITERATIONS as f64) / expansion_1_time.elapsed().as_secs_f64());
 }
@@ -745,7 +745,7 @@ fn tp_expansion_2_plain(_b: &mut Bencher) {
     initialize(&TEST_DB);
     let expansion_2_time = Instant::now();
     (0..*ITERATIONS).into_par_iter().for_each(|_| {
-        expansion_2();
+        expansion_2_plain();
     });
     dbg!((*ITERATIONS as f64) / expansion_2_time.elapsed().as_secs_f64());
 }
@@ -765,7 +765,7 @@ fn tp_expansion_3_plain(_b: &mut Bencher) {
     initialize(&TEST_DB);
     let expansion_3_time = Instant::now();
     (0..*ITERATIONS).into_par_iter().for_each(|_| {
-        expansion_3();
+        expansion_3_plain();
     });
     dbg!((*ITERATIONS as f64) / expansion_3_time.elapsed().as_secs_f64());
 }
@@ -785,7 +785,7 @@ fn tp_expansion_4_plain(_b: &mut Bencher) {
     initialize(&TEST_DB);
     let expansion_4_time = Instant::now();
     (0..*ITERATIONS).into_par_iter().for_each(|_| {
-        expansion_4();
+        expansion_4_plain();
     });
     dbg!((*ITERATIONS as f64) / expansion_4_time.elapsed().as_secs_f64());
 }
@@ -805,7 +805,7 @@ fn tp_neighbours_2_plain(_b: &mut Bencher) {
     initialize(&TEST_DB);
     let neighbours_2_time = Instant::now();
     (0..*ITERATIONS).into_par_iter().for_each(|_| {
-        neighbours_2();
+        neighbours_2_plain();
     });
     dbg!((*ITERATIONS as f64) / neighbours_2_time.elapsed().as_secs_f64());
 }
@@ -815,7 +815,7 @@ fn tp_neighbours_2_filter(_b: &mut Bencher) {
     initialize(&TEST_DB);
     let neighbours_2_filter_time = Instant::now();
     (0..*ITERATIONS).into_par_iter().for_each(|_| {
-        neighbours_2_filter();
+        neighbours_2_filter_only();
     });
     dbg!((*ITERATIONS as f64) / neighbours_2_filter_time.elapsed().as_secs_f64());
 }
@@ -825,7 +825,7 @@ fn tp_neighbours_2_data(_b: &mut Bencher) {
     initialize(&TEST_DB);
     let neighbours_2_data_time = Instant::now();
     (0..*ITERATIONS).into_par_iter().for_each(|_| {
-        neighbours_2_data();
+        neighbours_2_data_only();
     });
     dbg!((*ITERATIONS as f64) / neighbours_2_data_time.elapsed().as_secs_f64());
 }
@@ -1020,7 +1020,7 @@ fn mixed(_: &mut Bencher) {
     let expansion_1_time = Instant::now();
     let count = 100;
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, expansion_1);
+        wrap(mixed_pct, expansion_1_plain);
     });
     dbg!((count as f64) / expansion_1_time.elapsed().as_secs_f64());
 
@@ -1033,7 +1033,7 @@ fn mixed(_: &mut Bencher) {
     let expansion_2_time = Instant::now();
 
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, expansion_2);
+        wrap(mixed_pct, expansion_2_plain);
     });
     dbg!((count as f64) / expansion_2_time.elapsed().as_secs_f64());
 
@@ -1046,7 +1046,7 @@ fn mixed(_: &mut Bencher) {
     let expansion_3_time = Instant::now();
 
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, expansion_3);
+        wrap(mixed_pct, expansion_3_plain);
     });
     dbg!((count as f64) / expansion_3_time.elapsed().as_secs_f64());
 
@@ -1059,7 +1059,7 @@ fn mixed(_: &mut Bencher) {
     let expansion_4_time = Instant::now();
 
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, expansion_4);
+        wrap(mixed_pct, expansion_4_plain);
     });
     dbg!((count as f64) / expansion_4_time.elapsed().as_secs_f64());
 
@@ -1071,19 +1071,19 @@ fn mixed(_: &mut Bencher) {
 
     let neighbours_2_time = Instant::now();
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, neighbours_2);
+        wrap(mixed_pct, neighbours_2_plain);
     });
     dbg!((count as f64) / neighbours_2_time.elapsed().as_secs_f64());
 
     let neighbours_2_filter_time = Instant::now();
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, neighbours_2_filter);
+        wrap(mixed_pct, neighbours_2_filter_only);
     });
     dbg!((count as f64) / neighbours_2_filter_time.elapsed().as_secs_f64());
 
     let neighbours_2_data_time = Instant::now();
     (0..count).into_par_iter().for_each(|_| {
-        wrap(mixed_pct, neighbours_2_data);
+        wrap(mixed_pct, neighbours_2_data_only);
     });
     dbg!((count as f64) / neighbours_2_data_time.elapsed().as_secs_f64());
 
