@@ -50,8 +50,8 @@ lazy_static! {
             .parse::<usize>()
             .unwrap();
         db_path.push(format!("{}-{}.db", db_kind, data_size));
-        // let _ = std::fs::remove_file(&db_path);
-        // let _ = std::fs::remove_dir_all(&db_path);
+        let _ = std::fs::remove_file(&db_path);
+        let _ = std::fs::remove_dir_all(&db_path);
         let path_exists = Path::exists(&db_path);
         let db = DbInstance::new(&db_kind, db_path.to_str().unwrap(), "").unwrap();
         if path_exists {
@@ -204,8 +204,12 @@ const READ_QUERIES: [QueryFn; 1] = [single_vertex_read];
 const WRITE_QUERIES: [QueryFn; 2] = [single_edge_write, single_vertex_write];
 const UPDATE_QUERIES: [QueryFn; 1] = [single_vertex_update];
 #[allow(dead_code)]
-const AGGREGATE_QUERIES: [QueryFn; 4] =
-    [aggregation_group, aggregation_filter, aggregation_count, aggregation_min_max];
+const AGGREGATE_QUERIES: [QueryFn; 4] = [
+    aggregation_group,
+    aggregation_filter,
+    aggregation_count,
+    aggregation_min_max,
+];
 const ANALYTICAL_QUERIES: [QueryFn; 15] = [
     expansion_1,
     expansion_2,
@@ -539,6 +543,9 @@ fn nothing(_: &mut Bencher) {
 }
 
 #[bench]
+fn empty(_: &mut Bencher) {}
+
+#[bench]
 fn backup_db(_: &mut Bencher) {
     initialize(&TEST_DB);
     let data_size = env::var("COZO_BENCH_POKEC_SIZE").unwrap_or("medium".to_string());
@@ -721,7 +728,6 @@ fn tp_expansion_1_plain(_b: &mut Bencher) {
         expansion_1();
     });
     dbg!((*ITERATIONS as f64) / expansion_1_time.elapsed().as_secs_f64());
-
 }
 
 #[bench]
@@ -732,7 +738,6 @@ fn tp_expansion_1_filter(_b: &mut Bencher) {
         expansion_1_filter();
     });
     dbg!((*ITERATIONS as f64) / expansion_1_filter_time.elapsed().as_secs_f64());
-
 }
 
 #[bench]
@@ -743,7 +748,6 @@ fn tp_expansion_2_plain(_b: &mut Bencher) {
         expansion_2();
     });
     dbg!((*ITERATIONS as f64) / expansion_2_time.elapsed().as_secs_f64());
-
 }
 
 #[bench]
@@ -754,7 +758,6 @@ fn tp_expansion_2_filter(_b: &mut Bencher) {
         expansion_2_filter();
     });
     dbg!((*ITERATIONS as f64) / expansion_2_filter_time.elapsed().as_secs_f64());
-
 }
 
 #[bench]
@@ -765,7 +768,6 @@ fn tp_expansion_3_plain(_b: &mut Bencher) {
         expansion_3();
     });
     dbg!((*ITERATIONS as f64) / expansion_3_time.elapsed().as_secs_f64());
-
 }
 
 #[bench]
@@ -776,7 +778,6 @@ fn tp_expansion_3_filter(_b: &mut Bencher) {
         expansion_3_filter();
     });
     dbg!((*ITERATIONS as f64) / expansion_3_filter_time.elapsed().as_secs_f64());
-
 }
 
 #[bench]
@@ -787,7 +788,6 @@ fn tp_expansion_4_plain(_b: &mut Bencher) {
         expansion_4();
     });
     dbg!((*ITERATIONS as f64) / expansion_4_time.elapsed().as_secs_f64());
-
 }
 
 #[bench]
@@ -798,7 +798,6 @@ fn tp_expansion_4_filter(_b: &mut Bencher) {
         expansion_4_filter();
     });
     dbg!((*ITERATIONS as f64) / expansion_4_filter_time.elapsed().as_secs_f64());
-
 }
 
 #[bench]
@@ -809,7 +808,6 @@ fn tp_neighbours_2_plain(_b: &mut Bencher) {
         neighbours_2();
     });
     dbg!((*ITERATIONS as f64) / neighbours_2_time.elapsed().as_secs_f64());
-
 }
 
 #[bench]
@@ -942,7 +940,6 @@ fn tp_single_edge_write(_b: &mut Bencher) {
     dbg!((*ITERATIONS as f64) / single_edge_write_time.elapsed().as_secs_f64());
 }
 
-
 #[bench]
 fn tp_single_vertex_update(_b: &mut Bencher) {
     initialize(&TEST_DB);
@@ -952,7 +949,6 @@ fn tp_single_vertex_update(_b: &mut Bencher) {
     });
     dbg!((*ITERATIONS as f64) / single_vertex_update_time.elapsed().as_secs_f64());
 }
-
 
 fn wrap(mixed_pct: f64, f: QueryFn) {
     use rand::prelude::*;
