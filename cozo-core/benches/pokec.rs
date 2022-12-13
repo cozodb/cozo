@@ -974,17 +974,16 @@ fn realistic(_: &mut Bencher) {
     dbg!(init_time.elapsed());
 
     let percentages = [
-        [0.2, 0.4, 0.1, 0.3],
-        [0.0, 0.7, 0.0, 0.3],
-        [0.0, 0.5, 0.0, 0.5],
-        [0.0, 0.3, 0.0, 0.7],
+        [0.0, 0.9, 0.05, 0.05],
+        [0.0, 0.7, 0.15, 0.15],
+        [0.0, 0.5, 0.25, 0.25],
+        [0.0, 0.3, 0.35, 0.35],
     ];
 
     for [analytical, read, update, write] in percentages {
         dbg!((analytical, read, update, write));
-        let count = 100;
         let taken = Instant::now();
-        (0..count).into_par_iter().for_each(|_| {
+        (0..*ITERATIONS).into_par_iter().for_each(|_| {
             let mut gen = thread_rng();
             let p = gen.gen::<f64>();
             let f = if p < analytical {
@@ -998,7 +997,7 @@ fn realistic(_: &mut Bencher) {
             };
             f.unwrap()()
         });
-        dbg!((count as f64) / taken.elapsed().as_secs_f64());
+        dbg!((*ITERATIONS as f64) / taken.elapsed().as_secs_f64());
     }
 }
 
