@@ -276,6 +276,17 @@ fn single_edge_write() {
     panic!()
 }
 
+fn pagerank() {
+    TEST_DB
+        .run_script(
+            r#"
+            ?[] <~ PageRank(*friends[])
+            "#,
+            Default::default(),
+        )
+        .unwrap();
+}
+
 fn single_vertex_update() {
     let i = rand::thread_rng().gen_range(1..SIZES.0);
     for _ in 0..10 {
@@ -948,6 +959,16 @@ fn tp_single_vertex_update(_b: &mut Bencher) {
         single_vertex_update();
     });
     dbg!((*ITERATIONS as f64) / single_vertex_update_time.elapsed().as_secs_f64());
+}
+
+#[bench]
+fn tp_pagerank(_b: &mut Bencher) {
+    initialize(&TEST_DB);
+    let pagerank_time = Instant::now();
+    (0..*ITERATIONS).into_par_iter().for_each(|_| {
+        pagerank();
+    });
+    dbg!((*ITERATIONS as f64) / pagerank_time.elapsed().as_secs_f64());
 }
 
 fn wrap(mixed_pct: f64, f: QueryFn) {
