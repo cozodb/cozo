@@ -560,6 +560,10 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 .into_inner()
                 .map(|v| build_expr(v, param_pool))
                 .try_collect()?;
+            // let validity = match src.next() {
+            //     None => None,
+            //     Some(vld_clause) => todo!()
+            // };
             InputAtom::Relation {
                 inner: InputRelationApplyAtom {
                     name: Symbol::new(&name.as_str()[1..], name.extract_span()),
@@ -591,6 +595,10 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                     Ok((name, arg))
                 })
                 .try_collect()?;
+            // let validity = match src.next() {
+            //     None => None,
+            //     Some(vld_clause) => todo!()
+            // };
             InputAtom::NamedFieldRelation {
                 inner: InputNamedFieldRelationApplyAtom { name, args, span },
             }
@@ -698,9 +706,16 @@ fn parse_fixed_rule(
                     Rule::fixed_relation_rel => {
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap();
-                        let bindings = els
-                            .map(|v| Symbol::new(v.as_str(), v.extract_span()))
-                            .collect_vec();
+                        let mut bindings = vec![];
+                        for v in els {
+                            match v.as_rule() {
+                                Rule::var => {
+                                    bindings.push(Symbol::new(v.as_str(), v.extract_span()))
+                                }
+                                Rule::validity_clause => todo!(),
+                                _ => unreachable!(),
+                            }
+                        }
                         rule_args.push(FixedRuleArg::Stored {
                             name: Symbol::new(
                                 name.as_str().strip_prefix('*').unwrap(),
@@ -713,18 +728,23 @@ fn parse_fixed_rule(
                     Rule::fixed_named_relation_rel => {
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap();
-                        let bindings = els
-                            .map(|v| {
-                                let mut vs = v.into_inner();
-                                let kp = vs.next().unwrap();
-                                let k = SmartString::from(kp.as_str());
-                                let v = match vs.next() {
-                                    Some(vp) => Symbol::new(vp.as_str(), vp.extract_span()),
-                                    None => Symbol::new(k.clone(), kp.extract_span()),
-                                };
-                                (k, v)
-                            })
-                            .collect();
+                        let mut bindings = BTreeMap::new();
+                        for p in els {
+                            match p.as_rule() {
+                                Rule::fixed_named_relation_arg_pair => {
+                                    let mut vs = p.into_inner();
+                                    let kp = vs.next().unwrap();
+                                    let k = SmartString::from(kp.as_str());
+                                    let v = match vs.next() {
+                                        Some(vp) => Symbol::new(vp.as_str(), vp.extract_span()),
+                                        None => Symbol::new(k.clone(), kp.extract_span()),
+                                    };
+                                    bindings.insert(k, v);
+                                }
+                                Rule::validity_clause => todo!(),
+                                _ => unreachable!(),
+                            }
+                        }
 
                         rule_args.push(FixedRuleArg::NamedStored {
                             name: Symbol::new(

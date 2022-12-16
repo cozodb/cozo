@@ -29,7 +29,9 @@ impl From<JsonValue> for DataValue {
             JsonValue::Object(d) => DataValue::List(
                 d.into_iter()
                     .map(|(k, v)| {
-                        DataValue::List([DataValue::Str(SmartString::from(k)), DataValue::from(v)].into())
+                        DataValue::List(
+                            [DataValue::Str(SmartString::from(k)), DataValue::from(v)].into(),
+                        )
                     })
                     .collect(),
             ),
@@ -97,6 +99,9 @@ impl From<DataValue> for JsonValue {
             }
             DataValue::Uuid(u) => {
                 json!(u.0)
+            }
+            DataValue::Validity(v) => {
+                json!([v.timestamp.0, v.is_assert])
             }
         }
     }

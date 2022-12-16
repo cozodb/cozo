@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::str::FromStr;
@@ -13,7 +14,7 @@ use std::str::FromStr;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use regex::Regex;
 
-use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper};
+use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity};
 
 const INIT_TAG: u8 = 0x00;
 const NULL_TAG: u8 = 0x01;
@@ -26,6 +27,7 @@ const UUID_TAG: u8 = 0x08;
 const REGEX_TAG: u8 = 0x09;
 const LIST_TAG: u8 = 0x0A;
 const SET_TAG: u8 = 0x0B;
+const VLD_TAG: u8 = 0x0C;
 const BOT_TAG: u8 = 0xFF;
 
 const IS_FLOAT: u8 = 0b00010000;
@@ -77,6 +79,14 @@ pub(crate) trait MemCmpEncoder: Write {
                     self.encode_datavalue(el);
                 }
                 self.write_u8(INIT_TAG).unwrap()
+            }
+            DataValue::Validity(vld) => {
+                let ts = vld.timestamp.0;
+                let ts_u64 = order_encode_i64(ts);
+                let ts_flipped = !ts_u64;
+                self.write_u8(VLD_TAG).unwrap();
+                self.write_u64::<BigEndian>(ts_flipped).unwrap();
+                self.write_u8(vld.is_assert as u8).unwrap();
             }
             DataValue::Bot => self.write_u8(BOT_TAG).unwrap(),
         }
@@ -268,6 +278,21 @@ impl DataValue {
                     collected.insert(val);
                 }
                 (DataValue::Set(collected), &remaining[1..])
+            }
+            VLD_TAG => {
+                let (ts_flipped_bytes, rest) = remaining.split_at(8);
+                let ts_flipped = BigEndian::read_u64(ts_flipped_bytes);
+                let ts_u64 = !ts_flipped;
+                let ts = order_decode_i64(ts_u64);
+                let (is_assert_byte, rest) = rest.split_first().unwrap();
+                let is_assert = *is_assert_byte != 0;
+                (
+                    DataValue::Validity(Validity {
+                        timestamp: Reverse(ts),
+                        is_assert,
+                    }),
+                    rest,
+                )
             }
             BOT_TAG => (DataValue::Bot, remaining),
             _ => unreachable!("{:?}", bs),

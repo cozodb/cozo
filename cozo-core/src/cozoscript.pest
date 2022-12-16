@@ -58,14 +58,16 @@ fixed_arg = _{fixed_rel | fixed_opt_pair}
 fixed_opt_pair = {ident ~ ":" ~ expr}
 fixed_rel = {fixed_rule_rel | fixed_relation_rel | fixed_named_relation_rel }
 fixed_rule_rel = {ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
-fixed_relation_rel = {relation_ident ~ "[" ~ (var ~ ",")* ~ var? ~ "]"}
-fixed_named_relation_rel = {relation_ident ~ "{" ~ (fixed_named_relation_arg_pair ~ ",")* ~ fixed_named_relation_arg_pair? ~ "}"}
+fixed_relation_rel = {relation_ident ~ "[" ~ (var ~ ",")* ~ var? ~ validity_clause? ~ "]"}
+fixed_named_relation_rel = {relation_ident ~ "{" ~ (fixed_named_relation_arg_pair ~ ",")* ~ fixed_named_relation_arg_pair? ~ validity_clause? ~ "}"}
 fixed_named_relation_arg_pair = {ident ~ (":" ~ ident)?}
+
+validity_clause = {"@" ~ expr}
 
 rule_body = {(disjunction ~ ",")* ~ disjunction?}
 rule_apply = {underscore_ident ~ "[" ~ apply_args ~ "]"}
-relation_named_apply = {relation_ident ~ "{" ~ named_apply_args ~ "}"}
-relation_apply = {relation_ident ~ "[" ~ apply_args ~ "]"}
+relation_named_apply = {relation_ident ~ "{" ~ named_apply_args ~ validity_clause? ~ "}"}
+relation_apply = {relation_ident ~ "[" ~ apply_args ~ validity_clause? ~ "]"}
 
 disjunction = {(atom ~ "or" )* ~ atom}
 atom = _{ negation | relation_named_apply | relation_apply | rule_apply | unify_multi | unify | expr | grouped}
