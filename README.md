@@ -13,7 +13,7 @@
 [![pod](https://img.shields.io/cocoapods/v/CozoSwiftBridge)](https://github.com/cozodb/cozo/tree/main/cozo-lib-swift)
 [![Go](https://img.shields.io/github/v/release/cozodb/cozo-lib-go?label=go)](https://github.com/cozodb/cozo-lib-go)
 [![C](https://img.shields.io/github/v/release/cozodb/cozo?label=C)](https://github.com/cozodb/cozo/releases)
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/cozodb/cozo/Build)](https://github.com/cozodb/cozo/actions/workflows/build.yml)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cozodb/cozo/build.yml?branch=main)](https://github.com/cozodb/cozo/actions/workflows/build.yml)
 [![GitHub](https://img.shields.io/github/license/cozodb/cozo)](https://github.com/cozodb/cozo/blob/main/LICENSE.txt)
 
 # `cozo`
