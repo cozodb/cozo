@@ -30,7 +30,8 @@
 ## Introduction
 
 Cozo is a general-purpose, transactional, relational database
-that uses **Datalog** for query, is **embeddable** but can also handle huge amounts of data and concurrency, and focuses on **graph** data and algorithms.
+that uses **Datalog** for query, is **embeddable** but can also handle huge amounts of data and concurrency, 
+and focuses on **graph** data and algorithms. And it is **performant**!
 
 ### What does _embeddable_ mean here?
 
@@ -61,7 +62,7 @@ not so much, since that model is not very composable.
 
 ### What is so cool about _Datalog_?
 
-Datalog can express all relational queries. _Recursion_ in Datalog is much easier to express,
+Datalog can express all _relational_ queries. _Recursion_ in Datalog is much easier to express,
 much more powerful, and usually runs faster than in SQL. Datalog is also extremely composable:
 you can build your queries piece by piece.
 
@@ -75,6 +76,18 @@ you can build your queries piece by piece.
 > can make it clearer and more maintainable, with no loss in efficiency.
 > This is unlike the monolithic approach taken by the SQL `select-from-where` in nested forms,
 > which can sometimes read like [golfing](https://en.wikipedia.org/wiki/Code_golf).
+
+### How performant?
+
+On a 2020 Mac Mini with the RocksDB persistent storage engine (Cozo supports many storage engines):
+
+* Running OLTP queries for a relation with 1.6M rows, you can expect around 100K QPS (queries per second) for mixed read/write/update transactional queries, and more than 250K QPS for read-only queries, with database peak memory usage around 50MB.
+* Speed for backup or restore is around 1M rows per second, and is insensitive to data size.
+* For OLAP queries, it takes around 1 second (within a factor of 2, depending on the exact operations) to scan a table with 1.6M rows. The time a query takes scales roughly with the number of rows the query touches, with memory usage determined mainly by the size of the return set.
+* The Pagerank algorithm completes in around 50ms for a graph with 10K vertices and 120K edges, around 1 second for a graph with 100K vertices and 1.7M edges, and around 30 seconds for a graph with 1.6M vertices and 32M edges.
+
+For more details, we have a writeup 
+about performance [here](https://github.com/cozodb/cozo/wiki/Cozo-is-an-extremely-performant-graph-database-that-runs-everywhere).
 
 ## Getting started
 
@@ -214,7 +227,26 @@ which is helpful even if you are not using Rust.
 Even if a storage/platform is not officially supported,
 you can still try to compile your version to use, maybe with some tweaks in the code.
 
-You can [tune the RockDB engine](TUNING_ROCKSDB.md) for more performance.
+### Tuning the RocksDB backend for Cozo
+
+RocksDB has a lot of options, and by tuning them you can achieve better performance
+for your workload. This is probably unnecessary for 95% of users, but if you are the
+remaining 5%, Cozo gives you the options to tune RocksDB directly if you are using the
+RocksDB storage engine.
+
+When you create the CozoDB instance with the RocksDB backend option, you are asked to
+provide a path to a directory to store the data (will be created if it does not exist).
+If you put a file named `options` inside this directory, the engine will expect this
+to be a [RocksDB options file](https://github.com/facebook/rocksdb/wiki/RocksDB-Options-File)
+and use it. If you are using `cozoserver`, you will get a log message if
+this feature is activated.
+
+Note that improperly set options can make your database misbehave!
+In general, you should run your database once, copy the options file from `data/OPTIONS-XXXXXX`
+from within your database directory, and use that as a base for your customization.
+If you are not an expert on RocksDB, we suggest you limit your changes to adjusting those numerical
+options that you at least have a vague understanding.
+
 
 ## Architecture
 
