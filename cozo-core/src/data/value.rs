@@ -6,7 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::cmp::Ordering;
+use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -85,6 +85,22 @@ impl PartialOrd for RegexWrapper {
 }
 
 #[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    serde_derive::Deserialize,
+    serde_derive::Serialize,
+    Hash,
+)]
+pub struct Validity {
+    pub(crate) timestamp: Reverse<i64>,
+    pub(crate) is_assert: bool,
+}
+
+#[derive(
     Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
 pub enum DataValue {
@@ -98,6 +114,7 @@ pub enum DataValue {
     Regex(RegexWrapper),
     List(Vec<DataValue>),
     Set(BTreeSet<DataValue>),
+    Validity(Validity),
     Bot,
 }
 
@@ -245,6 +262,11 @@ impl Display for DataValue {
             DataValue::List(ls) => f.debug_list().entries(ls).finish(),
             DataValue::Set(s) => f.debug_list().entries(s).finish(),
             DataValue::Bot => write!(f, "null"),
+            DataValue::Validity(v) => f
+                .debug_struct("Validity")
+                .field("timestamp", &v.timestamp.0)
+                .field("retracted", &v.is_assert)
+                .finish(),
         }
     }
 }

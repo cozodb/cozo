@@ -324,11 +324,13 @@ pub(crate) enum FixedRuleArg {
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
+        // valid_at: Option<Expr>,
         span: SourceSpan,
     },
     NamedStored {
         name: Symbol,
         bindings: BTreeMap<SmartString<LazyCompact>, Symbol>,
+        // valid_at: Option<Expr>,
         span: SourceSpan,
     },
 }
@@ -998,6 +1000,7 @@ pub(crate) struct InputNamedFieldRelationApplyAtom {
 pub(crate) struct InputRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Expr>,
+    // pub(crate) valid_at: Option<Expr>,
     pub(crate) span: SourceSpan,
 }
 

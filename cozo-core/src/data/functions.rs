@@ -1271,6 +1271,7 @@ pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Regex(r) => !r.0.as_str().is_empty(),
         DataValue::List(l) => !l.is_empty(),
         DataValue::Set(s) => !s.is_empty(),
+        DataValue::Validity(vld) => vld.is_assert,
         DataValue::Bot => false,
     }))
 }
@@ -1288,6 +1289,7 @@ pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Regex(r) => if r.0.as_str().is_empty() {0 } else { 1},
         DataValue::List(l) => if l.is_empty() {0} else {1},
         DataValue::Set(s) => if s.is_empty() {0} else {1},
+        DataValue::Validity(vld) => if vld.is_assert {1} else {0},
         DataValue::Bot => 0,
     }))
 }
