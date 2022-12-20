@@ -16,9 +16,9 @@
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cozodb/cozo/build.yml?branch=main)](https://github.com/cozodb/cozo/actions/workflows/build.yml)
 [![GitHub](https://img.shields.io/github/license/cozodb/cozo)](https://github.com/cozodb/cozo/blob/main/LICENSE.txt)
 
-# `cozo`
+# `cozo` 数据库
 
-### Table of contents
+### 目次
 
 1. [Introduction](#Introduction)
 2. [Getting started](#Getting-started)
