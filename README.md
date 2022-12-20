@@ -84,9 +84,10 @@ On a 2020 Mac Mini with the RocksDB persistent storage engine (Cozo supports man
 * Running OLTP queries for a relation with 1.6M rows, you can expect around 100K QPS (queries per second) for mixed read/write/update transactional queries, and more than 250K QPS for read-only queries, with database peak memory usage around 50MB.
 * Speed for backup is around 1M rows per second, for restore is around 400K rows per second, and is insensitive to relation (table) size.
 * For OLAP queries, it takes around 1 second (within a factor of 2, depending on the exact operations) to scan a table with 1.6M rows. The time a query takes scales roughly with the number of rows the query touches, with memory usage determined mainly by the size of the return set.
+* Two-hop graph traversal completes in less than 1ms for a graph with 31M edges.
 * The Pagerank algorithm completes in around 50ms for a graph with 10K vertices and 120K edges, around 1 second for a graph with 100K vertices and 1.7M edges, and around 30 seconds for a graph with 1.6M vertices and 32M edges.
 
-For more details, we have a writeup 
+For more numbers and further details, we have a writeup 
 about performance [here](https://github.com/cozodb/cozo/wiki/Cozo-is-an-extremely-performant-graph-database-that-runs-everywhere).
 
 ## Getting started
