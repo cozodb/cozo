@@ -1,6 +1,6 @@
 {
   "name": "cozo-node",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Cozo database for NodeJS",
   "main": "index",
   "files": [
@@ -8,7 +8,7 @@
     "LICENSE.txt"
   ],
   "binary": {
-    "module_name": "index",
+    "module_name": "cozo_node_prebuilt",
     "host": "https://github.com/cozodb/cozo-lib-nodejs/releases/download/",
     "remote_path": "{version}",
     "package_name": "{napi_build_version}-{platform}-{arch}.tar.gz",
