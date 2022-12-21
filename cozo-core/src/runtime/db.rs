@@ -34,9 +34,7 @@ use crate::fixed_rule::DEFAULT_FIXED_RULES;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
-use crate::query::ra::{
-    FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, TempStoreRA, UnificationRA,
-};
+use crate::query::ra::{FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA, TempStoreRA, UnificationRA};
 use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
 use crate::storage::{Storage, StoreTx};
@@ -608,6 +606,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         storage, filters, ..
                                     }) => (
                                         "load_stored",
+                                        json!(format!(":{}", storage.name)),
+                                        json!(null),
+                                        json!(filters.iter().map(|f| f.to_string()).collect_vec()),
+                                    ),
+                                    RelAlgebra::StoredWithValidity(StoredWithValidityRA {
+                                                           storage, filters, ..
+                                                       }) => (
+                                        "load_stored_with_validity",
                                         json!(format!(":{}", storage.name)),
                                         json!(null),
                                         json!(filters.iter().map(|f| f.to_string()).collect_vec()),
