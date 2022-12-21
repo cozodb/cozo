@@ -18,6 +18,8 @@
 
 # `cozo`
 
+[ English | [中文文档](./README-zh.md) ]
+
 ### Table of contents
 
 1. [Introduction](#Introduction)

@@ -16,103 +16,69 @@
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cozodb/cozo/build.yml?branch=main)](https://github.com/cozodb/cozo/actions/workflows/build.yml)
 [![GitHub](https://img.shields.io/github/license/cozodb/cozo)](https://github.com/cozodb/cozo/blob/main/LICENSE.txt)
 
-# `cozo` 数据库
+# Cozo 数据库
 
-### 目次
+## 简介
 
-1. [Introduction](#Introduction)
-2. [Getting started](#Getting-started)
-3. [Install](#Install)
-4. [Architecture](#Architecture)
-5. [Status of the project](#Status-of-the-project)
-6. [Licensing and contributing](#Licensing-and-contributing)
+[ 中文文档 | [English](./README.md) ]
 
-## Introduction
+Cozo是一个通用事务性关系型数据库：
 
-Cozo is a general-purpose, transactional, relational database
-that uses **Datalog** for query, is **embeddable** but can also handle huge amounts of data and concurrency, 
-and focuses on **graph** data and algorithms. And it is **performant**!
+* 是一个**可嵌入**数据库；
+* 使用**Datalog**作为查询语句；
+* 专注于**图数据、图算法**；
+* 支持**高性能、高并发**。
 
-### What does _embeddable_ mean here?
+### “可嵌入”是什么意思？
 
-A database is almost surely embedded
-if you can use it on a phone which _never_ connects to any network
-(this situation is not as unusual as you might think). SQLite is embedded. MySQL/Postgres/Oracle are client-server.
+如果你能在不联网的手机上使用某个数据库，那它大概率就是嵌入式的。 SQLite是嵌入式数据库。MySQL、Postgres、Oracle是客户端—服务器（CS）架构的数据库。
 
-> A database is _embedded_ if it runs in the same process as your main program.
-This is in contradistinction to _client-server_ databases, where your program connects to
-a database server (maybe running on a separate machine) via a client library. Embedded databases
-generally require no setup and can be used in a much wider range of environments.
+> 如果一个数据库与你的主程序在同一进程中运行，那么它就是 _嵌入式_ 数据库。与此相对，在使用 _客户端—服务器_ 架构的数据库时，主程序通过数据库客户库连接到数据库服务器（可能运行在一个独立的机器上）。嵌入式数据库通常不需要额外设置，可以在更广泛的环境中使用。
 >
-> We say Cozo is _embeddable_ instead of _embedded_ since you can also use it in client-server
-mode, which can make better use of server resources and allow much more concurrency than
-in embedded mode.
+> 因为Cozo同时也支持客户端—服务器模式运行，所以我们说它是 _可嵌入_ 数据库而不是仅仅是 _嵌入式_ 数据库。在客户端—服务器模式下，服务器资源可以得到更好的运用，并支持比嵌入式模式更多的并发性能。
 
-### Why _graphs_?
+### “图数据”有什么用？
 
-Because data are inherently interconnected. Most insights about data can only be obtained if
-you take this interconnectedness into account.
+数据在本质上是相互关联、自关联的，这种关联的数学表达便是 _图_ 。只有将这些关联性考虑进去，才能更深入地洞察数据背后的逻辑。
 
-> Most existing _graph_ databases start by requiring you to shoehorn your data into the labelled-property graph model.
-We don't go this route because we think the traditional relational model is much easier to work with for
-storing data, much more versatile, and can deal with graph data just fine. Even more importantly,
-the most piercing insights about data usually come from graph structures _implicit_ several levels deep
-in your data. The relational model, being an _algebra_, can deal with it just fine. The property graph model,
-not so much, since that model is not very composable.
+> 大多数现有的 _图数据库_ 强制要求按照属性图（property graph）的范式存储数据。与此相对，Cozo的存储范式是传统的关系数据模型。关系数据模型的实现具有存储简单、功能强劲等优点，并且处理图数据也毫无问题。对于数据的数据洞察常常需要挖掘隐含在数据中内关联，而关系数据模型作为关系 _代数_（relational algebra）可以很好地处理此类问题。比较而言，属性图模型处理此类问题较为吃力，因为其不构成一个代数，可组合性弱。
 
-### What is so cool about _Datalog_?
+### “Datalog”好在哪儿？
 
-Datalog can express all _relational_ queries. _Recursion_ in Datalog is much easier to express,
-much more powerful, and usually runs faster than in SQL. Datalog is also extremely composable:
-you can build your queries piece by piece.
+Datalog可表达所有的 _关系型查询_。_递归_ 的表达是 Datalog 的强项，且通常比相应的SQL查询中运行得更快。Datalog的组合性、模块性都很优秀，你可以一层一层地清晰地表达你的查询。
 
-> Recursion is especially important for graph queries. Cozo's dialect of Datalog
-> supercharges it even further by allowing recursion through a safe subset of aggregations,
-> and by providing extremely efficient canned algorithms (such as PageRank) for the kinds of recursions
-> frequently required in graph analysis.
+> 递归对于图查询尤其重要。Cozo的Datalog方言CozoScript允许在含有（安全的）聚合查询规则中使用递归，进一步增强了Datalog的递归查询能力。同时，Cozo内置了图分析中常用的一些递归算法（如PageRank等）的高性能实现，可以简便的直接调用。
 >
-> As you learn Datalog, you will discover that the _rules_ of Datalog are like functions
-> in a programming language. Rules are composable, and decomposing a query into rules
-> can make it clearer and more maintainable, with no loss in efficiency.
-> This is unlike the monolithic approach taken by the SQL `select-from-where` in nested forms,
-> which can sometimes read like [golfing](https://en.wikipedia.org/wiki/Code_golf).
+> 当你对Datalog有进一步了解以后，你就会发现Datalog的 _规则_ 就像编程语言中的函数。规则的特点就是其可组合性：将一个查询分解成多个渐进的规则可使它更加清晰、更易维护，且也不会有效率上的损失。与此相对，复杂的SQL查询语句通常表现为多层嵌套的“select-from-where”的形式，可读性不高。
 
-### How performant?
+### “高性能、高并发”，有多高？
 
-On a 2020 Mac Mini with the RocksDB persistent storage engine (Cozo supports many storage engines):
+我们在一台2020年的Mac Mini上，使用RocksDB持久性存储引擎（Cozo支持许多存储引擎）做了一些性能测试：
 
-* Running OLTP queries for a relation with 1.6M rows, you can expect around 100K QPS (queries per second) for mixed read/write/update transactional queries, and more than 250K QPS for read-only queries, with database peak memory usage around 50MB.
-* Speed for backup is around 1M rows per second, for restore is around 400K rows per second, and is insensitive to relation (table) size.
-* For OLAP queries, it takes around 1 second (within a factor of 2, depending on the exact operations) to scan a table with 1.6M rows. The time a query takes scales roughly with the number of rows the query touches, with memory usage determined mainly by the size of the return set.
-* Two-hop graph traversal completes in less than 1ms for a graph with 31M edges.
-* The Pagerank algorithm completes in around 50ms for a graph with 10K vertices and 120K edges, around 1 second for a graph with 100K vertices and 1.7M edges, and around 30 seconds for a graph with 1.6M vertices and 32M edges.
+* 对一个有160万行的表进行OLTP查询：混合读、写、改的事务性查询可达到每秒10万次，而对于只读查询，可达到每秒25万次。在此过程中，数据库使用的内存峰值约为50MB。
+* 备份速度约为每秒100万行，恢复速度约为每秒40万行。备份、恢复的速度不管表本身有多大都差不多。
+* OLAP查询：扫描一个有160万行的表大约需要1秒（取决于具体操作略有不同，上下2倍以内）。查询所需的时间大致与查询所涉及的行数成比例，内存的使用主要由返回集的大小决定。
+* 对于一个有3100万条边的图数据表，“两跳”图查询（如查询某人的朋友的朋友都有谁）可在1毫秒内完成。
+* Pagerank算法速度。1万个顶点和12万条边：50毫秒内完成；10个万顶点和170万条边：大约在1秒内完成；160万个顶点和32万条边：大约在30秒内完成。
 
-For more numbers and further details, we have a writeup 
-about performance [here](https://github.com/cozodb/cozo/wiki/Cozo-is-an-extremely-performant-graph-database-that-runs-everywhere).
+更多的细节请看[此文章](https://github.com/cozodb/cozo/wiki/Cozo-is-an-extremely-performant-graph-database-that-runs-everywhere)。
 
-## Getting started
+## 学习
 
-Usually, to learn a database, you need to install it first.
-This is unnecessary for Cozo as a testimony to its extreme embeddability, since you can run
-a complete Cozo instance in your browser, at near-native speed for most operations!
+一般来说，你得先安装数据库才能学习怎么使用它。但Cozo是“嵌入式”的，所以它可以直接在浏览器里通过WASM运行，省去了安装的麻烦，而大多数操作的速度也和原生的差不多。打开[WASM里面跑的Cozo页面](https://cozodb.github.io/wasm-demo/)，然后就可以开始学了：
 
-So open up the [Cozo in WASM page](https://cozodb.github.io/wasm-demo/), and then:
+* [Cozo辅导课](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)——学习基础知识
+* [CozoScript手册](https://cozodb.github.io/current/manual/)——深入学习细节
 
-* Follow the [tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb) to learn the basics;
-* read the [manual](https://cozodb.github.io/current/manual/) for the finer points.
+当然你也可以先翻到后面了解如何在你熟悉的环境里安装原生Cozo数据库，再通过以上资料学习。
 
-After you have decided that Cozo is worth experimenting with for your next project, you can scroll down to learn
-how to use it embedded (or not) in your favourite environment.
+### 一些示例
 
-### Teasers
+以下给出一些示例，可以在正式学习之前了解一下Cozo的查询长什么样。
 
-If you are in a hurry and just want a taste of what querying with Cozo is like, here it is.
-In the following `*route` is a relation with two columns `fr` and `to`,
-representing a route between those airports,
-and `FRA` is the code for Frankfurt Airport.
+假设我们有个表叫做`*route`，含有两列，名称叫做`fr`和`to`，存的都是机场的代码（比如`FRA`就是法兰克福机场的代码），而每行数据表示一个航线。
 
-How many airports are directly connected to `FRA`?
-
+从`FRA`可以直接飞到多少个机场：
 ```
 ?[count_unique(to)] := *route{fr: 'FRA', to}
 ```
@@ -122,8 +88,7 @@ How many airports are directly connected to `FRA`?
 | 310              |
 
 
-How many airports are reachable from `FRA` by one stop?
-
+从`FRA`出发，经停一次，可以飞到多少个机场：
 ```
 ?[count_unique(to)] := *route{fr: 'FRA', to: 'stop},
                        *route{fr: stop, to}
@@ -133,8 +98,7 @@ How many airports are reachable from `FRA` by one stop?
 |------------------|
 | 2222             |
 
-How many airports are reachable from `FRA` by any number of stops?
-
+从`FRA`出发，经停任意次数，可以到达多少个机场：
 ```
 reachable[to] := *route{fr: 'FRA', to}
 reachable[to] := reachable[stop], *route{fr: stop, to}
@@ -145,10 +109,7 @@ reachable[to] := reachable[stop], *route{fr: stop, to}
 |------------------|
 | 3462             |
 
-What are the two most difficult-to-reach airports
-by the minimum number of hops required,
-starting from `FRA`?
-
+从`FRA`出发，按所需的最少经停次数计算，给出最难到达的两个机场：
 ```
 shortest_paths[to, shortest(path)] := *route{fr: 'FRA', to},
                                       path = ['FRA', to]
@@ -166,8 +127,7 @@ shortest_paths[to, shortest(path)] := shortest_paths[stop, prev_path],
 | YPO | `["FRA","YYZ","YTS","YMO","YFA","ZKE","YAT","YPO"]` | 8     |
 | BVI | `["FRA","AUH","BNE","ISA","BQL","BEU","BVI"]`        | 7     |
 
-What is the shortest path between `FRA` and `YPO`, by actual distance travelled?
-
+按实际路程计算，给出`FRA`和`YPO`这两个机场之间最短的路径：
 ```
 start[] <- [['FRA']]
 end[] <- [['YPO]]
@@ -178,8 +138,7 @@ end[] <- [['YPO]]
 |-----|-----|----------|--------------------------------------------------------|
 | FRA | YPO | 4544.0   | `["FRA","YUL","YVO","YKQ","YMO","YFA","ZKE","YAT","YPO"]` |
 
-Cozo attempts to provide nice error messages when you make mistakes:
-
+如果查询语句有错误，Cozo会尝试提供明确、有用的错误信息：
 ```
 ?[x, Y] := x = 1, y = x + 1
 ```
@@ -194,143 +153,101 @@ Cozo attempts to provide nice error messages when you make mistakes:
 </span><span style="color: rgb(0, 153, 255);">  help: </span><span>Note that symbols occurring only in negated positions are not considered bound
 </span></pre>
 
-## Install
+## 安装
 
-We suggest that you [try out](#Getting-started) Cozo before you install it in your environment.
+建议先[试用Cozo](#学习)，再安装。当然反过来也可以。
 
-How you install Cozo depends on which environment you want to use it in.
-Follow the links in the table below:
+如何安装Cozo取决于所使用的语言与环境，如下表：
 
-| Language/Environment                                  | Official platform support                                                                                               | Storage |
-|-------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|---------|
-| [Python](https://github.com/cozodb/pycozo)            | Linux (x86_64), Mac (ARM64, x86_64), Windows (x86_64)                                                                   | MQR     |
-| [NodeJS](./cozo-lib-nodejs)                           | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [Web browser](./cozo-lib-wasm)                        | Modern browsers supporting [web assembly](https://developer.mozilla.org/en-US/docs/WebAssembly#browser_compatibility)   | M       |
-| [Java (JVM)](https://github.com/cozodb/cozo-lib-java) | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [Clojure (JVM)](https://github.com/cozodb/cozo-clj)   | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                                 | MQR     |
-| [Android](https://github.com/cozodb/cozo-lib-android) | Android (ARM64, ARMv7, x86_64, x86)                                                                                     | MQ      |
-| [iOS/MacOS (Swift)](./cozo-lib-swift)                 | iOS (ARM64, simulators), Mac (ARM64, x86_64)                                                                            | MQ      |
-| [Rust](https://docs.rs/cozo/)                         | Source only, usable on any [platform](https://doc.rust-lang.org/nightly/rustc/platform-support.html) with `std` support | MQRST   |
-| [Golang](https://github.com/cozodb/cozo-lib-go)       | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [C/C++/language with C FFI](./cozo-lib-c)             | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [Standalone HTTP server](./cozoserver)                | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQRST   |
+| 语言/环境                                                 | 官方支持的平台                                                                                              | 存储引擎  |
+|-------------------------------------------------------|------------------------------------------------------------------------------------------------------|-------|
+| [Python](https://github.com/cozodb/pycozo)            | Linux (x86_64), Mac (ARM64, x86_64), Windows (x86_64)                                                | MQR   |
+| [NodeJS](./cozo-lib-nodejs)                           | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [浏览器](./cozo-lib-wasm)                                | 支持[WASM](https://developer.mozilla.org/en-US/docs/WebAssembly#browser_compatibility)的浏览器（较新的浏览器全都支持） | M     |
+| [Java (JVM)](https://github.com/cozodb/cozo-lib-java) | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [Clojure (JVM)](https://github.com/cozodb/cozo-clj)   | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [安卓](https://github.com/cozodb/cozo-lib-android)      | Android (ARM64, ARMv7, x86_64, x86)                                                                  | MQ    |
+| [iOS/macOS (Swift)](./cozo-lib-swift)                 | iOS (ARM64, 模拟器), Mac (ARM64, x86_64)                                                                | MQ    |
+| [Rust](https://docs.rs/cozo/)                         | 任何支持`std`的[平台](https://doc.rust-lang.org/nightly/rustc/platform-support.html)（源代码编译）                 | MQRST |
+| [Go](https://github.com/cozodb/cozo-lib-go)           | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [C/C++/支持C FFI的语言](./cozo-lib-c)                      | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [独立的HTTP服务](./cozoserver)                             | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQRST |
 
-For the storage column:
+“存储引擎”列中各个字母的含义：
 
-* M: in-memory, non-persistent backend
-* Q: [SQLite](https://www.sqlite.org/) storage backend
-* R: [RocksDB](http://rocksdb.org/) storage backend
-* S: [Sled](https://github.com/spacejam/sled) storage backend
-* T: [TiKV](https://tikv.org/) distributed storage backend
+* M: 基于内存的非持久性存储引擎
+* Q: 基于[SQLite](https://www.sqlite.org/)的存储引擎
+* R: 基于[RocksDB](http://rocksdb.org/)的存储引擎
+* S: 基于[Sled](https://github.com/spacejam/sled)的存储引擎
+* T: 基于[TiKV](https://tikv.org/)的分布式存储引擎
 
-The [Rust doc](https://docs.rs/cozo/) has some tips on choosing storage,
-which is helpful even if you are not using Rust.
-Even if a storage/platform is not officially supported,
-you can still try to compile your version to use, maybe with some tweaks in the code.
+在Cozo的[Rust文档](https://docs.rs/cozo/)里有一些额外的选择存储的建议。
 
-### Tuning the RocksDB backend for Cozo
+即使你的语言、平台、存储引擎不被官方支持，你也可以尝试自己编译（也许需要在代码中做一些调整）。
 
-RocksDB has a lot of options, and by tuning them you can achieve better performance
-for your workload. This is probably unnecessary for 95% of users, but if you are the
-remaining 5%, Cozo gives you the options to tune RocksDB directly if you are using the
-RocksDB storage engine.
+### 为Cozo优化RocksDB存储引擎
 
-When you create the CozoDB instance with the RocksDB backend option, you are asked to
-provide a path to a directory to store the data (will be created if it does not exist).
-If you put a file named `options` inside this directory, the engine will expect this
-to be a [RocksDB options file](https://github.com/facebook/rocksdb/wiki/RocksDB-Options-File)
-and use it. If you are using `cozoserver`, you will get a log message if
-this feature is activated.
+RocksDB本身就有非常多的选项，调整这些选项可以在特定的工作负载下达到更好的性能。当然Cozo“开箱”的设置就已经相当快了，所以对95%的用户来说，优化引擎本身是不必要的。
 
-Note that improperly set options can make your database misbehave!
-In general, you should run your database once, copy the options file from `data/OPTIONS-XXXXXX`
-from within your database directory, and use that as a base for your customization.
-If you are not an expert on RocksDB, we suggest you limit your changes to adjusting those numerical
-options that you at least have a vague understanding.
+如果你是剩下的那5%：当你用RocksDB引擎创建CozoDB实例时，你需要提供一个存储数据的目录的路径（如果不存在将被创建）。你可以在这个目录里创建一个名为`options`的文件，这时RocksDB引擎会将其解读为[RocksDB选项文件](https://github.com/facebook/rocksdb/wiki/RocksDB-Options-File)
+并应用其中的设置。如果你使用的是独立的`cozoserver`程序，此功能被激活时会有一条日志信息提示。
 
+设置文件的内容相当繁杂，乱设置可能会造成数据库的各种问题。每次运行RocksDB引擎的数据库时，目录下的`data/OPTIONS-XXXXXX`文件会记录当前的设置，你可以将这些文件作为优化设置的基础。如果你不是RocksDB方面的专家，建议只改动那些你至少大概知道什么意思的数字型选项。
 
-## Architecture
+## 架构
 
-The Cozo database consists of three layers stuck on top of each other,
-with each layer only calling into the layer below:
+Cozo数据库由三个垒起来的组成部分组成，其中每部分只调用下面那部分的接口。
 
 <table>
 <tbody>
-<tr><td>(<i>User code</i>)</td></tr>
-<tr><td>Language/environment wrapper</td></tr>
-<tr><td>Query engine</td></tr>
-<tr><td>Storage engine</td></tr>
-<tr><td>(<i>Operating system</i>)</td></tr>
+<tr><td>(<i>用户代码</i>)</td></tr>
+<tr><td>语言/环境包装</td></tr>
+<tr><td>查询引擎</td></tr>
+<tr><td>存储引擎</td></tr>
+<tr><td>(<i>操作系统</i>)</td></tr>
 </tbody>
 </table>
 
-### Storage engine
+### 存储引擎
 
-The storage engine defines a storage `trait` for the storage backend, which is an interface
-with required operations, mainly the provision of a key-value store for binary data
-with range scan capabilities. There are various implementations:
+存储引擎定义了一个存储接口（Rust中的`trait`），需要能够支持二进制数据的键值存储及范围扫描。目前官方的具体实现如下：
 
-* In-memory, non-persistent backend
-* [SQLite](https://www.sqlite.org/) storage backend
-* [RocksDB](http://rocksdb.org/) storage backend
-* [Sled](https://github.com/spacejam/sled) storage backend
-* [TiKV](https://tikv.org/) distributed storage backend
+* 基于内存的非持久性存储引擎
+* 基于[SQLite](https://www.sqlite.org/)的存储引擎
+* 基于[RocksDB](http://rocksdb.org/)的存储引擎
+* 基于[Sled](https://github.com/spacejam/sled)的存储引擎
+* 基于[TiKV](https://tikv.org/)的分布式存储引擎
 
-Depending on the build configuration, not all backends may be available
-in a binary release.
-The SQLite backend is special in that it is also used as the backup file format,
-which allows the exchange of data between databases with different backends.
-If you are using the database embedded in Rust, you can even provide your own
-custom backend.
+编译好的版本并不包含所有的引擎。这里面SQLite引擎有特殊地位：它也同时也是Cozo的备份文件格式，可以用来在不同引擎的Cozo数据库之间交换数据。Rust使用者也可以自己实现别的引擎。
 
-The storage engine also defines a _row-oriented_ binary data format, which the storage
-engine implementation does not need to know anything about.
-This format contains an implementation of the 
-[memcomparable format](https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format#memcomparable-format)
-used for the keys, which enables the storage of rows of data as binary blobs
-that, when sorted lexicographically, give the correct order.
-This also means that data files for the SQLite backend cannot be queried with SQL
-in the usual way, and access must be through the decoding process in Cozo.
+所有的存储引擎都使用相同的 _面向行的_ 二进制数据存储格式。实现具体的存储引擎并不需要了解这种格式。这种格式在存储键是使用的是一种叫做[memcomparable](https://github.com/facebook/mysql-5.6/wiki/MyRocks-record-format#memcomparable-format)的格式，其好处为能够将数据行存储为一个字节数组，直接对这些字节数组按照字节的顺序顺序排序就会得到正确的语义排序。当然，这也意味着SQLite引擎中存储的数据直接用SQL查询得到的结果看起来是乱码。
 
-### Query engine
+### 查询引擎
 
-The query engine part provides various functionalities:
+查询引擎部分实现了以下功能：
 
-* function/aggregation/algorithm definitions
-* database schema
-* transaction
-* query compilation
-* query execution
+* 函数、聚合算子、算法的定义
+* 数据结构定义（schema）
+* 数据库事务（transaction）
+* 查询语句的编译
+* 查询的执行
 
-This part is where most of
-the code of Cozo is concerned. The CozoScript manual [has a chapter](https://cozodb.github.io/current/manual/execution.html)
-about the execution process.
+Cozo中大部分代码都是在实现这些功能。CozoScript手册中[有一章](https://cozodb.github.io/current/manual/execution.html)简要介绍了查询执行的一些细节。
 
-Users interact with the query engine with the [Rust API](https://docs.rs/cozo/).
+用户通过[Rust API](https://docs.rs/cozo/)来驱动查询引擎。
 
-### Language/environment wrapper
+### 语言、环境封装
 
-For all languages/environments except Rust, this part just translates the Rust API
-into something that can be easily consumed by the targets. For Rust, there is no wrapper.
-For example, in the case of the standalone server, the Rust API is translated
-into HTTP endpoints, whereas in the case of NodeJS, the (synchronous) Rust API
-is translated into a series of asynchronous calls from the JavaScript runtime.
+除Rust之外的所有语言、环境，都只是Rust API的进一步封装，使其在相应的环境中更容易使用。例如，在独立服务器（cozoserver）中，Rust的API被封装为HTTP端点，而在NodeJS中，同步的Rust API被封装为基于JavaScript运行时的异步调用。
 
-If you want to make Cozo usable in other languages, this part is where your focus
-should be. Any existing generic interop libraries between Rust and your target language
-would make the job much easier. Otherwise, you can consider wrapping the C API,
-as this is supported by most languages. For the languages officially supported,
-only Golang wraps the C API directly.
+你也可以尝试自己封装Rust API，使其可以用于其他语言。如果没有现成的目标语言与Rust之前的交互库，你可以考虑包装Cozo提供的基于C语言的API。在官方支持的语言中，只有Go直接封装了C语言的API。
 
-## Status of the project
+## 项目进度
 
-Cozo is very young and **not** production-ready yet,
-but we encourage you to try it out for your use case.
-Any feedback is welcome.
+Cozo是一个非常年轻的项目。欢迎任何反馈。
 
-Versions before 1.0 do not promise syntax/API stability or storage compatibility.
+1.0之前的版本不承诺语法、API的稳定性或存储兼容性。
 
-## Licensing and contributing
+## 许可证和贡献
 
-This project is licensed under MPL-2.0 or later.
-See [here](CONTRIBUTING.md) if you are interested in contributing to the project.
+本项目以MPL-2.0或更高版本授权。如果你有兴趣为该项目做贡献，请看[这里](CONTRIBUTING.md)。
