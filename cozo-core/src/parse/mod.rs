@@ -14,10 +14,11 @@ use miette::{bail, ensure, Diagnostic, IntoDiagnostic, Result};
 use pest::error::InputLocation;
 use pest::Parser;
 use thiserror::Error;
+use crate::data::functions::current_validity;
 
 use crate::data::program::InputProgram;
 use crate::data::relation::NullableColType;
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue};
 use crate::parse::query::parse_query;
 use crate::parse::schema::parse_nullable_type;
 use crate::parse::sys::{parse_sys, SysOp};
@@ -59,7 +60,7 @@ impl CozoScript {
 }
 
 #[derive(
-    Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Default,
+Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Default,
 )]
 pub struct SourceSpan(pub(crate) usize, pub(crate) usize);
 
@@ -118,16 +119,17 @@ pub(crate) fn parse_script(
         })?
         .next()
         .unwrap();
+    let cur_vld = current_validity();
     Ok(match parsed.as_rule() {
         Rule::query_script => {
-            let q = parse_query(parsed.into_inner(), param_pool, algorithms)?;
+            let q = parse_query(parsed.into_inner(), param_pool, algorithms, cur_vld)?;
             CozoScript::Multi(vec![q])
         }
         Rule::multi_script => {
             let mut qs = vec![];
             for pair in parsed.into_inner() {
                 if pair.as_rule() != Rule::EOI {
-                    qs.push(parse_query(pair.into_inner(), param_pool, algorithms)?);
+                    qs.push(parse_query(pair.into_inner(), param_pool, algorithms, cur_vld)?);
                 }
             }
             CozoScript::Multi(qs)

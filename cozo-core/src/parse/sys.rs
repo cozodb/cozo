@@ -12,6 +12,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use miette::{Diagnostic, Result};
 use thiserror::Error;
+use crate::data::functions::{current_validity};
 
 use crate::data::program::InputProgram;
 use crate::data::symb::Symbol;
@@ -45,6 +46,7 @@ pub(crate) fn parse_sys(
     param_pool: &BTreeMap<String, DataValue>,
     algorithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
 ) -> Result<SysOp> {
+    let cur_vld = current_validity();
     let inner = src.next().unwrap();
     Ok(match inner.as_rule() {
         Rule::compact_op => SysOp::Compact,
@@ -62,6 +64,7 @@ pub(crate) fn parse_sys(
                 inner.into_inner().next().unwrap().into_inner(),
                 param_pool,
                 algorithms,
+                cur_vld,
             )?;
             SysOp::Explain(Box::new(prog))
         }
@@ -126,7 +129,7 @@ pub(crate) fn parse_sys(
                 let op = clause_inner.next().unwrap();
                 let script = clause_inner.next().unwrap();
                 let script_str = script.as_str();
-                parse_query(script.into_inner(), &Default::default(), algorithms)?;
+                parse_query(script.into_inner(), &Default::default(), algorithms, cur_vld)?;
                 match op.as_rule() {
                     Rule::trigger_put => puts.push(script_str.to_string()),
                     Rule::trigger_rm => rms.push(script_str.to_string()),

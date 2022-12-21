@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::ops::{Div, Rem};
 use std::str::FromStr;
@@ -1030,9 +1031,9 @@ pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)?;
     let ret = 2.
         * f64::asin(f64::sqrt(
-            f64::sin((lat1 - lat2) / 2.).powi(2)
-                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-        ));
+        f64::sin((lat1 - lat2) / 2.).powi(2)
+            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+    ));
     Ok(DataValue::from(ret))
 }
 
@@ -1045,9 +1046,9 @@ pub(crate) fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)? * f64::PI() / 180.;
     let ret = 2.
         * f64::asin(f64::sqrt(
-            f64::sin((lat1 - lat2) / 2.).powi(2)
-                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-        ));
+        f64::sin((lat1 - lat2) / 2.).powi(2)
+            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+    ));
     Ok(DataValue::from(ret))
 }
 
@@ -1283,13 +1284,13 @@ pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Null => 0,
         DataValue::Bool(b) => *b as i64,
         DataValue::Num(n) => (n.get_float() != 0.) as i64,
-        DataValue::Str(s) => if s.is_empty() {0} else { 1},
-        DataValue::Bytes(b) => if b.is_empty() {0} else { 1},
-        DataValue::Uuid(u) => if u.0.is_nil() {0} else { 1 },
-        DataValue::Regex(r) => if r.0.as_str().is_empty() {0 } else { 1},
-        DataValue::List(l) => if l.is_empty() {0} else {1},
-        DataValue::Set(s) => if s.is_empty() {0} else {1},
-        DataValue::Validity(vld) => if vld.is_assert {1} else {0},
+        DataValue::Str(s) => if s.is_empty() { 0 } else { 1 },
+        DataValue::Bytes(b) => if b.is_empty() { 0 } else { 1 },
+        DataValue::Uuid(u) => if u.0.is_nil() { 0 } else { 1 },
+        DataValue::Regex(r) => if r.0.as_str().is_empty() { 0 } else { 1 },
+        DataValue::List(l) => if l.is_empty() { 0 } else { 1 },
+        DataValue::Set(s) => if s.is_empty() { 0 } else { 1 },
+        DataValue::Validity(vld) => if vld.is_assert { 1 } else { 0 },
         DataValue::Bot => 0,
     }))
 }
@@ -1469,6 +1470,7 @@ pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
     let d: f64 = Date::now() / 1000.;
     Ok(DataValue::from(d))
 }
+
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
     let now = SystemTime::now();
@@ -1477,15 +1479,31 @@ pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
     ))
 }
 
+pub(crate) fn current_validity() -> Reverse<i64> {
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        let ts_millis = {
+        let now = SystemTime::now();
+        (now.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1000.) as i64
+    };
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        let ts_millis = {
+        Date::now() as i64
+    };
+
+    Reverse(ts_millis)
+}
+
+pub(crate) const MAX_VALIDITY: Reverse<i64> = Reverse(i64::MAX);
+
 define_op!(OP_FORMAT_TIMESTAMP, 1, true);
 pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    let dt = Utc
+        let dt = Utc
         .timestamp_millis_opt(Date::now() as i64)
         .latest()
         .ok_or_else(|| miette!("bad time input"))?;
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-    let dt = {
+        let dt = {
         let f = args[0]
             .get_float()
             .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
@@ -1524,19 +1542,26 @@ pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
     ))
 }
 
+pub(crate) fn str2vld(s: &str) -> Result<Reverse<i64>> {
+    let dt = DateTime::parse_from_rfc3339(s).map_err(|_| miette!("bad datetime: {}", s))?;
+    let st: SystemTime = dt.into();
+    let millis = st.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1000.;
+    Ok(Reverse(millis as i64))
+}
+
 define_op!(OP_RAND_UUID_V1, 0, false);
 pub(crate) fn op_rand_uuid_v1(_args: &[DataValue]) -> Result<DataValue> {
     let mut rng = rand::thread_rng();
     let uuid_ctx = uuid::v1::Context::new(rng.gen());
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    let ts = {
+        let ts = {
         let since_epoch: f64 = Date::now();
         let seconds = since_epoch.floor();
         let fractional = (since_epoch - seconds) * 1.0e9;
         Timestamp::from_unix(uuid_ctx, seconds as u64, fractional as u32)
     };
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-    let ts = {
+        let ts = {
         let now = SystemTime::now();
         let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
         Timestamp::from_unix(uuid_ctx, since_epoch.as_secs(), since_epoch.subsec_nanos())

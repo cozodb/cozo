@@ -332,14 +332,17 @@ impl NormalFormProgram {
                                                 name,
                                                 bindings,
                                                 span,
+                                                valid_at
                                             } => MagicFixedRuleRuleArg::Stored {
                                                 name: name.clone(),
                                                 bindings: bindings.clone(),
+                                                valid_at: *valid_at,
                                                 span: *span,
                                             },
                                             FixedRuleArg::NamedStored {
                                                 name,
                                                 bindings,
+                                                valid_at,
                                                 span,
                                             } => {
                                                 let relation = tx.get_relation(name, false)?;
@@ -377,6 +380,7 @@ impl NormalFormProgram {
                                                 MagicFixedRuleRuleArg::Stored {
                                                     name: name.clone(),
                                                     bindings: new_bindings,
+                                                    valid_at: *valid_at,
                                                     span: *span,
                                                 }
                                             }
@@ -457,6 +461,7 @@ impl NormalFormAtom {
                 let v = MagicRelationApplyAtom {
                     name: v.name.clone(),
                     args: v.args.clone(),
+                    valid_at: v.valid_at,
                     span: v.span,
                 };
                 for arg in v.args.iter() {
@@ -511,6 +516,7 @@ impl NormalFormAtom {
                 MagicAtom::NegatedRelation(MagicRelationApplyAtom {
                     name: nv.name.clone(),
                     args: nv.args.clone(),
+                    valid_at: nv.valid_at,
                     span: nv.span,
                 })
             }

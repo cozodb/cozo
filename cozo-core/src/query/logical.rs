@@ -99,7 +99,7 @@ impl InputAtom {
                                 inner: Box::new(a),
                                 span,
                             }
-                            .negation_normal_form()
+                                .negation_normal_form()
                         })
                         .try_collect()?,
                     span,
@@ -113,7 +113,7 @@ impl InputAtom {
                                 inner: Box::new(a),
                                 span,
                             }
-                            .negation_normal_form()
+                                .negation_normal_form()
                         })
                         .try_collect()?,
                     span,
@@ -135,6 +135,7 @@ impl InputAtom {
         InputNamedFieldRelationApplyAtom {
             name,
             mut args,
+            valid_at,
             span,
         }: InputNamedFieldRelationApplyAtom,
         gen: &mut TempSymbGen,
@@ -171,6 +172,7 @@ impl InputAtom {
             name,
             args: new_args,
             span,
+            valid_at
         })
     }
 
@@ -329,12 +331,14 @@ impl InputRelationApplyAtom {
             NormalFormAtom::NegatedRelation(NormalFormRelationApplyAtom {
                 name: self.name,
                 args,
+                valid_at: self.valid_at,
                 span: self.span,
             })
         } else {
             NormalFormAtom::Relation(NormalFormRelationApplyAtom {
                 name: self.name,
                 args,
+                valid_at: self.valid_at,
                 span: self.span,
             })
         });

@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::cmp::Reverse;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -21,6 +22,7 @@ use thiserror::Error;
 
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
+use crate::data::functions::{MAX_VALIDITY, str2vld};
 use crate::data::program::{
     FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
     InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
@@ -76,7 +78,7 @@ impl Diagnostic for MultipleRuleDefinitionError {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         Some(Box::new("parser::mult_rule_def"))
     }
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+    fn labels(&self) -> Option<Box<dyn Iterator<Item=LabeledSpan> + '_>> {
         Some(Box::new(
             self.1.iter().map(|s| LabeledSpan::new_with_span(None, s)),
         ))
@@ -95,6 +97,7 @@ pub(crate) fn parse_query(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
     fixedrithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
+    cur_vld: Reverse<i64>,
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputInlineRulesOrFixed> = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
@@ -103,7 +106,7 @@ pub(crate) fn parse_query(
     for pair in src {
         match pair.as_rule() {
             Rule::rule => {
-                let (name, rule) = parse_rule(pair, param_pool)?;
+                let (name, rule) = parse_rule(pair, param_pool, cur_vld)?;
 
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
@@ -147,7 +150,7 @@ pub(crate) fn parse_query(
             }
             Rule::fixed_rule => {
                 let rule_span = pair.extract_span();
-                let (name, apply) = parse_fixed_rule(pair, param_pool, fixedrithms)?;
+                let (name, apply) = parse_fixed_rule(pair, param_pool, fixedrithms, cur_vld)?;
 
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
@@ -351,13 +354,13 @@ pub(crate) fn parse_query(
 
     if prog.prog.is_empty() {
         if let Some((
-            InputRelationHandle {
-                key_bindings,
-                dep_bindings,
-                ..
-            },
-            RelationOp::Create,
-        )) = &prog.out_opts.store_relation
+                        InputRelationHandle {
+                            key_bindings,
+                            dep_bindings,
+                            ..
+                        },
+                        RelationOp::Create,
+                    )) = &prog.out_opts.store_relation
         {
             let mut bindings = key_bindings.clone();
             bindings.extend_from_slice(dep_bindings);
@@ -432,6 +435,7 @@ pub(crate) fn parse_query(
 fn parse_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
+    cur_vld: Reverse<i64>,
 ) -> Result<(Symbol, InputInlineRule)> {
     let span = src.extract_span();
     let mut src = src.into_inner();
@@ -448,7 +452,7 @@ fn parse_rule(
     let body = src.next().unwrap();
     let mut body_clauses = vec![];
     for atom_src in body.into_inner() {
-        body_clauses.push(parse_disjunction(atom_src, param_pool)?)
+        body_clauses.push(parse_disjunction(atom_src, param_pool, cur_vld)?)
     }
 
     Ok((
@@ -465,11 +469,12 @@ fn parse_rule(
 fn parse_disjunction(
     pair: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
+    cur_vld: Reverse<i64>,
 ) -> Result<InputAtom> {
     let span = pair.extract_span();
     let res: Vec<_> = pair
         .into_inner()
-        .map(|v| parse_atom(v, param_pool))
+        .map(|v| parse_atom(v, param_pool, cur_vld))
         .try_collect()?;
     Ok(if res.len() == 1 {
         res.into_iter().next().unwrap()
@@ -478,23 +483,23 @@ fn parse_disjunction(
     })
 }
 
-fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<InputAtom> {
+fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>, cur_vld: Reverse<i64>) -> Result<InputAtom> {
     Ok(match src.as_rule() {
         Rule::rule_body => {
             let span = src.extract_span();
             let grouped: Vec<_> = src
                 .into_inner()
-                .map(|v| parse_disjunction(v, param_pool))
+                .map(|v| parse_disjunction(v, param_pool, cur_vld))
                 .try_collect()?;
             InputAtom::Conjunction {
                 inner: grouped,
                 span,
             }
         }
-        Rule::disjunction => parse_disjunction(src, param_pool)?,
+        Rule::disjunction => parse_disjunction(src, param_pool, cur_vld)?,
         Rule::negation => {
             let span = src.extract_span();
-            let inner = parse_atom(src.into_inner().next().unwrap(), param_pool)?;
+            let inner = parse_atom(src.into_inner().next().unwrap(), param_pool, cur_vld)?;
             InputAtom::Negation {
                 inner: inner.into(),
                 span,
@@ -560,14 +565,18 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                 .into_inner()
                 .map(|v| build_expr(v, param_pool))
                 .try_collect()?;
-            // let validity = match src.next() {
-            //     None => None,
-            //     Some(vld_clause) => todo!()
-            // };
+            let valid_at = match src.next() {
+                None => None,
+                Some(vld_clause) => {
+                    let vld_expr = build_expr(vld_clause.into_inner().next().unwrap(), param_pool)?;
+                    Some(expr2vld_spec(vld_expr, cur_vld)?)
+                }
+            };
             InputAtom::Relation {
                 inner: InputRelationApplyAtom {
                     name: Symbol::new(&name.as_str()[1..], name.extract_span()),
                     args,
+                    valid_at,
                     span,
                 },
             }
@@ -595,12 +604,15 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result
                     Ok((name, arg))
                 })
                 .try_collect()?;
-            // let validity = match src.next() {
-            //     None => None,
-            //     Some(vld_clause) => todo!()
-            // };
+            let valid_at = match src.next() {
+                None => None,
+                Some(vld_clause) => {
+                    let vld_expr = build_expr(vld_clause.into_inner().next().unwrap(), param_pool)?;
+                    Some(expr2vld_spec(vld_expr, cur_vld)?)
+                }
+            };
             InputAtom::NamedFieldRelation {
-                inner: InputNamedFieldRelationApplyAtom { name, args, span },
+                inner: InputNamedFieldRelationApplyAtom { name, args, span, valid_at },
             }
         }
         rule => unreachable!("{:?}", rule),
@@ -661,16 +673,22 @@ fn parse_rule_head_arg(
     })
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("bad specification of validity")]
+#[diagnostic(code(parser::bad_validity_spec))]
+struct BadValiditySpecification(#[label] SourceSpan);
+
 fn parse_fixed_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
     fixedrithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
+    cur_vld: Reverse<i64>,
 ) -> Result<(Symbol, FixedRuleApply)> {
     let mut src = src.into_inner();
     let (out_symbol, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
 
     #[derive(Debug, Error, Diagnostic)]
-    #[error("fixedrithm rule cannot be combined with aggregation")]
+    #[error("fixed rule cannot be combined with aggregation")]
     #[diagnostic(code(parser::fixed_aggr_conflict))]
     struct AggrInfixedError(#[label] SourceSpan);
 
@@ -707,12 +725,17 @@ fn parse_fixed_rule(
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap();
                         let mut bindings = vec![];
+                        let mut valid_at = None;
                         for v in els {
                             match v.as_rule() {
                                 Rule::var => {
                                     bindings.push(Symbol::new(v.as_str(), v.extract_span()))
                                 }
-                                Rule::validity_clause => todo!(),
+                                Rule::validity_clause => {
+                                    let vld_inner = v.into_inner().next().unwrap();
+                                    let vld_expr = build_expr(vld_inner, param_pool)?;
+                                    valid_at = Some(expr2vld_spec(vld_expr, cur_vld)?)
+                                }
                                 _ => unreachable!(),
                             }
                         }
@@ -722,6 +745,7 @@ fn parse_fixed_rule(
                                 name.extract_span(),
                             ),
                             bindings,
+                            valid_at,
                             span,
                         })
                     }
@@ -729,6 +753,7 @@ fn parse_fixed_rule(
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap();
                         let mut bindings = BTreeMap::new();
+                        let mut valid_at = None;
                         for p in els {
                             match p.as_rule() {
                                 Rule::fixed_named_relation_arg_pair => {
@@ -741,7 +766,11 @@ fn parse_fixed_rule(
                                     };
                                     bindings.insert(k, v);
                                 }
-                                Rule::validity_clause => todo!(),
+                                Rule::validity_clause => {
+                                    let vld_inner = p.into_inner().next().unwrap();
+                                    let vld_expr = build_expr(vld_inner, param_pool)?;
+                                    valid_at = Some(expr2vld_spec(vld_expr, cur_vld)?)
+                                }
                                 _ => unreachable!(),
                             }
                         }
@@ -752,6 +781,7 @@ fn parse_fixed_rule(
                                 name.extract_span(),
                             ),
                             bindings,
+                            valid_at,
                             span,
                         })
                     }
@@ -833,4 +863,32 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
             },
         },
     );
+}
+
+fn expr2vld_spec(expr: Expr, cur_vld: Reverse<i64>) -> Result<Reverse<i64>> {
+    let vld_span = expr.span();
+    match expr.eval_to_const()? {
+        DataValue::Num(n) => {
+            let f = n.get_float();
+            let f = f * 1000.;
+            if !f.is_finite() {
+                bail!(BadValiditySpecification(vld_span))
+            }
+            Ok(Reverse(f as i64))
+        }
+        DataValue::Str(s) => {
+            match &s as &str {
+                "now" => {
+                    Ok(cur_vld)
+                }
+                "max" => { Ok(MAX_VALIDITY) }
+                s => {
+                    Ok(str2vld(s).map_err(|_| BadValiditySpecification(vld_span))?)
+                }
+            }
+        }
+        _ => {
+            bail!(BadValiditySpecification(vld_span))
+        }
+    }
 }

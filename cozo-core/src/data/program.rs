@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::cmp::Reverse;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
@@ -324,13 +325,13 @@ pub(crate) enum FixedRuleArg {
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
-        // valid_at: Option<Expr>,
+        valid_at: Option<Reverse<i64>>,
         span: SourceSpan,
     },
     NamedStored {
         name: Symbol,
         bindings: BTreeMap<SmartString<LazyCompact>, Symbol>,
-        // valid_at: Option<Expr>,
+        valid_at: Option<Reverse<i64>>,
         span: SourceSpan,
     },
 }
@@ -375,6 +376,7 @@ pub(crate) enum MagicFixedRuleRuleArg {
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
+        valid_at: Option<Reverse<i64>>,
         span: SourceSpan,
     },
 }
@@ -993,6 +995,7 @@ pub(crate) struct InputRuleApplyAtom {
 pub(crate) struct InputNamedFieldRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: BTreeMap<SmartString<LazyCompact>, Expr>,
+    pub(crate) valid_at: Option<Reverse<i64>>,
     pub(crate) span: SourceSpan,
 }
 
@@ -1000,7 +1003,7 @@ pub(crate) struct InputNamedFieldRelationApplyAtom {
 pub(crate) struct InputRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Expr>,
-    // pub(crate) valid_at: Option<Expr>,
+    pub(crate) valid_at: Option<Reverse<i64>>,
     pub(crate) span: SourceSpan,
 }
 
@@ -1015,6 +1018,7 @@ pub(crate) struct NormalFormRuleApplyAtom {
 pub(crate) struct NormalFormRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
+    pub(crate) valid_at: Option<Reverse<i64>>,
     pub(crate) span: SourceSpan,
 }
 
@@ -1029,6 +1033,7 @@ pub(crate) struct MagicRuleApplyAtom {
 pub(crate) struct MagicRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
+    pub(crate) valid_at: Option<Reverse<i64>>,
     pub(crate) span: SourceSpan,
 }
 
