@@ -81,7 +81,7 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
                 })?;
                 Box::new(store.all_iter().map(|t| Ok(t.into_tuple())))
             }
-            MagicFixedRuleRuleArg::Stored { name, .. } => {
+            MagicFixedRuleRuleArg::Stored { name, valid_at, .. } => {
                 let relation = self.tx.get_relation(name, false)?;
                 Box::new(relation.scan_all(self.tx))
             }
@@ -96,7 +96,7 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
                 let t = vec![prefix.clone()];
                 Box::new(store.prefix_iter(&t).map(|t| Ok(t.into_tuple())))
             }
-            MagicFixedRuleRuleArg::Stored { name, .. } => {
+            MagicFixedRuleRuleArg::Stored { name, valid_at, .. } => {
                 let relation = self.tx.get_relation(name, false)?;
                 let t = vec![prefix.clone()];
                 Box::new(relation.scan_prefix(self.tx, &t))
