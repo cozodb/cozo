@@ -1545,8 +1545,8 @@ pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
 pub(crate) fn str2vld(s: &str) -> Result<Reverse<i64>> {
     let dt = DateTime::parse_from_rfc3339(s).map_err(|_| miette!("bad datetime: {}", s))?;
     let st: SystemTime = dt.into();
-    let millis = st.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1000.;
-    Ok(Reverse(millis as i64))
+    let microseconds = st.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1_000_000.;
+    Ok(Reverse(microseconds as i64))
 }
 
 define_op!(OP_RAND_UUID_V1, 0, false);

@@ -869,12 +869,8 @@ fn expr2vld_spec(expr: Expr, cur_vld: Reverse<i64>) -> Result<Reverse<i64>> {
     let vld_span = expr.span();
     match expr.eval_to_const()? {
         DataValue::Num(n) => {
-            let f = n.get_float();
-            let f = f * 1000.;
-            if !f.is_finite() {
-                bail!(BadValiditySpecification(vld_span))
-            }
-            Ok(Reverse(f as i64))
+            let microseconds = n.get_int().ok_or_else(|| BadValiditySpecification(vld_span))?;
+            Ok(Reverse(microseconds))
         }
         DataValue::Str(s) => {
             match &s as &str {
