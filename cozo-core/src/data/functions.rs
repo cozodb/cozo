@@ -25,7 +25,7 @@ use uuid::v1::Timestamp;
 
 use crate::data::expr::Op;
 use crate::data::json::JsonValue;
-use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper};
+use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
 
 macro_rules! define_op {
     ($name:ident, $min_arity:expr, $vararg:expr) => {
@@ -112,8 +112,8 @@ define_op!(OP_GT, 2, false);
 pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l as f64 > *r as f64,
-        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 > *r as f64,
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l > *r as f64,
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 > *r,
         (a, b) => a > b,
     }))
 }
@@ -122,8 +122,8 @@ define_op!(OP_GE, 2, false);
 pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l as f64 >= *r as f64,
-        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 >= *r as f64,
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l >= *r as f64,
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 >= *r,
         (a, b) => a >= b,
     }))
 }
@@ -132,8 +132,8 @@ define_op!(OP_LT, 2, false);
 pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => (*l as f64) < (*r as f64),
-        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) < (*r as f64),
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l < (*r as f64),
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) < *r,
         (a, b) => a < b,
     }))
 }
@@ -142,8 +142,8 @@ define_op!(OP_LE, 2, false);
 pub(crate) fn op_le(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
     Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => (*l as f64) <= (*r as f64),
-        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) <= (*r as f64),
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l <= (*r as f64),
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) <= *r,
         (a, b) => a <= b,
     }))
 }
@@ -1031,9 +1031,9 @@ pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)?;
     let ret = 2.
         * f64::asin(f64::sqrt(
-        f64::sin((lat1 - lat2) / 2.).powi(2)
-            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-    ));
+            f64::sin((lat1 - lat2) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+        ));
     Ok(DataValue::from(ret))
 }
 
@@ -1046,9 +1046,9 @@ pub(crate) fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)? * f64::PI() / 180.;
     let ret = 2.
         * f64::asin(f64::sqrt(
-        f64::sin((lat1 - lat2) / 2.).powi(2)
-            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-    ));
+            f64::sin((lat1 - lat2) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+        ));
     Ok(DataValue::from(ret))
 }
 
@@ -1277,24 +1277,22 @@ pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
     }))
 }
 
-
 define_op!(OP_TO_UNITY, 1, false);
 pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::from(match &args[0] {
         DataValue::Null => 0,
         DataValue::Bool(b) => *b as i64,
         DataValue::Num(n) => (n.get_float() != 0.) as i64,
-        DataValue::Str(s) => if s.is_empty() { 0 } else { 1 },
-        DataValue::Bytes(b) => if b.is_empty() { 0 } else { 1 },
-        DataValue::Uuid(u) => if u.0.is_nil() { 0 } else { 1 },
-        DataValue::Regex(r) => if r.0.as_str().is_empty() { 0 } else { 1 },
-        DataValue::List(l) => if l.is_empty() { 0 } else { 1 },
-        DataValue::Set(s) => if s.is_empty() { 0 } else { 1 },
-        DataValue::Validity(vld) => if vld.is_assert { 1 } else { 0 },
+        DataValue::Str(s) => i64::from(!s.is_empty()),
+        DataValue::Bytes(b) => i64::from(!b.is_empty()),
+        DataValue::Uuid(u) => i64::from(!u.0.is_nil()),
+        DataValue::Regex(r) => i64::from(!r.0.as_str().is_empty()),
+        DataValue::List(l) => i64::from(!l.is_empty()),
+        DataValue::Set(s) => i64::from(!s.is_empty()),
+        DataValue::Validity(vld) => i64::from(vld.is_assert),
         DataValue::Bot => 0,
     }))
 }
-
 
 define_op!(OP_TO_FLOAT, 1, false);
 pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
@@ -1479,31 +1477,33 @@ pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
     ))
 }
 
-pub(crate) fn current_validity() -> Reverse<i64> {
+pub(crate) fn current_validity() -> ValidityTs {
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        let ts_millis = {
+    let ts_millis = {
         let now = SystemTime::now();
         (now.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1000.) as i64
     };
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        let ts_millis = {
-        Date::now() as i64
-    };
+    let ts_millis = { Date::now() as i64 };
 
-    Reverse(ts_millis)
+    ValidityTs(Reverse(ts_millis))
 }
 
-pub(crate) const MAX_VALIDITY: Reverse<i64> = Reverse(i64::MAX);
+pub(crate) const MAX_VALIDITY_TS: ValidityTs = ValidityTs(Reverse(i64::MAX));
+pub(crate) const TERMINAL_VALIDITY: Validity = Validity {
+    timestamp: ValidityTs(Reverse(i64::MIN)),
+    is_assert: true,
+};
 
 define_op!(OP_FORMAT_TIMESTAMP, 1, true);
 pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        let dt = Utc
+    let dt = Utc
         .timestamp_millis_opt(Date::now() as i64)
         .latest()
         .ok_or_else(|| miette!("bad time input"))?;
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        let dt = {
+    let dt = {
         let f = args[0]
             .get_float()
             .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
@@ -1542,11 +1542,11 @@ pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
     ))
 }
 
-pub(crate) fn str2vld(s: &str) -> Result<Reverse<i64>> {
+pub(crate) fn str2vld(s: &str) -> Result<ValidityTs> {
     let dt = DateTime::parse_from_rfc3339(s).map_err(|_| miette!("bad datetime: {}", s))?;
     let st: SystemTime = dt.into();
     let microseconds = st.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1_000_000.;
-    Ok(Reverse(microseconds as i64))
+    Ok(ValidityTs(Reverse(microseconds as i64)))
 }
 
 define_op!(OP_RAND_UUID_V1, 0, false);
@@ -1554,14 +1554,14 @@ pub(crate) fn op_rand_uuid_v1(_args: &[DataValue]) -> Result<DataValue> {
     let mut rng = rand::thread_rng();
     let uuid_ctx = uuid::v1::Context::new(rng.gen());
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        let ts = {
+    let ts = {
         let since_epoch: f64 = Date::now();
         let seconds = since_epoch.floor();
         let fractional = (since_epoch - seconds) * 1.0e9;
         Timestamp::from_unix(uuid_ctx, seconds as u64, fractional as u32)
     };
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        let ts = {
+    let ts = {
         let now = SystemTime::now();
         let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
         Timestamp::from_unix(uuid_ctx, since_epoch.as_secs(), since_epoch.subsec_nanos())

@@ -14,7 +14,7 @@ use std::str::FromStr;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use regex::Regex;
 
-use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity};
+use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
 
 const INIT_TAG: u8 = 0x00;
 const NULL_TAG: u8 = 0x01;
@@ -81,7 +81,7 @@ pub(crate) trait MemCmpEncoder: Write {
                 self.write_u8(INIT_TAG).unwrap()
             }
             DataValue::Validity(vld) => {
-                let ts = vld.timestamp.0;
+                let ts = vld.timestamp.0 .0;
                 let ts_u64 = order_encode_i64(ts);
                 let ts_flipped = !ts_u64;
                 self.write_u8(VLD_TAG).unwrap();
@@ -288,7 +288,7 @@ impl DataValue {
                 let is_assert = *is_assert_byte != 0;
                 (
                     DataValue::Validity(Validity {
-                        timestamp: Reverse(ts),
+                        timestamp: ValidityTs(Reverse(ts)),
                         is_assert,
                     }),
                     rest,

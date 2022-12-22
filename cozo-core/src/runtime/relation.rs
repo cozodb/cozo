@@ -20,7 +20,7 @@ use crate::data::memcmp::MemCmpEncoder;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::Symbol;
 use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_LEN};
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
 
@@ -226,6 +226,16 @@ impl RelationHandle {
         tx.store_tx.range_scan_tuple(&lower, &upper)
     }
 
+    pub(crate) fn skip_scan_all<'a>(
+        &self,
+        tx: &'a SessionTx<'_>,
+        valid_at: ValidityTs,
+    ) -> impl Iterator<Item = Result<Tuple>> + 'a {
+        let lower = Tuple::default().encode_as_key(self.id);
+        let upper = Tuple::default().encode_as_key(self.id.next());
+        tx.store_tx.range_skip_scan_tuple(&lower, &upper, valid_at)
+    }
+
     pub(crate) fn get<'a>(
         &self,
         tx: &'a SessionTx<'_>,
@@ -254,9 +264,26 @@ impl RelationHandle {
         upper.push(DataValue::Bot);
         let prefix_encoded = lower.encode_as_key(self.id);
         let upper_encoded = upper.encode_as_key(self.id);
-        // RelationIterator::new(tx, &prefix_encoded, &upper_encoded)
-        tx.store_tx.range_scan_tuple(&prefix_encoded, &upper_encoded)
+        tx.store_tx
+            .range_scan_tuple(&prefix_encoded, &upper_encoded)
     }
+
+    pub(crate) fn skip_scan_prefix<'a>(
+        &self,
+        tx: &'a SessionTx<'_>,
+        prefix: &Tuple,
+        valid_at: ValidityTs,
+    ) -> impl Iterator<Item = Result<Tuple>> + 'a {
+        let mut lower = prefix.clone();
+        lower.truncate(self.metadata.keys.len());
+        let mut upper = lower.clone();
+        upper.push(DataValue::Bot);
+        let prefix_encoded = lower.encode_as_key(self.id);
+        let upper_encoded = upper.encode_as_key(self.id);
+        tx.store_tx
+            .range_skip_scan_tuple(&prefix_encoded, &upper_encoded, valid_at)
+    }
+
     pub(crate) fn scan_bounded_prefix<'a>(
         &self,
         tx: &'a SessionTx<'_>,
@@ -273,6 +300,24 @@ impl RelationHandle {
         let upper_encoded = upper_t.encode_as_key(self.id);
         tx.store_tx.range_scan_tuple(&lower_encoded, &upper_encoded)
     }
+    pub(crate) fn skip_scan_bounded_prefix<'a>(
+        &self,
+        tx: &'a SessionTx<'_>,
+        prefix: &Tuple,
+        lower: &[DataValue],
+        upper: &[DataValue],
+        valid_at: ValidityTs,
+    ) -> impl Iterator<Item = Result<Tuple>> + 'a {
+        let mut lower_t = prefix.clone();
+        lower_t.extend_from_slice(lower);
+        let mut upper_t = prefix.clone();
+        upper_t.extend_from_slice(upper);
+        upper_t.push(DataValue::Bot);
+        let lower_encoded = lower_t.encode_as_key(self.id);
+        let upper_encoded = upper_t.encode_as_key(self.id);
+        tx.store_tx
+            .range_skip_scan_tuple(&lower_encoded, &upper_encoded, valid_at)
+    }
 }
 
 /// Decode tuple from key-value pairs. Used for customizing storage
@@ -280,11 +325,15 @@ impl RelationHandle {
 #[inline]
 pub fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
     let mut tup = decode_tuple_from_key(key);
+    extend_tuple_from_v(&mut tup, val);
+    tup
+}
+
+pub fn extend_tuple_from_v(key: &mut Tuple, val: &[u8]) {
     if !val.is_empty() {
         let vals: Vec<DataValue> = rmp_serde::from_slice(&val[ENCODED_KEY_MIN_LEN..]).unwrap();
-        tup.extend(vals);
+        key.extend(vals);
     }
-    tup
 }
 
 #[derive(Debug, Diagnostic, Error)]

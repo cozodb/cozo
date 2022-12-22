@@ -1164,6 +1164,7 @@ impl Aggregation {
         Ok(())
     }
     pub(crate) fn normal_init(&mut self, args: &[DataValue]) -> Result<()> {
+        #[allow(clippy::box_default)]
         self.normal_op.replace(match self.name {
             name if name == AGGR_AND.name => Box::new(AggrAnd::default()),
             name if name == AGGR_OR.name => Box::new(AggrOr::default()),

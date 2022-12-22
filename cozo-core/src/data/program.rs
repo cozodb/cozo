@@ -6,7 +6,6 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::cmp::Reverse;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
@@ -22,7 +21,7 @@ use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::{Symbol, PROG_ENTRY};
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::{FixedRule, FixedRuleHandle};
 use crate::parse::SourceSpan;
 use crate::runtime::relation::InputRelationHandle;
@@ -325,13 +324,13 @@ pub(crate) enum FixedRuleArg {
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
-        valid_at: Option<Reverse<i64>>,
+        valid_at: Option<ValidityTs>,
         span: SourceSpan,
     },
     NamedStored {
         name: Symbol,
         bindings: BTreeMap<SmartString<LazyCompact>, Symbol>,
-        valid_at: Option<Reverse<i64>>,
+        valid_at: Option<ValidityTs>,
         span: SourceSpan,
     },
 }
@@ -376,7 +375,7 @@ pub(crate) enum MagicFixedRuleRuleArg {
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
-        valid_at: Option<Reverse<i64>>,
+        valid_at: Option<ValidityTs>,
         span: SourceSpan,
     },
 }
@@ -534,7 +533,7 @@ impl InputProgram {
                     for (symb, aggr) in head.iter().zip(aggrs.iter()) {
                         if let Some((aggr, _)) = aggr {
                             ret.push(Symbol::new(
-                                &format!(
+                                format!(
                                     "{}({})",
                                     aggr.name
                                         .strip_prefix("AGGR_")
@@ -995,7 +994,7 @@ pub(crate) struct InputRuleApplyAtom {
 pub(crate) struct InputNamedFieldRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: BTreeMap<SmartString<LazyCompact>, Expr>,
-    pub(crate) valid_at: Option<Reverse<i64>>,
+    pub(crate) valid_at: Option<ValidityTs>,
     pub(crate) span: SourceSpan,
 }
 
@@ -1003,7 +1002,7 @@ pub(crate) struct InputNamedFieldRelationApplyAtom {
 pub(crate) struct InputRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Expr>,
-    pub(crate) valid_at: Option<Reverse<i64>>,
+    pub(crate) valid_at: Option<ValidityTs>,
     pub(crate) span: SourceSpan,
 }
 
@@ -1018,7 +1017,7 @@ pub(crate) struct NormalFormRuleApplyAtom {
 pub(crate) struct NormalFormRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
-    pub(crate) valid_at: Option<Reverse<i64>>,
+    pub(crate) valid_at: Option<ValidityTs>,
     pub(crate) span: SourceSpan,
 }
 
@@ -1033,7 +1032,7 @@ pub(crate) struct MagicRuleApplyAtom {
 pub(crate) struct MagicRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
-    pub(crate) valid_at: Option<Reverse<i64>>,
+    pub(crate) valid_at: Option<ValidityTs>,
     pub(crate) span: SourceSpan,
 }
 

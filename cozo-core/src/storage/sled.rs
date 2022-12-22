@@ -9,13 +9,14 @@
 use std::cmp::Ordering;
 use std::iter::Fuse;
 use std::path::Path;
-use std::thread;
+use std::{iter, thread};
 
 use itertools::Itertools;
-use miette::{IntoDiagnostic, Result};
+use miette::{miette, IntoDiagnostic, Result};
 use sled::{Batch, Config, Db, IVec, Iter, Mode};
 
 use crate::data::tuple::Tuple;
+use crate::data::value::ValidityTs;
 use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
@@ -201,6 +202,17 @@ impl<'s> StoreTx<'s> for SledTx {
                     .map_ok(|(k, v)| decode_tuple_from_kv(&k, &v)),
             )
         }
+    }
+
+    fn range_skip_scan_tuple<'a>(
+        &'a self,
+        _lower: &[u8],
+        _upper: &[u8],
+        _valid_at: ValidityTs,
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a> {
+        Box::new(iter::once(miette!(
+            "Sled backend does not support time travelling."
+        )))
     }
 
     fn range_scan<'a>(

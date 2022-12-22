@@ -22,7 +22,7 @@ use thiserror::Error;
 
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
-use crate::data::functions::{MAX_VALIDITY, str2vld};
+use crate::data::functions::{MAX_VALIDITY_TS, str2vld};
 use crate::data::program::{
     FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
     InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
@@ -30,7 +30,7 @@ use crate::data::program::{
 };
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::utilities::constant::Constant;
 use crate::fixed_rule::{FixedRuleHandle, FixedRuleNotFoundError};
 use crate::parse::expr::build_expr;
@@ -97,7 +97,7 @@ pub(crate) fn parse_query(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
     fixedrithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
-    cur_vld: Reverse<i64>,
+    cur_vld: ValidityTs,
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputInlineRulesOrFixed> = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
@@ -435,7 +435,7 @@ pub(crate) fn parse_query(
 fn parse_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    cur_vld: Reverse<i64>,
+    cur_vld: ValidityTs,
 ) -> Result<(Symbol, InputInlineRule)> {
     let span = src.extract_span();
     let mut src = src.into_inner();
@@ -469,7 +469,7 @@ fn parse_rule(
 fn parse_disjunction(
     pair: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    cur_vld: Reverse<i64>,
+    cur_vld: ValidityTs,
 ) -> Result<InputAtom> {
     let span = pair.extract_span();
     let res: Vec<_> = pair
@@ -483,7 +483,7 @@ fn parse_disjunction(
     })
 }
 
-fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>, cur_vld: Reverse<i64>) -> Result<InputAtom> {
+fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>, cur_vld: ValidityTs) -> Result<InputAtom> {
     Ok(match src.as_rule() {
         Rule::rule_body => {
             let span = src.extract_span();
@@ -682,7 +682,7 @@ fn parse_fixed_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
     fixedrithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
-    cur_vld: Reverse<i64>,
+    cur_vld: ValidityTs,
 ) -> Result<(Symbol, FixedRuleApply)> {
     let mut src = src.into_inner();
     let (out_symbol, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
@@ -865,19 +865,19 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
     );
 }
 
-fn expr2vld_spec(expr: Expr, cur_vld: Reverse<i64>) -> Result<Reverse<i64>> {
+fn expr2vld_spec(expr: Expr, cur_vld: ValidityTs) -> Result<ValidityTs> {
     let vld_span = expr.span();
     match expr.eval_to_const()? {
         DataValue::Num(n) => {
-            let microseconds = n.get_int().ok_or_else(|| BadValiditySpecification(vld_span))?;
-            Ok(Reverse(microseconds))
+            let microseconds = n.get_int().ok_or(BadValiditySpecification(vld_span))?;
+            Ok(ValidityTs(Reverse(microseconds)))
         }
         DataValue::Str(s) => {
             match &s as &str {
                 "now" => {
                     Ok(cur_vld)
                 }
-                "max" => { Ok(MAX_VALIDITY) }
+                "max" => { Ok(MAX_VALIDITY_TS) }
                 s => {
                     Ok(str2vld(s).map_err(|_| BadValiditySpecification(vld_span))?)
                 }

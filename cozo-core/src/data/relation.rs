@@ -32,6 +32,7 @@ impl Display for NullableColType {
             ColType::String => f.write_str("String")?,
             ColType::Bytes => f.write_str("Bytes")?,
             ColType::Uuid => f.write_str("Uuid")?,
+            ColType::Validity => f.write_str("Validity")?,
             ColType::List { eltype, len } => {
                 f.write_str("[")?;
                 write!(f, "{}", eltype)?;
@@ -73,6 +74,7 @@ pub(crate) enum ColType {
         len: Option<usize>,
     },
     Tuple(Vec<NullableColType>),
+    Validity
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
@@ -210,6 +212,12 @@ impl NullableColType {
                     )
                 } else {
                     bail!(make_err())
+                }
+            }
+            ColType::Validity => {
+                match data {
+                    vld@DataValue::Validity(_) => vld,
+                    _ => todo!()
                 }
             }
         })

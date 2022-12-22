@@ -31,7 +31,7 @@ impl FixedRule for TopSort {
     ) -> Result<()> {
         let edges = payload.get_input(0)?;
 
-        let (graph, indices, _) = edges.to_directed_graph(false)?;
+        let (graph, indices, _) = edges.as_directed_graph(false)?;
 
         let sorted = kahn_g(&graph, poison)?;
 
@@ -75,7 +75,7 @@ pub(crate) fn kahn_g(graph: &DirectedCsrGraph<u32>, poison: Poison) -> Result<Ve
     while !pending.is_empty() {
         let removed = pending.pop().unwrap();
         sorted.push(removed);
-        for nxt in graph.out_neighbors(removed as u32) {
+        for nxt in graph.out_neighbors(removed) {
             in_degree[*nxt as usize] -= 1;
             if in_degree[*nxt as usize] == 0 {
                 pending.push(*nxt);

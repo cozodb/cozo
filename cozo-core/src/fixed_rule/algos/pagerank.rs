@@ -38,7 +38,7 @@ impl FixedRule for PageRank {
         let epsilon = payload.unit_interval_option("epsilon", Some(0.0001))? as f32;
         let iterations = payload.pos_integer_option("iterations", Some(10))?;
 
-        let (graph, indices, _) = edges.to_directed_graph(undirected)?;
+        let (graph, indices, _) = edges.as_directed_graph(undirected)?;
 
         let (ranks, _n_run, _) = page_rank(
             &graph,

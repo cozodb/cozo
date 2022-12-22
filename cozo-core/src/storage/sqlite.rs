@@ -14,9 +14,11 @@ use either::{Either, Left, Right};
 use miette::{bail, miette, IntoDiagnostic, Result};
 use sqlite::{State, Statement};
 
-use crate::data::tuple::Tuple;
-use crate::runtime::relation::decode_tuple_from_kv;
+use crate::data::tuple::{check_key_for_validity, Tuple};
+use crate::data::value::ValidityTs;
+use crate::runtime::relation::{decode_tuple_from_kv, extend_tuple_from_v};
 use crate::storage::{Storage, StoreTx};
+use crate::utils::swap_option_result;
 
 /// The Sqlite storage engine
 #[derive(Clone)]
@@ -144,7 +146,7 @@ pub struct SqliteTx<'a> {
     committed: bool,
 }
 
-const N_QUERIES: usize = 5;
+const N_QUERIES: usize = 6;
 const N_CACHED_QUERIES: usize = 4;
 const QUERIES: [&str; N_QUERIES] = [
     "select v from cozo where k = ?;",
@@ -152,6 +154,7 @@ const QUERIES: [&str; N_QUERIES] = [
     "delete from cozo where k = ?;",
     "select 1 from cozo where k = ?;",
     "select k, v from cozo where k >= ? and k < ? order by k;",
+    "select k, v from cozo where k >= ? and k < ? order by k limit 1;",
 ];
 
 const GET_QUERY: usize = 0;
@@ -159,6 +162,7 @@ const PUT_QUERY: usize = 1;
 const DEL_QUERY: usize = 2;
 const EXISTS_QUERY: usize = 3;
 const RANGE_QUERY: usize = 4;
+const SKIP_RANGE_QUERY: usize = 5;
 
 impl Drop for SqliteTx<'_> {
     fn drop(&mut self) {
@@ -276,6 +280,22 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
         Box::new(TupleIter(statement))
     }
 
+    fn range_skip_scan_tuple<'a>(
+        &'a self,
+        lower: &[u8],
+        upper: &[u8],
+        valid_at: ValidityTs,
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a> {
+        let query = QUERIES[SKIP_RANGE_QUERY];
+        let statement = self.conn.as_ref().unwrap().prepare(query).unwrap();
+        Box::new(SkipIter {
+            stmt: statement,
+            valid_at,
+            next_bound: lower.to_vec(),
+            upper_bound: upper.to_vec(),
+        })
+    }
+
     fn range_scan<'a>(
         &'a self,
         lower: &[u8],
@@ -339,5 +359,44 @@ impl<'l> Iterator for RawIter<'l> {
             }
             Err(err) => Some(Err(miette!(err))),
         }
+    }
+}
+
+struct SkipIter<'l> {
+    stmt: Statement<'l>,
+    valid_at: ValidityTs,
+    next_bound: Vec<u8>,
+    upper_bound: Vec<u8>,
+}
+
+impl<'l> SkipIter<'l> {
+    fn next_inner(&mut self) -> Result<Option<Tuple>> {
+        loop {
+            self.stmt.reset().into_diagnostic()?;
+            self.stmt.bind((1, &self.next_bound as &[u8])).unwrap();
+            self.stmt.bind((2, &self.upper_bound as &[u8])).unwrap();
+
+            match self.stmt.next().into_diagnostic()? {
+                State::Done => return Ok(None),
+                State::Row => {
+                    let k = self.stmt.read::<Vec<u8>, _>(0).unwrap();
+                    let (ret, nxt_bound) = check_key_for_validity(&k, self.valid_at);
+                    self.next_bound = nxt_bound;
+                    if let Some(mut tup) = ret {
+                        let v = self.stmt.read::<Vec<u8>, _>(1).unwrap();
+                        extend_tuple_from_v(&mut tup, &v);
+                        return Ok(Some(tup))
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl<'l> Iterator for SkipIter<'l> {
+    type Item = Result<Tuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
     }
 }

@@ -6,7 +6,6 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Formatter};
 use std::iter;
@@ -14,14 +13,15 @@ use std::iter;
 use either::{Left, Right};
 use itertools::Itertools;
 use log::{debug, error};
-use miette::{Diagnostic, Result};
+use miette::{bail, Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::expr::{compute_bounds, Expr};
 use crate::data::program::MagicSymbol;
+use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleIter};
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::SourceSpan;
 use crate::runtime::relation::RelationHandle;
 use crate::runtime::temp_store::EpochStore;
@@ -317,6 +317,14 @@ impl Debug for RelAlgebra {
     }
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Invalid time travel on relation {0}")]
+#[diagnostic(code(eval::invalid_time_travel))]
+#[diagnostic(help(
+    "Time travel scanning requires the last key column of the relation to be of type 'Validity'"
+))]
+pub(crate) struct InvalidTimeTravelScanning(pub(crate) String, #[label] pub(crate) SourceSpan);
+
 impl RelAlgebra {
     pub(crate) fn fill_binding_indices(&mut self) -> Result<()> {
         match self {
@@ -380,25 +388,31 @@ impl RelAlgebra {
         bindings: Vec<Symbol>,
         storage: RelationHandle,
         span: SourceSpan,
-        validity: Option<Reverse<i64>>,
-    ) -> Self {
+        validity: Option<ValidityTs>,
+    ) -> Result<Self> {
         match validity {
-            None => {
-                Self::Stored(StoredRA {
-                    bindings,
-                    storage,
-                    filters: vec![],
-                    span,
-                })
-            }
+            None => Ok(Self::Stored(StoredRA {
+                bindings,
+                storage,
+                filters: vec![],
+                span,
+            })),
             Some(vld) => {
-                Self::StoredWithValidity(StoredWithValidityRA {
+                if storage.metadata.keys.last().unwrap().typing
+                    != (NullableColType {
+                        coltype: ColType::Validity,
+                        nullable: false,
+                    })
+                {
+                    bail!(InvalidTimeTravelScanning(storage.name.to_string(), span));
+                };
+                Ok(Self::StoredWithValidity(StoredWithValidityRA {
                     bindings,
                     storage,
                     filters: vec![],
                     valid_at: vld,
                     span,
-                })
+                }))
             }
         }
     }
@@ -423,11 +437,11 @@ impl RelAlgebra {
                 })
             }
             RelAlgebra::Filter(FilteredRA {
-                                   parent,
-                                   mut pred,
-                                   to_eliminate,
-                                   span,
-                               }) => {
+                parent,
+                mut pred,
+                to_eliminate,
+                span,
+            }) => {
                 pred.push(filter);
                 RelAlgebra::Filter(FilteredRA {
                     parent,
@@ -437,11 +451,11 @@ impl RelAlgebra {
                 })
             }
             RelAlgebra::TempStore(TempStoreRA {
-                                      bindings,
-                                      storage_key,
-                                      mut filters,
-                                      span,
-                                  }) => {
+                bindings,
+                storage_key,
+                mut filters,
+                span,
+            }) => {
                 filters.push(filter);
                 RelAlgebra::TempStore(TempStoreRA {
                     bindings,
@@ -451,11 +465,11 @@ impl RelAlgebra {
                 })
             }
             RelAlgebra::Stored(StoredRA {
-                                   bindings,
-                                   storage,
-                                   mut filters,
-                                   span,
-                               }) => {
+                bindings,
+                storage,
+                mut filters,
+                span,
+            }) => {
                 filters.push(filter);
                 RelAlgebra::Stored(StoredRA {
                     bindings,
@@ -465,12 +479,12 @@ impl RelAlgebra {
                 })
             }
             RelAlgebra::StoredWithValidity(StoredWithValidityRA {
-                                               bindings,
-                                               storage,
-                                               mut filters,
-                                               span,
-                                               valid_at,
-                                           }) => {
+                bindings,
+                storage,
+                mut filters,
+                span,
+                valid_at,
+            }) => {
                 filters.push(filter);
                 RelAlgebra::StoredWithValidity(StoredWithValidityRA {
                     bindings,
@@ -744,8 +758,8 @@ fn invert_option_err<T>(v: Result<Option<T>>) -> Option<Result<T>> {
 
 fn filter_iter(
     filters: Vec<Expr>,
-    it: impl Iterator<Item=Result<Tuple>>,
-) -> impl Iterator<Item=Result<Tuple>> {
+    it: impl Iterator<Item = Result<Tuple>>,
+) -> impl Iterator<Item = Result<Tuple>> {
     it.filter_map_ok(move |t| -> Option<Result<Tuple>> {
         for p in filters.iter() {
             match p.eval_pred(&t) {
@@ -759,7 +773,7 @@ fn filter_iter(
         }
         Some(Ok(t))
     })
-        .map(flatten_err)
+    .map(flatten_err)
 }
 
 fn get_eliminate_indices(bindings: &[Symbol], eliminate: &BTreeSet<Symbol>) -> BTreeSet<usize> {
@@ -789,7 +803,7 @@ pub(crate) struct StoredWithValidityRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: RelationHandle,
     pub(crate) filters: Vec<Expr>,
-    pub(crate) valid_at: Reverse<i64>,
+    pub(crate) valid_at: ValidityTs,
     pub(crate) span: SourceSpan,
 }
 
@@ -808,13 +822,12 @@ impl StoredWithValidityRA {
         Ok(())
     }
     fn iter<'a>(&'a self, tx: &'a SessionTx<'_>) -> Result<TupleIter<'a>> {
-        todo!()
-        // let it = self.storage.scan_all(tx);
-        // Ok(if self.filters.is_empty() {
-        //     Box::new(it)
-        // } else {
-        //     Box::new(filter_iter(self.filters.clone(), it))
-        // })
+        let it = self.storage.skip_scan_all(tx, self.valid_at);
+        Ok(if self.filters.is_empty() {
+            Box::new(it)
+        } else {
+            Box::new(filter_iter(self.filters.clone(), it))
+        })
     }
     fn prefix_join<'a>(
         &'a self,
@@ -822,89 +835,81 @@ impl StoredWithValidityRA {
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
-        left_tuple_len: usize,
     ) -> Result<TupleIter<'a>> {
-        todo!()
-        // let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
-        // right_invert_indices.sort_by_key(|(_, b)| **b);
-        // let left_to_prefix_indices = right_invert_indices
-        //     .into_iter()
-        //     .map(|(a, _)| left_join_indices[a])
-        //     .collect_vec();
-        //
-        // let key_len = self.storage.metadata.keys.len();
-        // if left_to_prefix_indices.len() >= key_len {
-        //     return self.point_lookup_join(
-        //         tx,
-        //         left_iter,
-        //         key_len,
-        //         left_to_prefix_indices,
-        //         eliminate_indices,
-        //         left_tuple_len,
-        //     );
-        // }
-        //
-        // let mut skip_range_check = false;
-        // // In some cases, maybe we can stop as soon as we get one result?
-        // let it = left_iter
-        //     .map_ok(move |tuple| {
-        //         let prefix = left_to_prefix_indices
-        //             .iter()
-        //             .map(|i| tuple[*i].clone())
-        //             .collect_vec();
-        //
-        //         if !skip_range_check && !self.filters.is_empty() {
-        //             let other_bindings = &self.bindings[right_join_indices.len()..];
-        //             let (l_bound, u_bound) = match compute_bounds(&self.filters, other_bindings) {
-        //                 Ok(b) => b,
-        //                 _ => (vec![], vec![]),
-        //             };
-        //             if !l_bound.iter().all(|v| *v == DataValue::Null)
-        //                 || !u_bound.iter().all(|v| *v == DataValue::Bot)
-        //             {
-        //                 return Left(
-        //                     self.storage
-        //                         .scan_bounded_prefix(tx, &prefix, &l_bound, &u_bound)
-        //                         .map(move |res_found| -> Result<Option<Tuple>> {
-        //                             let found = res_found?;
-        //                             for p in self.filters.iter() {
-        //                                 if !p.eval_pred(&found)? {
-        //                                     return Ok(None);
-        //                                 }
-        //                             }
-        //                             let mut ret = tuple.clone();
-        //                             ret.extend(found);
-        //                             Ok(Some(ret))
-        //                         })
-        //                         .filter_map(swap_option_result),
-        //                 );
-        //             }
-        //         }
-        //         skip_range_check = true;
-        //         Right(
-        //             self.storage
-        //                 .scan_prefix(tx, &prefix)
-        //                 .map(move |res_found| -> Result<Option<Tuple>> {
-        //                     let found = res_found?;
-        //                     for p in self.filters.iter() {
-        //                         if !p.eval_pred(&found)? {
-        //                             return Ok(None);
-        //                         }
-        //                     }
-        //                     let mut ret = tuple.clone();
-        //                     ret.extend(found);
-        //                     Ok(Some(ret))
-        //                 })
-        //                 .filter_map(swap_option_result),
-        //         )
-        //     })
-        //     .flatten_ok()
-        //     .map(flatten_err);
-        // Ok(if eliminate_indices.is_empty() {
-        //     Box::new(it)
-        // } else {
-        //     Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
-        // })
+        let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
+        right_invert_indices.sort_by_key(|(_, b)| **b);
+        let left_to_prefix_indices = right_invert_indices
+            .into_iter()
+            .map(|(a, _)| left_join_indices[a])
+            .collect_vec();
+
+        let mut skip_range_check = false;
+
+        let it = left_iter
+            .map_ok(move |tuple| {
+                let prefix = left_to_prefix_indices
+                    .iter()
+                    .map(|i| tuple[*i].clone())
+                    .collect_vec();
+
+                if !skip_range_check && !self.filters.is_empty() {
+                    let other_bindings = &self.bindings[right_join_indices.len()..];
+                    let (l_bound, u_bound) = match compute_bounds(&self.filters, other_bindings) {
+                        Ok(b) => b,
+                        _ => (vec![], vec![]),
+                    };
+                    if !l_bound.iter().all(|v| *v == DataValue::Null)
+                        || !u_bound.iter().all(|v| *v == DataValue::Bot)
+                    {
+                        return Left(
+                            self.storage
+                                .skip_scan_bounded_prefix(
+                                    tx,
+                                    &prefix,
+                                    &l_bound,
+                                    &u_bound,
+                                    self.valid_at,
+                                )
+                                .map(move |res_found| -> Result<Option<Tuple>> {
+                                    let found = res_found?;
+                                    for p in self.filters.iter() {
+                                        if !p.eval_pred(&found)? {
+                                            return Ok(None);
+                                        }
+                                    }
+                                    let mut ret = tuple.clone();
+                                    ret.extend(found);
+                                    Ok(Some(ret))
+                                })
+                                .filter_map(swap_option_result),
+                        );
+                    }
+                }
+                skip_range_check = true;
+                Right(
+                    self.storage
+                        .skip_scan_prefix(tx, &prefix, self.valid_at)
+                        .map(move |res_found| -> Result<Option<Tuple>> {
+                            let found = res_found?;
+                            for p in self.filters.iter() {
+                                if !p.eval_pred(&found)? {
+                                    return Ok(None);
+                                }
+                            }
+                            let mut ret = tuple.clone();
+                            ret.extend(found);
+                            Ok(Some(ret))
+                        })
+                        .filter_map(swap_option_result),
+                )
+            })
+            .flatten_ok()
+            .map(flatten_err);
+        Ok(if eliminate_indices.is_empty() {
+            Box::new(it)
+        } else {
+            Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+        })
     }
 }
 
@@ -1118,7 +1123,7 @@ impl StoredRA {
                         'outer: for found in self.storage.scan_prefix(tx, &prefix) {
                             let found = found?;
                             for (left_idx, right_idx) in
-                            left_join_indices.iter().zip(right_join_indices.iter())
+                                left_join_indices.iter().zip(right_join_indices.iter())
                             {
                                 if tuple[*left_idx] != found[*right_idx] {
                                     continue 'outer;
@@ -1281,7 +1286,7 @@ impl TempStoreRA {
 
                         'outer: for found in storage.prefix_iter(&prefix) {
                             for (left_idx, right_idx) in
-                            left_join_indices.iter().zip(right_join_indices.iter())
+                                left_join_indices.iter().zip(right_join_indices.iter())
                             {
                                 if tuple[*left_idx] != *found.get(*right_idx) {
                                     continue 'outer;
@@ -1414,7 +1419,7 @@ impl TempStoreRA {
                                     Ok(Some(ret))
                                 }
                             })
-                                .filter_map(swap_option_result),
+                            .filter_map(swap_option_result),
                         );
                     }
                 }
@@ -1444,7 +1449,7 @@ impl TempStoreRA {
                             Ok(Some(ret))
                         }
                     })
-                        .filter_map(swap_option_result),
+                    .filter_map(swap_option_result),
                 )
             })
             .flatten_ok()
@@ -1467,7 +1472,7 @@ impl Debug for Joiner {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let left_bindings = BindingFormatter(self.left_keys.clone());
         let right_bindings = BindingFormatter(self.right_keys.clone());
-        write!(f, "{:?}<->{:?}", left_bindings, right_bindings, )
+        write!(f, "{:?}<->{:?}", left_bindings, right_bindings,)
     }
 }
 
@@ -1856,13 +1861,11 @@ impl InnerJoin {
                     )
                     .unwrap();
                 if join_is_prefix(&join_indices.1) {
-                    let left_len = self.left.bindings_after_eliminate().len();
                     r.prefix_join(
                         tx,
                         self.left.iter(tx, delta_rule, stores)?,
                         join_indices,
                         eliminate_indices,
-                        left_len,
                     )
                 } else {
                     self.materialized_join(tx, eliminate_indices, delta_rule, stores)

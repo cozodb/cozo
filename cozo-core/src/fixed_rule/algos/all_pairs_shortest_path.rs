@@ -39,7 +39,7 @@ impl FixedRule for BetweennessCentrality {
         let undirected = payload.bool_option("undirected", Some(false))?;
 
         let (graph, indices, _inv_indices) =
-            edges.to_directed_weighted_graph(undirected, false)?;
+            edges.as_directed_weighted_graph(undirected, false)?;
 
         let n = graph.node_count();
         if n == 0 {
@@ -108,7 +108,7 @@ impl FixedRule for ClosenessCentrality {
         let undirected = payload.bool_option("undirected", Some(false))?;
 
         let (graph, indices, _inv_indices) =
-            edges.to_directed_weighted_graph(undirected, false)?;
+            edges.as_directed_weighted_graph(undirected, false)?;
 
         let n = graph.node_count();
         if n == 0 {

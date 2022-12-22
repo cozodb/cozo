@@ -10,19 +10,21 @@ use std::collections::BTreeSet;
 use std::mem;
 
 use itertools::Itertools;
-use miette::{ensure, Result};
+use miette::{bail, ensure, Result};
 use smallvec::SmallVec;
 use smartstring::SmartString;
 
 use crate::data::program::{
-    FixedRuleArg, MagicFixedRuleApply, MagicFixedRuleRuleArg, MagicAtom, MagicInlineRule, MagicProgram,
-    MagicRelationApplyAtom, MagicRuleApplyAtom, MagicRulesOrFixed, MagicSymbol,
-    NormalFormRulesOrFixed, NormalFormAtom, NormalFormInlineRule, NormalFormProgram,
+    FixedRuleArg, MagicAtom, MagicFixedRuleApply, MagicFixedRuleRuleArg, MagicInlineRule,
+    MagicProgram, MagicRelationApplyAtom, MagicRuleApplyAtom, MagicRulesOrFixed, MagicSymbol,
+    NormalFormAtom, NormalFormInlineRule, NormalFormProgram, NormalFormRulesOrFixed,
     StratifiedMagicProgram, StratifiedNormalFormProgram,
 };
+use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::parse::SourceSpan;
 use crate::query::logical::NamedFieldNotFound;
+use crate::query::ra::InvalidTimeTravelScanning;
 use crate::runtime::transact::SessionTx;
 
 impl NormalFormProgram {
@@ -332,13 +334,36 @@ impl NormalFormProgram {
                                                 name,
                                                 bindings,
                                                 span,
-                                                valid_at
-                                            } => MagicFixedRuleRuleArg::Stored {
-                                                name: name.clone(),
-                                                bindings: bindings.clone(),
-                                                valid_at: *valid_at,
-                                                span: *span,
-                                            },
+                                                valid_at,
+                                            } => {
+                                                if valid_at.is_some() {
+                                                    let relation = tx.get_relation(name, false)?;
+                                                    let last_col_type = &relation
+                                                        .metadata
+                                                        .keys
+                                                        .last()
+                                                        .unwrap()
+                                                        .typing;
+                                                    if *last_col_type
+                                                        != (NullableColType {
+                                                            coltype: ColType::Validity,
+                                                            nullable: false,
+                                                        })
+                                                    {
+                                                        bail!(InvalidTimeTravelScanning(
+                                                            name.to_string(),
+                                                            *span
+                                                        ));
+                                                    }
+                                                }
+
+                                                MagicFixedRuleRuleArg::Stored {
+                                                    name: name.clone(),
+                                                    bindings: bindings.clone(),
+                                                    valid_at: *valid_at,
+                                                    span: *span,
+                                                }
+                                            }
                                             FixedRuleArg::NamedStored {
                                                 name,
                                                 bindings,
@@ -346,6 +371,25 @@ impl NormalFormProgram {
                                                 span,
                                             } => {
                                                 let relation = tx.get_relation(name, false)?;
+                                                if valid_at.is_some() {
+                                                    let last_col_type = &relation
+                                                        .metadata
+                                                        .keys
+                                                        .last()
+                                                        .unwrap()
+                                                        .typing;
+                                                    if *last_col_type
+                                                        != (NullableColType {
+                                                            coltype: ColType::Validity,
+                                                            nullable: false,
+                                                        })
+                                                    {
+                                                        bail!(InvalidTimeTravelScanning(
+                                                            name.to_string(),
+                                                            *span
+                                                        ));
+                                                    }
+                                                }
                                                 let fields: BTreeSet<_> = relation
                                                     .metadata
                                                     .keys

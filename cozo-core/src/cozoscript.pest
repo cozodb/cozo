@@ -186,7 +186,7 @@ literal = _{ null | boolean | number | string}
 table_schema = {"{" ~ table_cols ~ ("=>" ~ table_cols)? ~ "}"}
 table_cols = {(table_col ~ ",")* ~ table_col?}
 table_col = {ident ~ (":" ~ col_type)? ~ (("default" ~ expr) | ("=" ~ out_arg))?}
-col_type = {(any_type | bool_type | int_type | float_type | string_type | bytes_type | uuid_type | list_type | tuple_type) ~ "?"?}
+col_type = {(any_type | bool_type | int_type | float_type | string_type | bytes_type | uuid_type | validity_type | list_type | tuple_type) ~ "?"?}
 col_type_with_term = {SOI ~ col_type ~ EOI}
 any_type = {"Any"}
 int_type = {"Int"}
@@ -195,5 +195,6 @@ string_type = {"String"}
 bytes_type = {"Bytes"}
 uuid_type = {"Uuid"}
 bool_type = {"Bool"}
+validity_type = {"Validity"}
 list_type = {"[" ~ col_type ~ (";" ~ expr)? ~ "]"}
 tuple_type = {"(" ~ (col_type ~ ",")* ~ col_type? ~ ")"}

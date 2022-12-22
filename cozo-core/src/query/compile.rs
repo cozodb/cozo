@@ -15,7 +15,7 @@ use thiserror::Error;
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::program::{
-    MagicFixedRuleApply, MagicAtom, MagicInlineRule, MagicRulesOrFixed, MagicSymbol,
+    MagicAtom, MagicFixedRuleApply, MagicInlineRule, MagicRulesOrFixed, MagicSymbol,
     StratifiedMagicProgram,
 };
 use crate::data::symb::Symbol;
@@ -238,7 +238,8 @@ impl<'a> SessionTx<'a> {
                         }
                     }
 
-                    let right = RelAlgebra::relation(right_vars, store, rel_app.span, rel_app.valid_at);
+                    let right =
+                        RelAlgebra::relation(right_vars, store, rel_app.span, rel_app.valid_at)?;
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rel_app.span);
                 }
@@ -306,7 +307,12 @@ impl<'a> SessionTx<'a> {
                         }
                     }
 
-                    let right = RelAlgebra::relation(right_vars, store, relation_app.span, relation_app.valid_at);
+                    let right = RelAlgebra::relation(
+                        right_vars,
+                        store,
+                        relation_app.span,
+                        relation_app.valid_at,
+                    )?;
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.neg_join(
                         right,
@@ -366,7 +372,7 @@ impl<'a> SessionTx<'a> {
         #[error("Symbol '{0}' in rule head is unbound")]
         #[diagnostic(code(eval::unbound_symb_in_head))]
         #[diagnostic(help(
-        "Note that symbols occurring only in negated positions are not considered bound"
+            "Note that symbols occurring only in negated positions are not considered bound"
         ))]
         struct UnboundSymbolInRuleHead(String, #[label] SourceSpan);
 

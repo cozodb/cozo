@@ -10,6 +10,7 @@ use itertools::Itertools;
 use miette::Result;
 
 use crate::data::tuple::Tuple;
+use crate::data::value::ValidityTs;
 use crate::decode_tuple_from_kv;
 
 pub(crate) mod mem;
@@ -92,6 +93,29 @@ pub trait StoreTx<'s> {
         let it = self.range_scan(lower, upper);
         Box::new(it.map_ok(|(k, v)| decode_tuple_from_kv(&k, &v)))
     }
+
+    /// Scan on a range with a certain validity.
+    ///
+    /// `lower` is inclusive whereas `upper` is exclusive.
+    /// For tuples that differ only with respect to their validity, which must be at
+    /// the last slot of the key,
+    /// only the tuple that has validity equal to or earlier than (i.e. greater by the comparator)
+    /// `valid_at` should be considered for returning, and only those with an assertive validity
+    /// should be returned. Every other tuple should be skipped.
+    ///
+    /// Ideally, implementations should take advantage of seeking capabilities of the
+    /// underlying storage so that not every tuple within the `lower` and `upper` range
+    /// need to be looked at.
+    ///
+    /// For custom implementations, it is OK to return an iterator that always error out,
+    /// in which case the database with the engine does not support time travelling.
+    /// You should indicate this clearly in your error message.
+    fn range_skip_scan_tuple<'a>(
+        &'a self,
+        lower: &[u8],
+        upper: &[u8],
+        valid_at: ValidityTs,
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a>;
 
     /// Scan on a range and return the raw results.
     /// `lower` is inclusive whereas `upper` is exclusive.

@@ -94,9 +94,23 @@ impl PartialOrd for RegexWrapper {
     serde_derive::Deserialize,
     serde_derive::Serialize,
     Hash,
+    Debug,
+)]
+pub struct ValidityTs(pub Reverse<i64>);
+
+#[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    serde_derive::Deserialize,
+    serde_derive::Serialize,
+    Hash,
 )]
 pub struct Validity {
-    pub(crate) timestamp: Reverse<i64>,
+    pub(crate) timestamp: ValidityTs,
     pub(crate) is_assert: bool,
 }
 
@@ -372,7 +386,7 @@ mod tests {
             DataValue::List(vec![
                 DataValue::Bool(false),
                 DataValue::Str(SmartString::from(r###"abc"你"好'啊👌"###)),
-                DataValue::from(f64::NEG_INFINITY)
+                DataValue::from(f64::NEG_INFINITY),
             ])
         );
     }
