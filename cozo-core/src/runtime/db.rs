@@ -25,16 +25,20 @@ use serde_json::json;
 use smartstring::SmartString;
 use thiserror::Error;
 
+use crate::data::functions::current_validity;
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::relation::ColumnDef;
 use crate::data::tuple::{Tuple, TupleT};
-use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::data::value::{DataValue, ValidityTs, LARGEST_UTF_CHAR};
 use crate::fixed_rule::DEFAULT_FIXED_RULES;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
-use crate::query::ra::{FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA, TempStoreRA, UnificationRA};
+use crate::query::ra::{
+    FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA,
+    TempStoreRA, UnificationRA,
+};
 use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
 use crate::storage::{Storage, StoreTx};
@@ -147,11 +151,12 @@ impl<'s, S: Storage<'s>> Db<S> {
         payload: &str,
         params: BTreeMap<String, JsonValue>,
     ) -> Result<NamedRows> {
+        let cur_vld = current_validity();
         let params = params
             .into_iter()
             .map(|(k, v)| (k, DataValue::from(v)))
             .collect();
-        self.do_run_script(payload, &params)
+        self.do_run_script(payload, &params, cur_vld)
     }
     /// Export relations to JSON data.
     ///
@@ -217,6 +222,8 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[error("cannot import data for relation '{0}': {1}")]
         #[diagnostic(code(import::bad_data))]
         struct BadDataForRelation(String, JsonValue);
+
+        let cur_vld = current_validity();
 
         let mut tx = self.transact_write()?;
 
@@ -292,7 +299,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         let v = row
                             .get(*i)
                             .ok_or_else(|| miette!("row too short: {:?}", row))?;
-                        col.typing.coerce(DataValue::from(v))
+                        col.typing.coerce(DataValue::from(v), cur_vld)
                     })
                     .try_collect()?;
                 let k_store = handle.encode_key_for_store(&keys, Default::default())?;
@@ -305,7 +312,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                             let v = row
                                 .get(*i)
                                 .ok_or_else(|| miette!("row too short: {:?}", row))?;
-                            col.typing.coerce(DataValue::from(v))
+                            col.typing.coerce(DataValue::from(v), cur_vld)
                         })
                         .try_collect()?;
                     let v_store = handle.encode_val_only_for_store(&vals, Default::default())?;
@@ -486,8 +493,9 @@ impl<'s, S: Storage<'s>> Db<S> {
         &'s self,
         payload: &str,
         param_pool: &BTreeMap<String, DataValue>,
+        cur_vld: ValidityTs,
     ) -> Result<NamedRows> {
-        match parse_script(payload, param_pool, &self.algorithms)? {
+        match parse_script(payload, param_pool, &self.algorithms, cur_vld)? {
             CozoScript::Multi(ps) => {
                 let is_write = ps.iter().any(|p| p.out_opts.store_relation.is_some());
                 let mut cleanups = vec![];
@@ -505,7 +513,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     for p in ps {
                         #[allow(unused_variables)]
                         let sleep_opt = p.out_opts.sleep;
-                        let (q_res, q_cleanups) = self.run_query(&mut tx, p)?;
+                        let (q_res, q_cleanups) = self.run_query(&mut tx, p, cur_vld)?;
                         res = q_res;
                         cleanups.extend(q_cleanups);
                         #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
@@ -611,8 +619,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         json!(filters.iter().map(|f| f.to_string()).collect_vec()),
                                     ),
                                     RelAlgebra::StoredWithValidity(StoredWithValidityRA {
-                                                           storage, filters, ..
-                                                       }) => (
+                                        storage,
+                                        filters,
+                                        ..
+                                    }) => (
                                         "load_stored_with_validity",
                                         json!(format!(":{}", storage.name)),
                                         json!(null),
@@ -827,6 +837,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         &self,
         tx: &mut SessionTx<'_>,
         input_program: InputProgram,
+        cur_vld: ValidityTs,
     ) -> Result<(NamedRows, Vec<(Vec<u8>, Vec<u8>)>)> {
         // cleanups contain stored relations that should be deleted at the end of query
         let mut clean_ups = vec![];
@@ -968,6 +979,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         *relation_op,
                         meta,
                         &entry_head_or_default,
+                        cur_vld,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
@@ -1017,7 +1029,14 @@ impl<'s, S: Storage<'s>> Db<S> {
 
             if let Some((meta, relation_op)) = &out_opts.store_relation {
                 let to_clear = tx
-                    .execute_relation(self, scan, *relation_op, meta, &entry_head_or_default)
+                    .execute_relation(
+                        self,
+                        scan,
+                        *relation_op,
+                        meta,
+                        &entry_head_or_default,
+                        cur_vld,
+                    )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
                 Ok((

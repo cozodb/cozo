@@ -1479,14 +1479,14 @@ pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
 
 pub(crate) fn current_validity() -> ValidityTs {
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-    let ts_millis = {
+    let ts_micros = {
         let now = SystemTime::now();
-        (now.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1000.) as i64
+        now.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64
     };
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    let ts_millis = { Date::now() as i64 };
+    let ts_micros = { Date::now() * 1000 as i64 };
 
-    ValidityTs(Reverse(ts_millis))
+    ValidityTs(Reverse(ts_micros))
 }
 
 pub(crate) const MAX_VALIDITY_TS: ValidityTs = ValidityTs(Reverse(i64::MAX));
@@ -1497,20 +1497,19 @@ pub(crate) const TERMINAL_VALIDITY: Validity = Validity {
 
 define_op!(OP_FORMAT_TIMESTAMP, 1, true);
 pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    let dt = Utc
-        .timestamp_millis_opt(Date::now() as i64)
-        .latest()
-        .ok_or_else(|| miette!("bad time input"))?;
-    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     let dt = {
-        let f = args[0]
-            .get_float()
-            .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
-        let millis = (f * 1000.) as i64;
+        let millis = match &args[0] {
+            DataValue::Validity(vld) => vld.timestamp.0 .0 / 1000,
+            v => {
+                let f = v
+                    .get_float()
+                    .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
+                (f * 1000.) as i64
+            }
+        };
         Utc.timestamp_millis_opt(millis)
             .latest()
-            .ok_or_else(|| miette!("bad time: {}", f))?
+            .ok_or_else(|| miette!("bad time: {}", &args[0]))?
     };
     match args.get(1) {
         Some(tz_v) => {
@@ -1545,7 +1544,7 @@ pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
 pub(crate) fn str2vld(s: &str) -> Result<ValidityTs> {
     let dt = DateTime::parse_from_rfc3339(s).map_err(|_| miette!("bad datetime: {}", s))?;
     let st: SystemTime = dt.into();
-    let microseconds = st.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1_000_000.;
+    let microseconds = st.duration_since(UNIX_EPOCH).unwrap().as_micros();
     Ok(ValidityTs(Reverse(microseconds as i64)))
 }
 
