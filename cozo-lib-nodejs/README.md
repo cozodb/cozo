@@ -123,7 +123,7 @@ cargo build --release -p cozo-node -F compact -F storage-rocksdb
 
 and then find the dynamic library (names can vary a lot, the file extension is `.so` on Linux, `.dylib` on Mac,
 and `.dll` on Windows) under the `../target/` folder (you may need to search for it).
-Copy it to the file `native/6/index.node` under this directory (create intermediate directories if they don't exist).
+Copy it to the file `native/6/cozo_node_prebuilt.node` under this directory (create intermediate directories if they don't exist).
 
 If you did everything correctly, you should get the hello world message printed out when you run
 
