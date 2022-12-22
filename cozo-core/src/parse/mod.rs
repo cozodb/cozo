@@ -14,11 +14,10 @@ use miette::{bail, ensure, Diagnostic, IntoDiagnostic, Result};
 use pest::error::InputLocation;
 use pest::Parser;
 use thiserror::Error;
-use crate::data::functions::current_validity;
 
 use crate::data::program::InputProgram;
 use crate::data::relation::NullableColType;
-use crate::data::value::{DataValue};
+use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::query::parse_query;
 use crate::parse::schema::parse_nullable_type;
 use crate::parse::sys::{parse_sys, SysOp};
@@ -108,6 +107,7 @@ pub(crate) fn parse_script(
     src: &str,
     param_pool: &BTreeMap<String, DataValue>,
     algorithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
+    cur_vld: ValidityTs
 ) -> Result<CozoScript> {
     let parsed = CozoScriptParser::parse(Rule::script, src)
         .map_err(|err| {
@@ -119,7 +119,6 @@ pub(crate) fn parse_script(
         })?
         .next()
         .unwrap();
-    let cur_vld = current_validity();
     Ok(match parsed.as_rule() {
         Rule::query_script => {
             let q = parse_query(parsed.into_inner(), param_pool, algorithms, cur_vld)?;
@@ -135,7 +134,7 @@ pub(crate) fn parse_script(
             CozoScript::Multi(qs)
         }
         Rule::sys_script => {
-            CozoScript::Sys(parse_sys(parsed.into_inner(), param_pool, algorithms)?)
+            CozoScript::Sys(parse_sys(parsed.into_inner(), param_pool, algorithms, cur_vld)?)
         }
         _ => unreachable!(),
     })

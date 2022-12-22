@@ -16,7 +16,7 @@ use smartstring::{LazyCompact, SmartString};
 use crate::fixed_rule::utilities::jlines::get_file_content_from_url;
 use crate::fixed_rule::{FixedRule, FixedRulePayload, CannotDetermineArity};
 use crate::data::expr::Expr;
-use crate::data::functions::{op_to_float, op_to_uuid};
+use crate::data::functions::{op_to_float, op_to_uuid, TERMINAL_VALIDITY};
 use crate::data::program::{FixedRuleOptionNotFoundError, WrongFixedRuleOptionError};
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
@@ -59,7 +59,7 @@ impl FixedRule for CsvReader {
             },
             nullable: false,
         };
-        let types_opts = typing.coerce(types_opts)?;
+        let types_opts = typing.coerce(types_opts, TERMINAL_VALIDITY.timestamp)?;
         let mut types = vec![];
         for type_str in types_opts.get_list().unwrap() {
             let type_str = type_str.get_string().unwrap();

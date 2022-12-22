@@ -22,7 +22,7 @@ use thiserror::Error;
 
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
-use crate::data::functions::{MAX_VALIDITY_TS, str2vld};
+use crate::data::functions::{str2vld, MAX_VALIDITY_TS};
 use crate::data::program::{
     FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
     InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
@@ -78,7 +78,7 @@ impl Diagnostic for MultipleRuleDefinitionError {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         Some(Box::new("parser::mult_rule_def"))
     }
-    fn labels(&self) -> Option<Box<dyn Iterator<Item=LabeledSpan> + '_>> {
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         Some(Box::new(
             self.1.iter().map(|s| LabeledSpan::new_with_span(None, s)),
         ))
@@ -354,13 +354,13 @@ pub(crate) fn parse_query(
 
     if prog.prog.is_empty() {
         if let Some((
-                        InputRelationHandle {
-                            key_bindings,
-                            dep_bindings,
-                            ..
-                        },
-                        RelationOp::Create,
-                    )) = &prog.out_opts.store_relation
+            InputRelationHandle {
+                key_bindings,
+                dep_bindings,
+                ..
+            },
+            RelationOp::Create,
+        )) = &prog.out_opts.store_relation
         {
             let mut bindings = key_bindings.clone();
             bindings.extend_from_slice(dep_bindings);
@@ -483,7 +483,11 @@ fn parse_disjunction(
     })
 }
 
-fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>, cur_vld: ValidityTs) -> Result<InputAtom> {
+fn parse_atom(
+    src: Pair<'_>,
+    param_pool: &BTreeMap<String, DataValue>,
+    cur_vld: ValidityTs,
+) -> Result<InputAtom> {
     Ok(match src.as_rule() {
         Rule::rule_body => {
             let span = src.extract_span();
@@ -612,7 +616,12 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>, cur_vld: 
                 }
             };
             InputAtom::NamedFieldRelation {
-                inner: InputNamedFieldRelationApplyAtom { name, args, span, valid_at },
+                inner: InputNamedFieldRelationApplyAtom {
+                    name,
+                    args,
+                    span,
+                    valid_at,
+                },
             }
         }
         rule => unreachable!("{:?}", rule),
@@ -872,17 +881,11 @@ fn expr2vld_spec(expr: Expr, cur_vld: ValidityTs) -> Result<ValidityTs> {
             let microseconds = n.get_int().ok_or(BadValiditySpecification(vld_span))?;
             Ok(ValidityTs(Reverse(microseconds)))
         }
-        DataValue::Str(s) => {
-            match &s as &str {
-                "now" => {
-                    Ok(cur_vld)
-                }
-                "max" => { Ok(MAX_VALIDITY_TS) }
-                s => {
-                    Ok(str2vld(s).map_err(|_| BadValiditySpecification(vld_span))?)
-                }
-            }
-        }
+        DataValue::Str(s) => match &s as &str {
+            "NOW" => Ok(cur_vld),
+            "END" => Ok(MAX_VALIDITY_TS),
+            s => Ok(str2vld(s).map_err(|_| BadValiditySpecification(vld_span))?),
+        },
         _ => {
             bail!(BadValiditySpecification(vld_span))
         }

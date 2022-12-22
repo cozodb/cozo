@@ -48,11 +48,13 @@ wasm = ["uuid/js", "dep:js-sys"]
 ## Enables the [Sled](https://github.com/spacejam/sled) backend.
 ## Sled is slower than Sqlite for the usual workload of Cozo, can use quite a lot of disk space,
 ## and may not be stable enough. In general you should use RocksDB instead.
+## The Sled engine does not support time travel.
 storage-sled = ["dep:sled"]
 ## Enables the [TiKV](https://tikv.org/) client backend.
 ## The only reason that you may want to use this is that your data does not fit in a single machine.
 ## This engine is orders of magnitude slower than every other engine for graph traversals, due to the
 ## significant network overhead. Simple point-lookup queries are fine, though.
+## The TiKV engine does not support time travel.
 storage-tikv = ["dep:tikv-client", "dep:tokio"]
 
 #! # Recommendation for features to enable

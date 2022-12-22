@@ -12,11 +12,10 @@ use std::sync::Arc;
 use itertools::Itertools;
 use miette::{Diagnostic, Result};
 use thiserror::Error;
-use crate::data::functions::{current_validity};
 
 use crate::data::program::InputProgram;
 use crate::data::symb::Symbol;
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::AccessLevel;
@@ -45,8 +44,8 @@ pub(crate) fn parse_sys(
     mut src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
     algorithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
+    cur_vld: ValidityTs
 ) -> Result<SysOp> {
-    let cur_vld = current_validity();
     let inner = src.next().unwrap();
     Ok(match inner.as_rule() {
         Rule::compact_op => SysOp::Compact,
