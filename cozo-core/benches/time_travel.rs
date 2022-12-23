@@ -10,6 +10,7 @@
 
 extern crate test;
 
+use std::cmp::max;
 use cozo::{DbInstance, NamedRows};
 use itertools::Itertools;
 use lazy_static::{initialize, lazy_static};
@@ -235,9 +236,10 @@ fn time_travel_init(_: &mut Bencher) {
     (0..count).for_each(|_| {
         plain_aggr();
     });
-    dbg!(plain_aggr_time.elapsed().as_secs_f64() / (count as f64));
+    dbg!(plain_aggr_time.elapsed().as_secs_f64() * 1000. / (count as f64));
 
     for k in [1, 10, 100, 1000] {
+        let count = max(1000 / k, 5);
         let tt_stupid_aggr_time = Instant::now();
         (0..count).for_each(|_| {
             tt_stupid_aggr(k);
@@ -245,6 +247,7 @@ fn time_travel_init(_: &mut Bencher) {
         dbg!(k);
         dbg!(tt_stupid_aggr_time.elapsed().as_secs_f64() * 1000. / (count as f64));
 
+        let count = 20;
         let tt_travel_aggr_time = Instant::now();
         (0..count).for_each(|_| {
             tt_travel_aggr(k);
