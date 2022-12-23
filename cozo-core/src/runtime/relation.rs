@@ -163,7 +163,7 @@ impl RelationHandle {
         tuple.serialize(&mut Serializer::new(&mut ret)).unwrap();
         Ok(ret)
     }
-    pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle) -> Result<()> {
+    pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle, is_remove: bool) -> Result<()> {
         let InputRelationHandle { metadata, .. } = inp;
         // check that every given key is found and compatible
         for col in &metadata.keys {
@@ -176,8 +176,10 @@ impl RelationHandle {
         for col in &self.metadata.keys {
             metadata.satisfied_by_required_col(col, true)?;
         }
-        for col in &self.metadata.non_keys {
-            metadata.satisfied_by_required_col(col, false)?;
+        if !is_remove {
+            for col in &self.metadata.non_keys {
+                metadata.satisfied_by_required_col(col, false)?;
+            }
         }
         Ok(())
     }
