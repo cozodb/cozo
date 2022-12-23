@@ -15,9 +15,11 @@ use itertools::Itertools;
 use lazy_static::{initialize, lazy_static};
 use serde_json::json;
 use std::collections::BTreeMap;
+use std::time::Instant;
 use test::Bencher;
 
 fn insert_data(db: &DbInstance) {
+    let insert_plain_time = Instant::now();
     let mut to_import = BTreeMap::new();
     to_import.insert(
         "plain".to_string(),
@@ -26,7 +28,11 @@ fn insert_data(db: &DbInstance) {
             rows: (0..10000).map(|i| vec![json!(i), json!(i)]).collect_vec(),
         },
     );
+    db.import_relations(to_import).unwrap();
+    dbg!(insert_plain_time.elapsed());
 
+    let insert_tt1_time = Instant::now();
+    let mut to_import = BTreeMap::new();
     to_import.insert(
         "tt1".to_string(),
         NamedRows {
@@ -36,6 +42,11 @@ fn insert_data(db: &DbInstance) {
                 .collect_vec(),
         },
     );
+    db.import_relations(to_import).unwrap();
+    dbg!(insert_tt1_time.elapsed());
+
+    let insert_tt10_time = Instant::now();
+    let mut to_import = BTreeMap::new();
     to_import.insert(
         "tt10".to_string(),
         NamedRows {
@@ -45,7 +56,11 @@ fn insert_data(db: &DbInstance) {
                 .collect_vec(),
         },
     );
+    db.import_relations(to_import).unwrap();
+    dbg!(insert_tt10_time.elapsed());
 
+    let insert_tt100_time = Instant::now();
+    let mut to_import = BTreeMap::new();
     to_import.insert(
         "tt100".to_string(),
         NamedRows {
@@ -55,20 +70,24 @@ fn insert_data(db: &DbInstance) {
                 .collect_vec(),
         },
     );
+    db.import_relations(to_import).unwrap();
+    dbg!(insert_tt100_time.elapsed());
 
+    let insert_tt1000_time = Instant::now();
+    let mut to_import = BTreeMap::new();
     to_import.insert(
         "tt1000".to_string(),
         NamedRows {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
                 .flat_map(|i| {
-                    (0..10000).map(move |vld| vec![json!(i), json!([vld, true]), json!(i)])
+                    (0..1000).map(move |vld| vec![json!(i), json!([vld, true]), json!(i)])
                 })
                 .collect_vec(),
         },
     );
-
     db.import_relations(to_import).unwrap();
+    dbg!(insert_tt1000_time.elapsed());
 }
 
 lazy_static! {
