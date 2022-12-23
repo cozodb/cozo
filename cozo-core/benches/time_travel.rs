@@ -229,13 +229,13 @@ fn time_travel_init(_: &mut Bencher) {
         dbg!((count as f64) / qps_single_tt_travel_time.elapsed().as_secs_f64());
     }
 
-    let count = 1000;
+    let count = 100;
 
     let plain_aggr_time = Instant::now();
     (0..count).for_each(|_| {
         plain_aggr();
     });
-    dbg!(plain_aggr_time.elapsed().as_secs_f64());
+    dbg!(plain_aggr_time.elapsed().as_secs_f64() / (count as f64));
 
     for k in [1, 10, 100, 1000] {
         let tt_stupid_aggr_time = Instant::now();
@@ -243,15 +243,13 @@ fn time_travel_init(_: &mut Bencher) {
             tt_stupid_aggr(k);
         });
         dbg!(k);
-        dbg!(tt_stupid_aggr_time.elapsed().as_secs_f64());
-    }
+        dbg!(tt_stupid_aggr_time.elapsed().as_secs_f64() * 1000. / (count as f64));
 
-    for k in [1, 10, 100, 1000] {
         let tt_travel_aggr_time = Instant::now();
         (0..count).for_each(|_| {
             tt_travel_aggr(k);
         });
         dbg!(k);
-        dbg!(tt_travel_aggr_time.elapsed().as_secs_f64());
+        dbg!(tt_travel_aggr_time.elapsed().as_secs_f64() * 1000 / (count as f64));
     }
 }
