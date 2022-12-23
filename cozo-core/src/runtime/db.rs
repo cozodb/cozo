@@ -1343,6 +1343,28 @@ grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
     }
 
     #[test]
+    fn default_columns() {
+        let db = new_cozo_mem().unwrap();
+
+        db.run_script(
+            r#"
+            :create status {uid: String, ts default now() => quitted: Bool, mood: String}
+            "#,
+            Default::default(),
+        )
+        .unwrap();
+
+        db.run_script(
+            r#"
+        ?[uid, quitted, mood] <- [['z', true, 'x']]
+            :put status {uid => quitted, mood}
+        "#,
+            Default::default(),
+        )
+        .unwrap();
+    }
+
+    #[test]
     fn rm_does_not_need_all_keys() {
         let db = new_cozo_mem().unwrap();
         db.run_script(":create status {uid => mood}", Default::default())
