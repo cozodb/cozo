@@ -235,14 +235,15 @@ fn time_travel_init(_: &mut Bencher) {
     (0..count).for_each(|_| {
         plain_aggr();
     });
-    dbg!(plain_aggr_time.elapsed().as_secs_f64() / (count as f64));
+    dbg!(plain_aggr_time.elapsed().as_secs_f64());
 
     for k in [1, 10, 100, 1000] {
         let tt_stupid_aggr_time = Instant::now();
         (0..count).for_each(|_| {
             tt_stupid_aggr(k);
         });
-        dbg!(tt_stupid_aggr_time.elapsed().as_secs_f64() / (count as f64));
+        dbg!(k);
+        dbg!(tt_stupid_aggr_time.elapsed().as_secs_f64());
     }
 
     for k in [1, 10, 100, 1000] {
@@ -250,6 +251,7 @@ fn time_travel_init(_: &mut Bencher) {
         (0..count).for_each(|_| {
             tt_travel_aggr(k);
         });
-        dbg!(tt_travel_aggr_time.elapsed().as_secs_f64() / (count as f64));
+        dbg!(k);
+        dbg!(tt_travel_aggr_time.elapsed().as_secs_f64());
     }
 }

@@ -201,7 +201,8 @@ impl Debug for RelationHandle {
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("Cannot deserialize relation")]
 #[diagnostic(code(deser::relation))]
-#[diagnostic(help("This could indicate a bug. Consider file a bug report."))]
+#[diagnostic(help("This could indicate a bug, or you are using an incompatible DB version. \
+Consider file a bug report."))]
 pub(crate) struct RelationDeserError;
 
 impl RelationHandle {
