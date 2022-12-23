@@ -13,6 +13,8 @@ extern crate test;
 use cozo::{DbInstance, NamedRows};
 use itertools::Itertools;
 use lazy_static::{initialize, lazy_static};
+use rand::Rng;
+use rayon::prelude::*;
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::time::Instant;
@@ -116,7 +118,44 @@ lazy_static! {
     };
 }
 
+fn single_plain_read() {
+    let i = rand::thread_rng().gen_range(0..10000);
+    TEST_DB
+        .run_script(
+            "?[k, v] := *plain{k: $id, v}",
+            BTreeMap::from([("id".to_string(), json!(i))]),
+        )
+        .unwrap();
+}
+
+fn single_tt_read(k: usize) {
+    let i = rand::thread_rng().gen_range(0..10000);
+    TEST_DB
+        .run_script(
+            &format!(r#"?[k, vld, v] := *tt{}{{k: $id, vld, v}}"#, k),
+            BTreeMap::from([("id".to_string(), json!(i))]),
+        )
+        .unwrap();
+}
+
 #[bench]
 fn time_travel_init(_: &mut Bencher) {
     initialize(&TEST_DB);
+
+    let count = 1_000_000;
+    let qps_single_plain_time = Instant::now();
+    (0..count).into_par_iter().for_each(|_| {
+        single_plain_read();
+    });
+    dbg!((count as f64) / qps_single_plain_time.elapsed().as_secs_f64());
+
+    for k in [1, 10, 100, 1000] {
+        let count = 1_000_000;
+        let qps_single_tt_time = Instant::now();
+        (0..count).into_par_iter().for_each(|_| {
+            single_tt_read(k);
+        });
+        dbg!(k);
+        dbg!((count as f64) / qps_single_tt_time.elapsed().as_secs_f64());
+    }
 }
