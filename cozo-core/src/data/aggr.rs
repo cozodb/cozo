@@ -781,7 +781,7 @@ impl NormalAggrObj for AggrSmallestBy {
                     "'smallest_by' requires a list of exactly two items as argument"
                 );
                 let c = &l[1];
-                if *c < self.cost {
+                if self.cost == DataValue::Null || *c < self.cost {
                     self.cost = c.clone();
                     self.found = l[0].clone();
                 }
