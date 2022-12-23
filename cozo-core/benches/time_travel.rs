@@ -145,7 +145,7 @@ fn single_tt_travel_read(k: usize) {
     TEST_DB
         .run_script(
             &format!(r#"
-            ?[v] := *tt{}{{k: $id v @ "NOW"}}
+            ?[v] := *tt{}{{k: $id, v @ "NOW"}}
             "#, k),
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
