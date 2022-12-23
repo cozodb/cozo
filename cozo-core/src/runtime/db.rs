@@ -1341,4 +1341,32 @@ grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
         println!("{:?}", res);
         assert_eq!(res[0][0], json!("jakob"))
     }
+
+    #[test]
+    fn rm_does_not_need_all_keys() {
+        let db = new_cozo_mem().unwrap();
+        db.run_script(":create status {uid => mood}", Default::default())
+            .unwrap();
+        assert!(db
+            .run_script(
+                "?[uid, mood] <- [[1, 2]] :put status {uid => mood}",
+                Default::default()
+            )
+            .is_ok());
+        assert!(db
+            .run_script(
+                "?[uid, mood] <- [[2]] :put status {uid}",
+                Default::default()
+            )
+            .is_err());
+        assert!(db
+            .run_script(
+                "?[uid, mood] <- [[3, 2]] :rm status {uid => mood}",
+                Default::default()
+            )
+            .is_ok());
+        assert!(db
+            .run_script("?[uid] <- [[1]] :rm status {uid}", Default::default())
+            .is_ok());
+    }
 }
