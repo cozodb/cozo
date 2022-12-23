@@ -122,7 +122,7 @@ fn single_plain_read() {
     let i = rand::thread_rng().gen_range(0..10000);
     TEST_DB
         .run_script(
-            "?[k, v] := *plain{k: $id, v}",
+            "?[v] := *plain{k: $id, v}",
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
         .unwrap();
@@ -132,7 +132,7 @@ fn single_tt_read(k: usize) {
     let i = rand::thread_rng().gen_range(0..10000);
     TEST_DB
         .run_script(
-            &format!(r#"?[k, vld, v] := *tt{}{{k: $id, vld, v}}"#, k),
+            &format!(r#"?[vld, v] := *tt{}{{k: $id, vld, v}}"#, k),
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
         .unwrap();
