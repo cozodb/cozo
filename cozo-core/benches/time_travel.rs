@@ -128,13 +128,56 @@ fn single_plain_read() {
         .unwrap();
 }
 
+fn plain_aggr() {
+    TEST_DB
+        .run_script(
+            r#"
+    ?[sum(v)] := *plain{v}
+    "#,
+            BTreeMap::default(),
+        )
+        .unwrap();
+}
+
+fn tt_stupid_aggr(k: usize) {
+    TEST_DB
+        .run_script(
+            &format!(
+                r#"
+    r[k, smallest_by(pack)] := *tt{}{{k, vld, v}}, pack = [v, vld]
+    ?[sum(v)] := r[k, v]
+    "#,
+                k
+            ),
+            BTreeMap::default(),
+        )
+        .unwrap();
+}
+
+fn tt_travel_aggr(k: usize) {
+    TEST_DB
+        .run_script(
+            &format!(
+                r#"
+    ?[sum(v)] := *tt{}{{v @ "NOW"}}
+    "#,
+                k
+            ),
+            BTreeMap::default(),
+        )
+        .unwrap();
+}
+
 fn single_tt_read(k: usize) {
     let i = rand::thread_rng().gen_range(0..10000);
     TEST_DB
         .run_script(
-            &format!(r#"
+            &format!(
+                r#"
             ?[smallest_by(pack)] := *tt{}{{k: $id, vld, v}}, pack = [v, vld]
-            "#, k),
+            "#,
+                k
+            ),
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
         .unwrap();
@@ -144,9 +187,12 @@ fn single_tt_travel_read(k: usize) {
     let i = rand::thread_rng().gen_range(0..10000);
     TEST_DB
         .run_script(
-            &format!(r#"
+            &format!(
+                r#"
             ?[v] := *tt{}{{k: $id, v @ "NOW"}}
-            "#, k),
+            "#,
+                k
+            ),
             BTreeMap::from([("id".to_string(), json!(i))]),
         )
         .unwrap();
@@ -181,5 +227,29 @@ fn time_travel_init(_: &mut Bencher) {
         });
         dbg!(k);
         dbg!((count as f64) / qps_single_tt_travel_time.elapsed().as_secs_f64());
+    }
+
+    let count = 1000;
+
+    let plain_aggr_time = Instant::now();
+    (0..count).for_each(|_| {
+        plain_aggr();
+    });
+    dbg!(plain_aggr_time.elapsed().as_secs_f64() / (count as f64));
+
+    for k in [1, 10, 100, 1000] {
+        let tt_stupid_aggr_time = Instant::now();
+        (0..count).for_each(|_| {
+            tt_stupid_aggr(k);
+        });
+        dbg!(tt_stupid_aggr_time.elapsed().as_secs_f64() / (count as f64));
+    }
+
+    for k in [1, 10, 100, 1000] {
+        let tt_travel_aggr_time = Instant::now();
+        (0..count).for_each(|_| {
+            tt_travel_aggr(k);
+        });
+        dbg!(tt_travel_aggr_time.elapsed().as_secs_f64() / (count as f64));
     }
 }
