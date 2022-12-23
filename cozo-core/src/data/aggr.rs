@@ -1181,6 +1181,7 @@ pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
         "bit_or" => &AGGR_BIT_OR,
         "bit_xor" => &AGGR_BIT_XOR,
         "latest_by" => &AGGR_LATEST_BY,
+        "smallest_by" => &AGGR_SMALLEST_BY,
         "choice_rand" => &AGGR_CHOICE_RAND,
         _ => return None,
     })
