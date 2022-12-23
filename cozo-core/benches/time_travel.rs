@@ -36,6 +36,15 @@ fn insert_data(db: &DbInstance) {
                 .collect_vec(),
         },
     );
+    to_import.insert(
+        "tt10".to_string(),
+        NamedRows {
+            headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
+            rows: (0..10000)
+                .flat_map(|i| (0..10).map(move |vld| vec![json!(i), json!([vld, true]), json!(i)]))
+                .collect_vec(),
+        },
+    );
 
     to_import.insert(
         "tt100".to_string(),
@@ -48,7 +57,7 @@ fn insert_data(db: &DbInstance) {
     );
 
     to_import.insert(
-        "tt10000".to_string(),
+        "tt1000".to_string(),
         NamedRows {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
@@ -71,8 +80,9 @@ lazy_static! {
             r#"
         {:create plain {k: Int => v}}
         {:create tt1 {k: Int, vld: Validity => v}}
+        {:create tt10 {k: Int, vld: Validity => v}}
         {:create tt100 {k: Int, vld: Validity => v}}
-        {:create tt10000 {k: Int, vld: Validity => v}}
+        {:create tt1000 {k: Int, vld: Validity => v}}
         "#,
             Default::default(),
         );
