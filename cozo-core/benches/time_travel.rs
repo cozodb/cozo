@@ -250,6 +250,6 @@ fn time_travel_init(_: &mut Bencher) {
             tt_travel_aggr(k);
         });
         dbg!(k);
-        dbg!(tt_travel_aggr_time.elapsed().as_secs_f64() * 1000 / (count as f64));
+        dbg!(tt_travel_aggr_time.elapsed().as_secs_f64() * 1000. / (count as f64));
     }
 }
