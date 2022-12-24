@@ -1391,4 +1391,75 @@ grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
             .run_script("?[uid] <- [[1]] :rm status {uid}", Default::default())
             .is_ok());
     }
+
+    #[test]
+    fn strict_checks_for_fixed_rules_args() {
+        let db = new_cozo_mem().unwrap();
+        let res = db.run_script(
+            r#"
+            r[] <- [[1, 2]]
+            ?[] <~ PageRank(r[_, _])
+        "#,
+            Default::default(),
+        );
+        assert!(res.is_ok());
+
+        let db = new_cozo_mem().unwrap();
+        let res = db.run_script(
+            r#"
+            r[] <- [[1, 2]]
+            ?[] <~ PageRank(r[a, b])
+        "#,
+            Default::default(),
+        );
+        assert!(res.is_ok());
+
+        let db = new_cozo_mem().unwrap();
+        let res = db.run_script(
+            r#"
+            r[] <- [[1, 2]]
+            ?[] <~ PageRank(r[a, a])
+        "#,
+            Default::default(),
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn do_not_unify_underscore() {
+        let db = new_cozo_mem().unwrap();
+        let res = db
+            .run_script(
+                r#"
+        r1[] <- [[1, 'a'], [2, 'b']]
+        r2[] <- [[2, 'B'], [3, 'C']]
+
+        ?[l1, l2] := r1[_ , l1], r2[_ , l2]
+        "#,
+                Default::default(),
+            )
+            .unwrap()
+            .rows;
+        assert_eq!(res.len(), 4);
+
+        let res = db.run_script(
+            r#"
+        ?[_] := _ = 1
+        "#,
+            Default::default(),
+        );
+        assert!(res.is_err());
+
+        let res = db
+            .run_script(
+                r#"
+        ?[x] := x = 1, _ = 1, _ = 2
+        "#,
+                Default::default(),
+            )
+            .unwrap()
+            .rows;
+
+        assert_eq!(res.len(), 1);
+    }
 }
