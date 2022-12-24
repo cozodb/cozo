@@ -1551,6 +1551,28 @@ grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
             .rows;
         assert_eq!(json!(res), json!([[1, 2, 3]]));
 
+        let res = db
+            .run_script(
+                r#"
+            {
+                ?[a] <- [[1]]
+                :yield first_yield
+            }
+            {
+                ?[a] := first_yield[b], a = b + 1
+                :yield second_yield
+            }
+            {
+                ?[a] := first_yield[a]
+                ?[a] := second_yield[a]
+            }
+        "#,
+                Default::default(),
+            )
+            .unwrap()
+            .rows;
+        assert_eq!(json!(res), json!([[1], [2]]));
+
         let res = db.run_script(
             r#"
         {
