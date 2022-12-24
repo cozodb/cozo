@@ -95,8 +95,6 @@ pub(crate) struct MeetAggrStore {
     grouping_len: usize,
 }
 
-// optimization: MeetAggrStore can be used to simulate functional dependency
-
 impl MeetAggrStore {
     pub(crate) fn wrap(self) -> TempStore {
         TempStore::MeetAggr(self)

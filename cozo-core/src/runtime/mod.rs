@@ -10,3 +10,5 @@ pub(crate) mod db;
 pub(crate) mod transact;
 pub(crate) mod relation;
 pub(crate) mod temp_store;
+#[cfg(test)]
+mod tests;
