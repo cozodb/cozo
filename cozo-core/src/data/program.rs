@@ -43,6 +43,7 @@ pub(crate) struct QueryOutOptions {
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
     pub(crate) store_relation: Option<(InputRelationHandle, RelationOp)>,
     pub(crate) assertion: Option<QueryAssertion>,
+    pub(crate) yield_const: Option<Symbol>,
 }
 
 impl Debug for QueryOutOptions {

@@ -62,6 +62,11 @@ struct MultipleRuleDefinitionError(String, Vec<SourceSpan>);
 #[diagnostic(code(parser::multiple_out_assert))]
 struct DuplicateQueryAssertion(#[label] SourceSpan);
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Multiple query yields defined")]
+#[diagnostic(code(parser::multiple_yields))]
+struct DuplicateYield(#[label] SourceSpan);
+
 impl Error for MultipleRuleDefinitionError {}
 
 impl Display for MultipleRuleDefinitionError {
@@ -342,6 +347,14 @@ pub(crate) fn parse_query(
                 );
                 out_opts.assertion = Some(QueryAssertion::AssertSome(pair.extract_span()))
             }
+            Rule::yield_option => {
+                ensure!(
+                    out_opts.yield_const.is_none(),
+                    DuplicateYield(pair.extract_span())
+                );
+                let p = pair.into_inner().next().unwrap();
+                out_opts.yield_const = Some(Symbol::new(p.as_str(), p.extract_span()));
+            }
             Rule::EOI => break,
             r => unreachable!("{:?}", r),
         }
@@ -453,7 +466,12 @@ fn parse_rule(
     let mut body_clauses = vec![];
     let mut ignored_counter = 0;
     for atom_src in body.into_inner() {
-        body_clauses.push(parse_disjunction(atom_src, param_pool, cur_vld, &mut ignored_counter)?)
+        body_clauses.push(parse_disjunction(
+            atom_src,
+            param_pool,
+            cur_vld,
+            &mut ignored_counter,
+        )?)
     }
 
     Ok((
@@ -489,7 +507,7 @@ fn parse_atom(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
     cur_vld: ValidityTs,
-    ignored_counter: &mut u32
+    ignored_counter: &mut u32,
 ) -> Result<InputAtom> {
     Ok(match src.as_rule() {
         Rule::rule_body => {
@@ -506,7 +524,12 @@ fn parse_atom(
         Rule::disjunction => parse_disjunction(src, param_pool, cur_vld, ignored_counter)?,
         Rule::negation => {
             let span = src.extract_span();
-            let inner = parse_atom(src.into_inner().next().unwrap(), param_pool, cur_vld, ignored_counter)?;
+            let inner = parse_atom(
+                src.into_inner().next().unwrap(),
+                param_pool,
+                cur_vld,
+                ignored_counter,
+            )?;
             InputAtom::Negation {
                 inner: inner.into(),
                 span,
@@ -746,7 +769,8 @@ fn parse_fixed_rule(
                         for v in els {
                             let s = v.as_str();
                             if s == "_" {
-                                let symb = Symbol::new(format!("*_*{}", binding_gen_id) ,v.extract_span());
+                                let symb =
+                                    Symbol::new(format!("*_*{}", binding_gen_id), v.extract_span());
                                 binding_gen_id += 1;
                                 bindings.push(symb);
                             } else {
@@ -773,7 +797,10 @@ fn parse_fixed_rule(
                                 Rule::var => {
                                     let s = v.as_str();
                                     if s == "_" {
-                                        let symb = Symbol::new(format!("*_*{}", binding_gen_id) ,v.extract_span());
+                                        let symb = Symbol::new(
+                                            format!("*_*{}", binding_gen_id),
+                                            v.extract_span(),
+                                        );
                                         binding_gen_id += 1;
                                         bindings.push(symb);
                                     } else {

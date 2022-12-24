@@ -27,7 +27,7 @@ use thiserror::Error;
 
 use crate::data::functions::current_validity;
 use crate::data::json::JsonValue;
-use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
+use crate::data::program::{InputProgram, MagicSymbol, QueryAssertion, RelationOp};
 use crate::data::relation::ColumnDef;
 use crate::data::tuple::{Tuple, TupleT};
 use crate::data::value::{DataValue, ValidityTs, LARGEST_UTF_CHAR};
@@ -100,7 +100,7 @@ impl<S> Debug for Db<S> {
 #[diagnostic(code(db::init))]
 pub(crate) struct BadDbInit(#[help] pub(crate) String);
 
-#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Clone)]
 /// Rows in a relation, together with headers for the fields.
 pub struct NamedRows {
     /// The headers
@@ -1461,5 +1461,24 @@ grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
             .rows;
 
         assert_eq!(res.len(), 1);
+    }
+
+    #[test]
+    fn returning_relations() {
+        let db = new_cozo_mem().unwrap();
+        let res = db
+            .run_script(
+                r#"
+        {
+            ?[] <- [[1,2,3]]
+            :yield nxt
+        }
+        {
+            ?[a,b,c] := nxt[a, b, c]
+        }
+        "#,
+                Default::default(),
+            )
+            .unwrap();
     }
 }
