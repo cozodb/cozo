@@ -163,7 +163,7 @@ impl RelationHandle {
         tuple.serialize(&mut Serializer::new(&mut ret)).unwrap();
         Ok(ret)
     }
-    pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle) -> Result<()> {
+    pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle, is_remove: bool) -> Result<()> {
         let InputRelationHandle { metadata, .. } = inp;
         // check that every given key is found and compatible
         for col in &metadata.keys {
@@ -176,8 +176,10 @@ impl RelationHandle {
         for col in &self.metadata.keys {
             metadata.satisfied_by_required_col(col, true)?;
         }
-        for col in &self.metadata.non_keys {
-            metadata.satisfied_by_required_col(col, false)?;
+        if !is_remove {
+            for col in &self.metadata.non_keys {
+                metadata.satisfied_by_required_col(col, false)?;
+            }
         }
         Ok(())
     }
@@ -497,49 +499,3 @@ pub(crate) struct InsufficientAccessLevel(
     pub(crate) AccessLevel,
 );
 
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use crate::new_cozo_mem;
-
-    #[test]
-    fn test_trigger() {
-        let db = new_cozo_mem().unwrap();
-        db.run_script(":create friends {fr: Int, to: Int}", Default::default())
-            .unwrap();
-        db.run_script(":create friends.rev {to: Int, fr: Int}", Default::default())
-            .unwrap();
-        db.run_script(
-            r#"
-        ::set_triggers friends
-
-        on put {
-            ?[fr, to] := _new[fr, to]
-
-            :put friends.rev{ to, fr }
-        }
-        on rm {
-            ?[fr, to] := _old[fr, to]
-
-            :rm friends.rev{ to, fr }
-        }
-        "#,
-            Default::default(),
-        )
-        .unwrap();
-        db.run_script(
-            r"?[fr, to] <- [[1,2]] :put friends {fr, to}",
-            Default::default(),
-        )
-        .unwrap();
-        let ret = db
-            .export_relations(["friends", "friends.rev"].into_iter())
-            .unwrap();
-        let frs = ret.get("friends").unwrap();
-        assert_eq!(vec![json!(1), json!(2)], frs.rows[0]);
-
-        let frs_rev = ret.get("friends.rev").unwrap();
-        assert_eq!(vec![json!(2), json!(1)], frs_rev.rows[0]);
-    }
-}

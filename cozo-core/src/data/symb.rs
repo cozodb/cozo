@@ -81,6 +81,9 @@ impl Symbol {
     pub(crate) fn is_prog_entry(&self) -> bool {
         self.name == "?"
     }
+    pub(crate) fn is_ignored_symbol(&self) -> bool {
+        self.name == "_"
+    }
     pub(crate) fn ensure_valid_field(&self) -> Result<()> {
         if self.name.contains('(') || self.name.contains(')') {
             #[derive(Debug, Error, Diagnostic)]
