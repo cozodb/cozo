@@ -1484,7 +1484,7 @@ pub(crate) fn current_validity() -> ValidityTs {
         now.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64
     };
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-    let ts_micros = { Date::now() * 1000 as i64 };
+    let ts_micros = { (Date::now() * 1000.) as i64 };
 
     ValidityTs(Reverse(ts_micros))
 }
