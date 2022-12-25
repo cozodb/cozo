@@ -36,3 +36,4 @@ release/
 release*
 Cross.toml
 /tools
+*.cozo_auth
