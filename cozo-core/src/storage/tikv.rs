@@ -167,9 +167,9 @@ impl<'s> StoreTx<'s> for TiKvTx {
         _upper: &[u8],
         _valid_at: ValidityTs,
     ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a> {
-        Box::new(iter::once(miette!(
+        Box::new(iter::once(Err(miette!(
             "TiKV backend does not support time travelling."
-        )))
+        ))))
     }
 
     fn range_scan<'a>(
