@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::cmp::Reverse;
 use crate::data::functions::TERMINAL_VALIDITY;
 use miette::Result;
 
@@ -64,11 +65,11 @@ pub fn check_key_for_validity(key: &[u8], valid_at: ValidityTs) -> (Option<Tuple
     if vld.timestamp < valid_at {
         *decoded.last_mut().unwrap() = DataValue::Validity(Validity {
             timestamp: valid_at,
-            is_assert: false,
+            is_assert: Reverse(true),
         });
         let nxt_seek = decoded.encode_as_key(rel_id);
         (None, nxt_seek)
-    } else if !vld.is_assert {
+    } else if !vld.is_assert.0 {
         *decoded.last_mut().unwrap() = DataValue::Validity(TERMINAL_VALIDITY);
         let nxt_seek = decoded.encode_as_key(rel_id);
         (None, nxt_seek)

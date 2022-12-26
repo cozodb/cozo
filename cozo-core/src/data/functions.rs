@@ -1272,7 +1272,7 @@ pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Regex(r) => !r.0.as_str().is_empty(),
         DataValue::List(l) => !l.is_empty(),
         DataValue::Set(s) => !s.is_empty(),
-        DataValue::Validity(vld) => vld.is_assert,
+        DataValue::Validity(vld) => vld.is_assert.0,
         DataValue::Bot => false,
     }))
 }
@@ -1289,7 +1289,7 @@ pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Regex(r) => i64::from(!r.0.as_str().is_empty()),
         DataValue::List(l) => i64::from(!l.is_empty()),
         DataValue::Set(s) => i64::from(!s.is_empty()),
-        DataValue::Validity(vld) => i64::from(vld.is_assert),
+        DataValue::Validity(vld) => i64::from(vld.is_assert.0),
         DataValue::Bot => 0,
     }))
 }
@@ -1492,7 +1492,7 @@ pub(crate) fn current_validity() -> ValidityTs {
 pub(crate) const MAX_VALIDITY_TS: ValidityTs = ValidityTs(Reverse(i64::MAX));
 pub(crate) const TERMINAL_VALIDITY: Validity = Validity {
     timestamp: ValidityTs(Reverse(i64::MIN)),
-    is_assert: true,
+    is_assert: Reverse(false),
 };
 
 define_op!(OP_FORMAT_TIMESTAMP, 1, true);

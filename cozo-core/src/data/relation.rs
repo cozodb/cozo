@@ -232,11 +232,11 @@ impl NullableColType {
                     DataValue::Str(s) => match &s as &str {
                         "ASSERT" => DataValue::Validity(Validity {
                             timestamp: cur_vld,
-                            is_assert: true,
+                            is_assert: Reverse(true),
                         }),
                         "RETRACT" => DataValue::Validity(Validity {
                             timestamp: cur_vld,
-                            is_assert: false,
+                            is_assert: Reverse(false),
                         }),
                         s => {
                             let (is_assert, ts_str) = match s.strip_prefix('~') {
@@ -255,7 +255,7 @@ impl NullableColType {
 
                             DataValue::Validity(Validity {
                                 timestamp: ValidityTs(Reverse(microseconds)),
-                                is_assert,
+                                is_assert: Reverse(is_assert),
                             })
                         }
                     },
@@ -269,7 +269,7 @@ impl NullableColType {
                                 }
                                 return Ok(DataValue::Validity(Validity {
                                     timestamp: ValidityTs(Reverse(ts)),
-                                    is_assert,
+                                    is_assert: Reverse(is_assert),
                                 }));
                             }
                         }

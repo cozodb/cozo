@@ -111,7 +111,7 @@ pub struct ValidityTs(pub Reverse<i64>);
 )]
 pub struct Validity {
     pub(crate) timestamp: ValidityTs,
-    pub(crate) is_assert: bool,
+    pub(crate) is_assert: Reverse<bool>,
 }
 
 #[derive(

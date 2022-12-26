@@ -86,7 +86,7 @@ pub(crate) trait MemCmpEncoder: Write {
                 let ts_flipped = !ts_u64;
                 self.write_u8(VLD_TAG).unwrap();
                 self.write_u64::<BigEndian>(ts_flipped).unwrap();
-                self.write_u8(vld.is_assert as u8).unwrap();
+                self.write_u8(!vld.is_assert.0 as u8).unwrap();
             }
             DataValue::Bot => self.write_u8(BOT_TAG).unwrap(),
         }
@@ -285,11 +285,11 @@ impl DataValue {
                 let ts_u64 = !ts_flipped;
                 let ts = order_decode_i64(ts_u64);
                 let (is_assert_byte, rest) = rest.split_first().unwrap();
-                let is_assert = *is_assert_byte != 0;
+                let is_assert = *is_assert_byte == 0;
                 (
                     DataValue::Validity(Validity {
                         timestamp: ValidityTs(Reverse(ts)),
-                        is_assert,
+                        is_assert: Reverse(is_assert),
                     }),
                     rest,
                 )
