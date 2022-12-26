@@ -1294,6 +1294,28 @@ pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
     }))
 }
 
+define_op!(OP_TO_INT, 1, false);
+pub(crate) fn op_to_int(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Num(n) => match n.get_int() {
+            None => {
+                let f = n.get_float();
+                DataValue::Num(Num::Int(f as i64))
+            }
+            Some(i) => DataValue::Num(Num::Int(i)),
+        },
+        DataValue::Null => DataValue::from(0),
+        DataValue::Bool(b) => DataValue::from(if *b { 1 } else { 0 }),
+        DataValue::Str(t) => match t as &str {
+            s => i64::from_str(s)
+                .map_err(|_| miette!("The string cannot be interpreted as int"))?
+                .into(),
+        },
+        DataValue::Validity(vld) => DataValue::Num(Num::Int(vld.timestamp.0 .0)),
+        v => bail!("'to_int' does not recognize {:?}", v),
+    })
+}
+
 define_op!(OP_TO_FLOAT, 1, false);
 pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
     Ok(match &args[0] {

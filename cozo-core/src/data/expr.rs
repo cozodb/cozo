@@ -698,6 +698,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "chunks" => &OP_CHUNKS,
         "chunks_exact" => &OP_CHUNKS_EXACT,
         "windows" => &OP_WINDOWS,
+        "to_int" => &OP_TO_INT,
         "to_float" => &OP_TO_FLOAT,
         "to_string" => &OP_TO_STRING,
         "rand_float" => &OP_RAND_FLOAT,
