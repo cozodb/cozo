@@ -221,7 +221,7 @@ function App() {
                     All computation is done within your browser. There is no backend, nor any outgoing requests.
                 </p>
                 <p>
-                    Please refer to the <a href="https://github.com/cozodb/cozo/">project homepage</a> for
+                    Please refer to the <a href="https://www.cozodb.org">project homepage</a> for
                     more information about the Cozo database.
                 </p>
                 <h2>Not sure what to run?</h2>
@@ -235,7 +235,7 @@ grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
                 }}>Here</a> is a classical example recursive example.
                 </p>
                 <p>
-                    The <a href="https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb">tutorial</a> contains many more examples.
+                    The <a href="https://docs.cozodb.org/en/latest/tutorial.html">tutorial</a> contains many more examples.
                 </p>
             </div>}
         </div>

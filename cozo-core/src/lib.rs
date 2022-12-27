@@ -6,15 +6,14 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-//! This crate provides the core functionalities of [CozoDB](https://github.com/cozodb/cozo).
+//! This crate provides the core functionalities of [CozoDB](https://cozodb.org).
 //! It may be used to embed CozoDB in your application.
 //!
 //! This doc describes the Rust API. To learn how to use CozoDB to query (CozoScript), see:
 //!
-//! * [CozoScript Tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
-//! * [CozoScript Manual](https://cozodb.github.io/current/manual/)
+//! * [CozoScript Manual](https://docs.cozodb.org)
 //!
-//! You can run all the queries described in the tutorial with an in-browser DB [here](https://cozodb.github.io/wasm-demo/)
+//! You can run all the queries described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/)
 //! without installing anything.
 //!
 //! Rust API usage:

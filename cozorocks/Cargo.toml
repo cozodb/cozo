@@ -5,9 +5,9 @@ edition = "2021"
 license = "MPL-2.0"
 authors = ["Ziyang Hu"]
 description = "Bindings to RocksDB used by the cozo crate"
-homepage = "https://github.com/cozodb/cozo"
+homepage = "https://www.cozodb.org"
 repository = "https://github.com/cozodb/cozo"
-documentation = "https://cozodb.github.io/current/manual"
+documentation = "https://docs.cozodb.org"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

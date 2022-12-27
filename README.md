@@ -1,7 +1,6 @@
 <img src="static/logo_c.png" width="200" height="175" alt="Logo">
 
-[![tutorial](https://img.shields.io/badge/tutorial-latest-brightgreen)](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
-[![manual](https://img.shields.io/badge/manual-latest-brightgreen)](https://cozodb.github.io/current/manual/)
+[![docs](https://img.shields.io/readthedocs/cozo/latest)](https://docs.cozodb.org/)
 [![cozo-node](https://img.shields.io/npm/v/cozo-node)](https://www.npmjs.com/package/cozo-node)
 [![npm (web)](https://img.shields.io/npm/v/cozo-lib-wasm?label=browser)](https://www.npmjs.com/package/cozo-lib-wasm)
 [![Crates.io](https://img.shields.io/crates/v/cozo)](https://crates.io/crates/cozo)
@@ -17,8 +16,6 @@
 [![GitHub](https://img.shields.io/github/license/cozodb/cozo)](https://github.com/cozodb/cozo/blob/main/LICENSE.txt)
 
 # `cozo`
-
-[ English | [中文文档](./README-zh.md) ]
 
 ### Table of contents
 
@@ -90,7 +87,7 @@ On a 2020 Mac Mini with the RocksDB persistent storage engine (Cozo supports man
 * The Pagerank algorithm completes in around 50ms for a graph with 10K vertices and 120K edges, around 1 second for a graph with 100K vertices and 1.7M edges, and around 30 seconds for a graph with 1.6M vertices and 32M edges.
 
 For more numbers and further details, we have a writeup 
-about performance [here](https://github.com/cozodb/cozo/wiki/Cozo-is-an-extremely-performant-graph-database-that-runs-everywhere).
+about performance [here](https://docs.cozodb.org/en/latest/releases/v0.3.html).
 
 ## Getting started
 
@@ -98,10 +95,9 @@ Usually, to learn a database, you need to install it first.
 This is unnecessary for Cozo as a testimony to its extreme embeddability, since you can run
 a complete Cozo instance in your browser, at near-native speed for most operations!
 
-So open up the [Cozo in WASM page](https://cozodb.github.io/wasm-demo/), and then:
+So open up the [Cozo in WASM page](https://www.cozodb.org/wasm-demo/), and then:
 
-* Follow the [tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb) to learn the basics;
-* read the [manual](https://cozodb.github.io/current/manual/) for the finer points.
+* Start learning from the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html) for the finer points.
 
 After you have decided that Cozo is worth experimenting with for your next project, you can scroll down to learn
 how to use it embedded (or not) in your favourite environment.
@@ -305,7 +301,7 @@ The query engine part provides various functionalities:
 * query execution
 
 This part is where most of
-the code of Cozo is concerned. The CozoScript manual [has a chapter](https://cozodb.github.io/current/manual/execution.html)
+the code of Cozo is concerned. The CozoScript manual [has a chapter](https://docs.cozodb.org/en/latest/execution.html)
 about the execution process.
 
 Users interact with the query engine with the [Rust API](https://docs.rs/cozo/).

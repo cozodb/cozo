@@ -1,7 +1,6 @@
 <img src="static/logo_c.png" width="200" height="175" alt="Logo">
 
-[![tutorial](https://img.shields.io/badge/tutorial-latest-brightgreen)](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
-[![manual](https://img.shields.io/badge/manual-latest-brightgreen)](https://cozodb.github.io/current/manual/)
+[![docs](https://img.shields.io/readthedocs/cozo/latest)](https://docs.cozodb.org/)
 [![cozo-node](https://img.shields.io/npm/v/cozo-node)](https://www.npmjs.com/package/cozo-node)
 [![npm (web)](https://img.shields.io/npm/v/cozo-lib-wasm?label=browser)](https://www.npmjs.com/package/cozo-lib-wasm)
 [![Crates.io](https://img.shields.io/crates/v/cozo)](https://crates.io/crates/cozo)
@@ -61,14 +60,13 @@ Datalog可表达所有的 _关系型查询_。_递归_ 的表达是 Datalog 的�
 * 对于一个有3100万条边的图数据表，“两跳”图查询（如查询某人的朋友的朋友都有谁）可在1毫秒内完成。
 * Pagerank算法速度。1万个顶点和12万条边：50毫秒内完成；10个万顶点和170万条边：大约在1秒内完成；160万个顶点和32万条边：大约在30秒内完成。
 
-更多的细节请看[此文章](https://github.com/cozodb/cozo/wiki/Cozo-is-an-extremely-performant-graph-database-that-runs-everywhere)。
+更多的细节请看[此文章](https://docs.cozodb.org/en/latest/releases/v0.3.html)。
 
 ## 学习
 
-一般来说，你得先安装数据库才能学习怎么使用它。但Cozo是“嵌入式”的，所以它可以直接在浏览器里通过WASM运行，省去了安装的麻烦，而大多数操作的速度也和原生的差不多。打开[WASM里面跑的Cozo页面](https://cozodb.github.io/wasm-demo/)，然后就可以开始学了：
+一般来说，你得先安装数据库才能学习怎么使用它。但Cozo是“嵌入式”的，所以它可以直接在浏览器里通过WASM运行，省去了安装的麻烦，而大多数操作的速度也和原生的差不多。打开[WASM里面跑的Cozo页面](https://www.cozodb.org/wasm-demo/)，然后就可以开始学了：
 
-* [Cozo辅导课](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)——学习基础知识
-* [CozoScript手册](https://cozodb.github.io/current/manual/)——深入学习细节
+* [Cozo辅导课](https://docs.cozodb.org/en/latest/tutorial.html)——学习基础知识
 
 当然你也可以先翻到后面了解如何在你熟悉的环境里安装原生Cozo数据库，再通过以上资料学习。
 
@@ -232,7 +230,7 @@ Cozo数据库由三个垒起来的组成部分组成，其中每部分只调用�
 * 查询语句的编译
 * 查询的执行
 
-Cozo中大部分代码都是在实现这些功能。CozoScript手册中[有一章](https://cozodb.github.io/current/manual/execution.html)简要介绍了查询执行的一些细节。
+Cozo中大部分代码都是在实现这些功能。CozoScript手册中[有一章](https://docs.cozodb.org/en/latest/execution.html)简要介绍了查询执行的一些细节。
 
 用户通过[Rust API](https://docs.rs/cozo/)来驱动查询引擎。
 

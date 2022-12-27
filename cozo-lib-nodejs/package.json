@@ -39,7 +39,7 @@
   "bugs": {
     "url": "https://github.com/cozodb/cozo/issues"
   },
-  "homepage": "https://github.com/cozodb/cozo#readme",
+  "homepage": "https://www.cozodb.org",
   "dependencies": {
     "@mapbox/node-pre-gyp": "^1.0.10"
   }

@@ -4,9 +4,9 @@ version = "0.4.0"
 description = "Cozo database for NodeJS"
 authors = ["Ziyang Hu"]
 license = "MPL-2.0"
-homepage = "https://github.com/cozodb/cozo"
+homepage = "https://www.cozodb.org"
 repository = "https://github.com/cozodb/cozo"
-documentation = "https://cozodb.github.io/current/manual"
+documentation = "https://docs.cozodb.org"
 edition = "2021"
 exclude = ["index.node"]
 

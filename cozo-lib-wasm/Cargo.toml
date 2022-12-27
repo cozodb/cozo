@@ -5,9 +5,9 @@ edition = "2021"
 description = "Cozo database for WASM"
 authors = ["Ziyang Hu"]
 license = "MPL-2.0"
-homepage = "https://github.com/cozodb/cozo"
+homepage = "https://www.cozodb.org"
 repository = "https://github.com/cozodb/cozo"
-documentation = "https://cozodb.github.io/current/manual"
+documentation = "https://docs.cozodb.org"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
