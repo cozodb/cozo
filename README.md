@@ -30,7 +30,8 @@
 
 Cozo is a general-purpose, transactional, relational database
 that uses **Datalog** for query, is **embeddable** but can also handle huge amounts of data and concurrency, 
-and focuses on **graph** data and algorithms. And it is **performant**!
+and focuses on **graph** data and algorithms. 
+It supports **time travel** and it is **performant**!
 
 ### What does _embeddable_ mean here?
 
@@ -75,6 +76,24 @@ you can build your queries piece by piece.
 > can make it clearer and more maintainable, with no loss in efficiency.
 > This is unlike the monolithic approach taken by the SQL `select-from-where` in nested forms,
 > which can sometimes read like [golfing](https://en.wikipedia.org/wiki/Code_golf).
+
+### Time travel?
+
+Time travel in the database setting means 
+tracking changes to data over time 
+and allowing queries to be logically executed at a point in time 
+to get a historical view of the data. 
+
+> In a sense, this makes your database _immutable_, 
+> since nothing is really deleted from the database ever.
+> 
+> In Cozo, instead of having all data automatically support
+> time travel, we let you decide if you want the capability
+> for each of your relation. Every extra functionality comes
+> with its cost, and you don't want to pay the price if you don't use it.
+> 
+> For the reason why you might want time travel for your data, 
+> we have written a [short story](https://docs.cozodb.org/en/latest/releases/v0.4.html).
 
 ### How performant?
 
