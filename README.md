@@ -116,7 +116,7 @@ a complete Cozo instance in your browser, at near-native speed for most operatio
 
 So open up the [Cozo in WASM page](https://www.cozodb.org/wasm-demo/), and then:
 
-* Start learning from the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html) for the finer points.
+* Start learning from the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html)
 
 After you have decided that Cozo is worth experimenting with for your next project, you can scroll down to learn
 how to use it embedded (or not) in your favourite environment.
