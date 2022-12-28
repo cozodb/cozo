@@ -86,9 +86,9 @@ Datalog 1977 年便出现了，它可表达所有的 _关系型查询_，而它�
 
 通过以下示例，可在正式开始学习之前对 Cozo 的查询先有个感性认识。
 
-假设有个表，名为`*route`，含有两列，名为`fr`和`to`，其中数据为机场代码（如`FRA`是法兰克福机场的代码），且每行数据表示一个飞行航线。
+假设有个表，名为 `*route`，含有两列，名为 `fr` 和 `to`，其中数据为机场代码（如 `FRA` 是法兰克福机场的代码），且每行数据表示一个飞行航线。
 
-从`FRA`可以不转机到达多少个机场：
+从 `FRA` 可以不转机到达多少个机场：
 ```
 ?[count_unique(to)] := *route{fr: 'FRA', to}
 ```
@@ -97,7 +97,7 @@ Datalog 1977 年便出现了，它可表达所有的 _关系型查询_，而它�
 |------------------|
 | 310              |
 
-从`FRA`出发，转机一次，可以到达多少个机场：
+从 `FRA` 出发，转机一次，可以到达多少个机场：
 ```
 ?[count_unique(to)] := *route{fr: 'FRA', to: 'stop},
                        *route{fr: stop, to}
@@ -107,7 +107,7 @@ Datalog 1977 年便出现了，它可表达所有的 _关系型查询_，而它�
 |------------------|
 | 2222             |
 
-从`FRA`出发，转机任意次，可以到达多少个机场：
+从 `FRA` 出发，转机任意次，可以到达多少个机场：
 ```
 reachable[to] := *route{fr: 'FRA', to}
 reachable[to] := reachable[stop], *route{fr: stop, to}
@@ -118,7 +118,7 @@ reachable[to] := reachable[stop], *route{fr: stop, to}
 |------------------|
 | 3462             |
 
-从`FRA`出发，按所需的最少转机次数排序，到达哪两个机场需要最多的转机次数：
+从 `FRA` 出发，按所需的最少转机次数排序，到达哪两个机场需要最多的转机次数：
 ```
 shortest_paths[to, shortest(path)] := *route{fr: 'FRA', to},
                                       path = ['FRA', to]
@@ -136,7 +136,7 @@ shortest_paths[to, shortest(path)] := shortest_paths[stop, prev_path],
 | YPO | `["FRA","YYZ","YTS","YMO","YFA","ZKE","YAT","YPO"]` | 8     |
 | BVI | `["FRA","AUH","BNE","ISA","BQL","BEU","BVI"]`        | 7     |
 
-`FRA`和`YPO`这两个机场之间最短的路径以及其实际飞行里程是多少：
+`FRA` 和 `YPO` 这两个机场之间最短的路径以及其实际飞行里程是多少：
 ```
 start[] <- [['FRA']]
 end[] <- [['YPO]]
@@ -198,10 +198,10 @@ Cozo 的 [Rust API 文档](https://docs.rs/cozo/)（英文）中有一些额外�
 
 RocksDB 有五花八门的选项以供用户进行性能调优。但是调优这个问题太复杂了，就连 RocksDB 他们自己也搞不定，所以实际生产中他们用的是强化学习来自动调优。对于 95% 的用户来说，费这个劲根本不值得，尤其是 Cozo “开箱”的设置就已经相当快、足够快了。
 
-如果你坚信你是那剩下的 5% 里面的：当你用 RocksDB 引擎创建 CozoDB 实例时，你提供了一个存储数据的目录的路径。如果在这个目录里创建一个名为`options`的文件，RocksDB 引擎便会将其解读为 [RocksDB选项文件](https://github.com/facebook/rocksdb/wiki/RocksDB-Options-File)
-并应用其中的设置。如果使用的是独立的`cozoserver`程序，激活此功能时会有一条提示日志。
+如果你坚信你是剩下那 5% 里面的：当你用 RocksDB 引擎创建 CozoDB 实例时，你提供过一个存储数据的目录路径。如果在这个目录里创建一个名为`options`的文件，RocksDB 引擎便会将其解读为 [RocksDB 选项文件](https://github.com/facebook/rocksdb/wiki/RocksDB-Options-File)
+并应用其中的设置。如果使用的是独立的 `cozoserver` 程序，激活此功能时会有一条提示日志。
 
-每次 RocksDB 引擎启动时，存储目录下的`data/OPTIONS-XXXXXX`文件会记录当前应用设置。你可以把这个文件拷贝出来，在其基础上修改。如果你不是 RocksDB 的专家，建议只改动那些你大概知道什么意思的数字型选项。设置不当可能会搞乱、搞坏数据库。
+每次 RocksDB 引擎启动时，存储目录下的 `data/OPTIONS-XXXXXX` 文件会记录当前应用设置。你可以把这个文件拷贝出来，在其基础上修改。如果你不是 RocksDB 的专家，建议只改动那些你大概知道什么意思的数字型选项。设置不当可能会搞乱、搞坏数据库。
 
 ## 架构
 
