@@ -1,4 +1,4 @@
-# CozoServer
+# CozoServer（独立服务）
 
 [![server](https://img.shields.io/github/v/release/cozodb/cozo)](https://github.com/cozodb/cozo/releases)
 

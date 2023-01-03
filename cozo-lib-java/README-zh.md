@@ -1,38 +1,31 @@
-# Cozo Java语言库
+# Cozo Java 语言库
 
-This crate provides the JNI bindings for using Cozo in Java/JVM languages/Android.
+这里是 Cozo 的 JNI 接口库，可以在 Java/JVM 语言/安卓中使用。
 
-You do not use this crate directly. Instead, use:
+一般情况下，这个库不是直接使用的。用于应当使用以下调用此库的库：
 
-* ... for Java or other JVM languages
-* ... for Clojure on JVM (you can also use the Java library, but this one is nicer)
-* ... for Android
+* [Cozo Java](https://github.com/cozodb/cozo-lib-java)：在 JVM Java 中使用
+* [Cozo Clojure](https://github.com/cozodb/cozo-clj)：在 JVM Clojure 中使用
+* [Cozo Android](https://github.com/cozodb/cozo-lib-android)：在安卓中使用
 
-Keep reading only if the prebuilt binaries provided by these libraries do not suit your needs.
+下面几个小节介绍在上面几个库不支持你的平台时如何从源码编译此库。
 
-## Building for JDK
+## 为 JDK 编译
 
-With the Rust toolchain installed,
+首先安装 Rust 工具链，然后：
 ```bash
 cargo build --release -p cozo_java -F storage-rocksdb
 ```
 
-## Building for Android
+## 为安卓编译
 
-Building for Android is not easy, and we will be very sketchy.
+为安卓编译较为复杂，以下仅做简要叙述。
 
-The first thing to note is that you should omit `-F storage-rocksdb` from the build command above,
-unless you are prepared to manually change lots of `build.rs` flags in 
-[cozorocks](../cozorocks) to build the RocksDB dependency.
+首先，在编译时请不要使用 `-F storage-rocksdb` 选项，除非你有能力在 `build.rs` 中做出大量调整使得 [cozorocks](../cozorocks) 能够成功为安卓编译。
 
-Then, in addition to adding Android targets to the Rust toolchain, 
-you also need to set up the Android NDK
-cross-compilation and libraries paths, etc.
-This is notoriously hard to get right, but fortunately 
-you can just use the Docker image [here](https://github.com/cross-rs/cross)
-which has everything set up for you.
+然后，在 Rust 工具链中添加安卓目标，设置好安卓 NDK 以及其编译路径、库路径等。手动搞定这些非常复杂，不过 [这里](https://github.com/cross-rs/cross) 有一些系统镜像可以省去你不少工作。
 
-When everything is set up correctly, the following command show complete without errors:
+所有上面所述都设置好了之后，执行下面命令就可以编译安卓库了：
 
 ```bash
 for TARGET in aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android; do
@@ -40,4 +33,4 @@ for TARGET in aarch64-linux-android armv7-linux-androideabi i686-linux-android x
 done
 ```
 
-For running on modern Android phones, the single target `aarch64-linux-android` is probably enough.
+上面编译了多个架构的安卓库。如果只是想在常见的安卓手机平板上运行，`aarch64-linux-android` 一个目标其实就够了。

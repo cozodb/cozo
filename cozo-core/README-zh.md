@@ -2,4 +2,4 @@
 
 [![Crates.io](https://img.shields.io/crates/v/cozo)](https://crates.io/crates/cozo)
 
-Cozo数据库核心部分的实现。
+Cozo 数据库核心部分的实现。

@@ -1,4 +1,4 @@
-# Cozo WASM库
+# Cozo WASM 库（浏览器）
 
 This crate provides Cozo web assembly modules for browsers.
 If you are targeting NodeJS, use [this](../cozo-lib-nodejs) instead: 

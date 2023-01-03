@@ -1,4 +1,4 @@
-# Cozo NodeJS库
+# Cozo NodeJS 库
 
 [![cozo-node](https://img.shields.io/npm/v/cozo-node)](https://www.npmjs.com/package/cozo-node)
 

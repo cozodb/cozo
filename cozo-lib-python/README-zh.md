@@ -1,4 +1,4 @@
-# Cozo Python库
+# Cozo Python 库
 
 [![pypi](https://img.shields.io/pypi/v/cozo_embedded)](https://pypi.org/project/cozo_embedded/)
 

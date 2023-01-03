@@ -1,4 +1,4 @@
-# Cozo Swift库（仅支持苹果硬件）
+# Cozo Swift 库（仅支持苹果硬件）
 
 [![pod](https://img.shields.io/cocoapods/v/CozoSwiftBridge)](https://github.com/cozodb/cozo/tree/main/cozo-lib-swift)
 
