@@ -3,13 +3,11 @@
 [![pod](https://img.shields.io/cocoapods/v/CozoSwiftBridge)](https://github.com/cozodb/cozo/tree/main/cozo-lib-swift)
 
 This document describes how to set up the Cozo module for use in Swift on Apple hardware.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/).
+To learn how to use CozoDB (CozoScript), read the [docs](https://docs.cozodb.org/en/latest/index.html).
 
 This package can be used for MacOS (both Apple ARM and Intel) and iOS (iPad, iPhone and simulators).
 
-Only the `storage-sqlite` engine is enabled for the Swift prebuilt binaries, as using
+Only the `storage-sqlite` persistent engine is enabled for the Swift prebuilt binaries, as using
 other storage engines on desktop or mobile does not make too much sense. If you disagree,
 see the Building section below.
 
@@ -142,6 +140,8 @@ public class CozoDB {
     public func importRelationsFromBackup(path: String, relations: [String]) throws;
 }
 ```
+
+More information are [here](https://docs.cozodb.org/en/latest/nonscript.html).
 
 ## Building the Swift Package
 

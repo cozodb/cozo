@@ -4,9 +4,9 @@
 
 一般情况下，这个库不是直接使用的。用于应当使用以下调用此库的库：
 
-* [Cozo Java](https://github.com/cozodb/cozo-lib-java)：在 JVM Java 中使用
-* [Cozo Clojure](https://github.com/cozodb/cozo-clj)：在 JVM Clojure 中使用
-* [Cozo Android](https://github.com/cozodb/cozo-lib-android)：在安卓中使用
+* [Cozo Java](https://github.com/cozodb/cozo-lib-java) （[镜像](https://gitee.com/cozodb/cozo-lib-java)）：在 JVM Java 中使用
+* [Cozo Clojure](https://github.com/cozodb/cozo-clj) （[镜像](https://gitee.com/cozodb/cozo-clj)）：在 JVM Clojure 中使用
+* [Cozo Android](https://github.com/cozodb/cozo-lib-android) （[镜像](https://gitee.com/cozodb/cozo-lib-android)）：在安卓中使用
 
 下面几个小节介绍在上面几个库不支持你的平台时如何从源码编译此库。
 

@@ -5,9 +5,7 @@ If you are targeting NodeJS, use [this](../cozo-lib-nodejs) instead:
 native code is still _much_ faster than WASM.
 
 This document describes how to set up the Cozo WASM module for use.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/).
+To learn how to use CozoDB (CozoScript), read the [docs](https://docs.cozodb.org/en/latest/index.html).
 
 ## Installation
 

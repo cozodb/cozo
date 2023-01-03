@@ -2,84 +2,56 @@
 
 [![server](https://img.shields.io/github/v/release/cozodb/cozo)](https://github.com/cozodb/cozo/releases)
 
-This document describes how to set up cozoserver.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/).
+本文叙述的是如何安装设置服务程序本身。有关如何使用 CozoDB（CozoScript）的信息，见 [文档](https://docs.cozodb.org/zh_CN/latest/index.html) 。
 
-## Download
+## 下载
 
-The standalone executable for Cozo can be downloaded from the [release page](https://github.com/cozodb/cozo/releases).
-Look for those with names `cozoserver-*`.
-Those with names `cozoserver_all-*` supports additional storage backends
-such as [TiKV](https://tikv.org/) storage, but are larger.
+独立服务的程序可以从 [GitHub 发布页](https://github.com/cozodb/cozo/releases) 或 [Gitee 发布页](https://gitee.com/cozodb/cozo/releases) 下载，其中名为 `cozoserver-*` 的是独立服务程序，名为 `cozoserver_all-*` 的独立程序同时支持更多地存储引擎，比如 [TiKV](https://tikv.org/)。
 
-## Starting the server
+## 启动服务程序
 
-Run the cozoserver command in a terminal:
+在终端中执行：
 
 ```bash
 ./cozoserver
 ```
 
-This starts an in-memory, non-persistent database.
-For more options such as how to run a persistent database with other storage engines,
-see `./cozoserver -h`
+如此执行命令会使用纯内存的非持久化存储引擎。执行 `./cozoserver -h` 可查看如何启用其它引擎，以及其它参数。
 
-To stop Cozo, press `CTRL-C`, or send `SIGTERM` to the process with e.g. `kill`.
+若要终止程序，按下 `CTRL-C` 按键，或向进程发送 `SIGTERM` （比如通过 `kill` 命令）。
 
-## The query API
+## 查询 API
 
-Queries are run by sending HTTP POST requests to the server. 
-By default, the API endpoint is `http://127.0.0.1:9070/text-query`. 
-A JSON body of the following form is expected:
+查询通过向 API 发送 POST 请求来完成。默认的请求地址是 `http://127.0.0.1:9070/text-query` 。请求必须包含 JSON 格式的正文，具体内容如下：
 ```json
 {
     "script": "<COZOSCRIPT QUERY STRING>",
     "params": {}
 }
 ```
-params should be an object of named parameters. For example, if params is `{"num": 1}`, 
-then `$num` can be used anywhere in your query string where an expression is expected. 
-Always use params instead of concatenating strings when you need parametrized queries.
+`params` 给出了查询文本中可用的变量。例如，当 `params` 为 `{"num": 1}` 时，查询文本中可以以 `$num` 来代替常量 `1`。请善用此功能，而不是手动拼接查询字符串。
 
-The HTTP API always responds in JSON. If a request is successful, then its `"ok"` field will be `true`,
-and the `"rows"` field will contain the data for the resulting relation, and `"headers"` will contain
-the headers. If an error occurs, then `"ok"` will contain `false`, the error message will be in `"message"`
-and a nicely-formatted diagnostic will be in `"display"` if available.
+HTTP API 返回的结果永远是 JSON 格式的。如果请求成功，则返回结果的 `"ok"` 字段将为 `true`，且 `"rows"` 字段将含有查询结果的行，而 `"headers"` 将含有表头。如果查询报错，则 `"ok"` 字段将为 `false`，而错误信息会在 `"message"` 字段中，同时 `"display"` 字段会包含格式化好的友好的错误提示。
 
-> Cozo is designed to run in a trusted environment and be used by trusted clients. 
-> It does not come with elaborate authentication and security features. 
-> If you must access Cozo remotely, you are responsible for setting up firewalls, encryptions and proxies yourself.
+> Cozo 的设计，基于其在一个受信任的环境中运行，且其所有用户也是由受信任的这种假设。因此 Cozo 没有内置认证与复杂的安全机制。如果你需要远程访问 Cozo 服务，你必须自己设置防火墙、加密和代理等，用来保护服务器上资源的安全。
 > 
-> As a guard against users accidentally exposing sensitive data, 
-> If you bind Cozo to non-loopback addresses, 
-> Cozo will generate a token string and require all queries from non-loopback addresses 
-> to provide the token string in the HTTP header field x-cozo-auth. 
-> The warning printed when you start Cozo with a 
-> non-default binding will tell you where to find the token string. 
-> This “security measure” is not considered sufficient for any purpose 
-> and is only intended as a last defence against carelessness.
+> 由于总是会有用户不小心将服务接口暴露于外网，Cozo 有一个补救措施：如果从非回传地址访问 Cozo，则必须在所有请求中以 HTTP 文件头 `x-cozo-auth` 的形式附上访问令牌。访问令牌的内容在启动服务的终端中有提示。注意这仅仅是一个补救措施，并不是特别可靠的安全机制，是为了尽量防止一些不由于小心而造成严重后果的悲剧。
 
-## API
+## 所有 API
 
-* `POST /text-query`, described above.
-* `GET /export/{relations: String}`, where `relations` is a comma-separated list of relations to export.
-* `PUT /import`, import data into the database. Data should be in `application/json` MIME type in the body,
-   in the same format as returned in the `data` field in the `/export` API.
-* `POST /backup`, backup database, should supply a JSON body of the form `{"path": <PATH>}`
-* `POST /import-from-backup`, import data into the database from a backup. Should supply a JSON body 
-   of the form `{"path": <PATH>, "relations": <ARRAY OF RELATION NAMES>}`.
-* `GET /`, if you open this in your browser and open your developer tools, you will be able to use
-   a very simple client to query this database.
+* `POST /text-query`，见上。
+* `GET /export/{relations: String}`，导出指定表中的数据，其中 `relations` 是以逗号分割的表名。
+* `PUT /import`，向数据库导入数据。所导入的数据应以在正文中以 `application/json` MIME 类型传入，具体格式与 `/export` 返回值中的 `data` 字段相同。
+* `POST /backup`，备份数据库，需要传入 JSON 正文 `{"path": <路径>}`。
+* `POST /import-from-backup`，将备份中指定存储表中的数据插入当前数据库中同名存储表。需要传入 JSON 正文 `{"path": <路径>, "relations": <表名数组>}`.
+* `GET /`，用浏览器打开这个地址，然后打开浏览器的调试工具，就可以使用一个简陋的 JS 客户端。
 
-> For `import` and `import-from-backup`, triggers are _not_ run for the relations, if any exists.
-If you need to activate triggers, use queries with parameters.
+> 注意 `import` 与 `import-from-backup` 接口不会激活任何触发器。
 
 
-## Building
+## 编译
 
-Building `cozo-node` requires a [Rust toolchain](https://rustup.rs). Run
+编译 `cozoserver` 需要 [Rust 工具链](https://rustup.rs)。运行
 
 ```bash
 cargo build --release -p cozoserver -F compact -F storage-rocksdb

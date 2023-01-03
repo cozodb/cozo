@@ -2,18 +2,13 @@
 
 [![pod](https://img.shields.io/cocoapods/v/CozoSwiftBridge)](https://github.com/cozodb/cozo/tree/main/cozo-lib-swift)
 
-This document describes how to set up the Cozo module for use in Swift on Apple hardware.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/).
+本文叙述的是如何安装设置库本身。有关如何使用 CozoDB（CozoScript）的信息，见 [文档](https://docs.cozodb.org/zh_CN/latest/index.html) 。
 
-This package can be used for MacOS (both Apple ARM and Intel) and iOS (iPad, iPhone and simulators).
+本库可在 macOS（苹果 ARM 或 Intel 芯片）以及 iOS（iPad、iPhone、模拟器）中使用。
 
-Only the `storage-sqlite` engine is enabled for the Swift prebuilt binaries, as using
-other storage engines on desktop or mobile does not make too much sense. If you disagree,
-see the Building section below.
+预编译的二进制包里，持久化引擎中，只有 `storage-sqlite` 在此库中可用。如果需要其他引擎请从源码编译。
 
-## Installation
+## 安装
 
 ### CocoaPods
 
@@ -27,28 +22,9 @@ end
 
 ### Swift Package Manager (SPM)
 
-The package is published as an archive containing a Swift package.
-Download it from the [release page](https://github.com/cozodb/cozo/releases) (look for `CozoSwiftBridge.tgz`).
-Uncompress.
+从 [GitHub 发布页面](https://github.com/cozodb/cozo/releases) 下载名为 `CozoSwiftBridge.tgz` 的包，然后手动导入至 XCode 中。详见 [英文文档](./README.md)。
 
-In XCode of your project, select from the menu `File > Add Packages`,
-select `Add Local ...` on the bottom, choose the folder you just decompressed 
-(the one containing a `Package.swift` at the root), then click `Add Package`.
-
-Then click your project on the left pane, and go to 
-`General > Frameworks, Libraries, and Embedded Content`,
-click on the plus sign, and add `Workspace > CozoSwiftBridge > CozoSwiftBridge` 
-(with a library icon).
-
-If you did everything right, you should also see `CozoSwiftBridge` under 
-`Build Phases > Link Binary With Libraries`.
-
-> You cannot download swift packages directly from GitHub repo, since
-in order to support that we would need to check the binaries
-into version control, and GitHub does not like it (we tried to work
-this around with Git LFS, but no luck).
-
-## Using the library
+## 基本使用
 
 ```swift
 import CozoSwiftBridge
@@ -60,7 +36,9 @@ import CozoSwiftBridge
     let res = try! db.run("?[] <- [[1,2,3]]").toString()
 }
 ```
-Above we created an SQLite-based database. For memory-based ones:
+
+上例中创建了一个 SQLite 引擎支持的数据库。如果要用纯内存引擎：
+
 ```swift
 let db = CozoDB()
 ```
@@ -72,101 +50,93 @@ public class CozoDB {
     public let db: DbInstance
 
     /**
-    * Constructs an in-memory database.
+    * 构造一个纯内存引擎的数据库
     */
     public init();
 
     /**
-    * Constructs a database.
+    * 构造一个数据库
     *
-    * `kind`: the engine kind, can be `mem` or `sqlite`.
-    * `path`: specifies the path to the storage file, only used for `sqlite` engine
+    * `kind`: 引擎类型，`mem` 或 `sqlite`。
+    * `path`: 存储文件的路径，仅在 `sqlite` 引擎下有效。
     */
     public init(kind: String, path: String) throws;
     
     /**
-     * Run query against the database.
+     * 执行查询文本
      *
-     * `query`:   the CozoScript to execute.
+     * `query`:   查询文本
      */
     public func run(_ query: String) throws -> [NamedRow];
         
     /**
-     * Run query against the database.
+     * 执行查询文本
      *
-     * `query`:   the CozoScript to execute.
-     * `params`:  the params of the query in JSON format.
+     * `query`:   查询文本
+     * `params`:  文本中可用的参数
      */
     public func run(_ query: String, params: JSON) throws -> [NamedRow];
     
     /**
-     * Export relations as JSON
+     * 导出纯出表至 JSON
      *
-     * `relations`: the stored relations to export
+     * `relations`: 需导出的表名
      */
     public func exportRelations(relations: [String]) throws -> JSON;
     
     /**
-     * Import data into relations
+     * 导入数据至存储表中
      * 
-     * Note that triggers are _not_ run for the relations, if any exists.
-     * If you need to activate triggers, use queries with parameters.
+     * 注意此方法不会激活任何触发器。
      * 
-     * `data`: the payload, in the same format as returned by `exportRelations`. 
+     * `data`: 导入内容，与 `exportRelations` 返回的格式相同 
      */
     public func importRelations(data: JSON) throws;
    
     /**
-     * Backup the database.
+     * 备份数据库
      *
-     * `path`: path of the output file.
+     * `path`: 备份路径
      */
     public func backup(path: String) throws;
     
     /**
-     * Restore the database from a backup.
+     * 将备份恢复到当前数据库
      *
-     * `path`: path of the input file.
+     * `path`: 备份路径
      */
     public func restore(path: String) throws;
     
     /**
-     * Import data into a relation from a backup.
+     * 将备份中表里的数据插入当前数据库中选定的同名表中
      *
-     * Note that triggers are _not_ run for the relations, if any exists.
-     * If you need to activate triggers, use queries with parameters.
+     * 注意此方法不会激活任何触发器。
      *
-     * `path`:      path of the input file.
-     * `relations`: the stored relations to import into.
+     * `path`:      备份路径
+     * `relations`: 需要导入数据的表名
      */
     public func importRelationsFromBackup(path: String, relations: [String]) throws;
 }
 ```
 
-## Building the Swift Package
+更多信息 [见此](https://docs.cozodb.org/zh_CN/latest/nonscript.html) 。
 
-First, install the [Rust toolchain](https://rustup.rs). 
-Then run the [build script](build-rust.sh) in this directory. 
-It is recommended to also set the environment variable `CARGO_PROFILE_RELEASE_LTO=fat`:
-this makes the building process much longer, but in turn the library runs a little bit faster.
+## 编译
 
-When everything goes well, you should find the compiled Swift package in a directory called
-`CozoSwiftBridge`.
+首先安装 [Rust 工具链](https://rustup.rs)。然后执行 [此批处理文件](build-rust.sh) 。建议执行时设置环境变量`CARGO_PROFILE_RELEASE_LTO=fat`：编译时间会变长，但是生成的库更快。
 
-If you want to use the RocksDB engine on Desktop, in the build script change the two lines
+如果一切都没问题，则 `CozoSwiftBridge` 文件夹里会有编译好的文件。
+
+如果想使用 RocksDB 引擎，则在批处理文件中，将以下两行
 ```bash
 cargo build -p cozo-swift -F compact --target x86_64-apple-darwin --release
 cargo build -p cozo-swift -F compact --target aarch64-apple-darwin --release
 ```
-to
+改为
 ```bash
 cargo build -p cozo-swift -F compact -F storage-rocksdb --target x86_64-apple-darwin --release
 cargo build -p cozo-swift -F compact -F storage-rocksdb --target aarch64-apple-darwin --release
 ```
+注意，给 iOS 编译 RocksDB 不是一件简单的事情。
 
-Then you also need to link your executable with `libc++`: in XCode, click on your project
-in the left drawer, then on the right go to `Build phases > Link Binary With Libraries`,
-click the plus sign, search for `libc++`, then add `libc++.tbd` found under Apple SDKs.
-
-Similar same process goes if you want to enable other features. Note that building the
-RocksDB engine for mobile is a very demanding task!
+在使用生成的库时，需要在 XCode 中选择链接至 `libc++` 动态库。

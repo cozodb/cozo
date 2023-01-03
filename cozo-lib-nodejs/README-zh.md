@@ -2,23 +2,27 @@
 
 [![cozo-node](https://img.shields.io/npm/v/cozo-node)](https://www.npmjs.com/package/cozo-node)
 
-Embedded [CozoDB](https://github.com/cozodb/cozo) for NodeJS.
+NodeJS 的嵌入式 [CozoDB](https://www.cozodb.org) 库。
 
-This document describes how to set up the Cozo module for use in NodeJS.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/).
+本文叙述的是如何安装设置库本身。有关如何使用 CozoDB（CozoScript）的信息，见 [文档](https://docs.cozodb.org/zh_CN/latest/index.html) 。
 
-## Installation
+## 安装
 
 ```bash
 npm install --save cozo-node
 ```
 
-If that doesn't work because there are no precompiled binaries for your platform,
-scroll below to the building section.
+安装过程中需要从 [GitHub 发布页](https://github.com/cozodb/cozo-lib-nodejs/releases/tag/0.4.0) 下载二进制文件。如果因为网络问题失败，可以使用此 [镜像](https://github.com/cozodb/cozo-lib-nodejs/releases/tag/0.4.0) ，使用方法为
 
-## Usage
+```bash
+npm install --save cozo-node --cozo_node_prebuilt_binary_host_mirror=https://gitee.com/cozodb/cozo-lib-nodejs/releases/download/
+```
+
+注意：如果你用的是 Yarn 而不是 NPM，类似的命令 [可能不奏效](https://github.com/mapbox/node-pre-gyp/issues/514) 。
+
+如果你的操作系统、平台不是常见的平台，可能会报错说找不到预编译库。这种情况下可以参见后面关于如何从源码编译的内容。
+
+## 用法
 
 ```javascript
 const {CozoDb} = require('cozo-node')
@@ -41,93 +45,84 @@ printQuery("?[a] <- [[1, 2]]")
 ```ts
 class CozoDb {
     /**
-     * Constructor
+     * 构造函数
      * 
-     * @param engine:  defaults to 'mem', the in-memory non-persistent engine.
-     *                 'sqlite', 'rocksdb' and maybe others are available,
-     *                 depending on compile time flags.
-     * @param path:    path to store the data on disk, defaults to 'data.db',
-     *                 may not be applicable for some engines such as 'mem'
-     * @param options: defaults to {}, ignored by all the engines in the published NodeJS artefact
+     * @param engine:  默认为 'mem'，即纯内存的非持久化存储。其他值可以是 'sqlite'、'rocksdb' 等
+     * @param path:    存储文件或文件夹的路径，默认为 'data.db'。在 'mem' 引擎下无用。
+     * @param options: 默认为 {}，在 NodeJS 支持的引擎中无用。
      */
     constructor(engine: string, path: string, options: object): CozoDb;
 
     /**
-     * You must call this method for any database you no longer want to use:
-     * otherwise the native resources associated with it may linger for as
-     * long as your program runs. Simply `delete` the variable is not enough.
+     * 关闭数据库，并释放其原生资源。如果不调用此方法而直接删除数据库的变量，则会造成原生资源泄漏。
      */
     close(): void;
 
     /**
-     * Runs a query
+     * 执行查询文本
      * 
-     * @param script: the query
-     * @param params: the parameters as key-value pairs, defaults to {}
+     * @param script: 查询文本
+     * @param params: 传入的参数，默认为 {}
      */
     async run(script: string, params: object): object;
 
     /**
-     * Export several relations
+     * 导出存储表
      * 
-     * @param relations:  names of relations to export, in an array.
+     * @param relations:  需要导出的存储表名称
      */
     async exportRelations(relations: Array<string>): object;
 
     /**
-     * Import several relations.
+     * 导入数据至存储表
      * 
-     * Note that triggers are _not_ run for the relations, if any exists.
-     * If you need to activate triggers, use queries with parameters.
+     * 注意：以此方法导入数据不会激活存储表上任何的触发器。
      * 
-     * @param data: in the same form as returned by `exportRelations`. The relations
-     *              must already exist in the database.
+     * @param data: 导入的表以及数据，格式与 `exportRelations` 返回的相同
      */
     async importRelations(data: object): object;
 
     /**
-     * Backup database
+     * 备份数据库
      * 
-     * @param path: path to file to store the backup.
+     * @param path: 备份文件路径
      */
     async backup(path: string): object;
 
     /**
-     * Restore from a backup. Will fail if the current database already contains data.
+     * 从备份文件恢复数据至当前数据库。若当前数据库非空，则报错。
      * 
-     * @param path: path to the backup file.
+     * @param path: 备份文件路径
      */
     async restore(path: string): object;
 
     /**
-     * Import several relations from a backup. The relations must already exist in the database.
-     * 
-     * Note that triggers are _not_ run for the relations, if any exists.
-     * If you need to activate triggers, use queries with parameters.
-     * 
-     * @param path: path to the backup file.
-     * @param rels: the relations to import.
+     * 将备份文件中指定存储表里的数据插入当前数据库中同名表里。
+     *
+     * 注意：以此方法导入数据不会激活存储表上任何的触发器。
+     *
+     * @param path: 备份文件路径
+     * @param rels: 需导入数据的表名
      */
     async importRelationsFromBackup(path: string, rels: Array<string>): object;
 }
 ```
 
-## Building
+更多信息 [见此](https://docs.cozodb.org/zh_CN/latest/nonscript.html) 。
 
-Building `cozo-node` requires a [Rust toolchain](https://rustup.rs). Run
+## 编译
+
+编译 `cozo-node` 需要 [Rust 工具链](https://rustup.rs)。运行
 
 ```bash
 cargo build --release -p cozo-node -F compact -F storage-rocksdb
 ```
 
-and then find the dynamic library (names can vary a lot, the file extension is `.so` on Linux, `.dylib` on Mac,
-and `.dll` on Windows) under the `../target/` folder (you may need to search for it).
-Copy it to the file `native/6/cozo_node_prebuilt.node` under this directory (create intermediate directories if they don't exist).
+完成后，动态链接库可以在 `../target/` 文件夹中找到（具体文件名根据平台与操作系统会有差异，一般来说 Linux 上 扩展名为 `.so`，Mac 上为 `.dylib`，Windows 上为 `.dll`）。
+将找到的动态库拷贝为此目录下的 `native/6/cozo_node_prebuilt.node` 文件（中间目录若不存在，则需建立）。
 
-If you did everything correctly, you should get the hello world message printed out when you run
+如果一切操作正确，在此目录下执行下列命令则会正常返回：
 
 ```bash
 node example.js
 ```
-
-under this directory.

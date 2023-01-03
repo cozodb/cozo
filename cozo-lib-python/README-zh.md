@@ -2,19 +2,14 @@
 
 [![pypi](https://img.shields.io/pypi/v/cozo_embedded)](https://pypi.org/project/cozo_embedded/)
 
-Native bindings for embedding [CozoDB](https://github.com/cozodb/cozo) in Python, providing the
-`cozo_embedded` package.
+[CozoDB](https://www.cozodb.org) 的 Python 嵌入式库 `cozo_embedded` 的源代码。
 
-You are not supposed to be using this package directly in your code. Use [PyCozo](https://github.com/cozodb/pycozo),
-which depends on this package.
+一般来说你应该使用 [PyCozo](https://github.com/cozodb/pycozo) 库（ [Gitee 镜像](https://gitee.com/cozodb/pycozo) ），而不是直接使用此库。
 
-To build this package, you need to install the Rust toolchain
-as well as the [maturin](https://github.com/PyO3/maturin) python package.
-Then run
+编译此库需要安装 Rust 工具链以及 [maturin](https://github.com/PyO3/maturin) 。安装好后运行
 
 ```bash
 maturin build -F compact -F storage-rocksdb --release
 ```
 
-Refer maturin's docs for more information about how to [develop](https://www.maturin.rs/develop.html)
-and [build](https://www.maturin.rs/distribution.html) this package.
+更多选项参见 maturin 的 [文档](https://www.maturin.rs/) 。
