@@ -2,12 +2,10 @@
 
 [![cozo-node](https://img.shields.io/npm/v/cozo-node)](https://www.npmjs.com/package/cozo-node)
 
-Embedded [CozoDB](https://github.com/cozodb/cozo) for NodeJS.
+Embedded [CozoDB](https://www.cozodb.org) for NodeJS.
 
 This document describes how to set up the Cozo module for use in NodeJS.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/).
+To learn how to use CozoDB (CozoScript), read the [docs](https://docs.cozodb.org/en/latest/index.html).
 
 ## Installation
 
@@ -111,6 +109,8 @@ class CozoDb {
     async importRelationsFromBackup(path: string, rels: Array<string>): object;
 }
 ```
+
+More information are [here](https://docs.cozodb.org/en/latest/nonscript.html).
 
 ## Building
 

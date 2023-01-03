@@ -11,10 +11,7 @@
 //!
 //! This doc describes the Rust API. To learn how to use CozoDB to query (CozoScript), see:
 //!
-//! * [CozoScript Manual](https://docs.cozodb.org)
-//!
-//! You can run all the queries described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/)
-//! without installing anything.
+//! * [The CozoDB documentation](https://docs.cozodb.org)
 //!
 //! Rust API usage:
 //! ```

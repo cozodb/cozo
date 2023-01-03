@@ -1,30 +1,24 @@
-# Cozo C语言库
+# Cozo C 语言库
 
 [![C](https://img.shields.io/github/v/release/cozodb/cozo)](https://github.com/cozodb/cozo/releases)
 
-This directory contains the source of the Cozo C API.
+这里是 Cozo 的 C API 的源代码。
 
-This document describes how to set up the C library.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/).
+本文叙述的是如何安装设置 Cozo 的 C 语言库。有关如何使用 CozoDB（CozoScript）的信息，见 [文档](https://docs.cozodb.org/zh_CN/latest/index.html) 。
 
-You can download pre-built libraries from the [release page](https://github.com/cozodb/cozo/releases),
-look for those starting with `libcozo_c`.
+预编译的库可从 [GitHub 发布页面](https://github.com/cozodb/cozo/releases) 下载，其中 C 语言库以 `libcozo_c` 开头。
 
-The API is contained in this single [header file](./cozo_c.h).
+C 语言的 API 在这个 [头文件](./cozo_c.h) 中。
 
-An example for using the API is [here](./example.c).
-
-To build and run the example:
+[这个程序](./example.c) 举例说明了如何调用此 API，程序可使用以下命令编译安装：
 
 ```bash
 gcc -L../target/release/ -lcozo_c example.c -o example && ./example
 ```
 
-# Building Cozo from source
+# 从源码编译
 
-You need to install the [Rust toolchain](https://www.rust-lang.org/tools/install) on your system. Then:
+首先需要安装 [Rust 工具链](https://www.rust-lang.org/tools/install) ，然后：
 
 ```bash
 cargo build --release -p cozo_c -F compact -F storage-rocksdb

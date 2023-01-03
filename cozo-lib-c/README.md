@@ -5,9 +5,7 @@
 This directory contains the source of the Cozo C API.
 
 This document describes how to set up the C library.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/).
+To learn how to use CozoDB (CozoScript), read the [docs](https://docs.cozodb.org/en/latest/index.html).
 
 You can download pre-built libraries from the [release page](https://github.com/cozodb/cozo/releases),
 look for those starting with `libcozo_c`.

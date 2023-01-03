@@ -1,3 +1,3 @@
 # Cozorocks
 
-对RocksDB C++接口的封装。
+对 RocksDB C++ 接口的封装。

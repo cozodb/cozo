@@ -162,25 +162,25 @@ end[] <- [['YPO]]
 </span><span style="color: rgb(0, 153, 255);">  help: </span><span>Note that symbols occurring only in negated positions are not considered bound
 </span></pre>
 
-## 安装
+## 安装 Cozo
 
-建议先[学习](#学习)，再安装。当然反过来我们也不反对。
+建议先学习，再安装。当然反过来我们也不反对。
 
 Cozo 可以安装在一大堆不同的语言与环境中：
 
-| 语言/环境                                                 | 官方支持的平台                                                                                              | 存储引擎  |
-|-------------------------------------------------------|------------------------------------------------------------------------------------------------------|-------|
-| [Python](https://github.com/cozodb/pycozo)            | Linux (x86_64), Mac (ARM64, x86_64), Windows (x86_64)                                                | MQR   |
-| [NodeJS](./cozo-lib-nodejs)                           | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
-| [浏览器](./cozo-lib-wasm)                                | 支持[WASM](https://developer.mozilla.org/en-US/docs/WebAssembly#browser_compatibility)的浏览器（较新的浏览器全都支持） | M     |
-| [Java (JVM)](https://github.com/cozodb/cozo-lib-java) | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
-| [Clojure (JVM)](https://github.com/cozodb/cozo-clj)   | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
-| [安卓](https://github.com/cozodb/cozo-lib-android)      | Android (ARM64, ARMv7, x86_64, x86)                                                                  | MQ    |
-| [iOS/macOS (Swift)](./cozo-lib-swift)                 | iOS (ARM64, 模拟器), Mac (ARM64, x86_64)                                                                | MQ    |
-| [Rust](https://docs.rs/cozo/)                         | 任何支持`std`的[平台](https://doc.rust-lang.org/nightly/rustc/platform-support.html)（源代码编译）                 | MQRST |
-| [Go](https://github.com/cozodb/cozo-lib-go)           | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
-| [C/C++/支持C FFI的语言](./cozo-lib-c)                      | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
-| [独立的HTTP服务](./cozoserver)                             | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQRST |
+| 语言/环境                                                                                               | 官方支持的平台                                                                                              | 存储引擎  |
+|-----------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|-------|
+| [Python](https://github.com/cozodb/pycozo)（[国内镜像](https://gitee.com/cozodb/pycozo)）                 | Linux (x86_64), Mac (ARM64, x86_64), Windows (x86_64)                                                | MQR   |
+| [NodeJS](./cozo-lib-nodejs)                                                                         | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [浏览器](./cozo-lib-wasm)                                                                              | 支持[WASM](https://developer.mozilla.org/en-US/docs/WebAssembly#browser_compatibility)的浏览器（较新的浏览器全都支持） | M     |
+| [Java (JVM)](https://github.com/cozodb/cozo-lib-java)（[国内镜像](https://gitee.com/cozodb/cozo-lib-java)） | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [Clojure (JVM)](https://github.com/cozodb/cozo-clj)（[国内镜像](https://gitee.com/cozodb/cozo-clj)）        | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [安卓](https://github.com/cozodb/cozo-lib-android)（[国内镜像](https://gitee.com/cozodb/cozo-lib-android)）   | Android (ARM64, ARMv7, x86_64, x86)                                                                  | MQ    |
+| [iOS/macOS (Swift)](./cozo-lib-swift)                                                               | iOS (ARM64, 模拟器), Mac (ARM64, x86_64)                                                                | MQ    |
+| [Rust](https://docs.rs/cozo/)                                                                       | 任何支持`std`的[平台](https://doc.rust-lang.org/nightly/rustc/platform-support.html)（源代码编译）                 | MQRST |
+| [Go](https://github.com/cozodb/cozo-lib-go)（[国内镜像](https://gitee.com/cozodb/cozo-lib-go)）             | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [C/C++/支持 C FFI 的语言](./cozo-lib-c)                                                                  | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQR   |
+| [独立的 HTTP 服务](./cozoserver)                                                                         | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                         | MQRST |
 
 “存储引擎”列中各个字母的含义：
 
@@ -203,7 +203,7 @@ RocksDB 有五花八门的选项以供用户进行性能调优。但是调优这
 
 每次 RocksDB 引擎启动时，存储目录下的 `data/OPTIONS-XXXXXX` 文件会记录当前应用设置。你可以把这个文件拷贝出来，在其基础上修改。如果你不是 RocksDB 的专家，建议只改动那些你大概知道什么意思的数字型选项。设置不当可能会搞乱、搞坏数据库。
 
-## 架构
+## Cozo 的架构
 
 Cozo 数据库有三个上下游部分组成，其中每部分只调用下游部分的接口。
 
@@ -253,7 +253,7 @@ Cozo 的 Rust 以外的所有语言、环境都只是对 Rust API 的进一步�
 
 ## 项目进程
 
-Cozo 一开始预想的功能已经实现的不少了，但是项目仍然年轻得很。欢迎各界朋友使用并提出宝贵意见。
+Cozo 一开始预想的功能已经实现得不少了，但是项目仍然年轻得很。欢迎各界朋友使用并提出宝贵意见。
 
 Cozo 1.0 之前的版本不承诺语法、API 的稳定性或存储兼容性。
 

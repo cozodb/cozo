@@ -4,9 +4,9 @@ This crate provides the JNI bindings for using Cozo in Java/JVM languages/Androi
 
 You do not use this crate directly. Instead, use:
 
-* ... for Java or other JVM languages
-* ... for Clojure on JVM (you can also use the Java library, but this one is nicer)
-* ... for Android
+* [Cozo Java](https://github.com/cozodb/cozo-lib-java) for Java or other JVM languages
+* [Cozo Clojure](https://github.com/cozodb/cozo-clj) for Clojure on JVM (you can also use the Java library, but this one is nicer)
+* [Cozo Android](https://github.com/cozodb/cozo-lib-android) for Android
 
 Keep reading only if the prebuilt binaries provided by these libraries do not suit your needs.
 

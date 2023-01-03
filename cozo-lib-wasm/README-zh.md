@@ -1,35 +1,26 @@
-# Cozo WASM库
+# Cozo WASM 库（浏览器）
 
-This crate provides Cozo web assembly modules for browsers.
-If you are targeting NodeJS, use [this](../cozo-lib-nodejs) instead: 
-native code is still _much_ faster than WASM.
+可以在浏览器中运行的 Cozo WASM 库。NodeJS 用户请使用 [原生库](../cozo-lib-nodejs) ：速度更快，功能也更多。
 
-This document describes how to set up the Cozo WASM module for use.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://www.cozodb.org/wasm-demo/).
+本文叙述的是如何安装设置库本身。有关如何使用 CozoDB（CozoScript）的信息，见 [文档](https://docs.cozodb.org/zh_CN/latest/index.html) 。
 
-## Installation
+安装
 
 ```
 npm install cozo-lib-wasm
 ```
 
-Alternatively, you can download `cozo_wasm-<VERSION>-wasm32-unknown-unknown.zip`
-from the [release page](https://github.com/cozodb/cozo/releases) and include
-the JS and WASM files directly in your project: see the `index.html` example 
-[here](https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html) for
-what is required in your code.
+你也可以直接从 [发布页面](https://github.com/cozodb/cozo/releases) 下载 `cozo_wasm-<VERSION>-wasm32-unknown-unknown.zip` 文件，然后直接在你的网页代码中引用：见 [此处](https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html) 的 `index.html` 范例。
 
-## Usage
+## 使用
 
-See the code [here](wasm-react-demo/src/App.js). Basically, you write
+参考 [此文件](wasm-react-demo/src/App.js)。简单地说：
 
 ```js
 import init, {CozoDb} from "cozo-lib-wasm";
 ```
 
-and call
+然后：
 
 ```js
 let db;
@@ -51,36 +42,26 @@ export class CozoDb {
 
     export_relations(data: string): string;
 
-    // Note that triggers are _not_ run for the relations, if any exists.
-    // If you need to activate triggers, use queries with parameters.
+    // 注意：通过此接口载入数据不会激活触发器
     import_relations(data: string): string;
 }
 ```
 
-Note that this API is synchronous. If your computation runs for a long time, 
-**it will block the main thread**. If you know that some of your queries are going to be heavy,
-you should consider running Cozo in a web worker. However, the published module
-may not work across browsers in web workers (look for the row "Support for ECMAScript
-modules" [here](https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker#browser_compatibility)).
+注意所有的 API 都是同步的。如果你的查询需要比较长的时间返回，浏览器的主线程会被阻塞。阻塞浏览器主线程不是好事，因此在这种情况下你可以考虑在 web worker 中运行 Cozo WASM 模块。不过预编译的 WASM 模块不支持在有些浏览器的 web worker 中运行：见 [此页面](https://developer.mozilla.org/en-US/docs/Web/API/Worker/Worker#browser_compatibility) 的 "Support for ECMAScript
+modules" 信息。
 
-The next section contains some pointers for how to alleviate this, but expect a lot of work.
+## 编译
 
-## Compiling
+编译需要 [Rust 工具链](https://rustup.rs/)，[NodeJS 与 npm](https://nodejs.org/)，再加上 [wasm-pack](https://github.com/rustwasm/wasm-pack)。
 
-You will need to install [Rust](https://rustup.rs/), [NodeJS with npm](https://nodejs.org/),
-and [wasm-pack](https://github.com/rustwasm/wasm-pack) first.
-
-The published module was built with
+用以下命令来编译：
 
 ```bash
 wasm-pack build --target web --release
 ```
 
-and the environment variable `CARGO_PROFILE_RELEASE_LTO=fat`.
+建议编译时设置环境变量 `CARGO_PROFILE_RELEASE_LTO=fat` 使生成的库更快（以增加编译时间为代价）。
 
-The important option is `--target web`: the above usage instructions only work for this target.
-See the documentation [here](https://rustwasm.github.io/wasm-pack/book/commands/build.html#target).
+以上我们给出了参数 `--target web`：上面在浏览器中的使用例子只支持用此参数编译出的库。更多信息参见 [WASM 的文档](https://rustwasm.github.io/wasm-pack/book/commands/build.html#target)。
 
-if you are interested in running Cozo in a web worker and expect it to run across browsers,
-you will need to use the `--target no-modules` option, and write a lot of gluing code.
-See [here](https://rustwasm.github.io/wasm-bindgen/examples/wasm-in-web-worker.html) for tips.
+使用 `--target no-modules` 编译出的库可以在更多浏览器中的 web worker 运行，但是调用方式与上面给出的例子有区别，也更麻烦。详情见 [文档](https://rustwasm.github.io/wasm-bindgen/examples/wasm-in-web-worker.html) 。

@@ -340,8 +340,7 @@ only Golang wraps the C API directly.
 
 ## Status of the project
 
-Cozo is very young and **not** production-ready yet,
-but we encourage you to try it out for your use case.
+Cozo is still very young, but we encourage you to try it out for your use case.
 Any feedback is welcome.
 
 Versions before 1.0 do not promise syntax/API stability or storage compatibility.

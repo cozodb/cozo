@@ -1,6 +1,6 @@
 [package]
 name = "cozorocks"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 license = "MPL-2.0"
 authors = ["Ziyang Hu"]
