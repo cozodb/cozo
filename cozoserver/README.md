@@ -79,7 +79,7 @@ If you need to activate triggers, use queries with parameters.
 
 ## Building
 
-Building `cozo-node` requires a [Rust toolchain](https://rustup.rs). Run
+Building `cozoserver` requires a [Rust toolchain](https://rustup.rs). Run
 
 ```bash
 cargo build --release -p cozoserver -F compact -F storage-rocksdb
