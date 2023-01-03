@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fs;
 use std::net::Ipv6Addr;
+use std::process::exit;
 use std::str::FromStr;
 
 use clap::Parser;
@@ -20,6 +21,10 @@ use rouille::{router, try_or_400, Request, Response};
 use serde_json::json;
 
 use cozo::*;
+
+use crate::repl::repl_main;
+
+mod repl;
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
@@ -39,6 +44,10 @@ struct Args {
     /// Extra config in JSON format
     #[clap(short, long, default_value_t = String::from("{}"))]
     config: String,
+
+    /// When on, start REPL instead of starting a webserver
+    #[clap(short, long)]
+    repl: bool,
 
     /// Address to bind the service to
     #[clap(short, long, default_value_t = String::from("127.0.0.1"))]
@@ -80,6 +89,17 @@ fn main() {
         db.restore_backup(restore_path).unwrap();
     }
 
+    if args.repl {
+        if let Err(e) = repl_main(db) {
+            eprintln!("{}", e);
+            exit(-1);
+        }
+    } else {
+        server_main(args, db)
+    }
+}
+
+fn server_main(args: Args, db: DbInstance) {
     let conf_path = format!("{}.{}.cozo_auth", args.path, args.engine);
     let auth_guard = match fs::read_to_string(&conf_path) {
         Ok(s) => s.trim().to_string(),

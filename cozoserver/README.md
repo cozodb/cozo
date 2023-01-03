@@ -26,6 +26,12 @@ see `./cozoserver -h`
 
 To stop Cozo, press `CTRL-C`, or send `SIGTERM` to the process with e.g. `kill`.
 
+## The REPL
+
+If you start the server with the `-r` or `--repl` option, a web server will not be started.
+Instead, a terminal-based REPL is presented for you. The engine options can be used when
+invoking the executable to choose the backend.
+
 ## The query API
 
 Queries are run by sending HTTP POST requests to the server. 
