@@ -32,6 +32,16 @@ If you start the server with the `-r` or `--repl` option, a web server will not 
 Instead, a terminal-based REPL is presented to you. The engine options can be used when
 invoking the executable to choose the backend.
 
+You can use the following meta ops in the REPL:
+
+* `%set <KEY> <VALUE>`: set a parameter that can be used in queries.
+* `%unset <KEY>`: unset a parameter.
+* `%clear`: unset all parameters.
+* `%params`: print all set parameters.
+* `%save <FILE>`: the result of the next successful query will be saved in JSON format in a file instead of printed on screen. If `<FILE>` is omitted, then the effect of any previous `%save` command is nullified. 
+* `%backup <FILE>`: the current database will be backed up into the file.
+* `%restore <FILE>`: restore the data in the backup to the current database. The current database must be empty.
+
 ## The query API
 
 Queries are run by sending HTTP POST requests to the server. 
