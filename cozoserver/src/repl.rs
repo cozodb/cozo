@@ -10,8 +10,10 @@
 
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::io::Write;
+use std::fs::File;
+use std::io::{Read, Write};
 
+use miette::{bail, miette, IntoDiagnostic};
 use prettytable;
 use rustyline;
 use serde_json::{json, Value};
@@ -72,159 +74,8 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
         let readline = rl.readline("=> ");
         match readline {
             Ok(line) => {
-                let line = line.trim();
-                if line.is_empty() {
-                    continue;
-                }
-                if let Some(remaining) = line.strip_prefix("%") {
-                    let remaining = remaining.trim();
-                    let (op, payload) = remaining
-                        .split_once(|c: char| c.is_whitespace())
-                        .unwrap_or((remaining, ""));
-                    match op {
-                        "set" => {
-                            if let Some((key, v_str)) =
-                                payload.trim().split_once(|c: char| c.is_whitespace())
-                            {
-                                match serde_json::from_str(v_str) {
-                                    Ok(val) => {
-                                        params.insert(key.to_string(), val);
-                                    }
-                                    Err(e) => {
-                                        eprintln!("{:?}", e)
-                                    }
-                                }
-                            } else {
-                                eprintln!("Bad set syntax. Should be '%set <KEY> <VALUE>'.")
-                            }
-                        }
-                        "unset" => {
-                            let key = remaining.trim();
-                            if params.remove(key).is_none() {
-                                eprintln!("Key not found: '{}'", key)
-                            }
-                        }
-                        "clear" => {
-                            params.clear();
-                        }
-                        "params" => match serde_json::to_string_pretty(&json!(&params)) {
-                            Ok(display) => {
-                                println!("{}", display)
-                            }
-                            Err(err) => {
-                                eprintln!("{:?}", err)
-                            }
-                        },
-                        "backup" => {
-                            let path = remaining.trim();
-                            if path.is_empty() {
-                                eprintln!("Backup requires a path");
-                            } else {
-                                match db.backup_db(path.to_string()) {
-                                    Ok(_) => {
-                                        println!("Backup written successfully to {}", path)
-                                    }
-                                    Err(err) => {
-                                        eprintln!("{:?}", err)
-                                    }
-                                }
-                            }
-                        }
-                        "restore" => {
-                            let path = remaining.trim();
-                            if path.is_empty() {
-                                eprintln!("Restore requires a path");
-                            } else {
-                                match db.restore_backup(path) {
-                                    Ok(_) => {
-                                        println!("Backup successfully loaded from {}", path)
-                                    }
-                                    Err(err) => {
-                                        eprintln!("{:?}", err)
-                                    }
-                                }
-                            }
-                        }
-                        "save" => {
-                            let next_path = remaining.trim();
-                            if next_path.is_empty() {
-                                eprintln!("Next result will NOT be saved to file");
-                            } else {
-                                eprintln!("Next result will be saved to file: {}", next_path);
-                                save_next = Some(next_path.to_string())
-                            }
-                        }
-                        op => eprintln!("Unknown op: {}", op),
-                    }
-                } else {
-                    match db.run_script(&line, params.clone()) {
-                        Ok(out) => {
-                            if let Some(path) = save_next.as_ref() {
-                                println!(
-                                    "Query has returned {} rows, saving to file {}",
-                                    out.rows.len(),
-                                    path
-                                );
-
-                                let to_save = out
-                                    .rows
-                                    .iter()
-                                    .map(|row| -> Value {
-                                        row.iter()
-                                            .zip(out.headers.iter())
-                                            .map(|(v, k)| (k.to_string(), v.clone()))
-                                            .collect()
-                                    })
-                                    .collect();
-
-                                let j_payload = Value::Array(to_save);
-
-                                match std::fs::File::create(path) {
-                                    Ok(mut file) => {
-                                        match file.write_all(j_payload.to_string().as_bytes()) {
-                                            Ok(_) => {
-                                                save_next = None;
-                                            }
-                                            Err(err) => {
-                                                eprintln!("{:?}", err);
-                                            }
-                                        }
-                                    }
-                                    Err(err) => {
-                                        eprintln!("{:?}", err);
-                                    }
-                                }
-                            } else {
-                                use prettytable::format;
-                                let mut table = prettytable::Table::new();
-                                let headers = out
-                                    .headers
-                                    .iter()
-                                    .map(prettytable::Cell::from)
-                                    .collect::<Vec<_>>();
-                                table.set_titles(prettytable::Row::new(headers));
-                                let rows = out
-                                    .rows
-                                    .iter()
-                                    .map(|r| r.iter().map(|c| format!("{}", c)).collect::<Vec<_>>())
-                                    .collect::<Vec<_>>();
-                                let rows = rows.iter().map(|r| {
-                                    r.iter().map(prettytable::Cell::from).collect::<Vec<_>>()
-                                });
-                                for row in rows {
-                                    table.add_row(prettytable::Row::new(row));
-                                }
-                                table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
-                                table.printstd();
-                            }
-                        }
-                        Err(mut err) => {
-                            if err.source_code().is_none() {
-                                err = err.with_source_code(line.to_string());
-                            }
-                            eprintln!("{:?}", err);
-                        }
-                    };
+                if let Err(err) = process_line(&line, &db, &mut params, &mut save_next) {
+                    eprintln!("{:?}", err);
                 }
                 rl.add_history_entry(line);
             }
@@ -238,6 +89,139 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
             }
             Err(rustyline::error::ReadlineError::Eof) => break,
             Err(e) => eprintln!("{:?}", e),
+        }
+    }
+    Ok(())
+}
+
+fn process_line(
+    line: &str,
+    db: &DbInstance,
+    params: &mut BTreeMap<String, Value>,
+    save_next: &mut Option<String>,
+) -> miette::Result<()> {
+    let line = line.trim();
+    if line.is_empty() {
+        return Ok(());
+    }
+    if let Some(remaining) = line.strip_prefix("%") {
+        let remaining = remaining.trim();
+        let (op, payload) = remaining
+            .split_once(|c: char| c.is_whitespace())
+            .unwrap_or((remaining, ""));
+        match op {
+            "set" => {
+                let (key, v_str) = payload
+                    .trim()
+                    .split_once(|c: char| c.is_whitespace())
+                    .ok_or_else(|| miette!("Bad set syntax. Should be '%set <KEY> <VALUE>'."))?;
+                let val = serde_json::from_str(v_str).into_diagnostic()?;
+                params.insert(key.to_string(), val);
+            }
+            "unset" => {
+                let key = payload.trim();
+                if params.remove(key).is_none() {
+                    bail!("Key not found: '{}'", key)
+                }
+            }
+            "clear" => {
+                params.clear();
+            }
+            "params" => {
+                let display = serde_json::to_string_pretty(&json!(&params)).into_diagnostic()?;
+                println!("{}", display);
+            }
+            "backup" => {
+                let path = payload.trim();
+                if path.is_empty() {
+                    bail!("Backup requires a path");
+                };
+                db.backup_db(path.to_string())?;
+                println!("Backup written successfully to {}", path)
+            }
+            "restore" => {
+                let path = payload.trim();
+                if path.is_empty() {
+                    bail!("Restore requires a path");
+                };
+                db.restore_backup(path)?;
+                println!("Backup successfully loaded from {}", path)
+            }
+            "save" => {
+                let next_path = payload.trim();
+                if next_path.is_empty() {
+                    println!("Next result will NOT be saved to file");
+                } else {
+                    println!("Next result will be saved to file: {}", next_path);
+                    *save_next = Some(next_path.to_string())
+                }
+            }
+            "import" => {
+                let url = payload.trim();
+                if url.starts_with("http://") || url.starts_with("https://") {
+                    let data = minreq::get(url).send().into_diagnostic()?;
+                    let data = data.as_str().into_diagnostic()?;
+                    db.import_relations_str_with_err(data)?;
+                    println!("Imported data from {}", url)
+                } else {
+                    let file_path = url.strip_prefix("file://").unwrap_or(url);
+                    let mut file = File::open(file_path).into_diagnostic()?;
+                    let mut content = String::new();
+                    file.read_to_string(&mut content).into_diagnostic()?;
+                    db.import_relations_str_with_err(&content)?;
+                    println!("Imported data from {}", url);
+                }
+            }
+            op => bail!("Unknown op: {}", op),
+        }
+    } else {
+        let out = db.run_script(&line, params.clone())?;
+        if let Some(path) = save_next.as_ref() {
+            println!(
+                "Query has returned {} rows, saving to file {}",
+                out.rows.len(),
+                path
+            );
+
+            let to_save = out
+                .rows
+                .iter()
+                .map(|row| -> Value {
+                    row.iter()
+                        .zip(out.headers.iter())
+                        .map(|(v, k)| (k.to_string(), v.clone()))
+                        .collect()
+                })
+                .collect();
+
+            let j_payload = Value::Array(to_save);
+
+            let mut file = File::create(path).into_diagnostic()?;
+            file.write_all(j_payload.to_string().as_bytes())
+                .into_diagnostic()?;
+            *save_next = None;
+        } else {
+            use prettytable::format;
+            let mut table = prettytable::Table::new();
+            let headers = out
+                .headers
+                .iter()
+                .map(prettytable::Cell::from)
+                .collect::<Vec<_>>();
+            table.set_titles(prettytable::Row::new(headers));
+            let rows = out
+                .rows
+                .iter()
+                .map(|r| r.iter().map(|c| format!("{}", c)).collect::<Vec<_>>())
+                .collect::<Vec<_>>();
+            let rows = rows
+                .iter()
+                .map(|r| r.iter().map(prettytable::Cell::from).collect::<Vec<_>>());
+            for row in rows {
+                table.add_row(prettytable::Row::new(row));
+            }
+            table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+            table.printstd();
         }
     }
     Ok(())

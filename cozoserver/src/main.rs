@@ -72,7 +72,6 @@ macro_rules! check_auth {
 }
 
 fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
     if args.bind != "127.0.0.1" {
         eprintln!("{}", SECURITY_WARNING);
@@ -95,6 +94,7 @@ fn main() {
             exit(-1);
         }
     } else {
+        env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
         server_main(args, db)
     }
 }

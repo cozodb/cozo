@@ -54,4 +54,5 @@ chrono = "0.4.19"
 serde_json = "1.0.81"
 prettytable = "0.10.0"
 rustyline = "10.0.0"
+minreq = { version = "2.6.0", features = ["https-rustls"] }
 miette = { version = "5.5.0", features = ["fancy"] }

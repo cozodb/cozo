@@ -285,7 +285,7 @@ impl DbInstance {
     /// Note that triggers are _not_ run for the relations, if any exists.
     /// If you need to activate triggers, use queries with parameters.
     pub fn import_relations_str(&self, data: &str) -> String {
-        match self.import_relations_str_inner(data) {
+        match self.import_relations_str_with_err(data) {
             Ok(()) => {
                 format!("{}", json!({"ok": true}))
             }
@@ -294,7 +294,11 @@ impl DbInstance {
             }
         }
     }
-    fn import_relations_str_inner(&self, data: &str) -> Result<()> {
+    /// Import a relation, the data is given as a JSON string
+    ///
+    /// Note that triggers are _not_ run for the relations, if any exists.
+    /// If you need to activate triggers, use queries with parameters.
+    pub fn import_relations_str_with_err(&self, data: &str) -> Result<()> {
         let j_obj: BTreeMap<String, NamedRows> = serde_json::from_str(data).into_diagnostic()?;
         self.import_relations(j_obj)
     }

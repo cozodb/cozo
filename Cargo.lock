@@ -670,6 +670,7 @@ dependencies = [
  "env_logger",
  "log",
  "miette",
+ "minreq",
  "prettytable",
  "rand 0.8.5",
  "rouille",

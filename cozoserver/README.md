@@ -38,6 +38,7 @@ You can use the following meta ops in the REPL:
 * `%unset <KEY>`: unset a parameter.
 * `%clear`: unset all parameters.
 * `%params`: print all set parameters.
+* `%import <FILE OR URL>`: import data in JSON format from the file or URL. 
 * `%save <FILE>`: the result of the next successful query will be saved in JSON format in a file instead of printed on screen. If `<FILE>` is omitted, then the effect of any previous `%save` command is nullified. 
 * `%backup <FILE>`: the current database will be backed up into the file.
 * `%restore <FILE>`: restore the data in the backup to the current database. The current database must be empty.
