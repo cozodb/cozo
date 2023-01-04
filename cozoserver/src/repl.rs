@@ -72,6 +72,10 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
         let readline = rl.readline("=> ");
         match readline {
             Ok(line) => {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
                 if let Some(remaining) = line.strip_prefix("%") {
                     let remaining = remaining.trim();
                     let (op, payload) = remaining
