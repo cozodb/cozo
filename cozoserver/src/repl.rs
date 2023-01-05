@@ -70,6 +70,11 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
     let mut save_next: Option<String> = None;
     rl.set_helper(Some(Indented));
 
+    let history_file = ".cozo_repl_history";
+    if rl.load_history(history_file).is_ok() {
+        println!("Loaded history from {}", history_file);
+    }
+
     loop {
         let readline = rl.readline("=> ");
         match readline {
@@ -78,6 +83,7 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
                     eprintln!("{:?}", err);
                 }
                 rl.add_history_entry(line);
+                exit = false;
             }
             Err(rustyline::error::ReadlineError::Interrupted) => {
                 if exit {
@@ -90,6 +96,10 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
             Err(rustyline::error::ReadlineError::Eof) => break,
             Err(e) => eprintln!("{:?}", e),
         }
+    }
+
+    if rl.save_history(history_file).is_ok() {
+        eprintln!("Query history saved in {}", history_file);
     }
     Ok(())
 }

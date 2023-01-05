@@ -15,7 +15,7 @@ sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | 
 
 compact_op = {"compact"}
 running_op = {"running"}
-kill_op = {"kill" ~ int}
+kill_op = {"kill" ~ expr}
 explain_op = {"explain" ~ query_script_inner}
 list_relations_op = {"relations"}
 list_relation_op = {"columns" ~ compound_ident}

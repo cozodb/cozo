@@ -37,3 +37,4 @@ release*
 Cross.toml
 /tools
 *.cozo_auth
+.cozo_repl_history

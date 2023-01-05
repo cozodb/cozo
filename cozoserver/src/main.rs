@@ -89,6 +89,21 @@ fn main() {
     }
 
     if args.repl {
+        let db_copy = db.clone();
+        ctrlc::set_handler(move || {
+            let running = db_copy
+                .run_script("::running", Default::default())
+                .expect("Cannot determine running queries");
+            for row in running.rows {
+                let id = row.into_iter().next().unwrap();
+                eprintln!("Killing running query {}", id);
+                db_copy
+                    .run_script("::kill $id", BTreeMap::from([("id".to_string(), id)]))
+                    .expect("Cannot kill process");
+            }
+        })
+        .expect("Error setting Ctrl-C handler");
+
         if let Err(e) = repl_main(db) {
             eprintln!("{}", e);
             exit(-1);

@@ -10,12 +10,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use miette::{Diagnostic, Result};
+use miette::{miette, Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::program::InputProgram;
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, ValidityTs};
+use crate::parse::expr::build_expr;
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::AccessLevel;
@@ -44,19 +45,20 @@ pub(crate) fn parse_sys(
     mut src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
     algorithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
-    cur_vld: ValidityTs
+    cur_vld: ValidityTs,
 ) -> Result<SysOp> {
     let inner = src.next().unwrap();
     Ok(match inner.as_rule() {
         Rule::compact_op => SysOp::Compact,
         Rule::running_op => SysOp::ListRunning,
         Rule::kill_op => {
-            let i_str = inner.into_inner().next().unwrap();
-            let i = i_str
-                .as_str()
-                .parse::<u64>()
-                .map_err(|_| ProcessIdError(i_str.as_str().to_string(), i_str.extract_span()))?;
-            SysOp::KillRunning(i)
+            let i_expr = inner.into_inner().next().unwrap();
+            let i_val = build_expr(i_expr, param_pool)?;
+            let i_val = i_val.eval_to_const()?;
+            let i_val = i_val
+                .get_int()
+                .ok_or_else(|| miette!("Process ID must be an integer"))?;
+            SysOp::KillRunning(i_val as u64)
         }
         Rule::explain_op => {
             let prog = parse_query(
@@ -128,7 +130,12 @@ pub(crate) fn parse_sys(
                 let op = clause_inner.next().unwrap();
                 let script = clause_inner.next().unwrap();
                 let script_str = script.as_str();
-                parse_query(script.into_inner(), &Default::default(), algorithms, cur_vld)?;
+                parse_query(
+                    script.into_inner(),
+                    &Default::default(),
+                    algorithms,
+                    cur_vld,
+                )?;
                 match op.as_rule() {
                     Rule::trigger_put => puts.push(script_str.to_string()),
                     Rule::trigger_rm => rms.push(script_str.to_string()),
