@@ -173,15 +173,10 @@ impl<'a> SessionTx<'a> {
                 };
                 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                 {
-                    if prog.len() == 1 {
-                        let (k, new_store) = execution(prog.iter().next().unwrap())?;
+                    let execs = prog.par_iter().map(execution);
+                    for res in execs.collect::<Vec<_>>() {
+                        let (k, new_store) = res?;
                         to_merge.insert(k, new_store);
-                    } else {
-                        let execs = prog.par_iter().map(execution);
-                        for res in execs.collect::<Vec<_>>() {
-                            let (k, new_store) = res?;
-                            to_merge.insert(k, new_store);
-                        }
                     }
                 }
                 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -234,15 +229,10 @@ impl<'a> SessionTx<'a> {
                 };
                 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
                 {
-                    if prog.len() == 1 {
-                        let (k, new_store) = execution(prog.iter().next().unwrap())?;
+                    let execs = prog.par_iter().map(execution);
+                    for res in execs.collect::<Vec<_>>() {
+                        let (k, new_store) = res?;
                         to_merge.insert(k, new_store);
-                    } else {
-                        let execs = prog.par_iter().map(execution);
-                        for res in execs.collect::<Vec<_>>() {
-                            let (k, new_store) = res?;
-                            to_merge.insert(k, new_store);
-                        }
                     }
                 }
                 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
