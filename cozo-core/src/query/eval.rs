@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use itertools::Itertools;
 use log::{debug, trace};
 use miette::Result;
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 
 use crate::data::aggr::Aggregation;
@@ -178,7 +178,7 @@ impl<'a> SessionTx<'a> {
                     };
                     Ok((k, new_store))
                 };
-                #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+                #[cfg(not(target_arch = "wasm32"))]
                 {
                     let limiter_enabled = limiter.total.is_some();
                     for res in prog
@@ -203,7 +203,7 @@ impl<'a> SessionTx<'a> {
                         to_merge.insert(k, new_store);
                     }
                 }
-                #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                #[cfg(target_arch = "wasm32")]
                 {
                     for res in prog.iter().map(execution) {
                         let (k, new_store) = res?;
@@ -251,7 +251,7 @@ impl<'a> SessionTx<'a> {
                     };
                     Ok((k, new_store))
                 };
-                #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+                #[cfg(not(target_arch = "wasm32"))]
                 {
                     let limiter_enabled = limiter.total.is_some();
                     // entry rules with limiter must execute sequentially in order to get deterministic ordering
@@ -276,7 +276,7 @@ impl<'a> SessionTx<'a> {
                         to_merge.insert(k, new_store);
                     }
                 }
-                #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                #[cfg(target_arch = "wasm32")]
                 {
                     for res in prog.iter().map(execution) {
                         let (k, new_store) = res?;

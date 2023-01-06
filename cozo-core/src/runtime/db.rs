@@ -532,7 +532,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         }
                         res = q_res;
                         cleanups.extend(q_cleanups);
-                        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+                        #[cfg(not(target_arch = "wasm32"))]
                         if let Some(secs) = sleep_opt {
                             thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
                         }
@@ -903,15 +903,15 @@ impl<'s, S: Storage<'s>> Db<S> {
         let id = self.queries_count.fetch_add(1, Ordering::AcqRel);
 
         // time the query
-        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        #[cfg(not(target_arch = "wasm32"))]
         let now = SystemTime::now();
-        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        #[cfg(not(target_arch = "wasm32"))]
         let since_the_epoch = now
             .duration_since(UNIX_EPOCH)
             .into_diagnostic()?
             .as_secs_f64();
 
-        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        #[cfg(target_arch = "wasm32")]
         let since_the_epoch = js_sys::Date::now();
 
         let handle = RunningQueryHandle {
@@ -1195,11 +1195,11 @@ impl Poison {
         }
         Ok(())
     }
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    #[cfg(target_arch = "wasm32")]
     pub(crate) fn set_timeout(&self, _secs: f64) -> Result<()> {
         bail!("Cannot set timeout when threading is disallowed");
     }
-    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn set_timeout(&self, secs: f64) -> Result<()> {
         let pill = self.clone();
         thread::spawn(move || {
