@@ -55,7 +55,7 @@ pub trait Storage<'s>: Sync {
 
 /// Trait for the associated transaction type of a storage engine.
 /// A transaction needs to guarantee MVCC semantics for all operations.
-pub trait StoreTx<'s> {
+pub trait StoreTx<'s>: Sync {
     /// Get a key. If `for_update` is `true` (only possible in a write transaction),
     /// then the database needs to guarantee that `commit()` can only succeed if
     /// the key has not been modified outside the transaction.

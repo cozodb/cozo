@@ -32,12 +32,12 @@ impl Clone for Aggregation {
     }
 }
 
-pub(crate) trait NormalAggrObj {
+pub(crate) trait NormalAggrObj: Send + Sync {
     fn set(&mut self, value: &DataValue) -> Result<()>;
     fn get(&self) -> Result<DataValue>;
 }
 
-pub(crate) trait MeetAggrObj {
+pub(crate) trait MeetAggrObj: Send + Sync {
     fn init_val(&self) -> DataValue;
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool>;
 }

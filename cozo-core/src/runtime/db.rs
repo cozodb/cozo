@@ -10,7 +10,6 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::default::Default;
 use std::fmt::{Debug, Formatter};
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 #[allow(unused_imports)]
@@ -1228,7 +1227,7 @@ fn propagate_previous_results(
                         name: Symbol::new("Constant", Default::default()),
                     },
                     rule_args: vec![],
-                    options: Rc::new(BTreeMap::from([(
+                    options: Arc::new(BTreeMap::from([(
                         SmartString::from("data"),
                         Expr::Const {
                             val: DataValue::List(

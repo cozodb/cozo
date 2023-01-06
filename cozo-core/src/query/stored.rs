@@ -7,7 +7,6 @@
  */
 
 use std::collections::BTreeMap;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use itertools::Itertools;
@@ -445,7 +444,7 @@ fn make_const_rule(
                     name: Symbol::new("Constant", Default::default()),
                 },
                 rule_args: vec![],
-                options: Rc::new(options),
+                options: Arc::new(options),
                 head: bindings,
                 arity: bindings_arity,
                 span: Default::default(),

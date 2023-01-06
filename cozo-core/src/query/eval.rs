@@ -8,11 +8,12 @@
 
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use itertools::Itertools;
 use log::{debug, trace};
 use miette::Result;
+use rayon::prelude::*;
 
 use crate::data::aggr::Aggregation;
 use crate::data::program::{MagicSymbol, NoEntryError};
@@ -112,42 +113,42 @@ impl<'a> SessionTx<'a> {
             counter: 0.into(),
         };
 
-        let mut used_limiter = false;
+        let used_limiter: AtomicBool = false.into();
 
         for epoch in 0u32.. {
             debug!("epoch {}", epoch);
             let mut to_merge = BTreeMap::new();
             let borrowed_stores = stores as &BTreeMap<_, _>;
             if epoch == 0 {
-                let execs = prog.iter().map(|(k, compiled_ruleset)| -> Result<_> {
+                let execs = prog.par_iter().map(|(k, compiled_ruleset)| -> Result<_> {
                     let new_store = match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => match compiled_ruleset.aggr_kind() {
                             AggrKind::None => {
                                 let res = self.initial_rule_non_aggr_eval(
                                     k,
-                                    ruleset,
+                                    &ruleset,
                                     borrowed_stores,
                                     &limiter,
                                     poison.clone(),
                                 )?;
-                                used_limiter = res.0 || used_limiter;
+                                used_limiter.fetch_or(res.0, Ordering::Relaxed);
                                 res.1.wrap()
                             }
                             AggrKind::Normal => {
                                 let res = self.initial_rule_aggr_eval(
                                     k,
-                                    ruleset,
+                                    &ruleset,
                                     borrowed_stores,
                                     &limiter,
                                     poison.clone(),
                                 )?;
-                                used_limiter = res.0 || used_limiter;
+                                used_limiter.fetch_or(res.0, Ordering::Relaxed);
                                 res.1.wrap()
                             }
                             AggrKind::Meet => {
                                 let new = self.initial_rule_meet_eval(
                                     k,
-                                    ruleset,
+                                    &ruleset,
                                     borrowed_stores,
                                     poison.clone(),
                                 )?;
@@ -158,7 +159,7 @@ impl<'a> SessionTx<'a> {
                             let fixed_impl = fixed.fixed_impl.as_ref();
                             let mut out = RegularTempStore::default();
                             let payload = FixedRulePayload {
-                                manifest: fixed,
+                                manifest: &fixed,
                                 stores: borrowed_stores,
                                 tx: self,
                             };
@@ -168,12 +169,12 @@ impl<'a> SessionTx<'a> {
                     };
                     Ok((k, new_store))
                 });
-                for res in execs {
+                for res in execs.collect::<Vec<_>>() {
                     let (k, new_store) = res?;
                     to_merge.insert(k, new_store);
                 }
             } else {
-                let execs = prog.iter().map(|(k, compiled_ruleset)| -> Result<_> {
+                let execs = prog.par_iter().map(|(k, compiled_ruleset)| -> Result<_> {
                     let new_store = match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => {
                             match compiled_ruleset.aggr_kind() {
@@ -186,7 +187,7 @@ impl<'a> SessionTx<'a> {
                                         &limiter,
                                         poison.clone(),
                                     )?;
-                                    used_limiter = res.0 || used_limiter;
+                                    used_limiter.fetch_or(res.0, Ordering::Relaxed);
                                     res.1.wrap()
                                 }
                                 AggrKind::Meet => {
@@ -212,7 +213,7 @@ impl<'a> SessionTx<'a> {
                     };
                     Ok((k, new_store))
                 });
-                for res in execs {
+                for res in execs.collect::<Vec<_>>() {
                     let (k, new_store) = res?;
                     to_merge.insert(k, new_store);
                 }
@@ -228,7 +229,7 @@ impl<'a> SessionTx<'a> {
                 break;
             }
         }
-        Ok(used_limiter)
+        Ok(used_limiter.load(Ordering::Acquire))
     }
     /// returns true is early return is activated
     fn initial_rule_non_aggr_eval(

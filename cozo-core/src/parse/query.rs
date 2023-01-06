@@ -11,7 +11,6 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::rc::Rc;
 use std::sync::Arc;
 
 use either::{Left, Right};
@@ -225,7 +224,7 @@ pub(crate) fn parse_query(
                         fixed: FixedRuleApply {
                             fixed_handle: handle,
                             rule_args: vec![],
-                            options: Rc::new(options),
+                            options: Arc::new(options),
                             head,
                             arity,
                             span,
@@ -906,7 +905,7 @@ fn parse_fixed_rule(
         FixedRuleApply {
             fixed_handle: fixed,
             rule_args,
-            options: Rc::new(options),
+            options: Arc::new(options),
             head,
             arity,
             span: args_list_span,
@@ -944,7 +943,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
                     name: Symbol::new("Constant", Default::default()),
                 },
                 rule_args: vec![],
-                options: Rc::new(options),
+                options: Arc::new(options),
                 head: bindings.to_vec(),
                 arity: bindings.len(),
                 span: Default::default(),

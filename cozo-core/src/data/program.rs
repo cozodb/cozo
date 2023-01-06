@@ -9,7 +9,6 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
-use std::rc::Rc;
 use std::sync::Arc;
 
 use miette::{ensure, Diagnostic, Result};
@@ -220,7 +219,7 @@ impl InputInlineRulesOrFixed {
 pub(crate) struct FixedRuleApply {
     pub(crate) fixed_handle: FixedRuleHandle,
     pub(crate) rule_args: Vec<FixedRuleArg>,
-    pub(crate) options: Rc<BTreeMap<SmartString<LazyCompact>, Expr>>,
+    pub(crate) options: Arc<BTreeMap<SmartString<LazyCompact>, Expr>>,
     pub(crate) head: Vec<Symbol>,
     pub(crate) arity: usize,
     pub(crate) span: SourceSpan,
@@ -248,7 +247,7 @@ impl Debug for FixedRuleApply {
 pub(crate) struct MagicFixedRuleApply {
     pub(crate) fixed_handle: FixedRuleHandle,
     pub(crate) rule_args: Vec<MagicFixedRuleRuleArg>,
-    pub(crate) options: Rc<BTreeMap<SmartString<LazyCompact>, Expr>>,
+    pub(crate) options: Arc<BTreeMap<SmartString<LazyCompact>, Expr>>,
     pub(crate) span: SourceSpan,
     pub(crate) arity: usize,
     pub(crate) fixed_impl: Arc<Box<dyn FixedRule>>,
