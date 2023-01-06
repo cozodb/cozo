@@ -154,6 +154,8 @@ pub struct RocksDbTx {
     db_tx: Tx,
 }
 
+unsafe impl Sync for RocksDbTx {}
+
 impl<'s> StoreTx<'s> for RocksDbTx {
     #[inline]
     fn get(&self, key: &[u8], for_update: bool) -> Result<Option<Vec<u8>>> {

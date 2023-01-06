@@ -194,6 +194,30 @@ fn empty() {
 }
 
 #[test]
+fn parallel_counts() {
+    initialize(&TEST_DB);
+    let res = TEST_DB
+        .run_script(
+            r#"
+        a[count(fr)] := *route{fr}
+        b[count(fr)] := *route{fr}
+        c[count(fr)] := *route{fr}
+        d[count(fr)] := *route{fr}
+        e[count(fr)] := *route{fr}
+        ?[x] := a[a], b[b], c[c], d[d], e[e], x = a + b + c + d + e
+        "#,
+            Default::default(),
+        )
+        .unwrap()
+        .rows
+        .remove(0)
+        .remove(0)
+        .as_i64()
+        .unwrap();
+    assert_eq!(res, 50637 * 5);
+}
+
+#[test]
 fn bfs() {
     initialize(&TEST_DB);
     let bfs = Instant::now();
