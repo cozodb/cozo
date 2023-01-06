@@ -47,27 +47,27 @@ pub(crate) struct QueryOutOptions {
 
 impl Debug for QueryOutOptions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
 impl Display for QueryOutOptions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(l) = self.limit {
-            writeln!(f, ":limit {};", l)?;
+            writeln!(f, ":limit {l};")?;
         }
         if let Some(l) = self.offset {
-            writeln!(f, ":offset {};", l)?;
+            writeln!(f, ":offset {l};")?;
         }
         if let Some(l) = self.timeout {
-            writeln!(f, ":timeout {};", l)?;
+            writeln!(f, ":timeout {l};")?;
         }
         for (symb, dir) in &self.sorters {
             write!(f, ":order ")?;
             if *dir == SortDir::Dsc {
                 write!(f, "-")?;
             }
-            writeln!(f, "{};", symb)?;
+            writeln!(f, "{symb};")?;
         }
         if let Some((
             InputRelationHandle {
@@ -100,7 +100,7 @@ impl Display for QueryOutOptions {
                     write!(f, ":ensure_not ")?;
                 }
             }
-            write!(f, "{} {{", name)?;
+            write!(f, "{name} {{")?;
             let mut is_first = true;
             for (col, bind) in keys.iter().zip(key_bindings) {
                 if is_first {
@@ -110,9 +110,9 @@ impl Display for QueryOutOptions {
                 }
                 write!(f, "{}: {}", col.name, col.typing)?;
                 if let Some(gen) = &col.default_gen {
-                    write!(f, " default {}", gen)?;
+                    write!(f, " default {gen}")?;
                 } else {
-                    write!(f, " = {}", bind)?;
+                    write!(f, " = {bind}")?;
                 }
             }
             write!(f, " => ")?;
@@ -125,9 +125,9 @@ impl Display for QueryOutOptions {
                 }
                 write!(f, "{}: {}", col.name, col.typing)?;
                 if let Some(gen) = &col.default_gen {
-                    write!(f, " default {}", gen)?;
+                    write!(f, " default {gen}")?;
                 } else {
-                    write!(f, " = {}", bind)?;
+                    write!(f, " = {bind}")?;
                 }
             }
             writeln!(f, "}};")?;
@@ -352,7 +352,7 @@ pub(crate) enum FixedRuleArg {
 
 impl Debug for FixedRuleArg {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -360,11 +360,11 @@ impl Display for FixedRuleArg {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             FixedRuleArg::InMem { name, bindings, .. } => {
-                write!(f, "{}", name)?;
+                write!(f, "{name}")?;
                 f.debug_list().entries(bindings).finish()?;
             }
             FixedRuleArg::Stored { name, bindings, .. } => {
-                write!(f, ":{}", name)?;
+                write!(f, ":{name}")?;
                 f.debug_list().entries(bindings).finish()?;
             }
             FixedRuleArg::NamedStored { name, bindings, .. } => {
@@ -438,7 +438,7 @@ impl Display for InputProgram {
                         head, aggr, body, ..
                     } in rules
                     {
-                        write!(f, "{}[", name)?;
+                        write!(f, "{name}[")?;
 
                         for (i, (h, a)) in head.iter().zip(aggr).enumerate() {
                             if i > 0 {
@@ -447,11 +447,11 @@ impl Display for InputProgram {
                             if let Some((aggr, aggr_args)) = a {
                                 write!(f, "{}({}", aggr.name, h)?;
                                 for aga in aggr_args {
-                                    write!(f, ", {}", aga)?;
+                                    write!(f, ", {aga}")?;
                                 }
                                 write!(f, ")")?;
                             } else {
-                                write!(f, "{}", h)?;
+                                write!(f, "{h}")?;
                             }
                         }
                         write!(f, "] := ")?;
@@ -459,7 +459,7 @@ impl Display for InputProgram {
                             if i > 0 {
                                 write!(f, ", ")?;
                             }
-                            write!(f, "{}", atom)?;
+                            write!(f, "{atom}")?;
                         }
                         writeln!(f, ";")?;
                     }
@@ -474,7 +474,7 @@ impl Display for InputProgram {
                             ..
                         },
                 } => {
-                    write!(f, "{}", name)?;
+                    write!(f, "{name}")?;
                     f.debug_list().entries(head).finish()?;
                     write!(f, " <~ ")?;
                     write!(f, "{}(", handle.name)?;
@@ -485,7 +485,7 @@ impl Display for InputProgram {
                         } else {
                             write!(f, ", ")?;
                         }
-                        write!(f, "{}", rule_arg)?;
+                        write!(f, "{rule_arg}")?;
                     }
                     for (k, v) in options.as_ref() {
                         if first {
@@ -493,7 +493,7 @@ impl Display for InputProgram {
                         } else {
                             write!(f, ", ")?;
                         }
-                        write!(f, "{}: {}", k, v)?;
+                        write!(f, "{k}: {v}")?;
                     }
                     writeln!(f, ");")?;
                 }
@@ -537,7 +537,7 @@ impl InputProgram {
             Err(_) => {
                 let arity = self.get_entry_arity()?;
                 Ok((0..arity)
-                    .map(|i| Symbol::new(format!("_{}", i), SourceSpan(0, 0)))
+                    .map(|i| Symbol::new(format!("_{i}"), SourceSpan(0, 0)))
                     .collect())
             }
         }
@@ -593,7 +593,7 @@ impl InputProgram {
                         let mut counter = -1;
                         let mut gen_symb = |span| {
                             counter += 1;
-                            Symbol::new(&format!("***{}", counter) as &str, span)
+                            Symbol::new(&format!("***{counter}") as &str, span)
                         };
                         let normalized_body = InputAtom::Conjunction {
                             inner: rule.body,
@@ -746,7 +746,7 @@ impl MagicSymbol {
 
 impl Display for MagicSymbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -894,7 +894,7 @@ pub(crate) enum InputAtom {
 
 impl Debug for InputAtom {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -904,7 +904,7 @@ impl Display for InputAtom {
             InputAtom::Rule {
                 inner: InputRuleApplyAtom { name, args, .. },
             } => {
-                write!(f, "{}", name)?;
+                write!(f, "{name}")?;
                 f.debug_list().entries(args).finish()?;
             }
             InputAtom::NamedFieldRelation {
@@ -920,21 +920,21 @@ impl Display for InputAtom {
             InputAtom::Relation {
                 inner: InputRelationApplyAtom { name, args, .. },
             } => {
-                write!(f, ":{}", name)?;
+                write!(f, ":{name}")?;
                 f.debug_list().entries(args).finish()?;
             }
             InputAtom::Predicate { inner } => {
-                write!(f, "{}", inner)?;
+                write!(f, "{inner}")?;
             }
             InputAtom::Negation { inner, .. } => {
-                write!(f, "not {}", inner)?;
+                write!(f, "not {inner}")?;
             }
             InputAtom::Conjunction { inner, .. } => {
                 for (i, a) in inner.iter().enumerate() {
                     if i > 0 {
                         write!(f, " and ")?;
                     }
-                    write!(f, "({})", a)?;
+                    write!(f, "({a})")?;
                 }
             }
             InputAtom::Disjunction { inner, .. } => {
@@ -942,7 +942,7 @@ impl Display for InputAtom {
                     if i > 0 {
                         write!(f, " or ")?;
                     }
-                    write!(f, "({})", a)?;
+                    write!(f, "({a})")?;
                 }
             }
             InputAtom::Unification {
@@ -954,13 +954,13 @@ impl Display for InputAtom {
                         ..
                     },
             } => {
-                write!(f, "{}", binding)?;
+                write!(f, "{binding}")?;
                 if *one_many_unif {
                     write!(f, " in ")?;
                 } else {
                     write!(f, " = ")?;
                 }
-                write!(f, "{}", expr)?;
+                write!(f, "{expr}")?;
             }
         }
         Ok(())

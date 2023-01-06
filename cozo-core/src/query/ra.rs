@@ -234,7 +234,7 @@ struct BindingFormatter(Vec<Symbol>);
 impl Debug for BindingFormatter {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let s = self.0.iter().map(|f| f.to_string()).join(", ");
-        write!(f, "[{}]", s)
+        write!(f, "[{s}]")
     }
 }
 
@@ -1472,7 +1472,7 @@ impl Debug for Joiner {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let left_bindings = BindingFormatter(self.left_keys.clone());
         let right_bindings = BindingFormatter(self.right_keys.clone());
-        write!(f, "{:?}<->{:?}", left_bindings, right_bindings,)
+        write!(f, "{left_bindings:?}<->{right_bindings:?}")
     }
 }
 

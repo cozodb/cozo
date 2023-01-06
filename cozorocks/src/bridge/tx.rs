@@ -38,7 +38,7 @@ impl AsRef<[u8]> for PinSlice {
 impl Debug for PinSlice {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let to_d: &[u8] = self;
-        write!(f, "{:?}", to_d)
+        write!(f, "{to_d:?}")
     }
 }
 

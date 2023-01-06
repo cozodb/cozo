@@ -74,7 +74,7 @@ macro_rules! check_auth {
 fn main() {
     let args = Args::parse();
     if args.bind != "127.0.0.1" {
-        eprintln!("{}", SECURITY_WARNING);
+        eprintln!("{SECURITY_WARNING}");
     }
 
     let db = DbInstance::new(
@@ -96,7 +96,7 @@ fn main() {
                 .expect("Cannot determine running queries");
             for row in running.rows {
                 let id = row.into_iter().next().unwrap();
-                eprintln!("Killing running query {}", id);
+                eprintln!("Killing running query {id}");
                 db_copy
                     .run_script("::kill $id", BTreeMap::from([("id".to_string(), id)]))
                     .expect("Cannot kill process");
@@ -105,7 +105,7 @@ fn main() {
         .expect("Error setting Ctrl-C handler");
 
         if let Err(e) = repl_main(db) {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             exit(-1);
         }
     } else {
@@ -138,7 +138,7 @@ fn server_main(args: Args, db: DbInstance) {
         "Database ({} backend) web API running at http://{}",
         args.engine, addr
     );
-    println!("The auth file is at {}", conf_path);
+    println!("The auth file is at {conf_path}");
     rouille::start_server(addr, move |request| {
         let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f");
         let log_ok = |req: &Request, _resp: &Response, elap: std::time::Duration| {

@@ -246,11 +246,11 @@ impl DbInstance {
         match self.export_relations_str_inner(data) {
             Ok(s) => {
                 let ret = json!({"ok": true, "data": s});
-                format!("{}", ret)
+                format!("{ret}")
             }
             Err(err) => {
                 let ret = json!({"ok": false, "message": err.to_string()});
-                format!("{}", ret)
+                format!("{ret}")
             }
         }
     }

@@ -769,7 +769,7 @@ fn parse_fixed_rule(
                             let s = v.as_str();
                             if s == "_" {
                                 let symb =
-                                    Symbol::new(format!("*_*{}", binding_gen_id), v.extract_span());
+                                    Symbol::new(format!("*_*{binding_gen_id}"), v.extract_span());
                                 binding_gen_id += 1;
                                 bindings.push(symb);
                             } else {
@@ -797,7 +797,7 @@ fn parse_fixed_rule(
                                     let s = v.as_str();
                                     if s == "_" {
                                         let symb = Symbol::new(
-                                            format!("*_*{}", binding_gen_id),
+                                            format!("*_*{binding_gen_id}"),
                                             v.extract_span(),
                                         );
                                         binding_gen_id += 1;

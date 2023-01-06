@@ -24,7 +24,7 @@ impl CozoDbPy {
     fn new(engine: &str, path: &str, options: &str) -> PyResult<Self> {
         match DbInstance::new(engine, path, options) {
             Ok(db) => Ok(Self { db: Some(db) }),
-            Err(err) => Err(PyException::new_err(format!("{:?}", err))),
+            Err(err) => Err(PyException::new_err(format!("{err:?}"))),
         }
     }
     pub fn run_query(&self, py: Python<'_>, query: &str, params: &str) -> String {

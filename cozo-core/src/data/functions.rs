@@ -1306,11 +1306,12 @@ pub(crate) fn op_to_int(args: &[DataValue]) -> Result<DataValue> {
         },
         DataValue::Null => DataValue::from(0),
         DataValue::Bool(b) => DataValue::from(if *b { 1 } else { 0 }),
-        DataValue::Str(t) => match t as &str {
-            s => i64::from_str(s)
+        DataValue::Str(t) => {
+            let s = t as &str;
+            i64::from_str(s)
                 .map_err(|_| miette!("The string cannot be interpreted as int"))?
-                .into(),
-        },
+                .into()
+        }
         DataValue::Validity(vld) => DataValue::Num(Num::Int(vld.timestamp.0 .0)),
         v => bail!("'to_int' does not recognize {:?}", v),
     })

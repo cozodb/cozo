@@ -182,5 +182,5 @@ pub(crate) fn get_file_content_from_url(url: &str) -> Result<Response> {
             error!("{:?}", e);
             miette!(e)
         })
-        .wrap_err_with(|| format!("when requesting URL {}", url))
+        .wrap_err_with(|| format!("when requesting URL {url}"))
 }

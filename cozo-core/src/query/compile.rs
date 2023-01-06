@@ -126,8 +126,7 @@ impl<'a> SessionTx<'a> {
                                         self.compile_magic_rule_body(rule, &k, &store_arities, header)?;
                                     relation.fill_binding_indices().with_context(|| {
                                         format!(
-                                            "error encountered when filling binding indices for {:#?}",
-                                            relation
+                                            "error encountered when filling binding indices for {relation:#?}"
                                         )
                                     })?;
                                     collected.push(CompiledRule {
@@ -160,7 +159,7 @@ impl<'a> SessionTx<'a> {
         let mut seen_variables = BTreeSet::new();
         let mut serial_id = 0;
         let mut gen_symb = |span| {
-            let ret = Symbol::new(&format!("**{}", serial_id) as &str, span);
+            let ret = Symbol::new(&format!("**{serial_id}") as &str, span);
             serial_id += 1;
             ret
         };

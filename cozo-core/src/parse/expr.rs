@@ -402,6 +402,6 @@ fn parse_s_quoted_string(pair: Pair<'_>) -> Result<SmartString<LazyCompact>> {
 
 fn parse_raw_string(pair: Pair<'_>) -> Result<SmartString<LazyCompact>> {
     Ok(SmartString::from(
-        pair.into_inner().into_iter().next().unwrap().as_str(),
+        pair.into_inner().next().unwrap().as_str(),
     ))
 }

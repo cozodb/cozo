@@ -178,8 +178,8 @@ fn verify_no_cycle(g: &StratifiedGraph<&'_ Symbol>, sccs: &[BTreeSet<&Symbol>]) 
     Ok(())
 }
 
-fn make_scc_reduced_graph<'a>(
-    sccs: &[BTreeSet<&'a Symbol>],
+fn make_scc_reduced_graph(
+    sccs: &[BTreeSet<&Symbol>],
     graph: &StratifiedGraph<&Symbol>,
 ) -> (BTreeMap<Symbol, usize>, StratifiedGraph<usize>) {
     let indices = sccs

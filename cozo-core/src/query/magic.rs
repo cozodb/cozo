@@ -415,7 +415,7 @@ impl NormalFormProgram {
                                                     .enumerate()
                                                     .map(|(i, col)| match bindings.get(&col.name) {
                                                         None => Symbol::new(
-                                                            SmartString::from(format!("{}", i)),
+                                                            SmartString::from(format!("{i}")),
                                                             Default::default(),
                                                         ),
                                                         Some(k) => k.clone(),

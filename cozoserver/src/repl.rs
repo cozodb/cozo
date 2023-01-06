@@ -14,11 +14,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use miette::{bail, miette, IntoDiagnostic};
-use prettytable;
-use rustyline;
 use serde_json::{json, Value};
 
-use cozo;
 use cozo::DbInstance;
 
 struct Indented;
@@ -48,8 +45,8 @@ impl rustyline::validate::Validator for Indented {
         &self,
         ctx: &mut rustyline::validate::ValidationContext<'_>,
     ) -> rustyline::Result<rustyline::validate::ValidationResult> {
-        Ok(if ctx.input().starts_with(" ") {
-            if ctx.input().ends_with("\n") {
+        Ok(if ctx.input().starts_with(' ') {
+            if ctx.input().ends_with('\n') {
                 rustyline::validate::ValidationResult::Valid(None)
             } else {
                 rustyline::validate::ValidationResult::Incomplete
@@ -72,7 +69,7 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
 
     let history_file = ".cozo_repl_history";
     if rl.load_history(history_file).is_ok() {
-        println!("Loaded history from {}", history_file);
+        println!("Loaded history from {history_file}");
     }
 
     loop {
@@ -80,7 +77,7 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
         match readline {
             Ok(line) => {
                 if let Err(err) = process_line(&line, &db, &mut params, &mut save_next) {
-                    eprintln!("{:?}", err);
+                    eprintln!("{err:?}");
                 }
                 rl.add_history_entry(line);
                 exit = false;
@@ -94,12 +91,12 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
                 }
             }
             Err(rustyline::error::ReadlineError::Eof) => break,
-            Err(e) => eprintln!("{:?}", e),
+            Err(e) => eprintln!("{e:?}"),
         }
     }
 
     if rl.save_history(history_file).is_ok() {
-        eprintln!("Query history saved in {}", history_file);
+        eprintln!("Query history saved in {history_file}");
     }
     Ok(())
 }
@@ -114,7 +111,7 @@ fn process_line(
     if line.is_empty() {
         return Ok(());
     }
-    if let Some(remaining) = line.strip_prefix("%") {
+    if let Some(remaining) = line.strip_prefix('%') {
         let remaining = remaining.trim();
         let (op, payload) = remaining
             .split_once(|c: char| c.is_whitespace())
@@ -139,7 +136,7 @@ fn process_line(
             }
             "params" => {
                 let display = serde_json::to_string_pretty(&json!(&params)).into_diagnostic()?;
-                println!("{}", display);
+                println!("{display}");
             }
             "backup" => {
                 let path = payload.trim();
@@ -147,7 +144,7 @@ fn process_line(
                     bail!("Backup requires a path");
                 };
                 db.backup_db(path.to_string())?;
-                println!("Backup written successfully to {}", path)
+                println!("Backup written successfully to {path}")
             }
             "restore" => {
                 let path = payload.trim();
@@ -155,14 +152,14 @@ fn process_line(
                     bail!("Restore requires a path");
                 };
                 db.restore_backup(path)?;
-                println!("Backup successfully loaded from {}", path)
+                println!("Backup successfully loaded from {path}")
             }
             "save" => {
                 let next_path = payload.trim();
                 if next_path.is_empty() {
                     println!("Next result will NOT be saved to file");
                 } else {
-                    println!("Next result will be saved to file: {}", next_path);
+                    println!("Next result will be saved to file: {next_path}");
                     *save_next = Some(next_path.to_string())
                 }
             }
@@ -172,20 +169,20 @@ fn process_line(
                     let data = minreq::get(url).send().into_diagnostic()?;
                     let data = data.as_str().into_diagnostic()?;
                     db.import_relations_str_with_err(data)?;
-                    println!("Imported data from {}", url)
+                    println!("Imported data from {url}")
                 } else {
                     let file_path = url.strip_prefix("file://").unwrap_or(url);
                     let mut file = File::open(file_path).into_diagnostic()?;
                     let mut content = String::new();
                     file.read_to_string(&mut content).into_diagnostic()?;
                     db.import_relations_str_with_err(&content)?;
-                    println!("Imported data from {}", url);
+                    println!("Imported data from {url}");
                 }
             }
             op => bail!("Unknown op: {}", op),
         }
     } else {
-        let out = db.run_script(&line, params.clone())?;
+        let out = db.run_script(line, params.clone())?;
         if let Some(path) = save_next.as_ref() {
             println!(
                 "Query has returned {} rows, saving to file {}",
@@ -222,7 +219,7 @@ fn process_line(
             let rows = out
                 .rows
                 .iter()
-                .map(|r| r.iter().map(|c| format!("{}", c)).collect::<Vec<_>>())
+                .map(|r| r.iter().map(|c| format!("{c}")).collect::<Vec<_>>())
                 .collect::<Vec<_>>();
             let rows = rows
                 .iter()

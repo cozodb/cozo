@@ -40,7 +40,7 @@ pub(crate) struct RelationId(pub(crate) u64);
 impl RelationId {
     pub(crate) fn new(u: u64) -> Self {
         if u > 2u64.pow(6 * 8) {
-            panic!("StoredRelId overflow: {}", u)
+            panic!("StoredRelId overflow: {u}")
         } else {
             Self(u)
         }
@@ -239,9 +239,9 @@ impl RelationHandle {
         tx.store_tx.range_skip_scan_tuple(&lower, &upper, valid_at)
     }
 
-    pub(crate) fn get<'a>(
+    pub(crate) fn get(
         &self,
-        tx: &'a SessionTx<'_>,
+        tx: &SessionTx<'_>,
         key: &[DataValue],
     ) -> Result<Option<Tuple>> {
         let key_data = key.encode_as_key(self.id);
@@ -251,7 +251,7 @@ impl RelationHandle {
             .map(|val_data| decode_tuple_from_kv(&key_data, &val_data)))
     }
 
-    pub(crate) fn exists<'a>(&self, tx: &'a SessionTx<'_>, key: &[DataValue]) -> Result<bool> {
+    pub(crate) fn exists(&self, tx: &SessionTx<'_>, key: &[DataValue]) -> Result<bool> {
         let key_data = key.encode_as_key(self.id);
         tx.store_tx.exists(&key_data, false)
     }

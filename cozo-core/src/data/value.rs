@@ -191,7 +191,7 @@ impl Eq for Num {}
 impl Display for Num {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Num::Int(i) => write!(f, "{}", i),
+            Num::Int(i) => write!(f, "{i}"),
             Num::Float(n) => {
                 if n.is_nan() {
                     write!(f, r#"to_float("NAN")"#)
@@ -202,7 +202,7 @@ impl Display for Num {
                         write!(f, r#"to_float("INF")"#)
                     }
                 } else {
-                    write!(f, "{}", n)
+                    write!(f, "{n}")
                 }
             }
         }
@@ -212,8 +212,8 @@ impl Display for Num {
 impl Debug for Num {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Num::Int(i) => write!(f, "{}", i),
-            Num::Float(n) => write!(f, "{}", n),
+            Num::Int(i) => write!(f, "{i}"),
+            Num::Float(n) => write!(f, "{n}"),
         }
     }
 }
@@ -251,7 +251,7 @@ impl Ord for Num {
 
 impl Debug for DataValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -259,16 +259,16 @@ impl Display for DataValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             DataValue::Null => f.write_str("null"),
-            DataValue::Bool(b) => write!(f, "{}", b),
-            DataValue::Num(n) => write!(f, "{}", n),
-            DataValue::Str(s) => write!(f, "{:?}", s),
+            DataValue::Bool(b) => write!(f, "{b}"),
+            DataValue::Num(n) => write!(f, "{n}"),
+            DataValue::Str(s) => write!(f, "{s:?}"),
             DataValue::Bytes(b) => {
                 let bs = base64::encode(b);
-                write!(f, "decode_base64({:?})", bs)
+                write!(f, "decode_base64({bs:?})")
             }
             DataValue::Uuid(u) => {
                 let us = u.0.to_string();
-                write!(f, "to_uuid({:?})", us)
+                write!(f, "to_uuid({us:?})")
             }
             DataValue::Regex(rx) => {
                 write!(f, "regex({:?})", rx.0.as_str())

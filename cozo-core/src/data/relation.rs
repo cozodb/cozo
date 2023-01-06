@@ -38,9 +38,9 @@ impl Display for NullableColType {
             ColType::Validity => f.write_str("Validity")?,
             ColType::List { eltype, len } => {
                 f.write_str("[")?;
-                write!(f, "{}", eltype)?;
+                write!(f, "{eltype}")?;
                 if let Some(l) = len {
-                    write!(f, ";{}", l)?;
+                    write!(f, ";{l}")?;
                 }
                 f.write_str("]")?;
             }
@@ -48,7 +48,7 @@ impl Display for NullableColType {
                 f.write_str("(")?;
                 let l = t.len();
                 for (i, el) in t.iter().enumerate() {
-                    write!(f, "{}", el)?;
+                    write!(f, "{el}")?;
                     if i != l - 1 {
                         f.write_str(",")?
                     }

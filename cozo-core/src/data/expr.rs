@@ -54,7 +54,7 @@ pub enum Expr {
 
 impl Debug for Expr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -65,7 +65,7 @@ impl Display for Expr {
                 write!(f, "{}", var.name)
             }
             Expr::Const { val, .. } => {
-                write!(f, "{}", val)
+                write!(f, "{val}")
             }
             Expr::Apply { op, args, .. } => {
                 let mut writer =
@@ -581,7 +581,7 @@ impl<'de> Visitor<'de> for OpVisitor {
         E: Error,
     {
         let name = v.strip_prefix("OP_").unwrap().to_ascii_lowercase();
-        get_op(&name).ok_or_else(|| E::custom(format!("op not found in serialized data: {}", v)))
+        get_op(&name).ok_or_else(|| E::custom(format!("op not found in serialized data: {v}")))
     }
 }
 

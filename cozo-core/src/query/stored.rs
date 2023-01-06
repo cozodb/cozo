@@ -371,10 +371,10 @@ impl DataExtractor {
         Ok(match self {
             DataExtractor::DefaultExtractor(expr, typ) => typ
                 .coerce(expr.clone().eval_to_const()?, cur_vld)
-                .wrap_err_with(|| format!("when processing tuple {:?}", tuple))?,
+                .wrap_err_with(|| format!("when processing tuple {tuple:?}"))?,
             DataExtractor::IndexExtractor(i, typ) => typ
                 .coerce(tuple[*i].clone(), cur_vld)
-                .wrap_err_with(|| format!("when processing tuple {:?}", tuple))?,
+                .wrap_err_with(|| format!("when processing tuple {tuple:?}"))?,
         })
     }
 }
