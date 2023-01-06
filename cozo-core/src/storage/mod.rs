@@ -25,7 +25,7 @@ pub(crate) mod tikv;
 // pub(crate) mod re;
 
 /// Swappable storage trait for Cozo's storage engine
-pub trait Storage<'s> {
+pub trait Storage<'s>: Sync {
     /// The associated transaction type used by this engine
     type Tx: StoreTx<'s>;
 
